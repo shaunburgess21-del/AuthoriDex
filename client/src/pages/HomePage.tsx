@@ -4,9 +4,12 @@ import { TrendWidget } from "@/components/TrendWidget";
 import { LeaderboardRow } from "@/components/LeaderboardRow";
 import { UpdateIndicator } from "@/components/UpdateIndicator";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { FilterDropdown } from "@/components/FilterDropdown";
+import { SortDropdown } from "@/components/SortDropdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowUpDown, Filter } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { X } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
@@ -14,11 +17,24 @@ import { useLocation } from "wouter";
 
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [category, setCategory] = useState("all");
+  const [sort, setSort] = useState("rank");
   const [, setLocation] = useLocation();
 
-  // Fetch all trending people
+  // Build query params
+  const queryParams = new URLSearchParams();
+  if (searchQuery) queryParams.set('search', searchQuery);
+  if (category !== 'all') queryParams.set('category', category);
+  if (sort) queryParams.set('sort', sort);
+
+  // Fetch all trending people with filters
   const { data: allPeople = [], isLoading, error } = useQuery<TrendingPerson[]>({
-    queryKey: ['/api/trending'],
+    queryKey: ['/api/trending', searchQuery, category, sort],
+    queryFn: async () => {
+      const response = await fetch(`/api/trending?${queryParams}`);
+      if (!response.ok) throw new Error('Failed to fetch');
+      return response.json();
+    },
     refetchInterval: 5 * 60 * 1000, // Refresh every 5 minutes
   });
 
@@ -40,14 +56,17 @@ export default function HomePage() {
     refetchInterval: 5 * 60 * 1000,
   });
 
-  const filteredPeople = allPeople.filter((p) =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (p.category && p.category.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
-
   const handlePersonClick = (personId: string) => {
     setLocation(`/person/${personId}`);
   };
+
+  const handleClearFilters = () => {
+    setSearchQuery("");
+    setCategory("all");
+    setSort("rank");
+  };
+
+  const hasActiveFilters = searchQuery || category !== "all" || sort !== "rank";
 
   if (isLoading) {
     return (
@@ -105,25 +124,61 @@ export default function HomePage() {
               Top 1000 Leaderboard
             </CardTitle>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="gap-2" data-testid="button-filter">
-                <Filter className="h-4 w-4" />
-                Filter
-              </Button>
-              <Button variant="outline" size="sm" className="gap-2" data-testid="button-sort">
-                <ArrowUpDown className="h-4 w-4" />
-                Sort
-              </Button>
+              <FilterDropdown value={category} onChange={setCategory} />
+              <SortDropdown value={sort} onChange={setSort} />
             </div>
           </CardHeader>
           <CardContent className="p-0">
             <div className="px-6 py-4 border-b bg-muted/30">
-              <SearchBar 
-                onSearch={setSearchQuery} 
-                placeholder="Search by name or category..."
-              />
+              <div className="space-y-3">
+                <SearchBar 
+                  onSearch={setSearchQuery} 
+                  placeholder="Search by name or category..."
+                />
+                {hasActiveFilters && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm text-muted-foreground">Active filters:</span>
+                    {searchQuery && (
+                      <Badge variant="secondary" className="gap-1">
+                        Search: {searchQuery}
+                        <X 
+                          className="h-3 w-3 cursor-pointer" 
+                          onClick={() => setSearchQuery("")}
+                        />
+                      </Badge>
+                    )}
+                    {category !== "all" && (
+                      <Badge variant="secondary" className="gap-1">
+                        Category: {category}
+                        <X 
+                          className="h-3 w-3 cursor-pointer" 
+                          onClick={() => setCategory("all")}
+                        />
+                      </Badge>
+                    )}
+                    {sort !== "rank" && (
+                      <Badge variant="secondary" className="gap-1">
+                        Sort: {sort}
+                        <X 
+                          className="h-3 w-3 cursor-pointer" 
+                          onClick={() => setSort("rank")}
+                        />
+                      </Badge>
+                    )}
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={handleClearFilters}
+                      className="h-6 text-xs"
+                    >
+                      Clear all
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
             <div>
-              {filteredPeople.slice(0, 20).map((person) => (
+              {allPeople.slice(0, 20).map((person) => (
                 <LeaderboardRow
                   key={person.id}
                   person={person}
@@ -131,16 +186,20 @@ export default function HomePage() {
                 />
               ))}
             </div>
-            {filteredPeople.length > 20 && (
+            {allPeople.length > 20 && (
               <div className="p-6 border-t text-center">
                 <Button variant="outline" data-testid="button-load-more">
                   Load More
                 </Button>
               </div>
             )}
-            {filteredPeople.length === 0 && (
+            {allPeople.length === 0 && !isLoading && (
               <div className="p-12 text-center">
-                <p className="text-muted-foreground">No results found for "{searchQuery}"</p>
+                <p className="text-muted-foreground">
+                  {searchQuery || category !== "all" 
+                    ? "No results found matching your filters" 
+                    : "No trending people available"}
+                </p>
               </div>
             )}
           </CardContent>
