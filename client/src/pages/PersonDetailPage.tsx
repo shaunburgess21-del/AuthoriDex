@@ -7,21 +7,46 @@ import { TrendChart } from "@/components/TrendChart";
 import { StatCard } from "@/components/StatCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ArrowLeft, Share2, Star, TrendingUp, Users, Eye } from "lucide-react";
-import { useRoute } from "wouter";
+import { useRoute, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { TrendingPerson } from "@shared/schema";
 
 export default function PersonDetailPage() {
   const [, params] = useRoute("/person/:id");
+  const [, setLocation] = useLocation();
 
-  const mockPerson = {
-    id: params?.id || "1",
-    name: "Taylor Swift",
-    rank: 1,
-    trendScore: 9850,
-    change24h: 12.5,
-    change7d: 45.3,
-    category: "Music",
-    avatar: null,
-  };
+  const { data: person, isLoading, error } = useQuery<TrendingPerson>({
+    queryKey: [`/api/trending/${params?.id}`],
+    enabled: !!params?.id,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
+          <p className="mt-4 text-muted-foreground">Loading person data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || (!person && !isLoading)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-xl text-muted-foreground">Person not found</p>
+          <Button className="mt-4" onClick={() => setLocation("/")}>
+            Back to Leaderboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!person) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen">
@@ -31,7 +56,7 @@ export default function PersonDetailPage() {
             <Button 
               variant="ghost" 
               size="icon"
-              onClick={() => window.history.back()}
+              onClick={() => setLocation("/")}
               data-testid="button-back"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -54,17 +79,17 @@ export default function PersonDetailPage() {
           <CardContent className="p-8">
             <div className="flex flex-col md:flex-row gap-8">
               <div className="flex flex-col items-center md:items-start gap-4">
-                <PersonAvatar name={mockPerson.name} avatar={mockPerson.avatar} size="lg" />
-                <RankBadge rank={mockPerson.rank} />
+                <PersonAvatar name={person.name} avatar={person.avatar} size="lg" />
+                <RankBadge rank={person.rank} />
               </div>
               
               <div className="flex-1">
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
                   <div>
                     <h1 className="text-4xl font-serif font-bold mb-2" data-testid="text-person-name">
-                      {mockPerson.name}
+                      {person.name}
                     </h1>
-                    <p className="text-lg text-muted-foreground">{mockPerson.category}</p>
+                    <p className="text-lg text-muted-foreground">{person.category}</p>
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" className="gap-2" data-testid="button-share">
@@ -84,7 +109,7 @@ export default function PersonDetailPage() {
                       Trend Score
                     </p>
                     <p className="text-3xl font-mono font-bold" data-testid="text-trend-score">
-                      {mockPerson.trendScore.toFixed(0)}
+                      {person.trendScore.toFixed(0)}
                     </p>
                   </div>
                   <div className="text-center p-4 rounded-lg border">
@@ -92,7 +117,7 @@ export default function PersonDetailPage() {
                       24h Change
                     </p>
                     <div className="flex justify-center mt-2">
-                      <TrendBadge value={mockPerson.change24h} />
+                      <TrendBadge value={person.change24h} />
                     </div>
                   </div>
                   <div className="text-center p-4 rounded-lg border">
@@ -100,7 +125,7 @@ export default function PersonDetailPage() {
                       7d Change
                     </p>
                     <div className="flex justify-center mt-2">
-                      <TrendBadge value={mockPerson.change7d} />
+                      <TrendBadge value={person.change7d} />
                     </div>
                   </div>
                   <div className="text-center p-4 rounded-lg border">
@@ -108,7 +133,7 @@ export default function PersonDetailPage() {
                       Rank
                     </p>
                     <p className="text-3xl font-mono font-bold">
-                      #{mockPerson.rank}
+                      #{person.rank}
                     </p>
                   </div>
                 </div>
@@ -138,7 +163,7 @@ export default function PersonDetailPage() {
           />
         </div>
 
-        <TrendChart personName={mockPerson.name} />
+        <TrendChart personName={person.name} />
       </div>
     </div>
   );

@@ -8,31 +8,70 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowUpDown, Filter } from "lucide-react";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
+import { useLocation } from "wouter";
 
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [, setLocation] = useLocation();
 
-  const mockPeople: TrendingPerson[] = [
-    { id: "1", name: "Taylor Swift", rank: 1, trendScore: 9850, change24h: 12.5, change7d: 45.3, category: "Music", avatar: null },
-    { id: "2", name: "Elon Musk", rank: 2, trendScore: 9720, change24h: -3.2, change7d: 18.7, category: "Tech", avatar: null },
-    { id: "3", name: "Cristiano Ronaldo", rank: 3, trendScore: 9650, change24h: 8.9, change7d: 22.1, category: "Sports", avatar: null },
-    { id: "4", name: "Kim Kardashian", rank: 4, trendScore: 9480, change24h: 5.4, change7d: -12.3, category: "Entertainment", avatar: null },
-    { id: "5", name: "Lionel Messi", rank: 5, trendScore: 9350, change24h: 15.8, change7d: 38.9, category: "Sports", avatar: null },
-    { id: "6", name: "Beyoncé", rank: 6, trendScore: 9210, change24h: 7.2, change7d: 15.6, category: "Music", avatar: null },
-    { id: "7", name: "Donald Trump", rank: 7, trendScore: 9180, change24h: -8.5, change7d: -22.4, category: "Politics", avatar: null },
-    { id: "8", name: "LeBron James", rank: 8, trendScore: 9050, change24h: 4.3, change7d: 9.8, category: "Sports", avatar: null },
-    { id: "9", name: "Rihanna", rank: 9, trendScore: 8920, change24h: 10.1, change7d: 28.5, category: "Music", avatar: null },
-    { id: "10", name: "Jeff Bezos", rank: 10, trendScore: 8850, change24h: -2.7, change7d: 5.3, category: "Tech", avatar: null },
-  ];
+  // Fetch all trending people
+  const { data: allPeople = [], isLoading, error } = useQuery<TrendingPerson[]>({
+    queryKey: ['/api/trending'],
+    refetchInterval: 5 * 60 * 1000, // Refresh every 5 minutes
+  });
 
-  const topGainers = [...mockPeople].sort((a, b) => b.change7d - a.change7d);
-  const topDroppers = [...mockPeople].sort((a, b) => a.change7d - b.change7d);
-  const dailyMovers = [...mockPeople].sort((a, b) => Math.abs(b.change24h) - Math.abs(a.change24h));
+  // Fetch top gainers
+  const { data: topGainers = [] } = useQuery<TrendingPerson[]>({
+    queryKey: ['/api/trending/movers/gainers'],
+    refetchInterval: 5 * 60 * 1000,
+  });
 
-  const filteredPeople = mockPeople.filter((p) =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase())
+  // Fetch top droppers
+  const { data: topDroppers = [] } = useQuery<TrendingPerson[]>({
+    queryKey: ['/api/trending/movers/droppers'],
+    refetchInterval: 5 * 60 * 1000,
+  });
+
+  // Fetch daily movers
+  const { data: dailyMovers = [] } = useQuery<TrendingPerson[]>({
+    queryKey: ['/api/trending/movers/daily'],
+    refetchInterval: 5 * 60 * 1000,
+  });
+
+  const filteredPeople = allPeople.filter((p) =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (p.category && p.category.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  const handlePersonClick = (personId: string) => {
+    setLocation(`/person/${personId}`);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
+          <p className="mt-4 text-muted-foreground">Loading trending data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-xl text-muted-foreground">Failed to load trending data</p>
+          <Button className="mt-4" onClick={() => window.location.reload()}>
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -84,19 +123,26 @@ export default function HomePage() {
               />
             </div>
             <div>
-              {filteredPeople.map((person) => (
+              {filteredPeople.slice(0, 20).map((person) => (
                 <LeaderboardRow
                   key={person.id}
                   person={person}
-                  onClick={() => console.log('View person:', person.name)}
+                  onClick={() => handlePersonClick(person.id)}
                 />
               ))}
             </div>
-            <div className="p-6 border-t text-center">
-              <Button variant="outline" data-testid="button-load-more">
-                Load More
-              </Button>
-            </div>
+            {filteredPeople.length > 20 && (
+              <div className="p-6 border-t text-center">
+                <Button variant="outline" data-testid="button-load-more">
+                  Load More
+                </Button>
+              </div>
+            )}
+            {filteredPeople.length === 0 && (
+              <div className="p-12 text-center">
+                <p className="text-muted-foreground">No results found for "{searchQuery}"</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
