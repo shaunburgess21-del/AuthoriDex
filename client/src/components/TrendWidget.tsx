@@ -1,0 +1,49 @@
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TrendingPerson } from "@shared/schema";
+import { PersonAvatar } from "./PersonAvatar";
+import { TrendBadge } from "./TrendBadge";
+import { cn } from "@/lib/utils";
+
+interface TrendWidgetProps {
+  title: string;
+  people: TrendingPerson[];
+  type: "gainer" | "dropper" | "daily";
+}
+
+export function TrendWidget({ title, people, type }: TrendWidgetProps) {
+  return (
+    <Card className="overflow-hidden" data-testid={`widget-${type}`}>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg font-serif">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 p-4 pt-0">
+        {people.slice(0, 5).map((person, idx) => (
+          <div
+            key={person.id}
+            className={cn(
+              "flex items-center gap-3 p-2 rounded-lg hover-elevate cursor-pointer",
+              type === "gainer" && "bg-trend-up/5",
+              type === "dropper" && "bg-trend-down/5"
+            )}
+            data-testid={`widget-item-${person.id}`}
+          >
+            <span className="font-mono font-bold text-muted-foreground w-6">
+              {idx + 1}
+            </span>
+            <PersonAvatar name={person.name} avatar={person.avatar} size="sm" />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm truncate">{person.name}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {person.category}
+              </p>
+            </div>
+            <TrendBadge 
+              value={type === "daily" ? person.change24h : person.change7d} 
+              size="sm" 
+            />
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
