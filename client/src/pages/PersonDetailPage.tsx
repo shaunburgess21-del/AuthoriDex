@@ -63,9 +63,9 @@ export default function PersonDetailPage() {
             </Button>
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold font-serif text-lg">T</span>
+                <span className="text-primary-foreground font-bold font-serif text-lg">F</span>
               </div>
-              <span className="font-serif font-bold text-xl">TrendSurge</span>
+              <span className="font-serif font-bold text-xl">FameStreem</span>
             </div>
           </div>
           <div className="flex items-center gap-3">

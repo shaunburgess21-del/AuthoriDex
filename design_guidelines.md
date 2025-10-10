@@ -1,4 +1,4 @@
-# TrendSurge Design Guidelines
+# FameStreem Design Guidelines
 
 ## Design Approach
 **Reference-Based Approach** drawing from financial tracking platforms (CoinMarketCap, Yahoo Finance) and social trending interfaces (Twitter/X). The design emphasizes real-time data visualization, quick scanability, and dynamic updates while maintaining visual sophistication.
