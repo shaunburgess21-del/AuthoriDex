@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { fetchTrendingData, fetchPersonDetails } from "./lunarcrush";
+import { getTrendingData } from "./api-integrations";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get all trending people
@@ -11,9 +11,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let people = await storage.getTrendingPeople();
       
-      // If storage is empty, fetch fresh data
+      // If storage is empty, fetch fresh data from APIs
       if (people.length === 0) {
-        const freshData = await fetchTrendingData();
+        const freshData = await getTrendingData();
         await storage.updateTrendingPeople(freshData);
         people = freshData;
       }
@@ -57,10 +57,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let person = await storage.getTrendingPerson(id);
       
       if (!person) {
-        const personDetails = await fetchPersonDetails(id);
-        if (personDetails) {
-          person = personDetails;
-        }
+        // Try to get from fresh data
+        const allPeople = await getTrendingData();
+        person = allPeople.find(p => p.id === id);
       }
 
       if (!person) {
@@ -77,7 +76,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Refresh trending data (can be called periodically)
   app.post("/api/trending/refresh", async (req, res) => {
     try {
-      const freshData = await fetchTrendingData();
+      const freshData = await getTrendingData();
       await storage.updateTrendingPeople(freshData);
       res.json({ success: true, count: freshData.length });
     } catch (error) {
@@ -93,7 +92,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let people = await storage.getTrendingPeople();
       
       if (people.length === 0) {
-        const freshData = await fetchTrendingData();
+        const freshData = await getTrendingData();
         await storage.updateTrendingPeople(freshData);
         people = freshData;
       }

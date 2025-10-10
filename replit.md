@@ -1,8 +1,8 @@
-# FameDex - Real-Time Fame Tracking Platform
+# TrendSurge - Real-Time Fame Tracking Platform
 
 ## Overview
 
-FameDex is a real-time celebrity and influencer tracking platform that monitors trending people worldwide. The application displays live trending data with rankings, trend scores, and percentage changes over 24-hour and 7-day periods. Users can search, filter by category, and sort trending individuals while viewing detailed analytics for each person.
+TrendSurge is a real-time celebrity and influencer tracking platform that monitors trending people worldwide. The application displays live trending data with rankings, trend scores, and percentage changes over 24-hour and 7-day periods. Users can search, filter by category, and sort trending individuals while viewing detailed analytics for each person.
 
 The platform draws design inspiration from financial tracking platforms (CoinMarketCap, Yahoo Finance) and social trending interfaces (Twitter/X), emphasizing data-first hierarchy and quick-scan optimization.
 
