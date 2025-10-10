@@ -2,7 +2,17 @@
 
 ## Overview
 
-TrendSurge is a real-time celebrity and influencer tracking platform that monitors trending people worldwide. The application displays live trending data with rankings, trend scores, and percentage changes over 24-hour and 7-day periods. Users can search, filter by category, and sort trending individuals while viewing detailed analytics for each person.
+TrendSurge is a real-time celebrity and influencer tracking platform that monitors trending people worldwide by aggregating data from multiple authoritative sources. The application displays live trending data with rankings, unified trend scores, and percentage changes over 24-hour and 7-day periods. Users can search, filter by category, and sort trending individuals while viewing detailed analytics for each person.
+
+**Current Status:** 🚧 Beta - Live API integrations active, historical tracking pending
+- ✅ Multi-source data aggregation from News API, YouTube, Spotify, and Google Trends
+- ✅ Balanced scoring algorithm combining 4 data streams with real-time metrics
+- ✅ 15 high-profile celebrities tracked across Music, Sports, Politics, Tech, and Entertainment
+- ✅ 30-minute intelligent caching with graceful error handling
+- ✅ Real-time leaderboard with search, filters, and category sorting
+- ⏳ **TODO**: Historical data tracking for accurate 24h/7d change calculations (currently using placeholder values)
+- ⏳ **TODO**: Expand celebrity roster or adjust UI copy (currently 15 vs promised 1000)
+- ⏳ **TODO**: Complete Spotify integration (requires SPOTIFY_CLIENT_SECRET environment variable)
 
 The platform draws design inspiration from financial tracking platforms (CoinMarketCap, Yahoo Finance) and social trending interfaces (Twitter/X), emphasizing data-first hierarchy and quick-scan optimization.
 
@@ -45,13 +55,34 @@ Preferred communication style: Simple, everyday language.
 - RESTful endpoints for trending data retrieval and filtering
 - Query parameter support for search, category filtering, and sorting
 - Separation of concerns with dedicated route handlers in `/server/routes.ts`
-- Mock data generation system in `/server/lunarcrush.ts` (placeholder for real API integration)
+- Multi-source API aggregation system in `/server/api-integrations.ts`
+
+**Multi-API Integration Architecture:**
+- **Data Aggregation**: Combines data from 4 external APIs (News, YouTube, Spotify, SERP) into unified trending scores
+- **Balanced Scoring Algorithm**: 
+  - All metrics normalized to 0-1000 range for fair comparison
+  - Weighted combination: 30% news mentions, 25% YouTube views, 25% Spotify followers, 20% search trends
+  - Final scores scaled to 100k-500k range for visual impact
+- **Performance Optimization**:
+  - 30-minute cache duration to respect API rate limits
+  - Fetch locking prevents simultaneous API calls (thundering herd protection)
+  - AbortController-based timeouts (5s per API, 15s total) prevent hung requests
+  - Stale cache fallback on errors ensures continuous availability
+- **Error Resilience**: 
+  - Failed API calls return 0 (graceful degradation)
+  - Zero-score entries filtered from results
+  - Missing credentials fail fast (e.g., Spotify skips when CLIENT_SECRET absent)
+  
+**Celebrity Tracking:**
+- Currently monitoring 15 high-profile celebrities across categories (Music, Sports, Politics, Tech, Entertainment)
+- Celebrity list optimized for performance (60 API calls per refresh: 15 celebrities × 4 APIs)
+- Rate limiting: 100ms delay between celebrity aggregations
 
 **Key Design Decisions:**
 - **Data Layer**: Abstracted storage interface (`IStorage`) allowing swappable implementations (in-memory vs. database)
 - **Middleware Pattern**: Request logging, JSON parsing, and error handling implemented as Express middleware
 - **Development Mode**: Vite integration in development for HMR; static file serving in production
-- **API Integration**: Structured for future LunarCrush API integration with fallback to mock data
+- **API Integration**: Real-time multi-source aggregation with intelligent caching and error handling
 
 ### Data Storage Solutions
 
@@ -72,8 +103,11 @@ Preferred communication style: Simple, everyday language.
 
 ### External Dependencies
 
-**Third-Party Services:**
-- **LunarCrush API**: Planned integration for real-time trending data (currently using mock data)
+**Third-Party API Services (Active):**
+- **News API**: Tracks celebrity mentions in news articles (100 requests/day free tier)
+- **YouTube Data API**: Monitors video views and popularity (10,000 units/day quota)
+- **Spotify Web API**: Fetches artist follower counts (requires CLIENT_ID and CLIENT_SECRET)
+- **SERP API (Google Trends)**: Tracks search interest trends over time
 - **Google Fonts**: Typography loading (Inter, Space Grotesk, JetBrains Mono)
 - **Neon Database**: PostgreSQL database provider via `@neondatabase/serverless`
 
