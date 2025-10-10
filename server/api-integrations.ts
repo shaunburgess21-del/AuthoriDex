@@ -1,6 +1,6 @@
 import { TrendingPerson } from "@shared/schema";
 
-// Celebrity list to track across all APIs
+// Celebrity list to track across all APIs (limited to top 15 for performance)
 const CELEBRITIES = [
   { name: "Taylor Swift", category: "Music" },
   { name: "Elon Musk", category: "Tech" },
@@ -14,24 +14,9 @@ const CELEBRITIES = [
   { name: "Drake", category: "Music" },
   { name: "Selena Gomez", category: "Music" },
   { name: "Justin Bieber", category: "Music" },
-  { name: "Kanye West", category: "Music" },
-  { name: "Serena Williams", category: "Sports" },
-  { name: "Roger Federer", category: "Sports" },
-  { name: "Tom Brady", category: "Sports" },
-  { name: "Oprah Winfrey", category: "Entertainment" },
-  { name: "Ellen DeGeneres", category: "Entertainment" },
-  { name: "Will Smith", category: "Entertainment" },
-  { name: "Dwayne Johnson", category: "Entertainment" },
-  { name: "Jennifer Lopez", category: "Entertainment" },
-  { name: "Brad Pitt", category: "Entertainment" },
-  { name: "Angelina Jolie", category: "Entertainment" },
-  { name: "George Clooney", category: "Entertainment" },
   { name: "Donald Trump", category: "Politics" },
-  { name: "Joe Biden", category: "Politics" },
-  { name: "Barack Obama", category: "Politics" },
-  { name: "Jeff Bezos", category: "Business" },
+  { name: "Dwayne Johnson", category: "Entertainment" },
   { name: "Mark Zuckerberg", category: "Tech" },
-  { name: "Bill Gates", category: "Tech" },
 ];
 
 interface CelebrityMetrics {
@@ -44,6 +29,15 @@ interface CelebrityMetrics {
   trendScore: number;
 }
 
+// Helper function to add timeout to fetch with AbortController
+function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 5000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timeoutId));
+}
+
 // News API Integration
 export async function fetchNewsMetrics(celebrityName: string): Promise<number> {
   const apiKey = process.env.NEWS_API_KEY;
@@ -54,7 +48,7 @@ export async function fetchNewsMetrics(celebrityName: string): Promise<number> {
       celebrityName
     )}"&language=en&sortBy=publishedAt&pageSize=100&apiKey=${apiKey}`;
 
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, {}, 5000);
     if (!response.ok) return 0;
 
     const data = await response.json();
@@ -76,7 +70,7 @@ export async function fetchYouTubeMetrics(celebrityName: string): Promise<number
       celebrityName
     )}&type=video&maxResults=10&key=${apiKey}`;
 
-    const searchResponse = await fetch(searchUrl);
+    const searchResponse = await fetchWithTimeout(searchUrl, {}, 5000);
     if (!searchResponse.ok) return 0;
 
     const searchData = await searchResponse.json();
@@ -86,7 +80,7 @@ export async function fetchYouTubeMetrics(celebrityName: string): Promise<number
     const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
     const statsUrl = `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoIds}&key=${apiKey}`;
 
-    const statsResponse = await fetch(statsUrl);
+    const statsResponse = await fetchWithTimeout(statsUrl, {}, 5000);
     if (!statsResponse.ok) return 0;
 
     const statsData = await statsResponse.json();
@@ -108,21 +102,25 @@ export async function fetchSpotifyMetrics(artistName: string): Promise<number> {
   const clientId = process.env.SPOTIFY_CLIENT_ID;
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
   
-  if (!clientId) return 0;
+  // Fail fast if credentials are missing
+  if (!clientId || !clientSecret) {
+    console.log('Spotify credentials not configured, skipping...');
+    return 0;
+  }
 
   try {
     // Get access token
     const tokenUrl = 'https://accounts.spotify.com/api/token';
-    const authString = Buffer.from(`${clientId}:${clientSecret || ''}`).toString('base64');
+    const authString = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     
-    const tokenResponse = await fetch(tokenUrl, {
+    const tokenResponse = await fetchWithTimeout(tokenUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${authString}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: 'grant_type=client_credentials',
-    });
+    }, 5000);
 
     if (!tokenResponse.ok) return 0;
     const tokenData = await tokenResponse.json();
@@ -133,9 +131,9 @@ export async function fetchSpotifyMetrics(artistName: string): Promise<number> {
       artistName
     )}&type=artist&limit=1`;
 
-    const searchResponse = await fetch(searchUrl, {
+    const searchResponse = await fetchWithTimeout(searchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    }, 5000);
 
     if (!searchResponse.ok) return 0;
     const searchData = await searchResponse.json();
@@ -160,7 +158,7 @@ export async function fetchSearchTrends(query: string): Promise<number> {
       query
     )}&data_type=TIMESERIES&date=now 7-d&api_key=${apiKey}`;
 
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, {}, 5000);
     if (!response.ok) return 0;
 
     const data = await response.json();
@@ -198,12 +196,18 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
         fetchSearchTrends(celeb.name),
       ]);
 
-      // Calculate weighted trend score
+      // Calculate balanced weighted trend score
+      // Normalize all metrics to similar scales (0-1000 range) then weight them
+      const normalizedNews = Math.min(newsCount / 100, 1000);        // News: 0-100 articles = 0-1000
+      const normalizedYouTube = Math.min(youtubeViews / 10000000, 1000); // YouTube: 10M views = 1000
+      const normalizedSpotify = Math.min(spotifyFollowers / 1000000, 1000); // Spotify: 1M followers = 1000
+      const normalizedSearch = Math.min(searchVolume / 100, 1000);   // Search: 0-100 interest = 0-1000
+      
       const trendScore = 
-        (newsCount * 5) +           // News mentions (weight: 5)
-        (youtubeViews / 100000) +   // YouTube views (normalized)
-        (spotifyFollowers / 10000) + // Spotify followers (normalized)
-        (searchVolume * 10);         // Search trends (weight: 10)
+        (normalizedNews * 0.30) +      // News mentions: 30% weight
+        (normalizedYouTube * 0.25) +   // YouTube popularity: 25% weight
+        (normalizedSpotify * 0.25) +   // Spotify followers: 25% weight
+        (normalizedSearch * 0.20);     // Search trends: 20% weight
 
       results.push({
         name: celeb.name,
@@ -212,27 +216,40 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
         youtubeViews,
         spotifyFollowers,
         searchVolume,
-        trendScore,
+        trendScore: Math.round(trendScore * 1000), // Scale up for display
       });
 
       // Rate limiting: small delay between API calls
       await new Promise(resolve => setTimeout(resolve, 100));
     } catch (error) {
       console.error(`Error aggregating data for ${celeb.name}:`, error);
+      // On error, add with zero scores to maintain list consistency
+      results.push({
+        name: celeb.name,
+        category: celeb.category,
+        newsCount: 0,
+        youtubeViews: 0,
+        spotifyFollowers: 0,
+        searchVolume: 0,
+        trendScore: 0,
+      });
     }
   }
 
   // Sort by trend score and convert to TrendingPerson format
   results.sort((a, b) => b.trendScore - a.trendScore);
 
-  return results.map((celeb, index) => ({
+  // Filter out zero-score entries (failed API calls) before mapping
+  const validResults = results.filter(r => r.trendScore > 0);
+  
+  return validResults.map((celeb, index) => ({
     id: `person-${index + 1}`,
     name: celeb.name,
     avatar: null,
     rank: index + 1,
-    trendScore: Math.round(celeb.trendScore),
-    change24h: (Math.random() - 0.5) * 20, // Mock for now (need historical data)
-    change7d: (Math.random() - 0.5) * 40,  // Mock for now (need historical data)
+    trendScore: celeb.trendScore,
+    change24h: (Math.random() - 0.5) * 20, // TODO: Replace with historical data tracking
+    change7d: (Math.random() - 0.5) * 40,  // TODO: Replace with historical data tracking
     category: celeb.category,
   }));
 }
@@ -242,16 +259,68 @@ let cachedData: TrendingPerson[] = [];
 let lastFetch: number = 0;
 const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
+// Lock to prevent simultaneous fetches
+let fetchInProgress: Promise<TrendingPerson[]> | null = null;
+
 export async function getTrendingData(): Promise<TrendingPerson[]> {
   const now = Date.now();
   
+  // Return cached data if still valid
   if (cachedData.length > 0 && now - lastFetch < CACHE_DURATION) {
+    console.log('Using cached data');
     return cachedData;
   }
 
+  // If a fetch is already in progress, wait for it
+  if (fetchInProgress) {
+    console.log('Waiting for ongoing fetch to complete...');
+    return fetchInProgress;
+  }
+
   console.log('Fetching fresh celebrity data from APIs...');
-  cachedData = await aggregateCelebrityData();
-  lastFetch = now;
   
-  return cachedData;
+  // Create the fetch promise and store it
+  fetchInProgress = (async () => {
+    try {
+      // Add a timeout to the entire aggregation process
+      const timeoutPromise = new Promise<TrendingPerson[]>((_, reject) => 
+        setTimeout(() => reject(new Error('Data aggregation timeout')), 15000)
+      );
+      
+      const freshData = await Promise.race([
+        aggregateCelebrityData(),
+        timeoutPromise
+      ]);
+      
+      // Only update cache if we got valid data
+      if (freshData && freshData.length > 0) {
+        cachedData = freshData;
+        lastFetch = now;
+        console.log(`Fetched ${cachedData.length} celebrities successfully`);
+        return cachedData;
+      } else {
+        console.warn('No valid data returned from APIs');
+        // Return stale cache if available
+        if (cachedData.length > 0) {
+          console.log('Returning stale cached data (no fresh data available)');
+          return cachedData;
+        }
+        throw new Error('No trending data available');
+      }
+    } catch (error) {
+      console.error('Error fetching trending data:', error);
+      // Always try to return cached data on error, even if expired
+      if (cachedData.length > 0) {
+        console.log('Returning stale cached data due to error');
+        return cachedData;
+      }
+      // If no cache exists, we have to throw
+      throw new Error('Failed to fetch trending data and no cache available');
+    } finally {
+      // Clear the lock when done
+      fetchInProgress = null;
+    }
+  })();
+  
+  return fetchInProgress;
 }
