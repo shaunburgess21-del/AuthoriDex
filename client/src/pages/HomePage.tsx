@@ -100,7 +100,7 @@ export default function HomePage() {
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
               <span className="text-primary-foreground font-bold font-serif text-lg">F</span>
             </div>
-            <span className="font-serif font-bold text-xl">FameStreem</span>
+            <span className="font-serif font-bold text-xl">FameDex</span>
           </div>
           <div className="flex items-center gap-3">
             <UpdateIndicator />
@@ -209,7 +209,7 @@ export default function HomePage() {
       <footer className="border-t mt-24 py-12">
         <div className="container mx-auto px-4 text-center">
           <p className="text-sm text-muted-foreground">
-            FameStreem - Real-time celebrity trending tracker powered by live data APIs
+            FameDex - Real-time celebrity trending tracker powered by live data APIs
           </p>
         </div>
       </footer>

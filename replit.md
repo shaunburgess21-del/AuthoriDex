@@ -1,8 +1,8 @@
-# FameStreem - Real-Time Fame Tracking Platform
+# FameDex - Real-Time Fame Tracking Platform
 
 ## Overview
 
-FameStreem is a real-time celebrity and influencer tracking platform that monitors trending people worldwide by aggregating data from multiple authoritative sources. The application displays live trending data with rankings, unified trend scores, and percentage changes over 24-hour and 7-day periods. Users can search, filter by category, and sort trending individuals while viewing detailed analytics for each person.
+FameDex is a real-time celebrity and influencer tracking platform that monitors trending people worldwide by aggregating data from multiple authoritative sources. The application displays live trending data with rankings, unified trend scores, and percentage changes over 24-hour and 7-day periods. Users can search, filter by category, and sort trending individuals while viewing detailed analytics for each person.
 
 **Current Status:** 🚧 Beta - Live API integrations active, historical tracking pending
 - ✅ Multi-source data aggregation from News API, YouTube, Spotify, and Google Trends
