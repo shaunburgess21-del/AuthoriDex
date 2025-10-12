@@ -21,7 +21,6 @@ export function PersonAvatar({ name, avatar, size = "md" }: PersonAvatarProps) {
 
   return (
     <Avatar className={sizeClass} data-testid={`avatar-${name.toLowerCase().replace(/\s/g, '-')}`}>
-      <AvatarImage src={avatar || undefined} alt={name} />
       <AvatarFallback className="bg-primary/10 text-primary font-semibold">
         {initials}
       </AvatarFallback>

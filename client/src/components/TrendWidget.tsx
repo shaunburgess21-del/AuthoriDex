@@ -8,9 +8,10 @@ interface TrendWidgetProps {
   title: string;
   people: TrendingPerson[];
   type: "gainer" | "dropper" | "daily";
+  onPersonClick?: (personId: string) => void;
 }
 
-export function TrendWidget({ title, people, type }: TrendWidgetProps) {
+export function TrendWidget({ title, people, type, onPersonClick }: TrendWidgetProps) {
   return (
     <Card className="overflow-hidden" data-testid={`widget-${type}`}>
       <CardHeader className="pb-3">
@@ -25,6 +26,7 @@ export function TrendWidget({ title, people, type }: TrendWidgetProps) {
               type === "gainer" && "bg-trend-up/5",
               type === "dropper" && "bg-trend-down/5"
             )}
+            onClick={() => onPersonClick?.(person.id)}
             data-testid={`widget-item-${person.id}`}
           >
             <span className="font-mono font-bold text-muted-foreground w-6">

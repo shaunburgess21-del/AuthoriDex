@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { X } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useLocation } from "wouter";
@@ -19,6 +19,7 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState("rank");
+  const [visibleCount, setVisibleCount] = useState(20);
   const [, setLocation] = useLocation();
 
   // Build query params
@@ -64,7 +65,17 @@ export default function HomePage() {
     setSearchQuery("");
     setCategory("all");
     setSort("rank");
+    setVisibleCount(20);
   };
+
+  const handleLoadMore = () => {
+    setVisibleCount(prev => Math.min(prev + 20, allPeople.length));
+  };
+
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [searchQuery, category, sort]);
 
   const hasActiveFilters = searchQuery || category !== "all" || sort !== "rank";
 
@@ -113,9 +124,9 @@ export default function HomePage() {
 
       <div className="container mx-auto px-4 py-12 max-w-7xl">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <TrendWidget title="Daily Movers" people={dailyMovers} type="daily" />
-          <TrendWidget title="Weekly Gainers" people={topGainers} type="gainer" />
-          <TrendWidget title="Weekly Droppers" people={topDroppers} type="dropper" />
+          <TrendWidget title="Daily Movers" people={dailyMovers} type="daily" onPersonClick={handlePersonClick} />
+          <TrendWidget title="Weekly Gainers" people={topGainers} type="gainer" onPersonClick={handlePersonClick} />
+          <TrendWidget title="Weekly Droppers" people={topDroppers} type="dropper" onPersonClick={handlePersonClick} />
         </div>
 
         <Card>
@@ -178,7 +189,7 @@ export default function HomePage() {
               </div>
             </div>
             <div>
-              {allPeople.slice(0, 20).map((person) => (
+              {allPeople.slice(0, visibleCount).map((person) => (
                 <LeaderboardRow
                   key={person.id}
                   person={person}
@@ -186,10 +197,14 @@ export default function HomePage() {
                 />
               ))}
             </div>
-            {allPeople.length > 20 && (
+            {allPeople.length > visibleCount && (
               <div className="p-6 border-t text-center">
-                <Button variant="outline" data-testid="button-load-more">
-                  Load More
+                <Button 
+                  variant="outline" 
+                  onClick={handleLoadMore}
+                  data-testid="button-load-more"
+                >
+                  Load More ({allPeople.length - visibleCount} remaining)
                 </Button>
               </div>
             )}
