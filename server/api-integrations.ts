@@ -1,23 +1,6 @@
-import { TrendingPerson } from "@shared/schema";
-
-// Celebrity list to track across all APIs (limited to top 15 for performance)
-const CELEBRITIES = [
-  { name: "Taylor Swift", category: "Music" },
-  { name: "Elon Musk", category: "Tech" },
-  { name: "Cristiano Ronaldo", category: "Sports" },
-  { name: "Kim Kardashian", category: "Entertainment" },
-  { name: "Lionel Messi", category: "Sports" },
-  { name: "Beyoncé", category: "Music" },
-  { name: "LeBron James", category: "Sports" },
-  { name: "Rihanna", category: "Music" },
-  { name: "Ariana Grande", category: "Music" },
-  { name: "Drake", category: "Music" },
-  { name: "Selena Gomez", category: "Music" },
-  { name: "Justin Bieber", category: "Music" },
-  { name: "Donald Trump", category: "Politics" },
-  { name: "Dwayne Johnson", category: "Entertainment" },
-  { name: "Mark Zuckerberg", category: "Tech" },
-];
+import { TrendingPerson, TrackedPerson, trendSnapshots, trackedPeople } from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, and, sql } from "drizzle-orm";
 
 interface CelebrityMetrics {
   name: string;
@@ -180,13 +163,46 @@ export async function fetchSearchTrends(query: string): Promise<number> {
   }
 }
 
+// Helper function to calculate percentage change
+function calculatePercentageChange(current: number, previous: number): number {
+  if (previous === 0) return 0;
+  return ((current - previous) / previous) * 100;
+}
+
+// Helper function to get historical snapshot from database
+async function getHistoricalSnapshot(personId: string, hoursAgo: number): Promise<number | null> {
+  const cutoffTime = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
+  
+  const [snapshot] = await db
+    .select()
+    .from(trendSnapshots)
+    .where(and(
+      eq(trendSnapshots.personId, personId),
+      sql`${trendSnapshots.timestamp} <= ${cutoffTime}`
+    ))
+    .orderBy(desc(trendSnapshots.timestamp))
+    .limit(1);
+  
+  return snapshot?.trendScore || null;
+}
+
 // Aggregate all metrics into a unified trending score
 export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
+  // Fetch tracked people from database
+  const celebrities = await db.select().from(trackedPeople);
+  
+  if (celebrities.length === 0) {
+    console.warn('No tracked people found in database');
+    return [];
+  }
+
+  console.log(`Aggregating data for ${celebrities.length} tracked people...`);
+  
   const results: CelebrityMetrics[] = [];
 
   // Fetch metrics for each celebrity (with rate limiting)
-  for (let i = 0; i < CELEBRITIES.length; i++) {
-    const celeb = CELEBRITIES[i];
+  for (let i = 0; i < celebrities.length; i++) {
+    const celeb = celebrities[i];
     
     try {
       const [newsCount, youtubeViews, spotifyFollowers, searchVolume] = await Promise.all([
@@ -209,6 +225,8 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
         (normalizedSpotify * 0.25) +   // Spotify followers: 25% weight
         (normalizedSearch * 0.20);     // Search trends: 20% weight
 
+      const finalTrendScore = Math.round(trendScore * 1000); // Scale up for display
+      
       results.push({
         name: celeb.name,
         category: celeb.category,
@@ -216,8 +234,22 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
         youtubeViews,
         spotifyFollowers,
         searchVolume,
-        trendScore: Math.round(trendScore * 1000), // Scale up for display
+        trendScore: finalTrendScore,
       });
+
+      // Save snapshot to database for historical tracking
+      try {
+        await db.insert(trendSnapshots).values({
+          personId: celeb.id,
+          newsCount,
+          youtubeViews,
+          spotifyFollowers,
+          searchVolume,
+          trendScore: finalTrendScore,
+        });
+      } catch (snapshotError) {
+        console.error(`Failed to save snapshot for ${celeb.name}:`, snapshotError);
+      }
 
       // Rate limiting: small delay between API calls
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -236,22 +268,46 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
     }
   }
 
-  // Sort by trend score and convert to TrendingPerson format
+  // Sort by trend score
   results.sort((a, b) => b.trendScore - a.trendScore);
 
   // Filter out zero-score entries (failed API calls) before mapping
   const validResults = results.filter(r => r.trendScore > 0);
   
-  return validResults.map((celeb, index) => ({
-    id: `person-${index + 1}`,
-    name: celeb.name,
-    avatar: null,
-    rank: index + 1,
-    trendScore: celeb.trendScore,
-    change24h: (Math.random() - 0.5) * 20, // TODO: Replace with historical data tracking
-    change7d: (Math.random() - 0.5) * 40,  // TODO: Replace with historical data tracking
-    category: celeb.category,
-  }));
+  // Convert to TrendingPerson format with historical changes
+  const trendingPeople: TrendingPerson[] = [];
+  
+  for (let index = 0; index < validResults.length; index++) {
+    const celeb = validResults[index];
+    const dbPerson = celebrities.find(c => c.name === celeb.name);
+    
+    if (!dbPerson) continue;
+    
+    // Get historical snapshots for 24h and 7d changes
+    const score24hAgo = await getHistoricalSnapshot(dbPerson.id, 24);
+    const score7dAgo = await getHistoricalSnapshot(dbPerson.id, 7 * 24);
+    
+    // Calculate percentage changes (or use 0 if no historical data)
+    const change24h = score24hAgo !== null 
+      ? calculatePercentageChange(celeb.trendScore, score24hAgo)
+      : 0;
+    const change7d = score7dAgo !== null 
+      ? calculatePercentageChange(celeb.trendScore, score7dAgo)
+      : 0;
+    
+    trendingPeople.push({
+      id: dbPerson.id,
+      name: celeb.name,
+      avatar: dbPerson.avatar,
+      rank: index + 1,
+      trendScore: celeb.trendScore,
+      change24h,
+      change7d,
+      category: celeb.category,
+    });
+  }
+  
+  return trendingPeople;
 }
 
 // Cache for aggregated data (refresh every 30 minutes)
