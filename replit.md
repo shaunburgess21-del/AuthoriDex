@@ -16,6 +16,7 @@ FameDex is a real-time celebrity and influencer tracking platform that monitors 
 - ✅ Avatar initials display (e.g., "EM" for Elon Musk)
 - ✅ Load More pagination (20 at a time, up to 100)
 - ✅ Clickable daily/weekly mover widgets
+- ✅ **NEW: Platform Insights** - Rich platform-specific content analytics on person profiles
 - 📋 **NEXT PHASE**: Upgrade to premium APIs (Twitter/X, TikTok, Meta) before launch
 
 The platform draws design inspiration from financial tracking platforms (CoinMarketCap, Yahoo Finance) and social trending interfaces (Twitter/X), emphasizing data-first hierarchy and quick-scan optimization.
@@ -63,11 +64,18 @@ Preferred communication style: Simple, everyday language.
 
 **Mock Data System (CURRENTLY ACTIVE):**
 - **Purpose**: Enable design/UX iteration without API rate limiting constraints
-- **Data Generation**:
+- **Trending Data Generation**:
   - `generateMockMetrics()`: Creates varied trend scores (100k-500k) using name-based seeding
   - `generateMockHistoricalData()`: Creates 30 days of historical snapshots with growth pattern
   - Formula: `500000 - (index * 4000) - (Math.sin(seed) * 20000)`
   - Historical pattern: `currentScore * (1 - daysAgo/40 + Math.sin(daysAgo*0.5)*0.15)`
+- **Platform Insights Generation** (NEW):
+  - `generateMockPlatformInsights()`: Creates realistic platform-specific content insights
+  - Platforms: X/Twitter, YouTube, Instagram, TikTok, Spotify, News
+  - Each platform has 2 insight types (e.g., Most Liked Tweet, Most Retweeted)
+  - Each insight has 5 ranked items with decreasing metric values
+  - Metrics: Twitter (250K-750K likes), YouTube (5M-15M views), Instagram (800K-1.8M likes), TikTok (10M-30M views), Spotify (50M-150M plays), News (500K-1.5M views)
+  - Includes title, metric value, optional link/image, timestamp for each item
 - **Duplicate Prevention**:
   - Unique constraint on (person_id, timestamp) in trend_snapshots table
   - Stable midnight UTC timestamps for historical data
