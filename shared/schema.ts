@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, real, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { relations } from "drizzle-orm";
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -17,6 +18,56 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+// Tracked people - the master list of celebrities/influencers we're monitoring
+export const trackedPeople = pgTable("tracked_people", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  category: text("category").notNull(),
+  avatar: text("avatar"),
+  youtubeId: text("youtube_id"),
+  spotifyId: text("spotify_id"),
+});
+
+export const insertTrackedPersonSchema = createInsertSchema(trackedPeople).omit({
+  id: true,
+});
+
+export type TrackedPerson = typeof trackedPeople.$inferSelect;
+export type InsertTrackedPerson = z.infer<typeof insertTrackedPersonSchema>;
+
+// Trend snapshots - historical time-series data for each person
+export const trendSnapshots = pgTable("trend_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  personId: varchar("person_id").notNull().references(() => trackedPeople.id, { onDelete: "cascade" }),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  newsCount: integer("news_count").notNull().default(0),
+  youtubeViews: integer("youtube_views").notNull().default(0),
+  spotifyFollowers: integer("spotify_followers").notNull().default(0),
+  searchVolume: integer("search_volume").notNull().default(0),
+  trendScore: real("trend_score").notNull(),
+});
+
+export const insertTrendSnapshotSchema = createInsertSchema(trendSnapshots).omit({
+  id: true,
+  timestamp: true,
+});
+
+export type TrendSnapshot = typeof trendSnapshots.$inferSelect;
+export type InsertTrendSnapshot = z.infer<typeof insertTrendSnapshotSchema>;
+
+// Relations
+export const trackedPeopleRelations = relations(trackedPeople, ({ many }) => ({
+  snapshots: many(trendSnapshots),
+}));
+
+export const trendSnapshotsRelations = relations(trendSnapshots, ({ one }) => ({
+  person: one(trackedPeople, {
+    fields: [trendSnapshots.personId],
+    references: [trackedPeople.id],
+  }),
+}));
+
+// Legacy trending people table (for backwards compatibility with existing API)
 export const trendingPeople = pgTable("trending_people", {
   id: varchar("id").primaryKey(),
   name: text("name").notNull(),
