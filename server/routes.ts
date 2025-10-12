@@ -1,9 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { getTrendingData } from "./api-integrations";
+import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots } from "@shared/schema";
+import { trendSnapshots, trackedPeople } from "@shared/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -157,6 +157,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching movers:", error);
       res.status(500).json({ error: "Failed to fetch movers data" });
+    }
+  });
+
+  // Get platform insights for a person
+  app.get("/api/people/:id/insights", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Get person details from database
+      const [person] = await db
+        .select()
+        .from(trackedPeople)
+        .where(eq(trackedPeople.id, id))
+        .limit(1);
+      
+      if (!person) {
+        return res.status(404).json({ error: "Person not found" });
+      }
+      
+      // Generate mock platform insights
+      const insights = generateMockPlatformInsights(person.name);
+      
+      res.json(insights);
+    } catch (error) {
+      console.error("Error fetching platform insights:", error);
+      res.status(500).json({ error: "Failed to fetch platform insights" });
     }
   });
 

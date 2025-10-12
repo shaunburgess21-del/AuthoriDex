@@ -423,3 +423,197 @@ export async function getTrendingData(): Promise<TrendingPerson[]> {
   
   return fetchInProgress;
 }
+
+// ========== Platform Insights Mock Data Generator ==========
+
+interface PlatformInsightData {
+  platform: string;
+  insightType: string;
+  metricName: string;
+  items: {
+    rank: number;
+    title: string;
+    metricValue: number;
+    link?: string;
+    imageUrl?: string;
+    timestamp: Date;
+  }[];
+}
+
+// Generate mock platform insights for a specific person
+export function generateMockPlatformInsights(personName: string): PlatformInsightData[] {
+  // Use name hash for consistent pseudo-random values
+  const hash = personName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  
+  const insights: PlatformInsightData[] = [];
+  
+  // Helper to generate varied metric values with rank decay
+  const generateRankedValues = (baseValue: number, count: number = 5) => {
+    return Array.from({ length: count }, (_, i) => {
+      const rankFactor = 1 - (i * 0.25); // Each rank is ~25% less than previous
+      const variance = 0.85 + Math.random() * 0.3; // ±15% variance
+      return Math.round(baseValue * rankFactor * variance);
+    });
+  };
+  
+  // X/Twitter Insights
+  const twitterLikes = generateRankedValues(250000 + (hash % 500000));
+  const twitterRetweets = generateRankedValues(50000 + (hash % 100000));
+  
+  insights.push({
+    platform: 'X',
+    insightType: 'Most Liked Tweet',
+    metricName: 'likes',
+    items: twitterLikes.map((likes, i) => ({
+      rank: i + 1,
+      title: `${personName}'s tweet about ${['innovation', 'the future', 'breaking news', 'latest project', 'personal thoughts'][i]}`,
+      metricValue: likes,
+      link: `https://x.com/${personName.toLowerCase().replace(/\s+/g, '')}/status/${Math.floor(Math.random() * 1000000000000)}`,
+      timestamp: new Date(Date.now() - (i + 1) * 7 * 24 * 60 * 60 * 1000), // weeks ago
+    })),
+  });
+  
+  insights.push({
+    platform: 'X',
+    insightType: 'Most Retweeted',
+    metricName: 'retweets',
+    items: twitterRetweets.map((retweets, i) => ({
+      rank: i + 1,
+      title: `${personName}'s announcement about ${['major update', 'collaboration', 'upcoming event', 'industry news', 'exclusive reveal'][i]}`,
+      metricValue: retweets,
+      link: `https://x.com/${personName.toLowerCase().replace(/\s+/g, '')}/status/${Math.floor(Math.random() * 1000000000000)}`,
+      timestamp: new Date(Date.now() - (i + 2) * 6 * 24 * 60 * 60 * 1000),
+    })),
+  });
+  
+  // YouTube Insights
+  const youtubeViews = generateRankedValues(5000000 + (hash % 10000000));
+  const youtubeLikes = generateRankedValues(150000 + (hash % 300000));
+  
+  insights.push({
+    platform: 'YouTube',
+    insightType: 'Most Viewed Video',
+    metricName: 'views',
+    items: youtubeViews.map((views, i) => ({
+      rank: i + 1,
+      title: `${personName} - ${['Exclusive Interview', 'Behind the Scenes', 'Q&A Session', 'Special Announcement', 'Documentary'][i]}`,
+      metricValue: views,
+      link: `https://youtube.com/watch?v=${Math.random().toString(36).substring(7)}`,
+      imageUrl: `https://picsum.photos/seed/${hash + i}/320/180`,
+      timestamp: new Date(Date.now() - (i + 1) * 30 * 24 * 60 * 60 * 1000), // months ago
+    })),
+  });
+  
+  insights.push({
+    platform: 'YouTube',
+    insightType: 'Most Liked Video',
+    metricName: 'likes',
+    items: youtubeLikes.map((likes, i) => ({
+      rank: i + 1,
+      title: `${personName} - ${['Highlights Reel', 'Best Moments', 'Compilation', 'Special Event', 'Live Performance'][i]}`,
+      metricValue: likes,
+      link: `https://youtube.com/watch?v=${Math.random().toString(36).substring(7)}`,
+      imageUrl: `https://picsum.photos/seed/${hash + i + 100}/320/180`,
+      timestamp: new Date(Date.now() - (i + 2) * 25 * 24 * 60 * 60 * 1000),
+    })),
+  });
+  
+  // Instagram Insights
+  const instagramLikes = generateRankedValues(800000 + (hash % 1000000));
+  const instagramComments = generateRankedValues(25000 + (hash % 50000));
+  
+  insights.push({
+    platform: 'Instagram',
+    insightType: 'Top Post by Likes',
+    metricName: 'likes',
+    items: instagramLikes.map((likes, i) => ({
+      rank: i + 1,
+      title: `${personName}'s post featuring ${['stunning visuals', 'candid moment', 'special occasion', 'daily life', 'exclusive content'][i]}`,
+      metricValue: likes,
+      link: `https://instagram.com/p/${Math.random().toString(36).substring(7)}`,
+      imageUrl: `https://picsum.photos/seed/${hash + i + 200}/400/400`,
+      timestamp: new Date(Date.now() - (i + 1) * 14 * 24 * 60 * 60 * 1000), // weeks ago
+    })),
+  });
+  
+  insights.push({
+    platform: 'Instagram',
+    insightType: 'Most Commented Post',
+    metricName: 'comments',
+    items: instagramComments.map((comments, i) => ({
+      rank: i + 1,
+      title: `${personName} shares ${['big news', 'controversial opinion', 'heartfelt message', 'exciting update', 'fan appreciation'][i]}`,
+      metricValue: comments,
+      link: `https://instagram.com/p/${Math.random().toString(36).substring(7)}`,
+      imageUrl: `https://picsum.photos/seed/${hash + i + 300}/400/400`,
+      timestamp: new Date(Date.now() - (i + 1) * 10 * 24 * 60 * 60 * 1000),
+    })),
+  });
+  
+  // TikTok Insights
+  const tiktokViews = generateRankedValues(10000000 + (hash % 20000000));
+  const tiktokLikes = generateRankedValues(1200000 + (hash % 2000000));
+  
+  insights.push({
+    platform: 'TikTok',
+    insightType: 'Most Viewed Video',
+    metricName: 'views',
+    items: tiktokViews.map((views, i) => ({
+      rank: i + 1,
+      title: `${personName}'s viral ${['dance challenge', 'trend', 'comedy skit', 'tutorial', 'duet'][i]}`,
+      metricValue: views,
+      link: `https://tiktok.com/@${personName.toLowerCase().replace(/\s+/g, '')}/video/${Math.floor(Math.random() * 10000000000000000)}`,
+      imageUrl: `https://picsum.photos/seed/${hash + i + 400}/300/400`,
+      timestamp: new Date(Date.now() - (i + 1) * 5 * 24 * 60 * 60 * 1000), // days ago
+    })),
+  });
+  
+  insights.push({
+    platform: 'TikTok',
+    insightType: 'Most Liked Video',
+    metricName: 'likes',
+    items: tiktokLikes.map((likes, i) => ({
+      rank: i + 1,
+      title: `${personName} ${['trending audio', 'original sound', 'challenge entry', 'reaction video', 'behind the scenes'][i]}`,
+      metricValue: likes,
+      link: `https://tiktok.com/@${personName.toLowerCase().replace(/\s+/g, '')}/video/${Math.floor(Math.random() * 10000000000000000)}`,
+      imageUrl: `https://picsum.photos/seed/${hash + i + 500}/300/400`,
+      timestamp: new Date(Date.now() - (i + 2) * 4 * 24 * 60 * 60 * 1000),
+    })),
+  });
+  
+  // Spotify Insights (for musicians/artists)
+  const spotifyPlays = generateRankedValues(50000000 + (hash % 100000000));
+  const spotifyMonthlyListeners = generateRankedValues(5000000 + (hash % 10000000));
+  
+  insights.push({
+    platform: 'Spotify',
+    insightType: 'Top Track by Plays',
+    metricName: 'plays',
+    items: spotifyPlays.map((plays, i) => ({
+      rank: i + 1,
+      title: `${personName} - ${['Hit Single', 'Chart Topper', 'Fan Favorite', 'Latest Release', 'Classic Track'][i]}`,
+      metricValue: plays,
+      link: `https://open.spotify.com/track/${Math.random().toString(36).substring(7)}`,
+      timestamp: new Date(Date.now() - (i + 1) * 60 * 24 * 60 * 60 * 1000), // months ago
+    })),
+  });
+  
+  // News Insights
+  const newsViews = generateRankedValues(500000 + (hash % 1000000));
+  
+  insights.push({
+    platform: 'News',
+    insightType: 'Top News Story',
+    metricName: 'views',
+    items: newsViews.map((views, i) => ({
+      rank: i + 1,
+      title: `${personName} ${['Makes Headlines', 'Featured in Major Story', 'Exclusive Interview', 'Breaking News', 'Special Report'][i]}`,
+      metricValue: views,
+      link: `https://news.example.com/${personName.toLowerCase().replace(/\s+/g, '-')}-${i + 1}`,
+      timestamp: new Date(Date.now() - (i + 1) * 3 * 24 * 60 * 60 * 1000), // days ago
+    })),
+  });
+  
+  return insights;
+}

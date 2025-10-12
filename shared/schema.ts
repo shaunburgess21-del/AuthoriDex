@@ -82,3 +82,54 @@ export const trendingPeople = pgTable("trending_people", {
 });
 
 export type TrendingPerson = typeof trendingPeople.$inferSelect;
+
+// Platform Insights - platform-specific content insights for each person
+export const platformInsights = pgTable("platform_insights", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  personId: varchar("person_id").notNull().references(() => trackedPeople.id, { onDelete: "cascade" }),
+  platform: text("platform").notNull(), // X, YouTube, Instagram, TikTok, Spotify, News
+  insightType: text("insight_type").notNull(), // Most Liked Tweet, Top Video, etc.
+  metricName: text("metric_name").notNull(), // likes, views, plays, etc.
+});
+
+export const insertPlatformInsightSchema = createInsertSchema(platformInsights).omit({
+  id: true,
+});
+
+export type PlatformInsight = typeof platformInsights.$inferSelect;
+export type InsertPlatformInsight = z.infer<typeof insertPlatformInsightSchema>;
+
+// Insight Items - top 5 ranked items for each insight
+export const insightItems = pgTable("insight_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  insightId: varchar("insight_id").notNull().references(() => platformInsights.id, { onDelete: "cascade" }),
+  rank: integer("rank").notNull(), // 1-5
+  title: text("title").notNull(),
+  metricValue: real("metric_value").notNull(),
+  link: text("link"), // optional URL
+  imageUrl: text("image_url"), // optional thumbnail
+  timestamp: timestamp("timestamp"), // when it was posted
+});
+
+export const insertInsightItemSchema = createInsertSchema(insightItems).omit({
+  id: true,
+});
+
+export type InsightItem = typeof insightItems.$inferSelect;
+export type InsertInsightItem = z.infer<typeof insertInsightItemSchema>;
+
+// Relations for platform insights
+export const platformInsightsRelations = relations(platformInsights, ({ one, many }) => ({
+  person: one(trackedPeople, {
+    fields: [platformInsights.personId],
+    references: [trackedPeople.id],
+  }),
+  items: many(insightItems),
+}));
+
+export const insightItemsRelations = relations(insightItems, ({ one }) => ({
+  insight: one(platformInsights, {
+    fields: [insightItems.insightId],
+    references: [platformInsights.id],
+  }),
+}));

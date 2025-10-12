@@ -6,6 +6,7 @@ import { RankBadge } from "@/components/RankBadge";
 import { TrendChart } from "@/components/TrendChart";
 import { StatCard } from "@/components/StatCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { PlatformInsightsSection } from "@/components/PlatformInsightsSection";
 import { ArrowLeft, Share2, Star, TrendingUp, Users, Eye } from "lucide-react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -164,6 +165,8 @@ export default function PersonDetailPage() {
         </div>
 
         <TrendChart personId={person.id} personName={person.name} />
+        
+        <PlatformInsightsSection personId={person.id} />
       </div>
     </div>
   );
