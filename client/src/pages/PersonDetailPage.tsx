@@ -163,7 +163,7 @@ export default function PersonDetailPage() {
           />
         </div>
 
-        <TrendChart personName={person.name} />
+        <TrendChart personId={person.id} personName={person.name} />
       </div>
     </div>
   );

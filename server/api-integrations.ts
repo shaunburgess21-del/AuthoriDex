@@ -251,8 +251,8 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
         console.error(`Failed to save snapshot for ${celeb.name}:`, snapshotError);
       }
 
-      // Rate limiting: small delay between API calls
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Rate limiting: minimal delay between API calls
+      await new Promise(resolve => setTimeout(resolve, 50));
     } catch (error) {
       console.error(`Error aggregating data for ${celeb.name}:`, error);
       // On error, add with zero scores to maintain list consistency
@@ -310,10 +310,10 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
   return trendingPeople;
 }
 
-// Cache for aggregated data (refresh every 30 minutes)
+// Cache for aggregated data (refresh every 2 hours to manage API quotas)
 let cachedData: TrendingPerson[] = [];
 let lastFetch: number = 0;
-const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
+const CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 hours (reduced frequency for 100 people)
 
 // Lock to prevent simultaneous fetches
 let fetchInProgress: Promise<TrendingPerson[]> | null = null;
@@ -338,9 +338,9 @@ export async function getTrendingData(): Promise<TrendingPerson[]> {
   // Create the fetch promise and store it
   fetchInProgress = (async () => {
     try {
-      // Add a timeout to the entire aggregation process
+      // Add a timeout to the entire aggregation process (increased for 100 people)
       const timeoutPromise = new Promise<TrendingPerson[]>((_, reject) => 
-        setTimeout(() => reject(new Error('Data aggregation timeout')), 15000)
+        setTimeout(() => reject(new Error('Data aggregation timeout')), 60000)
       );
       
       const freshData = await Promise.race([

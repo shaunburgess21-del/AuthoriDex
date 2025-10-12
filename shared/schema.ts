@@ -40,10 +40,10 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   personId: varchar("person_id").notNull().references(() => trackedPeople.id, { onDelete: "cascade" }),
   timestamp: timestamp("timestamp").notNull().defaultNow(),
-  newsCount: integer("news_count").notNull().default(0),
-  youtubeViews: integer("youtube_views").notNull().default(0),
-  spotifyFollowers: integer("spotify_followers").notNull().default(0),
-  searchVolume: integer("search_volume").notNull().default(0),
+  newsCount: real("news_count").notNull().default(0),
+  youtubeViews: real("youtube_views").notNull().default(0),
+  spotifyFollowers: real("spotify_followers").notNull().default(0),
+  searchVolume: real("search_volume").notNull().default(0),
   trendScore: real("trend_score").notNull(),
 });
 

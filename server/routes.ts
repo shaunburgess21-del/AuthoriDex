@@ -2,6 +2,9 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getTrendingData } from "./api-integrations";
+import { db } from "./db";
+import { trendSnapshots } from "@shared/schema";
+import { eq, desc, and, sql } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get all trending people
@@ -70,6 +73,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching person:", error);
       res.status(500).json({ error: "Failed to fetch person data" });
+    }
+  });
+
+  // Get historical trend data for graphs
+  app.get("/api/trending/:id/history", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { days = '7' } = req.query; // Default to 7 days
+      
+      const daysNum = parseInt(days as string);
+      const cutoffDate = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000);
+      
+      // Fetch snapshots for this person within the time range
+      const snapshots = await db
+        .select()
+        .from(trendSnapshots)
+        .where(and(
+          eq(trendSnapshots.personId, id),
+          sql`${trendSnapshots.timestamp} >= ${cutoffDate}`
+        ))
+        .orderBy(desc(trendSnapshots.timestamp))
+        .limit(daysNum * 24); // Max one per hour for requested days
+      
+      // Transform for graph display
+      const historyData = snapshots.reverse().map(snapshot => ({
+        timestamp: snapshot.timestamp.toISOString(),
+        date: snapshot.timestamp.toLocaleDateString(),
+        time: snapshot.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        trendScore: snapshot.trendScore,
+        newsCount: snapshot.newsCount,
+        youtubeViews: snapshot.youtubeViews,
+        spotifyFollowers: snapshot.spotifyFollowers,
+        searchVolume: snapshot.searchVolume,
+      }));
+
+      res.json(historyData);
+    } catch (error) {
+      console.error("Error fetching history:", error);
+      res.status(500).json({ error: "Failed to fetch historical data" });
     }
   });
 
