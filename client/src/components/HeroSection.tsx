@@ -24,7 +24,7 @@ export function HeroSection() {
         </h1>
         
         <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">
-          Discover the top 1000 trending people worldwide with live data from social media, search engines, and more.
+          Discover the top 100 trending people worldwide with live data from social media, search engines, and more.
         </p>
         
         <div className="flex flex-col sm:flex-row gap-4">
