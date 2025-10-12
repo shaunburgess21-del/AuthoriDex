@@ -28,7 +28,7 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
   const days = timeRange === "1D" ? 1 : timeRange === "7D" ? 7 : timeRange === "30D" ? 30 : 365;
 
   const { data: historyData, isLoading } = useQuery<HistoryDataPoint[]>({
-    queryKey: [`/api/trending/${personId}/history`, { days }],
+    queryKey: [`/api/trending/${personId}/history?days=${days}`],
   });
 
   const formatYAxis = (value: number) => {

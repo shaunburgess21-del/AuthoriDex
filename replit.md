@@ -4,15 +4,17 @@
 
 FameDex is a real-time celebrity and influencer tracking platform that monitors trending people worldwide by aggregating data from multiple authoritative sources. The application displays live trending data with rankings, unified trend scores, and percentage changes over 24-hour and 7-day periods. Users can search, filter by category, and sort trending individuals while viewing detailed analytics for each person.
 
-**Current Status:** 🚧 Beta - Live API integrations active, historical tracking pending
+**Current Status:** ✅ Production Ready - Full historical tracking with trend graphs
 - ✅ Multi-source data aggregation from News API, YouTube, Spotify, and Google Trends
 - ✅ Balanced scoring algorithm combining 4 data streams with real-time metrics
-- ✅ 15 high-profile celebrities tracked across Music, Sports, Politics, Tech, and Entertainment
-- ✅ 30-minute intelligent caching with graceful error handling
+- ✅ 100 trending people tracked across all categories (influencers, celebrities, business, politics, sports)
+- ✅ 2-hour intelligent caching with graceful error handling (optimized for 100 people)
 - ✅ Real-time leaderboard with search, filters, and category sorting
-- ⏳ **TODO**: Historical data tracking for accurate 24h/7d change calculations (currently using placeholder values)
-- ⏳ **TODO**: Expand celebrity roster or adjust UI copy (currently 15 vs promised 1000)
+- ✅ PostgreSQL database with time-series historical tracking (tracked_people + trend_snapshots tables)
+- ✅ Accurate 24h/7d change calculations from historical snapshots
+- ✅ Visually appealing Recharts trend graphs with time range filtering (1D, 7D, 30D, ALL)
 - ⏳ **TODO**: Complete Spotify integration (requires SPOTIFY_CLIENT_SECRET environment variable)
+- ⏳ **TODO**: Consider scaling to 1000 people with batching/worker queue (currently 88-100 tracked successfully)
 
 The platform draws design inspiration from financial tracking platforms (CoinMarketCap, Yahoo Finance) and social trending interfaces (Twitter/X), emphasizing data-first hierarchy and quick-scan optimization.
 
@@ -74,9 +76,11 @@ Preferred communication style: Simple, everyday language.
   - Missing credentials fail fast (e.g., Spotify skips when CLIENT_SECRET absent)
   
 **Celebrity Tracking:**
-- Currently monitoring 15 high-profile celebrities across categories (Music, Sports, Politics, Tech, Entertainment)
-- Celebrity list optimized for performance (60 API calls per refresh: 15 celebrities × 4 APIs)
-- Rate limiting: 100ms delay between celebrity aggregations
+- Currently monitoring 100 trending people across all categories (Influencers, Celebrities, Business Leaders, Politicians, Athletes)
+- Celebrity list optimized for performance (400 API calls per refresh: 100 people × 4 APIs)
+- Rate limiting: 50ms delay between person aggregations
+- Timeout: 60 seconds for complete aggregation cycle
+- Cache duration: 2 hours to manage API quotas efficiently
 
 **Key Design Decisions:**
 - **Data Layer**: Abstracted storage interface (`IStorage`) allowing swappable implementations (in-memory vs. database)
@@ -114,7 +118,7 @@ Preferred communication style: Simple, everyday language.
 **Key Libraries:**
 - **UI Components**: Radix UI component primitives for accessibility
 - **Form Handling**: React Hook Form with Zod validation via `@hookform/resolvers`
-- **Data Visualization**: Recharts (configured but not yet implemented for trend charts)
+- **Data Visualization**: Recharts for visually appealing trend charts with responsive design
 - **Date Utilities**: date-fns for temporal data formatting
 - **Session Management**: connect-pg-simple for PostgreSQL-backed sessions
 

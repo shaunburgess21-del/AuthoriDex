@@ -83,6 +83,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { days = '7' } = req.query; // Default to 7 days
       
       const daysNum = parseInt(days as string);
+      
+      // Validate days parameter
+      if (isNaN(daysNum) || daysNum < 1 || daysNum > 3650) {
+        return res.status(400).json({ error: "Invalid days parameter. Must be between 1 and 3650." });
+      }
+      
       const cutoffDate = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000);
       
       // Fetch snapshots for this person within the time range
