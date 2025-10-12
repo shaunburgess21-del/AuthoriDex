@@ -121,7 +121,7 @@ export default function HomePage() {
         <Card>
           <CardHeader className="flex flex-col sm:flex-row sm:items-center gap-4 space-y-0 pb-4">
             <CardTitle className="text-2xl font-serif flex-1">
-              Top 1000 Leaderboard
+              Top 100 Leaderboard
             </CardTitle>
             <div className="flex gap-2">
               <FilterDropdown value={category} onChange={setCategory} />
