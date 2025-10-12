@@ -4,17 +4,19 @@
 
 FameDex is a real-time celebrity and influencer tracking platform that monitors trending people worldwide by aggregating data from multiple authoritative sources. The application displays live trending data with rankings, unified trend scores, and percentage changes over 24-hour and 7-day periods. Users can search, filter by category, and sort trending individuals while viewing detailed analytics for each person.
 
-**Current Status:** ✅ Production Ready - Full historical tracking with trend graphs
-- ✅ Multi-source data aggregation from News API, YouTube, Spotify, and Google Trends
-- ✅ Balanced scoring algorithm combining 4 data streams with real-time metrics
-- ✅ 100 trending people tracked across all categories (influencers, celebrities, business, politics, sports)
-- ✅ 2-hour intelligent caching with graceful error handling (optimized for 100 people)
-- ✅ Real-time leaderboard with search, filters, and category sorting
-- ✅ PostgreSQL database with time-series historical tracking (tracked_people + trend_snapshots tables)
-- ✅ Accurate 24h/7d change calculations from historical snapshots
-- ✅ Visually appealing Recharts trend graphs with time range filtering (1D, 7D, 30D, ALL)
-- ⏳ **TODO**: Complete Spotify integration (requires SPOTIFY_CLIENT_SECRET environment variable)
-- ⏳ **TODO**: Consider scaling to 1000 people with batching/worker queue (currently 88-100 tracked successfully)
+**Current Status:** ✅ Design/UX Ready - Mock data mode for perfect design iteration
+- ✅ **MOCK DATA MODE ACTIVE** - Real APIs replaced with realistic mock data for design work
+- ✅ All 100 people tracked successfully (no API rate limiting)
+- ✅ Realistic trend scores (100k-500k range) with varied percentage changes
+- ✅ 30 days of historical data for trend graphs (1D, 7D, 30D, ALL)
+- ✅ Real 24h/7d percentage changes (e.g., -4.48%, +29.47%)
+- ✅ PostgreSQL database with unique constraint preventing duplicates
+- ✅ 30-second cache for fast design iteration
+- ✅ Stable midnight UTC timestamps for historical data consistency
+- ✅ Avatar initials display (e.g., "EM" for Elon Musk)
+- ✅ Load More pagination (20 at a time, up to 100)
+- ✅ Clickable daily/weekly mover widgets
+- 📋 **NEXT PHASE**: Upgrade to premium APIs (Twitter/X, TikTok, Meta) before launch
 
 The platform draws design inspiration from financial tracking platforms (CoinMarketCap, Yahoo Finance) and social trending interfaces (Twitter/X), emphasizing data-first hierarchy and quick-scan optimization.
 
@@ -59,28 +61,31 @@ Preferred communication style: Simple, everyday language.
 - Separation of concerns with dedicated route handlers in `/server/routes.ts`
 - Multi-source API aggregation system in `/server/api-integrations.ts`
 
-**Multi-API Integration Architecture:**
+**Mock Data System (CURRENTLY ACTIVE):**
+- **Purpose**: Enable design/UX iteration without API rate limiting constraints
+- **Data Generation**:
+  - `generateMockMetrics()`: Creates varied trend scores (100k-500k) using name-based seeding
+  - `generateMockHistoricalData()`: Creates 30 days of historical snapshots with growth pattern
+  - Formula: `500000 - (index * 4000) - (Math.sin(seed) * 20000)`
+  - Historical pattern: `currentScore * (1 - daysAgo/40 + Math.sin(daysAgo*0.5)*0.15)`
+- **Duplicate Prevention**:
+  - Unique constraint on (person_id, timestamp) in trend_snapshots table
+  - Stable midnight UTC timestamps for historical data
+  - One-time historical generation per person (3200 total snapshots: 100 people × 32)
+- **Performance**:
+  - 30-second cache for fast design iteration
+  - ~60 second initial generation (includes historical data)
+  - ~7 second subsequent loads (current snapshot only)
+  - 120-second timeout for safety
+- **Console Log**: "🎭 Using MOCK DATA for 100 tracked people (design mode)"
+
+**Real API Integration Architecture (FOR FUTURE USE):**
 - **Data Aggregation**: Combines data from 4 external APIs (News, YouTube, Spotify, SERP) into unified trending scores
 - **Balanced Scoring Algorithm**: 
   - All metrics normalized to 0-1000 range for fair comparison
   - Weighted combination: 30% news mentions, 25% YouTube views, 25% Spotify followers, 20% search trends
   - Final scores scaled to 100k-500k range for visual impact
-- **Performance Optimization**:
-  - 30-minute cache duration to respect API rate limits
-  - Fetch locking prevents simultaneous API calls (thundering herd protection)
-  - AbortController-based timeouts (5s per API, 15s total) prevent hung requests
-  - Stale cache fallback on errors ensures continuous availability
-- **Error Resilience**: 
-  - Failed API calls return 0 (graceful degradation)
-  - Zero-score entries filtered from results
-  - Missing credentials fail fast (e.g., Spotify skips when CLIENT_SECRET absent)
-  
-**Celebrity Tracking:**
-- Currently monitoring 100 trending people across all categories (Influencers, Celebrities, Business Leaders, Politicians, Athletes)
-- Celebrity list optimized for performance (400 API calls per refresh: 100 people × 4 APIs)
-- Rate limiting: 50ms delay between person aggregations
-- Timeout: 60 seconds for complete aggregation cycle
-- Cache duration: 2 hours to manage API quotas efficiently
+- **Note**: Currently disabled in favor of mock data for design work. Will be re-enabled with premium API tiers (Twitter/X, TikTok, Meta) before launch.
 
 **Key Design Decisions:**
 - **Data Layer**: Abstracted storage interface (`IStorage`) allowing swappable implementations (in-memory vs. database)
