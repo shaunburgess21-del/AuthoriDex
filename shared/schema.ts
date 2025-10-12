@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, real, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, real, timestamp, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -45,7 +45,9 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   spotifyFollowers: real("spotify_followers").notNull().default(0),
   searchVolume: real("search_volume").notNull().default(0),
   trendScore: real("trend_score").notNull(),
-});
+}, (table) => ({
+  uniquePersonTimestamp: unique().on(table.personId, table.timestamp),
+}));
 
 export const insertTrendSnapshotSchema = createInsertSchema(trendSnapshots).omit({
   id: true,

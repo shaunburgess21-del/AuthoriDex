@@ -186,6 +186,76 @@ async function getHistoricalSnapshot(personId: string, hoursAgo: number): Promis
   return snapshot?.trendScore || null;
 }
 
+// Generate realistic mock data for design work
+function generateMockMetrics(name: string, index: number): CelebrityMetrics {
+  // Use name hash for consistent pseudo-random values
+  const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const seed = hash + index;
+  
+  // Generate varied trend scores (100k-500k range, with clustering at top)
+  const baseTrendScore = 500000 - (index * 4000) - (Math.sin(seed) * 20000);
+  const trendScore = Math.max(100000, Math.round(baseTrendScore));
+  
+  // Reverse engineer realistic component metrics
+  const newsCount = Math.round((trendScore / 1000) * 0.3 * (0.8 + Math.random() * 0.4));
+  const youtubeViews = Math.round(trendScore * 100 * (0.8 + Math.random() * 0.4));
+  const spotifyFollowers = Math.round(trendScore * 20 * (0.8 + Math.random() * 0.4));
+  const searchVolume = Math.round((trendScore / 1000) * 0.2 * (0.8 + Math.random() * 0.4));
+  
+  return {
+    name,
+    category: '', // Will be filled from DB
+    newsCount,
+    youtubeViews,
+    spotifyFollowers,
+    searchVolume,
+    trendScore,
+  };
+}
+
+// Generate mock historical snapshots for trend graphs
+async function generateMockHistoricalData(personId: string, currentScore: number): Promise<void> {
+  // Use stable base date (truncated to midnight UTC today)
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const baseTimestamp = today.getTime();
+  
+  const dataPoints = [];
+  
+  // Generate 30 days of mock historical data with stable timestamps
+  for (let daysAgo = 30; daysAgo >= 0; daysAgo--) {
+    // Create stable timestamp (midnight UTC for each day)
+    const timestamp = new Date(baseTimestamp - daysAgo * 24 * 60 * 60 * 1000);
+    
+    // Create trending pattern: gradual growth with some volatility
+    const dayFactor = 1 - (daysAgo / 40); // Gradual increase
+    const volatility = (Math.sin(daysAgo * 0.5) * 0.15); // ±15% fluctuation
+    const historicalScore = Math.round(currentScore * (dayFactor + volatility));
+    
+    // Reverse engineer component metrics proportionally
+    const score = Math.max(50000, historicalScore);
+    
+    dataPoints.push({
+      personId,
+      newsCount: Math.round((score / 1000) * 0.3),
+      youtubeViews: Math.round(score * 100),
+      spotifyFollowers: Math.round(score * 20),
+      searchVolume: Math.round((score / 1000) * 0.2),
+      trendScore: score,
+      timestamp,
+    });
+  }
+  
+  // Insert all historical snapshots (duplicates will be ignored via unique constraint)
+  for (const point of dataPoints) {
+    try {
+      await db.insert(trendSnapshots).values(point);
+    } catch (error) {
+      // Silently ignore duplicate errors from unique constraint
+    }
+  }
+}
+
 // Aggregate all metrics into a unified trending score
 export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
   // Fetch tracked people from database
@@ -196,89 +266,62 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
     return [];
   }
 
-  console.log(`Aggregating data for ${celebrities.length} tracked people...`);
+  console.log(`🎭 Using MOCK DATA for ${celebrities.length} tracked people (design mode)`);
   
   const results: CelebrityMetrics[] = [];
 
-  // Fetch metrics for each celebrity (with rate limiting)
+  // Generate mock metrics for each celebrity
   for (let i = 0; i < celebrities.length; i++) {
     const celeb = celebrities[i];
     
+    const mockMetrics = generateMockMetrics(celeb.name, i);
+    
+    results.push({
+      name: celeb.name,
+      category: celeb.category,
+      newsCount: mockMetrics.newsCount,
+      youtubeViews: mockMetrics.youtubeViews,
+      spotifyFollowers: mockMetrics.spotifyFollowers,
+      searchVolume: mockMetrics.searchVolume,
+      trendScore: mockMetrics.trendScore,
+    });
+
+    // Generate historical data and current snapshot
     try {
-      const [newsCount, youtubeViews, spotifyFollowers, searchVolume] = await Promise.all([
-        fetchNewsMetrics(celeb.name),
-        fetchYouTubeMetrics(celeb.name),
-        celeb.category === 'Music' ? fetchSpotifyMetrics(celeb.name) : Promise.resolve(0),
-        fetchSearchTrends(celeb.name),
-      ]);
-
-      // Calculate balanced weighted trend score
-      // Normalize all metrics to similar scales (0-1000 range) then weight them
-      const normalizedNews = Math.min(newsCount / 100, 1000);        // News: 0-100 articles = 0-1000
-      const normalizedYouTube = Math.min(youtubeViews / 10000000, 1000); // YouTube: 10M views = 1000
-      const normalizedSpotify = Math.min(spotifyFollowers / 1000000, 1000); // Spotify: 1M followers = 1000
-      const normalizedSearch = Math.min(searchVolume / 100, 1000);   // Search: 0-100 interest = 0-1000
-      
-      const trendScore = 
-        (normalizedNews * 0.30) +      // News mentions: 30% weight
-        (normalizedYouTube * 0.25) +   // YouTube popularity: 25% weight
-        (normalizedSpotify * 0.25) +   // Spotify followers: 25% weight
-        (normalizedSearch * 0.20);     // Search trends: 20% weight
-
-      const finalTrendScore = Math.round(trendScore * 1000); // Scale up for display
-      
-      results.push({
-        name: celeb.name,
-        category: celeb.category,
-        newsCount,
-        youtubeViews,
-        spotifyFollowers,
-        searchVolume,
-        trendScore: finalTrendScore,
-      });
-
-      // Save snapshot to database for historical tracking
-      try {
-        await db.insert(trendSnapshots).values({
-          personId: celeb.id,
-          newsCount,
-          youtubeViews,
-          spotifyFollowers,
-          searchVolume,
-          trendScore: finalTrendScore,
-        });
-      } catch (snapshotError) {
-        console.error(`Failed to save snapshot for ${celeb.name}:`, snapshotError);
+      // Check if historical data exists FIRST
+      const anyHistory = await db
+        .select()
+        .from(trendSnapshots)
+        .where(eq(trendSnapshots.personId, celeb.id))
+        .limit(1);
+        
+      // Only generate historical data once (when person has no history at all)
+      if (anyHistory.length === 0) {
+        await generateMockHistoricalData(celeb.id, mockMetrics.trendScore);
       }
-
-      // Rate limiting: minimal delay between API calls
-      await new Promise(resolve => setTimeout(resolve, 50));
-    } catch (error) {
-      console.error(`Error aggregating data for ${celeb.name}:`, error);
-      // On error, add with zero scores to maintain list consistency
-      results.push({
-        name: celeb.name,
-        category: celeb.category,
-        newsCount: 0,
-        youtubeViews: 0,
-        spotifyFollowers: 0,
-        searchVolume: 0,
-        trendScore: 0,
+      
+      // Always save current snapshot
+      await db.insert(trendSnapshots).values({
+        personId: celeb.id,
+        newsCount: mockMetrics.newsCount,
+        youtubeViews: mockMetrics.youtubeViews,
+        spotifyFollowers: mockMetrics.spotifyFollowers,
+        searchVolume: mockMetrics.searchVolume,
+        trendScore: mockMetrics.trendScore,
       });
+    } catch (snapshotError) {
+      // Ignore errors, continue
     }
   }
 
   // Sort by trend score
   results.sort((a, b) => b.trendScore - a.trendScore);
-
-  // Filter out zero-score entries (failed API calls) before mapping
-  const validResults = results.filter(r => r.trendScore > 0);
   
   // Convert to TrendingPerson format with historical changes
   const trendingPeople: TrendingPerson[] = [];
   
-  for (let index = 0; index < validResults.length; index++) {
-    const celeb = validResults[index];
+  for (let index = 0; index < results.length; index++) {
+    const celeb = results[index];
     const dbPerson = celebrities.find(c => c.name === celeb.name);
     
     if (!dbPerson) continue;
@@ -287,7 +330,7 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
     const score24hAgo = await getHistoricalSnapshot(dbPerson.id, 24);
     const score7dAgo = await getHistoricalSnapshot(dbPerson.id, 7 * 24);
     
-    // Calculate percentage changes (or use 0 if no historical data)
+    // Calculate percentage changes
     const change24h = score24hAgo !== null 
       ? calculatePercentageChange(celeb.trendScore, score24hAgo)
       : 0;
@@ -310,10 +353,10 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
   return trendingPeople;
 }
 
-// Cache for aggregated data (refresh every 2 hours to manage API quotas)
+// Cache for aggregated data (short duration for mock data design work)
 let cachedData: TrendingPerson[] = [];
 let lastFetch: number = 0;
-const CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 hours (reduced frequency for 100 people)
+const CACHE_DURATION = 30 * 1000; // 30 seconds (fast refresh for design work with mock data)
 
 // Lock to prevent simultaneous fetches
 let fetchInProgress: Promise<TrendingPerson[]> | null = null;
@@ -338,9 +381,9 @@ export async function getTrendingData(): Promise<TrendingPerson[]> {
   // Create the fetch promise and store it
   fetchInProgress = (async () => {
     try {
-      // Add a timeout to the entire aggregation process (increased for 100 people)
+      // Add a timeout to the entire aggregation process (increased for mock data generation)
       const timeoutPromise = new Promise<TrendingPerson[]>((_, reject) => 
-        setTimeout(() => reject(new Error('Data aggregation timeout')), 60000)
+        setTimeout(() => reject(new Error('Data aggregation timeout')), 120000)
       );
       
       const freshData = await Promise.race([
