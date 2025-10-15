@@ -1,0 +1,67 @@
+We’re refining the FameDex individual profile (e.g., Elon Musk). Supabase is fully integrated. Please implement the following UI/UX features and structure:
+1) Sentiment Voting (top of page)
+•	Add a “Vote Your Sentiment” widget placed beside or directly below the person’s name (desktop: right of name; mobile: below name, above stat cards).
+•	Users vote on a 1–10 scale:
+o	1 = “Hate” (red) → 5 = “Neutral” (yellow/orange) → 10 = “Love” (dark green), with smooth color transition (red → orange → yellow → light green → dark green).
+•	Show visual distribution only (no total counts yet): a horizontal 1–10 segmented bar or mini-bars, where segment width/opacity reflects % share.
+•	If user has already voted, highlight their chosen segment and keep interaction available to revise (optional).
+•	Connect to Supabase for persisting and reading votes; update UI smoothly after voting.
+•	Add helper text/tooltip: “Click to rate your sentiment (1–10).”
+•	Caption: “Community Sentiment.”
+2) Page Layout Order (top → bottom)
+1.	Header: Name + category + Sentiment Voting widget.
+2.	Stats Cards: Trend Score, 24h Change, etc. (existing).
+3.	Trend History chart (existing).
+4.	Platform Insights (new section, stacked blocks vertically).
+3) Platform Insights (stacked blocks)
+•	Create full-width Platform Blocks for: X (Twitter), YouTube, Instagram, TikTok, Spotify, News/Google (hide blocks with no data).
+•	Header row (per platform):
+o	Left: platform logo + name with brand accent color.
+o	Right-aligned: Total followers/subscribers (compact format: 1.2M, 850K).
+	Labels: X/Instagram/TikTok = “Followers”; YouTube = “Subscribers”; Spotify = “Monthly Listeners” (or “Followers” if that’s what we store).
+	On mobile, place followers metric below the logo/name, left-aligned.
+	If value unknown, hide it (no placeholder). Optional tooltip: “Last updated: {timestamp}”.
+•	Insight Cards row (per platform): display multiple cards side-by-side (wrap on small screens). Each card shows the #1 ranked item for that insight (e.g., “Most Liked Tweet”, “Most Viewed Video”).
+o	Card content includes: title/snippet, primary metric (likes/views/comments/etc.), optional thumbnail/preview.
+o	Primary CTA: “View Top 5” opens a modal overlay.
+•	Modal (Top 5):
+o	Title: {Platform} — {Insight Name}.
+o	Show ranked list #1 → #5 with rank badges, title/snippet, metric value + label, and an “Open Post” link (if available).
+o	Close via ESC, overlay click, or close button.
+•	Optional (nice-to-have): small “Engagement Over Time” mini-chart beneath the cards per platform, if we have an engagement series; hide if absent.
+4) Responsiveness & Style
+•	Dark theme, modern cards with soft borders/hover states; platform accent colors for headers and key lines.
+•	Desktop: Platform header left/right layout; cards in a responsive grid (min ~260–300px each).
+•	Tablet: 2 columns.
+•	Mobile: Single column; platform header stacks, followers metric drops below name.
+•	Smooth animations for voting transitions and modal open/close.
+5) Supabase Integration (already active)
+•	Use Supabase for:
+o	Votes: read/write and aggregate distribution for the sentiment widget (1–10).
+o	Platform Insights data: read from our API-safe views (top posts, metrics, thumbnails, links).
+o	Followers/Subscribers totals per platform: read from our platform stats source if present; otherwise hide.
+•	Realtime updates (if available) should update Trend Score/History and can be used to refresh visible platform insights gracefully (non-blocking).
+6) Accessibility & Performance
+•	All interactive elements keyboard-accessible; modal traps focus and restores on close.
+•	Maintain color contrast; include aria-labels for interactive controls.
+•	Lazy-load images/thumbnails; avoid layout shift; use compact number formatting (e.g., 2,400,000 → 2.4M).
+7) Telemetry (light)
+•	Log UI events:
+o	ui.vote_submitted with { personId, value }.
+o	ui.insight_modal_open with { personId, platform, insightKey }.
+o	ui.insight_post_open with { personId, platform, insightKey, rank }.
+8) Acceptance Criteria
+•	Voting widget appears at the top near the name; users can submit a 1–10 vote; distribution updates visually; no raw counts displayed.
+•	Platform Insights appear below Trend History; blocks are stacked vertically; each block shows platform name/logo + right-aligned followers (or hidden if unknown).
+•	Each platform block displays Insight Cards with the #1 ranked item and opens a Top 5 modal with proper ranking/metrics/links.
+•	Layout is responsive across desktop/tablet/mobile and matches the FameDex dark theme.
+•	All reads/writes use Supabase; no client errors; smooth animations.
+•	No code smells: clear structure, maintainable components, and best practices.
+9) Future Widgets (implement placeholders where possible)
+•	Net Worth / Estimated Earnings (Forbes/Google Knowledge).
+•	Social Reach Summary (total followers across platforms).
+•	AI Sentiment Summary (“Overall sentiment is positive, driven by activity on X and YouTube.”).
+•	Engagement Rank vs. Category (compare engagement rate to peers).
+•	Most Talked About Topic (keywords from latest posts).
+If any detail is unclear, use best judgment and proceed—opt for a visually engaging, scalable implementation consistent with the current FameDex style.
+

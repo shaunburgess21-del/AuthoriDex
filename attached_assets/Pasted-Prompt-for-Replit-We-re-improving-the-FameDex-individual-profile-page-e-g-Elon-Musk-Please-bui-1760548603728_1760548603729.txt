@@ -1,0 +1,75 @@
+Prompt for Replit:
+
+We’re improving the FameDex individual profile page (e.g. Elon Musk). Please build and refine the layout using the following structure and new voting feature. Supabase is already fully integrated — the voting data should connect to and update via Supabase.
+
+1. Add Sentiment Voting Feature
+
+Create a “Vote Your Sentiment” component placed beside or directly below the person’s name, near the top of the page.
+
+Users can vote on a scale of 1–10, where:
+
+1 = “Hate” (red)
+
+5 = “Neutral” (yellow/orange)
+
+10 = “Love” (dark green)
+
+The scale transitions smoothly from red → orange → yellow → light green → dark green.
+
+Display results visually only (no total vote count yet).
+
+Use a horizontal bar chart or segmented gradient bar showing the percentage of votes across 1–10.
+
+Keep votes anonymous.
+
+If the user has already voted, highlight their selection with a glowing border or marker.
+
+2. Placement
+
+On desktop: place to the right of the person’s name and category.
+
+On mobile: place below the name, above the stats (Trend Score, 24h Change, etc.).
+
+Design should feel interactive and align with the FameDex dark theme.
+
+3. Functionality
+
+Connect this feature to Supabase for reading/writing votes.
+
+Store and update votes in real time.
+
+Animate bars updating smoothly after each vote.
+
+Include a tooltip: “Click to rate your sentiment (1–10)”.
+
+Add subtle label text below: “Community Sentiment”.
+
+4. Page Layout Order
+
+After the voting widget, keep the layout order as follows:
+
+Trend metrics (Trend Score, 24h Change, etc.)
+
+Trend History chart
+
+Platform Insights (stacked blocks, already implemented)
+
+5. Component Readiness
+
+Component props: personId, userVote, distributionData.
+
+Use existing Supabase integration for persistent vote storage.
+
+Future Widget Ideas (for later phases)
+
+When API integrations are live, please consider adding:
+
+Net Worth / Estimated Earnings Card (from Forbes or Google Knowledge API)
+
+Social Reach Summary (total followers across all platforms)
+
+AI Sentiment Summary — auto-generated text such as: “Overall sentiment is positive, driven by recent activity on X and YouTube.”
+
+Engagement Rank vs. Category — compares a person’s engagement rate with others in their category
+
+Most Talked About Topic — extracts trending keywords from their latest posts
