@@ -7,7 +7,8 @@ import { TrendChart } from "@/components/TrendChart";
 import { StatCard } from "@/components/StatCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PlatformInsightsSection } from "@/components/PlatformInsightsSection";
-import { ArrowLeft, Share2, Star, TrendingUp, Users, Eye } from "lucide-react";
+import { SentimentVotingWidget } from "@/components/SentimentVotingWidget";
+import { ArrowLeft, Share2, Star, TrendingUp, Users, Eye, DollarSign, Globe, MessageSquare, Trophy } from "lucide-react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
@@ -76,97 +77,145 @@ export default function PersonDetailPage() {
       </header>
 
       <div className="container mx-auto px-4 py-12 max-w-6xl">
-        <Card className="mb-8">
-          <CardContent className="p-8">
-            <div className="flex flex-col md:flex-row gap-8">
-              <div className="flex flex-col items-center md:items-start gap-4">
-                <PersonAvatar name={person.name} avatar={person.avatar} size="lg" />
-                <RankBadge rank={person.rank} />
-              </div>
-              
-              <div className="flex-1">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
-                  <div>
-                    <h1 className="text-4xl font-serif font-bold mb-2" data-testid="text-person-name">
-                      {person.name}
-                    </h1>
-                    <p className="text-lg text-muted-foreground">{person.category}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="gap-2" data-testid="button-share">
-                      <Share2 className="h-4 w-4" />
-                      Share
-                    </Button>
-                    <Button variant="outline" size="sm" className="gap-2" data-testid="button-favorite">
-                      <Star className="h-4 w-4" />
-                      Favorite
-                    </Button>
-                  </div>
+        {/* 1. Header: Name + Category + Sentiment Widget */}
+        <div className="mb-8">
+          <div className="flex flex-col lg:flex-row gap-6 mb-6">
+            <div className="flex items-start gap-6">
+              <PersonAvatar name={person.name} avatar={person.avatar} size="lg" />
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <h1 className="text-4xl font-serif font-bold" data-testid="text-person-name">
+                    {person.name}
+                  </h1>
+                  <RankBadge rank={person.rank} />
                 </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="text-center p-4 rounded-lg border">
-                    <p className="text-sm text-muted-foreground uppercase tracking-wide mb-1">
-                      Trend Score
-                    </p>
-                    <p className="text-3xl font-mono font-bold" data-testid="text-trend-score">
-                      {person.trendScore.toFixed(0)}
-                    </p>
-                  </div>
-                  <div className="text-center p-4 rounded-lg border">
-                    <p className="text-sm text-muted-foreground uppercase tracking-wide mb-1">
-                      24h Change
-                    </p>
-                    <div className="flex justify-center mt-2">
-                      <TrendBadge value={person.change24h} />
-                    </div>
-                  </div>
-                  <div className="text-center p-4 rounded-lg border">
-                    <p className="text-sm text-muted-foreground uppercase tracking-wide mb-1">
-                      7d Change
-                    </p>
-                    <div className="flex justify-center mt-2">
-                      <TrendBadge value={person.change7d} />
-                    </div>
-                  </div>
-                  <div className="text-center p-4 rounded-lg border">
-                    <p className="text-sm text-muted-foreground uppercase tracking-wide mb-1">
-                      Rank
-                    </p>
-                    <p className="text-3xl font-mono font-bold">
-                      #{person.rank}
-                    </p>
-                  </div>
+                <p className="text-lg text-muted-foreground mb-4">{person.category}</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="gap-2" data-testid="button-share">
+                    <Share2 className="h-4 w-4" />
+                    Share
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-2" data-testid="button-favorite">
+                    <Star className="h-4 w-4" />
+                    Favorite
+                  </Button>
                 </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <StatCard 
-            title="Social Mentions" 
-            value="1.2M" 
-            icon={Users} 
-            subtitle="Past 7 days" 
-          />
-          <StatCard 
-            title="Engagement Rate" 
-            value="8.5%" 
-            icon={TrendingUp} 
-            subtitle="Above average" 
-          />
-          <StatCard 
-            title="Search Volume" 
-            value="850K" 
-            icon={Eye} 
-            subtitle="Weekly searches" 
-          />
+            
+            {/* Sentiment Widget - Desktop: right side, Mobile: below name */}
+            <div className="lg:ml-auto lg:w-96">
+              <SentimentVotingWidget 
+                personId={person.id} 
+                personName={person.name}
+                distribution={{}}
+              />
+            </div>
+          </div>
         </div>
 
+        {/* 2. Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="text-center p-4 rounded-lg border">
+            <p className="text-sm text-muted-foreground uppercase tracking-wide mb-1">
+              Trend Score
+            </p>
+            <p className="text-3xl font-mono font-bold" data-testid="text-trend-score">
+              {person.trendScore.toFixed(0)}
+            </p>
+          </div>
+          <div className="text-center p-4 rounded-lg border">
+            <p className="text-sm text-muted-foreground uppercase tracking-wide mb-1">
+              24h Change
+            </p>
+            <div className="flex justify-center mt-2">
+              <TrendBadge value={person.change24h} />
+            </div>
+          </div>
+          <div className="text-center p-4 rounded-lg border">
+            <p className="text-sm text-muted-foreground uppercase tracking-wide mb-1">
+              7d Change
+            </p>
+            <div className="flex justify-center mt-2">
+              <TrendBadge value={person.change7d} />
+            </div>
+          </div>
+          <div className="text-center p-4 rounded-lg border">
+            <p className="text-sm text-muted-foreground uppercase tracking-wide mb-1">
+              Rank
+            </p>
+            <p className="text-3xl font-mono font-bold">
+              #{person.rank}
+            </p>
+          </div>
+        </div>
+
+        {/* 3. Trend History Chart */}
         <TrendChart personId={person.id} personName={person.name} />
         
+        {/* 4. Platform Insights (stacked blocks) */}
         <PlatformInsightsSection personId={person.id} />
+
+        {/* 5. Future Widgets - Placeholder Section */}
+        <div className="mt-12 space-y-6">
+          <h2 className="text-2xl font-serif font-bold mb-6">Additional Insights</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Net Worth Placeholder */}
+            <Card className="p-6 opacity-50">
+              <div className="flex items-center gap-3 mb-3">
+                <DollarSign className="h-5 w-5 text-muted-foreground" />
+                <h3 className="font-semibold">Net Worth</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">Coming soon: Forbes & Knowledge Graph data</p>
+            </Card>
+
+            {/* Social Reach Summary Placeholder */}
+            <Card className="p-6 opacity-50">
+              <div className="flex items-center gap-3 mb-3">
+                <Globe className="h-5 w-5 text-muted-foreground" />
+                <h3 className="font-semibold">Social Reach</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">Coming soon: Total followers across platforms</p>
+            </Card>
+
+            {/* AI Sentiment Summary Placeholder */}
+            <Card className="p-6 opacity-50">
+              <div className="flex items-center gap-3 mb-3">
+                <MessageSquare className="h-5 w-5 text-muted-foreground" />
+                <h3 className="font-semibold">AI Sentiment</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">Coming soon: AI-powered sentiment analysis</p>
+            </Card>
+
+            {/* Engagement Rank Placeholder */}
+            <Card className="p-6 opacity-50">
+              <div className="flex items-center gap-3 mb-3">
+                <Trophy className="h-5 w-5 text-muted-foreground" />
+                <h3 className="font-semibold">Category Rank</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">Coming soon: Engagement vs. peers</p>
+            </Card>
+
+            {/* Most Talked About Topic Placeholder */}
+            <Card className="p-6 opacity-50">
+              <div className="flex items-center gap-3 mb-3">
+                <TrendingUp className="h-5 w-5 text-muted-foreground" />
+                <h3 className="font-semibold">Trending Topics</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">Coming soon: Keywords from latest posts</p>
+            </Card>
+
+            {/* Search Volume Detail Placeholder */}
+            <Card className="p-6 opacity-50">
+              <div className="flex items-center gap-3 mb-3">
+                <Eye className="h-5 w-5 text-muted-foreground" />
+                <h3 className="font-semibold">Search Trends</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">Coming soon: Geographic search distribution</p>
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
