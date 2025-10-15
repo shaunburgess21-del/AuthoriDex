@@ -5,14 +5,43 @@ import { getTrendingData, generateMockPlatformInsights } from "./api-integration
 import { db } from "./db";
 import { trendSnapshots, trackedPeople } from "@shared/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
+import { seedSupabasePersons } from "./supabase-seed";
+import { supabaseServer } from "./supabase";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Seed Supabase with tracked persons on server start
+  seedSupabasePersons().catch(err => {
+    console.error('Failed to seed Supabase:', err);
+  });
+  
   // Supabase config endpoint for client
   app.get("/api/config/supabase", (req, res) => {
     res.json({
       url: process.env.SUPABASE_URL,
       anonKey: process.env.SUPABASE_ANON_KEY,
     });
+  });
+  
+  // Manual seeding endpoint for testing
+  app.post("/api/admin/seed-supabase", async (req, res) => {
+    try {
+      const result = await seedSupabasePersons();
+      
+      // Test query to verify
+      const { data, error } = await supabaseServer
+        .from('persons')
+        .select('id, name')
+        .limit(3);
+      
+      res.json({ 
+        success: true, 
+        message: "Supabase seeded successfully",
+        samplePersons: data,
+        error: error
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
   });
   // Get all trending people
   app.get("/api/trending", async (req, res) => {
