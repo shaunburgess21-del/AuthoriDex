@@ -215,7 +215,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate mock platform insights
       const insights = generateMockPlatformInsights(person.name);
       
-      res.json(insights);
+      // Generate mock follower counts for each platform
+      const hash = person.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const followerCounts = {
+        'X': Math.round(1000000 + (hash % 50000000)), // 1M-51M followers
+        'YouTube': Math.round(500000 + (hash % 20000000)), // 500K-20.5M subscribers
+        'Instagram': Math.round(2000000 + (hash % 100000000)), // 2M-102M followers
+        'TikTok': Math.round(5000000 + (hash % 150000000)), // 5M-155M followers
+        'Spotify': Math.round(100000 + (hash % 10000000)), // 100K-10.1M monthly listeners
+        'News': 0, // No followers for news
+      };
+      
+      // Add follower counts to the response
+      res.json({
+        insights,
+        followerCounts,
+      });
     } catch (error) {
       console.error("Error fetching platform insights:", error);
       res.status(500).json({ error: "Failed to fetch platform insights" });

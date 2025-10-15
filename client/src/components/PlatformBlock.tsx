@@ -26,6 +26,7 @@ interface PlatformBlockProps {
   insights: PlatformInsight[];
   followerCount?: number;
   followerLabel?: string;
+  personId?: string;
 }
 
 const platformConfig: Record<string, { 
@@ -72,10 +73,20 @@ const platformConfig: Record<string, {
   },
 };
 
-export function PlatformBlock({ platform, insights, followerCount, followerLabel }: PlatformBlockProps) {
+export function PlatformBlock({ platform, insights, followerCount, followerLabel, personId }: PlatformBlockProps) {
   const [selectedInsight, setSelectedInsight] = useState<PlatformInsight | null>(null);
   const config = platformConfig[platform] || platformConfig['News'];
   const Icon = config.icon;
+
+  const handleInsightClick = (insight: PlatformInsight) => {
+    // Log telemetry event
+    console.log('[Telemetry] ui.insight_modal_open', { 
+      personId,
+      platform, 
+      insightKey: insight.insightType 
+    });
+    setSelectedInsight(insight);
+  };
 
   // Format follower count (e.g., 1200000 -> 1.2M)
   const formatCount = (count: number): string => {
@@ -128,7 +139,7 @@ export function PlatformBlock({ platform, insights, followerCount, followerLabel
                 insightType={insight.insightType}
                 metricName={insight.metricName}
                 topItem={insight.items[0]}
-                onClick={() => setSelectedInsight(insight)}
+                onClick={() => handleInsightClick(insight)}
               />
             ))}
           </div>
@@ -143,6 +154,7 @@ export function PlatformBlock({ platform, insights, followerCount, followerLabel
           metricName={selectedInsight.metricName}
           items={selectedInsight.items}
           platform={platform}
+          personId={personId}
         />
       )}
     </>

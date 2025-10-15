@@ -17,12 +17,27 @@ interface PlatformInsight {
   items: InsightItem[];
 }
 
+interface PlatformInsightsResponse {
+  insights: PlatformInsight[];
+  followerCounts: Record<string, number>;
+}
+
 interface PlatformInsightsSectionProps {
   personId: string;
 }
 
+// Platform-specific follower labels
+const followerLabels: Record<string, string> = {
+  'X': 'Followers',
+  'YouTube': 'Subscribers',
+  'Instagram': 'Followers',
+  'TikTok': 'Followers',
+  'Spotify': 'Monthly Listeners',
+  'News': '',
+};
+
 export function PlatformInsightsSection({ personId }: PlatformInsightsSectionProps) {
-  const { data: insights, isLoading, error } = useQuery<PlatformInsight[]>({
+  const { data, isLoading, error } = useQuery<PlatformInsightsResponse>({
     queryKey: [`/api/people/${personId}/insights`],
     enabled: !!personId,
   });
@@ -38,12 +53,14 @@ export function PlatformInsightsSection({ personId }: PlatformInsightsSectionPro
     );
   }
 
-  if (error || !insights || insights.length === 0) {
+  if (error || !data || !data.insights || data.insights.length === 0) {
     return null;
   }
 
+  const { insights, followerCounts } = data;
+
   // Group insights by platform
-  const platformGroups = insights.reduce((acc, insight) => {
+  const platformGroups = insights.reduce((acc: Record<string, PlatformInsight[]>, insight: PlatformInsight) => {
     if (!acc[insight.platform]) {
       acc[insight.platform] = [];
     }
@@ -65,6 +82,9 @@ export function PlatformInsightsSection({ personId }: PlatformInsightsSectionPro
             key={platform}
             platform={platform}
             insights={platformGroups[platform]}
+            followerCount={followerCounts[platform]}
+            followerLabel={followerLabels[platform]}
+            personId={personId}
           />
         ))}
       </div>

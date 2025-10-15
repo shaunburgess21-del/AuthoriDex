@@ -19,6 +19,7 @@ interface InsightModalProps {
   metricName: string;
   items: InsightItem[];
   platform: string;
+  personId?: string;
 }
 
 function formatMetricValue(value: number, metricName: string): string {
@@ -49,8 +50,19 @@ export function InsightModal({
   insightType, 
   metricName, 
   items, 
-  platform 
+  platform,
+  personId
 }: InsightModalProps) {
+  const handleViewOriginalClick = (rank: number) => {
+    // Log telemetry event
+    console.log('[Telemetry] ui.insight_post_open', { 
+      personId,
+      platform, 
+      insightKey: insightType,
+      rank 
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto" data-testid="modal-insights">
@@ -105,6 +117,7 @@ export function InsightModal({
                     className="mt-2 gap-2" 
                     asChild
                     data-testid={`button-view-${item.rank}`}
+                    onClick={() => handleViewOriginalClick(item.rank)}
                   >
                     <a href={item.link} target="_blank" rel="noopener noreferrer">
                       <ExternalLink className="h-3 w-3" />
