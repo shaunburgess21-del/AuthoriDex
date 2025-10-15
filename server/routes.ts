@@ -7,6 +7,13 @@ import { trendSnapshots, trackedPeople } from "@shared/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Supabase config endpoint for client
+  app.get("/api/config/supabase", (req, res) => {
+    res.json({
+      url: process.env.SUPABASE_URL,
+      anonKey: process.env.SUPABASE_ANON_KEY,
+    });
+  });
   // Get all trending people
   app.get("/api/trending", async (req, res) => {
     try {
