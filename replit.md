@@ -16,7 +16,10 @@ FameDex is a real-time celebrity and influencer tracking platform that monitors 
 - ✅ Avatar initials display (e.g., "EM" for Elon Musk)
 - ✅ Load More pagination (20 at a time, up to 100)
 - ✅ Clickable daily/weekly mover widgets
-- ✅ **NEW: Platform Insights** - Rich platform-specific content analytics on person profiles
+- ✅ **Platform Insights** - Rich platform-specific content analytics with follower counts
+- ✅ **Sentiment Voting** - 1-10 scale voting widget with color gradient and distribution visualization
+- ✅ **Enhanced Profile Pages** - Reorganized layout with responsive design and future widget placeholders
+- ✅ **Telemetry Logging** - User interaction tracking (vote_submitted, insight_modal_open, insight_post_open)
 - ✅ **Supabase Ready**: Complete schema with voting, RLS, realtime, and api views created
 - 📋 **NEXT PHASE**: Migrate to Supabase + upgrade to premium APIs before launch
 
@@ -70,13 +73,19 @@ Preferred communication style: Simple, everyday language.
   - `generateMockHistoricalData()`: Creates 30 days of historical snapshots with growth pattern
   - Formula: `500000 - (index * 4000) - (Math.sin(seed) * 20000)`
   - Historical pattern: `currentScore * (1 - daysAgo/40 + Math.sin(daysAgo*0.5)*0.15)`
-- **Platform Insights Generation** (NEW):
+- **Platform Insights Generation**:
   - `generateMockPlatformInsights()`: Creates realistic platform-specific content insights
   - Platforms: X/Twitter, YouTube, Instagram, TikTok, Spotify, News
   - Each platform has 2 insight types (e.g., Most Liked Tweet, Most Retweeted)
   - Each insight has 5 ranked items with decreasing metric values
   - Metrics: Twitter (250K-750K likes), YouTube (5M-15M views), Instagram (800K-1.8M likes), TikTok (10M-30M views), Spotify (50M-150M plays), News (500K-1.5M views)
   - Includes title, metric value, optional link/image, timestamp for each item
+  - **Follower Counts**: Mock follower/subscriber counts per platform (X: 1M-51M followers, YouTube: 500K-20.5M subscribers, Instagram: 2M-102M followers, TikTok: 5M-155M followers, Spotify: 100K-10.1M listeners)
+- **Sentiment Voting**:
+  - 1-10 scale with color gradient (1=red "Hate" → 5=yellow "Neutral" → 10=green "Love")
+  - Visual distribution bar showing vote percentages across all sentiment values
+  - localStorage persistence for user's vote (ready for Supabase migration)
+  - Telemetry logging for vote_submitted events with personId and value
 - **Duplicate Prevention**:
   - Unique constraint on (person_id, timestamp) in trend_snapshots table
   - Stable midnight UTC timestamps for historical data
