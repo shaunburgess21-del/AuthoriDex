@@ -12,6 +12,41 @@ interface SentimentVotingWidgetProps {
 // Simplified 5-zone labels matching Figma
 const ZONE_LABELS = ['Hate', 'Dislike', 'Neutral', 'Like', 'Love'];
 
+// Speech Bubble Component (to use hooks properly)
+function SpeechBubble({ label, isActive }: { label: string; isActive: boolean }) {
+  return (
+    <div className="relative">
+      {/* Speech Bubble */}
+      <div 
+        className={`
+          px-4 py-2 rounded-xl transition-all duration-300 relative border
+          ${isActive 
+            ? 'bg-card text-foreground border-border shadow-lg scale-110' 
+            : 'bg-transparent text-muted-foreground border-border/50'
+          }
+        `}
+        style={isActive ? {
+          boxShadow: '0 0 20px rgba(255, 255, 255, 0.15), 0 0 40px rgba(255, 255, 255, 0.1)'
+        } : {}}
+      >
+        {label}
+      </div>
+      {/* Speech Bubble Tail - using bg-card class to match bubble */}
+      {isActive && (
+        <div 
+          className="absolute left-1/2 -translate-x-1/2 -bottom-2 transition-all duration-300 bg-card"
+          style={{
+            width: '16px',
+            height: '16px',
+            clipPath: 'polygon(50% 100%, 0% 0%, 100% 0%)',
+            filter: 'drop-shadow(0 4px 8px rgba(255, 255, 255, 0.15))'
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 // Detailed labels for each value 1-10
 const SENTIMENT_LABELS = [
   'Hate',
@@ -170,12 +205,12 @@ export function SentimentVotingWidget({
     }
   };
 
-  // Get the zone label for a value (1-2 = Hate, 3-4 = Dislike, etc.)
+  // Get the zone label for a value (1-2 = Hate, 3-4 = Dislike, 5-6 = Neutral, 7-8 = Like, 9-10 = Love)
   const getZoneLabel = (value: number) => {
     if (value <= 2) return ZONE_LABELS[0]; // Hate
     if (value <= 4) return ZONE_LABELS[1]; // Dislike
-    if (value === 5) return ZONE_LABELS[2]; // Neutral
-    if (value <= 7) return ZONE_LABELS[3]; // Like
+    if (value <= 6) return ZONE_LABELS[2]; // Neutral
+    if (value <= 8) return ZONE_LABELS[3]; // Like
     return ZONE_LABELS[4]; // Love
   };
 
@@ -198,42 +233,9 @@ export function SentimentVotingWidget({
         {/* Zone Labels Above Slider - Speech Bubble Style */}
         <div className="flex justify-between px-2 text-sm font-semibold mb-8">
           {ZONE_LABELS.map((label, i) => {
-            const isActive = displayValue && getZoneLabel(displayValue) === label;
+            const isActive = !!(displayValue && getZoneLabel(displayValue) === label);
             return (
-              <div 
-                key={i} 
-                className="relative"
-              >
-                {/* Speech Bubble */}
-                <div 
-                  className={`
-                    px-4 py-2 rounded-xl transition-all duration-300 relative border
-                    ${isActive 
-                      ? 'bg-card text-foreground border-border shadow-lg scale-110' 
-                      : 'bg-transparent text-muted-foreground border-border/50'
-                    }
-                  `}
-                  style={isActive ? {
-                    boxShadow: '0 0 20px rgba(255, 255, 255, 0.15), 0 0 40px rgba(255, 255, 255, 0.1)'
-                  } : {}}
-                >
-                  {label}
-                </div>
-                {/* Speech Bubble Tail */}
-                {isActive && (
-                  <div 
-                    className="absolute left-1/2 -translate-x-1/2 -bottom-2 transition-all duration-300"
-                    style={{
-                      width: 0,
-                      height: 0,
-                      borderLeft: '8px solid transparent',
-                      borderRight: '8px solid transparent',
-                      borderTop: '8px solid hsl(var(--border))',
-                      filter: 'drop-shadow(0 4px 8px rgba(255, 255, 255, 0.15))'
-                    }}
-                  />
-                )}
-              </div>
+              <SpeechBubble key={i} label={label} isActive={isActive} />
             );
           })}
         </div>
