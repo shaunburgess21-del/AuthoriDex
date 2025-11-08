@@ -179,34 +179,59 @@ export function SentimentVotingWidget({
     return ZONE_LABELS[4]; // Love
   };
 
+  // Get the glow color for the needle based on position
+  const getNeedleGlowColor = (value: number) => {
+    if (value <= 2) return 'rgb(220, 38, 38)'; // Red
+    if (value <= 4) return 'rgb(249, 115, 22)'; // Orange
+    if (value === 5) return 'rgb(251, 191, 36)'; // Yellow
+    if (value <= 7) return 'rgb(132, 204, 22)'; // Lime
+    return 'rgb(34, 197, 94)'; // Green
+  };
+
+  // Convert RGB to RGBA with alpha value
+  const getRgbaColor = (rgb: string, alpha: number) => {
+    return rgb.replace('rgb', 'rgba').replace(')', `, ${alpha})`);
+  };
+
   const displayValue = tempValue || selectedValue;
 
   return (
     <Card className="p-8" data-testid="sentiment-voting-widget">
       {/* Title and Subtitle */}
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-semibold mb-2">Rate Your Experience</h2>
-        <p className="text-sm text-muted-foreground">
-          Slide the needle to express how you feel
+        <h2 className="text-3xl font-bold mb-3 bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
+          Cast Your Vote
+        </h2>
+        <p className="text-base text-muted-foreground">
+          How do you feel about <span className="font-semibold text-foreground">{personName}</span>?
         </p>
       </div>
 
       {/* Interactive Slider */}
       <div className="space-y-6">
-        {/* Zone Labels Above Slider */}
-        <div className="flex justify-between px-2 text-sm font-medium text-muted-foreground">
-          {ZONE_LABELS.map((label, i) => (
-            <div 
-              key={i} 
-              className={`text-center ${
-                displayValue && getZoneLabel(displayValue) === label
-                  ? 'text-foreground scale-110 transition-transform'
-                  : ''
-              }`}
-            >
-              {label}
-            </div>
-          ))}
+        {/* Zone Labels Above Slider - Glowing Text Bubbles */}
+        <div className="flex justify-between px-2 text-sm font-semibold">
+          {ZONE_LABELS.map((label, i) => {
+            const isActive = displayValue && getZoneLabel(displayValue) === label;
+            const glowColor = displayValue ? getNeedleGlowColor(displayValue) : '';
+            return (
+              <div 
+                key={i} 
+                className={`
+                  px-4 py-2 rounded-xl transition-all duration-300
+                  ${isActive 
+                    ? 'bg-gradient-to-r from-primary/20 to-primary/10 text-foreground backdrop-blur-sm border-2 border-primary/50 shadow-lg scale-110' 
+                    : 'text-muted-foreground hover:text-foreground'
+                  }
+                `}
+                style={isActive ? {
+                  boxShadow: `0 0 20px ${glowColor}, 0 0 40px ${getRgbaColor(glowColor, 0.25)}`
+                } : {}}
+              >
+                {label}
+              </div>
+            );
+          })}
         </div>
 
         {/* Gradient Slider with Draggable Needle */}
@@ -231,17 +256,30 @@ export function SentimentVotingWidget({
             onKeyDown={handleKeyDown}
             data-testid="sentiment-slider"
           >
-            {/* Draggable White Circle Needle */}
-            {displayValue !== null && (
-              <div
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-12 h-12 bg-white rounded-full shadow-lg cursor-grab active:cursor-grabbing transition-all hover:scale-110 border-4 border-background pointer-events-none"
-                style={{
-                  left: `${valueToPosition(displayValue)}%`,
-                }}
-                data-testid="sentiment-needle"
-                aria-hidden="true"
-              />
-            )}
+            {/* Draggable Glowing Needle */}
+            {displayValue !== null && (() => {
+              const glowColor = getNeedleGlowColor(displayValue);
+              return (
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-14 h-14 rounded-full cursor-grab active:cursor-grabbing hover:scale-110 pointer-events-none transition-transform duration-200"
+                  style={{
+                    left: `${valueToPosition(displayValue)}%`,
+                    background: 'radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.95) 50%, rgba(255, 255, 255, 0.9) 100%)',
+                    boxShadow: `0 0 0 4px hsl(var(--background)), 0 0 10px 2px ${glowColor}, 0 0 25px 5px ${glowColor}, 0 0 50px 10px ${getRgbaColor(glowColor, 0.25)}, 0 4px 15px rgba(0, 0, 0, 0.3)`,
+                  }}
+                  data-testid="sentiment-needle"
+                  aria-hidden="true"
+                >
+                  {/* Inner shine effect */}
+                  <div 
+                    className="absolute inset-2 rounded-full opacity-60 pointer-events-none"
+                    style={{
+                      background: `radial-gradient(circle at 25% 25%, ${getRgbaColor(glowColor, 0.3)} 0%, transparent 70%)`
+                    }}
+                  />
+                </div>
+              );
+            })()}
           </div>
         </div>
 

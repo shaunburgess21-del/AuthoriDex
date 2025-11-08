@@ -82,15 +82,28 @@ Preferred communication style: Simple, everyday language.
   - Metrics: Twitter (250K-750K likes), YouTube (5M-15M views), Instagram (800K-1.8M likes), TikTok (10M-30M views), Spotify (50M-150M plays), News (500K-1.5M views)
   - Includes title, metric value, optional link/image, timestamp for each item
   - **Follower Counts**: Mock follower/subscriber counts per platform (X: 1M-51M followers, YouTube: 500K-20.5M subscribers, Instagram: 2M-102M followers, TikTok: 5M-155M followers, Spotify: 100K-10.1M listeners)
-- **Sentiment Voting (Interactive Slider)**:
-  - **Design**: Draggable slider with white circular needle on gradient bar (red → orange → yellow → green)
+- **Sentiment Voting (Interactive Slider) - Figma-Inspired Design**:
+  - **Title & Copy**: "Cast Your Vote" with gradient text effect + "How do you feel about {PersonName}?" subtitle
+  - **Glowing Zone Labels**: Hate, Dislike, Neutral, Like, Love styled as rounded pill bubbles
+    - Active bubble glows with multi-layered box-shadow matching needle color
+    - Dynamic glow formula: `0 0 20px {color}, 0 0 40px rgba({color}, 0.25)`
+    - Scale-110 transform + gradient background + border when active
+    - Smooth 300ms transitions between states
+  - **Beautiful Glowing Needle**: 56px white circle with premium visual effects
+    - Radial gradient background for 3D shine: `radial-gradient(circle at 30% 30%, white → 90%)`
+    - Multi-layered box-shadow (5 layers):
+      1. 4px border ring (background color)
+      2. 10px inner glow (full color opacity)
+      3. 25px medium glow (full color opacity)
+      4. 50px outer halo (25% opacity via RGBA)
+      5. Drop shadow for depth
+    - Inner child element with color-tinted shine (30% opacity)
+    - Dynamic glow color: Red→Orange→Yellow→Lime→Green based on position
   - **Interaction**: Click anywhere on slider OR drag needle OR use keyboard (arrow keys, Home/End, Enter/Space)
-  - **5 Zone Labels**: Hate (1-2), Dislike (3-4), Neutral (5), Like (6-7), Love (8-10) displayed above slider
-  - **Numbers 1-10**: Displayed below slider with dynamic highlighting on selection
-  - **Current Rating Display**: Shows "Current Rating: {value}/10 - {zone}" with feedback message after voting
   - **Strategic Placement**: Positioned BETWEEN stats cards and Trend History chart for maximum user engagement
   - **Accessibility**: Full keyboard navigation, ARIA slider role, screen reader support, visible focus ring
   - **Pointer Capture**: Drag-outside-window handling ensures vote saves even if pointer leaves viewport
+  - **Technical**: `getRgbaColor()` helper converts RGB to RGBA for valid CSS box-shadow syntax
   - **localStorage persistence** for user's vote (ready for Supabase migration)
   - **Telemetry logging** for vote_submitted events with personId and value
 - **Duplicate Prevention**:
