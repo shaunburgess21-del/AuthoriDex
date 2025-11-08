@@ -85,10 +85,11 @@ Preferred communication style: Simple, everyday language.
 - **Sentiment Voting (Interactive Slider) - Figma-Inspired Simple & Elegant Design**:
   - **Title & Copy**: "Cast Your Vote" with gradient text effect + "How do you feel about {PersonName}?" subtitle
   - **Speech Bubble Zone Labels**: Hate, Dislike, Neutral, Like, Love styled as chat-style speech bubbles
+    - **Zone Allocations (Even Distribution)**: 1-2=Hate, 3-4=Dislike, 5-6=Neutral, 7-8=Like, 9-10=Love (2 values per zone)
     - **Card Background Theme**: Active bubbles use `bg-card` with `border-border`; inactive use `bg-transparent` with `border-border/50`
     - **Single Neutral Glow**: Soft white/gray glow for elegance and simplicity (NOT dynamic colors)
-    - **Speech Bubble Tails**: CSS triangle pointers below active bubble only (8px downward-pointing triangle)
-    - **Tail Implementation**: Conditionally rendered using border technique (transparent left/right, solid top)
+    - **Speech Bubble Tails**: Downward-pointing triangles below active bubble only (16px × 16px)
+    - **Tail Implementation**: `clip-path: polygon(50% 100%, 0% 0%, 100% 0%)` with `bg-card` class for perfect color match
     - **Tail Glow**: Drop-shadow filter with neutral white glow matching overall design
     - Active bubble: Scale-110 transform + subtle neutral glow + speech tail visible
     - Smooth 300ms transitions; only one bubble active at a time
