@@ -179,20 +179,6 @@ export function SentimentVotingWidget({
     return ZONE_LABELS[4]; // Love
   };
 
-  // Get the glow color for the needle based on position
-  const getNeedleGlowColor = (value: number) => {
-    if (value <= 2) return 'rgb(220, 38, 38)'; // Red
-    if (value <= 4) return 'rgb(249, 115, 22)'; // Orange
-    if (value === 5) return 'rgb(251, 191, 36)'; // Yellow
-    if (value <= 7) return 'rgb(132, 204, 22)'; // Lime
-    return 'rgb(34, 197, 94)'; // Green
-  };
-
-  // Convert RGB to RGBA with alpha value
-  const getRgbaColor = (rgb: string, alpha: number) => {
-    return rgb.replace('rgb', 'rgba').replace(')', `, ${alpha})`);
-  };
-
   const displayValue = tempValue || selectedValue;
 
   return (
@@ -210,10 +196,9 @@ export function SentimentVotingWidget({
       {/* Interactive Slider */}
       <div className="space-y-6">
         {/* Zone Labels Above Slider - Speech Bubble Style */}
-        <div className="flex justify-between px-2 text-sm font-semibold mb-2">
+        <div className="flex justify-between px-2 text-sm font-semibold mb-8">
           {ZONE_LABELS.map((label, i) => {
             const isActive = displayValue && getZoneLabel(displayValue) === label;
-            const glowColor = displayValue ? getNeedleGlowColor(displayValue) : '';
             return (
               <div 
                 key={i} 
@@ -222,14 +207,14 @@ export function SentimentVotingWidget({
                 {/* Speech Bubble */}
                 <div 
                   className={`
-                    px-4 py-2 rounded-xl transition-all duration-300 relative
+                    px-4 py-2 rounded-xl transition-all duration-300 relative border
                     ${isActive 
-                      ? 'bg-slate-700 text-white shadow-lg scale-110' 
-                      : 'bg-slate-800/80 text-slate-400'
+                      ? 'bg-card text-foreground border-border shadow-lg scale-110' 
+                      : 'bg-transparent text-muted-foreground border-border/50'
                     }
                   `}
                   style={isActive ? {
-                    boxShadow: `0 0 20px ${glowColor}, 0 0 40px ${getRgbaColor(glowColor, 0.25)}`
+                    boxShadow: '0 0 20px rgba(255, 255, 255, 0.15), 0 0 40px rgba(255, 255, 255, 0.1)'
                   } : {}}
                 >
                   {label}
@@ -243,8 +228,8 @@ export function SentimentVotingWidget({
                       height: 0,
                       borderLeft: '8px solid transparent',
                       borderRight: '8px solid transparent',
-                      borderTop: '8px solid #334155',
-                      filter: `drop-shadow(0 4px 8px ${getRgbaColor(glowColor, 0.4)})`
+                      borderTop: '8px solid hsl(var(--border))',
+                      filter: 'drop-shadow(0 4px 8px rgba(255, 255, 255, 0.15))'
                     }}
                   />
                 )}
@@ -264,7 +249,7 @@ export function SentimentVotingWidget({
             aria-valuenow={displayValue || undefined}
             aria-valuetext={displayValue ? `${displayValue}/10 - ${getZoneLabel(displayValue)}` : undefined}
             tabIndex={0}
-            className="h-14 rounded-full cursor-pointer relative overflow-visible focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+            className="h-14 rounded-full cursor-pointer relative overflow-visible focus:outline-none"
             style={{
               background: 'linear-gradient(to right, #dc2626 0%, #f97316 25%, #fbbf24 50%, #84cc16 75%, #22c55e 100%)',
             }}
@@ -275,30 +260,29 @@ export function SentimentVotingWidget({
             onKeyDown={handleKeyDown}
             data-testid="sentiment-slider"
           >
-            {/* Draggable Glowing Needle */}
-            {displayValue !== null && (() => {
-              const glowColor = getNeedleGlowColor(displayValue);
-              return (
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-14 h-14 rounded-full cursor-grab active:cursor-grabbing hover:scale-110 pointer-events-none transition-transform duration-200"
+            {/* Draggable Glowing Needle - Simple hollow circle with center dot */}
+            {displayValue !== null && (
+              <div
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-12 h-12 rounded-full cursor-grab active:cursor-grabbing hover:scale-110 pointer-events-none transition-transform duration-200"
+                style={{
+                  left: `${valueToPosition(displayValue)}%`,
+                  background: 'transparent',
+                  border: '3px solid rgba(255, 255, 255, 0.9)',
+                  boxShadow: '0 0 15px rgba(255, 255, 255, 0.4), 0 0 30px rgba(255, 255, 255, 0.2)',
+                }}
+                data-testid="sentiment-needle"
+                aria-hidden="true"
+              >
+                {/* Center dot */}
+                <div 
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full"
                   style={{
-                    left: `${valueToPosition(displayValue)}%`,
-                    background: 'radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.95) 50%, rgba(255, 255, 255, 0.9) 100%)',
-                    boxShadow: `0 0 0 4px hsl(var(--background)), 0 0 10px 2px ${glowColor}, 0 0 25px 5px ${glowColor}, 0 0 50px 10px ${getRgbaColor(glowColor, 0.25)}, 0 4px 15px rgba(0, 0, 0, 0.3)`,
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    boxShadow: '0 0 8px rgba(255, 255, 255, 0.5)',
                   }}
-                  data-testid="sentiment-needle"
-                  aria-hidden="true"
-                >
-                  {/* Inner shine effect */}
-                  <div 
-                    className="absolute inset-2 rounded-full opacity-60 pointer-events-none"
-                    style={{
-                      background: `radial-gradient(circle at 25% 25%, ${getRgbaColor(glowColor, 0.3)} 0%, transparent 70%)`
-                    }}
-                  />
-                </div>
-              );
-            })()}
+                />
+              </div>
+            )}
           </div>
         </div>
 
