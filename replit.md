@@ -100,9 +100,8 @@ Preferred communication style: Simple, everyday language.
     - Clean, minimal design matching Figma simplicity
   - **Interaction**: Click anywhere on slider OR drag needle OR use keyboard (arrow keys, Home/End, Enter/Space)
   - **Strategic Placement**: Positioned BETWEEN stats cards and Trend History chart for maximum user engagement
-  - **Accessibility**: Full keyboard navigation, ARIA slider role, screen reader support, visible focus ring
+  - **Accessibility**: Full keyboard navigation, ARIA slider role, screen reader support (focus ring removed for clean design per Figma)
   - **Pointer Capture**: Drag-outside-window handling ensures vote saves even if pointer leaves viewport
-  - **Technical**: `getRgbaColor()` helper converts RGB to RGBA for valid CSS box-shadow/filter syntax
   - **localStorage persistence** for user's vote (ready for Supabase migration)
   - **Telemetry logging** for vote_submitted events with personId and value
 - **Duplicate Prevention**:
