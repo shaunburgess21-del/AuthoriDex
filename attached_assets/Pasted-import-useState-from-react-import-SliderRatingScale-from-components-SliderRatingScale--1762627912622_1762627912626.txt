@@ -1,0 +1,77 @@
+import { useState } from "react";
+import { SliderRatingScale } from "./components/SliderRatingScale";
+
+export default function App() {
+  const [rating, setRating] = useState<number>(5);
+  const [needleStyle, setNeedleStyle] = useState<"circle" | "diamond" | "teardrop" | "line">("circle");
+
+  const getRatingText = (value: number) => {
+    if (value <= 2) return "Hate";
+    if (value <= 4) return "Dislike";
+    if (value <= 6) return "Neutral";
+    if (value <= 8) return "Like";
+    return "Love";
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-8">
+      <div className="w-full max-w-5xl">
+        <div className="text-center mb-12">
+          <h1 className="mb-3 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+            Rate Your Experience
+          </h1>
+          <p className="text-slate-400">
+            Slide the needle to express how you feel
+          </p>
+        </div>
+
+        <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl shadow-2xl p-12 border border-slate-700/50">
+          <SliderRatingScale 
+            value={rating} 
+            onChange={setRating}
+            needleStyle={needleStyle}
+          />
+          
+          <div className="mt-12 text-center">
+            <p className="text-slate-300 mb-2">
+              Current Rating: <span className="text-white">{rating}/10</span> - {getRatingText(rating)}
+            </p>
+            <p className="text-slate-400">
+              {rating <= 2 && "We're sorry to hear that. We'll work on improving your experience."}
+              {rating >= 3 && rating <= 4 && "Thanks for your feedback. We'll try to do better."}
+              {rating >= 5 && rating <= 6 && "Thank you for your honest feedback."}
+              {rating >= 7 && rating <= 8 && "Great! We're glad you had a positive experience."}
+              {rating >= 9 && "Wonderful! We're thrilled you loved it!"}
+            </p>
+          </div>
+        </div>
+
+        {/* Needle Style Selector */}
+        <div className="mt-8 bg-slate-800/50 backdrop-blur-xl rounded-2xl shadow-xl p-6 border border-slate-700/50">
+          <p className="text-slate-300 mb-4 text-center">Choose Your Needle Style</p>
+          <div className="flex gap-4 justify-center flex-wrap">
+            {(["circle", "diamond", "teardrop", "line"] as const).map((style) => (
+              <button
+                key={style}
+                onClick={() => setNeedleStyle(style)}
+                className={`px-6 py-3 rounded-xl transition-all duration-300 capitalize ${
+                  needleStyle === style
+                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg shadow-blue-500/50"
+                    : "bg-slate-700/50 text-slate-300 hover:bg-slate-700 border border-slate-600"
+                }`}
+              >
+                {style}
+              </button>
+            ))}
+          </div>
+          <div className="mt-6 text-center text-slate-400">
+            <p className="mb-2">🔵 <span className="text-slate-300">Circle:</span> Classic elegant design with glow effect</p>
+            <p className="mb-2">💎 <span className="text-slate-300">Diamond:</span> Modern geometric shape that rotates</p>
+            <p className="mb-2">💧 <span className="text-slate-300">Teardrop:</span> Organic pointer with directional flow</p>
+            <p>📍 <span className="text-slate-300">Line:</span> Minimalist vertical indicator with base</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
