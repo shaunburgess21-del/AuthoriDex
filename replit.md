@@ -17,9 +17,10 @@ FameDex is a real-time celebrity and influencer tracking platform that monitors 
 - ✅ Load More pagination (20 at a time, up to 100)
 - ✅ Clickable daily/weekly mover widgets
 - ✅ **Platform Insights** - Rich platform-specific content analytics with follower counts
-- ✅ **Sentiment Voting** - 1-10 scale voting widget with color gradient and distribution visualization
-- ✅ **Enhanced Profile Pages** - Reorganized layout with responsive design and future widget placeholders
+- ✅ **Sentiment Voting (Interactive Slider)** - Draggable slider with 1-10 scale, strategically positioned between stats and trend chart for maximum engagement
+- ✅ **Enhanced Profile Pages** - Reorganized layout with Card-based stats and prominent sentiment widget placement
 - ✅ **Telemetry Logging** - User interaction tracking (vote_submitted, insight_modal_open, insight_post_open)
+- ✅ **Accessibility** - Full keyboard support for sentiment voting (arrow keys, Home/End, Enter/Space) with ARIA attributes
 - ✅ **Supabase Ready**: Complete schema with voting, RLS, realtime, and api views created
 - 📋 **NEXT PHASE**: Migrate to Supabase + upgrade to premium APIs before launch
 
@@ -81,11 +82,17 @@ Preferred communication style: Simple, everyday language.
   - Metrics: Twitter (250K-750K likes), YouTube (5M-15M views), Instagram (800K-1.8M likes), TikTok (10M-30M views), Spotify (50M-150M plays), News (500K-1.5M views)
   - Includes title, metric value, optional link/image, timestamp for each item
   - **Follower Counts**: Mock follower/subscriber counts per platform (X: 1M-51M followers, YouTube: 500K-20.5M subscribers, Instagram: 2M-102M followers, TikTok: 5M-155M followers, Spotify: 100K-10.1M listeners)
-- **Sentiment Voting**:
-  - 1-10 scale with color gradient (1=red "Hate" → 5=yellow "Neutral" → 10=green "Love")
-  - Visual distribution bar showing vote percentages across all sentiment values
-  - localStorage persistence for user's vote (ready for Supabase migration)
-  - Telemetry logging for vote_submitted events with personId and value
+- **Sentiment Voting (Interactive Slider)**:
+  - **Design**: Draggable slider with white circular needle on gradient bar (red → orange → yellow → green)
+  - **Interaction**: Click anywhere on slider OR drag needle OR use keyboard (arrow keys, Home/End, Enter/Space)
+  - **5 Zone Labels**: Hate (1-2), Dislike (3-4), Neutral (5), Like (6-7), Love (8-10) displayed above slider
+  - **Numbers 1-10**: Displayed below slider with dynamic highlighting on selection
+  - **Current Rating Display**: Shows "Current Rating: {value}/10 - {zone}" with feedback message after voting
+  - **Strategic Placement**: Positioned BETWEEN stats cards and Trend History chart for maximum user engagement
+  - **Accessibility**: Full keyboard navigation, ARIA slider role, screen reader support, visible focus ring
+  - **Pointer Capture**: Drag-outside-window handling ensures vote saves even if pointer leaves viewport
+  - **localStorage persistence** for user's vote (ready for Supabase migration)
+  - **Telemetry logging** for vote_submitted events with personId and value
 - **Duplicate Prevention**:
   - Unique constraint on (person_id, timestamp) in trend_snapshots table
   - Stable midnight UTC timestamps for historical data
