@@ -82,13 +82,15 @@ Preferred communication style: Simple, everyday language.
   - Metrics: Twitter (250K-750K likes), YouTube (5M-15M views), Instagram (800K-1.8M likes), TikTok (10M-30M views), Spotify (50M-150M plays), News (500K-1.5M views)
   - Includes title, metric value, optional link/image, timestamp for each item
   - **Follower Counts**: Mock follower/subscriber counts per platform (X: 1M-51M followers, YouTube: 500K-20.5M subscribers, Instagram: 2M-102M followers, TikTok: 5M-155M followers, Spotify: 100K-10.1M listeners)
-- **Sentiment Voting (Interactive Slider) - Figma-Inspired Design**:
+- **Sentiment Voting (Interactive Slider) - Figma-Inspired Speech Bubble Design**:
   - **Title & Copy**: "Cast Your Vote" with gradient text effect + "How do you feel about {PersonName}?" subtitle
-  - **Glowing Zone Labels**: Hate, Dislike, Neutral, Like, Love styled as rounded pill bubbles
-    - Active bubble glows with multi-layered box-shadow matching needle color
-    - Dynamic glow formula: `0 0 20px {color}, 0 0 40px rgba({color}, 0.25)`
-    - Scale-110 transform + gradient background + border when active
-    - Smooth 300ms transitions between states
+  - **Speech Bubble Zone Labels**: Hate, Dislike, Neutral, Like, Love styled as chat-style speech bubbles
+    - **Dark Slate Theme**: Active bubbles use `bg-slate-700` with white text; inactive use `bg-slate-800/80` with muted text
+    - **Speech Bubble Tails**: CSS triangle pointers below active bubble only (8px downward-pointing triangle)
+    - **Tail Implementation**: Conditionally rendered using border technique (transparent left/right, solid top)
+    - **Tail Glow**: Drop-shadow filter matching needle color zone at 40% opacity
+    - Active bubble: Scale-110 transform + multi-layered box-shadow glow + speech tail visible
+    - Smooth 300ms transitions; only one bubble active at a time
   - **Beautiful Glowing Needle**: 56px white circle with premium visual effects
     - Radial gradient background for 3D shine: `radial-gradient(circle at 30% 30%, white → 90%)`
     - Multi-layered box-shadow (5 layers):
@@ -103,7 +105,7 @@ Preferred communication style: Simple, everyday language.
   - **Strategic Placement**: Positioned BETWEEN stats cards and Trend History chart for maximum user engagement
   - **Accessibility**: Full keyboard navigation, ARIA slider role, screen reader support, visible focus ring
   - **Pointer Capture**: Drag-outside-window handling ensures vote saves even if pointer leaves viewport
-  - **Technical**: `getRgbaColor()` helper converts RGB to RGBA for valid CSS box-shadow syntax
+  - **Technical**: `getRgbaColor()` helper converts RGB to RGBA for valid CSS box-shadow/filter syntax
   - **localStorage persistence** for user's vote (ready for Supabase migration)
   - **Telemetry logging** for vote_submitted events with personId and value
 - **Duplicate Prevention**:

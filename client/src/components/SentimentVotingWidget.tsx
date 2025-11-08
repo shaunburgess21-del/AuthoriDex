@@ -209,26 +209,45 @@ export function SentimentVotingWidget({
 
       {/* Interactive Slider */}
       <div className="space-y-6">
-        {/* Zone Labels Above Slider - Glowing Text Bubbles */}
-        <div className="flex justify-between px-2 text-sm font-semibold">
+        {/* Zone Labels Above Slider - Speech Bubble Style */}
+        <div className="flex justify-between px-2 text-sm font-semibold mb-2">
           {ZONE_LABELS.map((label, i) => {
             const isActive = displayValue && getZoneLabel(displayValue) === label;
             const glowColor = displayValue ? getNeedleGlowColor(displayValue) : '';
             return (
               <div 
                 key={i} 
-                className={`
-                  px-4 py-2 rounded-xl transition-all duration-300
-                  ${isActive 
-                    ? 'bg-gradient-to-r from-primary/20 to-primary/10 text-foreground backdrop-blur-sm border-2 border-primary/50 shadow-lg scale-110' 
-                    : 'text-muted-foreground hover:text-foreground'
-                  }
-                `}
-                style={isActive ? {
-                  boxShadow: `0 0 20px ${glowColor}, 0 0 40px ${getRgbaColor(glowColor, 0.25)}`
-                } : {}}
+                className="relative"
               >
-                {label}
+                {/* Speech Bubble */}
+                <div 
+                  className={`
+                    px-4 py-2 rounded-xl transition-all duration-300 relative
+                    ${isActive 
+                      ? 'bg-slate-700 text-white shadow-lg scale-110' 
+                      : 'bg-slate-800/80 text-slate-400'
+                    }
+                  `}
+                  style={isActive ? {
+                    boxShadow: `0 0 20px ${glowColor}, 0 0 40px ${getRgbaColor(glowColor, 0.25)}`
+                  } : {}}
+                >
+                  {label}
+                </div>
+                {/* Speech Bubble Tail */}
+                {isActive && (
+                  <div 
+                    className="absolute left-1/2 -translate-x-1/2 -bottom-2 transition-all duration-300"
+                    style={{
+                      width: 0,
+                      height: 0,
+                      borderLeft: '8px solid transparent',
+                      borderRight: '8px solid transparent',
+                      borderTop: '8px solid #334155',
+                      filter: `drop-shadow(0 4px 8px ${getRgbaColor(glowColor, 0.4)})`
+                    }}
+                  />
+                )}
               </div>
             );
           })}
