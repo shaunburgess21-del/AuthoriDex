@@ -198,7 +198,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
               className="absolute pointer-events-none"
               data-testid="vote-needle"
               style={{
-                top: '-30px', // Shifted down 10px: circle below segment bar
+                top: '-24px', // Shifted down 16px total: circle below segment bar
               }}
               initial={{ opacity: 0, scale: 0, left: `${((displayValue - 0.5) / 10) * 100}%` }}
               animate={{ 
@@ -215,7 +215,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
                   className="w-1 rounded-full"
                   data-testid="needle-line"
                   style={{
-                    height: '61px', // Reduced by 3px from h-16 (64px)
+                    height: '58px', // Reduced by 6px from h-16 (64px)
                     backgroundColor: SEGMENT_COLORS[displayValue - 1].bg,
                     boxShadow: `0 0 12px ${SEGMENT_COLORS[displayValue - 1].glow}60`,
                   }}
