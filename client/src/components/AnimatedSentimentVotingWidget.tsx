@@ -188,24 +188,12 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
                     }}
                     transition={{ type: "spring", stiffness: 400, damping: 25 }}
                   />
-                  
-                  {/* Number Label */}
-                  <motion.div
-                    className="mt-3 text-slate-300 transition-all duration-300"
-                    animate={{
-                      scale: isActive ? 1.3 : 1,
-                      opacity: isActive ? 1 : 0.6,
-                      fontWeight: isActive || value === 10 ? 700 : 400,
-                    }}
-                  >
-                    {value}
-                  </motion.div>
                 </div>
               );
             })}
           </div>
 
-          {/* Line Needle Indicator */}
+          {/* Line Needle Indicator with Number */}
           {currentValue && (
             <motion.div
               className="absolute pointer-events-none"
@@ -224,24 +212,24 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
               transition={{ type: "spring", stiffness: 400, damping: 25 }}
             >
               <div className="flex flex-col items-center">
-                {/* Vertical Line extending upward */}
+                {/* Solid Vertical Line extending upward */}
                 <motion.div
-                  className="w-1 h-16 rounded-full mb-2"
+                  className="w-1 h-16 rounded-full"
                   data-testid="needle-line"
                   style={{
-                    background: `linear-gradient(to bottom, transparent, ${SEGMENT_COLORS[displayValue - 1].bg})`,
+                    backgroundColor: SEGMENT_COLORS[displayValue - 1].bg,
                     boxShadow: `0 0 12px ${SEGMENT_COLORS[displayValue - 1].glow}60`,
                   }}
                   animate={{
                     scaleY: isDragging ? 1.1 : 1,
                   }}
                 />
-                {/* Hollow Circle at Bar Level */}
+                {/* Circle with colored center and white border */}
                 <motion.div
                   className="w-6 h-6 rounded-full"
                   data-testid="needle-circle"
                   style={{
-                    backgroundColor: 'transparent',
+                    backgroundColor: SEGMENT_COLORS[displayValue - 1].bg,
                     borderWidth: '3px',
                     borderStyle: 'solid',
                     borderColor: '#ffffff',
@@ -251,6 +239,17 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
                     scale: isDragging ? 1.15 : 1,
                   }}
                 />
+                {/* Number Label below circle */}
+                <motion.div
+                  className="mt-3 text-slate-100 text-lg font-extrabold"
+                  data-testid="needle-number"
+                  style={{ fontWeight: '900' }}
+                  animate={{
+                    scale: isDragging ? 1.2 : 1,
+                  }}
+                >
+                  {displayValue}
+                </motion.div>
               </div>
             </motion.div>
           )}
