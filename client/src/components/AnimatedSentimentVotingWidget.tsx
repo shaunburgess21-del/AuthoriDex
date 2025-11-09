@@ -157,7 +157,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
         {/* Segmented Bar Area */}
         <div className="relative px-2">
           {/* Clickable columns container - extended vertically for better clickability */}
-          <div className="flex justify-between gap-1 absolute inset-x-2 -top-16 bottom-0 pointer-events-none">
+          <div className="flex justify-between gap-1 absolute inset-x-2 -top-16 -bottom-20 pointer-events-none">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => {
               return (
                 <div
@@ -261,7 +261,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
             <div
               key={num}
               className={`flex-1 text-center text-muted-foreground mt-[7px] mb-[7px] text-[16px] ${
-                num === displayValue ? 'font-black' : 'font-medium'
+                num === displayValue ? 'font-bold' : 'font-medium'
               }`}
               data-testid={`number-label-${num}`}
             >
