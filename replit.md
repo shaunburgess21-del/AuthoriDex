@@ -17,7 +17,7 @@ FameDex is a real-time celebrity and influencer tracking platform that monitors 
 - ✅ Load More pagination (20 at a time, up to 100)
 - ✅ Clickable daily/weekly mover widgets
 - ✅ **Platform Insights** - Rich platform-specific content analytics with follower counts
-- ✅ **Sentiment Voting (Animated Segmented Design)** - 10 vibrant pill segments with progressive fill, line-style needle, and full column clickability
+- ✅ **Sentiment Voting (Animated Segmented Design)** - Figma-matched design with 10 vibrant pill segments, progressive fill, line-style needle at bar level, and full column clickability
 - ✅ **Enhanced Profile Pages** - Reorganized layout with Card-based stats and prominent sentiment widget placement
 - ✅ **Telemetry Logging** - User interaction tracking (vote_submitted, insight_modal_open, insight_post_open)
 - ✅ **Accessibility** - Full keyboard support for sentiment voting (arrow keys, Home/End, Enter/Space) with ARIA attributes
