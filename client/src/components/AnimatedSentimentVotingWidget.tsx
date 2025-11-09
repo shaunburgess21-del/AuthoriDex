@@ -166,12 +166,12 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
               return (
                 <div
                   key={value}
-                  className="flex-1 flex flex-col items-center cursor-pointer group"
+                  className="flex-1 flex flex-col items-center cursor-pointer group pt-16 pb-8"
                   onClick={() => handleSegmentClick(value)}
                   data-testid={`segment-column-${value}`}
                 >
                   {/* Spacer for alignment with bubbles above */}
-                  <div className="h-20" />
+                  <div className="h-4" />
                   
                   {/* Segment Bar */}
                   <motion.div
@@ -190,7 +190,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
                   
                   {/* Number label inside clickable column */}
                   <div
-                    className={`flex-1 text-center text-muted-foreground mt-[25px] mb-[25px] text-[16px] ${
+                    className={`flex-1 text-center text-muted-foreground mt-[25px] text-[16px] ${
                       isActive ? 'font-bold' : 'font-medium'
                     }`}
                     data-testid={`number-label-${value}`}
