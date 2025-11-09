@@ -17,7 +17,7 @@ FameDex is a real-time celebrity and influencer tracking platform that monitors 
 - ✅ Load More pagination (20 at a time, up to 100)
 - ✅ Clickable daily/weekly mover widgets
 - ✅ **Platform Insights** - Rich platform-specific content analytics with follower counts
-- ✅ **Sentiment Voting (Interactive Slider)** - Draggable slider with 1-10 scale, strategically positioned between stats and trend chart for maximum engagement
+- ✅ **Sentiment Voting (Animated Segmented Design)** - 10 vibrant pill segments with progressive fill, line-style needle, and full column clickability
 - ✅ **Enhanced Profile Pages** - Reorganized layout with Card-based stats and prominent sentiment widget placement
 - ✅ **Telemetry Logging** - User interaction tracking (vote_submitted, insight_modal_open, insight_post_open)
 - ✅ **Accessibility** - Full keyboard support for sentiment voting (arrow keys, Home/End, Enter/Space) with ARIA attributes
@@ -82,27 +82,33 @@ Preferred communication style: Simple, everyday language.
   - Metrics: Twitter (250K-750K likes), YouTube (5M-15M views), Instagram (800K-1.8M likes), TikTok (10M-30M views), Spotify (50M-150M plays), News (500K-1.5M views)
   - Includes title, metric value, optional link/image, timestamp for each item
   - **Follower Counts**: Mock follower/subscriber counts per platform (X: 1M-51M followers, YouTube: 500K-20.5M subscribers, Instagram: 2M-102M followers, TikTok: 5M-155M followers, Spotify: 100K-10.1M listeners)
-- **Sentiment Voting (Interactive Slider) - Figma-Inspired Simple & Elegant Design**:
+- **Sentiment Voting (Animated Segmented Design) - Vibrant & Engaging**:
+  - **Implementation**: `AnimatedSentimentVotingWidget.tsx` using Framer Motion for smooth animations
   - **Title & Copy**: "Cast Your Vote" with gradient text effect + "How do you feel about {PersonName}?" subtitle
-  - **Speech Bubble Zone Labels**: Hate, Dislike, Neutral, Like, Love styled as chat-style speech bubbles
-    - **Zone Allocations (Even Distribution)**: 1-2=Hate, 3-4=Dislike, 5-6=Neutral, 7-8=Like, 9-10=Love (2 values per zone)
-    - **Card Background Theme**: Active bubbles use `bg-card` with `border-border`; inactive use `bg-transparent` with `border-border/50`
-    - **Single Neutral Glow**: Soft white/gray glow for elegance and simplicity (NOT dynamic colors)
-    - **Speech Bubble Tails**: Downward-pointing triangles below active bubble only (16px × 16px)
-    - **Tail Implementation**: `clip-path: polygon(50% 100%, 0% 0%, 100% 0%)` with `bg-card` class for perfect color match
-    - **Tail Glow**: Drop-shadow filter with neutral white glow matching overall design
-    - Active bubble: Scale-110 transform + subtle neutral glow + speech tail visible
-    - Smooth 300ms transitions; only one bubble active at a time
-    - **Increased Spacing**: mb-8 between bubbles and slider for visual breathing room
-  - **Simple Glowing Needle**: 48px hollow white circle with subtle elegance
-    - **Hollow Circle**: Transparent background (0% fill opacity) with 3px white border
-    - **Center Dot**: Small white dot in center of hollow circle
-    - **Single Neutral Glow**: Soft white shadow for subtle elegance (NOT dynamic colors)
-    - Clean, minimal design matching Figma simplicity
-  - **Interaction**: Click anywhere on slider OR drag needle OR use keyboard (arrow keys, Home/End, Enter/Space)
-  - **Strategic Placement**: Positioned BETWEEN stats cards and Trend History chart for maximum user engagement
-  - **Accessibility**: Full keyboard navigation, ARIA slider role, screen reader support (focus ring removed for clean design per Figma)
-  - **Pointer Capture**: Drag-outside-window handling ensures vote saves even if pointer leaves viewport
+  - **10 Segmented Pill Bars**: Individual rounded pill segments with gaps (not one solid bar)
+    - **Thin Height**: h-3.5 (14px) for sleek, modern appearance
+    - **Progressive Fill Effect**: Only segments 1 to selected value are vibrant; remaining segments very dim/dark
+  - **Vibrant Color Palette** (SEGMENT_COLORS array):
+    - 1-2: Deep red (Hate) - `#ef4444` with red glow
+    - 3-4: Vibrant orange (Dislike) - `#f97316` with orange glow
+    - 5-6: Bright yellow (Neutral) - `#eab308` with yellow glow
+    - 7-8: Lime green (Like) - `#84cc16` with lime glow
+    - 9-10: Emerald/cyan (Love) - `#10b981` to `#06b6d4` with cyan glow
+  - **Line-Style Needle**:
+    - Vertical colored line extending upward from selected segment
+    - **Hollow Circle** at bottom: 3px white border, transparent center, colored glow effect
+    - Inline styles guarantee border rendering: `borderWidth: '3px', borderColor: '#ffffff', backgroundColor: 'transparent'`
+    - Scales up when dragging (1.15x)
+  - **Zone Labels**: Hate, Dislike, Neutral, Like, Love as speech bubbles above segments
+    - Active zone gets white glow (drop-shadow animation)
+    - pointer-events-none for click-through to segments
+  - **Number Labels**: 1-10 displayed below segments
+    - Animated: scale 1.3x and fontWeight 700 when selected
+    - Full vertical column clickability (bubble + segment + number)
+  - **Updated Feedback**: "Your Vote: X/10 - [Zone]" with approval messages
+    - Messages: "strongly disapprove", "disapprove of", "neutral about", "approve of", "strongly approve of"
+  - **Strategic Placement**: Positioned BETWEEN stats cards and Trend History chart for maximum engagement
+  - **Accessibility**: Full keyboard navigation (arrow keys, Home/End, Enter/Space), ARIA slider role, screen reader support
   - **localStorage persistence** for user's vote (ready for Supabase migration)
   - **Telemetry logging** for vote_submitted events with personId and value
 - **Duplicate Prevention**:
