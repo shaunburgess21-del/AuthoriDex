@@ -258,7 +258,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
         {/* Feedback Text */}
         {currentValue && (
           <motion.div 
-            className="text-center space-y-1 pt-9 mt-[0px] mb-[0px]"
+            className="text-center space-y-1 mt-[0px] mb-[0px] pt-[0px] pb-[0px]"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
