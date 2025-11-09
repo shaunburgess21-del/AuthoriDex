@@ -156,8 +156,22 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
 
         {/* Segmented Bar Area */}
         <div className="relative px-2">
-          {/* Clickable columns container */}
-          <div className="flex justify-between gap-1 -mt-16">
+          {/* Clickable columns container - extended vertically for better clickability */}
+          <div className="flex justify-between gap-1 absolute inset-x-2 -top-16 bottom-0 pointer-events-none">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => {
+              return (
+                <div
+                  key={value}
+                  className="flex-1 cursor-pointer pointer-events-auto"
+                  onClick={() => handleSegmentClick(value)}
+                  data-testid={`segment-column-${value}`}
+                />
+              );
+            })}
+          </div>
+          
+          {/* Visual segment bars */}
+          <div className="flex justify-between gap-1">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => {
               const isActive = value === displayValue;
               const isFilled = value <= displayValue;
@@ -166,9 +180,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
               return (
                 <div
                   key={value}
-                  className="flex-1 flex flex-col items-center cursor-pointer group pt-16 pb-8"
-                  onClick={() => handleSegmentClick(value)}
-                  data-testid={`segment-column-${value}`}
+                  className="flex-1 flex flex-col items-center"
                 >
                   {/* Spacer for alignment with bubbles above */}
                   <div className="h-4" />
@@ -187,16 +199,6 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
                     }}
                     transition={{ type: "spring", stiffness: 400, damping: 25 }}
                   />
-                  
-                  {/* Number label inside clickable column */}
-                  <div
-                    className={`flex-1 text-center text-muted-foreground mt-[25px] text-[16px] ${
-                      isActive ? 'font-bold' : 'font-medium'
-                    }`}
-                    data-testid={`number-label-${value}`}
-                  >
-                    {value}
-                  </div>
                 </div>
               );
             })}
@@ -251,6 +253,21 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
               </div>
             </motion.div>
           )}
+        </div>
+
+        {/* Static Numbers Row (1-10) */}
+        <div className="flex justify-between gap-1 px-2 mt-[25px] mb-[25px]">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+            <div
+              key={num}
+              className={`flex-1 text-center text-muted-foreground mt-[7px] mb-[7px] text-[16px] ${
+                num === displayValue ? 'font-bold' : 'font-medium'
+              }`}
+              data-testid={`number-label-${num}`}
+            >
+              {num}
+            </div>
+          ))}
         </div>
 
         {/* Feedback Text */}
