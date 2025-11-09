@@ -189,7 +189,8 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
                   <motion.div
                     className="w-full h-3.5 rounded-full"
                     style={{
-                      backgroundColor: isFilled ? color.bg : 'rgba(100, 116, 139, 0.2)',
+                      backgroundColor: color.bg,
+                      opacity: isFilled ? 1 : 0.4,
                       boxShadow: isFilled 
                         ? `0 0 8px ${color.glow}60, 0 2px 4px rgba(0,0,0,0.3)`
                         : 'none',
