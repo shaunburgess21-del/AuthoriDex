@@ -101,7 +101,6 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
           How do you feel about <span className="text-foreground font-semibold">{personName}</span>?
         </p>
       </div>
-
       {/* Interactive Segmented Slider */}
       <div className="space-y-6">
         {/* Zone Labels with Glow Effect - Non-interactive to allow clicks through */}
@@ -262,7 +261,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <p className="text-sm font-semibold text-foreground">
+            <p className="text-sm font-semibold text-foreground mt-[35px] mb-[35px]">
               Your Vote: {displayValue}/10 - {activeZone}
             </p>
             <p className="text-sm text-muted-foreground">
