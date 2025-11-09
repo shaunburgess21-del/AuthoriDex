@@ -199,22 +199,21 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
               className="absolute pointer-events-none"
               data-testid="vote-needle"
               style={{
-                top: '23px', // Position so circle sits at bar level (16px spacer + half bar height)
+                top: '34px', // Position circle just below bar (16px spacer + 14px bar + 4px offset)
               }}
               initial={{ opacity: 0, scale: 0, left: `${((displayValue - 0.5) / 10) * 100}%` }}
               animate={{ 
                 opacity: 1, 
                 scale: 1,
                 left: `${((displayValue - 0.5) / 10) * 100}%`,
-                x: '-50%',
-                y: '-50%'
+                x: '-50%'
               }}
               transition={{ type: "spring", stiffness: 400, damping: 25 }}
             >
               <div className="flex flex-col items-center">
                 {/* Solid Vertical Line extending upward */}
                 <motion.div
-                  className="w-1 h-16 rounded-full"
+                  className="w-1 h-20 rounded-full"
                   data-testid="needle-line"
                   style={{
                     backgroundColor: SEGMENT_COLORS[displayValue - 1].bg,
