@@ -266,7 +266,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
             <p className="text-sm font-semibold text-foreground">
               Your Vote: {displayValue}/10 - {activeZone}
             </p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground mt-[8px] mb-[8px]">
               {getApprovalMessage(displayValue, personName)}
             </p>
           </motion.div>
