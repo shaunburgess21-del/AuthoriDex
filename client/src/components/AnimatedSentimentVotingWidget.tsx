@@ -9,18 +9,18 @@ interface AnimatedSentimentVotingWidgetProps {
 
 const ZONE_LABELS = ['Hate', 'Dislike', 'Neutral', 'Like', 'Love'];
 
-// Vibrant color palette for each segment (most beautiful colors ever!)
+// Exact colors from Figma design - darker, more saturated neon palette
 const SEGMENT_COLORS = [
-  { bg: '#dc2626', glow: '#dc2626' }, // 1 - Deep crimson red
-  { bg: '#ef4444', glow: '#ef4444' }, // 2 - Bright red
-  { bg: '#f97316', glow: '#f97316' }, // 3 - Vibrant orange
-  { bg: '#fb923c', glow: '#fb923c' }, // 4 - Bright orange
-  { bg: '#fbbf24', glow: '#fbbf24' }, // 5 - Bright yellow/gold
-  { bg: '#fde047', glow: '#fde047' }, // 6 - Sunny yellow
-  { bg: '#84cc16', glow: '#84cc16' }, // 7 - Lime green
-  { bg: '#a3e635', glow: '#a3e635' }, // 8 - Bright lime
-  { bg: '#10b981', glow: '#10b981' }, // 9 - Emerald green
-  { bg: '#14b8a6', glow: '#14b8a6' }, // 10 - Cyan/turquoise
+  { bg: '#ef4444', glow: '#ef4444' }, // 1 - Red
+  { bg: '#f87171', glow: '#f87171' }, // 2 - Red
+  { bg: '#fb923c', glow: '#fb923c' }, // 3 - Orange
+  { bg: '#fbbf24', glow: '#fbbf24' }, // 4 - Orange
+  { bg: '#fde047', glow: '#fde047' }, // 5 - Yellow
+  { bg: '#fef08a', glow: '#fef08a' }, // 6 - Yellow
+  { bg: '#84cc16', glow: '#84cc16' }, // 7 - Green
+  { bg: '#a3e635', glow: '#a3e635' }, // 8 - Green
+  { bg: '#22d3ee', glow: '#22d3ee' }, // 9 - Cyan
+  { bg: '#06b6d4', glow: '#06b6d4' }, // 10 - Cyan/turquoise
 ];
 
 const getZoneLabel = (value: number) => {
@@ -105,10 +105,13 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
       {/* Interactive Segmented Slider */}
       <div className="space-y-6">
         {/* Zone Labels with Glow Effect - Non-interactive to allow clicks through */}
-        <div className="relative mb-8 h-16 flex justify-between items-center px-2 pointer-events-none">
+        <div className="relative mb-8 h-16 flex items-center pointer-events-none">
           {ZONE_LABELS.map((label, index) => {
             const isActive = activeZone === label;
-            const labelPosition = index / (ZONE_LABELS.length - 1);
+            // Position at center of each zone: Hate(1.5), Dislike(3.5), Neutral(5.5), Like(7.5), Love(9.5)
+            // Convert to percentage: (position - 1) / 9 * 100
+            const centerSegment = 1.5 + (index * 2); // 1.5, 3.5, 5.5, 7.5, 9.5
+            const labelPosition = (centerSegment - 1) / 9; // 0.055, 0.277, 0.5, 0.722, 0.944
             
             return (
               <motion.div
@@ -192,7 +195,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
                     animate={{
                       scale: isActive ? 1.3 : 1,
                       opacity: isActive ? 1 : 0.6,
-                      fontWeight: isActive ? 700 : 400,
+                      fontWeight: isActive || value === 10 ? 700 : 400,
                     }}
                   >
                     {value}
@@ -209,29 +212,29 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
               data-testid="vote-needle"
               style={{
                 left: `${((displayValue - 1) / 9) * 100}%`,
-                top: '48px', // Align with segments
-                transform: 'translateX(-50%)',
+                top: '55px', // Position so circle sits at bar level (48px + half bar height)
+                transform: 'translateX(-50%) translateY(-50%)',
               }}
               initial={{ opacity: 0, scale: 0 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ type: "spring", stiffness: 400, damping: 25 }}
             >
               <div className="flex flex-col items-center">
-                {/* Vertical Line */}
+                {/* Vertical Line extending upward */}
                 <motion.div
-                  className="w-1 h-16 rounded-full"
+                  className="w-1 h-16 rounded-full mb-2"
                   data-testid="needle-line"
                   style={{
-                    background: `linear-gradient(to bottom, ${SEGMENT_COLORS[displayValue - 1].bg}, ${SEGMENT_COLORS[displayValue - 1].bg}dd)`,
-                    boxShadow: `0 0 16px ${SEGMENT_COLORS[displayValue - 1].glow}70, 0 0 32px ${SEGMENT_COLORS[displayValue - 1].glow}40`,
+                    background: `linear-gradient(to bottom, transparent, ${SEGMENT_COLORS[displayValue - 1].bg})`,
+                    boxShadow: `0 0 12px ${SEGMENT_COLORS[displayValue - 1].glow}60`,
                   }}
                   animate={{
                     scaleY: isDragging ? 1.1 : 1,
                   }}
                 />
-                {/* Hollow Circle at Bottom */}
+                {/* Hollow Circle at Bar Level */}
                 <motion.div
-                  className="w-6 h-6 rounded-full -mt-3"
+                  className="w-6 h-6 rounded-full"
                   data-testid="needle-circle"
                   style={{
                     backgroundColor: 'transparent',
