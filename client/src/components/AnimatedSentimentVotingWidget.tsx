@@ -261,7 +261,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
             <div
               key={num}
               className={`flex-1 text-center text-muted-foreground mt-[7px] mb-[7px] text-[16px] ${
-                num === displayValue ? 'font-bold' : 'font-medium'
+                num === displayValue ? 'font-black' : 'font-medium'
               }`}
               data-testid={`number-label-${num}`}
             >
