@@ -180,14 +180,24 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
               return (
                 <div
                   key={value}
-                  className="flex-1 flex flex-col items-center"
+                  className="flex-1 flex flex-col items-center cursor-pointer"
+                  onClick={() => handleSegmentClick(value)}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Select ${value} out of 10`}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleSegmentClick(value);
+                    }
+                  }}
                 >
                   {/* Spacer for alignment with bubbles above */}
                   <div className="h-4" />
                   
                   {/* Segment Bar */}
                   <motion.div
-                    className="w-full h-3.5 rounded-full"
+                    className="w-full h-3.5 rounded-full cursor-pointer"
                     style={{
                       backgroundColor: color.bg,
                       opacity: isFilled ? 1 : 0.4,
