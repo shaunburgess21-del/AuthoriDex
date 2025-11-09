@@ -104,8 +104,8 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
 
       {/* Interactive Segmented Slider */}
       <div className="space-y-6">
-        {/* Zone Labels with Glow Effect */}
-        <div className="relative mb-8 h-16 flex justify-between items-center px-2">
+        {/* Zone Labels with Glow Effect - Non-interactive to allow clicks through */}
+        <div className="relative mb-8 h-16 flex justify-between items-center px-2 pointer-events-none">
           {ZONE_LABELS.map((label, index) => {
             const isActive = activeZone === label;
             const labelPosition = index / (ZONE_LABELS.length - 1);
@@ -206,6 +206,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
           {currentValue && (
             <motion.div
               className="absolute pointer-events-none"
+              data-testid="vote-needle"
               style={{
                 left: `${((displayValue - 1) / 9) * 100}%`,
                 top: '48px', // Align with segments
@@ -219,6 +220,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
                 {/* Vertical Line */}
                 <motion.div
                   className="w-1 h-16 rounded-full"
+                  data-testid="needle-line"
                   style={{
                     background: `linear-gradient(to bottom, ${SEGMENT_COLORS[displayValue - 1].bg}, ${SEGMENT_COLORS[displayValue - 1].bg}dd)`,
                     boxShadow: `0 0 16px ${SEGMENT_COLORS[displayValue - 1].glow}70, 0 0 32px ${SEGMENT_COLORS[displayValue - 1].glow}40`,
@@ -229,9 +231,13 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
                 />
                 {/* Hollow Circle at Bottom */}
                 <motion.div
-                  className="w-6 h-6 rounded-full border-3 border-white -mt-3"
+                  className="w-6 h-6 rounded-full -mt-3"
+                  data-testid="needle-circle"
                   style={{
-                    backgroundColor: SEGMENT_COLORS[displayValue - 1].bg,
+                    backgroundColor: 'transparent',
+                    borderWidth: '3px',
+                    borderStyle: 'solid',
+                    borderColor: '#ffffff',
                     boxShadow: `0 0 16px ${SEGMENT_COLORS[displayValue - 1].glow}70, 0 4px 8px rgba(0,0,0,0.3)`,
                   }}
                   animate={{

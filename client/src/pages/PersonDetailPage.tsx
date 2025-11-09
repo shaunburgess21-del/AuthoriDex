@@ -7,7 +7,7 @@ import { TrendChart } from "@/components/TrendChart";
 import { StatCard } from "@/components/StatCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PlatformInsightsSection } from "@/components/PlatformInsightsSection";
-import { SentimentVotingWidget } from "@/components/SentimentVotingWidget";
+import { AnimatedSentimentVotingWidget } from "@/components/AnimatedSentimentVotingWidget";
 import { ArrowLeft, Share2, Star, TrendingUp, Users, Eye, DollarSign, Globe, MessageSquare, Trophy } from "lucide-react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -141,10 +141,9 @@ export default function PersonDetailPage() {
 
         {/* 3. Sentiment Voting Widget - PROMINENT PLACEMENT */}
         <div className="mb-8">
-          <SentimentVotingWidget 
+          <AnimatedSentimentVotingWidget 
             personId={person.id} 
             personName={person.name}
-            distribution={{}}
           />
         </div>
 
