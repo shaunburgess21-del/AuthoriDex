@@ -199,7 +199,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
               className="absolute pointer-events-none"
               data-testid="vote-needle"
               style={{
-                top: '34px', // Position circle just below bar (16px spacer + 14px bar + 4px offset)
+                top: '-48px', // Position line top near bubble, circle just below bar
               }}
               initial={{ opacity: 0, scale: 0, left: `${((displayValue - 0.5) / 10) * 100}%` }}
               animate={{ 
