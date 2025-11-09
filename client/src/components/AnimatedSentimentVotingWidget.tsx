@@ -244,7 +244,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
         </div>
 
         {/* Static Numbers Row (1-10) */}
-        <div className="flex justify-between gap-1 mt-3 px-2">
+        <div className="flex justify-between gap-1 px-2 mt-[30px] mb-[30px]">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
             <div
               key={num}
