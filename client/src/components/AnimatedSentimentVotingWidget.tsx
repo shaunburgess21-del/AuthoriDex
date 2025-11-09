@@ -200,11 +200,11 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
               style={{
                 top: '-18px', // Shifted down to position circle below segment bar
               }}
-              initial={{ opacity: 0, scale: 0, left: `${((displayValue - 0.5) / 10) * 100}%` }}
+              initial={{ opacity: 0, scale: 0, left: `calc(0.5rem + (100% - 1rem) * ${(displayValue - 0.5) / 10})` }}
               animate={{ 
                 opacity: 1, 
                 scale: 1,
-                left: `${((displayValue - 0.5) / 10) * 100}%`,
+                left: `calc(0.5rem + (100% - 1rem) * ${(displayValue - 0.5) / 10})`,
                 x: '-50%'
               }}
               transition={{ type: "spring", stiffness: 400, damping: 25 }}
