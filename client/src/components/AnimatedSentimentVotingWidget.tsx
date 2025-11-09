@@ -9,18 +9,18 @@ interface AnimatedSentimentVotingWidgetProps {
 
 const ZONE_LABELS = ['Hate', 'Dislike', 'Neutral', 'Like', 'Love'];
 
-// Exact colors from Figma design - darker, more saturated neon palette
+// Exact colors from Figma design - vivid gradient palette
 const SEGMENT_COLORS = [
-  { bg: '#ef4444', glow: '#ef4444' }, // 1 - Red
-  { bg: '#f87171', glow: '#f87171' }, // 2 - Red
-  { bg: '#fb923c', glow: '#fb923c' }, // 3 - Orange
-  { bg: '#fbbf24', glow: '#fbbf24' }, // 4 - Orange
-  { bg: '#fde047', glow: '#fde047' }, // 5 - Yellow
-  { bg: '#fef08a', glow: '#fef08a' }, // 6 - Yellow
-  { bg: '#84cc16', glow: '#84cc16' }, // 7 - Green
-  { bg: '#a3e635', glow: '#a3e635' }, // 8 - Green
-  { bg: '#22d3ee', glow: '#22d3ee' }, // 9 - Cyan
-  { bg: '#06b6d4', glow: '#06b6d4' }, // 10 - Cyan/turquoise
+  { bg: '#FF0000', glow: '#FF0000' }, // 1 - Pure vivid red
+  { bg: '#FF1744', glow: '#FF1744' }, // 2 - Bright crimson
+  { bg: '#FF6D00', glow: '#FF6D00' }, // 3 - Vivid orange
+  { bg: '#FF9100', glow: '#FF9100' }, // 4 - Bright orange
+  { bg: '#FFC400', glow: '#FFC400' }, // 5 - Golden amber
+  { bg: '#FFEA00', glow: '#FFEA00' }, // 6 - Brilliant yellow
+  { bg: '#C6FF00', glow: '#C6FF00' }, // 7 - Electric lime
+  { bg: '#76FF03', glow: '#76FF03' }, // 8 - Neon green
+  { bg: '#00E676', glow: '#00E676' }, // 9 - Vibrant emerald
+  { bg: '#00C853', glow: '#00C853' }, // 10 - Pure green
 ];
 
 const getZoneLabel = (value: number) => {
@@ -105,7 +105,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
       {/* Interactive Segmented Slider */}
       <div className="space-y-6">
         {/* Zone Labels with Glow Effect - Non-interactive to allow clicks through */}
-        <div className="relative mb-8 h-16 flex items-center pointer-events-none">
+        <div className="relative mb-3 h-16 flex items-center pointer-events-none">
           {ZONE_LABELS.map((label, index) => {
             const isActive = activeZone === label;
             // Position at center of each zone: Hate(1.5), Dislike(3.5), Neutral(5.5), Like(7.5), Love(9.5)
@@ -172,7 +172,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
                   data-testid={`segment-column-${value}`}
                 >
                   {/* Spacer for alignment with bubbles above */}
-                  <div className="h-12" />
+                  <div className="h-4" />
                   
                   {/* Segment Bar */}
                   <motion.div
@@ -211,12 +211,16 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
               className="absolute pointer-events-none"
               data-testid="vote-needle"
               style={{
-                left: `${((displayValue - 1) / 9) * 100}%`,
-                top: '55px', // Position so circle sits at bar level (48px + half bar height)
-                transform: 'translateX(-50%) translateY(-50%)',
+                top: '23px', // Position so circle sits at bar level (16px spacer + half bar height)
               }}
-              initial={{ opacity: 0, scale: 0 }}
-              animate={{ opacity: 1, scale: 1 }}
+              initial={{ opacity: 0, scale: 0, left: `${((displayValue - 0.5) / 10) * 100}%` }}
+              animate={{ 
+                opacity: 1, 
+                scale: 1,
+                left: `${((displayValue - 0.5) / 10) * 100}%`,
+                x: '-50%',
+                y: '-50%'
+              }}
               transition={{ type: "spring", stiffness: 400, damping: 25 }}
             >
               <div className="flex flex-col items-center">
