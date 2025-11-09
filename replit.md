@@ -17,7 +17,7 @@ FameDex is a real-time celebrity and influencer tracking platform that monitors 
 - ✅ Load More pagination (20 at a time, up to 100)
 - ✅ Clickable daily/weekly mover widgets
 - ✅ **Platform Insights** - Rich platform-specific content analytics with follower counts
-- ✅ **Sentiment Voting (Animated Segmented Design)** - Figma-matched design with 10 vibrant pill segments, progressive fill, line-style needle at bar level, and full column clickability
+- ✅ **Sentiment Voting (Animated Segmented Design)** - Exact Figma match with 10 vivid gradient segments (#FF0000→#00C853), progressive fill, line-style needle centered in segments, and full column clickability
 - ✅ **Enhanced Profile Pages** - Reorganized layout with Card-based stats and prominent sentiment widget placement
 - ✅ **Telemetry Logging** - User interaction tracking (vote_submitted, insight_modal_open, insight_post_open)
 - ✅ **Accessibility** - Full keyboard support for sentiment voting (arrow keys, Home/End, Enter/Space) with ARIA attributes
@@ -82,22 +82,30 @@ Preferred communication style: Simple, everyday language.
   - Metrics: Twitter (250K-750K likes), YouTube (5M-15M views), Instagram (800K-1.8M likes), TikTok (10M-30M views), Spotify (50M-150M plays), News (500K-1.5M views)
   - Includes title, metric value, optional link/image, timestamp for each item
   - **Follower Counts**: Mock follower/subscriber counts per platform (X: 1M-51M followers, YouTube: 500K-20.5M subscribers, Instagram: 2M-102M followers, TikTok: 5M-155M followers, Spotify: 100K-10.1M listeners)
-- **Sentiment Voting (Animated Segmented Design) - Vibrant & Engaging**:
+- **Sentiment Voting (Animated Segmented Design) - Exact Figma Match**:
   - **Implementation**: `AnimatedSentimentVotingWidget.tsx` using Framer Motion for smooth animations
   - **Title & Copy**: "Cast Your Vote" with gradient text effect + "How do you feel about {PersonName}?" subtitle
   - **10 Segmented Pill Bars**: Individual rounded pill segments with gaps (not one solid bar)
     - **Thin Height**: h-3.5 (14px) for sleek, modern appearance
     - **Progressive Fill Effect**: Only segments 1 to selected value are vibrant; remaining segments very dim/dark
-  - **Vibrant Color Palette** (SEGMENT_COLORS array):
-    - 1-2: Deep red (Hate) - `#ef4444` with red glow
-    - 3-4: Vibrant orange (Dislike) - `#f97316` with orange glow
-    - 5-6: Bright yellow (Neutral) - `#eab308` with yellow glow
-    - 7-8: Lime green (Like) - `#84cc16` with lime glow
-    - 9-10: Emerald/cyan (Love) - `#10b981` to `#06b6d4` with cyan glow
-  - **Line-Style Needle**:
+  - **Exact Figma Color Palette** (SEGMENT_COLORS array):
+    - Segment 1: Pure vivid red - `#FF0000`
+    - Segment 2: Bright crimson - `#FF1744`
+    - Segment 3: Vivid orange - `#FF6D00`
+    - Segment 4: Bright orange - `#FF9100`
+    - Segment 5: Golden amber - `#FFC400`
+    - Segment 6: Brilliant yellow - `#FFEA00`
+    - Segment 7: Electric lime - `#C6FF00`
+    - Segment 8: Neon green - `#76FF03`
+    - Segment 9: Vibrant emerald - `#00E676`
+    - Segment 10: Pure green - `#00C853`
+  - **Line-Style Needle** (Centered in Segments):
     - Vertical colored line extending upward from selected segment
+    - **Positioning Formula**: `left: ((displayValue - 0.5) / 10) * 100%` centers needle at segment midpoints
+    - Positions: Segment 1→5%, Segment 5→45%, Segment 10→95%
     - **Hollow Circle** at bottom: 3px white border, transparent center, colored glow effect
     - Inline styles guarantee border rendering: `borderWidth: '3px', borderColor: '#ffffff', backgroundColor: 'transparent'`
+    - Smooth spring animation (stiffness: 400, damping: 25) via Framer Motion's `animate` prop
     - Scales up when dragging (1.15x)
   - **Zone Labels**: Hate, Dislike, Neutral, Like, Love as speech bubbles above segments
     - Active zone gets white glow (drop-shadow animation)
