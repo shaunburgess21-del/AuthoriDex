@@ -192,13 +192,13 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
             })}
           </div>
 
-          {/* Line Needle Indicator with Number */}
+          {/* Line Needle Indicator */}
           {currentValue && (
             <motion.div
               className="absolute pointer-events-none"
               data-testid="vote-needle"
               style={{
-                top: '-48px', // Position line top near bubble, circle just below bar
+                top: '-40px', // Adjusted: line top near bubble, circle just below bar
               }}
               initial={{ opacity: 0, scale: 0, left: `${((displayValue - 0.5) / 10) * 100}%` }}
               animate={{ 
@@ -212,7 +212,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
               <div className="flex flex-col items-center">
                 {/* Solid Vertical Line extending upward */}
                 <motion.div
-                  className="w-1 h-20 rounded-full"
+                  className="w-1 h-16 rounded-full"
                   data-testid="needle-line"
                   style={{
                     backgroundColor: SEGMENT_COLORS[displayValue - 1].bg,
@@ -237,31 +237,33 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
                     scale: isDragging ? 1.15 : 1,
                   }}
                 />
-                {/* Number Label below circle */}
-                <motion.div
-                  className="mt-3 text-slate-100 text-lg font-extrabold"
-                  data-testid="needle-number"
-                  style={{ fontWeight: '900' }}
-                  animate={{
-                    scale: isDragging ? 1.2 : 1,
-                  }}
-                >
-                  {displayValue}
-                </motion.div>
               </div>
             </motion.div>
           )}
         </div>
 
+        {/* Static Numbers Row (1-10) */}
+        <div className="flex justify-between gap-1 mt-3 px-2">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+            <div
+              key={num}
+              className="flex-1 text-center text-sm text-muted-foreground font-medium"
+              data-testid={`number-label-${num}`}
+            >
+              {num}
+            </div>
+          ))}
+        </div>
+
         {/* Feedback Text */}
         {currentValue && (
           <motion.div 
-            className="text-center space-y-1 pt-4"
+            className="text-center space-y-1 pt-9"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <p className="text-sm font-semibold text-foreground mt-[0px] mb-[0px]">
+            <p className="text-sm font-semibold text-foreground">
               Your Vote: {displayValue}/10 - {activeZone}
             </p>
             <p className="text-sm text-muted-foreground">
