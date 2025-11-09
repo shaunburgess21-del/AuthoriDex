@@ -261,7 +261,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <p className="text-sm font-semibold text-foreground mt-[35px] mb-[35px]">
+            <p className="text-sm font-semibold text-foreground mt-[0px] mb-[0px]">
               Your Vote: {displayValue}/10 - {activeZone}
             </p>
             <p className="text-sm text-muted-foreground">
