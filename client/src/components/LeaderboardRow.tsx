@@ -8,6 +8,25 @@ import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
 
+// Exact colors from sentiment widget - vivid gradient palette
+const SEGMENT_COLORS = [
+  '#FF0000', // 1 - Pure vivid red
+  '#FF1744', // 2 - Bright crimson
+  '#FF6D00', // 3 - Vivid orange
+  '#FF9100', // 4 - Bright orange
+  '#FFC400', // 5 - Golden amber
+  '#FFEA00', // 6 - Brilliant yellow
+  '#C6FF00', // 7 - Electric lime
+  '#76FF03', // 8 - Neon green
+  '#00E676', // 9 - Vibrant emerald
+  '#00C853', // 10 - Pure green
+];
+
+const getSentimentColor = (value: number): string => {
+  if (value < 1 || value > 10) return '#888888'; // Fallback color
+  return SEGMENT_COLORS[value - 1];
+};
+
 interface LeaderboardRowProps {
   person: TrendingPerson;
   expanded: boolean;
@@ -87,7 +106,16 @@ export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: L
         {/* Sentiment Score replacing 24h/7d badges */}
         <div className="hidden md:block text-center min-w-[80px]">
           <p className="font-mono font-semibold text-lg" data-testid={`sentiment-score-${person.id}`}>
-            {sentimentScore ? `${sentimentScore}/10` : '—'}
+            {sentimentScore ? (
+              <>
+                <span style={{ color: getSentimentColor(sentimentScore) }}>
+                  {sentimentScore}
+                </span>
+                <span className="text-muted-foreground">/10</span>
+              </>
+            ) : (
+              '—'
+            )}
           </p>
           <p className="text-xs text-muted-foreground uppercase tracking-wide">
             Sentiment
