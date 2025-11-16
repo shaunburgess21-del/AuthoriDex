@@ -20,6 +20,7 @@ export default function HomePage() {
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState("rank");
   const [visibleCount, setVisibleCount] = useState(20);
+  const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null);
   const [, setLocation] = useLocation();
 
   // Build query params
@@ -57,7 +58,11 @@ export default function HomePage() {
     refetchInterval: 5 * 60 * 1000,
   });
 
-  const handlePersonClick = (personId: string) => {
+  const handleToggleExpand = (personId: string) => {
+    setExpandedPersonId(prev => prev === personId ? null : personId);
+  };
+
+  const handleVisitProfile = (personId: string) => {
     setLocation(`/person/${personId}`);
   };
 
@@ -124,9 +129,9 @@ export default function HomePage() {
 
       <div className="container mx-auto px-4 py-12 max-w-7xl">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <TrendWidget title="Daily Movers" people={dailyMovers} type="daily" onPersonClick={handlePersonClick} />
-          <TrendWidget title="Weekly Gainers" people={topGainers} type="gainer" onPersonClick={handlePersonClick} />
-          <TrendWidget title="Weekly Droppers" people={topDroppers} type="dropper" onPersonClick={handlePersonClick} />
+          <TrendWidget title="Daily Movers" people={dailyMovers} type="daily" onPersonClick={handleVisitProfile} />
+          <TrendWidget title="Weekly Gainers" people={topGainers} type="gainer" onPersonClick={handleVisitProfile} />
+          <TrendWidget title="Weekly Droppers" people={topDroppers} type="dropper" onPersonClick={handleVisitProfile} />
         </div>
 
         <Card>
@@ -193,7 +198,9 @@ export default function HomePage() {
                 <LeaderboardRow
                   key={person.id}
                   person={person}
-                  onClick={() => handlePersonClick(person.id)}
+                  expanded={expandedPersonId === person.id}
+                  onToggle={() => handleToggleExpand(person.id)}
+                  onVisitProfile={() => handleVisitProfile(person.id)}
                 />
               ))}
             </div>

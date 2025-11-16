@@ -58,6 +58,11 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
     // Save to localStorage
     localStorage.setItem(`sentiment-vote-${personId}`, newValue.toString());
     
+    // Dispatch custom event to notify other components
+    window.dispatchEvent(new CustomEvent('sentiment-vote-updated', {
+      detail: { personId, value: newValue }
+    }));
+    
     // Log telemetry
     console.log('🗳️ [Telemetry] ui.vote_submitted', { 
       personId, 
@@ -185,6 +190,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
                   tabIndex={0}
                   role="button"
                   aria-label={`Select ${value} out of 10`}
+                  data-testid={`segment-${value}`}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();

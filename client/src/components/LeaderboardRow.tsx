@@ -2,54 +2,156 @@ import { TrendingPerson } from "@shared/schema";
 import { PersonAvatar } from "./PersonAvatar";
 import { RankBadge } from "./RankBadge";
 import { TrendBadge } from "./TrendBadge";
+import { AnimatedSentimentVotingWidget } from "./AnimatedSentimentVotingWidget";
 import { Button } from "@/components/ui/button";
-import { ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect } from "react";
 
 interface LeaderboardRowProps {
   person: TrendingPerson;
-  onClick?: () => void;
+  expanded: boolean;
+  onToggle: () => void;
+  onVisitProfile: () => void;
 }
 
-export function LeaderboardRow({ person, onClick }: LeaderboardRowProps) {
+export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: LeaderboardRowProps) {
+  const [sentimentScore, setSentimentScore] = useState<number | null>(null);
+
+  // Load sentiment score from localStorage
+  useEffect(() => {
+    const loadSentimentScore = () => {
+      const savedVote = localStorage.getItem(`sentiment-vote-${person.id}`);
+      if (savedVote) {
+        setSentimentScore(parseInt(savedVote, 10));
+      } else {
+        setSentimentScore(null);
+      }
+    };
+
+    // Initial load
+    loadSentimentScore();
+
+    // Listen for storage changes (works across tabs and within same page via custom events)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === `sentiment-vote-${person.id}`) {
+        loadSentimentScore();
+      }
+    };
+
+    // Also listen for custom events within the same page
+    const handleCustomUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.personId === person.id) {
+        loadSentimentScore();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('sentiment-vote-updated', handleCustomUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('sentiment-vote-updated', handleCustomUpdate);
+    };
+  }, [person.id]);
+
   return (
-    <div
-      className="flex items-center gap-4 p-4 border-b hover-elevate active-elevate-2 cursor-pointer"
-      onClick={onClick}
-      data-testid={`row-person-${person.id}`}
-    >
-      <RankBadge rank={person.rank} />
-      <PersonAvatar name={person.name} avatar={person.avatar} size="md" />
-      <div className="flex-1 min-w-0">
-        <h3 className="font-semibold text-base truncate" data-testid={`text-name-${person.id}`}>
-          {person.name}
-        </h3>
-        {person.category && (
-          <p className="text-sm text-muted-foreground truncate">
-            {person.category}
+    <div className="border-b">
+      {/* Main Row */}
+      <div
+        className="flex items-center gap-4 p-4 hover-elevate active-elevate-2 cursor-pointer"
+        onClick={onToggle}
+        data-testid={`row-person-${person.id}`}
+      >
+        <RankBadge rank={person.rank} />
+        <PersonAvatar name={person.name} avatar={person.avatar} size="md" />
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-base truncate" data-testid={`text-name-${person.id}`}>
+            {person.name}
+          </h3>
+          {person.category && (
+            <p className="text-sm text-muted-foreground truncate">
+              {person.category}
+            </p>
+          )}
+        </div>
+        <div className="text-right hidden sm:block">
+          <p className="font-mono font-bold text-2xl" data-testid={`text-score-${person.id}`}>
+            {person.trendScore.toFixed(0)}
           </p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">
+            Trend Score
+          </p>
+        </div>
+        {/* Sentiment Score replacing 24h/7d badges */}
+        <div className="hidden md:block text-center min-w-[80px]">
+          <p className="font-mono font-semibold text-lg" data-testid={`sentiment-score-${person.id}`}>
+            {sentimentScore ? `${sentimentScore}/10` : '—'}
+          </p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">
+            Sentiment
+          </p>
+        </div>
+        <Button variant="ghost" size="icon" data-testid={`button-expand-${person.id}`}>
+          {expanded ? (
+            <ChevronUp className="h-5 w-5" />
+          ) : (
+            <ChevronDown className="h-5 w-5" />
+          )}
+        </Button>
+      </div>
+
+      {/* Expandable Content */}
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 pb-6 pt-2 bg-muted/30">
+              {/* 24h/7d Change Badges */}
+              <div className="flex gap-3 mb-6 justify-center">
+                <div className="text-center">
+                  <TrendBadge value={person.change24h} size="sm" />
+                  <p className="text-xs text-muted-foreground mt-1">24h Change</p>
+                </div>
+                <div className="text-center">
+                  <TrendBadge value={person.change7d} size="sm" />
+                  <p className="text-xs text-muted-foreground mt-1">7d Change</p>
+                </div>
+              </div>
+
+              {/* Sentiment Voting Widget */}
+              <div className="mb-6">
+                <AnimatedSentimentVotingWidget 
+                  personId={person.id} 
+                  personName={person.name}
+                />
+              </div>
+
+              {/* Visit Profile Button */}
+              <div className="flex justify-center">
+                <Button 
+                  variant="default" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onVisitProfile();
+                  }}
+                  data-testid={`button-visit-profile-${person.id}`}
+                  className="gap-2"
+                >
+                  Visit Profile
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </motion.div>
         )}
-      </div>
-      <div className="text-right hidden sm:block">
-        <p className="font-mono font-bold text-2xl" data-testid={`text-score-${person.id}`}>
-          {person.trendScore.toFixed(0)}
-        </p>
-        <p className="text-xs text-muted-foreground uppercase tracking-wide">
-          Trend Score
-        </p>
-      </div>
-      <div className="hidden md:flex gap-2">
-        <div className="text-center">
-          <TrendBadge value={person.change24h} size="sm" />
-          <p className="text-xs text-muted-foreground mt-1">24h</p>
-        </div>
-        <div className="text-center">
-          <TrendBadge value={person.change7d} size="sm" />
-          <p className="text-xs text-muted-foreground mt-1">7d</p>
-        </div>
-      </div>
-      <Button variant="ghost" size="icon" data-testid={`button-view-${person.id}`}>
-        <ChevronRight className="h-5 w-5" />
-      </Button>
+      </AnimatePresence>
     </div>
   );
 }
