@@ -398,7 +398,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
       >
         {/* Average Rating Display */}
         <div className="text-center">
-          <p className="text-3xl font-bold text-foreground mb-1">
+          <p className="font-bold text-foreground mb-1 text-[20px]">
             Average Rating: <span style={{ color: SEGMENT_COLORS[Math.round(averageRating) - 1]?.bg || '#888' }}>
               {averageRating.toFixed(1)}
             </span>/10
