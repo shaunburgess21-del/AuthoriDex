@@ -21,6 +21,7 @@ FameDex is a real-time celebrity and influencer tracking platform that monitors 
 - ✅ **Enhanced Profile Pages** - Reorganized layout with Card-based stats and prominent sentiment widget placement
 - ✅ **Telemetry Logging** - User interaction tracking (vote_submitted, insight_modal_open, insight_post_open)
 - ✅ **Accessibility** - Full keyboard support for sentiment voting (arrow keys, Home/End, Enter/Space) with ARIA attributes
+- ✅ **Expandable Leaderboard Rows** - Inline voting functionality with smooth animations, sentiment score display in main row, only one row open at a time
 - ✅ **Supabase Ready**: Complete schema with voting, RLS, realtime, and api views created
 - 📋 **NEXT PHASE**: Migrate to Supabase + upgrade to premium APIs before launch
 
@@ -52,6 +53,7 @@ Preferred communication style: Simple, everyday language.
 - **State Management**: Server state handled by React Query with 5-minute refetch intervals for live data updates; local UI state managed via React hooks
 - **Routing Strategy**: File-based route components in `/client/src/pages/` using Wouter for minimal bundle size
 - **Styling Approach**: Design tokens defined in CSS variables for consistent theming; custom utility classes for hover/active elevation effects
+- **Expandable Rows Pattern**: LeaderboardRow supports inline expansion with AnimatePresence/Framer Motion for smooth height transitions; custom event system (sentiment-vote-updated) synchronizes sentiment scores between widget and main row display
 
 ### Backend Architecture
 
