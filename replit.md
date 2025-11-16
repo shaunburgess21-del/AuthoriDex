@@ -17,7 +17,7 @@ FameDex is a real-time celebrity and influencer tracking platform that monitors 
 - ✅ Load More pagination (20 at a time, up to 100)
 - ✅ Clickable daily/weekly mover widgets
 - ✅ **Platform Insights** - Rich platform-specific content analytics with follower counts
-- ✅ **Sentiment Voting (Animated Segmented Design)** - Exact Figma match with 10 vivid gradient segments (#FF0000→#00C853), progressive fill, line-style needle centered in segments, and full column clickability
+- ✅ **Sentiment Voting (Animated Segmented Design)** - Exact Figma match with 10 vivid gradient segments (#FF0000→#00C853), progressive fill, line-style needle centered in segments, full column clickability, and two-mode toggle (Cast Your Vote / View Results)
 - ✅ **Enhanced Profile Pages** - Reorganized layout with Card-based stats and prominent sentiment widget placement
 - ✅ **Telemetry Logging** - User interaction tracking (vote_submitted, insight_modal_open, insight_post_open)
 - ✅ **Accessibility** - Full keyboard support for sentiment voting (arrow keys, Home/End, Enter/Space) with ARIA attributes
@@ -121,6 +121,18 @@ Preferred communication style: Simple, everyday language.
   - **Accessibility**: Full keyboard navigation (arrow keys, Home/End, Enter/Space), ARIA slider role, screen reader support
   - **localStorage persistence** for user's vote (ready for Supabase migration)
   - **Telemetry logging** for vote_submitted events with personId and value
+  - **Two-Mode Toggle**: "Cast Your Vote" and "View Results" buttons in top-right corner
+    - **Vote Mode (default)**: Full voting interface with segmented slider, zone labels, and needle indicator
+    - **Results Mode**: 10-bar vertical graph showing community vote distribution
+      - Average Rating display (e.g., "Average Rating: 7.8/10") with color-coded number
+      - Bars scaled by vote count with same color palette as voting segments
+      - Bars with 0 votes remain dimmed (40% opacity) at baseline
+      - Hover tooltips show exact vote counts
+      - Community sentiment message: "Other FameDex users {phrase} {Person Name}"
+      - Sentiment phrases: "strongly disapprove of", "disapprove of", "are neutral about", "approve of", "strongly approve of"
+    - **Mock Vote Distribution**: Realistic bell curve favoring positive ratings (e.g., 1=5-20 votes, 5=40-90 votes, 8=70-160 votes)
+    - **Smooth Transitions**: AnimatePresence with 300ms fade and vertical movement between modes
+    - **Universal**: Works identically in expandable leaderboard rows and profile pages
 - **Duplicate Prevention**:
   - Unique constraint on (person_id, timestamp) in trend_snapshots table
   - Stable midnight UTC timestamps for historical data
