@@ -20,8 +20,9 @@ export function PersonAvatar({ name, avatar, size = "md" }: PersonAvatarProps) {
     .slice(0, 2);
 
   return (
-    <Avatar className={sizeClass} data-testid={`avatar-${name.toLowerCase().replace(/\s/g, '-')}`}>
-      <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+    <Avatar className={`${sizeClass} rounded-md`} data-testid={`avatar-${name.toLowerCase().replace(/\s/g, '-')}`}>
+      {avatar && <AvatarImage src={avatar} alt={name} className="object-cover" />}
+      <AvatarFallback className="bg-primary/10 text-primary font-semibold rounded-md">
         {initials}
       </AvatarFallback>
     </Avatar>
