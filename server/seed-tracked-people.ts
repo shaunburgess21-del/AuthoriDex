@@ -54,7 +54,7 @@ const TOP_100_PEOPLE = [
   { name: "PinkPantheress", category: "Music", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=PinkPantheress" },
 
   // Tech & Business Leaders (20)
-  { name: "Elon Musk", category: "Tech", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=ElonMusk" },
+  { name: "Elon Musk", category: "Tech", avatar: "/attached_assets/elon-musk.png" },
   { name: "Jensen Huang", category: "Tech", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=JensenHuang" },
   { name: "Mark Zuckerberg", category: "Tech", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=MarkZuckerberg" },
   { name: "Satya Nadella", category: "Tech", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=SatyaNadella" },
