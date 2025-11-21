@@ -44,11 +44,7 @@ export function TrendWidget({ title, people, type, onPersonClick }: TrendWidgetP
           {people.slice(0, 5).map((person, idx) => (
             <div
               key={person.id}
-              className={cn(
-                "flex items-center gap-3 p-2 rounded-lg hover-elevate cursor-pointer",
-                type === "gainer" && "bg-trend-up/5",
-                type === "dropper" && "bg-trend-down/5"
-              )}
+              className="flex items-center gap-3 p-2 rounded-lg hover-elevate cursor-pointer bg-[#191d24]"
               onClick={() => onPersonClick?.(person.id)}
               data-testid={`widget-item-${person.id}`}
             >
