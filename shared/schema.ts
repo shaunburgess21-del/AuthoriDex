@@ -75,6 +75,7 @@ export const trendingPeople = pgTable("trending_people", {
   id: varchar("id").primaryKey(),
   name: text("name").notNull(),
   avatar: text("avatar"),
+  bio: text("bio"),
   rank: integer("rank").notNull(),
   trendScore: real("trend_score").notNull(),
   change24h: real("change_24h").notNull(),
