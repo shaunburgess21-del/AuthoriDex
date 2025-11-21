@@ -27,10 +27,11 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
 
   const days = timeRange === "1D" ? 1 : timeRange === "7D" ? 7 : timeRange === "30D" ? 30 : timeRange === "6M" ? 180 : timeRange === "1Y" ? 365 : 365;
 
-  // Calculate optimal interval for X-axis labels (target ~10-12 labels across the chart)
+  // Calculate optimal interval for X-axis labels (target ~6-10 labels across the chart)
   const getXAxisInterval = () => {
-    if (timeRange === "1D" || timeRange === "7D") return 0; // Show all or most dates
-    if (timeRange === "30D") return 2; // Show every 3rd day (~10 labels)
+    if (timeRange === "1D") return 0; // Show the single date
+    if (timeRange === "7D") return 1; // Show every other day (~4 dates)
+    if (timeRange === "30D") return 3; // Show every 4th day (~8 labels)
     if (timeRange === "6M") return 14; // Show every 15th day (~12 labels)
     if (timeRange === "1Y" || timeRange === "ALL") return 30; // Show every 31st day (~12 labels)
     return 0;
