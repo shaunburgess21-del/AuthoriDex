@@ -174,37 +174,41 @@ export default function PersonDetailPage() {
       <div className="container mx-auto px-4 py-12 max-w-6xl">
         {/* 1. Header: Name + Category */}
         <div className="mb-8">
-          <div className="flex items-end gap-6">
+          <div className="flex gap-6">
             <PersonAvatar name={person.name} avatar={person.avatar} size="xl" />
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-4xl font-serif font-bold" data-testid="text-person-name">
-                  {person.name}
-                </h1>
-                <RankBadge rank={person.rank} />
+            <div className="flex-1 flex flex-col justify-between h-48">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <h1 className="text-4xl font-serif font-bold" data-testid="text-person-name">
+                    {person.name}
+                  </h1>
+                  <RankBadge rank={person.rank} />
+                </div>
+                <p className="text-lg text-muted-foreground mb-4">{person.category}</p>
               </div>
-              <p className="text-lg text-muted-foreground mb-2">{person.category}</p>
-              {person.bio && (
-                <p className="text-sm text-muted-foreground mb-4 max-w-md leading-relaxed" data-testid="text-person-bio">
-                  {person.bio}
-                </p>
-              )}
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="gap-2" data-testid="button-share">
-                  <Share2 className="h-4 w-4" />
-                  Share
-                </Button>
-                <Button
-                  variant={isFavorited ? "default" : "outline"}
-                  size="sm"
-                  className="gap-2"
-                  onClick={handleToggleFavorite}
-                  disabled={favoriteLoading}
-                  data-testid="button-favorite"
-                >
-                  <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
-                  {isFavorited ? "Favorited" : "Favorite"}
-                </Button>
+              <div className="flex flex-col gap-3">
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="gap-2" data-testid="button-share">
+                    <Share2 className="h-4 w-4" />
+                    Share
+                  </Button>
+                  <Button
+                    variant={isFavorited ? "default" : "outline"}
+                    size="sm"
+                    className="gap-2"
+                    onClick={handleToggleFavorite}
+                    disabled={favoriteLoading}
+                    data-testid="button-favorite"
+                  >
+                    <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
+                    {isFavorited ? "Favorited" : "Favorite"}
+                  </Button>
+                </div>
+                {person.bio && (
+                  <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-person-bio">
+                    {person.bio}
+                  </p>
+                )}
               </div>
             </div>
           </div>
