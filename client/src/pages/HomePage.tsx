@@ -4,18 +4,21 @@ import { TrendWidget } from "@/components/TrendWidget";
 import { LeaderboardRow } from "@/components/LeaderboardRow";
 import { UpdateIndicator } from "@/components/UpdateIndicator";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { UserAvatar } from "@/components/UserAvatar";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { SortDropdown } from "@/components/SortDropdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { X } from "lucide-react";
+import { X, LogIn } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useLocation } from "wouter";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function HomePage() {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState("rank");
@@ -120,6 +123,20 @@ export default function HomePage() {
           </div>
           <div className="flex items-center gap-3">
             <UpdateIndicator />
+            {user ? (
+              <UserAvatar />
+            ) : (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => setLocation("/login")}
+                className="gap-2"
+                data-testid="button-login"
+              >
+                <LogIn className="h-4 w-4" />
+                Log In
+              </Button>
+            )}
             <ThemeToggle />
           </div>
         </div>
