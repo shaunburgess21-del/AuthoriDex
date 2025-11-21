@@ -109,9 +109,9 @@ export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: L
             {sentimentScore ? (
               <>
                 <span style={{ color: getSentimentColor(sentimentScore) }}>
-                  {sentimentScore}
+                  {Math.round((sentimentScore / 10) * 100)}
                 </span>
-                <span className="text-muted-foreground">/10</span>
+                <span className="text-muted-foreground">%</span>
               </>
             ) : (
               '—'
