@@ -54,7 +54,7 @@ const TOP_100_PEOPLE = [
   { name: "PinkPantheress", category: "Music" },
 
   // Tech & Business Leaders (20)
-  { name: "Elon Musk", category: "Tech", avatar: "/attached_assets/elon-musk.png", bio: "CEO of Tesla & SpaceX. Visionary entrepreneur pushing boundaries in electric vehicles, space exploration, and AI. Known for bold ambitions and active social media presence." },
+  { name: "Elon Musk", category: "Tech", avatar: "/attached_assets/elon-musk.png", bio: "CEO of Tesla, SpaceX, Boring Company and Neuralink, entrepreneur and innovator pushing the boundaries of technology and space exploration." },
   { name: "Jensen Huang", category: "Tech" },
   { name: "Mark Zuckerberg", category: "Tech" },
   { name: "Satya Nadella", category: "Tech" },

@@ -141,17 +141,27 @@ export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: L
             className="overflow-hidden"
           >
             <div className="px-4 pb-6 pt-2 bg-muted/30">
-              {/* 24h/7d Change Badges */}
-              <div className="flex gap-3 mb-6 justify-center">
-                <div className="text-center">
-                  <TrendBadge value={person.change24h} size="sm" />
-                  <p className="text-xs text-muted-foreground mt-1">24h Change</p>
+              {/* Bio and Visit Profile Button */}
+              {person.bio && (
+                <div className="flex gap-4 mb-6 items-start">
+                  <p className="text-sm text-muted-foreground flex-1" data-testid={`text-bio-${person.id}`}>
+                    {person.bio}
+                  </p>
+                  <Button 
+                    variant="default" 
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onVisitProfile();
+                    }}
+                    data-testid={`button-visit-profile-${person.id}`}
+                    className="gap-2 whitespace-nowrap"
+                  >
+                    Visit Profile
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
                 </div>
-                <div className="text-center">
-                  <TrendBadge value={person.change7d} size="sm" />
-                  <p className="text-xs text-muted-foreground mt-1">7d Change</p>
-                </div>
-              </div>
+              )}
 
               {/* Sentiment Voting Widget */}
               <div className="mb-6">
@@ -159,22 +169,6 @@ export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: L
                   personId={person.id} 
                   personName={person.name}
                 />
-              </div>
-
-              {/* Visit Profile Button */}
-              <div className="flex justify-center">
-                <Button 
-                  variant="default" 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onVisitProfile();
-                  }}
-                  data-testid={`button-visit-profile-${person.id}`}
-                  className="gap-2"
-                >
-                  Visit Profile
-                  <ExternalLink className="h-4 w-4" />
-                </Button>
               </div>
             </div>
           </motion.div>
