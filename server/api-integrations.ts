@@ -315,15 +315,15 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
     }
   }
 
-  // Sort by trend score
-  results.sort((a, b) => b.trendScore - a.trendScore);
+  // DO NOT sort - maintain displayOrder ranking
+  // results.sort((a, b) => b.trendScore - a.trendScore);
   
-  // Convert to TrendingPerson format with historical changes
+  // Convert to TrendingPerson format with historical changes (in displayOrder sequence)
   const trendingPeople: TrendingPerson[] = [];
   
-  for (let index = 0; index < results.length; index++) {
-    const celeb = results[index];
-    const dbPerson = celebrities.find(c => c.name === celeb.name);
+  for (let index = 0; index < celebrities.length; index++) {
+    const dbPerson = celebrities[index];
+    const celeb = results.find(c => c.name === dbPerson.name);
     
     if (!dbPerson) continue;
     
