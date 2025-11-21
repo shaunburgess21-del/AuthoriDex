@@ -9,7 +9,7 @@ const TOP_100_PEOPLE = [
   { name: "Donald Trump", category: "Politics", displayOrder: 2, avatar: "/attached_assets/Donald Trump_1763764394332.png", bio: "Former President of the United States and prominent political figure." },
   
   // Social Media Creators & Influencers (25)
-  { name: "Kai Cenat", category: "Creator", displayOrder: 3 },
+  { name: "Narendra Modi", category: "Politics", displayOrder: 3, avatar: "/attached_assets/Narendra Modi_1763764500021.png", bio: "Prime Minister of India and influential political leader." },
   { name: "MrBeast", category: "Creator", displayOrder: 4 },
   { name: "Khaby Lame", category: "Creator", displayOrder: 5 },
   { name: "Alix Earle", category: "Creator", displayOrder: 6 },
