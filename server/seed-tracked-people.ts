@@ -6,7 +6,7 @@ import { trackedPeople } from "@shared/schema";
 const TOP_100_PEOPLE = [
   // Rank 1-2: Top trending
   { name: "Elon Musk", category: "Tech", displayOrder: 1, avatar: "/attached_assets/elon-musk.png", bio: "CEO of Tesla, SpaceX, Boring Company and Neuralink, entrepreneur and innovator pushing the boundaries of technology and space exploration." },
-  { name: "Donald Trump", category: "Politics", displayOrder: 2, avatar: "/assets/donald-trump.png", bio: "Former President of the United States and prominent political figure." },
+  { name: "Donald Trump", category: "Politics", displayOrder: 2, avatar: "/attached_assets/Donald Trump_1763764394332.png", bio: "Former President of the United States and prominent political figure." },
   
   // Social Media Creators & Influencers (25)
   { name: "Kai Cenat", category: "Creator", displayOrder: 3 },
