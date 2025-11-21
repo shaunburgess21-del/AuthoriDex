@@ -46,12 +46,12 @@ export default function UserProfilePage() {
           supabase
             .from("user_votes")
             .select("*")
-            .eq("userId", user.id)
+            .eq("userId", user!.id)
             .order("votedAt", { ascending: false }),
           supabase
             .from("user_favourites")
             .select("*")
-            .eq("userId", user.id)
+            .eq("userId", user!.id)
             .order("favouritedAt", { ascending: false }),
         ]);
 
