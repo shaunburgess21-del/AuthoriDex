@@ -174,8 +174,8 @@ export default function PersonDetailPage() {
       <div className="container mx-auto px-4 py-12 max-w-6xl">
         {/* 1. Header: Name + Category */}
         <div className="mb-8">
-          <div className="flex items-start gap-6">
-            <PersonAvatar name={person.name} avatar={person.avatar} size="lg" />
+          <div className="flex items-end gap-6">
+            <PersonAvatar name={person.name} avatar={person.avatar} size="xl" />
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <h1 className="text-4xl font-serif font-bold" data-testid="text-person-name">
