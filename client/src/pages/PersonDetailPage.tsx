@@ -185,30 +185,28 @@ export default function PersonDetailPage() {
                   <RankBadge rank={person.rank} />
                 </div>
                 <p className="text-lg text-muted-foreground mb-4">{person.category}</p>
-              </div>
-              <div className="flex flex-col gap-3">
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="gap-2" data-testid="button-share">
-                    <Share2 className="h-4 w-4" />
-                    Share
-                  </Button>
-                  <Button
-                    variant={isFavorited ? "default" : "outline"}
-                    size="sm"
-                    className="gap-2"
-                    onClick={handleToggleFavorite}
-                    disabled={favoriteLoading}
-                    data-testid="button-favorite"
-                  >
-                    <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
-                    {isFavorited ? "Favorited" : "Favorite"}
-                  </Button>
-                </div>
                 {person.bio && (
-                  <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-person-bio">
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-4" data-testid="text-person-bio">
                     {person.bio}
                   </p>
                 )}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="gap-2" data-testid="button-share">
+                  <Share2 className="h-4 w-4" />
+                  Share
+                </Button>
+                <Button
+                  variant={isFavorited ? "default" : "outline"}
+                  size="sm"
+                  className="gap-2"
+                  onClick={handleToggleFavorite}
+                  disabled={favoriteLoading}
+                  data-testid="button-favorite"
+                >
+                  <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
+                  {isFavorited ? "Favorited" : "Favorite"}
+                </Button>
               </div>
             </div>
           </div>
