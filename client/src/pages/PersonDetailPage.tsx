@@ -88,7 +88,12 @@ export default function PersonDetailPage() {
                 </h1>
                 <RankBadge rank={person.rank} />
               </div>
-              <p className="text-lg text-muted-foreground mb-4">{person.category}</p>
+              <p className="text-lg text-muted-foreground mb-2">{person.category}</p>
+              {person.bio && (
+                <p className="text-sm text-muted-foreground mb-4 max-w-md leading-relaxed" data-testid="text-person-bio">
+                  {person.bio}
+                </p>
+              )}
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" className="gap-2" data-testid="button-share">
                   <Share2 className="h-4 w-4" />

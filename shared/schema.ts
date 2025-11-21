@@ -24,6 +24,7 @@ export const trackedPeople = pgTable("tracked_people", {
   name: text("name").notNull().unique(),
   category: text("category").notNull(),
   avatar: text("avatar"),
+  bio: text("bio"),
   youtubeId: text("youtube_id"),
   spotifyId: text("spotify_id"),
 });
