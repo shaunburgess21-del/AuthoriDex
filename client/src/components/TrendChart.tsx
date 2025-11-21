@@ -27,27 +27,6 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
 
   const days = timeRange === "1D" ? 1 : timeRange === "7D" ? 7 : timeRange === "30D" ? 30 : timeRange === "6M" ? 180 : timeRange === "1Y" ? 365 : 365;
 
-  // Calculate optimal interval for X-axis labels (target max 10 labels)
-  const getXAxisInterval = () => {
-    if (timeRange === "1D") return 0; // Show hourly data (max ~24 hours)
-    if (timeRange === "7D") return 0; // Show all 7 days (7 labels)
-    if (timeRange === "30D") return 2; // Show every 3rd day (~10 labels)
-    if (timeRange === "6M") return 17; // Show every 18th day (~10 labels)
-    if (timeRange === "1Y" || timeRange === "ALL") return 36; // Show every 37th day (~10 labels)
-    return 0;
-  };
-
-  // Format date for display based on time range
-  const formatXAxisDate = (dateStr: string) => {
-    if (timeRange === "1D") {
-      // For 1D, show time (HH:MM format)
-      const parts = dateStr.split(' ');
-      if (parts.length === 2) return parts[1]; // Return time portion
-      return dateStr;
-    }
-    return dateStr; // Return full date for other ranges
-  };
-
   const { data: historyData, isLoading } = useQuery<HistoryDataPoint[]>({
     queryKey: [`/api/trending/${personId}/history?days=${days}`],
   });
@@ -99,19 +78,12 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
         ) : (
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={historyData} margin={{ top: 5, right: 30, left: 20, bottom: 40 }}>
+              <LineChart data={historyData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis 
                   dataKey="date" 
                   className="text-xs"
-                  tick={{ 
-                    fill: 'hsl(var(--muted-foreground))',
-                    angle: window.innerWidth < 768 ? -45 : 0,
-                    textAnchor: window.innerWidth < 768 ? 'end' : 'middle',
-                    height: window.innerWidth < 768 ? 80 : 40
-                  }}
-                  interval={getXAxisInterval()}
-                  tickFormatter={formatXAxisDate}
+                  tick={{ fill: 'hsl(var(--muted-foreground))' }}
                 />
                 <YAxis 
                   tickFormatter={formatYAxis}
