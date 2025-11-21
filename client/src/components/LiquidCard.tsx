@@ -1,31 +1,12 @@
-import { ReactNode, useRef, useEffect, useState, useCallback, HTMLAttributes } from "react";
+import { ReactNode, useRef, useEffect, useState, useCallback, HTMLAttributes, useMemo } from "react";
 import { cn } from "@/lib/utils";
-
-type GradientPreset = "greenCyan" | "purplePink" | "tealYellow";
 
 interface LiquidCardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
-  gradient: GradientPreset;
+  gradientColors: [string, string, string]; // [start, mid, end]
+  glowColor: string; // rgba format
   className?: string;
 }
-
-const gradientColors: Record<GradientPreset, { start: string; mid: string; end: string }> = {
-  greenCyan: {
-    start: "#10b981",
-    mid: "#06b6d4",
-    end: "#14b8a6",
-  },
-  purplePink: {
-    start: "#a855f7",
-    mid: "#ec4899",
-    end: "#f472b6",
-  },
-  tealYellow: {
-    start: "#14b8a6",
-    mid: "#06b6d4",
-    end: "#fbbf24",
-  },
-};
 
 // Pre-build simplex noise permutation tables ONCE (outside component)
 const NOISE_PERM = (() => {
@@ -58,32 +39,14 @@ const GRAD3 = [
   [0, 1, 1], [0, -1, 1], [0, 1, -1], [0, -1, -1]
 ];
 
-// Parse hex color ONCE per gradient preset
+// Parse hex color utility
 const parseHex = (hex: string) => ({
   r: parseInt(hex.slice(1, 3), 16),
   g: parseInt(hex.slice(3, 5), 16),
   b: parseInt(hex.slice(5, 7), 16),
 });
 
-const parsedGradients = {
-  greenCyan: {
-    start: parseHex("#10b981"),
-    mid: parseHex("#06b6d4"),
-    end: parseHex("#14b8a6"),
-  },
-  purplePink: {
-    start: parseHex("#a855f7"),
-    mid: parseHex("#ec4899"),
-    end: parseHex("#f472b6"),
-  },
-  tealYellow: {
-    start: parseHex("#14b8a6"),
-    mid: parseHex("#06b6d4"),
-    end: parseHex("#fbbf24"),
-  },
-};
-
-export function LiquidCard({ children, gradient, className, ...rest }: LiquidCardProps) {
+export function LiquidCard({ children, gradientColors, glowColor, className, ...rest }: LiquidCardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -94,8 +57,12 @@ export function LiquidCard({ children, gradient, className, ...rest }: LiquidCar
   const time = useRef(0);
   const imageDataBuffer = useRef<ImageData | null>(null);
 
-  const colors = gradientColors[gradient];
-  const parsedColors = parsedGradients[gradient];
+  // Parse gradient colors once with useMemo
+  const parsedColors = useMemo(() => ({
+    start: parseHex(gradientColors[0]),
+    mid: parseHex(gradientColors[1]),
+    end: parseHex(gradientColors[2]),
+  }), [gradientColors]);
 
   // Optimized simplex noise function (2D) - uses pre-built tables
   const simplex2D = useCallback((x: number, y: number): number => {
@@ -332,48 +299,49 @@ export function LiquidCard({ children, gradient, className, ...rest }: LiquidCar
   return (
     <div
       ref={containerRef}
-      className={cn("relative overflow-hidden rounded-2xl", className)}
+      className={cn("relative overflow-hidden rounded-2xl p-[2px]", className)}
       onMouseMove={handleMouseMove}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       style={{
-        background: "hsl(var(--card))",
+        background: `linear-gradient(135deg, ${gradientColors[0]}cc 0%, ${gradientColors[1]}66 50%, transparent 100%)`,
+        transition: "all 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
       }}
       {...rest}
     >
-      {/* Canvas layer - absolutely positioned behind content */}
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          mixBlendMode: "screen",
-          opacity: isHovered ? 0.6 : 0.2,
-          transition: "opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
-        }}
-      />
-
-      {/* Gradient background that animates on hover */}
-      <div
-        className="absolute inset-0 opacity-0 transition-opacity duration-700"
-        style={{
-          opacity: isHovered ? 0.15 : 0,
-          background: `radial-gradient(circle at ${mousePos.x * 100}% ${mousePos.y * 100}%, ${colors.start}, ${colors.mid}, ${colors.end})`,
-        }}
-      />
-
-      {/* Glow effect on hover */}
-      {isHovered && (
-        <div
+      {/* Inner container with card background */}
+      <div className="relative rounded-2xl overflow-hidden" style={{ background: "hsl(var(--card))" }}>
+        {/* Canvas layer - absolutely positioned behind content */}
+        <canvas
+          ref={canvasRef}
           className="absolute inset-0 pointer-events-none"
           style={{
-            boxShadow: `0 0 60px ${colors.mid}40, inset 0 0 30px ${colors.start}20`,
-            transition: "box-shadow 0.6s ease-out",
+            mixBlendMode: "screen",
+            opacity: isHovered ? 0.6 : 0.2,
+            transition: "opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
         />
-      )}
 
-      {/* Content layer */}
-      <div className="relative z-10">{children}</div>
+        {/* Gradient background that animates on hover */}
+        <div
+          className="absolute inset-0 transition-opacity duration-700"
+          style={{
+            opacity: isHovered ? 0.15 : 0,
+            background: `radial-gradient(circle at ${mousePos.x * 100}% ${mousePos.y * 100}%, ${gradientColors[0]}, ${gradientColors[1]}, ${gradientColors[2]})`,
+          }}
+        />
+
+        {/* Glow effect on hover */}
+        <div
+          className="absolute inset-0 pointer-events-none transition-all duration-500"
+          style={{
+            boxShadow: isHovered ? `0 0 60px ${glowColor}, inset 0 0 30px ${glowColor}` : "none",
+          }}
+        />
+
+        {/* Content layer */}
+        <div className="relative z-10">{children}</div>
+      </div>
     </div>
   );
 }
