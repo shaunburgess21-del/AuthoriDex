@@ -135,3 +135,44 @@ export const insightItemsRelations = relations(insightItems, ({ one }) => ({
     references: [platformInsights.id],
   }),
 }));
+
+// User votes - stores user sentiment ratings for tracked people (Supabase)
+export const userVotes = pgTable("user_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(), // Supabase auth user ID
+  personId: varchar("person_id").notNull(), // References tracked person
+  personName: text("person_name").notNull(), // Cached for quick display
+  rating: integer("rating").notNull(), // 1-10 sentiment score
+  votedAt: timestamp("voted_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueUserPerson: unique().on(table.userId, table.personId),
+}));
+
+export const insertUserVoteSchema = createInsertSchema(userVotes).omit({
+  id: true,
+  votedAt: true,
+});
+
+export type UserVote = typeof userVotes.$inferSelect;
+export type InsertUserVote = z.infer<typeof insertUserVoteSchema>;
+
+// User favourites - stores which people a user has favourited (Supabase)
+export const userFavourites = pgTable("user_favourites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(), // Supabase auth user ID
+  personId: varchar("person_id").notNull(), // References tracked person
+  personName: text("person_name").notNull(), // Cached for quick display
+  personAvatar: text("person_avatar"), // Cached for quick display
+  personCategory: text("person_category"), // Cached for quick display
+  favouritedAt: timestamp("favourited_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueUserPerson: unique().on(table.userId, table.personId),
+}));
+
+export const insertUserFavouriteSchema = createInsertSchema(userFavourites).omit({
+  id: true,
+  favouritedAt: true,
+});
+
+export type UserFavourite = typeof userFavourites.$inferSelect;
+export type InsertUserFavourite = z.infer<typeof insertUserFavouriteSchema>;
