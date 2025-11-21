@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
+import { getSupabase } from "@/lib/supabase";
 
 interface AnimatedSentimentVotingWidgetProps {
   personId: string;
@@ -77,6 +79,7 @@ const generateMockVoteDistribution = (personId: string): number[] => {
 };
 
 export function AnimatedSentimentVotingWidget({ personId, personName }: AnimatedSentimentVotingWidgetProps) {
+  const { user } = useAuth();
   const [currentValue, setCurrentValue] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('vote');
@@ -99,10 +102,10 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
   }, [voteDistribution, totalVotes]);
   const maxVotes = useMemo(() => Math.max(...voteDistribution), [voteDistribution]);
 
-  const handleValueChange = (newValue: number) => {
+  const handleValueChange = async (newValue: number) => {
     setCurrentValue(newValue);
     
-    // Save to localStorage
+    // Save to localStorage (for immediate UI update)
     localStorage.setItem(`sentiment-vote-${personId}`, newValue.toString());
     
     // Dispatch custom event to notify other components
@@ -110,11 +113,37 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
       detail: { personId, value: newValue }
     }));
     
+    // Save to Supabase if user is logged in
+    if (user) {
+      try {
+        const supabase = await getSupabase();
+        const { error } = await supabase
+          .from('user_votes')
+          .upsert({
+            userId: user.id,
+            personId,
+            personName,
+            rating: newValue,
+          }, {
+            onConflict: 'userId,personId',
+          });
+
+        if (error) {
+          console.error('Error saving vote to Supabase:', error);
+        } else {
+          console.log('✅ Vote saved to Supabase');
+        }
+      } catch (error) {
+        console.error('Error connecting to Supabase:', error);
+      }
+    }
+    
     // Log telemetry
     console.log('🗳️ [Telemetry] ui.vote_submitted', { 
       personId, 
       value: newValue,
-      zone: getZoneLabel(newValue)
+      zone: getZoneLabel(newValue),
+      savedToSupabase: !!user
     });
     
     // Show toast notification
