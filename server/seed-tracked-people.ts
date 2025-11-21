@@ -55,6 +55,7 @@ const TOP_100_PEOPLE = [
 
   // Tech & Business Leaders (20)
   { name: "Elon Musk", category: "Tech", avatar: "/attached_assets/elon-musk.png", bio: "CEO of Tesla, SpaceX, Boring Company and Neuralink, entrepreneur and innovator pushing the boundaries of technology and space exploration." },
+  { name: "Donald Trump", category: "Politics", avatar: "/assets/donald-trump.png", bio: "Former President of the United States and prominent political figure." },
   { name: "Jensen Huang", category: "Tech" },
   { name: "Mark Zuckerberg", category: "Tech" },
   { name: "Satya Nadella", category: "Tech" },
@@ -76,7 +77,6 @@ const TOP_100_PEOPLE = [
   { name: "Amy Edmondson", category: "Business" },
 
   // Politicians & World Leaders (15)
-  { name: "Donald Trump", category: "Politics" },
   { name: "Narendra Modi", category: "Politics" },
   { name: "Xi Jinping", category: "Politics" },
   { name: "Vladimir Putin", category: "Politics" },
