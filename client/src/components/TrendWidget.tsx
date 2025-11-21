@@ -12,15 +12,30 @@ interface TrendWidgetProps {
   onPersonClick?: (personId: string) => void;
 }
 
-const gradientMap = {
-  gainer: "greenCyan" as const,
-  dropper: "purplePink" as const,
-  daily: "tealYellow" as const,
+const colorConfig = {
+  daily: {
+    gradientColors: ["#3b82f6", "#6366f1", "#3b82f6"] as [string, string, string],
+    glowColor: "rgba(59, 130, 246, 0.5)",
+  },
+  gainer: {
+    gradientColors: ["#10b981", "#14b8a6", "#10b981"] as [string, string, string],
+    glowColor: "rgba(16, 185, 129, 0.5)",
+  },
+  dropper: {
+    gradientColors: ["#ef4444", "#f97316", "#ef4444"] as [string, string, string],
+    glowColor: "rgba(239, 68, 68, 0.5)",
+  },
 };
 
 export function TrendWidget({ title, people, type, onPersonClick }: TrendWidgetProps) {
+  const colors = colorConfig[type];
+  
   return (
-    <LiquidCard gradient={gradientMap[type]} data-testid={`widget-${type}`}>
+    <LiquidCard 
+      gradientColors={colors.gradientColors} 
+      glowColor={colors.glowColor} 
+      data-testid={`widget-${type}`}
+    >
       <Card className="overflow-hidden bg-transparent border-0 shadow-none">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg font-serif">{title}</CardTitle>

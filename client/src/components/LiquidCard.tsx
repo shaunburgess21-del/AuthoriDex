@@ -58,11 +58,20 @@ export function LiquidCard({ children, gradientColors, glowColor, className, ...
   const imageDataBuffer = useRef<ImageData | null>(null);
 
   // Parse gradient colors once with useMemo
-  const parsedColors = useMemo(() => ({
-    start: parseHex(gradientColors[0]),
-    mid: parseHex(gradientColors[1]),
-    end: parseHex(gradientColors[2]),
-  }), [gradientColors]);
+  const parsedColors = useMemo(() => {
+    if (!gradientColors || gradientColors.length !== 3) {
+      return {
+        start: { r: 0, g: 0, b: 0 },
+        mid: { r: 0, g: 0, b: 0 },
+        end: { r: 0, g: 0, b: 0 },
+      };
+    }
+    return {
+      start: parseHex(gradientColors[0]),
+      mid: parseHex(gradientColors[1]),
+      end: parseHex(gradientColors[2]),
+    };
+  }, [gradientColors]);
 
   // Optimized simplex noise function (2D) - uses pre-built tables
   const simplex2D = useCallback((x: number, y: number): number => {
@@ -240,7 +249,7 @@ export function LiquidCard({ children, gradientColors, glowColor, className, ...
     ctx.putImageData(imageData, 0, 0);
 
     animationFrameId.current = requestAnimationFrame(animate);
-  }, [isHovered, colors, simplex2D, mousePos, parsedColors]);
+  }, [isHovered, gradientColors, simplex2D, mousePos, parsedColors]);
 
   // Handle mouse movement
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
