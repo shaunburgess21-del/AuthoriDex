@@ -88,14 +88,13 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
         ) : (
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={historyData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+              <LineChart data={historyData} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis 
                   dataKey="date" 
                   className="text-xs"
-                  tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                  tick={{ fill: 'hsl(var(--muted-foreground))', angle: -45, textAnchor: 'end', height: 80 }}
                   interval={getXAxisInterval()}
-                  minTickGap={20}
                 />
                 <YAxis 
                   tickFormatter={formatYAxis}
