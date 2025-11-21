@@ -258,8 +258,8 @@ async function generateMockHistoricalData(personId: string, currentScore: number
 
 // Aggregate all metrics into a unified trending score
 export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
-  // Fetch tracked people from database
-  const celebrities = await db.select().from(trackedPeople);
+  // Fetch tracked people from database, ordered by displayOrder
+  const celebrities = await db.select().from(trackedPeople).orderBy(trackedPeople.displayOrder);
   
   if (celebrities.length === 0) {
     console.warn('No tracked people found in database');
@@ -270,11 +270,12 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
   
   const results: CelebrityMetrics[] = [];
 
-  // Generate mock metrics for each celebrity
+  // Generate mock metrics for each celebrity (using displayOrder - 1 as index for consistent scoring)
   for (let i = 0; i < celebrities.length; i++) {
     const celeb = celebrities[i];
     
-    const mockMetrics = generateMockMetrics(celeb.name, i);
+    // Use displayOrder - 1 as the index so rank 1 gets the highest score
+    const mockMetrics = generateMockMetrics(celeb.name, celeb.displayOrder ? celeb.displayOrder - 1 : i);
     
     results.push({
       name: celeb.name,

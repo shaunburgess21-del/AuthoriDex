@@ -23,6 +23,7 @@ export const trackedPeople = pgTable("tracked_people", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
   category: text("category").notNull(),
+  displayOrder: integer("display_order").notNull().default(0),
   avatar: text("avatar"),
   bio: text("bio"),
   youtubeId: text("youtube_id"),
