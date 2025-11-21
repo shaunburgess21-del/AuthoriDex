@@ -50,7 +50,7 @@ function generateMockTrendingPeople(): TrendingPerson[] {
       name,
       avatar: null,
       rank: i + 1,
-      trendScore: 10000 - (i * 50) + Math.random() * 100,
+      trendScore: 9900 - ((i - 2) * 50) + Math.random() * 100,
       change24h: (Math.random() - 0.5) * 30,
       change7d: (Math.random() - 0.5) * 60,
       category: categories[i % categories.length],
