@@ -80,7 +80,7 @@ export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: L
       {/* Main Row */}
       <div
         className="flex items-center gap-4 p-4 hover-elevate active-elevate-2 cursor-pointer"
-        onClick={onToggle}
+        onClick={onVisitProfile}
         data-testid={`row-person-${person.id}`}
       >
         <RankBadge rank={person.rank} />
@@ -121,7 +121,15 @@ export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: L
             Sentiment
           </p>
         </div>
-        <Button variant="ghost" size="icon" data-testid={`button-expand-${person.id}`}>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
+          data-testid={`button-expand-${person.id}`}
+        >
           {expanded ? (
             <ChevronUp className="h-5 w-5" />
           ) : (
