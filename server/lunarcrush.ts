@@ -16,7 +16,31 @@ function generateMockTrendingPeople(): TrendingPerson[] {
 
   const people: TrendingPerson[] = [];
   
-  for (let i = 0; i < 100; i++) {
+  // Rank 1: Elon Musk
+  people.push({
+    id: "person-1",
+    name: "Elon Musk",
+    avatar: null,
+    rank: 1,
+    trendScore: 10000,
+    change24h: (Math.random() - 0.5) * 30,
+    change7d: (Math.random() - 0.5) * 60,
+    category: "Tech",
+  });
+
+  // Rank 2: Donald Trump
+  people.push({
+    id: "person-2",
+    name: "Donald Trump",
+    avatar: "/assets/donald-trump.png",
+    rank: 2,
+    trendScore: 9950,
+    change24h: (Math.random() - 0.5) * 30,
+    change7d: (Math.random() - 0.5) * 60,
+    category: "Politics",
+  });
+  
+  for (let i = 2; i < 100; i++) {
     const firstName = firstNames[i % firstNames.length];
     const lastName = lastNames[i % lastNames.length];
     const name = `${firstName} ${lastName}${i > 23 ? ` ${Math.floor(i / 24)}` : ''}`;
