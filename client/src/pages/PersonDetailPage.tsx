@@ -144,6 +144,24 @@ export default function PersonDetailPage() {
           </Card>
         </div>
 
+        {/* 2.5. Bio and Visit Profile */}
+        {person.bio && (
+          <div className="flex gap-6 items-start mb-8">
+            <p className="text-sm text-muted-foreground flex-1" data-testid="text-person-bio-detail">
+              {person.bio}
+            </p>
+            <Button 
+              variant="default"
+              onClick={() => setLocation("/")}
+              data-testid="button-back-to-leaderboard"
+              className="gap-2 whitespace-nowrap"
+            >
+              Back
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
         {/* 3. Sentiment Voting Widget - PROMINENT PLACEMENT */}
         <div className="mb-8">
           <AnimatedSentimentVotingWidget 
