@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
-type TimeRange = "1D" | "7D" | "30D" | "ALL";
+type TimeRange = "1D" | "7D" | "30D" | "6M" | "1Y" | "ALL";
 
 interface TrendChartProps {
   personId: string;
@@ -25,7 +25,7 @@ interface HistoryDataPoint {
 export function TrendChart({ personId, personName }: TrendChartProps) {
   const [timeRange, setTimeRange] = useState<TimeRange>("7D");
 
-  const days = timeRange === "1D" ? 1 : timeRange === "7D" ? 7 : timeRange === "30D" ? 30 : 365;
+  const days = timeRange === "1D" ? 1 : timeRange === "7D" ? 7 : timeRange === "30D" ? 30 : timeRange === "6M" ? 180 : timeRange === "1Y" ? 365 : 365;
 
   const { data: historyData, isLoading } = useQuery<HistoryDataPoint[]>({
     queryKey: [`/api/trending/${personId}/history?days=${days}`],
@@ -42,7 +42,7 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <CardTitle className="text-lg font-serif">Trend History</CardTitle>
         <div className="flex gap-2">
-          {(["1D", "7D", "30D", "ALL"] as TimeRange[]).map((range) => (
+          {(["1D", "7D", "30D", "6M", "1Y", "ALL"] as TimeRange[]).map((range) => (
             <Button
               key={range}
               variant={timeRange === range ? "default" : "outline"}

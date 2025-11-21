@@ -222,13 +222,13 @@ async function generateMockHistoricalData(personId: string, currentScore: number
   
   const dataPoints = [];
   
-  // Generate 30 days of mock historical data with stable timestamps
-  for (let daysAgo = 30; daysAgo >= 0; daysAgo--) {
+  // Generate 365 days of mock historical data with stable timestamps
+  for (let daysAgo = 365; daysAgo >= 0; daysAgo--) {
     // Create stable timestamp (midnight UTC for each day)
     const timestamp = new Date(baseTimestamp - daysAgo * 24 * 60 * 60 * 1000);
     
     // Create trending pattern: gradual growth with some volatility
-    const dayFactor = 1 - (daysAgo / 40); // Gradual increase
+    const dayFactor = 1 - (daysAgo / 400); // Gradual increase over longer period
     const volatility = (Math.sin(daysAgo * 0.5) * 0.15); // ±15% fluctuation
     const historicalScore = Math.round(currentScore * (dayFactor + volatility));
     
