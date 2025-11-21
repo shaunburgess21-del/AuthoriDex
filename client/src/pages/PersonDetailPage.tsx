@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -12,15 +13,109 @@ import { ArrowLeft, Share2, Star, TrendingUp, Users, Eye, DollarSign, Globe, Mes
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
+import { useAuth } from "@/contexts/AuthContext";
+import { getSupabase } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 
 export default function PersonDetailPage() {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [, params] = useRoute("/person/:id");
   const [, setLocation] = useLocation();
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
 
   const { data: person, isLoading, error } = useQuery<TrendingPerson>({
     queryKey: [`/api/trending/${params?.id}`],
     enabled: !!params?.id,
   });
+
+  // Check if person is favorited
+  useEffect(() => {
+    if (!user || !person) return;
+
+    async function checkFavorite() {
+      try {
+        const supabase = await getSupabase();
+        const { data, error } = await supabase
+          .from('user_favourites')
+          .select('id')
+          .eq('userId', user!.id)
+          .eq('personId', person!.id)
+          .single();
+
+        if (!error && data) {
+          setIsFavorited(true);
+        }
+      } catch (error) {
+        console.error('Error checking favorite:', error);
+      }
+    }
+
+    checkFavorite();
+  }, [user, person]);
+
+  const handleToggleFavorite = async () => {
+    if (!user) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to add favorites",
+        variant: "destructive",
+      });
+      setLocation("/login");
+      return;
+    }
+
+    if (!person) return;
+
+    setFavoriteLoading(true);
+    try {
+      const supabase = await getSupabase();
+
+      if (isFavorited) {
+        const { error } = await supabase
+          .from('user_favourites')
+          .delete()
+          .eq('userId', user.id)
+          .eq('personId', person.id);
+
+        if (error) throw error;
+
+        setIsFavorited(false);
+        toast({
+          title: "Removed from favorites",
+          description: `${person.name} has been removed from your favorites`,
+        });
+      } else {
+        const { error } = await supabase
+          .from('user_favourites')
+          .insert({
+            userId: user.id,
+            personId: person.id,
+            personName: person.name,
+            personAvatar: person.avatar,
+            personCategory: person.category,
+          });
+
+        if (error) throw error;
+
+        setIsFavorited(true);
+        toast({
+          title: "Added to favorites",
+          description: `${person.name} has been added to your favorites`,
+        });
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update favorite status",
+        variant: "destructive",
+      });
+    } finally {
+      setFavoriteLoading(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -99,9 +194,16 @@ export default function PersonDetailPage() {
                   <Share2 className="h-4 w-4" />
                   Share
                 </Button>
-                <Button variant="outline" size="sm" className="gap-2" data-testid="button-favorite">
-                  <Star className="h-4 w-4" />
-                  Favorite
+                <Button
+                  variant={isFavorited ? "default" : "outline"}
+                  size="sm"
+                  className="gap-2"
+                  onClick={handleToggleFavorite}
+                  disabled={favoriteLoading}
+                  data-testid="button-favorite"
+                >
+                  <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
+                  {isFavorited ? "Favorited" : "Favorite"}
                 </Button>
               </div>
             </div>
