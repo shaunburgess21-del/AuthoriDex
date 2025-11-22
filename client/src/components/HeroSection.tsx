@@ -19,7 +19,7 @@ export function HeroSection() {
         </div>
         
         <h1 className="text-5xl md:text-7xl font-serif font-bold mb-6 tracking-tight max-w-4xl">
-          Track Fame in <span className="text-primary">Real-Time</span>
+          Global Influence <span className="text-primary">Insights</span>
         </h1>
         
         <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">Discover real-time insights on the world’s most influential people, powered by live data from social media and other verified sources.</p>
