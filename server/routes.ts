@@ -9,10 +9,11 @@ import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Seed Supabase with tracked persons on server start
-  seedSupabasePersons().catch(err => {
-    console.error('Failed to seed Supabase:', err);
-  });
+  // Note: Using local PostgreSQL database instead of Supabase
+  // Supabase seeding disabled while Supabase is paused
+  // seedSupabasePersons().catch(err => {
+  //   console.error('Failed to seed Supabase:', err);
+  // });
   
   // Supabase config endpoint for client
   app.get("/api/config/supabase", (req, res) => {
