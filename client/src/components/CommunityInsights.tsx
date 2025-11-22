@@ -198,18 +198,18 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-serif font-bold">Community Insights</h2>
         </div>
         <p className="text-muted-foreground">Loading insights...</p>
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-serif font-bold" data-testid="text-community-insights-title">
           Community Insights
         </h2>
@@ -227,49 +227,51 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
       </div>
 
       {showForm && (
-        <Card className="p-4">
-          <div className="space-y-3">
-            <Textarea
-              placeholder={`What are your thoughts on ${personName}?`}
-              value={newInsight}
-              onChange={(e) => setNewInsight(e.target.value)}
-              rows={4}
-              className="resize-none"
-              data-testid="textarea-new-insight"
-            />
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setShowForm(false);
-                  setNewInsight("");
-                }}
-                data-testid="button-cancel-insight"
-              >
-                <X className="h-4 w-4 mr-1" />
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSubmit}
-                disabled={createInsightMutation.isPending}
-                data-testid="button-post-insight"
-              >
-                {createInsightMutation.isPending ? "Posting..." : "Post"}
-              </Button>
+        <div className="mb-6 max-w-2xl mx-auto">
+          <div className="p-4 border rounded-md bg-card border-border">
+            <div className="space-y-3">
+              <Textarea
+                placeholder={`What are your thoughts on ${personName}?`}
+                value={newInsight}
+                onChange={(e) => setNewInsight(e.target.value)}
+                rows={4}
+                className="resize-none"
+                data-testid="textarea-new-insight"
+              />
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowForm(false);
+                    setNewInsight("");
+                  }}
+                  data-testid="button-cancel-insight"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSubmit}
+                  disabled={createInsightMutation.isPending}
+                  data-testid="button-post-insight"
+                >
+                  {createInsightMutation.isPending ? "Posting..." : "Post"}
+                </Button>
+              </div>
             </div>
           </div>
-        </Card>
+        </div>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-4 max-w-2xl mx-auto">
         {insights.length === 0 ? (
-          <Card className="p-8 text-center">
+          <div className="p-8 text-center border rounded-md border-border">
             <p className="text-muted-foreground">
               No insights yet. Be the first to share your thoughts on {personName}!
             </p>
-          </Card>
+          </div>
         ) : (
           insights.map((insight) => {
             const netVotes = getNetVotes(insight);
@@ -277,26 +279,30 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
             const isTopPost = netVotes >= 100;
 
             return (
-              <Card
+              <div
                 key={insight.id}
-                className={`p-4 ${isTopPost ? "border-yellow-500 border-2" : ""}`}
+                className={`p-4 border rounded-md bg-card ${
+                  isTopPost ? "border-yellow-500 border-2" : "border-border"
+                }`}
                 data-testid={`card-insight-${insight.id}`}
               >
                 <div className="flex gap-4">
-                  {/* Voting Column */}
-                  <div className="flex flex-col items-center gap-1 min-w-[40px]">
+                  {/* Voting Column - Avatar-style arrows */}
+                  <div className="flex flex-col items-center gap-2">
                     <button
                       onClick={() => handleVote(insight.id, "up")}
                       disabled={!user}
-                      className={`p-1 rounded hover-elevate transition-colors ${
-                        userVote === "up" ? "text-green-500" : "text-muted-foreground"
-                      }`}
+                      className={`flex items-center justify-center w-10 h-10 rounded-md transition-all ${
+                        userVote === "up" 
+                          ? "bg-green-500/20 text-green-500 border border-green-500/30" 
+                          : "bg-muted/50 text-muted-foreground hover-elevate active-elevate-2"
+                      } ${!user ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                       data-testid={`button-upvote-${insight.id}`}
                     >
-                      <ChevronUp className="h-5 w-5" />
+                      <ChevronUp className="h-6 w-6" />
                     </button>
                     <span
-                      className={`font-mono font-bold text-sm ${getVoteColor(netVotes)}`}
+                      className={`font-mono font-bold text-base ${getVoteColor(netVotes)}`}
                       data-testid={`text-vote-count-${insight.id}`}
                     >
                       {netVotes}
@@ -304,24 +310,26 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
                     <button
                       onClick={() => handleVote(insight.id, "down")}
                       disabled={!user}
-                      className={`p-1 rounded hover-elevate transition-colors ${
-                        userVote === "down" ? "text-red-500" : "text-muted-foreground"
-                      }`}
+                      className={`flex items-center justify-center w-10 h-10 rounded-md transition-all ${
+                        userVote === "down" 
+                          ? "bg-red-500/20 text-red-500 border border-red-500/30" 
+                          : "bg-muted/50 text-muted-foreground hover-elevate active-elevate-2"
+                      } ${!user ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                       data-testid={`button-downvote-${insight.id}`}
                     >
-                      <ChevronDown className="h-5 w-5" />
+                      <ChevronDown className="h-6 w-6" />
                     </button>
                   </div>
 
                   {/* Content Column */}
-                  <div className="flex-1 space-y-2">
+                  <div className="flex-1 space-y-2 min-w-0">
                     <div className="flex items-start gap-3">
-                      <Avatar className="h-8 w-8">
+                      <Avatar className="h-8 w-8 flex-shrink-0">
                         <AvatarFallback>
                           {insight.username.substring(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-sm" data-testid={`text-username-${insight.id}`}>
                             {insight.username}
@@ -335,18 +343,18 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
                             </Badge>
                           )}
                         </div>
-                        <p className="mt-2 text-sm leading-relaxed" data-testid={`text-content-${insight.id}`}>
+                        <p className="mt-2 text-sm leading-relaxed break-words" data-testid={`text-content-${insight.id}`}>
                           {insight.content}
                         </p>
                       </div>
                     </div>
                   </div>
                 </div>
-              </Card>
+              </div>
             );
           })
         )}
       </div>
-    </div>
+    </Card>
   );
 }

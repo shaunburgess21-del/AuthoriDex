@@ -293,15 +293,15 @@ export default function PersonDetailPage() {
           />
         </div>
 
-        {/* 4. Trend History Chart */}
-        <TrendChart personId={person.id} personName={person.name} />
-        
-        {/* 4.5. Community Insights */}
+        {/* 4. Community Insights - Right after voting widget */}
         <div className="mb-8">
           <CommunityInsights personId={person.id} personName={person.name} />
         </div>
+
+        {/* 5. Trend History Chart */}
+        <TrendChart personId={person.id} personName={person.name} />
         
-        {/* 5. Platform Insights (stacked blocks) */}
+        {/* 6. Platform Insights (stacked blocks) */}
         <PlatformInsightsSection personId={person.id} />
 
         {/* 5. Future Widgets - Placeholder Section */}
