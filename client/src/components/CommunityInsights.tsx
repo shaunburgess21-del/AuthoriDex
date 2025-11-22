@@ -11,12 +11,73 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
+// Utility: Get sentiment color based on 1-10 vote (matches Cast Your Vote widget)
+function getSentimentColor(vote: number): string {
+  // Color gradient matching SentimentVotingWidget
+  const colors = [
+    "#dc2626", // 1 - red
+    "#e63946", // 2 - red-orange
+    "#f97316", // 3 - orange
+    "#fa9c3c", // 4 - orange-yellow
+    "#fbbf24", // 5 - yellow
+    "#c1d42d", // 6 - yellow-lime
+    "#84cc16", // 7 - lime
+    "#5bca30", // 8 - lime-green
+    "#22c55e", // 9 - green
+    "#22c55e", // 10 - green
+  ];
+  return colors[vote - 1] || colors[4]; // Default to yellow if invalid
+}
+
+// Utility: Get rank badge info (gold/silver/bronze)
+interface RankBadge {
+  rank: number;
+  label: string;
+  borderColor: string;
+  boxShadow: string;
+}
+
+function getRankBadge(rank: number): RankBadge | null {
+  if (rank === 1) {
+    return {
+      rank: 1,
+      label: "Top",
+      borderColor: "rgba(245, 158, 11, 0.6)", // amber-500 with 60% opacity
+      boxShadow: "0 0 20px rgba(245, 158, 11, 0.15)",
+    };
+  } else if (rank === 2) {
+    return {
+      rank: 2,
+      label: "2nd",
+      borderColor: "rgba(148, 163, 184, 0.6)", // slate-400 with 60% opacity
+      boxShadow: "0 0 20px rgba(148, 163, 184, 0.15)",
+    };
+  } else if (rank === 3) {
+    return {
+      rank: 3,
+      label: "3rd",
+      borderColor: "rgba(234, 88, 12, 0.6)", // orange-600 with 60% opacity
+      boxShadow: "0 0 20px rgba(234, 88, 12, 0.15)",
+    };
+  }
+  return null;
+}
+
+// Utility: Truncate text to character limit
+function truncateText(text: string, limit: number): { preview: string; isTruncated: boolean } {
+  if (text.length <= limit) {
+    return { preview: text, isTruncated: false };
+  }
+  return { preview: text.substring(0, limit), isTruncated: true };
+}
+
 interface CommunityInsight {
   id: string;
   personId: string;
   userId: string;
   username: string;
   content: string;
+  sentimentVote?: number | null;
   createdAt: string;
   upvotes: number;
   downvotes: number;
@@ -33,6 +94,8 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
   const [showForm, setShowForm] = useState(false);
   const [newInsight, setNewInsight] = useState("");
   const [userVotes, setUserVotes] = useState<Record<string, string>>({});
+  const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set());
+  const [displayCount, setDisplayCount] = useState(4); // Show 4 posts initially
 
   // Fetch insights
   const { data: insights = [], isLoading, refetch } = useQuery<CommunityInsight[]>({
@@ -196,6 +259,39 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
     return "text-muted-foreground";
   };
 
+  const toggleExpanded = (insightId: string) => {
+    setExpandedPosts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(insightId)) {
+        newSet.delete(insightId);
+      } else {
+        newSet.add(insightId);
+      }
+      return newSet;
+    });
+  };
+
+  const loadMore = () => {
+    setDisplayCount(prev => prev + 4);
+  };
+
+  // Rank insights by net votes (for gold/silver/bronze borders)
+  const rankedInsights = [...insights].sort((a, b) => {
+    const aNet = getNetVotes(a);
+    const bNet = getNetVotes(b);
+    if (aNet !== bNet) return bNet - aNet; // Sort by net votes descending
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // Tie-breaker: most recent first
+  });
+
+  // Get rank for an insight (1-indexed)
+  const getInsightRank = (insightId: string): number => {
+    return rankedInsights.findIndex(i => i.id === insightId) + 1;
+  };
+
+  // Get display limit for insights
+  const displayedInsights = insights.slice(0, displayCount);
+  const hasMore = insights.length > displayCount;
+
   if (isLoading) {
     return (
       <Card className="p-6">
@@ -273,19 +369,22 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
             </p>
           </div>
         ) : (
-          insights.map((insight) => {
+          displayedInsights.map((insight) => {
             const netVotes = getNetVotes(insight);
             const userVote = userVotes[insight.id];
-            const isTopPost = netVotes >= 100;
+            const rank = getInsightRank(insight.id);
+            const rankBadge = getRankBadge(rank);
+            const isExpanded = expandedPosts.has(insight.id);
+            const { preview, isTruncated } = truncateText(insight.content, 280);
 
             return (
               <div
                 key={insight.id}
-                className={`p-4 border rounded-md bg-card ${
-                  isTopPost 
-                    ? "border-amber-500/60 shadow-[0_0_20px_rgba(245,158,11,0.15)]" 
-                    : "border-border"
-                }`}
+                className="p-4 border rounded-md bg-card"
+                style={rankBadge ? {
+                  borderColor: rankBadge.borderColor,
+                  boxShadow: rankBadge.boxShadow,
+                } : undefined}
                 data-testid={`card-insight-${insight.id}`}
               >
                 <div className="flex gap-4">
@@ -339,15 +438,53 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
                           <span className="text-xs text-muted-foreground" data-testid={`text-timestamp-${insight.id}`}>
                             {formatDistanceToNow(new Date(insight.createdAt), { addSuffix: true })}
                           </span>
-                          {isTopPost && (
-                            <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30">
-                              Top
+                          {rankBadge && (
+                            <Badge 
+                              variant="secondary" 
+                              className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30"
+                              data-testid={`badge-rank-${insight.id}`}
+                            >
+                              {rankBadge.label}
+                            </Badge>
+                          )}
+                          {insight.sentimentVote && (
+                            <Badge 
+                              variant="secondary"
+                              style={{
+                                backgroundColor: `${getSentimentColor(insight.sentimentVote)}20`,
+                                color: getSentimentColor(insight.sentimentVote),
+                                borderColor: `${getSentimentColor(insight.sentimentVote)}30`,
+                              }}
+                              data-testid={`badge-sentiment-${insight.id}`}
+                            >
+                              Voted {insight.sentimentVote}/10
                             </Badge>
                           )}
                         </div>
                         <p className="mt-2 text-sm leading-relaxed break-words" data-testid={`text-content-${insight.id}`}>
-                          {insight.content}
+                          {isExpanded ? insight.content : preview}
+                          {isTruncated && !isExpanded && "..."}
                         </p>
+                        {isTruncated && (
+                          <button
+                            onClick={() => toggleExpanded(insight.id)}
+                            className="text-xs text-primary hover:underline mt-1"
+                            data-testid={`button-toggle-${insight.id}`}
+                          >
+                            {isExpanded ? "Show Less" : "Show More"}
+                          </button>
+                        )}
+                        
+                        {/* Vote Breakdown */}
+                        <div className="flex items-center gap-3 mt-2 text-xs">
+                          <span className="text-green-500" data-testid={`text-upvotes-${insight.id}`}>
+                            Upvotes - {insight.upvotes}
+                          </span>
+                          <span className="text-muted-foreground">|</span>
+                          <span className="text-red-500" data-testid={`text-downvotes-${insight.id}`}>
+                            Downvotes - {insight.downvotes}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -355,6 +492,20 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
               </div>
             );
           })
+        )}
+
+        {/* Load More Button */}
+        {hasMore && (
+          <div className="flex justify-center pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadMore}
+              data-testid="button-load-more"
+            >
+              Load More
+            </Button>
+          </div>
         )}
       </div>
     </Card>

@@ -252,6 +252,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: communityInsights.userId,
           username: communityInsights.username,
           content: communityInsights.content,
+          sentimentVote: communityInsights.sentimentVote,
           createdAt: communityInsights.createdAt,
           upvotes: sql<number>`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'up' THEN 1 END) AS INTEGER)`,
           downvotes: sql<number>`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'down' THEN 1 END) AS INTEGER)`,
@@ -265,6 +266,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           communityInsights.userId,
           communityInsights.username,
           communityInsights.content,
+          communityInsights.sentimentVote,
           communityInsights.createdAt
         )
         .orderBy(desc(sql`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'up' THEN 1 END) AS INTEGER) - CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'down' THEN 1 END) AS INTEGER)`));
@@ -279,10 +281,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a new community insight (protected route)
   app.post("/api/community-insights", requireAuth, async (req: AuthRequest, res) => {
     try {
-      const { personId, username, content } = req.body;
+      const { personId, username, content, sentimentVote } = req.body;
       
       if (!personId || !content) {
         return res.status(400).json({ error: "Missing required fields: personId, content" });
+      }
+
+      // Validate content length (max 2500 characters)
+      if (content.length > 2500) {
+        return res.status(400).json({ error: "Content exceeds maximum length of 2500 characters" });
+      }
+
+      // Validate sentimentVote if provided (must be 1-10)
+      if (sentimentVote !== undefined && sentimentVote !== null) {
+        if (typeof sentimentVote !== 'number' || sentimentVote < 1 || sentimentVote > 10) {
+          return res.status(400).json({ error: "Sentiment vote must be between 1 and 10" });
+        }
       }
       
       const [newInsight] = await db
@@ -292,6 +306,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: req.userId!, // Use verified user ID from auth middleware
           username: username || req.userId!.substring(0, 8),
           content,
+          sentimentVote: sentimentVote || null,
         })
         .returning();
 
