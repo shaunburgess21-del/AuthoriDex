@@ -151,7 +151,7 @@ export default function HomePage() {
           <TrendWidget title="Weekly Droppers" people={topDroppers} type="dropper" onPersonClick={handleVisitProfile} />
         </div>
 
-        <Card>
+        <Card id="leaderboard">
           <CardHeader className="flex flex-col sm:flex-row sm:items-center gap-4 space-y-0 pb-4">
             <CardTitle className="text-2xl font-serif flex-1">
               Top 100 Leaderboard

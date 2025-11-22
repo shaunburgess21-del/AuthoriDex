@@ -31,6 +31,7 @@ export function HeroSection() {
           <Button 
             size="lg" 
             className="gap-2"
+            onClick={() => document.getElementById('leaderboard')?.scrollIntoView({ behavior: 'smooth' })}
             data-testid="button-explore-leaderboard"
           >
             <TrendingUp className="h-5 w-5" />
