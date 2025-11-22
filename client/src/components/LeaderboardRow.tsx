@@ -113,7 +113,7 @@ export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: L
                   className="text-[22px]">
                   {Math.round((sentimentScore / 10) * 100)}
                 </span>
-                <span className="text-muted-foreground text-[22px]">%</span>
+                <span className="text-muted-foreground text-[22px] translate-y-[0.5px]">%</span>
               </>
             ) : (
               '—'
