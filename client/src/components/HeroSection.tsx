@@ -10,7 +10,6 @@ export function HeroSection() {
         style={{ backgroundImage: `url(${heroImage})` }}
       />
       <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/70 to-background" />
-      
       <div className="relative h-full flex flex-col items-center justify-center px-4 text-center">
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 backdrop-blur-sm border border-primary/20 mb-6">
           <TrendingUp className="h-4 w-4 text-primary" />
@@ -23,9 +22,7 @@ export function HeroSection() {
           Track Fame in <span className="text-primary">Real-Time</span>
         </h1>
         
-        <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">
-          Discover the top 100 trending people worldwide with live data from social media, search engines, and more.
-        </p>
+        <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">Discover real-time insights on the world’s most influential people, powered by live data from social media and other verified sources.</p>
         
         <div className="flex flex-col sm:flex-row gap-4">
           <Button 
