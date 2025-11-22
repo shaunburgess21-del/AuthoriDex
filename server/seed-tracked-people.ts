@@ -11,7 +11,7 @@ const TOP_100_PEOPLE = [
   // Social Media Creators & Influencers (25)
   { name: "Narendra Modi", category: "Politics", displayOrder: 3, avatar: "/attached_assets/Narendra Modi_1763764500021.png", bio: "Prime Minister of India and influential political leader shaping South Asia's future." },
   { name: "MrBeast", category: "Creator", displayOrder: 4, bio: "YouTube creator known for elaborate challenges, philanthropy, and record-breaking viral content." },
-  { name: "Khaby Lame", category: "Creator", displayOrder: 5, bio: "TikTok sensation famous for reaction videos and comedic takes on internet trends." },
+  { name: "Jensen Huang", category: "Tech", displayOrder: 5, avatar: "/assets/jensen-huang.png", bio: "CEO of NVIDIA and visionary leader driving AI and computing innovation worldwide." },
   { name: "Alix Earle", category: "Creator", displayOrder: 6, bio: "Fashion and lifestyle influencer known for trend-setting content and brand collaborations." },
   { name: "Charli D'Amelio", category: "Creator", displayOrder: 7, bio: "Early TikTok superstar known for dance videos and pioneering platform success." },
   { name: "Logan Paul", category: "Creator", displayOrder: 8, bio: "YouTuber, boxer, and entertainer known for high-energy content and controversial projects." },
