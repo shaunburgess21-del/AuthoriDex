@@ -45,7 +45,17 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
 
     async function fetchUserVotes() {
       try {
-        const response = await fetch(`/api/community-insights/${personId}/votes/${user!.id}`);
+        const supabase = await import("@/lib/supabase").then(m => m.getSupabase());
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) return;
+
+        const response = await fetch(`/api/community-insights/${personId}/votes`, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        });
+        
         if (response.ok) {
           const votes = await response.json();
           setUserVotes(votes);
@@ -63,12 +73,31 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
     mutationFn: async (content: string) => {
       if (!user) throw new Error("Must be logged in to post");
       
-      return apiRequest("POST", `/api/community-insights`, {
-        personId,
-        userId: user.id,
-        username: user.email?.split('@')[0] || user.id.substring(0, 8),
-        content,
+      const supabase = await import("@/lib/supabase").then(m => m.getSupabase());
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) throw new Error("No active session");
+
+      const response = await fetch("/api/community-insights", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          personId,
+          username: user.email?.split('@')[0] || user.id.substring(0, 8),
+          content,
+        }),
       });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to create insight");
+      }
+
+      return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/community-insights/${personId}`] });
@@ -93,10 +122,27 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
     mutationFn: async ({ insightId, voteType }: { insightId: string; voteType: string }) => {
       if (!user) throw new Error("Must be logged in to vote");
 
-      return apiRequest("POST", `/api/community-insights/${insightId}/vote`, {
-        userId: user.id,
-        voteType,
+      const supabase = await import("@/lib/supabase").then(m => m.getSupabase());
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) throw new Error("No active session");
+
+      const response = await fetch(`/api/community-insights/${insightId}/vote`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        credentials: "include",
+        body: JSON.stringify({ voteType }),
       });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to vote");
+      }
+
+      return response;
     },
     onSuccess: (_, variables) => {
       // Update local vote state immediately

@@ -131,13 +131,15 @@ async function createVotes(insightId: string, upvoteCount: number, downvoteCount
   console.log(`  Added ${upvoteCount} upvotes and ${downvoteCount} downvotes to insight`);
 }
 
-// Auto-run when imported
-seedCommunityInsights()
-  .then(() => {
-    console.log("✨ Seeding complete!");
-    process.exit(0);
-  })
-  .catch((error) => {
-    console.error("❌ Seeding failed:", error);
-    process.exit(1);
-  });
+// Only run if executed directly via tsx
+if (import.meta.url === `file://${process.argv[1]}`) {
+  seedCommunityInsights()
+    .then(() => {
+      console.log("✨ Seeding complete!");
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error("❌ Seeding failed:", error);
+      process.exit(1);
+    });
+}

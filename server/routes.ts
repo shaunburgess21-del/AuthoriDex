@@ -7,6 +7,7 @@ import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insertC
 import { eq, desc, and, sql, count } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
+import { requireAuth, type AuthRequest } from "./auth-middleware";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Using local PostgreSQL database instead of Supabase
@@ -275,14 +276,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create a new community insight
-  app.post("/api/community-insights", async (req, res) => {
+  // Create a new community insight (protected route)
+  app.post("/api/community-insights", requireAuth, async (req: AuthRequest, res) => {
     try {
-      const validatedData = insertCommunityInsightSchema.parse(req.body);
+      const { personId, username, content } = req.body;
+      
+      if (!personId || !content) {
+        return res.status(400).json({ error: "Missing required fields: personId, content" });
+      }
       
       const [newInsight] = await db
         .insert(communityInsights)
-        .values(validatedData)
+        .values({
+          personId,
+          userId: req.userId!, // Use verified user ID from auth middleware
+          username: username || req.userId!.substring(0, 8),
+          content,
+        })
         .returning();
 
       res.json(newInsight);
@@ -292,15 +302,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Vote on a community insight
-  app.post("/api/community-insights/:id/vote", async (req, res) => {
+  // Vote on a community insight (protected route)
+  app.post("/api/community-insights/:id/vote", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { userId, voteType } = req.body;
+      const { voteType } = req.body;
 
-      if (!userId || !voteType || !['up', 'down'].includes(voteType)) {
-        return res.status(400).json({ error: "Invalid vote data" });
+      if (!voteType || !['up', 'down'].includes(voteType)) {
+        return res.status(400).json({ error: "Invalid vote type. Must be 'up' or 'down'" });
       }
+
+      const userId = req.userId!; // Verified user ID from auth middleware
 
       // Check if user already voted on this insight
       const existingVote = await db
@@ -339,10 +351,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get user's vote status for insights
-  app.get("/api/community-insights/:personId/votes/:userId", async (req, res) => {
+  // Get user's vote status for insights (protected route)
+  app.get("/api/community-insights/:personId/votes", requireAuth, async (req: AuthRequest, res) => {
     try {
-      const { personId, userId } = req.params;
+      const { personId } = req.params;
+      const userId = req.userId!; // Verified user ID from auth middleware
       
       // Get all insights for this person
       const personInsights = await db
