@@ -108,7 +108,9 @@ export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: L
           <p className="font-mono font-semibold text-lg" data-testid={`sentiment-score-${person.id}`}>
             {sentimentScore ? (
               <>
-                <span style={{ color: getSentimentColor(sentimentScore) }}>
+                <span
+                  style={{ color: getSentimentColor(sentimentScore) }}
+                  className="text-[22px]">
                   {Math.round((sentimentScore / 10) * 100)}
                 </span>
                 <span className="text-muted-foreground">%</span>
@@ -137,7 +139,6 @@ export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: L
           )}
         </Button>
       </div>
-
       {/* Expandable Content */}
       <AnimatePresence>
         {expanded && (
