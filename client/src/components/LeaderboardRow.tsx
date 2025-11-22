@@ -119,7 +119,7 @@ export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: L
               '—'
             )}
           </p>
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide translate-y-0.5">
             Sentiment
           </p>
         </div>
