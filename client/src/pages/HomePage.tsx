@@ -142,9 +142,7 @@ export default function HomePage() {
           </div>
         </div>
       </header>
-
       <HeroSection />
-
       <div className="container mx-auto px-4 py-12 max-w-7xl">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
           <TrendWidget title="Daily Movers" people={dailyMovers} type="daily" onPersonClick={handleVisitProfile} />
@@ -159,9 +157,7 @@ export default function HomePage() {
 
         <Card id="leaderboard">
           <CardHeader className="flex flex-col sm:flex-row sm:items-center gap-4 space-y-0 pb-4">
-            <CardTitle className="text-2xl font-serif flex-1">
-              Top 100 Leaderboard
-            </CardTitle>
+            <CardTitle className="text-2xl font-serif flex-1">Leaderboard</CardTitle>
             <div className="flex gap-2">
               <FilterDropdown value={category} onChange={setCategory} />
               <SortDropdown value={sort} onChange={setSort} />
@@ -250,7 +246,6 @@ export default function HomePage() {
           </CardContent>
         </Card>
       </div>
-
       <footer className="border-t mt-24 py-12">
         <div className="container mx-auto px-4 text-center">
           <p className="text-sm text-muted-foreground">
