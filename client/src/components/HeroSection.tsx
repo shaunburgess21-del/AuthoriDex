@@ -41,7 +41,7 @@ export function HeroSection() {
             data-testid="button-search-people"
           >
             <Search className="h-5 w-5" />
-            Search People
+            Cast Your Vote
           </Button>
         </div>
       </div>
