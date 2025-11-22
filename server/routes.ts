@@ -3,8 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople } from "@shared/schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insertCommunityInsightSchema, insertInsightVoteSchema } from "@shared/schema";
+import { eq, desc, and, sql, count } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 
@@ -235,6 +235,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching platform insights:", error);
       res.status(500).json({ error: "Failed to fetch platform insights" });
+    }
+  });
+
+  // Get community insights for a person with vote counts
+  app.get("/api/community-insights/:personId", async (req, res) => {
+    try {
+      const { personId } = req.params;
+      
+      // Get all insights for this person with vote counts
+      const insights = await db
+        .select({
+          id: communityInsights.id,
+          personId: communityInsights.personId,
+          userId: communityInsights.userId,
+          username: communityInsights.username,
+          content: communityInsights.content,
+          createdAt: communityInsights.createdAt,
+          upvotes: sql<number>`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'up' THEN 1 END) AS INTEGER)`,
+          downvotes: sql<number>`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'down' THEN 1 END) AS INTEGER)`,
+        })
+        .from(communityInsights)
+        .leftJoin(insightVotes, eq(insightVotes.insightId, communityInsights.id))
+        .where(eq(communityInsights.personId, personId))
+        .groupBy(
+          communityInsights.id,
+          communityInsights.personId,
+          communityInsights.userId,
+          communityInsights.username,
+          communityInsights.content,
+          communityInsights.createdAt
+        )
+        .orderBy(desc(sql`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'up' THEN 1 END) AS INTEGER) - CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'down' THEN 1 END) AS INTEGER)`));
+
+      res.json(insights);
+    } catch (error) {
+      console.error("Error fetching community insights:", error);
+      res.status(500).json({ error: "Failed to fetch community insights" });
+    }
+  });
+
+  // Create a new community insight
+  app.post("/api/community-insights", async (req, res) => {
+    try {
+      const validatedData = insertCommunityInsightSchema.parse(req.body);
+      
+      const [newInsight] = await db
+        .insert(communityInsights)
+        .values(validatedData)
+        .returning();
+
+      res.json(newInsight);
+    } catch (error: any) {
+      console.error("Error creating community insight:", error);
+      res.status(400).json({ error: error.message || "Failed to create insight" });
+    }
+  });
+
+  // Vote on a community insight
+  app.post("/api/community-insights/:id/vote", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { userId, voteType } = req.body;
+
+      if (!userId || !voteType || !['up', 'down'].includes(voteType)) {
+        return res.status(400).json({ error: "Invalid vote data" });
+      }
+
+      // Check if user already voted on this insight
+      const existingVote = await db
+        .select()
+        .from(insightVotes)
+        .where(and(
+          eq(insightVotes.insightId, id),
+          eq(insightVotes.userId, userId)
+        ))
+        .limit(1);
+
+      if (existingVote.length > 0) {
+        // Update existing vote
+        await db
+          .update(insightVotes)
+          .set({ voteType })
+          .where(and(
+            eq(insightVotes.insightId, id),
+            eq(insightVotes.userId, userId)
+          ));
+      } else {
+        // Create new vote
+        await db
+          .insert(insightVotes)
+          .values({
+            insightId: id,
+            userId,
+            voteType,
+          });
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error voting on insight:", error);
+      res.status(500).json({ error: error.message || "Failed to vote" });
+    }
+  });
+
+  // Get user's vote status for insights
+  app.get("/api/community-insights/:personId/votes/:userId", async (req, res) => {
+    try {
+      const { personId, userId } = req.params;
+      
+      // Get all insights for this person
+      const personInsights = await db
+        .select({ id: communityInsights.id })
+        .from(communityInsights)
+        .where(eq(communityInsights.personId, personId));
+
+      const insightIds = personInsights.map(i => i.id);
+
+      if (insightIds.length === 0) {
+        return res.json({});
+      }
+
+      // Get user's votes for these insights
+      const votes = await db
+        .select()
+        .from(insightVotes)
+        .where(and(
+          eq(insightVotes.userId, userId),
+          sql`${insightVotes.insightId} IN ${insightIds}`
+        ));
+
+      // Convert to map: insightId -> voteType
+      const voteMap = votes.reduce((acc, vote) => {
+        acc[vote.insightId] = vote.voteType;
+        return acc;
+      }, {} as Record<string, string>);
+
+      res.json(voteMap);
+    } catch (error) {
+      console.error("Error fetching user votes:", error);
+      res.status(500).json({ error: "Failed to fetch user votes" });
     }
   });
 

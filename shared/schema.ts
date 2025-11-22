@@ -177,3 +177,40 @@ export const insertUserFavouriteSchema = createInsertSchema(userFavourites).omit
 
 export type UserFavourite = typeof userFavourites.$inferSelect;
 export type InsertUserFavourite = z.infer<typeof insertUserFavouriteSchema>;
+
+// Community Insights - user-generated insights/posts about tracked people
+export const communityInsights = pgTable("community_insights", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  personId: varchar("person_id").notNull(), // References tracked person
+  userId: varchar("user_id").notNull(), // Supabase auth user ID
+  username: text("username").notNull(), // Cached for quick display
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertCommunityInsightSchema = createInsertSchema(communityInsights).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type CommunityInsight = typeof communityInsights.$inferSelect;
+export type InsertCommunityInsight = z.infer<typeof insertCommunityInsightSchema>;
+
+// Insight Votes - tracks upvotes/downvotes on community insights
+export const insightVotes = pgTable("insight_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  insightId: varchar("insight_id").notNull().references(() => communityInsights.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(), // Supabase auth user ID
+  voteType: text("vote_type").notNull(), // 'up' or 'down'
+  votedAt: timestamp("voted_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueUserInsight: unique().on(table.userId, table.insightId),
+}));
+
+export const insertInsightVoteSchema = createInsertSchema(insightVotes).omit({
+  id: true,
+  votedAt: true,
+});
+
+export type InsightVote = typeof insightVotes.$inferSelect;
+export type InsertInsightVote = z.infer<typeof insertInsightVoteSchema>;
