@@ -121,7 +121,7 @@ export function TrendingBarChart({ people }: TrendingBarChartProps) {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        className="absolute -top-16 bg-background/95 backdrop-blur-sm border border-border rounded-lg px-3 py-2 shadow-xl z-10 whitespace-nowrap"
+                        className="absolute -top-16 bg-background/95 backdrop-blur-sm border border-border rounded-lg px-3 py-2 shadow-xl z-50 whitespace-nowrap"
                       >
                         <p className="font-semibold text-sm">{person.name}</p>
                         <p className="text-xs text-muted-foreground">Rank #{actualRank}</p>
