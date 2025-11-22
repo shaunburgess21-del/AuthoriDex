@@ -126,7 +126,6 @@ export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: L
         <Button 
           variant="default" 
           size="sm"
-          className="bg-[#3c83f600]"
           onClick={(e) => {
             e.stopPropagation();
             onToggle();
