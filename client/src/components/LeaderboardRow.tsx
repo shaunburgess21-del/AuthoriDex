@@ -124,7 +124,7 @@ export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: L
           </p>
         </div>
         <Button 
-          variant="secondary" 
+          variant={expanded ? "default" : "secondary"} 
           size="sm"
           className="font-mono font-bold text-sm min-w-14 justify-center"
           onClick={(e) => {
