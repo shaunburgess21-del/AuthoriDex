@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { TrendingUp, Search } from "lucide-react";
+import { TrendingUp, CheckSquare } from "lucide-react";
 import heroImage from "@assets/generated_images/Hero_background_network_visualization_1293b14e.png";
 
 export function HeroSection() {
@@ -40,7 +40,7 @@ export function HeroSection() {
             className="gap-2 backdrop-blur-sm bg-background/50"
             data-testid="button-search-people"
           >
-            <Search className="h-5 w-5" />
+            <CheckSquare className="h-5 w-5" />
             Cast Your Vote
           </Button>
         </div>
