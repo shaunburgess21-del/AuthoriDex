@@ -124,19 +124,15 @@ export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: L
           </p>
         </div>
         <Button 
-          variant="ghost" 
-          size="icon" 
+          variant="default" 
+          size="sm"
           onClick={(e) => {
             e.stopPropagation();
             onToggle();
           }}
           data-testid={`button-expand-${person.id}`}
         >
-          {expanded ? (
-            <ChevronUp className="h-5 w-5" />
-          ) : (
-            <ChevronDown className="h-5 w-5" />
-          )}
+          Vote
         </Button>
       </div>
       {/* Expandable Content */}
