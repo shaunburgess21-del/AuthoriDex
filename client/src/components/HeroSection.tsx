@@ -1,8 +1,12 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, CheckSquare } from "lucide-react";
 import heroImage from "@assets/generated_images/Hero_background_network_visualization_1293b14e.png";
+import { VotingModal } from "@/components/VotingModal";
 
 export function HeroSection() {
+  const [votingModalOpen, setVotingModalOpen] = useState(false);
+
   return (
     <div className="relative h-96 md:h-[500px] w-full overflow-hidden">
       <div
@@ -38,13 +42,19 @@ export function HeroSection() {
             size="lg" 
             variant="outline" 
             className="gap-2 backdrop-blur-sm bg-background/50"
-            data-testid="button-search-people"
+            onClick={() => setVotingModalOpen(true)}
+            data-testid="button-cast-vote"
           >
             <CheckSquare className="h-5 w-5" />
             Cast Your Vote
           </Button>
         </div>
       </div>
+
+      <VotingModal 
+        open={votingModalOpen} 
+        onOpenChange={setVotingModalOpen} 
+      />
     </div>
   );
 }

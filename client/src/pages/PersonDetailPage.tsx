@@ -55,6 +55,24 @@ export default function PersonDetailPage() {
     checkFavorite();
   }, [user, person]);
 
+  // Scroll to voting widget when navigated from modal with hash
+  useEffect(() => {
+    if (!person || isLoading) return;
+
+    const hash = window.location.hash;
+    if (hash === '#voting-widget') {
+      // Wait a bit for the DOM to fully render
+      const scrollTimeout = setTimeout(() => {
+        const element = document.getElementById('voting-widget');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 150);
+
+      return () => clearTimeout(scrollTimeout);
+    }
+  }, [person, isLoading]);
+
   const handleToggleFavorite = async () => {
     if (!user) {
       toast({
@@ -267,7 +285,7 @@ export default function PersonDetailPage() {
         )}
 
         {/* 3. Sentiment Voting Widget - PROMINENT PLACEMENT */}
-        <div className="mb-8">
+        <div id="voting-widget" className="mb-8">
           <AnimatedSentimentVotingWidget 
             personId={person.id} 
             personName={person.name}
