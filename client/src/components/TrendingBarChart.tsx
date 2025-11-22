@@ -91,7 +91,6 @@ export function TrendingBarChart({ people }: TrendingBarChartProps) {
           </div>
         </div>
       </div>
-
       {/* Bar Chart */}
       <div className="p-6 overflow-x-auto">
         <div className="flex items-end justify-center gap-2 min-h-[400px]" style={{ minWidth: displayCount === 30 ? '1200px' : '600px' }}>
@@ -129,7 +128,6 @@ export function TrendingBarChart({ people }: TrendingBarChartProps) {
                       </motion.div>
                     )}
                   </AnimatePresence>
-
                   {/* Avatar with crown for #1 */}
                   <motion.div
                     className="relative mb-2"
@@ -147,7 +145,6 @@ export function TrendingBarChart({ people }: TrendingBarChartProps) {
                       </div>
                     )}
                   </motion.div>
-
                   {/* Bar with glow effect */}
                   <motion.div
                     className="relative w-full rounded-t-lg overflow-hidden"
@@ -169,13 +166,12 @@ export function TrendingBarChart({ people }: TrendingBarChartProps) {
                       }}
                     />
                   </motion.div>
-
                   {/* Footer with rank */}
                   <div 
                     className="w-full bg-[#0a0e13] border-t border-[#1f2937] rounded-b-lg flex items-center justify-center"
                     style={{ height: '56px' }}
                   >
-                    <span className="font-mono font-bold text-sm text-muted-foreground">
+                    <span className="font-mono font-bold text-muted-foreground text-[16px]">
                       #{actualRank}
                     </span>
                   </div>
@@ -185,7 +181,6 @@ export function TrendingBarChart({ people }: TrendingBarChartProps) {
           </AnimatePresence>
         </div>
       </div>
-
       {/* AI Insight Row */}
       {leader && runnerUp && (
         <div className="px-6 pb-6">
