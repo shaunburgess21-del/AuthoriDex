@@ -282,7 +282,9 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
               <div
                 key={insight.id}
                 className={`p-4 border rounded-md bg-card ${
-                  isTopPost ? "border-yellow-500 border-2" : "border-border"
+                  isTopPost 
+                    ? "border-amber-500/60 shadow-[0_0_20px_rgba(245,158,11,0.15)]" 
+                    : "border-border"
                 }`}
                 data-testid={`card-insight-${insight.id}`}
               >
