@@ -1,6 +1,7 @@
 import { HeroSection } from "@/components/HeroSection";
 import { SearchBar } from "@/components/SearchBar";
 import { TrendWidget } from "@/components/TrendWidget";
+import { TrendingBarChart } from "@/components/TrendingBarChart";
 import { LeaderboardRow } from "@/components/LeaderboardRow";
 import { UpdateIndicator } from "@/components/UpdateIndicator";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -149,6 +150,11 @@ export default function HomePage() {
           <TrendWidget title="Daily Movers" people={dailyMovers} type="daily" onPersonClick={handleVisitProfile} />
           <TrendWidget title="Weekly Gainers" people={topGainers} type="gainer" onPersonClick={handleVisitProfile} />
           <TrendWidget title="Weekly Droppers" people={topDroppers} type="dropper" onPersonClick={handleVisitProfile} />
+        </div>
+
+        {/* Trending Bar Chart Widget */}
+        <div className="mb-12">
+          <TrendingBarChart people={allPeople} />
         </div>
 
         <Card id="leaderboard">
