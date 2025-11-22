@@ -92,8 +92,8 @@ export function TrendingBarChart({ people }: TrendingBarChartProps) {
         </div>
       </div>
       {/* Bar Chart */}
-      <div className="p-6 overflow-x-auto">
-        <div className="flex items-end justify-center gap-2 min-h-[400px]" style={{ minWidth: displayCount === 30 ? '1200px' : '600px' }}>
+      <div className="p-6 overflow-x-auto overflow-y-visible">
+        <div className="flex items-end justify-center gap-2 min-h-[400px] overflow-visible" style={{ minWidth: displayCount === 30 ? '1200px' : '600px' }}>
           <AnimatePresence mode="popLayout">
             {topPeople.map((person, index) => {
               const barHeight = ((person.trendScore - minScore) / scoreRange) * 300 + 100;
@@ -105,14 +105,14 @@ export function TrendingBarChart({ people }: TrendingBarChartProps) {
               return (
                 <motion.div
                   key={person.id}
-                  className="relative flex flex-col items-center"
+                  className="relative flex flex-col items-center overflow-visible"
                   initial={{ opacity: 0, y: 50 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.8 }}
                   transition={{ duration: 0.5, delay: index * 0.05 }}
                   onMouseEnter={() => setHoveredIndex(index)}
                   onMouseLeave={() => setHoveredIndex(null)}
-                  style={{ flex: 1, maxWidth: displayCount === 30 ? '40px' : '60px' }}
+                  style={{ flex: 1, maxWidth: displayCount === 30 ? '40px' : '60px', zIndex: 'auto' }}
                 >
                   {/* Tooltip on hover */}
                   <AnimatePresence>
