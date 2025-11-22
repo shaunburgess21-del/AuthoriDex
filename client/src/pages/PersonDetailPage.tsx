@@ -9,6 +9,7 @@ import { StatCard } from "@/components/StatCard";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PlatformInsightsSection } from "@/components/PlatformInsightsSection";
 import { AnimatedSentimentVotingWidget } from "@/components/AnimatedSentimentVotingWidget";
+import { CommunityInsights } from "@/components/CommunityInsights";
 import { ArrowLeft, Share2, Star, TrendingUp, Users, Eye, DollarSign, Globe, MessageSquare, Trophy } from "lucide-react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -295,7 +296,12 @@ export default function PersonDetailPage() {
         {/* 4. Trend History Chart */}
         <TrendChart personId={person.id} personName={person.name} />
         
-        {/* 4. Platform Insights (stacked blocks) */}
+        {/* 4.5. Community Insights */}
+        <div className="mb-8">
+          <CommunityInsights personId={person.id} personName={person.name} />
+        </div>
+        
+        {/* 5. Platform Insights (stacked blocks) */}
         <PlatformInsightsSection personId={person.id} />
 
         {/* 5. Future Widgets - Placeholder Section */}
