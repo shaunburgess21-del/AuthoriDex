@@ -494,9 +494,9 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
           })
         )}
 
-        {/* Load More Button */}
-        {hasMore && (
-          <div className="flex justify-center pt-2">
+        {/* Load More / View Less Buttons */}
+        <div className="flex justify-center pt-2 gap-2">
+          {hasMore && (
             <Button
               variant="outline"
               size="sm"
@@ -505,8 +505,18 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
             >
               Load More
             </Button>
-          </div>
-        )}
+          )}
+          {displayCount > 4 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDisplayCount(4)}
+              data-testid="button-view-less"
+            >
+              View Less
+            </Button>
+          )}
+        </div>
       </div>
     </Card>
   );
