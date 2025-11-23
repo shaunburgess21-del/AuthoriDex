@@ -272,7 +272,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
   };
 
   const loadMore = () => {
-    setDisplayCount(prev => prev + 4);
+    setDisplayCount(15);
   };
 
   // Rank insights by net votes (for gold/silver/bronze borders)
@@ -361,7 +361,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
         </div>
       )}
 
-      <div className="space-y-4 max-w-2xl mx-auto">
+      <div className="space-y-4 max-w-2xl mx-auto max-h-96 overflow-y-auto">
         {insights.length === 0 ? (
           <div className="p-8 text-center border rounded-md border-border">
             <p className="text-muted-foreground">
