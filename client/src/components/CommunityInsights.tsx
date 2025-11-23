@@ -361,7 +361,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
         </div>
       )}
 
-      <div className="space-y-4 max-w-2xl mx-auto max-h-96 overflow-y-auto">
+      <div className="space-y-4 max-w-2xl mx-auto max-h-96 overflow-y-auto insights-scroll">
         {insights.length === 0 ? (
           <div className="p-8 text-center border rounded-md border-border">
             <p className="text-muted-foreground">
