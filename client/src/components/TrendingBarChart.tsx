@@ -56,9 +56,9 @@ export function TrendingBarChart({ people }: TrendingBarChartProps) {
   };
 
   return (
-    <Card className="overflow-hidden bg-[#0f1419] border-[#1f2937]" data-testid="trending-bar-chart">
+    <Card className="overflow-hidden" data-testid="trending-bar-chart">
       {/* Header */}
-      <div className="p-6 border-b border-[#1f2937]">
+      <div className="p-6 border-b border-border">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-serif font-bold">Most Influential People Worldwide</h2>
@@ -168,7 +168,7 @@ export function TrendingBarChart({ people }: TrendingBarChartProps) {
                   </motion.div>
                   {/* Footer with rank */}
                   <div 
-                    className="w-full bg-[#0a0e13] border-t border-[#1f2937] rounded-b-lg flex items-center justify-center"
+                    className="w-full bg-muted border-t border-border rounded-b-lg flex items-center justify-center"
                     style={{ height: '56px' }}
                   >
                     <span className="font-mono font-bold text-muted-foreground text-[16px]">
