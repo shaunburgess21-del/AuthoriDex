@@ -32,6 +32,17 @@ export default function MePage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-1 mr-2">
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/")} data-testid="nav-home-desktop">
+                Home
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
+                Predict
+              </Button>
+              <Button variant="ghost" size="sm" className="text-primary" data-testid="nav-me-desktop">
+                Me
+              </Button>
+            </div>
             <ThemeToggle />
           </div>
         </div>
