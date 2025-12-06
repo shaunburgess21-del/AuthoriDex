@@ -1,0 +1,127 @@
+IMPORTANT CONSTRAINTS (READ FIRST)
+
+- You are working on an existing FameDex project that is already largely built.
+- DO NOT redesign or rebuild existing pages.
+- DO NOT move sections around drastically (hero, leaderboard, profile layout, charts, vote slider, etc.).
+- Only make **small, additive changes** and **refinements** to what already exists.
+
+Current state (from UI):
+
+- Home page:
+  - Top nav: Home | Predict | Me | “Updated XXs ago” | Log In (blue button).
+  - Hero: "Global Influence Insights" with a CTA row, mover cards, bar chart, leaderboard, and “Cast Your Vote” slider.
+- Person profile page:
+  - Header with avatar, name, rank, and buttons: Share, Favorite, Predict.
+  - Stat cards: Trend Score, 24H Change, 7D Change, Rank.
+  - A segmented control: Overview | Vote | Predict.
+  - Overview tab shows: Trend History chart, Platform Insights, Additional Insights.
+  - Vote tab shows: Cast Your Vote slider + Community Insights comments.
+  - Predict tab shows a **Weekly Trend Score Prediction** card with:
+    - Title, question, Current Score block, Ends block.
+    - Two odds pills (e.g. Up 1.8x, Down 2.1x).
+    - Button: “Predict & Win (Test Mode)”.
+    - A blue “TEST MODE” banner below.
+- Supabase auth is NOT fully wired yet; login is not functional.
+
+Goal of this task:
+
+1. Clean up the header so it’s less noisy:
+   - Remove redundant Log In button.
+   - Remove/relocate “Updated Xs ago”.
+   - Make **Me** the single entry point for account/auth.
+2. Make the Predict tab on the profile **properly interactive** (side selection, modal, test prediction).
+3. Improve discoverability of predictions from the Home page.
+4. Ensure mobile behaviour (especially navigation + predict flow) is smooth.
+5. Keep everything in **Test Mode only** (virtual credits, no real money, no auth requirement).
+
+Supabase/Auth constraint:
+
+- Do NOT require login for prediction flows.
+- Do NOT ask me to sign in during Preview.
+- If you interact with Supabase, you must handle null/anonymous user gracefully.
+
+------------------------------------------------
+A. HEADER CLEANUP (DESKTOP)
+------------------------------------------------
+
+1. Remove the separate blue **“Log In”** button from the top-right header.
+2. Remove the **“Updated Xs ago”** label from the header.
+   - The header should only show: `Home | Predict | Me` and any existing icon (e.g. theme toggle), but no status text.
+3. Make **“Me”** the single account/auth entry point:
+   - For now, when clicked, it should simply navigate to the existing login/account page or a basic `/me` placeholder screen.
+   - Nothing else in the app should require login.
+
+4. Optional, if easy: reuse “Last updated” inside the Home page content:
+   - Add a small, subtle text line near the hero or leaderboard, e.g.
+     - “Last updated X min ago”
+   - Style it as low-priority (small, grey), and never show it again in the header.
+
+------------------------------------------------
+B. PREDICT TAB INTERACTION (PROFILE PAGE)
+------------------------------------------------
+
+On the profile page, refine the existing **Weekly Trend Score Prediction** card and Predict action. DO NOT move the card or change its basic look; just add behaviour.
+
+1. **Side selection on the card**
+   - When the user clicks **“Up 1.8x”** or **“Down 2.1x”**:
+     - Visually highlight the selected pill (e.g. different background, border, text color).
+     - Only one option can be active at a time.
+   - The default state should have neither selected.
+
+2. **Enable/disable the main button**
+   - The **“Predict & Win (Test Mode)”** button should be disabled until a side is selected.
+   - After a side is selected, the button becomes enabled.
+
+3. **Prediction modal / bottom sheet**
+   - Clicking an enabled “Predict & Win (Test Mode)” button should open a modal:
+     - On desktop: centered modal.
+     - On mobile: bottom sheet style (slides up, rounded top).
+   - The modal must show:
+     - Title: “Weekly Trend Score Prediction (Test Mode)”.
+     - Person’s name and the same question as on the card.
+     - Display of the selected side (Up/Down) and its odds.
+     - Numeric input for **amount in virtual credits**.
+     - A live “Estimated payout” value calculated as `amount × odds` (recalculate on change).
+     - Buttons: Cancel and Confirm (or similar labels).
+
+   - On Confirm:
+     - DO NOT require login or Supabase auth.
+     - Log a prediction object to the console:
+       `{ personId, personName, side, amount, odds, timestamp }`.
+     - Show a brief success feedback:
+       - Either a toast/snackbar or an inline label on the card like:
+         “Prediction placed in Test Mode ✅”.
+     - Close the modal.
+     - Keep the selected side highlighted on the card so the user can see what they picked.
+
+   - The user must be able to repeat this flow multiple times without refresh.
+
+4. **Predict button in the profile header**
+   - The header currently has a “Predict” button next to Share/Favorite.
+   - Make sure that clicking this button:
+     - Switches the segmented control to **Predict**,
+     - Smooth-scrolls the page to the Weekly Trend Score Prediction card (use an anchor/ref).
+
+------------------------------------------------
+C. HOME PAGE – DISCOVERABILITY OF PREDICTIONS
+------------------------------------------------
+
+On the Home page (do NOT redesign):
+
+1. Under the main hero heading/subheading, add a small pill or text link that promotes the new Predict feature, e.g.:
+
+   - “New: Prediction Markets (Test Mode)”
+
+   Requirements:
+   - Style it to match the existing design (use the same button/pill style already used in the hero if possible).
+   - Clicking it should navigate to the `/predict` page.
+
+2. If you moved “Last updated X min ago” out of the header, you can place that subtle status near the hero or above the leaderboard.
+
+------------------------------------------------
+D. MOBILE POLISH – NAVIGATION & PREDICT FLOW
+------------------------------------------------
+
+1. Bottom navigation (if it already exists from previous steps):
+   - Ensure that on small viewports a bottom nav is visible and fixed, with items: Home, Predict, Me.
+   - Main content s

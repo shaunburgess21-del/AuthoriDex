@@ -5,10 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { TrendingUp, TrendingDown, Zap, Clock, DollarSign } from "lucide-react";
+import { TrendingUp, TrendingDown, Zap, Clock, DollarSign, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
-import { useLocation } from "wouter";
 
 interface PredictTabProps {
   personId: string;
@@ -17,13 +15,13 @@ interface PredictTabProps {
 }
 
 export function PredictTab({ personId, personName, currentScore }: PredictTabProps) {
-  const { user } = useAuth();
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
   const [showModal, setShowModal] = useState(false);
+  const [selectedSide, setSelectedSide] = useState<"up" | "down" | null>(null);
   const [selectedDirection, setSelectedDirection] = useState<"up" | "down" | null>(null);
   const [betAmount, setBetAmount] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [predictionPlaced, setPredictionPlaced] = useState(false);
 
   const upOdds = 1.8;
   const downOdds = 2.1;
@@ -38,15 +36,15 @@ export function PredictTab({ personId, personName, currentScore }: PredictTabPro
   };
 
   const handleOpenModal = () => {
-    if (!user) {
+    if (!selectedSide) {
       toast({
-        title: "Sign in required",
-        description: "Please sign in to make predictions",
+        title: "Select a side first",
+        description: "Choose Up or Down before placing your prediction",
         variant: "destructive",
       });
-      setLocation("/login");
       return;
     }
+    setSelectedDirection(selectedSide);
     setShowModal(true);
   };
 
@@ -101,7 +99,7 @@ export function PredictTab({ personId, personName, currentScore }: PredictTabPro
 
     setIsSubmitting(false);
     setShowModal(false);
-    setSelectedDirection(null);
+    setPredictionPlaced(true);
     setBetAmount("");
   };
 
@@ -217,24 +215,50 @@ export function PredictTab({ personId, personName, currentScore }: PredictTabPro
         </div>
 
         <div className="flex gap-3 mb-6">
-          <Badge className="bg-green-500/20 text-green-500 border-green-500/30 px-4 py-2">
+          <button
+            onClick={() => setSelectedSide("up")}
+            className={`flex items-center px-4 py-2 rounded-md border-2 transition-all cursor-pointer ${
+              selectedSide === "up"
+                ? "bg-green-500/20 text-green-500 border-green-500"
+                : "bg-green-500/10 text-green-500/70 border-green-500/30 hover:border-green-500/50"
+            }`}
+            data-testid="pill-select-up"
+          >
             <TrendingUp className="h-4 w-4 mr-2" />
             Up {upOdds}x
-          </Badge>
-          <Badge className="bg-red-500/20 text-red-500 border-red-500/30 px-4 py-2">
+          </button>
+          <button
+            onClick={() => setSelectedSide("down")}
+            className={`flex items-center px-4 py-2 rounded-md border-2 transition-all cursor-pointer ${
+              selectedSide === "down"
+                ? "bg-red-500/20 text-red-500 border-red-500"
+                : "bg-red-500/10 text-red-500/70 border-red-500/30 hover:border-red-500/50"
+            }`}
+            data-testid="pill-select-down"
+          >
             <TrendingDown className="h-4 w-4 mr-2" />
             Down {downOdds}x
-          </Badge>
+          </button>
         </div>
 
         <Button 
           onClick={handleOpenModal} 
           className="w-full gap-2"
+          disabled={!selectedSide}
           data-testid="button-predict-and-win"
         >
           <DollarSign className="h-4 w-4" />
           Predict & Win (Test Mode)
         </Button>
+
+        {predictionPlaced && selectedSide && (
+          <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/30 flex items-center gap-2">
+            <Check className="h-4 w-4 text-green-500" />
+            <span className="text-sm text-green-500">
+              Prediction placed in Test Mode - You picked {selectedSide === "up" ? "Up" : "Down"}
+            </span>
+          </div>
+        )}
       </Card>
 
       <Card className="mt-4 p-4 bg-primary/5 border-primary/20">
