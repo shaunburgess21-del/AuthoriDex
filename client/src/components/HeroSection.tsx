@@ -26,7 +26,7 @@ export function HeroSection() {
           Global Influence <span className="text-primary">Insights</span>
         </h1>
         
-        <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">Discover real-time insights on the world’s most influential people, powered by live data from social media and other verified sources.</p>
+        <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">Discover real-time insights and vote on the world’s most influential people, powered by live data from verified sources</p>
         
         <div className="flex flex-col sm:flex-row gap-4">
           <Button 
@@ -50,7 +50,6 @@ export function HeroSection() {
           </Button>
         </div>
       </div>
-
       <VotingModal 
         open={votingModalOpen} 
         onOpenChange={setVotingModalOpen} 

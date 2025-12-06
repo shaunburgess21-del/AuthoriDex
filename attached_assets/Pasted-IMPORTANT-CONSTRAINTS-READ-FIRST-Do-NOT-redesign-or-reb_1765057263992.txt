@@ -1,0 +1,101 @@
+IMPORTANT CONSTRAINTS – READ FIRST
+
+- Do NOT redesign or rebuild the existing FameDex site.
+- Do NOT remove or significantly change existing layouts, components, or styling.
+- The current Home page and Person Profile page structure is GOOD and should be preserved.
+- Your job is to make **additions** (Prediction feature + navigation) and **light mobile optimisations only**, without breaking or refactoring the core structure.
+
+------------------------------------------------
+Goal
+------------------------------------------------
+
+Add a **prediction feature (test mode only)** into the existing FameDex app, with good UX on both **mobile and desktop**, while preserving the current design and page structure.
+
+Context (short):
+- FameDex already has:
+  - A Home page with leaderboards and a “Cast Your Vote” sentiment slider.
+  - A Person Profile page with Trend Score, charts, platform insights, etc.
+  - Supabase for backend/auth.
+- We now want to add a **“Predict”** experience:
+  - Users can “predict” if a person’s Trend Score will go up or down for the week.
+  - Initially this is **test mode only** with mock data / virtual credits (no real money, no smart contracts yet).
+- The UI must work well on **mobile first**, but also on desktop.
+
+You must work WITH the existing components and layout patterns. Extend them, don’t replace them.
+
+------------------------------------------------
+A. GLOBAL NAVIGATION (MOBILE + DESKTOP)
+------------------------------------------------
+
+1) Bottom nav on mobile (additive)
+
+- When viewport is small (e.g. `md:hidden`), add a fixed bottom navigation bar with three tabs:
+  - **Home** → existing homepage (`/`)
+  - **Predict** → new prediction markets page (`/predict`)
+  - **Me** → user account area (`/me`) – can be basic placeholder for now
+- Use the existing dark theme (colors, fonts). Each tab shows an icon + label.
+- Show an active state based on current route.
+- Ensure main content has enough bottom padding so it is not covered by the nav.
+- This should be a NEW component (e.g. `BottomNav`) wired into the existing layout – do not reorganize the entire layout.
+
+2) Top nav on desktop (additive)
+
+- On desktop, do NOT show the bottom nav.
+- Reuse or lightly extend the existing header/top nav to show the same three sections:
+  - Home, Predict, Me
+- Keep existing header styling; just add these links and active states.
+- Do not rewrite the header from scratch – only minimally extend it.
+
+If there is already a layout component, extend it; otherwise, add minimal shared layout logic.
+
+------------------------------------------------
+B. NEW PREDICT PAGE – /predict
+------------------------------------------------
+
+Create a new route/page at **`/predict`** that lists prediction markets using MOCK DATA.
+
+Requirements:
+- Title: **“Prediction Markets”**
+- Subtext: “Back your insight on who’s really moving the world. Currently running in test mode with virtual credits.”
+
+- Below that, show a vertical list of **market cards**. Use a hard-coded array of mock market objects for now.
+
+Each market card:
+- Person avatar + name (e.g. Elon Musk)
+- Small label: “Weekly Trend Score · Ends Sun 23:59 UTC”
+- Optional mock current Trend Score or 7d change
+- Two pill-style badges/buttons on the right with mock odds, e.g.:
+  - “Up 1.7×”
+  - “Down 2.3×”
+- CTA / chevron: “View Market”
+
+Click behaviour:
+- Clicking a card should open a **Market Detail view**. For v1 you can either:
+  - Navigate to `/predict/[marketId]`, OR
+  - Navigate to that person’s profile page and auto-select its **Predict** tab (see section C).
+- Choose whichever best fits the existing routing structure and keep the code small and additive.
+
+Styling:
+- Follow existing card styles and spacing.
+- On mobile: full-width cards in a simple column.
+- On desktop: centered content with the same max-width/container as the existing pages.
+
+------------------------------------------------
+C. PERSON PROFILE PAGE – OVERVIEW / VOTE / PREDICT TABS
+------------------------------------------------
+
+On each person profile page (where Trend Score and platform insights are currently shown):
+
+1) Add a small tab/segment control (no layout overhaul)
+
+- Directly below the existing stat cards (Trend Score, 24h, 7d, Rank), add a **segmented control / tab switcher** with three tabs:
+  - **Overview**
+  - **Vote**
+  - **Predict**
+
+- This should be a small, self-contained component that wraps existing sections. Do not rearrange the entire page; simply hide/show content sections based on the selected tab.
+
+2) Tab behavior (reuse existing content):
+
+- **Overview tab**
+  - Shows the existing “overview”
