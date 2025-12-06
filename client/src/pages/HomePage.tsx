@@ -113,7 +113,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen pb-20 md:pb-0">
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -123,6 +123,17 @@ export default function HomePage() {
             <span className="font-serif font-bold text-xl">FameDex</span>
           </div>
           <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-1 mr-2">
+              <Button variant="ghost" size="sm" className="text-primary" data-testid="nav-home-desktop">
+                Home
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
+                Predict
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/me")} data-testid="nav-me-desktop">
+                Me
+              </Button>
+            </div>
             <UpdateIndicator />
             {user ? (
               <UserAvatar />

@@ -10,7 +10,9 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { PlatformInsightsSection } from "@/components/PlatformInsightsSection";
 import { AnimatedSentimentVotingWidget } from "@/components/AnimatedSentimentVotingWidget";
 import { CommunityInsights } from "@/components/CommunityInsights";
-import { ArrowLeft, Share2, Star, TrendingUp, Users, Eye, DollarSign, Globe, MessageSquare, Trophy } from "lucide-react";
+import { ProfileTabs } from "@/components/ProfileTabs";
+import { PredictTab } from "@/components/PredictTab";
+import { ArrowLeft, Share2, Star, TrendingUp, Users, Eye, DollarSign, Globe, MessageSquare, Trophy, Zap } from "lucide-react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
@@ -22,9 +24,19 @@ export default function PersonDetailPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [, params] = useRoute("/person/:id");
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [isFavorited, setIsFavorited] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
+
+  // Handle URL query param for tab
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get("tab");
+    if (tabParam && ["overview", "vote", "predict"].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [location]);
 
   const { data: person, isLoading, error } = useQuery<TrendingPerson>({
     queryKey: [`/api/trending/${params?.id}`],
@@ -164,8 +176,16 @@ export default function PersonDetailPage() {
     return null;
   }
 
+  const handlePredictClick = () => {
+    setActiveTab("predict");
+    const tabsElement = document.getElementById("profile-tabs-section");
+    if (tabsElement) {
+      tabsElement.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen pb-20 md:pb-0">
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -185,6 +205,17 @@ export default function PersonDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-1 mr-2">
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/")} data-testid="nav-home-desktop">
+                Home
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
+                Predict
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/me")} data-testid="nav-me-desktop">
+                Me
+              </Button>
+            </div>
             <ThemeToggle />
           </div>
         </div>
@@ -210,7 +241,7 @@ export default function PersonDetailPage() {
                   </p>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button variant="outline" size="sm" className="gap-2" data-testid="button-share">
                   <Share2 className="h-4 w-4" />
                   Share
@@ -225,6 +256,16 @@ export default function PersonDetailPage() {
                 >
                   <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
                   {isFavorited ? "Favorited" : "Favorite"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={handlePredictClick}
+                  data-testid="button-predict-on"
+                >
+                  <Zap className="h-4 w-4" />
+                  Predict
                 </Button>
               </div>
             </div>
@@ -267,103 +308,109 @@ export default function PersonDetailPage() {
           </Card>
         </div>
 
-        {/* 2.5. Bio and Visit Profile */}
-        {person.bio && (
-          <div className="flex gap-6 items-start mb-8">
-            <p className="text-sm text-muted-foreground flex-1" data-testid="text-person-bio-detail">
-              {person.bio}
-            </p>
-            <Button 
-              variant="default"
-              onClick={() => setLocation("/")}
-              data-testid="button-back-to-leaderboard"
-              className="gap-2 whitespace-nowrap"
-            >
-              Back
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </div>
+        {/* Profile Tabs Section */}
+        <div id="profile-tabs-section">
+          <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
+        </div>
+
+        {/* OVERVIEW TAB */}
+        {activeTab === "overview" && (
+          <>
+            {/* 5. Trend History Chart */}
+            <TrendChart personId={person.id} personName={person.name} />
+            
+            {/* 6. Platform Insights (stacked blocks) */}
+            <PlatformInsightsSection personId={person.id} />
+
+            {/* Future Widgets - Placeholder Section */}
+            <div className="mt-12 space-y-6">
+              <h2 className="text-2xl font-serif font-bold mb-6">Additional Insights</h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Net Worth Placeholder */}
+                <Card className="p-6 opacity-50">
+                  <div className="flex items-center gap-3 mb-3">
+                    <DollarSign className="h-5 w-5 text-muted-foreground" />
+                    <h3 className="font-semibold">Net Worth</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Coming soon: Forbes & Knowledge Graph data</p>
+                </Card>
+
+                {/* Social Reach Summary Placeholder */}
+                <Card className="p-6 opacity-50">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Globe className="h-5 w-5 text-muted-foreground" />
+                    <h3 className="font-semibold">Social Reach</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Coming soon: Total followers across platforms</p>
+                </Card>
+
+                {/* AI Sentiment Summary Placeholder */}
+                <Card className="p-6 opacity-50">
+                  <div className="flex items-center gap-3 mb-3">
+                    <MessageSquare className="h-5 w-5 text-muted-foreground" />
+                    <h3 className="font-semibold">AI Sentiment</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Coming soon: AI-powered sentiment analysis</p>
+                </Card>
+
+                {/* Engagement Rank Placeholder */}
+                <Card className="p-6 opacity-50">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Trophy className="h-5 w-5 text-muted-foreground" />
+                    <h3 className="font-semibold">Category Rank</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Coming soon: Engagement vs. peers</p>
+                </Card>
+
+                {/* Most Talked About Topic Placeholder */}
+                <Card className="p-6 opacity-50">
+                  <div className="flex items-center gap-3 mb-3">
+                    <TrendingUp className="h-5 w-5 text-muted-foreground" />
+                    <h3 className="font-semibold">Trending Topics</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Coming soon: Keywords from latest posts</p>
+                </Card>
+
+                {/* Search Volume Detail Placeholder */}
+                <Card className="p-6 opacity-50">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Eye className="h-5 w-5 text-muted-foreground" />
+                    <h3 className="font-semibold">Search Trends</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Coming soon: Geographic search distribution</p>
+                </Card>
+              </div>
+            </div>
+          </>
         )}
 
-        {/* 3. Sentiment Voting Widget - PROMINENT PLACEMENT */}
-        <div id="voting-widget" className="mb-8">
-          <AnimatedSentimentVotingWidget 
+        {/* VOTE TAB */}
+        {activeTab === "vote" && (
+          <>
+            {/* Sentiment Voting Widget */}
+            <div id="voting-widget" className="mb-8">
+              <AnimatedSentimentVotingWidget 
+                personId={person.id} 
+                personName={person.name}
+              />
+            </div>
+
+            {/* Community Insights */}
+            <div className="mb-8">
+              <CommunityInsights personId={person.id} personName={person.name} />
+            </div>
+          </>
+        )}
+
+        {/* PREDICT TAB */}
+        {activeTab === "predict" && (
+          <PredictTab 
             personId={person.id} 
             personName={person.name}
+            currentScore={Math.round(person.trendScore)}
           />
-        </div>
-
-        {/* 4. Community Insights - Right after voting widget */}
-        <div className="mb-8">
-          <CommunityInsights personId={person.id} personName={person.name} />
-        </div>
-
-        {/* 5. Trend History Chart */}
-        <TrendChart personId={person.id} personName={person.name} />
-        
-        {/* 6. Platform Insights (stacked blocks) */}
-        <PlatformInsightsSection personId={person.id} />
-
-        {/* 5. Future Widgets - Placeholder Section */}
-        <div className="mt-12 space-y-6">
-          <h2 className="text-2xl font-serif font-bold mb-6">Additional Insights</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Net Worth Placeholder */}
-            <Card className="p-6 opacity-50">
-              <div className="flex items-center gap-3 mb-3">
-                <DollarSign className="h-5 w-5 text-muted-foreground" />
-                <h3 className="font-semibold">Net Worth</h3>
-              </div>
-              <p className="text-sm text-muted-foreground">Coming soon: Forbes & Knowledge Graph data</p>
-            </Card>
-
-            {/* Social Reach Summary Placeholder */}
-            <Card className="p-6 opacity-50">
-              <div className="flex items-center gap-3 mb-3">
-                <Globe className="h-5 w-5 text-muted-foreground" />
-                <h3 className="font-semibold">Social Reach</h3>
-              </div>
-              <p className="text-sm text-muted-foreground">Coming soon: Total followers across platforms</p>
-            </Card>
-
-            {/* AI Sentiment Summary Placeholder */}
-            <Card className="p-6 opacity-50">
-              <div className="flex items-center gap-3 mb-3">
-                <MessageSquare className="h-5 w-5 text-muted-foreground" />
-                <h3 className="font-semibold">AI Sentiment</h3>
-              </div>
-              <p className="text-sm text-muted-foreground">Coming soon: AI-powered sentiment analysis</p>
-            </Card>
-
-            {/* Engagement Rank Placeholder */}
-            <Card className="p-6 opacity-50">
-              <div className="flex items-center gap-3 mb-3">
-                <Trophy className="h-5 w-5 text-muted-foreground" />
-                <h3 className="font-semibold">Category Rank</h3>
-              </div>
-              <p className="text-sm text-muted-foreground">Coming soon: Engagement vs. peers</p>
-            </Card>
-
-            {/* Most Talked About Topic Placeholder */}
-            <Card className="p-6 opacity-50">
-              <div className="flex items-center gap-3 mb-3">
-                <TrendingUp className="h-5 w-5 text-muted-foreground" />
-                <h3 className="font-semibold">Trending Topics</h3>
-              </div>
-              <p className="text-sm text-muted-foreground">Coming soon: Keywords from latest posts</p>
-            </Card>
-
-            {/* Search Volume Detail Placeholder */}
-            <Card className="p-6 opacity-50">
-              <div className="flex items-center gap-3 mb-3">
-                <Eye className="h-5 w-5 text-muted-foreground" />
-                <h3 className="font-semibold">Search Trends</h3>
-              </div>
-              <p className="text-sm text-muted-foreground">Coming soon: Geographic search distribution</p>
-            </Card>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
