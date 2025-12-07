@@ -110,6 +110,11 @@ export function SentimentVotingWidget({
       setSelectedValue(value);
       setTempValue(null);
       
+      // Dispatch custom event for vote updates
+      window.dispatchEvent(new CustomEvent('sentimentVoteUpdated', { 
+        detail: { personId, value } 
+      }));
+      
       // Log telemetry event
       console.log('[Telemetry] ui.vote_submitted', { personId, value });
       

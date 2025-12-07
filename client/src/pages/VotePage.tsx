@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -186,7 +186,51 @@ function StepCard({ step, icon: Icon, title, subtitle }: { step: number; icon: t
   );
 }
 
+function getStoredVote(personId: string): number | null {
+  try {
+    const stored = localStorage.getItem(`vote_${personId}`);
+    if (stored) {
+      const value = parseInt(stored, 10);
+      return isNaN(value) ? null : value;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function getApprovalColor(value: number): string {
+  if (value <= 2) return "text-red-500";
+  if (value <= 4) return "text-orange-500";
+  if (value <= 6) return "text-yellow-500";
+  if (value <= 8) return "text-lime-500";
+  return "text-green-500";
+}
+
 function SentimentVoteRow({ person, onRowClick, isFeatured = false }: { person: Person; onRowClick: (person: Person) => void; isFeatured?: boolean }) {
+  const [storedVote, setStoredVote] = useState<number | null>(() => getStoredVote(person.id));
+  
+  useEffect(() => {
+    const handleVoteUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<{ personId: string; value: number }>;
+      if (customEvent.detail.personId === person.id) {
+        setStoredVote(customEvent.detail.value);
+      }
+    };
+    
+    const handleStorageChange = () => {
+      setStoredVote(getStoredVote(person.id));
+    };
+    
+    window.addEventListener('sentimentVoteUpdated', handleVoteUpdate);
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('sentimentVoteUpdated', handleVoteUpdate);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [person.id]);
+
   return (
     <Card 
       className={`p-3 hover-elevate transition-all cursor-pointer ${isFeatured ? 'border-primary/30 bg-primary/5' : ''}`} 
@@ -204,17 +248,26 @@ function SentimentVoteRow({ person, onRowClick, isFeatured = false }: { person: 
           </div>
           <p className="text-xs text-muted-foreground">{person.category}</p>
         </div>
-        <Button 
-          size="sm" 
-          onClick={(e) => {
-            e.stopPropagation();
-            onRowClick(person);
-          }}
-          data-testid={`button-vote-${person.id}`}
-        >
-          <Heart className="h-4 w-4 mr-1" />
-          Vote
-        </Button>
+        <div className="flex items-center gap-2">
+          {storedVote !== null && (
+            <div className="flex items-center gap-1" data-testid={`rating-${person.id}`}>
+              <span className={`text-sm font-semibold ${getApprovalColor(storedVote)}`}>
+                {storedVote}/10
+              </span>
+            </div>
+          )}
+          <Button 
+            size="sm" 
+            onClick={(e) => {
+              e.stopPropagation();
+              onRowClick(person);
+            }}
+            data-testid={`button-vote-${person.id}`}
+          >
+            <Heart className="h-4 w-4 mr-1" />
+            Vote
+          </Button>
+        </div>
       </div>
     </Card>
   );
