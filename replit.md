@@ -93,18 +93,26 @@ The Vote page provides three distinct voting mechanisms for community engagement
 - 3-step explainer cards (Pick a vote type → Cast your vote → See your impact)
 
 **Section 1: Sentiment Votes**
-- Spotlight card: Featured person (Elon Musk) with full SentimentVotingWidget
-- Quick vote list: 7 trending people with Vote buttons
-- Clicking Vote opens a modal with the same SentimentVotingWidget
+- Unified row-based list: All people shown as clickable rows (no inline slider)
+- First person (Elon Musk) has "Featured" badge
+- Shows top 5 people by default, "View all X people to rate" toggle expands to full list
+- Clicking any row OR Vote button opens the same sentiment modal
+- Modal includes:
+  - Person avatar and "Rate {name}" title
+  - SentimentVotingWidget (same component as profile pages)
+  - "Visit full profile" link at bottom to navigate to person's profile
 - Votes persist to localStorage with key pattern `vote_${personId}`
+- Modal auto-closes 1.5 seconds after vote submission
 
 **Section 2: Profile Image Voting**
-- 3 demo cards showing image selection options
-- Users can vote for preferred profile images
+- 3 featured cards shown by default (Taylor Swift, MrBeast, Beyoncé)
+- "View all profile image votes" toggle shows 5 additional cards
+- Each card has 3 image options with vote percentages
 
 **Section 3: Suggest New People**
-- Cards for suggested additions (Jensen Huang, Charli XCX, etc.)
-- Upvote/downvote functionality
+- Cards for suggested additions (Jensen Huang, Charli XCX, Kai Cenat, Lionel Messi)
+- Green upvote button, red downvote button
+- Mutual exclusivity: selecting one deselects the other (no unvote)
 
 **Navigation:**
 - Desktop: Header with Home, Vote, Predict, Me links
