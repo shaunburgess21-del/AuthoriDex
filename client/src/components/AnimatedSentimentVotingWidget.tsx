@@ -166,7 +166,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
       data-testid="sentiment-voting-widget"
     >
       {/* Title Section with Mode Toggle */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
         <div className="flex-1">
           <h3 
             className="text-2xl font-bold mb-2"
@@ -188,7 +188,7 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
           </p>
         </div>
         {/* Mode Toggle Buttons */}
-        <div className="flex gap-2 ml-4">
+        <div className="flex gap-2">
           <Button
             variant={viewMode === 'vote' ? 'default' : 'outline'}
             size="sm"
