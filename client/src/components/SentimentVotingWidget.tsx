@@ -72,6 +72,8 @@ export function SentimentVotingWidget({
   const [isDragging, setIsDragging] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const sliderRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+  const tempValueRef = useRef<number | null>(null);
   const { toast } = useToast();
 
   // Check if user has already voted (stored in localStorage for now)
@@ -130,40 +132,47 @@ export function SentimentVotingWidget({
     }
   };
 
+  const handleSliderClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!sliderRef.current) return;
+    
+    const rect = sliderRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
+    const value = Math.max(1, Math.min(10, positionToValue(percentage)));
+    
+    console.log('[SentimentSlider] Click detected, value:', value);
+    handleVote(value);
+  };
+
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const value = calculateValueFromEvent(e);
     if (value !== null) {
+      isDraggingRef.current = true;
+      tempValueRef.current = value;
       setIsDragging(true);
       setTempValue(value);
-      // Capture pointer to ensure we get pointerup even if mouse leaves window
       e.currentTarget.setPointerCapture(e.pointerId);
     }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDragging) return;
+    if (!isDraggingRef.current) return;
     
     const value = calculateValueFromEvent(e);
     if (value !== null) {
+      tempValueRef.current = value;
       setTempValue(value);
     }
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isDragging && tempValue !== null) {
+    if (isDraggingRef.current && tempValueRef.current !== null) {
+      const voteValue = tempValueRef.current;
+      isDraggingRef.current = false;
+      tempValueRef.current = null;
       setIsDragging(false);
-      handleVote(tempValue);
+      handleVote(voteValue);
       e.currentTarget.releasePointerCapture(e.pointerId);
-    }
-  };
-
-  const handleClick = (e: React.PointerEvent<HTMLDivElement>) => {
-    // Only handle direct clicks (not drag releases)
-    if (!isDragging) {
-      const value = calculateValueFromEvent(e);
-      if (value !== null) {
-        handleVote(value);
-      }
     }
   };
 
@@ -255,7 +264,7 @@ export function SentimentVotingWidget({
             style={{
               background: 'linear-gradient(to right, #dc2626 0%, #f97316 25%, #fbbf24 50%, #84cc16 75%, #22c55e 100%)',
             }}
-            onClick={handleClick}
+            onClick={handleSliderClick}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}

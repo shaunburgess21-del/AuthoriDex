@@ -82,3 +82,39 @@ Preferred communication style: Simple, everyday language.
 - Replit-specific plugins.
 - ESBuild (production bundling).
 - PostCSS with Autoprefixer.
+
+## Page Structure
+
+### Vote Page (/vote)
+The Vote page provides three distinct voting mechanisms for community engagement:
+
+**Header Section:**
+- Title: "Vote on Global Influence"
+- 3-step explainer cards (Pick a vote type → Cast your vote → See your impact)
+
+**Section 1: Sentiment Votes**
+- Spotlight card: Featured person (Elon Musk) with full SentimentVotingWidget
+- Quick vote list: 7 trending people with Vote buttons
+- Clicking Vote opens a modal with the same SentimentVotingWidget
+- Votes persist to localStorage with key pattern `vote_${personId}`
+
+**Section 2: Profile Image Voting**
+- 3 demo cards showing image selection options
+- Users can vote for preferred profile images
+
+**Section 3: Suggest New People**
+- Cards for suggested additions (Jensen Huang, Charli XCX, etc.)
+- Upvote/downvote functionality
+
+**Navigation:**
+- Desktop: Header with Home, Vote, Predict, Me links
+- Mobile: Fixed bottom nav with Heart icon for Vote
+
+### Predict Page (/predict)
+Prediction markets with test mode (virtual 10,000 credits):
+- Weekly Up/Down markets
+- Head-to-Head Battles
+- Category Races
+
+### Me Page (/me)
+User profile showing votes and favorites (placeholder for Supabase auth integration).
