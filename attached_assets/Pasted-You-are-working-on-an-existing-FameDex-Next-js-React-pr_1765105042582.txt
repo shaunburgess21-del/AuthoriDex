@@ -1,0 +1,152 @@
+You are working on an existing FameDex Next.js/React project.
+
+Context:
+- A new `/vote` page already exists with:
+  - Intro hero (“Vote on Global Influence”) and 3-step explainer.
+  - Sentiment section with an inline multi-colour slider for Elon Musk and a list of people with “Vote” buttons that open a modal.
+  - Profile Image Voting section with 3 side-by-side cards (Taylor Swift, MrBeast, Beyoncé).
+  - Suggest New People section with suggestion cards and blue upvote buttons.
+- Person profile pages already have a “Cast Your Vote” slider component and consistent sentiment UI.
+- Supabase/auth is NOT wired yet. Do NOT add any backend calls or real persistence. Local React state only is fine.
+
+IMPORTANT CONSTRAINTS
+- Do NOT redesign or rebuild pages globally.
+- Do NOT touch the Predict page.
+- Work ONLY on:
+  - The `/vote` page sentiment section,
+  - Profile Image Voting,
+  - Suggest New People,
+  - And the sentiment modal behaviour.
+- Keep the existing dark theme and component style system.
+
+==================================================
+A. SENTIMENT SECTION – MAKE IT CONSISTENT & CLEAR
+==================================================
+
+Goal: Make sentiment voting on `/vote` consistent with the slider used on profile pages, reduce noise, and clarify interactions.
+
+1) Reuse existing slider component
+----------------------------------
+- Currently the Vote page uses a new gradient slider design that does not match the rest of the app.
+- Replace that custom slider (both inline and in the modal) with the **exact same slider component and styles** used for “Cast Your Vote” on profile pages / leaderboard.
+- If there is an existing shared component (e.g. `SentimentSlider` or similar), import and use that instead of redefining UI.
+- End result: sentiment slider looks and behaves identically everywhere.
+
+2) Remove the "+" button from Sentiment section
+-----------------------------------------------
+- In the Sentiment section header (“Sentiment Votes”), remove the plus icon/button entirely.
+- Users cannot create sentiment polls here, so no “+” for this section.
+
+3) Show top 3–5 people by default + “View all”
+----------------------------------------------
+- In the Sentiment section list:
+  - By default, render only the **top 3–5 people** (based on whatever order is already used – it can simply be the first 3–5 in the current array).
+  - Below the list, add a link/button:
+    - Text: “View all people to rate →”
+  - Clicking this toggles a piece of state (e.g. `showAllSentiment`):
+    - When `false`: show only first 3–5 items.
+    - When `true`: show the full list of people.
+- Keep the layout exactly the same; just slice/expand the data and add the toggle control.
+
+4) Make behaviour consistent: no inline slider; use modal only
+--------------------------------------------------------------
+Right now:
+- Elon Musk has an inline slider at the top.
+- Other people require clicking the “Vote” button to open a modal.
+
+Change this to a single behaviour:
+
+- Remove the inline full-width slider from the Sentiment section entirely.
+- Instead, show Elon Musk as a **featured row** at the top of the list (same row style as other people: avatar, name, category, Vote button).
+- For ALL people in the Sentiment list (including Elon):
+  - Clicking the row OR the “Vote” button should do the **same thing**: open the sentiment modal.
+
+5) Improve modal UX + add “Visit profile”
+-----------------------------------------
+Update the sentiment modal:
+
+- Inside the modal, use the shared “Cast Your Vote” slider component mentioned in step (1).
+- Show:
+  - Person avatar + initials,
+  - Person name in the title (e.g. “Rate Taylor Swift”),
+  - The slider with labels Hate / Dislike / Neutral / Like / Love.
+  - A text label under the slider: “Current Rating: X/10 – [label]” using the existing mapping already used on profile pages.
+- Add a subtle link/button at the bottom-right of the modal:
+
+  - Text: “Visit full profile →”
+  - Behaviour:
+    - Close the modal.
+    - Navigate to this person’s profile page (use the existing profile route and go to Overview or Vote tab).
+
+- Clicking outside the modal or the close icon should simply close the modal, no navigation.
+
+6) Row click behaviour
+----------------------
+- For each Sentiment list row:
+  - Clicking anywhere on the row (not just the “Vote” button) must open the exact same sentiment modal.
+- Do NOT navigate directly to the profile from row click; navigation should only happen via the “Visit full profile →” link inside the modal.
+
+==================================================
+B. PROFILE IMAGE VOTING – FEATURED + EXPAND
+==================================================
+
+Goal: Keep the 3 horizontal cards as a strong “featured” strip but allow users to see more people’s image votes without overwhelming the initial layout.
+
+1) Keep existing 3 cards as “Featured”
+--------------------------------------
+- Preserve the current layout: three side-by-side cards (Taylor Swift, MrBeast, Beyoncé) with image options and percentages.
+
+2) Add “View all profile image votes” and expand
+------------------------------------------------
+- Under the three featured cards, add a link/button:
+
+  - Text: “View all profile image votes →”
+
+- Implement a toggle (e.g. `showAllProfileImageVotes`):
+  - When `false`:
+    - Show ONLY the 3 featured cards (current behaviour).
+  - When `true`:
+    - Render additional profile image voting cards below the featured row.
+    - These can be a simple vertical list or a responsive grid reusing the same card component.
+    - Use dummy data for extra people; design is more important than data.
+
+- Optional but nice:
+  - On mobile, ensure the featured row is horizontally scrollable if needed (flex + overflow-x) while the expanded list is vertical.
+
+==================================================
+C. SUGGEST NEW PEOPLE – UPVOTE COLOUR & STATE
+==================================================
+
+Goal: Make upvote/downvote consistent with the rest of FameDex: green for up, red for down, single selection per card.
+
+1) Upvote button colour
+-----------------------
+- In the “Suggest New People” section:
+  - Change the **Upvote** button to use the **green style** (same as other Upvote/positive actions in the app).
+  - Downvote remains red.
+
+2) Upvote/Downvote state
+------------------------
+- For each suggestion card:
+  - User can select either Upvote OR Downvote (not both).
+  - Selected button is solid/filled; unselected is outline or subdued.
+  - Clicking the opposite choice should toggle the selection (Up → Down, Down → Up).
+  - It is acceptable if clicking the same button again does nothing (no unvote) for now.
+- State can be stored locally in React; no persistence or backend.
+
+==================================================
+D. IMPLEMENTATION & WRAP-UP
+==================================================
+
+- Work only in the Vote page and any shared components involved in:
+  - Sentiment section rows and modal,
+  - Profile Image Voting section,
+  - Suggest New People section.
+- Do NOT alter Home, Predict, or profile pages beyond importing the shared sentiment slider component if needed.
+- At the end, summarise:
+  - Files you touched,
+  - How the Sentiment section now behaves (top 3–5 + View all, row click behaviour, modal + Visit profile link),
+  - How Profile Image Voting expands,
+  - How Suggest New People upvote/downvote now looks and works.
+
+Remember: Supabase/auth is not connected; keep everything front-end only.

@@ -15,7 +15,9 @@ import {
   Sliders,
   Eye,
   ThumbsUp,
-  ThumbsDown
+  ThumbsDown,
+  ChevronRight,
+  ExternalLink
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -27,14 +29,8 @@ interface Person {
   category: string;
 }
 
-const spotlightPerson: Person = {
-  id: "7426f0ee-1d7b-4fde-8db8-b5bc0fc92bba",
-  name: "Elon Musk",
-  avatar: "",
-  category: "Tech",
-};
-
-const quickVotePeople: Person[] = [
+const allSentimentPeople: Person[] = [
+  { id: "1", name: "Elon Musk", avatar: "", category: "Tech" },
   { id: "2", name: "Taylor Swift", avatar: "", category: "Music" },
   { id: "3", name: "MrBeast", avatar: "", category: "Entertainment" },
   { id: "4", name: "Donald Trump", avatar: "", category: "Politics" },
@@ -53,15 +49,17 @@ interface ImageOption {
 interface ImageVotingCard {
   id: string;
   personName: string;
+  personId: string;
   category: string;
   images: ImageOption[];
   totalVotes: number;
 }
 
-const imageVotingCards: ImageVotingCard[] = [
+const featuredImageVotingCards: ImageVotingCard[] = [
   {
     id: "img-1",
     personName: "Taylor Swift",
+    personId: "2",
     category: "Music",
     images: [
       { id: "a", url: "", votes: 1234 },
@@ -73,6 +71,7 @@ const imageVotingCards: ImageVotingCard[] = [
   {
     id: "img-2",
     personName: "MrBeast",
+    personId: "3",
     category: "Entertainment",
     images: [
       { id: "a", url: "", votes: 2341 },
@@ -84,6 +83,7 @@ const imageVotingCards: ImageVotingCard[] = [
   {
     id: "img-3",
     personName: "Beyoncé",
+    personId: "7",
     category: "Music",
     images: [
       { id: "a", url: "", votes: 3456 },
@@ -91,6 +91,69 @@ const imageVotingCards: ImageVotingCard[] = [
       { id: "c", url: "", votes: 1543 },
     ],
     totalVotes: 7197,
+  },
+];
+
+const additionalImageVotingCards: ImageVotingCard[] = [
+  {
+    id: "img-4",
+    personName: "Elon Musk",
+    personId: "1",
+    category: "Tech",
+    images: [
+      { id: "a", url: "", votes: 4521 },
+      { id: "b", url: "", votes: 3890 },
+      { id: "c", url: "", votes: 2134 },
+    ],
+    totalVotes: 10545,
+  },
+  {
+    id: "img-5",
+    personName: "Donald Trump",
+    personId: "4",
+    category: "Politics",
+    images: [
+      { id: "a", url: "", votes: 5678 },
+      { id: "b", url: "", votes: 4321 },
+      { id: "c", url: "", votes: 2987 },
+    ],
+    totalVotes: 12986,
+  },
+  {
+    id: "img-6",
+    personName: "Kim Kardashian",
+    personId: "5",
+    category: "Entertainment",
+    images: [
+      { id: "a", url: "", votes: 2890 },
+      { id: "b", url: "", votes: 2456 },
+      { id: "c", url: "", votes: 1876 },
+    ],
+    totalVotes: 7222,
+  },
+  {
+    id: "img-7",
+    personName: "Cristiano Ronaldo",
+    personId: "6",
+    category: "Sports",
+    images: [
+      { id: "a", url: "", votes: 8901 },
+      { id: "b", url: "", votes: 7654 },
+      { id: "c", url: "", votes: 5432 },
+    ],
+    totalVotes: 21987,
+  },
+  {
+    id: "img-8",
+    personName: "Drake",
+    personId: "8",
+    category: "Music",
+    images: [
+      { id: "a", url: "", votes: 3456 },
+      { id: "b", url: "", votes: 2987 },
+      { id: "c", url: "", votes: 2345 },
+    ],
+    totalVotes: 8788,
   },
 ];
 
@@ -123,35 +186,30 @@ function StepCard({ step, icon: Icon, title, subtitle }: { step: number; icon: t
   );
 }
 
-function SpotlightSentimentCard({ person }: { person: Person }) {
+function SentimentVoteRow({ person, onRowClick, isFeatured = false }: { person: Person; onRowClick: (person: Person) => void; isFeatured?: boolean }) {
   return (
-    <div className="mb-4" data-testid="card-spotlight-sentiment">
-      <div className="flex items-center gap-4 mb-4">
-        <PersonAvatar name={person.name} avatar={person.avatar} size="lg" />
-        <div>
-          <h3 className="text-xl font-bold">{person.name}</h3>
-          <Badge variant="secondary" className="text-xs">{person.category}</Badge>
-        </div>
-      </div>
-      <SentimentVotingWidget personId={person.id} personName={person.name} />
-    </div>
-  );
-}
-
-function QuickVoteItem({ person, onVoteClick }: { person: Person; onVoteClick: (person: Person) => void }) {
-  const [, setLocation] = useLocation();
-  
-  return (
-    <Card className="p-3 hover-elevate transition-all" data-testid={`card-quickvote-${person.id}`}>
+    <Card 
+      className={`p-3 hover-elevate transition-all cursor-pointer ${isFeatured ? 'border-primary/30 bg-primary/5' : ''}`} 
+      onClick={() => onRowClick(person)}
+      data-testid={`card-sentiment-${person.id}`}
+    >
       <div className="flex items-center gap-3">
         <PersonAvatar name={person.name} avatar={person.avatar} size="sm" />
         <div className="flex-1 min-w-0">
-          <h4 className="font-medium truncate">{person.name}</h4>
+          <div className="flex items-center gap-2">
+            <h4 className="font-medium truncate">{person.name}</h4>
+            {isFeatured && (
+              <Badge variant="secondary" className="text-xs">Featured</Badge>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">{person.category}</p>
         </div>
         <Button 
           size="sm" 
-          onClick={() => onVoteClick(person)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRowClick(person);
+          }}
           data-testid={`button-vote-${person.id}`}
         >
           <Heart className="h-4 w-4 mr-1" />
@@ -201,7 +259,7 @@ function ImageVotingCardComponent({ card }: { card: ImageVotingCard }) {
       </div>
       
       <div className="flex justify-between text-xs text-muted-foreground">
-        {card.images.map((img, i) => (
+        {card.images.map((img) => (
           <span key={img.id}>{((img.votes / card.totalVotes) * 100).toFixed(0)}%</span>
         ))}
       </div>
@@ -215,15 +273,13 @@ function SuggestedPersonCard({ person }: { person: SuggestedPerson }) {
 
   const handleVote = (type: 'up' | 'down') => {
     if (userVote === type) {
-      setUserVote(null);
-      setVotes(prev => ({ ...prev, [type]: prev[type] - 1 }));
-    } else {
-      if (userVote) {
-        setVotes(prev => ({ ...prev, [userVote]: prev[userVote] - 1 }));
-      }
-      setUserVote(type);
-      setVotes(prev => ({ ...prev, [type]: prev[type] + 1 }));
+      return;
     }
+    if (userVote) {
+      setVotes(prev => ({ ...prev, [userVote]: prev[userVote] - 1 }));
+    }
+    setUserVote(type);
+    setVotes(prev => ({ ...prev, [type]: prev[type] + 1 }));
   };
 
   return (
@@ -241,7 +297,7 @@ function SuggestedPersonCard({ person }: { person: SuggestedPerson }) {
             size="sm"
             variant={userVote === 'up' ? 'default' : 'outline'}
             onClick={() => handleVote('up')}
-            className="gap-1"
+            className={`gap-1 ${userVote === 'up' ? 'bg-green-600 hover:bg-green-700 border-green-600' : 'text-green-600 border-green-600/50 hover:bg-green-600/10'}`}
             data-testid={`button-upvote-${person.id}`}
           >
             <ThumbsUp className="h-3 w-3" />
@@ -251,7 +307,7 @@ function SuggestedPersonCard({ person }: { person: SuggestedPerson }) {
             size="sm"
             variant={userVote === 'down' ? 'destructive' : 'outline'}
             onClick={() => handleVote('down')}
-            className="gap-1"
+            className={`gap-1 ${userVote !== 'down' ? 'text-red-500 border-red-500/50 hover:bg-red-500/10' : ''}`}
             data-testid={`button-downvote-${person.id}`}
           >
             <ThumbsDown className="h-3 w-3" />
@@ -265,13 +321,28 @@ function SuggestedPersonCard({ person }: { person: SuggestedPerson }) {
 
 export default function VotePage() {
   const [, setLocation] = useLocation();
-  const [sentimentModalOpen, setSentimentModalOpen] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [suggestModalOpen, setSuggestModalOpen] = useState(false);
   const [voteModalPerson, setVoteModalPerson] = useState<Person | null>(null);
+  
+  const [showAllSentiment, setShowAllSentiment] = useState(false);
+  const [showAllImageVotes, setShowAllImageVotes] = useState(false);
+  
+  const DEFAULT_SENTIMENT_COUNT = 5;
+  
+  const displayedSentimentPeople = showAllSentiment 
+    ? allSentimentPeople 
+    : allSentimentPeople.slice(0, DEFAULT_SENTIMENT_COUNT);
 
-  const handleQuickVote = (person: Person) => {
+  const handleRowClick = (person: Person) => {
     setVoteModalPerson(person);
+  };
+
+  const handleVisitProfile = () => {
+    if (voteModalPerson) {
+      setVoteModalPerson(null);
+      setLocation(`/person/${voteModalPerson.id}`);
+    }
   };
 
   return (
@@ -350,30 +421,34 @@ export default function VotePage() {
         </div>
 
         <section className="mb-10" data-testid="section-sentiment-votes">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-xl font-serif font-bold mb-1">Sentiment Votes</h2>
-              <p className="text-sm text-muted-foreground">
-                Rate how you feel about each person from 1 (Hate) to 10 (Love).
-              </p>
-            </div>
-            <Button
-              size="icon"
-              variant="outline"
-              onClick={() => setSentimentModalOpen(true)}
-              data-testid="button-add-sentiment"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
+          <div className="mb-4">
+            <h2 className="text-xl font-serif font-bold mb-1">Sentiment Votes</h2>
+            <p className="text-sm text-muted-foreground">
+              Rate how you feel about each person from 1 (Hate) to 10 (Love).
+            </p>
           </div>
-          
-          <SpotlightSentimentCard person={spotlightPerson} />
           
           <div className="space-y-2">
-            {quickVotePeople.map((person) => (
-              <QuickVoteItem key={person.id} person={person} onVoteClick={handleQuickVote} />
+            {displayedSentimentPeople.map((person, index) => (
+              <SentimentVoteRow 
+                key={person.id} 
+                person={person} 
+                onRowClick={handleRowClick}
+                isFeatured={index === 0}
+              />
             ))}
           </div>
+          
+          {allSentimentPeople.length > DEFAULT_SENTIMENT_COUNT && (
+            <button
+              onClick={() => setShowAllSentiment(!showAllSentiment)}
+              className="mt-4 text-sm text-primary hover:underline flex items-center gap-1"
+              data-testid="button-view-all-sentiment"
+            >
+              {showAllSentiment ? 'Show less' : `View all ${allSentimentPeople.length} people to rate`}
+              <ChevronRight className={`h-4 w-4 transition-transform ${showAllSentiment ? 'rotate-90' : ''}`} />
+            </button>
+          )}
         </section>
 
         <section className="mb-10" data-testid="section-image-voting">
@@ -395,10 +470,27 @@ export default function VotePage() {
           </div>
           
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {imageVotingCards.map((card) => (
+            {featuredImageVotingCards.map((card) => (
               <ImageVotingCardComponent key={card.id} card={card} />
             ))}
           </div>
+          
+          {showAllImageVotes && (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mt-4">
+              {additionalImageVotingCards.map((card) => (
+                <ImageVotingCardComponent key={card.id} card={card} />
+              ))}
+            </div>
+          )}
+          
+          <button
+            onClick={() => setShowAllImageVotes(!showAllImageVotes)}
+            className="mt-4 text-sm text-primary hover:underline flex items-center gap-1"
+            data-testid="button-view-all-images"
+          >
+            {showAllImageVotes ? 'Show less' : 'View all profile image votes'}
+            <ChevronRight className={`h-4 w-4 transition-transform ${showAllImageVotes ? 'rotate-90' : ''}`} />
+          </button>
         </section>
 
         <section className="mb-10" data-testid="section-suggest-people">
@@ -432,20 +524,6 @@ export default function VotePage() {
           </p>
         </div>
       </div>
-
-      <Dialog open={sentimentModalOpen} onOpenChange={setSentimentModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create Custom Poll</DialogTitle>
-            <DialogDescription>
-              In a future version, you'll be able to create custom sentiment polls here.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setSentimentModalOpen(false)}>Close</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={imageModalOpen} onOpenChange={setImageModalOpen}>
         <DialogContent>
@@ -488,13 +566,25 @@ export default function VotePage() {
             </DialogTitle>
           </DialogHeader>
           {voteModalPerson && (
-            <SentimentVotingWidget 
-              personId={voteModalPerson.id} 
-              personName={voteModalPerson.name}
-              onVoteSubmitted={() => {
-                setTimeout(() => setVoteModalPerson(null), 1500);
-              }}
-            />
+            <div className="space-y-4">
+              <SentimentVotingWidget 
+                personId={voteModalPerson.id} 
+                personName={voteModalPerson.name}
+                onVoteSubmitted={() => {
+                  setTimeout(() => setVoteModalPerson(null), 1500);
+                }}
+              />
+              <div className="flex justify-end pt-2 border-t">
+                <button
+                  onClick={handleVisitProfile}
+                  className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
+                  data-testid="button-visit-profile"
+                >
+                  Visit full profile
+                  <ExternalLink className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>

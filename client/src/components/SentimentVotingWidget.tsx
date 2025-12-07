@@ -202,10 +202,11 @@ export function SentimentVotingWidget({
         break;
       case 'Enter':
       case ' ':
+        e.preventDefault();
+        e.stopPropagation();
         if (tempValue !== null && tempValue !== selectedValue) {
           handleVote(tempValue);
         }
-        e.preventDefault();
         return;
     }
 
