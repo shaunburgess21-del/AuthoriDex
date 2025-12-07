@@ -18,13 +18,6 @@ export function HeroSection() {
       />
       <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/70 to-background" />
       <div className="relative h-full flex flex-col items-center justify-center px-4 text-center">
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 backdrop-blur-sm border border-primary/20 mb-6">
-          <TrendingUp className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-primary">
-            Live Trending Data
-          </span>
-        </div>
-        
         <h1 className="text-5xl md:text-7xl font-serif font-bold mb-6 tracking-tight max-w-4xl">
           Global Influence <span className="text-primary">Insights</span>
         </h1>
