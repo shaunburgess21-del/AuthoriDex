@@ -36,6 +36,9 @@ export default function MePage() {
               <Button variant="ghost" size="sm" onClick={() => setLocation("/")} data-testid="nav-home-desktop">
                 Home
               </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/vote")} data-testid="nav-vote-desktop">
+                Vote
+              </Button>
               <Button variant="ghost" size="sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
                 Predict
               </Button>

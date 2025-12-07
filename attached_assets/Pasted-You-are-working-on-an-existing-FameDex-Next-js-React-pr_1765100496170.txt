@@ -1,0 +1,96 @@
+You are working on an existing FameDex Next.js/React project. The UI is mostly complete and already includes:
+
+- Home page with hero, mover cards, bar chart and leaderboard.
+- Top nav: Home | Predict | Me.
+- Person profile pages with Overview / Vote / Predict tabs and a working “Cast Your Vote” slider and “Weekly Trend Score Prediction” card in Test Mode.
+- A Predict page with structured sections (we recently added these).
+
+IMPORTANT CONSTRAINTS
+- Do NOT redesign or rebuild existing pages.
+- Do NOT move major sections (hero, leaderboard, profile layout, etc.).
+- Only add a **new Vote page**, update the nav, and add very small linking hooks from existing components.
+- Supabase/auth is NOT wired. Nothing should require login.
+- All voting in this task must use **local React state only** (optionally localStorage), no backend calls.
+- Do NOT modify the “Me” page beyond navigation; any mention of Me integration should be comments only (future work).
+
+==================================================
+A. NEW /VOTE PAGE – STRUCTURE
+==================================================
+
+Create a new page/route at `/vote`.
+
+Overall layout:
+
+1. **Intro header block** at the top:
+
+   - Title: “Vote on Global Influence”
+   - Subtitle:
+     “Shape how the world sees its most influential people. Rate them, choose their profile image, and tell us who should appear on FameDex next.”
+   - Below this, add a simple 3-step explainer, horizontally on desktop and stacked on mobile:
+
+     - Step 1: “Pick a vote type”
+       - Subtext: “Sentiment, profile images, or new people to add.”
+     - Step 2: “Cast your vote”
+       - Subtext: “Use sliders and Upvote / Downvote buttons.”
+     - Step 3: “See your impact”
+       - Subtext: “Your choices will appear in your Me profile in a future version.”
+
+   Reuse existing typography and card styles so it feels consistent with Home and Predict.
+
+2. Below the intro, the page should have **three main sections**, each with:
+   - A heading
+   - Short description
+   - A “+” action button on the right of the heading
+   - A list of cards relevant to that vote type
+
+==================================================
+B. SECTION 1 – SENTIMENT VOTES
+==================================================
+
+Section heading and description:
+
+- Title: “Sentiment Votes”
+- Subtitle: “Rate how you feel about each person from 1 (Hate) to 10 (Love).”
+
+Content:
+
+1. **Spotlight Sentiment Card**
+
+   - At the top of this section, create a large card that reuses the existing “Cast Your Vote” slider component from profile pages.
+   - The card should show:
+     - Avatar + name + category of a single person (you can hard-code one person for now, e.g. Elon Musk or the first person in the leaderboard data).
+     - The full 1–10 slider with labels (Hate, Dislike, Neutral, Like, Love).
+     - Below the slider, show a summary text like:
+       “You rated X/10 – [Hate/Dislike/Neutral/Like/Love].”
+   - Store the vote for this card in local React state (no backend).
+
+2. **Quick Sentiment List**
+
+   - Under the spotlight card, show a list of several people (5–10 items).
+   - Each item should include:
+     - Avatar, name, category.
+     - A small “Vote” button.
+   - Clicking “Vote” should either:
+     - Open a small modal containing the same slider component, or
+     - Navigate to that person’s profile page on the Vote tab.
+   - For this task it’s fine to use existing dummy data or the same few people repeated.
+
+3. **“+” Action Button**
+
+   - On the right side of the “Sentiment Votes” heading, add a small icon/button with a plus sign.
+   - On click, open a simple placeholder modal with text like:
+     “In a future version, you’ll be able to create custom sentiment polls here.”
+   - No additional logic required.
+
+==================================================
+C. SECTION 2 – PROFILE IMAGE VOTING
+==================================================
+
+Section heading and description:
+
+- Title: “Profile Image Voting”
+- Subtitle: “Help decide which image best represents each person on FameDex.”
+
+Create a series of static demo cards (3–5 cards is enough). Each card:
+
+- Sh

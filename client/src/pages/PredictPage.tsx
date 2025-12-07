@@ -317,6 +317,9 @@ export default function PredictPage() {
               <Link href="/">
                 <Button variant="ghost" size="sm">Home</Button>
               </Link>
+              <Link href="/vote">
+                <Button variant="ghost" size="sm">Vote</Button>
+              </Link>
               <Link href="/predict">
                 <Button variant="ghost" size="sm" className="text-primary">Predict</Button>
               </Link>
