@@ -1,0 +1,110 @@
+You are working on an existing FameDex Next.js/React project. The UI is mostly complete and already includes:
+
+- Home page with hero, mover cards, bar chart and leaderboard.
+- Top nav: Home | Predict | Me.
+- A Predict page that currently shows a simple list of “Weekly Trend Score” markets.
+- Person profile pages with Overview / Vote / Predict tabs and a working “Weekly Trend Score Prediction” card in Test Mode.
+
+IMPORTANT CONSTRAINTS
+- Do NOT redesign or rebuild existing pages.
+- Do NOT move major sections (hero, leaderboard, profile layout, etc.).
+- Only make small, additive changes focused on:
+  1) Hero cleanup (remove prediction CTA)
+  2) Predict page structure + new sections
+  3) Test Wallet + My Predictions (dummy state only)
+- Supabase/auth is NOT wired. Nothing should require login. Prediction remains TEST MODE with virtual credits only.
+
+==================================================
+A. HERO CLEANUP (HOME PAGE)
+==================================================
+
+Goal: keep the hero clean with only two main CTAs.
+
+Current state: hero shows “Explore Leaderboard” (primary), “Cast Your Vote” (secondary), and a third button “New: Prediction Markets (Test Mode)”.
+
+Change this as follows:
+
+1. In the hero CTA area, keep **only two buttons**:
+   - Primary: “Explore Leaderboard”
+   - Secondary: “Cast Your Vote”
+
+2. Completely **remove** the Prediction Markets CTA from the hero (both the button and any associated label).  
+   - Do NOT replace it with another text line or pill.
+   - Prediction will be discovered via the top navigation “Predict” link only.
+
+Do not otherwise change the hero layout or visual style.
+
+==================================================
+B. PREDICT PAGE STRUCTURE + NEW SECTIONS
+==================================================
+
+Goal: make `/predict` understandable and exciting for a first-time visitor by adding an intro, clear steps, and grouping markets by type.
+
+The Predict page should be structured as:
+
+1. **Intro header block** at the top:
+
+   - Title: “Prediction Markets”
+   - Subtitle text similar to:
+     “Back your insight on who’s really moving the world. Make test-mode predictions using virtual credits – no real money.”
+   - Place this above the existing TEST MODE banner.
+
+2. **3-step explainer** just under the subtitle, horizontally on desktop (stacked on mobile):
+
+   Visually show 3 steps:
+   - Step 1: “Pick a market”
+     - Subtext: “Weekly Up/Down, Head-to-Head, or Category Races.”
+   - Step 2: “Choose a person & direction”
+     - Subtext: “Up or Down, or pick a single winner.”
+   - Step 3: “Place a test prediction”
+     - Subtext: “Use virtual credits and see your potential payout.”
+
+   Use simple icons or small cards consistent with the existing design.
+
+3. **Section: Weekly Up / Down**
+
+   - Add a section header above the existing list:
+     - Title: “Weekly Up / Down”
+     - Subtitle: “Predict if a person’s FameDex Trend Score will be higher or lower at the end of this week.”
+   - Under this header, reuse the current list of markets (Elon, Taylor, MrBeast, Trump, Kim etc.).
+   - Do NOT change the card styling much; just ensure they visually belong under this header.
+
+4. **Section: Head-to-Head & Group Battles (static dummy markets)**
+
+   - Below Weekly Up / Down, add another section:
+
+     - Title: “Head-to-Head & Group Battles”
+     - Subtitle: “Predict who will gain more Trend Score this week in curated matchups.”
+
+   - Add 1–2 STATIC demo cards (dummy data is fine, no backend needed yet), for example:
+     - Card 1: “Who will gain more this week? Drake vs The Weeknd vs Travis Scott”
+     - Card 2: “Tech Titans: Elon Musk vs Jensen Huang vs Mark Zuckerberg”
+
+   Card requirements:
+   - Each card should show:
+     - Market title.
+     - Participants as small chips or text.
+     - A short label like: “Music · 7-day window · Ends Sun 23:59 UTC”.
+     - A primary CTA button: “Open Market” (for now this can simply log to console or link to `#` – no full detail page needed yet).
+   - Style them similarly to the existing market cards so the page feels cohesive.
+
+5. **Section: Category Races (static dummy markets)**
+
+   - Add a third section:
+
+     - Title: “Category Races”
+     - Subtitle: “Pick who you think will be the biggest mover in a category this week.”
+
+   - Add 1–2 STATIC demo cards, for example:
+     - “Which Music artist will have the biggest Trend Score increase this week?” with 4–5 names.
+     - “Which Tech leader will move the most this week?” with 4–5 names.
+
+   - Same card pattern as Head-to-Head: title, participant list, label, “Open Market” button (dummy behaviour).
+
+NOTE: For this task, Head-to-Head and Category Races are **UX-only** – no need to wire them into real prediction logic yet. They should just look real and be clearly separated by headers.
+
+==================================================
+C. TEST WALLET + MY PREDICTIONS (DUMMY ONLY)
+==================================================
+
+We want users to see a wallet and a simple “My Prediction

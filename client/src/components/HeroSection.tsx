@@ -1,14 +1,11 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { TrendingUp, CheckSquare, Zap } from "lucide-react";
+import { TrendingUp, CheckSquare } from "lucide-react";
 import heroImage from "@assets/generated_images/Hero_background_network_visualization_1293b14e.png";
 import { VotingModal } from "@/components/VotingModal";
-import { useLocation } from "wouter";
 
 export function HeroSection() {
   const [votingModalOpen, setVotingModalOpen] = useState(false);
-  const [, setLocation] = useLocation();
 
   return (
     <div className="relative h-96 md:h-[500px] w-full overflow-hidden">
@@ -22,19 +19,9 @@ export function HeroSection() {
           Global Influence <span className="text-primary">Insights</span>
         </h1>
         
-        <p className="text-lg md:text-xl text-muted-foreground mb-6 max-w-2xl">
+        <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">
           Discover real-time insights and vote on the world's most influential people, powered by live data from verified sources
         </p>
-        
-        <Badge 
-          variant="outline" 
-          className="mb-6 px-4 py-2 cursor-pointer bg-primary/10 border-primary/30 text-primary backdrop-blur-sm hover-elevate"
-          onClick={() => setLocation("/predict")}
-          data-testid="badge-prediction-markets"
-        >
-          <Zap className="h-4 w-4 mr-2" />
-          New: Prediction Markets (Test Mode)
-        </Badge>
         
         <div className="flex flex-col sm:flex-row gap-4">
           <Button 

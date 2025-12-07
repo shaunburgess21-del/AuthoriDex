@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { ArrowLeft, ChevronRight, TrendingUp, TrendingDown, Zap } from "lucide-react";
+import { ArrowLeft, ChevronRight, TrendingUp, TrendingDown, Zap, Target, Users, Trophy, Wallet, ListChecks } from "lucide-react";
 import { useLocation, Link } from "wouter";
 
 interface PredictionMarket {
@@ -82,6 +82,62 @@ const mockMarkets: PredictionMarket[] = [
   },
 ];
 
+interface HeadToHeadMarket {
+  id: string;
+  title: string;
+  participants: string[];
+  category: string;
+  window: string;
+  endTime: string;
+}
+
+const headToHeadMarkets: HeadToHeadMarket[] = [
+  {
+    id: "h2h-1",
+    title: "Who will gain more this week?",
+    participants: ["Drake", "The Weeknd", "Travis Scott"],
+    category: "Music",
+    window: "7-day window",
+    endTime: "Ends Sun 23:59 UTC",
+  },
+  {
+    id: "h2h-2",
+    title: "Tech Titans Showdown",
+    participants: ["Elon Musk", "Jensen Huang", "Mark Zuckerberg"],
+    category: "Tech",
+    window: "7-day window",
+    endTime: "Ends Sun 23:59 UTC",
+  },
+];
+
+interface CategoryRaceMarket {
+  id: string;
+  title: string;
+  participants: string[];
+  category: string;
+  window: string;
+  endTime: string;
+}
+
+const categoryRaceMarkets: CategoryRaceMarket[] = [
+  {
+    id: "race-1",
+    title: "Which Music artist will have the biggest Trend Score increase?",
+    participants: ["Taylor Swift", "Drake", "The Weeknd", "Bad Bunny", "Beyoncé"],
+    category: "Music",
+    window: "7-day window",
+    endTime: "Ends Sun 23:59 UTC",
+  },
+  {
+    id: "race-2",
+    title: "Which Tech leader will move the most?",
+    participants: ["Elon Musk", "Sam Altman", "Jensen Huang", "Satya Nadella", "Mark Zuckerberg"],
+    category: "Tech",
+    window: "7-day window",
+    endTime: "Ends Sun 23:59 UTC",
+  },
+];
+
 function MarketCard({ market }: { market: PredictionMarket }) {
   const [, setLocation] = useLocation();
 
@@ -136,6 +192,102 @@ function MarketCard({ market }: { market: PredictionMarket }) {
   );
 }
 
+function HeadToHeadCard({ market }: { market: HeadToHeadMarket }) {
+  const handleOpenMarket = () => {
+    console.log("Opening head-to-head market:", market.id);
+  };
+
+  return (
+    <Card 
+      className="p-4 hover-elevate transition-all"
+      data-testid={`card-h2h-${market.id}`}
+    >
+      <div className="flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <h3 className="font-semibold mb-2">{market.title}</h3>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {market.participants.map((name, i) => (
+                <Badge key={name} variant="secondary" className="text-xs">
+                  {name}
+                  {i < market.participants.length - 1 && <span className="ml-1 text-muted-foreground">vs</span>}
+                </Badge>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {market.category} · {market.window} · {market.endTime}
+            </p>
+          </div>
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={handleOpenMarket}
+          className="w-full sm:w-auto"
+          data-testid={`button-open-h2h-${market.id}`}
+        >
+          Open Market
+          <ChevronRight className="h-4 w-4 ml-1" />
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function CategoryRaceCard({ market }: { market: CategoryRaceMarket }) {
+  const handleOpenMarket = () => {
+    console.log("Opening category race market:", market.id);
+  };
+
+  return (
+    <Card 
+      className="p-4 hover-elevate transition-all"
+      data-testid={`card-race-${market.id}`}
+    >
+      <div className="flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <h3 className="font-semibold mb-2">{market.title}</h3>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {market.participants.map((name) => (
+                <Badge key={name} variant="secondary" className="text-xs">
+                  {name}
+                </Badge>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {market.category} · {market.window} · {market.endTime}
+            </p>
+          </div>
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={handleOpenMarket}
+          className="w-full sm:w-auto"
+          data-testid={`button-open-race-${market.id}`}
+        >
+          Open Market
+          <ChevronRight className="h-4 w-4 ml-1" />
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function StepCard({ step, icon: Icon, title, subtitle }: { step: number; icon: typeof Target; title: string; subtitle: string }) {
+  return (
+    <div className="flex-1 flex flex-col items-center text-center p-4 rounded-lg bg-muted/50">
+      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+        <Icon className="h-5 w-5 text-primary" />
+      </div>
+      <div className="text-xs text-muted-foreground mb-1">Step {step}</div>
+      <h4 className="font-semibold text-sm mb-1">{title}</h4>
+      <p className="text-xs text-muted-foreground">{subtitle}</p>
+    </div>
+  );
+}
+
 export default function PredictPage() {
   const [, setLocation] = useLocation();
 
@@ -177,20 +329,41 @@ export default function PredictPage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8 max-w-3xl">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="mb-6">
+          <div className="flex items-center gap-3 mb-3">
             <Zap className="h-8 w-8 text-primary" />
             <h1 className="text-3xl font-serif font-bold" data-testid="text-predict-title">
               Prediction Markets
             </h1>
           </div>
-          <p className="text-muted-foreground">
-            Back your insight on who's really moving the world. Currently running in test mode with virtual credits.
+          <p className="text-muted-foreground max-w-2xl">
+            Back your insight on who's really moving the world. Make test-mode predictions using virtual credits – no real money.
           </p>
         </div>
 
-        <Card className="p-4 mb-6 bg-primary/5 border-primary/20">
+        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          <StepCard 
+            step={1} 
+            icon={Target} 
+            title="Pick a market" 
+            subtitle="Weekly Up/Down, Head-to-Head, or Category Races."
+          />
+          <StepCard 
+            step={2} 
+            icon={Users} 
+            title="Choose a person & direction" 
+            subtitle="Up or Down, or pick a single winner."
+          />
+          <StepCard 
+            step={3} 
+            icon={Trophy} 
+            title="Place a test prediction" 
+            subtitle="Use virtual credits and see your potential payout."
+          />
+        </div>
+
+        <Card className="p-4 mb-8 bg-primary/5 border-primary/20">
           <div className="flex items-center gap-3">
             <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
               TEST MODE
@@ -201,13 +374,72 @@ export default function PredictPage() {
           </div>
         </Card>
 
-        <div className="space-y-3">
-          {mockMarkets.map((market) => (
-            <MarketCard key={market.id} market={market} />
-          ))}
-        </div>
+        <Card className="p-4 mb-8 bg-muted/30 border-muted">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <Wallet className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Test Wallet Balance</div>
+                <div className="text-xl font-bold font-mono">10,000 <span className="text-sm font-normal text-muted-foreground">credits</span></div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                <ListChecks className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">My Predictions</div>
+                <div className="text-xl font-bold font-mono">0 <span className="text-sm font-normal text-muted-foreground">active</span></div>
+              </div>
+            </div>
+          </div>
+        </Card>
 
-        <div className="mt-8 text-center">
+        <section className="mb-10" data-testid="section-weekly-updown">
+          <div className="mb-4">
+            <h2 className="text-xl font-serif font-bold mb-1">Weekly Up / Down</h2>
+            <p className="text-sm text-muted-foreground">
+              Predict if a person's FameDex Trend Score will be higher or lower at the end of this week.
+            </p>
+          </div>
+          <div className="space-y-3">
+            {mockMarkets.map((market) => (
+              <MarketCard key={market.id} market={market} />
+            ))}
+          </div>
+        </section>
+
+        <section className="mb-10" data-testid="section-head-to-head">
+          <div className="mb-4">
+            <h2 className="text-xl font-serif font-bold mb-1">Head-to-Head & Group Battles</h2>
+            <p className="text-sm text-muted-foreground">
+              Predict who will gain more Trend Score this week in curated matchups.
+            </p>
+          </div>
+          <div className="space-y-3">
+            {headToHeadMarkets.map((market) => (
+              <HeadToHeadCard key={market.id} market={market} />
+            ))}
+          </div>
+        </section>
+
+        <section className="mb-10" data-testid="section-category-races">
+          <div className="mb-4">
+            <h2 className="text-xl font-serif font-bold mb-1">Category Races</h2>
+            <p className="text-sm text-muted-foreground">
+              Pick who you think will be the biggest mover in a category this week.
+            </p>
+          </div>
+          <div className="space-y-3">
+            {categoryRaceMarkets.map((market) => (
+              <CategoryRaceCard key={market.id} market={market} />
+            ))}
+          </div>
+        </section>
+
+        <div className="text-center">
           <p className="text-sm text-muted-foreground">
             More markets coming soon. Check back regularly for new prediction opportunities.
           </p>
