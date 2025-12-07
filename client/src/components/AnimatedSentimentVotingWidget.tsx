@@ -162,11 +162,11 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
 
   return (
     <div 
-      className="w-full bg-card border border-border rounded-2xl p-8"
+      className="w-full bg-card border border-border rounded-2xl p-4 sm:p-6 md:p-8"
       data-testid="sentiment-voting-widget"
     >
       {/* Title Section with Mode Toggle */}
-      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 mb-6">
         <div className="flex-1">
           <h3 
             className="text-2xl font-bold mb-2"
