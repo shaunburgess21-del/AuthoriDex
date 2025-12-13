@@ -85,6 +85,20 @@ Preferred communication style: Simple, everyday language.
 
 ## Page Structure
 
+### Home Page (/)
+The main dashboard displaying trending celebrities and influencers.
+
+**Sections:**
+1. **Hero Section** - Animated branding with call-to-action
+2. **Trend Widgets** - Three cards showing Daily Movers, Weekly Gainers, Weekly Droppers
+3. **Prediction Markets Teaser** - Carousel preview of Head-to-Head battles
+   - Title: "Prediction Markets" with subtitle "Predict the next big move. Win reputation."
+   - "View All Markets" button links to /predict
+   - 3 featured battles: Musk vs Zuckerberg, Swift vs Beyoncé, Drake vs Kendrick
+   - Uses react-slick carousel (3 desktop, 2 tablet, 1 mobile with center mode)
+   - Purple glow hover effect on cards
+4. **Leaderboard** - Filterable/sortable list of all trending people
+
 ### Vote Page (/vote)
 The Vote page provides three distinct voting mechanisms for community engagement:
 
