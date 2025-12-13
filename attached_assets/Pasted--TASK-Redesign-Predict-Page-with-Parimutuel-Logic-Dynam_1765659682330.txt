@@ -1,0 +1,65 @@
+**TASK: Redesign "Predict" Page with Parimutuel Logic & Dynamic Onboarding**
+
+**1. BRAND & AESTHETIC GUIDELINES (STRICT ADHERENCE)**
+*   **Color Palette:** PRESERVE existing FameDex dark theme (`gray-950`, `gray-900`), blue accents, and gradients. Do NOT introduce new random colors.
+*   **Typography:** Maintain current font styles (Inter/Roboto), sizes, and weights.
+*   **Avatars:** MUST be **Square with Rounded Corners** (`rounded-lg` for 48px, `rounded-md` for 32px). NO circular avatars.
+*   **Navigation:** Keep existing top nav and footer exactly as is.
+
+**2. THE LOGIC LAYER: PARIMUTUEL / POOL BETTING (CRITICAL CONTEXT)**
+*   **The Concept:** Understand that this is **NOT** fixed-odds betting (like a casino). It is **Parimutuel (Pool) Betting**. Users bet against each other, not the house.
+*   **Visual Implication:**
+    *   **Show the Pool:** Every single prediction card MUST display a **"Total Pool: [Amount]"** metric (e.g., "Pool: 12,450 Credits"). This is the most important data point.
+    *   **Dynamic Odds:** Display "Est. Return" or "Multiplier" (e.g., "2.5x") instead of fixed probability, as this changes based on how many people bet.
+    *   **Social Proof:** Visually emphasize that users are contributing to a growing pot.
+
+**3. UX/UI ENHANCEMENTS & LAYOUT**
+
+**A. The "Smart" Hero Section & Onboarding**
+*   **Clean Header:** A simple, eye-catching gradient banner with "Prediction Markets".
+*   **Status Bar:** Display "TEST MODE", User's Virtual Balance, and Active Predictions Count.
+*   **Dynamic "How it Works":**
+    *   **CHANGE:** Do NOT put the "3-step guide" statically on the page (it takes up too much space).
+    *   **IMPLEMENTATION:** Create a **"First-Time Visitor Modal"** that pops up automatically only for new users.
+    *   **Recall:** Add a small "How it works" text link or "Help" icon in the Hero section to manually re-open this modal if needed.
+
+**B. The Four Prediction Categories (Horizontal Carousels)**
+Use `react-slick` for smooth scrolling (3 cards desktop, 2 tablet, 1 mobile).
+
+*   **1. Weekly Up/Down:**
+    *   *Context:* Will the celebrity's trend score be higher or lower?
+    *   *Card:* Square Avatar, Name, Sparkline Graph, Current Score.
+    *   *Action:* Green "Up" / Red "Down" buttons with current Multipliers.
+    *   *Data:* "Pool: [Amount]".
+
+*   **2. Head-to-Head & Group Battles:**
+    *   *Context:* Curated matchups (e.g., "Drake vs Kendrick").
+    *   *Card:* Two Avatars side-by-side, "VS" badge in center.
+    *   *Visuals:* Progress bars showing the split of the pool (e.g., 60% vs 40%).
+    *   *Data:* "Total Pool" displayed prominently.
+
+*   **3. Category Races:**
+    *   *Context:* Competition within sectors (Music, Tech, Sports).
+    *   *Card:* Category Badge, Race Title, Top 3 Contenders (small avatars), Countdown Timer.
+
+*   **4. Top Gainer (Category Specific):**
+    *   *Context:* Who will gain the most raw points in 7 days?
+    *   *Card:* Leaderboard style preview showing the current Top 3 leaders in the pool.
+
+**C. Interaction & "View All" Modal**
+*   **Hover Effects:**
+    *   Card lifts (`translate-y`), border glows with accent color, and shadow increases.
+    *   **Z-Index:** Use `relative z-0 hover:z-10` so the card pops *over* section headers/neighbors.
+*   **"View All" Modal:**
+    *   Clicking "View All" opens a full-screen overlay (`bg-black/80 backdrop-blur-sm`).
+    *   Shows ALL predictions for that category in a Grid.
+    *   Includes Search Bar and Close Button. No page navigation required.
+
+**4. TECHNICAL REQUIREMENTS**
+*   **Package:** Install `slick-carousel` and `slick-carousel/slick.css`.
+*   **Mobile First:** Ensure touch targets are large enough. Carousels must be swipeable.
+*   **Structure:** Keep `ViewAllModal` as a separate component to keep code clean.
+*   **Colors:** Background `gray-950`, Cards `gray-800` gradient, Borders `gray-700`.
+
+**Summary of Changes:**
+Build a Parimutuel-focused interface where "Pool Size" is key. Move the static tutorial to a "First-Time Modal". Use horizontal carousels for all 4 categories. Keep the FameDex "Dark Mode" brand identity.
