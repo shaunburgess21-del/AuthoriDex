@@ -1,7 +1,7 @@
 import { HeroSection } from "@/components/HeroSection";
 import { SearchBar } from "@/components/SearchBar";
 import { TrendWidget } from "@/components/TrendWidget";
-import { TrendingBarChart } from "@/components/TrendingBarChart";
+import { PredictionMarketsTeaser } from "@/components/PredictionMarketsTeaser";
 import { LeaderboardRow } from "@/components/LeaderboardRow";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { FilterDropdown } from "@/components/FilterDropdown";
@@ -140,10 +140,8 @@ export default function HomePage() {
           <TrendWidget title="Weekly Droppers" people={topDroppers} type="dropper" onPersonClick={handleVisitProfile} />
         </div>
 
-        {/* Trending Bar Chart Widget */}
-        <div className="mb-12">
-          <TrendingBarChart people={allPeople} />
-        </div>
+        {/* Prediction Markets Teaser */}
+        <PredictionMarketsTeaser />
 
         <Card id="leaderboard">
           <CardHeader className="flex flex-col sm:flex-row sm:items-center gap-4 space-y-0 pb-4">

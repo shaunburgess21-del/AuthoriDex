@@ -1,0 +1,52 @@
+Task: Replace Home Page 3D Chart with "Trending Battles" Carousel
+1. The Objective
+We are removing the static 3D Bar Chart ("Most Influential People Worldwide") from the Home Page. In its place, we will insert a "Prediction Markets Teaser" section that displays a simplified version of the "Head-to-Head Battles" carousel.
+2. Location & Removal
+
+Target: Locate the section containing the 3D Bar Chart (likely between the "Weekly Movers" cards and the main "Leaderboard").
+Action: Completely remove the 3D Chart component and its container.
+Replacement: Insert the new PredictionTeaser section in this exact spot.
+
+3. Section Header Design
+
+Layout: Flex row with space-between.
+Left Side:
+
+Title: "Prediction Markets" (H2, bold, white).
+Subtitle: "Predict the next big move. Win reputation." (Small, gray-400).
+
+
+Right Side:
+
+Button: "View All Markets →"
+Style: Ghost button or subtle outline (text-blue-400 hover:text-blue-300).
+Action: Must link directly to the /predict page.
+
+
+Mobile: On mobile, stack the title and button, or keep the button small on the right.
+
+4. The "Trending Battles" Carousel (The Content)
+
+Component: Reuse the HeadToHeadCard logic we built for the Predict page, but strictly for this carousel.
+Data: Mock 3 high-profile matchups (e.g., "Elon vs Zuck", "Taylor vs Beyoncé", "Kendrick vs Drake").
+Carousel Settings (react-slick):
+
+Desktop: Show 3 cards.
+Tablet: Show 2 cards.
+Mobile: Show 1 card (Center Mode, so the user sees part of the next card peeking through).
+
+
+Visual Style:
+
+Keep the cards Dark and Premium (matching the Predict page style).
+Ensure the "VS" badge and "Pool Size" are clearly visible.
+Hover: Keep the "Royal Purple" border glow effect on hover—this helps distinguish these "Interactive" cards from the static "Weekly Mover" cards above them.
+
+
+
+5. Technical Constraints
+
+Ensure the new section has the same max-width and margins as the Leaderboard below it so it aligns perfectly.
+Mobile Responsiveness: The carousel must be swipeable on touch devices.
+Performance: Ensure the carousel loads instantly (no layout shift).
+

@@ -3,11 +3,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 interface PersonAvatarProps {
   name: string;
   avatar?: string | null;
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "xs" | "sm" | "md" | "lg" | "xl";
 }
 
 export function PersonAvatar({ name, avatar, size = "md" }: PersonAvatarProps) {
   const sizeClass = 
+    size === "xs" ? "h-6 w-6" :
     size === "sm" ? "h-10 w-10" : 
     size === "lg" ? "h-16 w-16" :
     size === "xl" ? "h-48 w-48" :
