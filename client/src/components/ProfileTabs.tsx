@@ -12,9 +12,9 @@ const tabs = [
 
 export function ProfileTabs({ activeTab, onTabChange }: ProfileTabsProps) {
   return (
-    <div className="flex items-center justify-center mb-8" data-testid="profile-tabs">
-      {/* Dark muted track container */}
-      <div className="w-full max-w-md grid grid-cols-3 gap-2 p-1.5 bg-gray-900/50 dark:bg-gray-900/60 rounded-2xl border border-gray-800/50 dark:border-gray-700/30">
+    <div className="mb-8" data-testid="profile-tabs">
+      {/* Card container with toggle buttons */}
+      <div className="w-full grid grid-cols-3 gap-2 p-1.5 bg-muted rounded-lg border border-border">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
