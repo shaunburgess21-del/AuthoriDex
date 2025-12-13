@@ -1,0 +1,27 @@
+**TASK: Visual Polish - Apply "Royal Purple" Theme to Predict Page Only**
+
+**1. SCOPE**
+*   **Target:** Apply these changes **ONLY** to the `/predict` page components.
+*   **Goal:** Differentiate the "Predict" section (The Arena) from the rest of the site by switching the primary accent color from Blue to **Royal Purple**.
+
+**2. COLOR PALETTE UPDATE (Predict Page Only)**
+*   **Action:** Find all elements on the Predict page currently using `blue-500`, `blue-600`, or blue text accents.
+*   **Replace With:** A rich "Royal Purple" palette.
+    *   *Reference:* Use `violet-600` or `purple-600` as the base.
+    *   *Gradients:* Use `from-violet-600 to-fuchsia-600` for buttons or active states to give it depth.
+
+**3. CARD STYLING: THE "SPOTLIGHT" BORDER**
+*   **Requirement:** Instead of a solid border, apply a **Gradient Border** to all Prediction Cards (Weekly, Head-to-Head, etc.).
+*   **Visual Style:** The border should be bright/glowing in the Top-Left corner and fade out (lower opacity) towards the Bottom-Right corner.
+*   **Reference:** This should match the logic used for the "Weekly Movers" card hover effect on the Home Page, but applied permanently (or as the primary style) in Purple.
+*   **Implementation Hint (Tailwind):**
+    *   Use a wrapper `div` or `border-image` logic.
+    *   Example logic: `bg-gradient-to-br from-violet-500/80 via-purple-500/20 to-transparent` applied to the border/ring.
+    *   Ensure the background of the card remains dark (`gray-900`/`black`) so the content sits on top of this glowing border.
+
+**4. INTERACTION STATES**
+*   **Buttons:** Change "Up/Down" or "Bet" buttons to use the Purple theme (unless "Up" needs to stay Green and "Down" needs to stay Red for financial clarity—in that case, keep Green/Red for logic, but use Purple for the "Place Prediction" or "View All" buttons).
+*   **Active Tabs/Filters:** When a category is selected (e.g., "Music"), the active pill should be Purple.
+
+**Summary:**
+Make the Predict page feel like a high-stakes "VIP Lounge" by washing it in Royal Purple accents and giving every card a premium, fading gradient border.

@@ -279,7 +279,7 @@ function FirstTimeModal({ open, onClose }: { open: boolean; onClose: () => void 
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <Zap className="h-6 w-6 text-primary" />
+            <Zap className="h-6 w-6 text-violet-500" />
             Welcome to Prediction Markets
           </DialogTitle>
           <DialogDescription>
@@ -289,8 +289,8 @@ function FirstTimeModal({ open, onClose }: { open: boolean; onClose: () => void 
         
         <div className="space-y-4 py-4">
           <div className="flex items-start gap-3">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <Target className="h-4 w-4 text-primary" />
+            <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+              <Target className="h-4 w-4 text-violet-500" />
             </div>
             <div>
               <h4 className="font-semibold text-sm">1. Pick a Market</h4>
@@ -301,8 +301,8 @@ function FirstTimeModal({ open, onClose }: { open: boolean; onClose: () => void 
           </div>
           
           <div className="flex items-start gap-3">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <Users className="h-4 w-4 text-primary" />
+            <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+              <Users className="h-4 w-4 text-violet-500" />
             </div>
             <div>
               <h4 className="font-semibold text-sm">2. Back Your Prediction</h4>
@@ -313,8 +313,8 @@ function FirstTimeModal({ open, onClose }: { open: boolean; onClose: () => void 
           </div>
           
           <div className="flex items-start gap-3">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <Trophy className="h-4 w-4 text-primary" />
+            <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+              <Trophy className="h-4 w-4 text-violet-500" />
             </div>
             <div>
               <h4 className="font-semibold text-sm">3. Win from the Pool</h4>
@@ -324,14 +324,14 @@ function FirstTimeModal({ open, onClose }: { open: boolean; onClose: () => void 
             </div>
           </div>
           
-          <Card className="p-3 bg-primary/5 border-primary/20">
+          <Card className="p-3 bg-violet-500/5 border-violet-500/20">
             <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-primary">Parimutuel System:</span> You're betting against other users, not the house. The bigger the pool, the bigger the potential returns!
+              <span className="font-semibold text-violet-500">Parimutuel System:</span> You're betting against other users, not the house. The bigger the pool, the bigger the potential returns!
             </p>
           </Card>
         </div>
         
-        <Button onClick={onClose} className="w-full" data-testid="button-get-started">
+        <Button onClick={onClose} className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white" data-testid="button-get-started">
           Get Started
         </Button>
       </DialogContent>
@@ -381,12 +381,22 @@ function ViewAllModal({
   );
 }
 
+function PredictCard({ children, className = "", testId }: { children: React.ReactNode; className?: string; testId?: string }) {
+  return (
+    <div className="relative p-[1px] rounded-xl bg-gradient-to-br from-violet-500/80 via-purple-500/30 to-transparent">
+      <Card 
+        className={`p-4 bg-card rounded-xl hover:translate-y-[-2px] hover:shadow-lg hover:shadow-violet-500/20 transition-all duration-200 relative z-0 hover:z-10 ${className}`}
+        data-testid={testId}
+      >
+        {children}
+      </Card>
+    </div>
+  );
+}
+
 function WeeklyUpDownCard({ market }: { market: PredictionMarket }) {
   return (
-    <Card 
-      className="p-4 hover:translate-y-[-2px] hover:shadow-lg hover:border-primary/30 transition-all duration-200 relative z-0 hover:z-10 min-w-[280px]"
-      data-testid={`card-market-${market.id}`}
-    >
+    <PredictCard testId={`card-market-${market.id}`} className="min-w-[280px]">
       <div className="flex items-center gap-3 mb-3">
         <PersonAvatar name={market.personName} avatar={market.personAvatar} size="md" />
         <div className="flex-1 min-w-0">
@@ -446,16 +456,13 @@ function WeeklyUpDownCard({ market }: { market: PredictionMarket }) {
           Down {market.downMultiplier}x
         </Button>
       </div>
-    </Card>
+    </PredictCard>
   );
 }
 
 function HeadToHeadCard({ market }: { market: HeadToHeadMarket }) {
   return (
-    <Card 
-      className="p-4 hover:translate-y-[-2px] hover:shadow-lg hover:border-primary/30 transition-all duration-200 relative z-0 hover:z-10 min-w-[300px]"
-      data-testid={`card-h2h-${market.id}`}
-    >
+    <PredictCard testId={`card-h2h-${market.id}`} className="min-w-[300px]">
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary" className="text-xs">{market.category}</Badge>
         <span className="text-xs text-muted-foreground flex items-center gap-1">
@@ -471,8 +478,8 @@ function HeadToHeadCard({ market }: { market: HeadToHeadMarket }) {
           <p className="text-xs text-green-500 font-mono">{market.person1Percent}%</p>
         </div>
         
-        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-          <span className="text-sm font-bold text-primary">VS</span>
+        <div className="h-12 w-12 rounded-full bg-violet-500/10 flex items-center justify-center">
+          <span className="text-sm font-bold text-violet-500">VS</span>
         </div>
         
         <div className="text-center">
@@ -494,7 +501,7 @@ function HeadToHeadCard({ market }: { market: HeadToHeadMarket }) {
       </div>
       
       <div className="text-center mb-3">
-        <span className="text-sm font-semibold text-primary">
+        <span className="text-sm font-semibold text-violet-500">
           Pool: {market.totalPool.toLocaleString()} credits
         </span>
       </div>
@@ -507,16 +514,13 @@ function HeadToHeadCard({ market }: { market: HeadToHeadMarket }) {
           {market.person2.name.split(" ")[0]}
         </Button>
       </div>
-    </Card>
+    </PredictCard>
   );
 }
 
 function CategoryRaceCard({ market }: { market: CategoryRaceMarket }) {
   return (
-    <Card 
-      className="p-4 hover:translate-y-[-2px] hover:shadow-lg hover:border-primary/30 transition-all duration-200 relative z-0 hover:z-10 min-w-[280px]"
-      data-testid={`card-race-${market.id}`}
-    >
+    <PredictCard testId={`card-race-${market.id}`} className="min-w-[280px]">
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary" className="text-xs">{market.category}</Badge>
         <Badge variant="outline" className="text-xs">
@@ -532,7 +536,7 @@ function CategoryRaceCard({ market }: { market: CategoryRaceMarket }) {
           <div key={contender.name} className="flex items-center">
             <div className="relative">
               <PersonAvatar name={contender.name} avatar={contender.avatar} size="sm" />
-              <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">
+              <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-violet-500 text-white text-[10px] flex items-center justify-center font-bold">
                 {i + 1}
               </div>
             </div>
@@ -542,25 +546,22 @@ function CategoryRaceCard({ market }: { market: CategoryRaceMarket }) {
       </div>
       
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold text-primary">
+        <span className="text-sm font-semibold text-violet-500">
           Pool: {market.totalPool.toLocaleString()}
         </span>
       </div>
       
-      <Button size="sm" variant="outline" className="w-full">
+      <Button size="sm" className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white">
         Enter Race
         <ChevronRight className="h-4 w-4 ml-1" />
       </Button>
-    </Card>
+    </PredictCard>
   );
 }
 
 function TopGainerCard({ market }: { market: TopGainerMarket }) {
   return (
-    <Card 
-      className="p-4 hover:translate-y-[-2px] hover:shadow-lg hover:border-primary/30 transition-all duration-200 relative z-0 hover:z-10 min-w-[280px]"
-      data-testid={`card-gainer-${market.id}`}
-    >
+    <PredictCard testId={`card-gainer-${market.id}`} className="min-w-[280px]">
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary" className="text-xs">{market.category}</Badge>
         <span className="text-xs text-muted-foreground">7-day gain</span>
@@ -580,16 +581,16 @@ function TopGainerCard({ market }: { market: TopGainerMarket }) {
       </div>
       
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold text-primary">
+        <span className="text-sm font-semibold text-violet-500">
           Pool: {market.totalPool.toLocaleString()}
         </span>
       </div>
       
-      <Button size="sm" variant="outline" className="w-full">
+      <Button size="sm" className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white">
         Place Prediction
         <ChevronRight className="h-4 w-4 ml-1" />
       </Button>
-    </Card>
+    </PredictCard>
   );
 }
 
@@ -638,7 +639,7 @@ function CarouselSection({
           variant="ghost" 
           size="sm" 
           onClick={onViewAll}
-          className="text-primary"
+          className="text-violet-500"
         >
           View All
           <ChevronRight className="h-4 w-4 ml-1" />
@@ -707,7 +708,7 @@ export default function PredictPage() {
                 <Button variant="ghost" size="sm">Vote</Button>
               </Link>
               <Link href="/predict">
-                <Button variant="ghost" size="sm" className="text-primary">Predict</Button>
+                <Button variant="ghost" size="sm" className="text-violet-500">Predict</Button>
               </Link>
               <Link href="/me">
                 <Button variant="ghost" size="sm">Me</Button>
@@ -718,10 +719,10 @@ export default function PredictPage() {
         </div>
       </header>
       <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <div className="mb-6 bg-gradient-to-r from-primary/20 via-primary/10 to-transparent rounded-xl p-6">
+        <div className="mb-6 bg-gradient-to-r from-violet-500/20 via-violet-500/10 to-transparent rounded-xl p-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-3">
-              <Zap className="h-8 w-8 text-primary" />
+              <Zap className="h-8 w-8 text-violet-500" />
               <h1 className="text-3xl font-serif font-bold" data-testid="text-predict-title">
                 Prediction Markets
               </h1>
@@ -743,11 +744,11 @@ export default function PredictPage() {
         <Card className="p-4 mb-8 bg-muted/30 border-muted">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 px-3 py-1">
+              <Badge variant="outline" className="bg-violet-500/10 text-violet-500 border-violet-500/30 px-3 py-1">
                 TEST MODE
               </Badge>
               <div className="flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-primary" />
+                <Wallet className="h-4 w-4 text-violet-500" />
                 <span className="font-mono font-bold">{balance.toLocaleString()}</span>
                 <span className="text-xs text-muted-foreground">credits</span>
               </div>
@@ -879,7 +880,7 @@ export default function PredictPage() {
         }
         .predict-carousel .slick-prev:before,
         .predict-carousel .slick-next:before {
-          color: hsl(var(--primary));
+          color: rgb(139 92 246);
           font-size: 24px;
         }
         .predict-carousel .slick-disabled:before {
