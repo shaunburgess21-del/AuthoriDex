@@ -717,7 +717,6 @@ export default function PredictPage() {
           </div>
         </div>
       </header>
-
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <div className="mb-6 bg-gradient-to-r from-primary/20 via-primary/10 to-transparent rounded-xl p-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
@@ -767,7 +766,7 @@ export default function PredictPage() {
           onViewAll={() => setViewAllCategory("weekly")}
         >
           {mockMarkets.map((market) => (
-            <div key={market.id} className="px-2">
+            <div key={market.id} className="px-2 pt-[10px] pb-[10px]">
               <WeeklyUpDownCard market={market} />
             </div>
           ))}
@@ -815,12 +814,10 @@ export default function PredictPage() {
           </p>
         </div>
       </div>
-
       <FirstTimeModal 
         open={showFirstTimeModal} 
         onClose={handleCloseFirstTimeModal} 
       />
-
       <ViewAllModal
         open={viewAllCategory === "weekly"}
         onClose={() => setViewAllCategory(null)}
@@ -830,7 +827,6 @@ export default function PredictPage() {
           <WeeklyUpDownCard key={market.id} market={market} />
         ))}
       </ViewAllModal>
-
       <ViewAllModal
         open={viewAllCategory === "h2h"}
         onClose={() => setViewAllCategory(null)}
@@ -840,7 +836,6 @@ export default function PredictPage() {
           <HeadToHeadCard key={market.id} market={market} />
         ))}
       </ViewAllModal>
-
       <ViewAllModal
         open={viewAllCategory === "races"}
         onClose={() => setViewAllCategory(null)}
@@ -850,7 +845,6 @@ export default function PredictPage() {
           <CategoryRaceCard key={market.id} market={market} />
         ))}
       </ViewAllModal>
-
       <ViewAllModal
         open={viewAllCategory === "gainers"}
         onClose={() => setViewAllCategory(null)}
@@ -860,7 +854,6 @@ export default function PredictPage() {
           <TopGainerCard key={market.id} market={market} />
         ))}
       </ViewAllModal>
-
       <style>{`
         .predict-carousel .slick-track {
           display: flex;
