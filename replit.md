@@ -119,10 +119,44 @@ The Vote page provides three distinct voting mechanisms for community engagement
 - Mobile: Fixed bottom nav with Heart icon for Vote
 
 ### Predict Page (/predict)
-Prediction markets with test mode (virtual 10,000 credits):
-- Weekly Up/Down markets
-- Head-to-Head Battles
-- Category Races
+Parimutuel prediction markets with test mode (virtual 10,000 credits):
+
+**First-Time Visitor Experience:**
+- Onboarding modal on first visit (localStorage key: `famedex_predict_first_visit`)
+- Explains parimutuel system in 3 steps: Pick a Market, Back Your Prediction, Win from the Pool
+- "How it works" link in hero reopens the modal
+
+**Hero Section:**
+- Gradient background with FameDex branding
+- Status bar showing: TEST MODE badge, current balance, active predictions count
+- "How it works" link to open onboarding modal
+
+**Market Sections (Horizontal Carousels using react-slick):**
+1. **Weekly Up/Down Markets** - Predict if a person's score will go up or down
+   - Shows current score, 7-day change, pool split visualization
+   - Dynamic multipliers (e.g., "Up 1.7x", "Down 2.3x")
+   - Green Up button, Red Down button
+2. **Head-to-Head Battles** - Pick who will gain more this week
+   - VS format with two person avatars
+   - Pool split bar showing betting percentages
+   - Category badges (Music, Tech, Sports)
+3. **Category Races** - Predict top gainer in a category
+   - Shows top 3 contenders with ranking badges
+   - Time remaining countdown
+4. **Top Gainer Predictions** - Leaderboard-style predictions
+   - Shows current leaders with point gains
+   - Category-based grouping
+
+**ViewAllModal:**
+- Accessible via "View All" button on each carousel section
+- Full-screen modal with search functionality
+- Grid display of all cards in that category
+
+**Technical Details:**
+- Carousel: react-slick with responsive breakpoints (3 slides desktop, 2 tablet, 1 mobile)
+- Pool display on every card with "Pool: X credits" format
+- Hover effects: translate-y-[-2px] with shadow and border highlight
+- Cards maintain square avatars with rounded corners (PersonAvatar component)
 
 ### Me Page (/me)
 User profile showing votes and favorites (placeholder for Supabase auth integration).

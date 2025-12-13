@@ -431,7 +431,7 @@ function WeeklyUpDownCard({ market }: { market: PredictionMarket }) {
       <div className="flex gap-2">
         <Button 
           size="sm" 
-          className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+          className="flex-1 bg-green-600 text-white"
           data-testid={`button-up-${market.id}`}
         >
           <TrendingUp className="h-4 w-4 mr-1" />
@@ -439,7 +439,7 @@ function WeeklyUpDownCard({ market }: { market: PredictionMarket }) {
         </Button>
         <Button 
           size="sm" 
-          className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+          className="flex-1 bg-red-600 text-white"
           data-testid={`button-down-${market.id}`}
         >
           <TrendingDown className="h-4 w-4 mr-1" />
@@ -500,10 +500,10 @@ function HeadToHeadCard({ market }: { market: HeadToHeadMarket }) {
       </div>
       
       <div className="flex gap-2">
-        <Button size="sm" variant="outline" className="flex-1 border-green-500/30 text-green-500 hover:bg-green-500/10">
+        <Button size="sm" variant="outline" className="flex-1 border-green-500/30 text-green-500">
           {market.person1.name.split(" ")[0]}
         </Button>
-        <Button size="sm" variant="outline" className="flex-1 border-red-500/30 text-red-500 hover:bg-red-500/10">
+        <Button size="sm" variant="outline" className="flex-1 border-red-500/30 text-red-500">
           {market.person2.name.split(" ")[0]}
         </Button>
       </div>
