@@ -366,7 +366,7 @@ function ViewAllModal({
             placeholder="Search markets..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="w-full pl-10 pr-4 py-2 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
             data-testid="input-search-markets"
           />
         </div>
@@ -729,7 +729,7 @@ export default function PredictPage() {
             </div>
             <button 
               onClick={handleOpenHowItWorks}
-              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors"
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-violet-500 transition-colors"
               data-testid="button-how-it-works"
             >
               <HelpCircle className="h-4 w-4" />
