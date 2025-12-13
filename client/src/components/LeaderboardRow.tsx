@@ -1,12 +1,11 @@
 import { TrendingPerson } from "@shared/schema";
 import { PersonAvatar } from "./PersonAvatar";
 import { RankBadge } from "./RankBadge";
-import { TrendBadge } from "./TrendBadge";
 import { AnimatedSentimentVotingWidget } from "./AnimatedSentimentVotingWidget";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { ExternalLink, X } from "lucide-react";
 import { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 // Exact colors from sentiment widget - vivid gradient palette
 const SEGMENT_COLORS = [
@@ -29,13 +28,12 @@ const getSentimentColor = (value: number): string => {
 
 interface LeaderboardRowProps {
   person: TrendingPerson;
-  expanded: boolean;
-  onToggle: () => void;
   onVisitProfile: () => void;
 }
 
-export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: LeaderboardRowProps) {
+export function LeaderboardRow({ person, onVisitProfile }: LeaderboardRowProps) {
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
+  const [voteModalOpen, setVoteModalOpen] = useState(false);
 
   // Load sentiment score from localStorage
   useEffect(() => {
@@ -124,62 +122,60 @@ export function LeaderboardRow({ person, expanded, onToggle, onVisitProfile }: L
           </p>
         </div>
         <Button 
-          variant={expanded ? "default" : "secondary"} 
+          variant="secondary" 
           size="sm"
           className="font-mono font-bold text-sm min-w-14 justify-center"
           onClick={(e) => {
             e.stopPropagation();
-            onToggle();
+            setVoteModalOpen(true);
           }}
           data-testid={`button-expand-${person.id}`}
         >
           Vote
         </Button>
       </div>
-      {/* Expandable Content */}
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="overflow-hidden"
-          >
-            <div className="px-4 pb-6 pt-2 bg-muted/30">
-              {/* Bio and Visit Profile Button */}
-              {person.bio && (
-                <div className="flex gap-4 mb-6 items-start">
-                  <p className="text-sm text-muted-foreground flex-1" data-testid={`text-bio-${person.id}`}>
-                    {person.bio}
-                  </p>
-                  <Button 
-                    variant="default" 
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onVisitProfile();
-                    }}
-                    data-testid={`button-visit-profile-${person.id}`}
-                    className="gap-2 whitespace-nowrap"
-                  >
-                    Visit Profile
-                    <ExternalLink className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
 
-              {/* Sentiment Voting Widget */}
-              <div className="mb-6">
-                <AnimatedSentimentVotingWidget 
-                  personId={person.id} 
-                  personName={person.name}
-                />
+      {/* Vote Modal */}
+      <Dialog open={voteModalOpen} onOpenChange={setVoteModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <PersonAvatar name={person.name} avatar={person.avatar} size="sm" />
+              <span>Rate {person.name}</span>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Bio and Visit Profile Button */}
+            {person.bio && (
+              <div className="flex gap-4 items-start">
+                <p className="text-sm text-muted-foreground flex-1" data-testid={`text-bio-${person.id}`}>
+                  {person.bio}
+                </p>
+                <Button 
+                  variant="default" 
+                  size="sm"
+                  onClick={() => {
+                    setVoteModalOpen(false);
+                    onVisitProfile();
+                  }}
+                  data-testid={`button-visit-profile-${person.id}`}
+                  className="gap-2 whitespace-nowrap"
+                >
+                  Visit Profile
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            )}
+
+            {/* Sentiment Voting Widget */}
+            <AnimatedSentimentVotingWidget 
+              personId={person.id} 
+              personName={person.name}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

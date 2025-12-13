@@ -20,7 +20,6 @@ export default function HomePage() {
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState("rank");
   const [visibleCount, setVisibleCount] = useState(20);
-  const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null);
   const [, setLocation] = useLocation();
 
   // Build query params
@@ -57,10 +56,6 @@ export default function HomePage() {
     queryKey: ['/api/trending/movers/daily'],
     refetchInterval: 5 * 60 * 1000,
   });
-
-  const handleToggleExpand = (personId: string) => {
-    setExpandedPersonId(prev => prev === personId ? null : personId);
-  };
 
   const handleVisitProfile = (personId: string) => {
     setLocation(`/person/${personId}`);
@@ -218,8 +213,6 @@ export default function HomePage() {
                 <LeaderboardRow
                   key={person.id}
                   person={person}
-                  expanded={expandedPersonId === person.id}
-                  onToggle={() => handleToggleExpand(person.id)}
                   onVisitProfile={() => handleVisitProfile(person.id)}
                 />
               ))}
