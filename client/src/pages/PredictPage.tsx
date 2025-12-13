@@ -791,7 +791,7 @@ export default function PredictPage() {
           onViewAll={() => setViewAllCategory("races")}
         >
           {categoryRaceMarkets.map((market) => (
-            <div key={market.id} className="px-2">
+            <div key={market.id} className="px-2 pt-[10px] pb-[10px]">
               <CategoryRaceCard market={market} />
             </div>
           ))}
