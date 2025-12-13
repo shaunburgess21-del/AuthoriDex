@@ -147,44 +147,56 @@ The Vote page is styled as a "Community Town Hall" with cyan/teal accent theme f
 - All interactive elements have data-testid attributes
 
 ### Predict Page (/predict)
-Parimutuel prediction markets with test mode (virtual 10,000 credits):
+Parimutuel prediction markets with test mode (virtual 10,000 credits). Styled with **Royal Purple theme** (violet/fuchsia accents).
 
 **First-Time Visitor Experience:**
 - Onboarding modal on first visit (localStorage key: `famedex_predict_first_visit`)
 - Explains parimutuel system in 3 steps: Pick a Market, Back Your Prediction, Win from the Pool
 - "How it works" link in hero reopens the modal
+- Modal uses violet-500 accent colors for icons and highlighted text
 
 **Hero Section:**
-- Gradient background with FameDex branding
-- Status bar showing: TEST MODE badge, current balance, active predictions count
-- "How it works" link to open onboarding modal
+- Violet gradient background (`from-violet-500/20 via-violet-500/10 to-transparent`)
+- Purple Zap icon (`text-violet-500`)
+- Status bar showing: TEST MODE badge (violet themed), current balance with purple Wallet icon, active predictions count
+- "How it works" link with `hover:text-violet-500`
 
 **Market Sections (Horizontal Carousels using react-slick):**
 1. **Weekly Up/Down Markets** - Predict if a person's score will go up or down
    - Shows current score, 7-day change, pool split visualization
    - Dynamic multipliers (e.g., "Up 1.7x", "Down 2.3x")
-   - Green Up button, Red Down button
+   - Green Up button, Red Down button (kept for financial clarity)
 2. **Head-to-Head Battles** - Pick who will gain more this week
-   - VS format with two person avatars
+   - VS badge with violet theme (`bg-violet-500/10 text-violet-500`)
+   - Pool text in violet-500
    - Pool split bar showing betting percentages
-   - Category badges (Music, Tech, Sports)
 3. **Category Races** - Predict top gainer in a category
-   - Shows top 3 contenders with ranking badges
+   - Ranking badges in violet-500
+   - "Enter Race" button with purple gradient (`from-violet-600 to-fuchsia-600`)
    - Time remaining countdown
 4. **Top Gainer Predictions** - Leaderboard-style predictions
-   - Shows current leaders with point gains
-   - Category-based grouping
+   - Pool text in violet-500
+   - "Place Prediction" button with purple gradient
+
+**PredictCard Component:**
+- Wrapper component providing gradient spotlight border effect
+- Border: `from-violet-500/80 via-purple-500/30 to-transparent`
+- Hover: `shadow-violet-500/20` purple glow effect
+- Used by all prediction card types (Weekly, H2H, Category Race, Top Gainer)
 
 **ViewAllModal:**
-- Accessible via "View All" button on each carousel section
-- Full-screen modal with search functionality
+- Accessible via "View All" button (violet-500 text) on each carousel section
+- Full-screen modal with search functionality (focus ring: violet-500/50)
 - Grid display of all cards in that category
 
 **Technical Details:**
+- Royal Purple theme: violet-500, violet-600, fuchsia-600 accent colors
 - Carousel: react-slick with responsive breakpoints (3 slides desktop, 2 tablet, 1 mobile)
-- Pool display on every card with "Pool: X credits" format
-- Hover effects: translate-y-[-2px] with shadow and border highlight
+- Carousel arrows styled in violet (rgb(139 92 246))
+- Pool display on every card with "Pool: X credits" format in violet-500
+- Hover effects: translate-y-[-2px] with purple shadow glow
 - Cards maintain square avatars with rounded corners (PersonAvatar component)
+- Nav link "Predict" highlighted in violet-500
 
 ### Me Page (/me)
 User profile showing votes and favorites (placeholder for Supabase auth integration).
