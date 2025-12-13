@@ -1,0 +1,31 @@
+**TASK: Overhaul "Trend History" Chart - Financial Style**
+
+**1. VISUAL STYLE: "CRYPTO MARKET" AESTHETIC**
+*   **Line Style:** Change the line curve from `monotone` (smooth) to `linear` (jagged/sharp). It must look like a stock ticker, not a bezier curve.
+*   **Gradient Fill:** Add a rich gradient area below the line (similar to the attached Figma design).
+    *   *Color:* Use the primary Blue accent.
+    *   *Gradient:* Start at `opacity-50` at the line and fade to `opacity-0` (transparent) at the bottom axis.
+*   **Grid:** Make grid lines extremely subtle (`stroke-gray-800`) or remove vertical lines entirely, keeping only horizontal guides.
+
+**2. INTELLIGENT X-AXIS (RESPONSIVE TICKS)**
+*   **Problem:** The dates currently bunch up or look messy.
+*   **Solution:** Implement a "Smart Tick" logic based on screen width.
+    *   **Mobile:** Force exactly 4 ticks (Start, 33%, 66%, End).
+    *   **Desktop:** Allow 6-8 ticks.
+*   **Date Formatting:**
+    *   If `1D` selected: Show Hours (e.g., "10 AM", "2 PM").
+    *   If `7D` or `30D`: Show "Day Mon" (e.g., "24 Nov").
+    *   If `6M` or `YTD`: Show Months (e.g., "Nov", "Dec").
+
+**3. INTERACTION: "THE GOOGLE FINANCE HOVER"**
+*   **Behavior:** When the user hovers (or drags finger on mobile) over the chart:
+    1.  **Vertical Crosshair:** Show a vertical line following the cursor.
+    2.  **Dynamic Tooltip:** Instead of just showing the score, show the **Delta (Change)**.
+        *   *Logic:* Calculate the % change between the *Start of the Chart* (or the previous closing price) and the *Current Hover Position*.
+        *   *Display:* "Score: 515,809 (+12.4%)"
+    3.  **The "Gap" Highlight (Bonus):** If possible, shade the area between the *Start of the Graph* and the *Current Cursor* to visually represent "Growth-to-Date" as the user scrolls across.
+
+**4. TECHNICAL IMPLEMENTATION (Recharts)**
+*   Use `<AreaChart>` instead of `<LineChart>` to easily handle the gradient fill.
+*   Use `<defs>` to define the `linearGradient` for the blue fill.
+*   Ensure the Y-Axis domain is `['auto', 'auto']` so the line doesn't look flat; it should use the full height of the container to show volatility.
