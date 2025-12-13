@@ -1,0 +1,54 @@
+**TASK: Redesign "Vote" Page - The "Community Town Hall"**
+
+**1. OBJECTIVE & VIBE**
+*   **Goal:** Create a page where users influence the platform's content. This is NOT betting; it is **Governance**.
+*   **Theme:** "Democratic & Clean."
+*   **Primary Accent Color:** Switch from the "Predict Purple" to **Electric Cyan/Teal (`text-cyan-400`, `border-cyan-500`)** to signify "Voice" and "Truth."
+*   **Structure:** Reuse the `react-slick` carousel logic from the Predict page, but with completely new Card Designs.
+
+**2. HERO SECTION: "Your Voice, Your Index"**
+*   **Headline:** "Shape the FameDex."
+*   **Subtext:** "Vote on new inductees, curate profile images, and rate global sentiment. Your opinion powers the index."
+*   **Stat Bar:** Display "Total Votes Cast" and "Next Induction in: [Countdown]" to create urgency.
+
+**3. SECTION 1: "The Induction Queue" (Who joins next?)**
+*   **Context:** Users vote on which celebrity from the waitlist gets added to the main leaderboard next.
+*   **Layout:** Horizontal Carousel (3 cards desktop).
+*   **Card Design:**
+    *   **Visual:** Large Avatar of the candidate.
+    *   **Data:** "Votes: 850 / 1,000 needed".
+    *   **Visual Element:** A prominent **Progress Bar** (Cyan color) showing how close they are to being "Unlocked."
+    *   **Action Button:** "Vote to Induct (+1)".
+    *   **Effect:** When clicked, the bar fills slightly and particles/confetti trigger (if possible).
+
+**4. SECTION 2: "Paparazzi Pit" (Image Curation)**
+*   **Context:** Users select the best profile photo for existing celebrities.
+*   **Layout:** Horizontal Carousel.
+*   **Card Design (The "A/B" Card):**
+    *   **Title:** "Best Look for [Celebrity Name]?"
+    *   **Visual:** Two photos displayed side-by-side (Photo A vs Photo B).
+    *   **Interaction:** Simple "Pick This" overlay button on each photo.
+    *   **Result:** Once clicked, show the % split (e.g., "70% prefer Photo A").
+
+**5. SECTION 3: "Global Sentiment Pulse"**
+*   **Context:** Quick 1-10 Approval Ratings (Mirrors the Home Page modal but faster).
+*   **Layout:** Grid or Carousel.
+*   **Card Design:**
+    *   **Visual:** Celebrity Avatar + Name.
+    *   **Interaction:** A simple **Slider** (1-10) visible directly on the card.
+    *   **Action:** A "Submit Rating" button.
+    *   **Feedback:** After submitting, show the "Global Average" (e.g., "Global Rating: 7.2").
+
+**6. FLOATING ACTION BUTTON (FAB)**
+*   **Position:** Bottom Right (Fixed).
+*   **Icon:** A Plus Sign (`+`).
+*   **Label:** "Suggest a Candidate".
+*   **Behavior:** Opens a simple modal with a form: "Who are we missing?" (Name field + Category dropdown).
+
+**7. TECHNICAL NOTES**
+*   **Consistency:** Keep the `rounded-lg` avatar styles and dark background (`gray-950`).
+*   **Reuse:** You can reuse the `Carousel` component wrapper, but you MUST create 3 new sub-components for the cards:
+    1.  `InductionCard` (Progress Bar logic).
+    2.  `ImagePollCard` (A/B Image logic).
+    3.  `SentimentCard` (Slider logic).
+*   **Mobile:** Ensure the Slider in Section 3 is easy to drag on touch screens.

@@ -100,37 +100,51 @@ The main dashboard displaying trending celebrities and influencers.
 4. **Leaderboard** - Filterable/sortable list of all trending people
 
 ### Vote Page (/vote)
-The Vote page provides three distinct voting mechanisms for community engagement:
+The Vote page is styled as a "Community Town Hall" with cyan/teal accent theme for community governance features.
 
-**Header Section:**
-- Title: "Vote on Global Influence"
-- 3-step explainer cards (Pick a vote type → Cast your vote → See your impact)
+**Hero Section:**
+- Title: "Shape the FameDex"
+- Subtitle: "Vote on new inductees, curate profile images, and rate global sentiment."
+- Badge: "Community Governance" with Sparkles icon
+- Stats bar: Total Votes Cast (formatted number), Next Induction In (countdown timer)
+- Cyan gradient background overlay
 
-**Section 1: Sentiment Votes**
-- Unified row-based list: All people shown as clickable rows (no inline slider)
-- First person (Elon Musk) has "Featured" badge
-- Shows top 5 people by default, "View all X people to rate" toggle expands to full list
-- Clicking any row OR Vote button opens the same sentiment modal
-- Modal includes:
-  - Person avatar and "Rate {name}" title
-  - SentimentVotingWidget (same component as profile pages)
-  - "Visit full profile" link at bottom to navigate to person's profile
-- Votes persist to localStorage with key pattern `vote_${personId}`
-- Modal auto-closes 1.5 seconds after vote submission
+**Section 1: The Induction Queue (Carousel)**
+- InductionCard components for voting new celebrities onto the leaderboard
+- Each card shows: PersonAvatar (lg), name, category badge, progress bar (votes/1000)
+- "Vote to Induct (+1)" button changes to "Voted!" when clicked (disabled state)
+- Confetti animation on vote (ping animations)
+- Candidates: Jensen Huang, Charli XCX, Kai Cenat, Sabrina Carpenter, xQc
 
-**Section 2: Profile Image Voting**
-- 3 featured cards shown by default (Taylor Swift, MrBeast, Beyoncé)
-- "View all profile image votes" toggle shows 5 additional cards
-- Each card has 3 image options with vote percentages
+**Section 2: Paparazzi Pit (Carousel)**
+- ImagePollCard components for A/B photo voting
+- Each card shows: person name, category badge, two photo options (A/B)
+- After voting, shows percentage preference for selected photo
+- Selected photo gets cyan border/ring highlight
+- Polls: Taylor Swift, Elon Musk, Beyoncé, MrBeast
 
-**Section 3: Suggest New People**
-- Cards for suggested additions (Jensen Huang, Charli XCX, Kai Cenat, Lionel Messi)
-- Green upvote button, red downvote button
-- Mutual exclusivity: selecting one deselects the other (no unvote)
+**Section 3: Global Sentiment Pulse (Carousel)**
+- SentimentCard components for quick 1-10 ratings
+- Each card shows: PersonAvatar (md), name, category, rating slider (1-10)
+- "Submit Rating" button, after submission shows "Your vote recorded!" and global average
+- Color-coded ratings (red → orange → yellow → lime → green)
+- People: Elon Musk, Taylor Swift, MrBeast, Donald Trump, Kim Kardashian, Cristiano Ronaldo
+
+**Floating Action Button:**
+- Fixed position bottom-right (bottom-24 on mobile for nav clearance, bottom-8 on desktop)
+- Opens "Suggest a Candidate" dialog with name input and category select
+- Categories: Music, Tech, Entertainment, Sports, Politics, Business
+- Submit button disabled until both fields are filled
 
 **Navigation:**
-- Desktop: Header with Home, Vote, Predict, Me links
-- Mobile: Fixed bottom nav with Heart icon for Vote
+- Desktop: Header with Home, Vote, Predict, Me links (Vote highlighted in cyan)
+- Mobile: Back button in header, fixed bottom nav
+
+**Technical Details:**
+- All sections use react-slick carousels (3 slides desktop, 2 tablet, 1 mobile with center mode)
+- Cyan/teal theme: text-cyan-400, bg-cyan-500, border-cyan-500/40
+- Hover effects: translate-y-[-2px] with shadow and border highlight
+- All interactive elements have data-testid attributes
 
 ### Predict Page (/predict)
 Parimutuel prediction markets with test mode (virtual 10,000 credits):

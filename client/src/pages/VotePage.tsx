@@ -4,397 +4,398 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { SentimentVotingWidget } from "@/components/SentimentVotingWidget";
 import { 
   ArrowLeft, 
   Plus, 
-  Heart, 
-  ImageIcon, 
-  UserPlus, 
-  CheckSquare,
-  Sliders,
-  Eye,
-  ThumbsUp,
-  ThumbsDown,
-  ChevronRight,
-  ExternalLink
+  Vote,
+  Users,
+  Clock,
+  Sparkles,
+  Camera
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Slider from "react-slick";
+import "slick-carousel/slick/slick.css";
+import "slick-carousel/slick/slick-theme.css";
 
-interface Person {
+interface InductionCandidate {
   id: string;
   name: string;
   avatar: string;
   category: string;
+  currentVotes: number;
+  votesNeeded: number;
 }
 
-const allSentimentPeople: Person[] = [
-  { id: "1", name: "Elon Musk", avatar: "", category: "Tech" },
-  { id: "2", name: "Taylor Swift", avatar: "", category: "Music" },
-  { id: "3", name: "MrBeast", avatar: "", category: "Entertainment" },
-  { id: "4", name: "Donald Trump", avatar: "", category: "Politics" },
-  { id: "5", name: "Kim Kardashian", avatar: "", category: "Entertainment" },
-  { id: "6", name: "Cristiano Ronaldo", avatar: "", category: "Sports" },
-  { id: "7", name: "Beyoncé", avatar: "", category: "Music" },
-  { id: "8", name: "Drake", avatar: "", category: "Music" },
+const inductionCandidates: InductionCandidate[] = [
+  { id: "i1", name: "Jensen Huang", avatar: "", category: "Tech", currentVotes: 850, votesNeeded: 1000 },
+  { id: "i2", name: "Charli XCX", avatar: "", category: "Music", currentVotes: 720, votesNeeded: 1000 },
+  { id: "i3", name: "Kai Cenat", avatar: "", category: "Entertainment", currentVotes: 945, votesNeeded: 1000 },
+  { id: "i4", name: "Sabrina Carpenter", avatar: "", category: "Music", currentVotes: 680, votesNeeded: 1000 },
+  { id: "i5", name: "xQc", avatar: "", category: "Entertainment", currentVotes: 590, votesNeeded: 1000 },
 ];
 
-interface ImageOption {
-  id: string;
-  url: string;
-  votes: number;
-}
-
-interface ImageVotingCard {
+interface ImagePoll {
   id: string;
   personName: string;
   personId: string;
   category: string;
-  images: ImageOption[];
-  totalVotes: number;
+  photoA: { id: string; votes: number };
+  photoB: { id: string; votes: number };
 }
 
-const featuredImageVotingCards: ImageVotingCard[] = [
-  {
-    id: "img-1",
-    personName: "Taylor Swift",
-    personId: "2",
-    category: "Music",
-    images: [
-      { id: "a", url: "", votes: 1234 },
-      { id: "b", url: "", votes: 892 },
-      { id: "c", url: "", votes: 567 },
-    ],
-    totalVotes: 2693,
-  },
-  {
-    id: "img-2",
-    personName: "MrBeast",
-    personId: "3",
-    category: "Entertainment",
-    images: [
-      { id: "a", url: "", votes: 2341 },
-      { id: "b", url: "", votes: 1876 },
-      { id: "c", url: "", votes: 943 },
-    ],
-    totalVotes: 5160,
-  },
-  {
-    id: "img-3",
-    personName: "Beyoncé",
-    personId: "7",
-    category: "Music",
-    images: [
-      { id: "a", url: "", votes: 3456 },
-      { id: "b", url: "", votes: 2198 },
-      { id: "c", url: "", votes: 1543 },
-    ],
-    totalVotes: 7197,
-  },
+const imagePolls: ImagePoll[] = [
+  { id: "ip1", personName: "Taylor Swift", personId: "2", category: "Music", photoA: { id: "a", votes: 3456 }, photoB: { id: "b", votes: 2198 } },
+  { id: "ip2", personName: "Elon Musk", personId: "1", category: "Tech", photoA: { id: "a", votes: 4521 }, photoB: { id: "b", votes: 3890 } },
+  { id: "ip3", personName: "Beyoncé", personId: "7", category: "Music", photoA: { id: "a", votes: 5678 }, photoB: { id: "b", votes: 4321 } },
+  { id: "ip4", personName: "MrBeast", personId: "3", category: "Entertainment", photoA: { id: "a", votes: 2890 }, photoB: { id: "b", votes: 2456 } },
 ];
 
-const additionalImageVotingCards: ImageVotingCard[] = [
-  {
-    id: "img-4",
-    personName: "Elon Musk",
-    personId: "1",
-    category: "Tech",
-    images: [
-      { id: "a", url: "", votes: 4521 },
-      { id: "b", url: "", votes: 3890 },
-      { id: "c", url: "", votes: 2134 },
-    ],
-    totalVotes: 10545,
-  },
-  {
-    id: "img-5",
-    personName: "Donald Trump",
-    personId: "4",
-    category: "Politics",
-    images: [
-      { id: "a", url: "", votes: 5678 },
-      { id: "b", url: "", votes: 4321 },
-      { id: "c", url: "", votes: 2987 },
-    ],
-    totalVotes: 12986,
-  },
-  {
-    id: "img-6",
-    personName: "Kim Kardashian",
-    personId: "5",
-    category: "Entertainment",
-    images: [
-      { id: "a", url: "", votes: 2890 },
-      { id: "b", url: "", votes: 2456 },
-      { id: "c", url: "", votes: 1876 },
-    ],
-    totalVotes: 7222,
-  },
-  {
-    id: "img-7",
-    personName: "Cristiano Ronaldo",
-    personId: "6",
-    category: "Sports",
-    images: [
-      { id: "a", url: "", votes: 8901 },
-      { id: "b", url: "", votes: 7654 },
-      { id: "c", url: "", votes: 5432 },
-    ],
-    totalVotes: 21987,
-  },
-  {
-    id: "img-8",
-    personName: "Drake",
-    personId: "8",
-    category: "Music",
-    images: [
-      { id: "a", url: "", votes: 3456 },
-      { id: "b", url: "", votes: 2987 },
-      { id: "c", url: "", votes: 2345 },
-    ],
-    totalVotes: 8788,
-  },
-];
-
-interface SuggestedPerson {
+interface SentimentPerson {
   id: string;
   name: string;
+  avatar: string;
   category: string;
-  suggestedBy: number;
-  upvotes: number;
-  downvotes: number;
+  globalAverage: number;
 }
 
-const suggestedPeople: SuggestedPerson[] = [
-  { id: "s1", name: "Jensen Huang", category: "Tech", suggestedBy: 234, upvotes: 189, downvotes: 12 },
-  { id: "s2", name: "Charli XCX", category: "Music", suggestedBy: 156, upvotes: 142, downvotes: 8 },
-  { id: "s3", name: "Kai Cenat", category: "Entertainment", suggestedBy: 312, upvotes: 287, downvotes: 21 },
-  { id: "s4", name: "Lionel Messi", category: "Sports", suggestedBy: 567, upvotes: 534, downvotes: 15 },
+const sentimentPeople: SentimentPerson[] = [
+  { id: "1", name: "Elon Musk", avatar: "", category: "Tech", globalAverage: 6.8 },
+  { id: "2", name: "Taylor Swift", avatar: "", category: "Music", globalAverage: 8.2 },
+  { id: "3", name: "MrBeast", avatar: "", category: "Entertainment", globalAverage: 7.9 },
+  { id: "4", name: "Donald Trump", avatar: "", category: "Politics", globalAverage: 4.5 },
+  { id: "5", name: "Kim Kardashian", avatar: "", category: "Entertainment", globalAverage: 5.3 },
+  { id: "6", name: "Cristiano Ronaldo", avatar: "", category: "Sports", globalAverage: 8.7 },
 ];
 
-function StepCard({ step, icon: Icon, title, subtitle }: { step: number; icon: typeof CheckSquare; title: string; subtitle: string }) {
+function InductionCard({ candidate, onVote }: { candidate: InductionCandidate; onVote: (id: string) => void }) {
+  const progress = (candidate.currentVotes / candidate.votesNeeded) * 100;
+  const [hasVoted, setHasVoted] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  const handleVote = () => {
+    if (!hasVoted) {
+      setHasVoted(true);
+      setShowConfetti(true);
+      onVote(candidate.id);
+      setTimeout(() => setShowConfetti(false), 1000);
+    }
+  };
+
   return (
-    <div className="flex-1 flex flex-col items-center text-center p-4 rounded-lg bg-muted/50">
-      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-        <Icon className="h-5 w-5 text-primary" />
-      </div>
-      <div className="text-xs text-muted-foreground mb-1">Step {step}</div>
-      <h4 className="font-semibold text-sm mb-1">{title}</h4>
-      <p className="text-xs text-muted-foreground">{subtitle}</p>
+    <div className="px-2">
+      <Card 
+        className="p-5 hover:translate-y-[-2px] hover:shadow-lg hover:border-cyan-500/40 transition-all duration-200 relative overflow-hidden"
+        data-testid={`card-induction-${candidate.id}`}
+      >
+        {showConfetti && (
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute top-2 left-1/4 w-2 h-2 bg-cyan-400 rounded-full animate-ping" />
+            <div className="absolute top-4 right-1/3 w-2 h-2 bg-cyan-300 rounded-full animate-ping delay-100" />
+            <div className="absolute top-3 right-1/4 w-2 h-2 bg-cyan-500 rounded-full animate-ping delay-200" />
+          </div>
+        )}
+        
+        <div className="flex flex-col items-center text-center mb-4">
+          <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="lg" />
+          <h3 className="font-semibold mt-3">{candidate.name}</h3>
+          <Badge variant="secondary" className="text-xs mt-1">{candidate.category}</Badge>
+        </div>
+        
+        <div className="mb-3">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-muted-foreground">Progress</span>
+            <span className="text-cyan-400 font-mono">{candidate.currentVotes.toLocaleString()} / {candidate.votesNeeded.toLocaleString()}</span>
+          </div>
+          <div className="h-3 w-full bg-muted/30 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 rounded-full transition-all duration-500"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+        
+        <Button 
+          onClick={handleVote}
+          disabled={hasVoted}
+          className={`w-full ${hasVoted ? 'bg-cyan-600' : 'bg-cyan-500'} text-white`}
+          data-testid={`button-induct-${candidate.id}`}
+        >
+          <Vote className="h-4 w-4 mr-2" />
+          {hasVoted ? 'Voted!' : 'Vote to Induct (+1)'}
+        </Button>
+      </Card>
     </div>
   );
 }
 
-function getStoredVote(personId: string): number | null {
-  try {
-    const stored = localStorage.getItem(`vote_${personId}`);
-    if (stored) {
-      const value = parseInt(stored, 10);
-      return isNaN(value) ? null : value;
+function ImagePollCard({ poll, onVote }: { poll: ImagePoll; onVote: (pollId: string, choice: 'a' | 'b') => void }) {
+  const [selectedChoice, setSelectedChoice] = useState<'a' | 'b' | null>(null);
+  const totalVotes = poll.photoA.votes + poll.photoB.votes;
+  const percentA = Math.round((poll.photoA.votes / totalVotes) * 100);
+  const percentB = 100 - percentA;
+
+  const handlePick = (choice: 'a' | 'b') => {
+    if (!selectedChoice) {
+      setSelectedChoice(choice);
+      onVote(poll.id, choice);
     }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-function getApprovalColor(value: number): string {
-  if (value <= 2) return "text-red-500";
-  if (value <= 4) return "text-orange-500";
-  if (value <= 6) return "text-yellow-500";
-  if (value <= 8) return "text-lime-500";
-  return "text-green-500";
-}
-
-function SentimentVoteRow({ person, onRowClick, isFeatured = false }: { person: Person; onRowClick: (person: Person) => void; isFeatured?: boolean }) {
-  const [storedVote, setStoredVote] = useState<number | null>(() => getStoredVote(person.id));
-  
-  useEffect(() => {
-    const handleVoteUpdate = (e: Event) => {
-      const customEvent = e as CustomEvent<{ personId: string; value: number }>;
-      if (customEvent.detail.personId === person.id) {
-        setStoredVote(customEvent.detail.value);
-      }
-    };
-    
-    const handleStorageChange = () => {
-      setStoredVote(getStoredVote(person.id));
-    };
-    
-    window.addEventListener('sentimentVoteUpdated', handleVoteUpdate);
-    window.addEventListener('storage', handleStorageChange);
-    
-    return () => {
-      window.removeEventListener('sentimentVoteUpdated', handleVoteUpdate);
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, [person.id]);
-
-  return (
-    <Card 
-      className={`p-3 hover-elevate transition-all cursor-pointer ${isFeatured ? 'border-primary/30 bg-primary/5' : ''}`} 
-      onClick={() => onRowClick(person)}
-      data-testid={`card-sentiment-${person.id}`}
-    >
-      <div className="flex items-center gap-3">
-        <PersonAvatar name={person.name} avatar={person.avatar} size="sm" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h4 className="font-medium truncate">{person.name}</h4>
-            {isFeatured && (
-              <Badge variant="secondary" className="text-xs">Featured</Badge>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">{person.category}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {storedVote !== null && (
-            <div className="flex items-center gap-1" data-testid={`rating-${person.id}`}>
-              <span className={`text-sm font-semibold ${getApprovalColor(storedVote)}`}>
-                {storedVote}/10
-              </span>
-            </div>
-          )}
-          <Button 
-            size="sm" 
-            onClick={(e) => {
-              e.stopPropagation();
-              onRowClick(person);
-            }}
-            data-testid={`button-vote-${person.id}`}
-          >
-            <Heart className="h-4 w-4 mr-1" />
-            Vote
-          </Button>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function ImageVotingCardComponent({ card }: { card: ImageVotingCard }) {
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-
-  const handleVote = (imageId: string) => {
-    setSelectedImage(imageId);
-    console.log(`Voted for image ${imageId} for ${card.personName}`);
   };
 
   return (
-    <Card className="p-4 hover-elevate transition-all" data-testid={`card-imagevote-${card.id}`}>
-      <div className="flex items-center gap-3 mb-4">
-        <PersonAvatar name={card.personName} avatar="" size="sm" />
-        <div className="flex-1">
-          <h4 className="font-medium">{card.personName}</h4>
-          <p className="text-xs text-muted-foreground">{card.category} · {card.totalVotes.toLocaleString()} votes</p>
+    <div className="px-2">
+      <Card 
+        className="p-4 hover:translate-y-[-2px] hover:shadow-lg hover:border-cyan-500/40 transition-all duration-200"
+        data-testid={`card-imagepoll-${poll.id}`}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-sm">Best Look for {poll.personName}?</h3>
+          <Badge variant="secondary" className="text-xs">{poll.category}</Badge>
         </div>
-      </div>
-      
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        {card.images.map((img, i) => (
+        
+        <div className="grid grid-cols-2 gap-3 mb-3">
           <button
-            key={img.id}
-            onClick={() => handleVote(img.id)}
-            className={`aspect-square rounded-lg bg-muted flex items-center justify-center border-2 transition-all ${
-              selectedImage === img.id 
-                ? 'border-primary ring-2 ring-primary/20' 
-                : 'border-transparent hover:border-muted-foreground/30'
+            onClick={() => handlePick('a')}
+            disabled={!!selectedChoice}
+            className={`relative aspect-square rounded-lg bg-muted flex items-center justify-center border-2 transition-all group ${
+              selectedChoice === 'a' 
+                ? 'border-cyan-500 ring-2 ring-cyan-500/20' 
+                : selectedChoice === 'b'
+                ? 'border-muted opacity-60'
+                : 'border-transparent hover:border-cyan-500/50'
             }`}
-            data-testid={`button-image-${card.id}-${img.id}`}
+            data-testid={`button-photo-a-${poll.id}`}
           >
             <div className="text-center">
-              <ImageIcon className="h-6 w-6 text-muted-foreground mx-auto mb-1" />
-              <span className="text-xs text-muted-foreground">Option {i + 1}</span>
+              <Camera className="h-8 w-8 text-muted-foreground mx-auto mb-1" />
+              <span className="text-xs text-muted-foreground">Photo A</span>
             </div>
+            {!selectedChoice && (
+              <div className="absolute inset-0 bg-cyan-500/0 group-hover:bg-cyan-500/10 rounded-lg flex items-center justify-center transition-all">
+                <span className="opacity-0 group-hover:opacity-100 text-cyan-400 text-sm font-medium transition-opacity">Pick This</span>
+              </div>
+            )}
           </button>
-        ))}
-      </div>
-      
-      <div className="flex justify-between text-xs text-muted-foreground">
-        {card.images.map((img) => (
-          <span key={img.id}>{((img.votes / card.totalVotes) * 100).toFixed(0)}%</span>
-        ))}
-      </div>
-    </Card>
+          
+          <button
+            onClick={() => handlePick('b')}
+            disabled={!!selectedChoice}
+            className={`relative aspect-square rounded-lg bg-muted flex items-center justify-center border-2 transition-all group ${
+              selectedChoice === 'b' 
+                ? 'border-cyan-500 ring-2 ring-cyan-500/20' 
+                : selectedChoice === 'a'
+                ? 'border-muted opacity-60'
+                : 'border-transparent hover:border-cyan-500/50'
+            }`}
+            data-testid={`button-photo-b-${poll.id}`}
+          >
+            <div className="text-center">
+              <Camera className="h-8 w-8 text-muted-foreground mx-auto mb-1" />
+              <span className="text-xs text-muted-foreground">Photo B</span>
+            </div>
+            {!selectedChoice && (
+              <div className="absolute inset-0 bg-cyan-500/0 group-hover:bg-cyan-500/10 rounded-lg flex items-center justify-center transition-all">
+                <span className="opacity-0 group-hover:opacity-100 text-cyan-400 text-sm font-medium transition-opacity">Pick This</span>
+              </div>
+            )}
+          </button>
+        </div>
+        
+        {selectedChoice && (
+          <div className="text-center">
+            <p className="text-sm">
+              <span className="text-cyan-400 font-semibold">{selectedChoice === 'a' ? percentA : percentB}%</span>
+              <span className="text-muted-foreground"> prefer Photo {selectedChoice.toUpperCase()}</span>
+            </p>
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }
 
-function SuggestedPersonCard({ person }: { person: SuggestedPerson }) {
-  const [votes, setVotes] = useState({ up: person.upvotes, down: person.downvotes });
-  const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
+function SentimentCard({ person, onSubmit }: { person: SentimentPerson; onSubmit: (personId: string, rating: number) => void }) {
+  const [rating, setRating] = useState(5);
+  const [submitted, setSubmitted] = useState(false);
 
-  const handleVote = (type: 'up' | 'down') => {
-    if (userVote === type) {
-      return;
+  const handleSubmit = () => {
+    if (!submitted) {
+      setSubmitted(true);
+      onSubmit(person.id, rating);
     }
-    if (userVote) {
-      setVotes(prev => ({ ...prev, [userVote]: prev[userVote] - 1 }));
-    }
-    setUserVote(type);
-    setVotes(prev => ({ ...prev, [type]: prev[type] + 1 }));
+  };
+
+  const getRatingColor = (value: number) => {
+    if (value <= 2) return "text-red-500";
+    if (value <= 4) return "text-orange-500";
+    if (value <= 6) return "text-yellow-500";
+    if (value <= 8) return "text-lime-500";
+    return "text-green-500";
   };
 
   return (
-    <Card className="p-4 hover-elevate transition-all" data-testid={`card-suggested-${person.id}`}>
-      <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-          <UserPlus className="h-5 w-5 text-primary" />
+    <div className="px-2">
+      <Card 
+        className="p-4 hover:translate-y-[-2px] hover:shadow-lg hover:border-cyan-500/40 transition-all duration-200"
+        data-testid={`card-sentiment-${person.id}`}
+      >
+        <div className="flex items-center gap-3 mb-4">
+          <PersonAvatar name={person.name} avatar={person.avatar} size="md" />
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold truncate">{person.name}</h3>
+            <Badge variant="secondary" className="text-xs">{person.category}</Badge>
+          </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <h4 className="font-medium truncate">{person.name}</h4>
-          <p className="text-xs text-muted-foreground">{person.category} · Suggested by {person.suggestedBy}</p>
+        
+        {!submitted ? (
+          <>
+            <div className="mb-3">
+              <div className="flex justify-between text-xs mb-2">
+                <span className="text-muted-foreground">Your Rating</span>
+                <span className={`font-mono font-bold ${getRatingColor(rating)}`}>{rating}/10</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="10"
+                value={rating}
+                onChange={(e) => setRating(parseInt(e.target.value))}
+                className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                data-testid={`slider-rating-${person.id}`}
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                <span>Hate</span>
+                <span>Love</span>
+              </div>
+            </div>
+            <Button 
+              onClick={handleSubmit}
+              className="w-full bg-cyan-500 text-white"
+              data-testid={`button-submit-rating-${person.id}`}
+            >
+              Submit Rating
+            </Button>
+          </>
+        ) : (
+          <div className="text-center py-2">
+            <p className="text-sm text-muted-foreground mb-1">Your vote recorded!</p>
+            <p className="text-lg">
+              <span className="text-muted-foreground">Global Average: </span>
+              <span className={`font-bold ${getRatingColor(person.globalAverage)}`}>{person.globalAverage.toFixed(1)}</span>
+            </p>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function CarouselSection({ 
+  title, 
+  subtitle, 
+  children,
+  icon: Icon
+}: { 
+  title: string; 
+  subtitle: string; 
+  children: React.ReactNode;
+  icon: typeof Vote;
+}) {
+  const sliderSettings = {
+    dots: false,
+    infinite: false,
+    speed: 300,
+    slidesToShow: 3,
+    slidesToScroll: 1,
+    arrows: true,
+    responsive: [
+      {
+        breakpoint: 1024,
+        settings: {
+          slidesToShow: 2,
+        }
+      },
+      {
+        breakpoint: 640,
+        settings: {
+          slidesToShow: 1,
+          centerMode: true,
+          centerPadding: '20px',
+        }
+      }
+    ]
+  };
+
+  return (
+    <section className="mb-10">
+      <div className="flex items-start gap-3 mb-4">
+        <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+          <Icon className="h-5 w-5 text-cyan-400" />
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant={userVote === 'up' ? 'default' : 'outline'}
-            onClick={() => handleVote('up')}
-            className={`gap-1 ${userVote === 'up' ? 'bg-green-600 hover:bg-green-700 border-green-600' : 'text-green-600 border-green-600/50 hover:bg-green-600/10'}`}
-            data-testid={`button-upvote-${person.id}`}
-          >
-            <ThumbsUp className="h-3 w-3" />
-            {votes.up}
-          </Button>
-          <Button
-            size="sm"
-            variant={userVote === 'down' ? 'destructive' : 'outline'}
-            onClick={() => handleVote('down')}
-            className={`gap-1 ${userVote !== 'down' ? 'text-red-500 border-red-500/50 hover:bg-red-500/10' : ''}`}
-            data-testid={`button-downvote-${person.id}`}
-          >
-            <ThumbsDown className="h-3 w-3" />
-            {votes.down}
-          </Button>
+        <div>
+          <h2 className="text-xl font-serif font-bold">{title}</h2>
+          <p className="text-sm text-muted-foreground">{subtitle}</p>
         </div>
       </div>
-    </Card>
+      
+      <div className="predict-carousel -mx-2">
+        <Slider {...sliderSettings}>
+          {children}
+        </Slider>
+      </div>
+    </section>
   );
 }
 
 export default function VotePage() {
   const [, setLocation] = useLocation();
-  const [imageModalOpen, setImageModalOpen] = useState(false);
   const [suggestModalOpen, setSuggestModalOpen] = useState(false);
-  const [voteModalPerson, setVoteModalPerson] = useState<Person | null>(null);
-  
-  const [showAllSentiment, setShowAllSentiment] = useState(false);
-  const [showAllImageVotes, setShowAllImageVotes] = useState(false);
-  
-  const DEFAULT_SENTIMENT_COUNT = 5;
-  
-  const displayedSentimentPeople = showAllSentiment 
-    ? allSentimentPeople 
-    : allSentimentPeople.slice(0, DEFAULT_SENTIMENT_COUNT);
+  const [suggestName, setSuggestName] = useState("");
+  const [suggestCategory, setSuggestCategory] = useState("");
+  const [totalVotes] = useState(127843);
+  const [countdown, setCountdown] = useState("2d 14h 32m");
 
-  const handleRowClick = (person: Person) => {
-    setVoteModalPerson(person);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCountdown(prev => {
+        const parts = prev.match(/(\d+)d (\d+)h (\d+)m/);
+        if (parts) {
+          let days = parseInt(parts[1]);
+          let hours = parseInt(parts[2]);
+          let mins = parseInt(parts[3]);
+          mins--;
+          if (mins < 0) { mins = 59; hours--; }
+          if (hours < 0) { hours = 23; days--; }
+          if (days < 0) return "0d 0h 0m";
+          return `${days}d ${hours}h ${mins}m`;
+        }
+        return prev;
+      });
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleInductionVote = (candidateId: string) => {
+    console.log(`Voted to induct: ${candidateId}`);
   };
 
-  const handleVisitProfile = () => {
-    if (voteModalPerson) {
-      setVoteModalPerson(null);
-      setLocation(`/person/${voteModalPerson.id}`);
+  const handleImageVote = (pollId: string, choice: 'a' | 'b') => {
+    console.log(`Voted for photo ${choice} on poll ${pollId}`);
+  };
+
+  const handleSentimentSubmit = (personId: string, rating: number) => {
+    console.log(`Submitted rating ${rating} for person ${personId}`);
+  };
+
+  const handleSuggestSubmit = () => {
+    if (suggestName && suggestCategory) {
+      console.log(`Suggested: ${suggestName} (${suggestCategory})`);
+      setSuggestModalOpen(false);
+      setSuggestName("");
+      setSuggestCategory("");
     }
   };
 
@@ -422,16 +423,16 @@ export default function VotePage() {
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-4">
               <Link href="/">
-                <Button variant="ghost" size="sm">Home</Button>
+                <Button variant="ghost" size="sm" data-testid="link-nav-home">Home</Button>
               </Link>
               <Link href="/vote">
-                <Button variant="ghost" size="sm" className="text-primary">Vote</Button>
+                <Button variant="ghost" size="sm" className="text-cyan-400" data-testid="link-nav-vote">Vote</Button>
               </Link>
               <Link href="/predict">
-                <Button variant="ghost" size="sm">Predict</Button>
+                <Button variant="ghost" size="sm" data-testid="link-nav-predict">Predict</Button>
               </Link>
               <Link href="/me">
-                <Button variant="ghost" size="sm">Me</Button>
+                <Button variant="ghost" size="sm" data-testid="link-nav-me">Me</Button>
               </Link>
             </div>
             <ThemeToggle />
@@ -439,206 +440,130 @@ export default function VotePage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="mb-6">
-          <div className="flex items-center gap-3 mb-3">
-            <Heart className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-serif font-bold" data-testid="text-vote-title">
-              Vote on Global Influence
+      <div className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
+        <div className="container mx-auto px-4 py-12 max-w-5xl relative">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 mb-4">
+              <Sparkles className="h-4 w-4 text-cyan-400" />
+              <span className="text-sm text-cyan-400 font-medium">Community Governance</span>
+            </div>
+            <h1 className="text-4xl md:text-5xl font-serif font-bold mb-3" data-testid="text-vote-title">
+              Shape the FameDex
             </h1>
-          </div>
-          <p className="text-muted-foreground max-w-2xl">
-            Shape how the world sees its most influential people. Rate them, choose their profile image, and tell us who should appear on FameDex next.
-          </p>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-3 mb-8">
-          <StepCard 
-            step={1} 
-            icon={Sliders} 
-            title="Pick a vote type" 
-            subtitle="Sentiment, profile images, or new people to add."
-          />
-          <StepCard 
-            step={2} 
-            icon={CheckSquare} 
-            title="Cast your vote" 
-            subtitle="Use sliders and Upvote / Downvote buttons."
-          />
-          <StepCard 
-            step={3} 
-            icon={Eye} 
-            title="See your impact" 
-            subtitle="Your choices will appear in your Me profile in a future version."
-          />
-        </div>
-
-        <section className="mb-10" data-testid="section-sentiment-votes">
-          <div className="mb-4">
-            <h2 className="text-xl font-serif font-bold mb-1">Sentiment Votes</h2>
-            <p className="text-sm text-muted-foreground">
-              Rate how you feel about each person from 1 (Hate) to 10 (Love).
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Vote on new inductees, curate profile images, and rate global sentiment. Your opinion powers the index.
             </p>
           </div>
           
-          <div className="space-y-2">
-            {displayedSentimentPeople.map((person, index) => (
-              <SentimentVoteRow 
-                key={person.id} 
-                person={person} 
-                onRowClick={handleRowClick}
-                isFeatured={index === 0}
-              />
-            ))}
-          </div>
-          
-          {allSentimentPeople.length > DEFAULT_SENTIMENT_COUNT && (
-            <button
-              onClick={() => setShowAllSentiment(!showAllSentiment)}
-              className="mt-4 text-sm text-primary hover:underline flex items-center gap-1"
-              data-testid="button-view-all-sentiment"
-            >
-              {showAllSentiment ? 'Show less' : `View all ${allSentimentPeople.length} people to rate`}
-              <ChevronRight className={`h-4 w-4 transition-transform ${showAllSentiment ? 'rotate-90' : ''}`} />
-            </button>
-          )}
-        </section>
-
-        <section className="mb-10" data-testid="section-image-voting">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-xl font-serif font-bold mb-1">Profile Image Voting</h2>
-              <p className="text-sm text-muted-foreground">
-                Help decide which image best represents each person on FameDex.
-              </p>
+          <div className="flex flex-col sm:flex-row justify-center gap-6 mb-8">
+            <div className="flex items-center gap-3 px-6 py-3 rounded-lg bg-muted/50 border border-border">
+              <Users className="h-5 w-5 text-cyan-400" />
+              <div>
+                <p className="text-xs text-muted-foreground">Total Votes Cast</p>
+                <p className="text-lg font-bold font-mono text-cyan-400" data-testid="text-total-votes">{totalVotes.toLocaleString()}</p>
+              </div>
             </div>
-            <Button
-              size="icon"
-              variant="outline"
-              onClick={() => setImageModalOpen(true)}
-              data-testid="button-add-image"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {featuredImageVotingCards.map((card) => (
-              <ImageVotingCardComponent key={card.id} card={card} />
-            ))}
-          </div>
-          
-          {showAllImageVotes && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mt-4">
-              {additionalImageVotingCards.map((card) => (
-                <ImageVotingCardComponent key={card.id} card={card} />
-              ))}
+            <div className="flex items-center gap-3 px-6 py-3 rounded-lg bg-muted/50 border border-border">
+              <Clock className="h-5 w-5 text-cyan-400" />
+              <div>
+                <p className="text-xs text-muted-foreground">Next Induction In</p>
+                <p className="text-lg font-bold font-mono text-cyan-400" data-testid="text-countdown">{countdown}</p>
+              </div>
             </div>
-          )}
-          
-          <button
-            onClick={() => setShowAllImageVotes(!showAllImageVotes)}
-            className="mt-4 text-sm text-primary hover:underline flex items-center gap-1"
-            data-testid="button-view-all-images"
-          >
-            {showAllImageVotes ? 'Show less' : 'View all profile image votes'}
-            <ChevronRight className={`h-4 w-4 transition-transform ${showAllImageVotes ? 'rotate-90' : ''}`} />
-          </button>
-        </section>
-
-        <section className="mb-10" data-testid="section-suggest-people">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-xl font-serif font-bold mb-1">Suggest New People</h2>
-              <p className="text-sm text-muted-foreground">
-                Vote on who should be added to FameDex next.
-              </p>
-            </div>
-            <Button
-              size="icon"
-              variant="outline"
-              onClick={() => setSuggestModalOpen(true)}
-              data-testid="button-add-suggestion"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
           </div>
-          
-          <div className="space-y-2">
-            {suggestedPeople.map((person) => (
-              <SuggestedPersonCard key={person.id} person={person} />
-            ))}
-          </div>
-        </section>
-
-        <div className="text-center">
-          <p className="text-sm text-muted-foreground">
-            More voting opportunities coming soon. Your votes help shape the FameDex community.
-          </p>
         </div>
       </div>
 
-      <Dialog open={imageModalOpen} onOpenChange={setImageModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Suggest Profile Images</DialogTitle>
-            <DialogDescription>
-              In a future version, you'll be able to suggest profile images for people on FameDex.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setImageModalOpen(false)}>Close</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <div className="container mx-auto px-4 py-8 max-w-5xl">
+        <CarouselSection
+          title="The Induction Queue"
+          subtitle="Vote on which celebrity joins the main leaderboard next."
+          icon={Vote}
+        >
+          {inductionCandidates.map((candidate) => (
+            <InductionCard key={candidate.id} candidate={candidate} onVote={handleInductionVote} />
+          ))}
+        </CarouselSection>
+
+        <CarouselSection
+          title="Paparazzi Pit"
+          subtitle="Select the best profile photo for existing celebrities."
+          icon={Camera}
+        >
+          {imagePolls.map((poll) => (
+            <ImagePollCard key={poll.id} poll={poll} onVote={handleImageVote} />
+          ))}
+        </CarouselSection>
+
+        <CarouselSection
+          title="Global Sentiment Pulse"
+          subtitle="Quick 1-10 approval ratings. How do you feel about them?"
+          icon={Sparkles}
+        >
+          {sentimentPeople.map((person) => (
+            <SentimentCard key={person.id} person={person} onSubmit={handleSentimentSubmit} />
+          ))}
+        </CarouselSection>
+      </div>
+
+      <button
+        onClick={() => setSuggestModalOpen(true)}
+        className="fixed bottom-24 md:bottom-8 right-6 h-14 w-14 rounded-full bg-cyan-500 text-white shadow-lg flex items-center justify-center hover:bg-cyan-600 transition-colors z-40"
+        data-testid="fab-suggest-candidate"
+      >
+        <Plus className="h-6 w-6" />
+      </button>
 
       <Dialog open={suggestModalOpen} onOpenChange={setSuggestModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Suggest a Person</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5 text-cyan-400" />
+              Suggest a Candidate
+            </DialogTitle>
             <DialogDescription>
-              In a future version, you'll be able to suggest new people to add to FameDex.
+              Who are we missing? Suggest someone to be added to FameDex.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setSuggestModalOpen(false)}>Close</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!voteModalPerson} onOpenChange={(open) => !open && setVoteModalPerson(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              {voteModalPerson && (
-                <>
-                  <PersonAvatar name={voteModalPerson.name} avatar={voteModalPerson.avatar} size="sm" />
-                  <span>Rate {voteModalPerson.name}</span>
-                </>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          {voteModalPerson && (
-            <div className="space-y-4">
-              <SentimentVotingWidget 
-                personId={voteModalPerson.id} 
-                personName={voteModalPerson.name}
-                onVoteSubmitted={() => {
-                  setTimeout(() => setVoteModalPerson(null), 1500);
-                }}
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-1 block">Name</label>
+              <Input 
+                placeholder="Enter celebrity name..."
+                value={suggestName}
+                onChange={(e) => setSuggestName(e.target.value)}
+                data-testid="input-suggest-name"
               />
-              <div className="flex justify-end pt-2 border-t">
-                <button
-                  onClick={handleVisitProfile}
-                  className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
-                  data-testid="button-visit-profile"
-                >
-                  Visit full profile
-                  <ExternalLink className="h-3 w-3" />
-                </button>
-              </div>
             </div>
-          )}
+            <div>
+              <label className="text-sm font-medium mb-1 block">Category</label>
+              <Select value={suggestCategory} onValueChange={setSuggestCategory}>
+                <SelectTrigger data-testid="select-suggest-category">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Music">Music</SelectItem>
+                  <SelectItem value="Tech">Tech</SelectItem>
+                  <SelectItem value="Entertainment">Entertainment</SelectItem>
+                  <SelectItem value="Sports">Sports</SelectItem>
+                  <SelectItem value="Politics">Politics</SelectItem>
+                  <SelectItem value="Business">Business</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setSuggestModalOpen(false)} data-testid="button-cancel-suggestion">Cancel</Button>
+            <Button 
+              onClick={handleSuggestSubmit}
+              disabled={!suggestName || !suggestCategory}
+              className="bg-cyan-500 text-white"
+              data-testid="button-submit-suggestion"
+            >
+              Submit Suggestion
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
