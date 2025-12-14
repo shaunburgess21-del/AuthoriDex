@@ -22,8 +22,12 @@ import {
   ChevronRight,
   Clock,
   Search,
-  Lock
+  Lock,
+  Sparkles,
+  Crown,
+  UserPlus
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { useLocation, Link } from "wouter";
 import Slider from "react-slick";
 import "slick-carousel/slick/slick.css";
@@ -274,6 +278,72 @@ const topGainerMarkets: TopGainerMarket[] = [
   },
 ];
 
+// Jackpot data
+const jackpotData = {
+  personName: "Elon Musk",
+  personAvatar: "",
+  currentScore: 515809,
+  totalPool: 50000,
+  endTime: "Sun 23:59 UTC",
+};
+
+// Community markets
+interface CommunityMarket {
+  id: string;
+  creatorName: string;
+  question: string;
+  personName: string;
+  personAvatar: string;
+  totalPool: number;
+  endTime: string;
+  participants: number;
+}
+
+const communityMarkets: CommunityMarket[] = [
+  {
+    id: "community-1",
+    creatorName: "CryptoKing99",
+    question: "Will Elon tweet about Dogecoin this week?",
+    personName: "Elon Musk",
+    personAvatar: "",
+    totalPool: 3420,
+    endTime: "Sun 23:59 UTC",
+    participants: 47,
+  },
+  {
+    id: "community-2",
+    creatorName: "SwiftieForever",
+    question: "Taylor Swift album announcement before month end?",
+    personName: "Taylor Swift",
+    personAvatar: "",
+    totalPool: 2890,
+    endTime: "Sun 23:59 UTC",
+    participants: 89,
+  },
+  {
+    id: "community-3",
+    creatorName: "TechWatcher",
+    question: "Jensen Huang keynote will break 1M views in 24h?",
+    personName: "Jensen Huang",
+    personAvatar: "",
+    totalPool: 1560,
+    endTime: "Sun 23:59 UTC",
+    participants: 23,
+  },
+  {
+    id: "community-4",
+    creatorName: "SportsGuru",
+    question: "Ronaldo will post about Al Nassr victory?",
+    personName: "Cristiano Ronaldo",
+    personAvatar: "",
+    totalPool: 2100,
+    endTime: "Sun 23:59 UTC",
+    participants: 56,
+  },
+];
+
+type MarketType = "JACKPOT_EXACT" | "BINARY_TREND" | "VERSUS" | "COMMUNITY";
+
 const FIRST_VISIT_KEY = "famedex_predict_first_visit";
 
 function FirstTimeModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -381,6 +451,251 @@ function ViewAllModal({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface PredictionModalProps {
+  open: boolean;
+  onClose: () => void;
+  marketType: MarketType;
+  personName?: string;
+  currentScore?: number;
+  isUserGenerated?: boolean;
+}
+
+function PredictionModal({ open, onClose, marketType, personName, currentScore, isUserGenerated }: PredictionModalProps) {
+  const [stakeAmount, setStakeAmount] = useState("");
+  const [exactPrediction, setExactPrediction] = useState("");
+
+  const getTitle = () => {
+    switch (marketType) {
+      case "JACKPOT_EXACT":
+        return "Enter Weekly Jackpot";
+      case "BINARY_TREND":
+        return "Place Your Prediction";
+      case "VERSUS":
+        return "Head-to-Head Prediction";
+      case "COMMUNITY":
+        return "Community Market";
+      default:
+        return "Place Prediction";
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {marketType === "JACKPOT_EXACT" ? (
+              <Crown className="h-5 w-5 text-amber-500" />
+            ) : (
+              <Target className="h-5 w-5 text-violet-500" />
+            )}
+            {getTitle()}
+          </DialogTitle>
+          {isUserGenerated && (
+            <Badge variant="secondary" className="w-fit mt-2">
+              <UserPlus className="h-3 w-3 mr-1" />
+              User Created
+            </Badge>
+          )}
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          {personName && (
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+              <PersonAvatar name={personName} avatar="" size="md" />
+              <div>
+                <p className="font-semibold">{personName}</p>
+                {currentScore && (
+                  <p className="text-xs text-muted-foreground font-mono">
+                    Current: {currentScore.toLocaleString()} pts
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {marketType === "JACKPOT_EXACT" && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Your Exact Score Prediction</label>
+              <Input
+                type="number"
+                placeholder="Enter predicted score (e.g., 520000)"
+                value={exactPrediction}
+                onChange={(e) => setExactPrediction(e.target.value)}
+                className="font-mono"
+                data-testid="input-exact-prediction"
+              />
+              <p className="text-xs text-muted-foreground">
+                Predict the exact score at week's end. Closest wins the jackpot!
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Stake Amount</label>
+            <Input
+              type="number"
+              placeholder="Enter credits to stake"
+              value={stakeAmount}
+              onChange={(e) => setStakeAmount(e.target.value)}
+              className="font-mono"
+              data-testid="input-stake-amount"
+            />
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            {[100, 500, 1000].map((amount) => (
+              <Button
+                key={amount}
+                variant="outline"
+                size="sm"
+                onClick={() => setStakeAmount(amount.toString())}
+                className="flex-1"
+              >
+                {amount}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <Button 
+          onClick={onClose} 
+          className={`w-full ${marketType === "JACKPOT_EXACT" 
+            ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white" 
+            : "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"}`}
+          data-testid="button-confirm-prediction"
+        >
+          Confirm Prediction
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function WeeklyJackpotHero({ 
+  onEnterJackpot, 
+  isMarketClosed,
+  timeRemaining 
+}: { 
+  onEnterJackpot: () => void; 
+  isMarketClosed: boolean;
+  timeRemaining: { days: number; hours: number; minutes: number; seconds: number };
+}) {
+  return (
+    <div 
+      className="relative overflow-hidden rounded-2xl mb-8 border-2 border-amber-500/50"
+      style={{
+        background: "linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 146, 60, 0.05) 50%, transparent 100%)",
+        boxShadow: "inset 0 0 30px rgba(245, 158, 11, 0.1), 0 0 40px rgba(245, 158, 11, 0.15)",
+      }}
+      data-testid="weekly-jackpot-hero"
+    >
+      <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl" />
+      <div className="absolute bottom-0 left-0 w-48 h-48 bg-orange-500/10 rounded-full blur-3xl" />
+      
+      <div className="relative z-10 p-6 md:p-8">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-3">
+              <Crown className="h-6 w-6 text-amber-500" />
+              <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/40">
+                WEEKLY JACKPOT
+              </Badge>
+            </div>
+            
+            <h2 className="text-2xl md:text-3xl font-serif font-bold mb-2">
+              Predict {jackpotData.personName}'s Exact Score
+            </h2>
+            
+            <p className="text-muted-foreground mb-4 max-w-lg">
+              Guess the exact FameDex score at week's end. Closest prediction takes the entire pot!
+            </p>
+            
+            <div className="flex items-center gap-6 flex-wrap">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Current Pot</p>
+                <p className="text-3xl font-mono font-bold text-amber-500">
+                  {jackpotData.totalPool.toLocaleString()}
+                  <span className="text-sm ml-1 text-muted-foreground">credits</span>
+                </p>
+              </div>
+              
+              <div className="h-12 w-px bg-border" />
+              
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Ends In</p>
+                <p className="text-lg font-mono font-bold">
+                  {timeRemaining.days}d {timeRemaining.hours}h {timeRemaining.minutes}m
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex flex-col items-center gap-3">
+            <PersonAvatar name={jackpotData.personName} avatar="" size="lg" />
+            <p className="text-sm font-mono text-muted-foreground">
+              Current: {jackpotData.currentScore.toLocaleString()} pts
+            </p>
+            
+            {isMarketClosed ? (
+              <Button 
+                size="lg" 
+                className="bg-muted text-muted-foreground cursor-not-allowed"
+                disabled
+              >
+                <Lock className="h-5 w-5 mr-2" />
+                Awaiting Results
+              </Button>
+            ) : (
+              <Button 
+                size="lg" 
+                className="bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
+                onClick={onEnterJackpot}
+                data-testid="button-enter-jackpot"
+              >
+                <Sparkles className="h-5 w-5 mr-2" />
+                Enter Jackpot
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CommunityCard({ market, onClick, isMarketClosed = false }: { market: CommunityMarket; onClick: () => void; isMarketClosed?: boolean }) {
+  return (
+    <div 
+      className={`relative overflow-visible group cursor-pointer ${isMarketClosed ? 'opacity-75' : ''}`}
+      onClick={!isMarketClosed ? onClick : undefined}
+    >
+      <Card 
+        className="p-4 rounded-xl border border-border/30 bg-card/50 group-hover:border-violet-500/30 group-hover:translate-y-[-2px] group-hover:shadow-md transition-all duration-200 ease-out"
+        data-testid={`card-community-${market.id}`}
+      >
+        <div className="flex items-start justify-between mb-3">
+          <Badge variant="secondary" className="text-[10px]">
+            <UserPlus className="h-3 w-3 mr-1" />
+            User Created
+          </Badge>
+          <span className="text-[10px] text-muted-foreground">{market.creatorName}</span>
+        </div>
+        
+        <div className="flex items-center gap-3 mb-3">
+          <PersonAvatar name={market.personName} avatar={market.personAvatar} size="sm" />
+          <p className="text-sm font-medium line-clamp-2">{market.question}</p>
+        </div>
+        
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span className="font-mono">{market.totalPool.toLocaleString()} credits</span>
+          <span>{market.participants} participants</span>
+        </div>
+      </Card>
+    </div>
   );
 }
 
@@ -726,6 +1041,14 @@ export default function PredictPage() {
   const [activePredictions] = useState(0);
   const marketCycle = useMarketCycle();
   const isMarketClosed = marketCycle.status === "CLOSED";
+  
+  const [predictionModal, setPredictionModal] = useState<{
+    open: boolean;
+    type: MarketType;
+    personName?: string;
+    currentScore?: number;
+    isUserGenerated?: boolean;
+  }>({ open: false, type: "BINARY_TREND" });
 
   useEffect(() => {
     const hasVisited = localStorage.getItem(FIRST_VISIT_KEY);
@@ -741,6 +1064,28 @@ export default function PredictPage() {
 
   const handleOpenHowItWorks = () => {
     setShowFirstTimeModal(true);
+  };
+
+  const handleEnterJackpot = () => {
+    setPredictionModal({
+      open: true,
+      type: "JACKPOT_EXACT",
+      personName: jackpotData.personName,
+      currentScore: jackpotData.currentScore,
+    });
+  };
+
+  const handleCommunityClick = (market: CommunityMarket) => {
+    setPredictionModal({
+      open: true,
+      type: "COMMUNITY",
+      personName: market.personName,
+      isUserGenerated: true,
+    });
+  };
+
+  const handleClosePredictionModal = () => {
+    setPredictionModal({ ...predictionModal, open: false });
   };
 
   return (
@@ -807,6 +1152,13 @@ export default function PredictPage() {
         </div>
 
         <MarketCycleHero marketState={marketCycle} />
+
+        {/* Weekly Jackpot Hero */}
+        <WeeklyJackpotHero 
+          onEnterJackpot={handleEnterJackpot}
+          isMarketClosed={isMarketClosed}
+          timeRemaining={marketCycle.timeRemaining}
+        />
 
         <Card className="p-4 mb-8 bg-muted/30 border-muted">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -876,6 +1228,25 @@ export default function PredictPage() {
           ))}
         </CarouselSection>
 
+        {/* Community Predictions Section */}
+        <div className="mb-10">
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="h-5 w-5 text-muted-foreground" />
+            <h2 className="text-xl font-serif font-bold">Community Predictions</h2>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">User-suggested markets from the community</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {communityMarkets.map((market) => (
+              <CommunityCard 
+                key={market.id} 
+                market={market} 
+                onClick={() => handleCommunityClick(market)}
+                isMarketClosed={isMarketClosed}
+              />
+            ))}
+          </div>
+        </div>
+
         <div className="text-center">
           <p className="text-sm text-muted-foreground">
             More markets added daily. Pool sizes update in real-time.
@@ -922,6 +1293,14 @@ export default function PredictPage() {
           <TopGainerCard key={market.id} market={market} isMarketClosed={isMarketClosed} />
         ))}
       </ViewAllModal>
+      <PredictionModal
+        open={predictionModal.open}
+        onClose={handleClosePredictionModal}
+        marketType={predictionModal.type}
+        personName={predictionModal.personName}
+        currentScore={predictionModal.currentScore}
+        isUserGenerated={predictionModal.isUserGenerated}
+      />
       <style>{`
         .predict-carousel .slick-track {
           display: flex;
