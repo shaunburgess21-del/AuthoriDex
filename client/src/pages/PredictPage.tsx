@@ -846,7 +846,7 @@ export default function PredictPage() {
           onViewAll={() => setViewAllCategory("h2h")}
         >
           {headToHeadMarkets.map((market) => (
-            <div key={market.id} className="px-2">
+            <div key={market.id} className="px-2 pt-[10px] pb-[10px]">
               <HeadToHeadCard market={market} isMarketClosed={isMarketClosed} />
             </div>
           ))}
