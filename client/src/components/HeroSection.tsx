@@ -19,7 +19,7 @@ export function HeroSection() {
           Global Influence <span className="text-primary">Insights</span>
         </h1>
         
-        <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">Discover real-time insights, vote and make your prediction on the world's most influential people, powered by live data</p>
+        <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">Discover real-time insights, cast your vote and make your prediction on the world's most influential people</p>
         
         <div className="flex flex-col sm:flex-row gap-4">
           <Button 
