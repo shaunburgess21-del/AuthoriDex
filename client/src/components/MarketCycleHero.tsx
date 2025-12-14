@@ -9,30 +9,24 @@ function padZero(num: number): string {
   return num.toString().padStart(2, "0");
 }
 
+function TimerSegment({ value, label, testId }: { value: string; label: string; testId: string }) {
+  return (
+    <div 
+      className="flex flex-col items-center justify-center bg-white/5 border border-white/5 rounded-lg px-3 py-2 md:px-4 md:py-3 min-w-[52px] md:min-w-[64px]"
+      data-testid={testId}
+    >
+      <span className="font-mono text-xl md:text-2xl font-bold text-white leading-none">
+        {value}
+      </span>
+      <span className="text-[9px] md:text-[10px] uppercase tracking-widest text-gray-400 mt-1">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export function MarketCycleHero({ marketState }: MarketCycleHeroProps) {
   const { status, timeRemaining, urgencyLevel } = marketState;
-  
-  const getBorderClass = () => {
-    switch (urgencyLevel) {
-      case "critical":
-        return "border-red-500/60";
-      case "warning":
-        return "border-orange-500/60";
-      default:
-        return "border-violet-500/50";
-    }
-  };
-  
-  const getInsetGlow = () => {
-    switch (urgencyLevel) {
-      case "critical":
-        return "inset 0 0 20px rgba(239, 68, 68, 0.15)";
-      case "warning":
-        return "inset 0 0 20px rgba(249, 115, 22, 0.15)";
-      default:
-        return "inset 0 0 20px rgba(139, 92, 246, 0.1)";
-    }
-  };
   
   const getStatusBadge = () => {
     if (status === "CLOSED") {
@@ -83,29 +77,42 @@ export function MarketCycleHero({ marketState }: MarketCycleHeroProps) {
   
   return (
     <div 
-      className={`relative rounded-xl mb-6 border backdrop-blur-md bg-[#1a103c]/50 ${getBorderClass()}`}
-      style={{
-        boxShadow: getInsetGlow(),
-      }}
+      className="relative rounded-xl mb-6 border border-white/10 bg-card"
       data-testid="market-cycle-hero"
     >
       <div className="relative z-10 px-4 py-4 md:px-6">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-violet-300/80 text-[10px] font-medium uppercase tracking-widest">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <p className="text-gray-400 text-[10px] font-medium uppercase tracking-widest">
             Weekly Market Closes In
           </p>
           
           <div 
-            className="font-mono text-2xl md:text-3xl font-bold tracking-wider text-gray-100"
+            className="flex items-center gap-2"
             data-testid="countdown-timer"
           >
-            <span data-testid="timer-days">{padZero(timeRemaining.days)}</span>
-            <span className="text-violet-400/60 mx-1">:</span>
-            <span data-testid="timer-hours">{padZero(timeRemaining.hours)}</span>
-            <span className="text-violet-400/60 mx-1">:</span>
-            <span data-testid="timer-minutes">{padZero(timeRemaining.minutes)}</span>
-            <span className="text-violet-400/60 mx-1">:</span>
-            <span data-testid="timer-seconds">{padZero(timeRemaining.seconds)}</span>
+            <TimerSegment 
+              value={padZero(timeRemaining.days)} 
+              label="Days" 
+              testId="timer-days" 
+            />
+            <span className="text-violet-500 text-lg font-bold">:</span>
+            <TimerSegment 
+              value={padZero(timeRemaining.hours)} 
+              label="Hrs" 
+              testId="timer-hours" 
+            />
+            <span className="text-violet-500 text-lg font-bold">:</span>
+            <TimerSegment 
+              value={padZero(timeRemaining.minutes)} 
+              label="Min" 
+              testId="timer-minutes" 
+            />
+            <span className="text-violet-500 text-lg font-bold">:</span>
+            <TimerSegment 
+              value={padZero(timeRemaining.seconds)} 
+              label="Sec" 
+              testId="timer-seconds" 
+            />
           </div>
           
           <div className="flex items-center">
@@ -115,7 +122,7 @@ export function MarketCycleHero({ marketState }: MarketCycleHeroProps) {
         
         {status === "CLOSED" && (
           <div className="mt-3 text-center">
-            <p className="text-violet-300/70 text-xs">
+            <p className="text-gray-400 text-xs">
               Markets are being resolved. New week opens soon.
             </p>
           </div>
