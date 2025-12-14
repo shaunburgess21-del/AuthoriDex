@@ -386,9 +386,13 @@ function ViewAllModal({
 
 function PredictCard({ children, className = "", testId }: { children: React.ReactNode; className?: string; testId?: string }) {
   return (
-    <div className="relative p-[1px] rounded-xl bg-gradient-to-br from-violet-500/80 via-purple-500/30 to-transparent">
+    <div className="relative overflow-visible group">
+      <div 
+        className="absolute -top-[3px] left-0 right-0 h-1 rounded-t-xl bg-transparent group-hover:bg-[#8B5CF6] transition-all duration-200 ease-out z-20"
+        style={{ boxShadow: "0 0 0 transparent" }}
+      />
       <Card 
-        className={`p-4 bg-card rounded-xl hover:translate-y-[-2px] hover:shadow-lg hover:shadow-violet-500/20 transition-all duration-200 relative z-0 hover:z-10 ${className}`}
+        className={`p-4 rounded-xl border border-border/50 group-hover:border-violet-500/40 group-hover:translate-y-[-2px] group-hover:shadow-lg group-hover:shadow-violet-500/20 transition-all duration-200 ease-out relative overflow-visible ${className}`}
         data-testid={testId}
       >
         {children}
