@@ -1,0 +1,30 @@
+I need to finalize the "Cast Your Vote" feature. Please implement two specific changes. 
+
+**IMPORTANT:** Task #2 applies ONLY to the "Cast Your Vote" overlay list triggered from the Home Page Hero section. Do NOT change the behavior of the main Leaderboard page.
+
+### 1. Fix Voting Modal Internal Logic (State & Submit Button)
+Refactor the `RateModal` (or voting modal component) to strictly follow this flow:
+- **Add State:** Create a state variable `const [hasSubmitted, setHasSubmitted] = useState(false);`
+- **Initial View (!hasSubmitted):**
+  - Show the Slider.
+  - **Show a "Submit Your Vote" button** below the slider.
+  - Button Logic: Disabled/Grey if no rating selected; Active/Blue if rating selected.
+  - **Hide** the dynamic sentiment text (e.g., "Your Vote: 10/10") in this view.
+- **Submitted View (hasSubmitted):**
+  - When user clicks "Submit Your Vote", set `hasSubmitted(true)`.
+  - Hide the "Submit Your Vote" button.
+  - Reveal the dynamic sentiment text ("Your Vote: 10/10 - Love") with a fade-in.
+  - **Show a "Visit Profile" button** below the text.
+
+### 2. Update Hero Section Interaction (Prevent Navigation)
+Currently, when a user clicks the "Cast Your Vote" button on the **Home Page Hero section**, it opens a list of people. Clicking a person in *this specific list* currently navigates to their profile.
+
+**Change this behavior:**
+- **Prevent Navigation:** Clicking a person in this Hero overlay list should **NOT** navigate to the Profile Page.
+- **Open Modal:** Instead, it must open the Voting Modal (fixed in step 1) for that selected person, keeping the user on the Home Page.
+- **Close Logic:** Ensure the modal has a clear "Close" (X) button that returns the user to the Hero overlay list (or closes the modal), so they can vote on others.
+
+**Summary of Changes:**
+1. Update the Voting Modal to have a "Submit" button state.
+2. Update the Hero Section's person list to open this Modal instead of navigating. 
+3. Leave the main Leaderboard page behavior exactly as it is.

@@ -9,6 +9,7 @@ import { useLocation } from "wouter";
 interface AnimatedSentimentVotingWidgetProps {
   personId: string;
   personName: string;
+  onVisitProfile?: () => void;
 }
 
 const ZONE_LABELS = ['Hate', 'Dislike', 'Neutral', 'Like', 'Love'];
@@ -43,7 +44,7 @@ const getApprovalMessage = (value: number, personName: string) => {
   return `You strongly approve of ${personName}!`;
 };
 
-export function AnimatedSentimentVotingWidget({ personId, personName }: AnimatedSentimentVotingWidgetProps) {
+export function AnimatedSentimentVotingWidget({ personId, personName, onVisitProfile }: AnimatedSentimentVotingWidgetProps) {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [currentValue, setCurrentValue] = useState<number | null>(null);
@@ -131,7 +132,11 @@ export function AnimatedSentimentVotingWidget({ personId, personName }: Animated
   };
 
   const handleVisitProfile = () => {
-    setLocation(`/person/${personId}`);
+    if (onVisitProfile) {
+      onVisitProfile();
+    } else {
+      setLocation(`/person/${personId}`);
+    }
   };
 
   const displayValue = currentValue || 5;
