@@ -12,6 +12,7 @@ import { AnimatedSentimentVotingWidget } from "@/components/AnimatedSentimentVot
 import { CommunityInsights } from "@/components/CommunityInsights";
 import { ProfileTabs } from "@/components/ProfileTabs";
 import { PredictTab } from "@/components/PredictTab";
+import { PolymarketBetsWidget } from "@/components/PolymarketBetsWidget";
 import { ArrowLeft, Share2, Star, TrendingUp, Users, Eye, DollarSign, Globe, MessageSquare, Trophy, Zap } from "lucide-react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -324,6 +325,9 @@ export default function PersonDetailPage() {
             
             {/* 6. Platform Insights (stacked blocks) */}
             <PlatformInsightsSection personId={person.id} />
+
+            {/* 7. Polymarket Bets Widget */}
+            <PolymarketBetsWidget personName={person.name} />
 
             {/* Future Widgets - Placeholder Section */}
             <div className="mt-12 space-y-6">

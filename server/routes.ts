@@ -406,6 +406,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Polymarket API proxy (to avoid CORS issues)
+  app.post("/api/polymarket/markets", async (req, res) => {
+    try {
+      const { personName } = req.body;
+      
+      if (!personName || typeof personName !== 'string') {
+        return res.status(400).json({ error: "personName is required" });
+      }
+
+      const query = `
+        query GetPersonMarkets($name: String!) {
+          markets(search: $name, limit: 5, sort: "volume") {
+            id
+            question
+            slug
+            volume
+            endDate
+          }
+        }
+      `;
+
+      const response = await fetch("https://api.polymarket.com/graphql", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query,
+          variables: { name: personName },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Polymarket API error: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.errors) {
+        throw new Error(result.errors[0]?.message || "GraphQL error");
+      }
+
+      res.json({ markets: result.data?.markets || [] });
+    } catch (error: any) {
+      console.error("Polymarket proxy error:", error.message);
+      res.status(500).json({ error: "Failed to fetch prediction markets", markets: [] });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
