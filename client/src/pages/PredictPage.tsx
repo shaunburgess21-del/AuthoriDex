@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { MarketCycleHero } from "@/components/MarketCycleHero";
+import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -19,7 +21,8 @@ import {
   X,
   ChevronRight,
   Clock,
-  Search
+  Search,
+  Lock
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import Slider from "react-slick";
@@ -394,9 +397,9 @@ function PredictCard({ children, className = "", testId }: { children: React.Rea
   );
 }
 
-function WeeklyUpDownCard({ market }: { market: PredictionMarket }) {
+function WeeklyUpDownCard({ market, isMarketClosed = false }: { market: PredictionMarket; isMarketClosed?: boolean }) {
   return (
-    <PredictCard testId={`card-market-${market.id}`} className="min-w-[280px]">
+    <PredictCard testId={`card-market-${market.id}`} className={`min-w-[280px] ${isMarketClosed ? 'opacity-75' : ''}`}>
       <div className="flex items-center gap-3 mb-3">
         <PersonAvatar name={market.personName} avatar={market.personAvatar} size="md" />
         <div className="flex-1 min-w-0">
@@ -429,7 +432,7 @@ function WeeklyUpDownCard({ market }: { market: PredictionMarket }) {
       </div>
       
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs text-muted-foreground font-semibold">
+        <span className="text-xs text-[#8B5CF6] font-semibold">
           Pool: {market.totalPool.toLocaleString()} credits
         </span>
         <span className="text-xs text-muted-foreground flex items-center gap-1">
@@ -438,31 +441,43 @@ function WeeklyUpDownCard({ market }: { market: PredictionMarket }) {
         </span>
       </div>
       
-      <div className="flex gap-2">
+      {isMarketClosed ? (
         <Button 
           size="sm" 
-          className="flex-1 bg-green-600 text-white"
-          data-testid={`button-up-${market.id}`}
+          className="w-full bg-muted text-muted-foreground cursor-not-allowed"
+          disabled
+          data-testid={`button-awaiting-${market.id}`}
         >
-          <TrendingUp className="h-4 w-4 mr-1" />
-          Up {market.upMultiplier}x
+          <Lock className="h-4 w-4 mr-2" />
+          Awaiting Results
         </Button>
-        <Button 
-          size="sm" 
-          className="flex-1 bg-red-600 text-white"
-          data-testid={`button-down-${market.id}`}
-        >
-          <TrendingDown className="h-4 w-4 mr-1" />
-          Down {market.downMultiplier}x
-        </Button>
-      </div>
+      ) : (
+        <div className="flex gap-2">
+          <Button 
+            size="sm" 
+            className="flex-1 bg-green-600 text-white"
+            data-testid={`button-up-${market.id}`}
+          >
+            <TrendingUp className="h-4 w-4 mr-1" />
+            Up {market.upMultiplier}x
+          </Button>
+          <Button 
+            size="sm" 
+            className="flex-1 bg-red-600 text-white"
+            data-testid={`button-down-${market.id}`}
+          >
+            <TrendingDown className="h-4 w-4 mr-1" />
+            Down {market.downMultiplier}x
+          </Button>
+        </div>
+      )}
     </PredictCard>
   );
 }
 
-function HeadToHeadCard({ market }: { market: HeadToHeadMarket }) {
+function HeadToHeadCard({ market, isMarketClosed = false }: { market: HeadToHeadMarket; isMarketClosed?: boolean }) {
   return (
-    <PredictCard testId={`card-h2h-${market.id}`} className="min-w-[300px]">
+    <PredictCard testId={`card-h2h-${market.id}`} className={`min-w-[300px] ${isMarketClosed ? 'opacity-75' : ''}`}>
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary" className="text-xs">{market.category}</Badge>
         <span className="text-xs text-muted-foreground flex items-center gap-1">
@@ -478,8 +493,8 @@ function HeadToHeadCard({ market }: { market: HeadToHeadMarket }) {
           <p className="text-xs text-green-500 font-mono">{market.person1Percent}%</p>
         </div>
         
-        <div className="h-12 w-12 rounded-full bg-violet-500/10 flex items-center justify-center">
-          <span className="text-sm font-bold text-violet-500">VS</span>
+        <div className="h-12 w-12 rounded-full bg-[#8B5CF6]/20 flex items-center justify-center border border-[#8B5CF6]/40">
+          <span className="text-sm font-bold text-[#8B5CF6]">VS</span>
         </div>
         
         <div className="text-center">
@@ -501,26 +516,38 @@ function HeadToHeadCard({ market }: { market: HeadToHeadMarket }) {
       </div>
       
       <div className="text-center mb-3">
-        <span className="text-sm font-semibold text-violet-500">
+        <span className="text-sm font-semibold text-[#8B5CF6]">
           Pool: {market.totalPool.toLocaleString()} credits
         </span>
       </div>
       
-      <div className="flex gap-2">
-        <Button size="sm" variant="outline" className="flex-1 border-green-500/30 text-green-500">
-          {market.person1.name.split(" ")[0]}
+      {isMarketClosed ? (
+        <Button 
+          size="sm" 
+          className="w-full bg-muted text-muted-foreground cursor-not-allowed"
+          disabled
+          data-testid={`button-awaiting-h2h-${market.id}`}
+        >
+          <Lock className="h-4 w-4 mr-2" />
+          Awaiting Results
         </Button>
-        <Button size="sm" variant="outline" className="flex-1 border-red-500/30 text-red-500">
-          {market.person2.name.split(" ")[0]}
-        </Button>
-      </div>
+      ) : (
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" className="flex-1 border-green-500/30 text-green-500">
+            {market.person1.name.split(" ")[0]}
+          </Button>
+          <Button size="sm" variant="outline" className="flex-1 border-red-500/30 text-red-500">
+            {market.person2.name.split(" ")[0]}
+          </Button>
+        </div>
+      )}
     </PredictCard>
   );
 }
 
-function CategoryRaceCard({ market }: { market: CategoryRaceMarket }) {
+function CategoryRaceCard({ market, isMarketClosed = false }: { market: CategoryRaceMarket; isMarketClosed?: boolean }) {
   return (
-    <PredictCard testId={`card-race-${market.id}`} className="min-w-[280px]">
+    <PredictCard testId={`card-race-${market.id}`} className={`min-w-[280px] ${isMarketClosed ? 'opacity-75' : ''}`}>
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary" className="text-xs">{market.category}</Badge>
         <Badge variant="outline" className="text-xs">
@@ -536,7 +563,7 @@ function CategoryRaceCard({ market }: { market: CategoryRaceMarket }) {
           <div key={contender.name} className="flex items-center">
             <div className="relative">
               <PersonAvatar name={contender.name} avatar={contender.avatar} size="sm" />
-              <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-violet-500 text-white text-[10px] flex items-center justify-center font-bold">
+              <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-[#8B5CF6] text-white text-[10px] flex items-center justify-center font-bold">
                 {i + 1}
               </div>
             </div>
@@ -546,22 +573,38 @@ function CategoryRaceCard({ market }: { market: CategoryRaceMarket }) {
       </div>
       
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold text-violet-500">
+        <span className="text-sm font-semibold text-[#8B5CF6]">
           Pool: {market.totalPool.toLocaleString()}
         </span>
       </div>
       
-      <Button size="sm" className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white">
-        Enter Race
-        <ChevronRight className="h-4 w-4 ml-1" />
-      </Button>
+      {isMarketClosed ? (
+        <Button 
+          size="sm" 
+          className="w-full bg-muted text-muted-foreground cursor-not-allowed"
+          disabled
+          data-testid={`button-awaiting-race-${market.id}`}
+        >
+          <Lock className="h-4 w-4 mr-2" />
+          Awaiting Results
+        </Button>
+      ) : (
+        <Button 
+          size="sm" 
+          className="w-full bg-gradient-to-r from-[#4C1D95] to-[#8B5CF6] text-white shadow-lg shadow-[#8B5CF6]/30"
+          data-testid={`button-enter-race-${market.id}`}
+        >
+          Enter Race
+          <ChevronRight className="h-4 w-4 ml-1" />
+        </Button>
+      )}
     </PredictCard>
   );
 }
 
-function TopGainerCard({ market }: { market: TopGainerMarket }) {
+function TopGainerCard({ market, isMarketClosed = false }: { market: TopGainerMarket; isMarketClosed?: boolean }) {
   return (
-    <PredictCard testId={`card-gainer-${market.id}`} className="min-w-[280px]">
+    <PredictCard testId={`card-gainer-${market.id}`} className={`min-w-[280px] ${isMarketClosed ? 'opacity-75' : ''}`}>
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary" className="text-xs">{market.category}</Badge>
         <span className="text-xs text-muted-foreground">7-day gain</span>
@@ -572,7 +615,7 @@ function TopGainerCard({ market }: { market: TopGainerMarket }) {
       <div className="space-y-2 mb-3">
         {market.leaders.map((leader, i) => (
           <div key={leader.name} className="flex items-center gap-2">
-            <span className="text-xs font-bold text-muted-foreground w-4">#{i + 1}</span>
+            <span className="text-xs font-bold text-[#8B5CF6] w-4">#{i + 1}</span>
             <PersonAvatar name={leader.name} avatar={leader.avatar} size="xs" />
             <span className="text-sm flex-1 truncate">{leader.name}</span>
             <span className="text-xs font-mono text-green-500">+{leader.currentGain.toLocaleString()}</span>
@@ -581,15 +624,31 @@ function TopGainerCard({ market }: { market: TopGainerMarket }) {
       </div>
       
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold text-violet-500">
+        <span className="text-sm font-semibold text-[#8B5CF6]">
           Pool: {market.totalPool.toLocaleString()}
         </span>
       </div>
       
-      <Button size="sm" className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white">
-        Place Prediction
-        <ChevronRight className="h-4 w-4 ml-1" />
-      </Button>
+      {isMarketClosed ? (
+        <Button 
+          size="sm" 
+          className="w-full bg-muted text-muted-foreground cursor-not-allowed"
+          disabled
+          data-testid={`button-awaiting-gainer-${market.id}`}
+        >
+          <Lock className="h-4 w-4 mr-2" />
+          Awaiting Results
+        </Button>
+      ) : (
+        <Button 
+          size="sm" 
+          className="w-full bg-gradient-to-r from-[#4C1D95] to-[#8B5CF6] text-white shadow-lg shadow-[#8B5CF6]/30"
+          data-testid={`button-place-prediction-${market.id}`}
+        >
+          Place Prediction
+          <ChevronRight className="h-4 w-4 ml-1" />
+        </Button>
+      )}
     </PredictCard>
   );
 }
@@ -661,6 +720,8 @@ export default function PredictPage() {
   const [viewAllCategory, setViewAllCategory] = useState<string | null>(null);
   const [balance] = useState(10000);
   const [activePredictions] = useState(0);
+  const marketCycle = useMarketCycle();
+  const isMarketClosed = marketCycle.status === "CLOSED";
 
   useEffect(() => {
     const hasVisited = localStorage.getItem(FIRST_VISIT_KEY);
@@ -693,8 +754,8 @@ export default function PredictPage() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold font-serif text-lg">F</span>
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#4C1D95] to-[#8B5CF6] flex items-center justify-center shadow-lg shadow-[#8B5CF6]/30">
+                <span className="text-white font-bold font-serif text-lg">F</span>
               </div>
               <span className="font-serif font-bold text-xl">FameDex</span>
             </div>
@@ -708,7 +769,7 @@ export default function PredictPage() {
                 <Button variant="ghost" size="sm">Vote</Button>
               </Link>
               <Link href="/predict">
-                <Button variant="ghost" size="sm" className="text-violet-500">Predict</Button>
+                <Button variant="ghost" size="sm" className="text-[#8B5CF6]">Predict</Button>
               </Link>
               <Link href="/me">
                 <Button variant="ghost" size="sm">Me</Button>
@@ -719,17 +780,17 @@ export default function PredictPage() {
         </div>
       </header>
       <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <div className="mb-6 bg-gradient-to-r from-violet-500/20 via-violet-500/10 to-transparent rounded-xl p-6">
+        <div className="mb-6 bg-gradient-to-r from-[#4C1D95]/30 via-[#8B5CF6]/20 to-transparent rounded-xl p-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-3">
-              <Zap className="h-8 w-8 text-violet-500" />
+              <Zap className="h-8 w-8 text-[#8B5CF6]" style={{ filter: 'drop-shadow(0 0 8px rgba(139, 92, 246, 0.5))' }} />
               <h1 className="text-3xl font-serif font-bold" data-testid="text-predict-title">
                 Prediction Markets
               </h1>
             </div>
             <button 
               onClick={handleOpenHowItWorks}
-              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-violet-500 transition-colors"
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-[#8B5CF6] transition-colors"
               data-testid="button-how-it-works"
             >
               <HelpCircle className="h-4 w-4" />
@@ -741,14 +802,16 @@ export default function PredictPage() {
           </p>
         </div>
 
+        <MarketCycleHero marketState={marketCycle} />
+
         <Card className="p-4 mb-8 bg-muted/30 border-muted">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <Badge variant="outline" className="bg-violet-500/10 text-violet-500 border-violet-500/30 px-3 py-1">
+              <Badge variant="outline" className="bg-[#8B5CF6]/10 text-[#8B5CF6] border-[#8B5CF6]/30 px-3 py-1">
                 TEST MODE
               </Badge>
               <div className="flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-violet-500" />
+                <Wallet className="h-4 w-4 text-[#8B5CF6]" />
                 <span className="font-mono font-bold">{balance.toLocaleString()}</span>
                 <span className="text-xs text-muted-foreground">credits</span>
               </div>
@@ -768,7 +831,7 @@ export default function PredictPage() {
         >
           {mockMarkets.map((market) => (
             <div key={market.id} className="px-2 pt-[10px] pb-[10px]">
-              <WeeklyUpDownCard market={market} />
+              <WeeklyUpDownCard market={market} isMarketClosed={isMarketClosed} />
             </div>
           ))}
         </CarouselSection>
@@ -780,7 +843,7 @@ export default function PredictPage() {
         >
           {headToHeadMarkets.map((market) => (
             <div key={market.id} className="px-2">
-              <HeadToHeadCard market={market} />
+              <HeadToHeadCard market={market} isMarketClosed={isMarketClosed} />
             </div>
           ))}
         </CarouselSection>
@@ -792,7 +855,7 @@ export default function PredictPage() {
         >
           {categoryRaceMarkets.map((market) => (
             <div key={market.id} className="px-2 pt-[10px] pb-[10px]">
-              <CategoryRaceCard market={market} />
+              <CategoryRaceCard market={market} isMarketClosed={isMarketClosed} />
             </div>
           ))}
         </CarouselSection>
@@ -804,7 +867,7 @@ export default function PredictPage() {
         >
           {topGainerMarkets.map((market) => (
             <div key={market.id} className="px-2">
-              <TopGainerCard market={market} />
+              <TopGainerCard market={market} isMarketClosed={isMarketClosed} />
             </div>
           ))}
         </CarouselSection>
@@ -825,7 +888,7 @@ export default function PredictPage() {
         title="All Weekly Up/Down Markets"
       >
         {mockMarkets.map((market) => (
-          <WeeklyUpDownCard key={market.id} market={market} />
+          <WeeklyUpDownCard key={market.id} market={market} isMarketClosed={isMarketClosed} />
         ))}
       </ViewAllModal>
       <ViewAllModal
@@ -834,7 +897,7 @@ export default function PredictPage() {
         title="All Head-to-Head Battles"
       >
         {headToHeadMarkets.map((market) => (
-          <HeadToHeadCard key={market.id} market={market} />
+          <HeadToHeadCard key={market.id} market={market} isMarketClosed={isMarketClosed} />
         ))}
       </ViewAllModal>
       <ViewAllModal
@@ -843,7 +906,7 @@ export default function PredictPage() {
         title="All Category Races"
       >
         {categoryRaceMarkets.map((market) => (
-          <CategoryRaceCard key={market.id} market={market} />
+          <CategoryRaceCard key={market.id} market={market} isMarketClosed={isMarketClosed} />
         ))}
       </ViewAllModal>
       <ViewAllModal
@@ -852,7 +915,7 @@ export default function PredictPage() {
         title="All Top Gainer Predictions"
       >
         {topGainerMarkets.map((market) => (
-          <TopGainerCard key={market.id} market={market} />
+          <TopGainerCard key={market.id} market={market} isMarketClosed={isMarketClosed} />
         ))}
       </ViewAllModal>
       <style>{`
