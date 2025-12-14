@@ -412,6 +412,7 @@ export default function PersonDetailPage() {
           <PredictTab 
             personId={person.id} 
             personName={person.name}
+            personAvatar={person.avatar || ""}
             currentScore={Math.round(person.trendScore)}
           />
         )}

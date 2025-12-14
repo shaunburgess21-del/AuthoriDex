@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,8 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
+import { useQuery } from "@tanstack/react-query";
+import { TrendingPerson } from "@shared/schema";
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -25,9 +27,11 @@ import {
   Lock,
   Sparkles,
   Crown,
-  UserPlus
+  UserPlus,
+  ChevronDown
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLocation, Link } from "wouter";
 import Slider from "react-slick";
 import "slick-carousel/slick/slick.css";
@@ -278,14 +282,8 @@ const topGainerMarkets: TopGainerMarket[] = [
   },
 ];
 
-// Jackpot data
-const jackpotData = {
-  personName: "Elon Musk",
-  personAvatar: "",
-  currentScore: 515809,
-  totalPool: 50000,
-  endTime: "Sun 23:59 UTC",
-};
+// Base jackpot pool amount (would come from API in production)
+const BASE_JACKPOT_POOL = 50000;
 
 // Community markets
 interface CommunityMarket {
@@ -575,15 +573,51 @@ function PredictionModal({ open, onClose, marketType, personName, currentScore, 
   );
 }
 
+interface WeeklyJackpotHeroProps {
+  onEnterJackpot: () => void;
+  isMarketClosed: boolean;
+  timeRemaining: { days: number; hours: number; minutes: number; seconds: number };
+  trendingPeople: TrendingPerson[];
+  selectedPerson: TrendingPerson | null;
+  onSelectPerson: (person: TrendingPerson) => void;
+  isLoading: boolean;
+}
+
 function WeeklyJackpotHero({ 
   onEnterJackpot, 
   isMarketClosed,
-  timeRemaining 
-}: { 
-  onEnterJackpot: () => void; 
-  isMarketClosed: boolean;
-  timeRemaining: { days: number; hours: number; minutes: number; seconds: number };
-}) {
+  timeRemaining,
+  trendingPeople,
+  selectedPerson,
+  onSelectPerson,
+  isLoading
+}: WeeklyJackpotHeroProps) {
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Filter people based on search (with safety check)
+  const filteredPeople = (trendingPeople || []).filter(person =>
+    person.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSelectPerson = (person: TrendingPerson) => {
+    onSelectPerson(person);
+    setDropdownOpen(false);
+    setSearchQuery("");
+  };
+
   return (
     <div 
       className="relative overflow-hidden rounded-2xl mb-8 border-2 border-amber-500/50"
@@ -606,8 +640,84 @@ function WeeklyJackpotHero({
               </Badge>
             </div>
             
+            {/* Searchable Dropdown */}
+            <div className="relative mb-4" ref={dropdownRef}>
+              <button
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="w-full max-w-md flex items-center justify-between gap-2 px-4 py-3 rounded-lg border-2 border-amber-500/40 bg-background/80 backdrop-blur-sm hover:border-amber-500/60 transition-colors"
+                data-testid="dropdown-jackpot-person"
+              >
+                <div className="flex items-center gap-3">
+                  {selectedPerson ? (
+                    <>
+                      <PersonAvatar name={selectedPerson.name} avatar={selectedPerson.avatar || ""} size="sm" />
+                      <div className="text-left">
+                        <p className="font-semibold">{selectedPerson.name}</p>
+                        <p className="text-xs text-muted-foreground">Rank #{selectedPerson.rank}</p>
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">
+                      {isLoading ? "Loading..." : "Select a person"}
+                    </span>
+                  )}
+                </div>
+                <ChevronDown className={`h-5 w-5 text-amber-500 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {dropdownOpen && (
+                <div className="absolute top-full left-0 right-0 max-w-md mt-2 rounded-lg border border-border bg-background shadow-xl z-50">
+                  <div className="p-2 border-b">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        placeholder="Search by name..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9"
+                        autoFocus
+                        data-testid="input-jackpot-search"
+                      />
+                    </div>
+                  </div>
+                  <ScrollArea className="h-[280px]">
+                    <div className="p-1">
+                      {filteredPeople.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-4">No results found</p>
+                      ) : (
+                        filteredPeople.map((person) => (
+                          <button
+                            key={person.id}
+                            onClick={() => handleSelectPerson(person)}
+                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors ${
+                              selectedPerson?.id === person.id ? 'bg-amber-500/10 border border-amber-500/30' : ''
+                            }`}
+                            data-testid={`option-person-${person.id}`}
+                          >
+                            <PersonAvatar name={person.name} avatar={person.avatar || ""} size="sm" />
+                            <div className="flex-1 text-left min-w-0">
+                              <p className="font-medium truncate">{person.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                #{person.rank} • {Math.round(person.trendScore).toLocaleString()} pts
+                              </p>
+                            </div>
+                            {person.rank === 1 && (
+                              <Badge variant="outline" className="text-amber-500 border-amber-500/30 text-[10px]">
+                                #1
+                              </Badge>
+                            )}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                </div>
+              )}
+            </div>
+
             <h2 className="text-2xl md:text-3xl font-serif font-bold mb-2">
-              Predict {jackpotData.personName}'s Exact Score
+              Predict {selectedPerson?.name || "..."}'s Exact Score
             </h2>
             
             <p className="text-muted-foreground mb-4 max-w-lg">
@@ -618,7 +728,7 @@ function WeeklyJackpotHero({
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Current Pot</p>
                 <p className="text-3xl font-mono font-bold text-amber-500">
-                  {jackpotData.totalPool.toLocaleString()}
+                  {BASE_JACKPOT_POOL.toLocaleString()}
                   <span className="text-sm ml-1 text-muted-foreground">credits</span>
                 </p>
               </div>
@@ -635,9 +745,9 @@ function WeeklyJackpotHero({
           </div>
           
           <div className="flex flex-col items-center gap-3">
-            <PersonAvatar name={jackpotData.personName} avatar="" size="lg" />
+            <PersonAvatar name={selectedPerson?.name || "?"} avatar={selectedPerson?.avatar || ""} size="lg" />
             <p className="text-sm font-mono text-muted-foreground">
-              Current: {jackpotData.currentScore.toLocaleString()} pts
+              Current: {selectedPerson ? Math.round(selectedPerson.trendScore).toLocaleString() : "..."} pts
             </p>
             
             {isMarketClosed ? (
@@ -654,10 +764,11 @@ function WeeklyJackpotHero({
                 size="lg" 
                 className="bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
                 onClick={onEnterJackpot}
+                disabled={!selectedPerson}
                 data-testid="button-enter-jackpot"
               >
                 <Sparkles className="h-5 w-5 mr-2" />
-                Enter Jackpot
+                Predict Score
               </Button>
             )}
           </div>
@@ -1042,6 +1153,22 @@ export default function PredictPage() {
   const marketCycle = useMarketCycle();
   const isMarketClosed = marketCycle.status === "CLOSED";
   
+  // Fetch trending people for jackpot dropdown
+  const { data: trendingPeople = [], isLoading: isLoadingPeople } = useQuery<TrendingPerson[]>({
+    queryKey: ['/api/trending?sort=rank'],
+  });
+
+  // State for selected jackpot person (defaults to #1 ranked)
+  const [selectedJackpotPerson, setSelectedJackpotPerson] = useState<TrendingPerson | null>(null);
+
+  // Set initial selected person to rank #1 when data loads
+  useEffect(() => {
+    if (trendingPeople.length > 0 && !selectedJackpotPerson) {
+      const rank1Person = trendingPeople.find(p => p.rank === 1) || trendingPeople[0];
+      setSelectedJackpotPerson(rank1Person);
+    }
+  }, [trendingPeople, selectedJackpotPerson]);
+  
   const [predictionModal, setPredictionModal] = useState<{
     open: boolean;
     type: MarketType;
@@ -1067,11 +1194,12 @@ export default function PredictPage() {
   };
 
   const handleEnterJackpot = () => {
+    if (!selectedJackpotPerson) return;
     setPredictionModal({
       open: true,
       type: "JACKPOT_EXACT",
-      personName: jackpotData.personName,
-      currentScore: jackpotData.currentScore,
+      personName: selectedJackpotPerson.name,
+      currentScore: Math.round(selectedJackpotPerson.trendScore),
     });
   };
 
@@ -1158,6 +1286,10 @@ export default function PredictPage() {
           onEnterJackpot={handleEnterJackpot}
           isMarketClosed={isMarketClosed}
           timeRemaining={marketCycle.timeRemaining}
+          trendingPeople={trendingPeople}
+          selectedPerson={selectedJackpotPerson}
+          onSelectPerson={setSelectedJackpotPerson}
+          isLoading={isLoadingPeople}
         />
 
         <Card className="p-4 mb-8 bg-muted/30 border-muted">
