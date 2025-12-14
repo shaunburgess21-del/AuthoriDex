@@ -252,6 +252,7 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
                     stroke: 'hsl(var(--background))',
                     strokeWidth: 2
                   }}
+                  isAnimationActive={false}
                 />
               </AreaChart>
             </ResponsiveContainer>
