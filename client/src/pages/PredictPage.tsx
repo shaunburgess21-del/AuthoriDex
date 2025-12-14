@@ -870,7 +870,7 @@ export default function PredictPage() {
           onViewAll={() => setViewAllCategory("gainers")}
         >
           {topGainerMarkets.map((market) => (
-            <div key={market.id} className="px-2">
+            <div key={market.id} className="px-2 pt-[10px] pb-[10px]">
               <TopGainerCard market={market} isMarketClosed={isMarketClosed} />
             </div>
           ))}
