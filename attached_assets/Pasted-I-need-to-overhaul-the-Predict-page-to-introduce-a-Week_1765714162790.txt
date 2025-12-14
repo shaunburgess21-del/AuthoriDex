@@ -1,0 +1,35 @@
+I need to overhaul the "Predict" page to introduce a "Weekly Market Cycle" and refine the visual identity with a specific "Sectional Branding" strategy.
+
+Please implement the following 3 major changes:
+
+### 1. Visual Identity: The "Electric Violet" Theme
+The Predict page currently uses a dull purple. I want to upgrade this to a striking, premium "Electric Violet" theme to signify high-stakes/futuristic prediction markets.
+- **Update the Accent Color:** Replace the existing dull purple with a vivid Electric Violet (approx Hex: `#8B5CF6` or Tailwind `violet-500`).
+- **Gradients:** Where backgrounds or headers use purple, use a subtle gradient from Deep Indigo (`#4C1D95`) to Electric Violet (`#8B5CF6`) to give it depth.
+- **Glows:** Add subtle box-shadow glows (e.g., `shadow-purple-500/20`) to the active cards to make them pop against the dark background.
+- **Consistency:** Ensure this new color applies to the Page Header, the new Timer Component, and the "Active" states of buttons on this page only.
+
+### 2. New Component: "Market Cycle Hero"
+Insert a new Hero section at the very top of the page (below the main title, above the filters).
+- **Design:** A sleek, glass-morphism banner using the new Electric Violet gradient (low opacity).
+- **Content:**
+  - Left: Label "WEEKLY MARKET CLOSES IN:"
+  - Center: A large, monospaced Countdown Timer (DD : HH : MM : SS).
+  - Right: A Status Badge (Green "OPEN" or Red "LOCKED").
+- **Urgency Logic:**
+  - If Time > 24h: Timer text is White/Violet.
+  - If Time < 24h: Timer text turns Orange.
+  - If Time < 1h: Timer text turns Red and pulses.
+
+### 3. Market Logic & State Management
+Implement a `useMarketCycle` hook (or similar logic):
+- **Hardcode a Deadline:** Set the market close time to next Sunday at 23:59 UTC.
+- **State Control:**
+  - **OPEN:** Users can interact with all prediction cards.
+  - **CLOSED:** When the timer hits 0, the state switches.
+- **UI Reaction:**
+  - When CLOSED, all "Up/Down", "Enter Race", and "Place Prediction" buttons on the cards must visually disable (turn grayscale/opacity-50) and become unclickable.
+  - Change the button text on closed cards to "Awaiting Results".
+
+### Summary
+The goal is to make the Predict page feel like a live, premium trading floor. It should look distinct from the Blue Home page and Teal Vote page, using the new Electric Violet identity.
