@@ -396,6 +396,7 @@ export default function PersonDetailPage() {
               <AnimatedSentimentVotingWidget 
                 personId={person.id} 
                 personName={person.name}
+                isProfilePage={true}
               />
             </div>
 
