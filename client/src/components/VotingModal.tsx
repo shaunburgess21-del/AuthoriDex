@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { RankBadge } from "@/components/RankBadge";
@@ -32,33 +32,14 @@ export function VotingModal({ open, onOpenChange, initialPersonId, peopleList }:
   const people = peopleList || fetchedPeople;
 
   // When modal opens with initialPersonId, auto-select that person
-  useState(() => {
+  useEffect(() => {
     if (open && initialPersonId && people.length > 0) {
       const person = people.find(p => p.id === initialPersonId);
       if (person) {
         setSelectedPerson(person);
       }
     }
-  });
-
-  // Effect to handle initialPersonId changes
-  const handleInitialPerson = () => {
-    if (open && initialPersonId && people.length > 0) {
-      const person = people.find(p => p.id === initialPersonId);
-      if (person) {
-        setSelectedPerson(person);
-      }
-    }
-  };
-
-  // Call on open/initialPersonId/people changes
-  if (open && initialPersonId && people.length > 0 && (!selectedPerson || selectedPerson.id !== initialPersonId)) {
-    const person = people.find(p => p.id === initialPersonId);
-    if (person && person.id !== selectedPerson?.id) {
-      // Defer state update to avoid render loop
-      setTimeout(() => setSelectedPerson(person), 0);
-    }
-  }
+  }, [open, initialPersonId, people]);
 
   const handlePersonClick = (person: TrendingPerson) => {
     setSelectedPerson(person);
@@ -119,7 +100,7 @@ export function VotingModal({ open, onOpenChange, initialPersonId, peopleList }:
             </DialogHeader>
             
             <ScrollArea className="max-h-[calc(80vh-100px)]">
-              <div className="pr-4">
+              <div className="pr-4 pb-8">
                 <AnimatedSentimentVotingWidget
                   key={selectedPerson.id}
                   personId={selectedPerson.id}

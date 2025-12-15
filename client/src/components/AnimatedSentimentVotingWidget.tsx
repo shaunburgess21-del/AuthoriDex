@@ -458,7 +458,7 @@ export function AnimatedSentimentVotingWidget({
 
                 {currentValue && (
                   <motion.div
-                    className="absolute pointer-events-none"
+                    className="absolute pointer-events-none z-10"
                     data-testid="vote-needle"
                     style={{
                       top: '-18px',
@@ -472,9 +472,9 @@ export function AnimatedSentimentVotingWidget({
                     }}
                     transition={{ type: "spring", stiffness: 400, damping: 25 }}
                   >
-                    <div className="flex flex-col items-center">
+                    <div className="flex flex-col items-center pointer-events-none">
                       <motion.div
-                        className="w-1 rounded-full"
+                        className="w-1 rounded-full pointer-events-none"
                         data-testid="needle-line"
                         style={{
                           height: '55px',
@@ -486,7 +486,7 @@ export function AnimatedSentimentVotingWidget({
                         }}
                       />
                       <motion.div
-                        className="w-6 h-6 rounded-full"
+                        className="w-6 h-6 rounded-full pointer-events-none"
                         data-testid="needle-circle"
                         style={{
                           backgroundColor: SEGMENT_COLORS[displayValue - 1].bg,
