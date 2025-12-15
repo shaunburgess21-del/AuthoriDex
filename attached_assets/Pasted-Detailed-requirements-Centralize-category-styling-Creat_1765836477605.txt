@@ -1,0 +1,138 @@
+Detailed requirements
+
+Centralize category styling
+
+Create a single reusable component for these labels, e.g. CategoryPill (if one already exists, extend it instead of creating a new one).
+
+It should accept a category prop, e.g. "Tech" | "Music" | "Politics" | "Business" | "Sports" | "Creator" | ....
+
+Inside, map the category to a small set of colour tokens.
+
+Example shape (adapt to this codebase’s patterns):
+
+const CATEGORY_STYLES: Record<string, CategoryStyle> = {
+  Tech: {
+    bg: 'bg-cyan-500/10',
+    border: 'border-cyan-400/60',
+    text: 'text-cyan-200',
+  },
+  Music: {
+    bg: 'bg-purple-500/10',
+    border: 'border-purple-400/60',
+    text: 'text-purple-200',
+  },
+  Politics: {
+    bg: 'bg-amber-500/10',
+    border: 'border-amber-400/60',
+    text: 'text-amber-200',
+  },
+  Business: {
+    bg: 'bg-sky-500/10',
+    border: 'border-sky-400/60',
+    text: 'text-sky-100',
+  },
+  Sports: {
+    bg: 'bg-emerald-500/10',
+    border: 'border-emerald-400/60',
+    text: 'text-emerald-200',
+  },
+  Creator: {
+    bg: 'bg-pink-500/10',
+    border: 'border-pink-400/60',
+    text: 'text-pink-200',
+  },
+};
+
+
+If Tailwind is not used, implement the same idea via CSS classes / variables.
+
+Add a default style for unknown categories that matches the current dark pill design.
+
+Keep the current pill look, just tint it
+
+For the pill itself:
+
+Maintain:
+
+Current padding, border radius, font size and font weight.
+
+Dark base background.
+
+Add:
+
+A subtle tinted background (low opacity over the dark base, like the attached example).
+
+A 1px border in the same colour family.
+
+The visual should feel like a “neon glass” chip, not a solid colour button:
+
+No full, flat bright fills.
+
+Colours should be slightly desaturated / low-opacity.
+
+Example Tailwind-style class composition (adapt to real styles):
+
+<span
+  className={clsx(
+    'inline-flex items-center rounded-full px-3 py-1 text-xs font-medium',
+    'bg-surface-elevated border',
+    categoryStyle.bg,
+    categoryStyle.border,
+    categoryStyle.text,
+  )}
+>
+  {category}
+</span>
+
+
+Respect existing sentiment and action colours
+
+Do not reuse the strong green/red used for:
+
+Up / Down prediction buttons
+
+Sentiment or performance chips
+
+The category pills should be clearly meta-data, not actions.
+
+On hover:
+
+Slightly increase background opacity or border brightness.
+
+Do not turn them into filled buttons or change them to bright red/green.
+
+Apply consistently across the app
+
+Replace all hard-coded category labels with the new CategoryPill:
+
+Leaderboard rows
+
+Profile pages (under name + role)
+
+Predict page (all market cards and modals)
+
+Vote page sections
+
+Public Discourse / Suggest New People / any other category-tagged sections
+
+After refactor, there should be one single source of truth for the category colour mapping.
+
+Accessibility & dark theme
+
+Ensure text contrast remains accessible on the dark background:
+
+Adjust text colour brightness if any combination is too low contrast.
+
+Test all pills in both default theme states used by FameDex (dark background primarily) so they’re readable but not overpowering.
+
+Do not change anything else
+
+Do not modify the hero layout, prediction cards, vote sliders, or navigation.
+
+Only update the category label component + mapping, and wire it into places where those labels already exist.
+
+When you’re done, briefly summarise:
+
+The final category colour mapping you used.
+
+Which components/pages you updated to use the shared CategoryPill.
