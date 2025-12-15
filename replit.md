@@ -101,7 +101,13 @@ The main dashboard displaying trending celebrities and influencers.
 4. **Leaderboard** - Filterable/sortable list of all trending people
 
 ### Vote Page (/vote)
-The Vote page is styled as a "Community Town Hall" with cyan/teal accent theme for community governance features.
+The Vote page is styled as a "Community Town Hall" with cyan/teal accent theme for community governance features. Focus on "Grinding," rapid-fire interactions, and gamification.
+
+**Gamification Header (Sticky XP Bar):**
+- Sticky bar below main header with gradient background
+- Displays: Rank (Crown icon, "Citizen") | XP (Zap icon, starts at 120)
+- XP increments on any vote action (+10 for Paparazzi/Induction, +20 for Discourse)
+- Floating "+X XP" animation appears near cursor on vote, floats up and fades
 
 **Hero Section:**
 - Title: "Shape the FameDex"
@@ -114,22 +120,30 @@ The Vote page is styled as a "Community Town Hall" with cyan/teal accent theme f
 - InductionCard components for voting new celebrities onto the leaderboard
 - Each card shows: PersonAvatar (lg), name, category badge, progress bar (votes/1000)
 - "Vote to Induct (+1)" button changes to "Voted!" when clicked (disabled state)
-- Confetti animation on vote (ping animations)
+- Confetti animation on vote (ping animations), triggers +10 XP
 - Candidates: Jensen Huang, Charli XCX, Kai Cenat, Sabrina Carpenter, xQc
 
-**Section 2: Paparazzi Pit (Carousel)**
-- ImagePollCard components for A/B photo voting
-- Each card shows: person name, category badge, two photo options (A/B)
-- After voting, shows percentage preference for selected photo
-- Selected photo gets cyan border/ring highlight
-- Polls: Taylor Swift, Elon Musk, Beyoncé, MrBeast
+**Section 2: Paparazzi Pit (Hot or Not Rapid-Fire)**
+- Single card at a time (not carousel), shows progress "X of Y"
+- "Which look is iconic?" headline
+- Two large clickable photo placeholders (Look A / Look B)
+- No submit button - clicking a photo:
+  1. Green border flash on selected image
+  2. Triggers +10 XP animation
+  3. Auto-advances to next pair after 600ms delay
+- "Start Over" button appears when all pairs completed
 
-**Section 3: Global Sentiment Pulse (Carousel)**
-- SentimentCard components for quick 1-10 ratings
-- Each card shows: PersonAvatar (md), name, category, rating slider (1-10)
-- "Submit Rating" button, after submission shows "Your vote recorded!" and global average
-- Color-coded ratings (red → orange → yellow → lime → green)
-- People: Elon Musk, Taylor Swift, MrBeast, Donald Trump, Kim Kardashian, Cristiano Ronaldo
+**Section 3: Public Discourse (Carousel)**
+- Renamed from "Global Sentiment Pulse"
+- DiscourseCard components for voting on controversial topics/events
+- Each card shows: category badge, headline, description, 3 neon buttons
+- **Neon Buttons (Glass Aesthetic):**
+  - Disapprove: Neon red border/text, red glow on hover
+  - Neutral: Amber/gold border/text, amber glow on hover
+  - Approve: Neon green border/text, green glow on hover
+- After voting: Shows percentage bar (Disapprove % | Neutral % | Approve %) with total votes
+- Triggers +20 XP on vote
+- Mock Topics: "Elon buys Twitter", "AI replacing jobs", "Taylor's Eras Tour pricing"
 
 **Floating Action Button:**
 - Fixed position bottom-right (bottom-24 on mobile for nav clearance, bottom-8 on desktop)
@@ -142,9 +156,9 @@ The Vote page is styled as a "Community Town Hall" with cyan/teal accent theme f
 - Mobile: Back button in header, fixed bottom nav
 
 **Technical Details:**
-- All sections use react-slick carousels (3 slides desktop, 2 tablet, 1 mobile with center mode)
+- XP state managed locally in React (mock data, no backend)
+- Framer Motion for XP floater animations
 - Cyan/teal theme: text-cyan-400, bg-cyan-500, border-cyan-500/40
-- Hover effects: translate-y-[-2px] with shadow and border highlight
 - All interactive elements have data-testid attributes
 
 ### Predict Page (/predict)
