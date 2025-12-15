@@ -1,40 +1,40 @@
 const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string }> = {
   Tech: {
-    bg: 'bg-cyan-500/10',
-    border: 'border-cyan-400/40',
-    text: 'text-cyan-300',
+    bg: 'bg-[#1E90FF]/10',
+    border: 'border-[#1E90FF]/40',
+    text: 'text-[#1E90FF]',
   },
   Music: {
-    bg: 'bg-purple-500/10',
-    border: 'border-purple-400/40',
-    text: 'text-purple-300',
+    bg: 'bg-[#EC4899]/10',
+    border: 'border-[#EC4899]/40',
+    text: 'text-[#EC4899]',
   },
   Politics: {
-    bg: 'bg-amber-500/10',
-    border: 'border-amber-400/40',
-    text: 'text-amber-300',
+    bg: 'bg-[#94A3B8]/10',
+    border: 'border-[#94A3B8]/40',
+    text: 'text-[#94A3B8]',
   },
   Business: {
-    bg: 'bg-sky-500/10',
-    border: 'border-sky-400/40',
-    text: 'text-sky-300',
+    bg: 'bg-[#94A3B8]/10',
+    border: 'border-[#94A3B8]/40',
+    text: 'text-[#94A3B8]',
   },
   Sports: {
-    bg: 'bg-emerald-500/10',
-    border: 'border-emerald-400/40',
-    text: 'text-emerald-300',
+    bg: 'bg-[#FB923C]/10',
+    border: 'border-[#FB923C]/40',
+    text: 'text-[#FB923C]',
   },
   Creator: {
-    bg: 'bg-pink-500/10',
-    border: 'border-pink-400/40',
-    text: 'text-pink-300',
+    bg: 'bg-[#FACC15]/10',
+    border: 'border-[#FACC15]/40',
+    text: 'text-[#FACC15]',
   },
 };
 
 const DEFAULT_CATEGORY_STYLE = {
-  bg: 'bg-slate-500/10',
-  border: 'border-slate-400/40',
-  text: 'text-slate-300',
+  bg: 'bg-[#94A3B8]/10',
+  border: 'border-[#94A3B8]/40',
+  text: 'text-[#94A3B8]',
 };
 
 export function getCategoryStyle(category: string) {
