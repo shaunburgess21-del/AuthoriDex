@@ -23,6 +23,7 @@ Preferred communication style: Simple, everyday language.
 - **Routing**: File-based route components using Wouter.
 - **Styling**: Design tokens via CSS variables, custom utility classes for effects.
 - **Expandable Rows**: LeaderboardRow with inline expansion using AnimatePresence/Framer Motion, custom event system for sentiment score synchronization, dynamic color-coding based on sentiment.
+- **VotingModal Architecture**: Centralized single-instance modal at HomePage level. LeaderboardRow and HeroSection trigger the modal via callbacks (onVoteClick, onCastVoteClick) instead of managing their own dialogs. Supports "Vote Next" cycling through the people list.
 - **Visuals**: Square avatars with rounded corners, supporting custom hero images and initials fallback.
 
 ### Backend Architecture
