@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { CategoryPill } from "@/components/CategoryPill";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -909,7 +910,7 @@ function HeadToHeadCard({ market, isMarketClosed = false }: { market: HeadToHead
   return (
     <PredictCard testId={`card-h2h-${market.id}`} className={`min-w-[300px] ${isMarketClosed ? 'opacity-75' : ''}`}>
       <div className="flex items-center justify-between mb-3">
-        <Badge variant="secondary" className="text-xs">{market.category}</Badge>
+        <CategoryPill category={market.category} data-testid={`badge-h2h-${market.id}`} />
         <span className="text-xs text-muted-foreground flex items-center gap-1">
           <Clock className="h-3 w-3" />
           {market.endTime}
@@ -979,7 +980,7 @@ function CategoryRaceCard({ market, isMarketClosed = false }: { market: Category
   return (
     <PredictCard testId={`card-race-${market.id}`} className={`min-w-[280px] ${isMarketClosed ? 'opacity-75' : ''}`}>
       <div className="flex items-center justify-between mb-3">
-        <Badge variant="secondary" className="text-xs">{market.category}</Badge>
+        <CategoryPill category={market.category} data-testid={`badge-race-${market.id}`} />
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
           {market.timeRemaining}
@@ -1036,7 +1037,7 @@ function TopGainerCard({ market, isMarketClosed = false }: { market: TopGainerMa
   return (
     <PredictCard testId={`card-gainer-${market.id}`} className={`min-w-[280px] ${isMarketClosed ? 'opacity-75' : ''}`}>
       <div className="flex items-center justify-between mb-3">
-        <Badge variant="secondary" className="text-xs">{market.category}</Badge>
+        <CategoryPill category={market.category} data-testid={`badge-gainer-${market.id}`} />
         <span className="text-xs text-muted-foreground">7-day gain</span>
       </div>
       

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { CategoryPill } from "@/components/CategoryPill";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { 
@@ -155,7 +156,7 @@ function InductionCard({
         <div className="flex flex-col items-center text-center mb-4">
           <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="lg" />
           <h3 className="font-semibold mt-3">{candidate.name}</h3>
-          <Badge variant="secondary" className="text-xs mt-1">{candidate.category}</Badge>
+          <CategoryPill category={candidate.category} data-testid={`badge-category-${candidate.id}`} />
         </div>
         
         <div className="mb-3">
@@ -221,7 +222,7 @@ function CurateProfileCard({
       >
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-sm">{poll.personName}</h3>
-          <Badge variant="secondary" className="text-xs">{poll.category}</Badge>
+          <CategoryPill category={poll.category} data-testid={`badge-curate-${poll.id}`} />
         </div>
         
         <p className="text-center text-lg font-serif font-bold text-cyan-400 mb-4">Which look defines them?</p>
@@ -284,50 +285,6 @@ function CurateProfileCard({
   );
 }
 
-const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string }> = {
-  Tech: {
-    bg: 'bg-cyan-500/10',
-    border: 'border-cyan-400/40',
-    text: 'text-cyan-300',
-  },
-  Music: {
-    bg: 'bg-purple-500/10',
-    border: 'border-purple-400/40',
-    text: 'text-purple-300',
-  },
-  Politics: {
-    bg: 'bg-amber-500/10',
-    border: 'border-amber-400/40',
-    text: 'text-amber-300',
-  },
-  Business: {
-    bg: 'bg-sky-500/10',
-    border: 'border-sky-400/40',
-    text: 'text-sky-300',
-  },
-  Sports: {
-    bg: 'bg-emerald-500/10',
-    border: 'border-emerald-400/40',
-    text: 'text-emerald-300',
-  },
-  Creator: {
-    bg: 'bg-pink-500/10',
-    border: 'border-pink-400/40',
-    text: 'text-pink-300',
-  },
-  Entertainment: {
-    bg: 'bg-pink-500/10',
-    border: 'border-pink-400/40',
-    text: 'text-pink-300',
-  },
-};
-
-const DEFAULT_CATEGORY_STYLE = {
-  bg: 'bg-slate-500/10',
-  border: 'border-slate-400/40',
-  text: 'text-slate-300',
-};
-
 function DiscourseCard({ 
   topic, 
   onVote 
@@ -336,7 +293,6 @@ function DiscourseCard({
   onVote: (choice: 'support' | 'neutral' | 'oppose') => void;
 }) {
   const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(null);
-  const categoryStyle = CATEGORY_STYLES[topic.category] || DEFAULT_CATEGORY_STYLE;
 
   const handleVote = (choice: 'support' | 'neutral' | 'oppose') => {
     if (!voted) {
@@ -350,12 +306,7 @@ function DiscourseCard({
       className="p-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col"
       data-testid={`card-discourse-${topic.id}`}
     >
-      <span 
-        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border w-fit mb-3 transition-all duration-200 hover:opacity-80 ${categoryStyle.bg} ${categoryStyle.border} ${categoryStyle.text}`}
-        data-testid={`badge-category-${topic.id}`}
-      >
-        {topic.category}
-      </span>
+      <CategoryPill category={topic.category} className="mb-3" data-testid={`badge-category-${topic.id}`} />
       <h3 className="font-serif font-bold text-lg mb-1">{topic.headline}</h3>
       <p className="text-sm text-muted-foreground mb-5 flex-grow">{topic.description}</p>
       

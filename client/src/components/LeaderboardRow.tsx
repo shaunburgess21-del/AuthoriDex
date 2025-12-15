@@ -1,6 +1,7 @@
 import { TrendingPerson } from "@shared/schema";
 import { PersonAvatar } from "./PersonAvatar";
 import { RankBadge } from "./RankBadge";
+import { getCategoryTextColor } from "./CategoryPill";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useEffect } from "react";
@@ -86,7 +87,7 @@ export function LeaderboardRow({ person, onVisitProfile, onVoteClick }: Leaderbo
             {person.name}
           </h3>
           {person.category && (
-            <p className="text-sm text-muted-foreground truncate">
+            <p className={`text-sm truncate ${getCategoryTextColor(person.category)}`}>
               {person.category}
             </p>
           )}
