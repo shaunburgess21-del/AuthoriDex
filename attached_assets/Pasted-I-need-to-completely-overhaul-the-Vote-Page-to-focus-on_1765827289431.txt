@@ -1,0 +1,37 @@
+I need to completely overhaul the "Vote" Page to focus on "Grinding," Rapid-Fire interactions, and Specific Topics. 
+
+**IMPORTANT INFRASTRUCTURE NOTE:** Do NOT connect to a backend/database yet. Implement all XP and Vote logic using local React state (Mock Data) so the UI is fully functional for demonstration.
+
+### 1. The "Gamification" Header (Visual XP System)
+- Add a sticky/prominent "User Stats" bar at the top of the Vote Page.
+- **Display:** "Rank: Citizen" | "XP: 120" (Start with these mock values).
+- **Logic:** Create a local state `xp`. Whenever a user engages with *any* vote on this page, increment `xp` by 10 and show a "+10 XP" floating animation near the cursor/button.
+
+### 2. Section 1: "Paparazzi Pit" (Rapid A/B Testing)
+Refactor this section to function as a "Hot or Not" style game.
+- **Layout:** Display TWO profile photos of the same celebrity side-by-side.
+- **Headline:** "Which look is iconic?"
+- **Interaction:**
+  - Remove the "Vote/Submit" button.
+  - Make the images themselves clickable.
+  - **Action:** When a user clicks an image:
+    1. Flash a subtle green border on the selected image.
+    2. Trigger the +10 XP logic.
+    3. Immediately slide to the next pair of images.
+
+### 3. Section 2: "Public Discourse" (Formerly Global Sentiment Pulse)
+Rename "Global Sentiment Pulse" to **"Public Discourse"**.
+- **Content:** Cards represent Specific Events/Topics (e.g., "Elon buys Twitter").
+- **UI Interaction (The Neon Buttons):**
+  - Replace the Slider with **3 Distinct Buttons** using a "Neon/Glass" aesthetic (Dark background, colored border/text, subtle box-shadow glow).
+  - **Button 1 (Disapprove):** "Beautiful Red" (Neon Crimson) border & text.
+  - **Button 2 (Neutral):** "Majestic Yellow" (Gold/Amber) border & text.
+  - **Button 3 (Approve):** "Electric Green" (Neon Lime) border & text.
+  - **Hover State:** The buttons should glow brighter or slightly fill with color on hover.
+  
+- **Post-Vote Behavior:**
+  - Upon clicking, replace buttons with a **Percentage Bar** (e.g., "70% Approve").
+  - Trigger the +20 XP logic.
+
+### 4. Mock Data
+- Pre-fill "Public Discourse" with 3 controversial topics so I can test the buttons immediately.

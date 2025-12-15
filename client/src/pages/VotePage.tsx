@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,10 @@ import {
   Users,
   Clock,
   Sparkles,
-  Camera
+  Camera,
+  Zap,
+  Crown,
+  MessageSquare
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -20,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import Slider from "react-slick";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface InductionCandidate {
   id: string;
@@ -38,40 +42,79 @@ const inductionCandidates: InductionCandidate[] = [
   { id: "i5", name: "xQc", avatar: "", category: "Entertainment", currentVotes: 590, votesNeeded: 1000 },
 ];
 
-interface ImagePoll {
+interface PaparazziPoll {
   id: string;
   personName: string;
-  personId: string;
   category: string;
-  photoA: { id: string; votes: number };
-  photoB: { id: string; votes: number };
 }
 
-const imagePolls: ImagePoll[] = [
-  { id: "ip1", personName: "Taylor Swift", personId: "2", category: "Music", photoA: { id: "a", votes: 3456 }, photoB: { id: "b", votes: 2198 } },
-  { id: "ip2", personName: "Elon Musk", personId: "1", category: "Tech", photoA: { id: "a", votes: 4521 }, photoB: { id: "b", votes: 3890 } },
-  { id: "ip3", personName: "Beyoncé", personId: "7", category: "Music", photoA: { id: "a", votes: 5678 }, photoB: { id: "b", votes: 4321 } },
-  { id: "ip4", personName: "MrBeast", personId: "3", category: "Entertainment", photoA: { id: "a", votes: 2890 }, photoB: { id: "b", votes: 2456 } },
+const paparazziPolls: PaparazziPoll[] = [
+  { id: "pp1", personName: "Taylor Swift", category: "Music" },
+  { id: "pp2", personName: "Elon Musk", category: "Tech" },
+  { id: "pp3", personName: "Beyoncé", category: "Music" },
+  { id: "pp4", personName: "MrBeast", category: "Entertainment" },
+  { id: "pp5", personName: "Zendaya", category: "Entertainment" },
+  { id: "pp6", personName: "Bad Bunny", category: "Music" },
 ];
 
-interface SentimentPerson {
+interface DiscourseTopicData {
   id: string;
-  name: string;
-  avatar: string;
+  headline: string;
+  description: string;
   category: string;
-  globalAverage: number;
+  approvePercent: number;
+  neutralPercent: number;
+  disapprovePercent: number;
+  totalVotes: number;
 }
 
-const sentimentPeople: SentimentPerson[] = [
-  { id: "1", name: "Elon Musk", avatar: "", category: "Tech", globalAverage: 6.8 },
-  { id: "2", name: "Taylor Swift", avatar: "", category: "Music", globalAverage: 8.2 },
-  { id: "3", name: "MrBeast", avatar: "", category: "Entertainment", globalAverage: 7.9 },
-  { id: "4", name: "Donald Trump", avatar: "", category: "Politics", globalAverage: 4.5 },
-  { id: "5", name: "Kim Kardashian", avatar: "", category: "Entertainment", globalAverage: 5.3 },
-  { id: "6", name: "Cristiano Ronaldo", avatar: "", category: "Sports", globalAverage: 8.7 },
+const discourseTopics: DiscourseTopicData[] = [
+  { 
+    id: "d1", 
+    headline: "Elon buys Twitter", 
+    description: "Was the $44B acquisition a smart move?",
+    category: "Tech", 
+    approvePercent: 35, 
+    neutralPercent: 20, 
+    disapprovePercent: 45,
+    totalVotes: 89432
+  },
+  { 
+    id: "d2", 
+    headline: "AI replacing jobs", 
+    description: "Should we embrace or regulate AI in the workplace?",
+    category: "Tech", 
+    approvePercent: 28, 
+    neutralPercent: 32, 
+    disapprovePercent: 40,
+    totalVotes: 156789
+  },
+  { 
+    id: "d3", 
+    headline: "Taylor's Eras Tour pricing", 
+    description: "Are dynamic ticket prices fair to fans?",
+    category: "Music", 
+    approvePercent: 15, 
+    neutralPercent: 25, 
+    disapprovePercent: 60,
+    totalVotes: 234567
+  },
 ];
 
-function InductionCard({ candidate, onVote }: { candidate: InductionCandidate; onVote: (id: string) => void }) {
+interface XPFloater {
+  id: number;
+  x: number;
+  y: number;
+  amount: number;
+}
+
+function InductionCard({ 
+  candidate, 
+  onVote 
+}: { 
+  candidate: InductionCandidate; 
+  onVote: (id: string) => void;
+}) {
   const progress = (candidate.currentVotes / candidate.votesNeeded) * 100;
   const [hasVoted, setHasVoted] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
@@ -132,159 +175,179 @@ function InductionCard({ candidate, onVote }: { candidate: InductionCandidate; o
   );
 }
 
-function ImagePollCard({ poll, onVote }: { poll: ImagePoll; onVote: (pollId: string, choice: 'a' | 'b') => void }) {
+function PaparazziCard({ 
+  poll, 
+  onVote,
+  onComplete 
+}: { 
+  poll: PaparazziPoll; 
+  onVote: () => void;
+  onComplete: () => void;
+}) {
   const [selectedChoice, setSelectedChoice] = useState<'a' | 'b' | null>(null);
-  const totalVotes = poll.photoA.votes + poll.photoB.votes;
-  const percentA = Math.round((poll.photoA.votes / totalVotes) * 100);
-  const percentB = 100 - percentA;
+  const [isExiting, setIsExiting] = useState(false);
 
   const handlePick = (choice: 'a' | 'b') => {
     if (!selectedChoice) {
       setSelectedChoice(choice);
-      onVote(poll.id, choice);
+      onVote();
+      setTimeout(() => {
+        setIsExiting(true);
+        setTimeout(onComplete, 300);
+      }, 600);
     }
   };
 
   return (
-    <div className="px-2">
+    <motion.div 
+      className="px-2"
+      initial={{ opacity: 1, x: 0 }}
+      animate={{ opacity: isExiting ? 0 : 1, x: isExiting ? -100 : 0 }}
+      transition={{ duration: 0.3 }}
+    >
       <Card 
-        className="p-4 hover:translate-y-[-2px] hover:shadow-lg hover:border-cyan-500/40 transition-all duration-200"
-        data-testid={`card-imagepoll-${poll.id}`}
+        className="p-4 transition-all duration-200"
+        data-testid={`card-paparazzi-${poll.id}`}
       >
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-sm">Best Look for {poll.personName}?</h3>
+          <h3 className="font-semibold text-sm">{poll.personName}</h3>
           <Badge variant="secondary" className="text-xs">{poll.category}</Badge>
         </div>
         
-        <div className="grid grid-cols-2 gap-3 mb-3">
+        <p className="text-center text-lg font-serif font-bold text-cyan-400 mb-4">Which look is iconic?</p>
+        
+        <div className="grid grid-cols-2 gap-4">
           <button
             onClick={() => handlePick('a')}
             disabled={!!selectedChoice}
-            className={`relative aspect-square rounded-lg bg-muted flex items-center justify-center border-2 transition-all group ${
+            className={`relative aspect-square rounded-lg bg-muted flex items-center justify-center border-3 transition-all duration-300 group cursor-pointer overflow-hidden ${
               selectedChoice === 'a' 
-                ? 'border-cyan-500 ring-2 ring-cyan-500/20' 
+                ? 'border-green-500 ring-4 ring-green-500/30 scale-105' 
                 : selectedChoice === 'b'
-                ? 'border-muted opacity-60'
-                : 'border-transparent hover:border-cyan-500/50'
+                ? 'border-muted opacity-40 scale-95'
+                : 'border-transparent hover:border-cyan-500/50 hover:scale-102'
             }`}
             data-testid={`button-photo-a-${poll.id}`}
           >
             <div className="text-center">
-              <Camera className="h-8 w-8 text-muted-foreground mx-auto mb-1" />
-              <span className="text-xs text-muted-foreground">Photo A</span>
+              <Camera className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+              <span className="text-sm text-muted-foreground font-medium">Look A</span>
             </div>
-            {!selectedChoice && (
-              <div className="absolute inset-0 bg-cyan-500/0 group-hover:bg-cyan-500/10 rounded-lg flex items-center justify-center transition-all">
-                <span className="opacity-0 group-hover:opacity-100 text-cyan-400 text-sm font-medium transition-opacity">Pick This</span>
-              </div>
+            {selectedChoice === 'a' && (
+              <motion.div 
+                className="absolute inset-0 bg-green-500/20"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2 }}
+              />
             )}
           </button>
           
           <button
             onClick={() => handlePick('b')}
             disabled={!!selectedChoice}
-            className={`relative aspect-square rounded-lg bg-muted flex items-center justify-center border-2 transition-all group ${
+            className={`relative aspect-square rounded-lg bg-muted flex items-center justify-center border-3 transition-all duration-300 group cursor-pointer overflow-hidden ${
               selectedChoice === 'b' 
-                ? 'border-cyan-500 ring-2 ring-cyan-500/20' 
+                ? 'border-green-500 ring-4 ring-green-500/30 scale-105' 
                 : selectedChoice === 'a'
-                ? 'border-muted opacity-60'
-                : 'border-transparent hover:border-cyan-500/50'
+                ? 'border-muted opacity-40 scale-95'
+                : 'border-transparent hover:border-cyan-500/50 hover:scale-102'
             }`}
             data-testid={`button-photo-b-${poll.id}`}
           >
             <div className="text-center">
-              <Camera className="h-8 w-8 text-muted-foreground mx-auto mb-1" />
-              <span className="text-xs text-muted-foreground">Photo B</span>
+              <Camera className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+              <span className="text-sm text-muted-foreground font-medium">Look B</span>
             </div>
-            {!selectedChoice && (
-              <div className="absolute inset-0 bg-cyan-500/0 group-hover:bg-cyan-500/10 rounded-lg flex items-center justify-center transition-all">
-                <span className="opacity-0 group-hover:opacity-100 text-cyan-400 text-sm font-medium transition-opacity">Pick This</span>
-              </div>
+            {selectedChoice === 'b' && (
+              <motion.div 
+                className="absolute inset-0 bg-green-500/20"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2 }}
+              />
             )}
           </button>
         </div>
-        
-        {selectedChoice && (
-          <div className="text-center">
-            <p className="text-sm">
-              <span className="text-cyan-400 font-semibold">{selectedChoice === 'a' ? percentA : percentB}%</span>
-              <span className="text-muted-foreground"> prefer Photo {selectedChoice.toUpperCase()}</span>
-            </p>
-          </div>
-        )}
       </Card>
-    </div>
+    </motion.div>
   );
 }
 
-function SentimentCard({ person, onSubmit }: { person: SentimentPerson; onSubmit: (personId: string, rating: number) => void }) {
-  const [rating, setRating] = useState(5);
-  const [submitted, setSubmitted] = useState(false);
+function DiscourseCard({ 
+  topic, 
+  onVote 
+}: { 
+  topic: DiscourseTopicData; 
+  onVote: (choice: 'approve' | 'neutral' | 'disapprove') => void;
+}) {
+  const [voted, setVoted] = useState<'approve' | 'neutral' | 'disapprove' | null>(null);
 
-  const handleSubmit = () => {
-    if (!submitted) {
-      setSubmitted(true);
-      onSubmit(person.id, rating);
+  const handleVote = (choice: 'approve' | 'neutral' | 'disapprove') => {
+    if (!voted) {
+      setVoted(choice);
+      onVote(choice);
     }
-  };
-
-  const getRatingColor = (value: number) => {
-    if (value <= 2) return "text-red-500";
-    if (value <= 4) return "text-orange-500";
-    if (value <= 6) return "text-yellow-500";
-    if (value <= 8) return "text-lime-500";
-    return "text-green-500";
   };
 
   return (
     <div className="px-2">
       <Card 
-        className="p-4 hover:translate-y-[-2px] hover:shadow-lg hover:border-cyan-500/40 transition-all duration-200"
-        data-testid={`card-sentiment-${person.id}`}
+        className="p-5 transition-all duration-200 bg-card/80 backdrop-blur-sm"
+        data-testid={`card-discourse-${topic.id}`}
       >
-        <div className="flex items-center gap-3 mb-4">
-          <PersonAvatar name={person.name} avatar={person.avatar} size="md" />
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold truncate">{person.name}</h3>
-            <Badge variant="secondary" className="text-xs">{person.category}</Badge>
-          </div>
-        </div>
+        <Badge variant="secondary" className="text-xs mb-3">{topic.category}</Badge>
+        <h3 className="font-serif font-bold text-lg mb-1">{topic.headline}</h3>
+        <p className="text-sm text-muted-foreground mb-5">{topic.description}</p>
         
-        {!submitted ? (
-          <>
-            <div className="mb-3">
-              <div className="flex justify-between text-xs mb-2">
-                <span className="text-muted-foreground">Your Rating</span>
-                <span className={`font-mono font-bold ${getRatingColor(rating)}`}>{rating}/10</span>
+        {!voted ? (
+          <div className="flex gap-3">
+            <button
+              onClick={() => handleVote('disapprove')}
+              className="flex-1 py-3 px-4 rounded-lg bg-background/50 border-2 border-red-500/60 text-red-400 font-semibold transition-all duration-200 hover:bg-red-500/10 hover:border-red-400 hover:shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:text-red-300"
+              data-testid={`button-disapprove-${topic.id}`}
+            >
+              Disapprove
+            </button>
+            <button
+              onClick={() => handleVote('neutral')}
+              className="flex-1 py-3 px-4 rounded-lg bg-background/50 border-2 border-amber-500/60 text-amber-400 font-semibold transition-all duration-200 hover:bg-amber-500/10 hover:border-amber-400 hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:text-amber-300"
+              data-testid={`button-neutral-${topic.id}`}
+            >
+              Neutral
+            </button>
+            <button
+              onClick={() => handleVote('approve')}
+              className="flex-1 py-3 px-4 rounded-lg bg-background/50 border-2 border-green-500/60 text-green-400 font-semibold transition-all duration-200 hover:bg-green-500/10 hover:border-green-400 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:text-green-300"
+              data-testid={`button-approve-${topic.id}`}
+            >
+              Approve
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex gap-1 h-8 rounded-lg overflow-hidden">
+              <div 
+                className="bg-red-500/80 flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
+                style={{ width: `${topic.disapprovePercent}%` }}
+              >
+                {topic.disapprovePercent}%
               </div>
-              <input
-                type="range"
-                min="1"
-                max="10"
-                value={rating}
-                onChange={(e) => setRating(parseInt(e.target.value))}
-                className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                data-testid={`slider-rating-${person.id}`}
-              />
-              <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                <span>Hate</span>
-                <span>Love</span>
+              <div 
+                className="bg-amber-500/80 flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
+                style={{ width: `${topic.neutralPercent}%` }}
+              >
+                {topic.neutralPercent}%
+              </div>
+              <div 
+                className="bg-green-500/80 flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
+                style={{ width: `${topic.approvePercent}%` }}
+              >
+                {topic.approvePercent}%
               </div>
             </div>
-            <Button 
-              onClick={handleSubmit}
-              className="w-full bg-cyan-500 text-white"
-              data-testid={`button-submit-rating-${person.id}`}
-            >
-              Submit Rating
-            </Button>
-          </>
-        ) : (
-          <div className="text-center py-2">
-            <p className="text-sm text-muted-foreground mb-1">Your vote recorded!</p>
-            <p className="text-lg">
-              <span className="text-muted-foreground">Global Average: </span>
-              <span className={`font-bold ${getRatingColor(person.globalAverage)}`}>{person.globalAverage.toFixed(1)}</span>
+            <p className="text-xs text-center text-muted-foreground">
+              {topic.totalVotes.toLocaleString()} total votes
             </p>
           </div>
         )}
@@ -350,6 +413,27 @@ function CarouselSection({
   );
 }
 
+function XPFloaterAnimation({ floater, onComplete }: { floater: XPFloater; onComplete: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onComplete, 1000);
+    return () => clearTimeout(timer);
+  }, [onComplete]);
+
+  return (
+    <motion.div
+      className="fixed z-[100] pointer-events-none font-bold text-lg"
+      initial={{ opacity: 1, y: 0, scale: 1 }}
+      animate={{ opacity: 0, y: -60, scale: 1.2 }}
+      transition={{ duration: 1, ease: "easeOut" }}
+      style={{ left: floater.x, top: floater.y }}
+    >
+      <span className="text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]">
+        +{floater.amount} XP
+      </span>
+    </motion.div>
+  );
+}
+
 export default function VotePage() {
   const [, setLocation] = useLocation();
   const [suggestModalOpen, setSuggestModalOpen] = useState(false);
@@ -357,6 +441,33 @@ export default function VotePage() {
   const [suggestCategory, setSuggestCategory] = useState("");
   const [totalVotes] = useState(127843);
   const [countdown, setCountdown] = useState("2d 14h 32m");
+  
+  const [xp, setXp] = useState(120);
+  const [rank] = useState("Citizen");
+  const [xpFloaters, setXpFloaters] = useState<XPFloater[]>([]);
+  const floaterIdRef = useRef(0);
+  
+  const [currentPaparazziIndex, setCurrentPaparazziIndex] = useState(0);
+
+  const addXP = (amount: number, event?: React.MouseEvent) => {
+    setXp(prev => prev + amount);
+    
+    const x = event ? event.clientX - 40 : window.innerWidth / 2;
+    const y = event ? event.clientY - 20 : 100;
+    
+    const newFloater: XPFloater = {
+      id: floaterIdRef.current++,
+      x,
+      y,
+      amount
+    };
+    
+    setXpFloaters(prev => [...prev, newFloater]);
+  };
+
+  const removeFloater = (id: number) => {
+    setXpFloaters(prev => prev.filter(f => f.id !== id));
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -378,29 +489,46 @@ export default function VotePage() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleInductionVote = (candidateId: string) => {
-    console.log(`Voted to induct: ${candidateId}`);
+  const handleInductionVote = (candidateId: string, event?: React.MouseEvent) => {
+    addXP(10, event as React.MouseEvent);
   };
 
-  const handleImageVote = (pollId: string, choice: 'a' | 'b') => {
-    console.log(`Voted for photo ${choice} on poll ${pollId}`);
+  const handlePaparazziVote = (event?: React.MouseEvent) => {
+    addXP(10, event as React.MouseEvent);
   };
 
-  const handleSentimentSubmit = (personId: string, rating: number) => {
-    console.log(`Submitted rating ${rating} for person ${personId}`);
+  const handlePaparazziComplete = () => {
+    if (currentPaparazziIndex < paparazziPolls.length - 1) {
+      setCurrentPaparazziIndex(prev => prev + 1);
+    }
+  };
+
+  const handleDiscourseVote = (topicId: string, choice: 'approve' | 'neutral' | 'disapprove', event?: React.MouseEvent) => {
+    addXP(20, event as React.MouseEvent);
   };
 
   const handleSuggestSubmit = () => {
     if (suggestName && suggestCategory) {
-      console.log(`Suggested: ${suggestName} (${suggestCategory})`);
       setSuggestModalOpen(false);
       setSuggestName("");
       setSuggestCategory("");
     }
   };
 
+  const currentPaparazziPoll = paparazziPolls[currentPaparazziIndex];
+
   return (
     <div className="min-h-screen pb-20 md:pb-0">
+      <AnimatePresence>
+        {xpFloaters.map(floater => (
+          <XPFloaterAnimation 
+            key={floater.id} 
+            floater={floater} 
+            onComplete={() => removeFloater(floater.id)} 
+          />
+        ))}
+      </AnimatePresence>
+
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -439,6 +567,33 @@ export default function VotePage() {
           </div>
         </div>
       </header>
+
+      <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-cyan-500/10 via-background/95 to-cyan-500/10 backdrop-blur-xl">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex items-center justify-center gap-6 sm:gap-10">
+            <div className="flex items-center gap-2">
+              <Crown className="h-5 w-5 text-amber-400" />
+              <span className="text-sm text-muted-foreground">Rank:</span>
+              <span className="font-bold text-foreground" data-testid="text-user-rank">{rank}</span>
+            </div>
+            <div className="h-6 w-px bg-border" />
+            <div className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-cyan-400" />
+              <span className="text-sm text-muted-foreground">XP:</span>
+              <motion.span 
+                key={xp}
+                className="font-bold font-mono text-cyan-400"
+                initial={{ scale: 1.3 }}
+                animate={{ scale: 1 }}
+                transition={{ duration: 0.2 }}
+                data-testid="text-user-xp"
+              >
+                {xp.toLocaleString()}
+              </motion.span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
@@ -482,27 +637,64 @@ export default function VotePage() {
           icon={Vote}
         >
           {inductionCandidates.map((candidate) => (
-            <InductionCard key={candidate.id} candidate={candidate} onVote={handleInductionVote} />
+            <InductionCard 
+              key={candidate.id} 
+              candidate={candidate} 
+              onVote={(id) => handleInductionVote(id)} 
+            />
           ))}
         </CarouselSection>
 
-        <CarouselSection
-          title="Paparazzi Pit"
-          subtitle="Select the best profile photo for existing celebrities."
-          icon={Camera}
-        >
-          {imagePolls.map((poll) => (
-            <ImagePollCard key={poll.id} poll={poll} onVote={handleImageVote} />
-          ))}
-        </CarouselSection>
+        <section className="mb-10">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+              <Camera className="h-5 w-5 text-cyan-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-serif font-bold">Paparazzi Pit</h2>
+              <p className="text-sm text-muted-foreground">Rapid fire! Click to choose the iconic look.</p>
+            </div>
+          </div>
+          
+          <div className="max-w-md mx-auto">
+            <div className="text-center mb-2 text-sm text-muted-foreground">
+              {currentPaparazziIndex + 1} of {paparazziPolls.length}
+            </div>
+            <AnimatePresence mode="wait">
+              {currentPaparazziPoll && (
+                <PaparazziCard 
+                  key={currentPaparazziPoll.id}
+                  poll={currentPaparazziPoll} 
+                  onVote={handlePaparazziVote}
+                  onComplete={handlePaparazziComplete}
+                />
+              )}
+            </AnimatePresence>
+            {currentPaparazziIndex >= paparazziPolls.length - 1 && (
+              <div className="text-center mt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setCurrentPaparazziIndex(0)}
+                  className="border-cyan-500/50 text-cyan-400"
+                >
+                  Start Over
+                </Button>
+              </div>
+            )}
+          </div>
+        </section>
 
         <CarouselSection
-          title="Global Sentiment Pulse"
-          subtitle="Quick 1-10 approval ratings. How do you feel about them?"
-          icon={Sparkles}
+          title="Public Discourse"
+          subtitle="Weigh in on the topics that matter. Approve, stay neutral, or disapprove."
+          icon={MessageSquare}
         >
-          {sentimentPeople.map((person) => (
-            <SentimentCard key={person.id} person={person} onSubmit={handleSentimentSubmit} />
+          {discourseTopics.map((topic) => (
+            <DiscourseCard 
+              key={topic.id} 
+              topic={topic} 
+              onVote={(choice) => handleDiscourseVote(topic.id, choice)} 
+            />
           ))}
         </CarouselSection>
       </div>
