@@ -122,7 +122,7 @@ export function LeaderboardRow({ person, onVisitProfile }: LeaderboardRowProps) 
           </p>
         </div>
         <Button 
-          variant="secondary" 
+          variant="default" 
           size="sm"
           className="font-mono font-bold text-sm min-w-14 justify-center"
           onClick={(e) => {
