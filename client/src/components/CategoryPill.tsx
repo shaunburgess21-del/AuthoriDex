@@ -15,9 +15,9 @@ const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string
     text: 'text-[#94A3B8]',
   },
   Business: {
-    bg: 'bg-[#94A3B8]/10',
-    border: 'border-[#94A3B8]/40',
-    text: 'text-[#94A3B8]',
+    bg: 'bg-[#B8860B]/10',
+    border: 'border-[#B8860B]/40',
+    text: 'text-[#B8860B]',
   },
   Sports: {
     bg: 'bg-[#FB923C]/10',
@@ -28,6 +28,11 @@ const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string
     bg: 'bg-[#FACC15]/10',
     border: 'border-[#FACC15]/40',
     text: 'text-[#FACC15]',
+  },
+  Entertainment: {
+    bg: 'bg-[#8B0000]/10',
+    border: 'border-[#8B0000]/40',
+    text: 'text-[#8B0000]',
   },
 };
 
