@@ -62,7 +62,7 @@ export function CategoryPill({ category, className = "", "data-testid": testId }
   
   return (
     <span 
-      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border transition-all duration-200 hover:opacity-80 ${style.bg} ${style.border} ${style.text} ${className}`}
+      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border w-fit whitespace-nowrap transition-all duration-200 hover:opacity-80 ${style.bg} ${style.border} ${style.text} ${className}`}
       data-testid={testId}
     >
       {category}
