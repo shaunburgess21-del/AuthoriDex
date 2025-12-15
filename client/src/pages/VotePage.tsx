@@ -14,7 +14,8 @@ import {
   Camera,
   Zap,
   Crown,
-  MessageSquare
+  MessageSquare,
+  Search
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -24,6 +25,15 @@ import Slider from "react-slick";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
 import { motion, AnimatePresence } from "framer-motion";
+
+const mockCelebrityList = [
+  "Taylor Swift", "Elon Musk", "Keanu Reeves", "Beyoncé", "Dwayne Johnson",
+  "Rihanna", "LeBron James", "Kim Kardashian", "Justin Bieber", "Ariana Grande",
+  "Cristiano Ronaldo", "Lionel Messi", "Drake", "Selena Gomez", "Kylie Jenner",
+  "Billie Eilish", "Bad Bunny", "Post Malone", "The Weeknd", "Zendaya",
+  "Tom Holland", "Timothée Chalamet", "Margot Robbie", "Ryan Reynolds", "Dua Lipa",
+  "Harry Styles", "Olivia Rodrigo", "Ice Spice", "Travis Scott", "SZA"
+];
 
 interface InductionCandidate {
   id: string;
@@ -42,13 +52,13 @@ const inductionCandidates: InductionCandidate[] = [
   { id: "i5", name: "xQc", avatar: "", category: "Entertainment", currentVotes: 590, votesNeeded: 1000 },
 ];
 
-interface PaparazziPoll {
+interface CurateProfilePoll {
   id: string;
   personName: string;
   category: string;
 }
 
-const paparazziPolls: PaparazziPoll[] = [
+const curateProfilePolls: CurateProfilePoll[] = [
   { id: "pp1", personName: "Taylor Swift", category: "Music" },
   { id: "pp2", personName: "Elon Musk", category: "Tech" },
   { id: "pp3", personName: "Beyoncé", category: "Music" },
@@ -175,12 +185,12 @@ function InductionCard({
   );
 }
 
-function PaparazziCard({ 
+function CurateProfileCard({ 
   poll, 
   onVote,
   onComplete 
 }: { 
-  poll: PaparazziPoll; 
+  poll: CurateProfilePoll; 
   onVote: () => void;
   onComplete: () => void;
 }) {
@@ -207,14 +217,14 @@ function PaparazziCard({
     >
       <Card 
         className="p-4 transition-all duration-200"
-        data-testid={`card-paparazzi-${poll.id}`}
+        data-testid={`card-curate-${poll.id}`}
       >
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-sm">{poll.personName}</h3>
           <Badge variant="secondary" className="text-xs">{poll.category}</Badge>
         </div>
         
-        <p className="text-center text-lg font-serif font-bold text-cyan-400 mb-4">Which look is iconic?</p>
+        <p className="text-center text-lg font-serif font-bold text-cyan-400 mb-4">Which look defines them?</p>
         
         <div className="grid grid-cols-2 gap-4">
           <button
@@ -291,68 +301,66 @@ function DiscourseCard({
   };
 
   return (
-    <div className="px-2">
-      <Card 
-        className="p-5 transition-all duration-200 bg-card/80 backdrop-blur-sm"
-        data-testid={`card-discourse-${topic.id}`}
-      >
-        <Badge variant="secondary" className="text-xs mb-3">{topic.category}</Badge>
-        <h3 className="font-serif font-bold text-lg mb-1">{topic.headline}</h3>
-        <p className="text-sm text-muted-foreground mb-5">{topic.description}</p>
-        
-        {!voted ? (
-          <div className="flex gap-3">
-            <button
-              onClick={() => handleVote('disapprove')}
-              className="flex-1 py-3 px-4 rounded-lg bg-background/50 border-2 border-red-500/60 text-red-400 font-semibold transition-all duration-200 hover:bg-red-500/10 hover:border-red-400 hover:shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:text-red-300"
-              data-testid={`button-disapprove-${topic.id}`}
+    <Card 
+      className="p-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col"
+      data-testid={`card-discourse-${topic.id}`}
+    >
+      <Badge variant="secondary" className="text-xs mb-3 w-fit">{topic.category}</Badge>
+      <h3 className="font-serif font-bold text-lg mb-1">{topic.headline}</h3>
+      <p className="text-sm text-muted-foreground mb-5 flex-grow">{topic.description}</p>
+      
+      {!voted ? (
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+          <button
+            onClick={() => handleVote('disapprove')}
+            className="flex-1 py-3 px-3 rounded-lg bg-background/50 border-2 border-red-500/60 text-red-400 font-semibold text-sm transition-all duration-200 hover:bg-red-500/10 hover:border-red-400 hover:shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:text-red-300"
+            data-testid={`button-disapprove-${topic.id}`}
+          >
+            Disapprove
+          </button>
+          <button
+            onClick={() => handleVote('neutral')}
+            className="flex-1 py-3 px-3 rounded-lg bg-background/50 border-2 border-amber-500/60 text-amber-400 font-semibold text-sm transition-all duration-200 hover:bg-amber-500/10 hover:border-amber-400 hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:text-amber-300"
+            data-testid={`button-neutral-${topic.id}`}
+          >
+            Neutral
+          </button>
+          <button
+            onClick={() => handleVote('approve')}
+            className="flex-1 py-3 px-3 rounded-lg bg-background/50 border-2 border-green-500/60 text-green-400 font-semibold text-sm transition-all duration-200 hover:bg-green-500/10 hover:border-green-400 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:text-green-300"
+            data-testid={`button-approve-${topic.id}`}
+          >
+            Approve
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex gap-1 h-8 rounded-lg overflow-hidden">
+            <div 
+              className="bg-red-500/80 flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
+              style={{ width: `${topic.disapprovePercent}%` }}
             >
-              Disapprove
-            </button>
-            <button
-              onClick={() => handleVote('neutral')}
-              className="flex-1 py-3 px-4 rounded-lg bg-background/50 border-2 border-amber-500/60 text-amber-400 font-semibold transition-all duration-200 hover:bg-amber-500/10 hover:border-amber-400 hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:text-amber-300"
-              data-testid={`button-neutral-${topic.id}`}
-            >
-              Neutral
-            </button>
-            <button
-              onClick={() => handleVote('approve')}
-              className="flex-1 py-3 px-4 rounded-lg bg-background/50 border-2 border-green-500/60 text-green-400 font-semibold transition-all duration-200 hover:bg-green-500/10 hover:border-green-400 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:text-green-300"
-              data-testid={`button-approve-${topic.id}`}
-            >
-              Approve
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex gap-1 h-8 rounded-lg overflow-hidden">
-              <div 
-                className="bg-red-500/80 flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
-                style={{ width: `${topic.disapprovePercent}%` }}
-              >
-                {topic.disapprovePercent}%
-              </div>
-              <div 
-                className="bg-amber-500/80 flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
-                style={{ width: `${topic.neutralPercent}%` }}
-              >
-                {topic.neutralPercent}%
-              </div>
-              <div 
-                className="bg-green-500/80 flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
-                style={{ width: `${topic.approvePercent}%` }}
-              >
-                {topic.approvePercent}%
-              </div>
+              {topic.disapprovePercent}%
             </div>
-            <p className="text-xs text-center text-muted-foreground">
-              {topic.totalVotes.toLocaleString()} total votes
-            </p>
+            <div 
+              className="bg-amber-500/80 flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
+              style={{ width: `${topic.neutralPercent}%` }}
+            >
+              {topic.neutralPercent}%
+            </div>
+            <div 
+              className="bg-green-500/80 flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
+              style={{ width: `${topic.approvePercent}%` }}
+            >
+              {topic.approvePercent}%
+            </div>
           </div>
-        )}
-      </Card>
-    </div>
+          <p className="text-xs text-center text-muted-foreground">
+            {topic.totalVotes.toLocaleString()} total votes
+          </p>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -434,6 +442,96 @@ function XPFloaterAnimation({ floater, onComplete }: { floater: XPFloater; onCom
   );
 }
 
+function CelebrityAutocomplete({ 
+  value, 
+  onChange,
+  onSelect 
+}: { 
+  value: string; 
+  onChange: (value: string) => void;
+  onSelect: (name: string) => void;
+}) {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (value.length >= 1) {
+      const filtered = mockCelebrityList.filter(name => 
+        name.toLowerCase().includes(value.toLowerCase())
+      ).slice(0, 8);
+      setFilteredSuggestions(filtered);
+      setShowSuggestions(filtered.length > 0);
+    } else {
+      setFilteredSuggestions([]);
+      setShowSuggestions(false);
+    }
+  }, [value]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        suggestionsRef.current && 
+        !suggestionsRef.current.contains(e.target as Node) &&
+        inputRef.current &&
+        !inputRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelect = (name: string) => {
+    onSelect(name);
+    setShowSuggestions(false);
+  };
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input 
+          ref={inputRef}
+          placeholder="Search celebrity name..."
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => value.length >= 1 && filteredSuggestions.length > 0 && setShowSuggestions(true)}
+          className="pl-10"
+          data-testid="input-suggest-name"
+        />
+      </div>
+      
+      <AnimatePresence>
+        {showSuggestions && (
+          <motion.div 
+            ref={suggestionsRef}
+            className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg overflow-hidden"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.15 }}
+          >
+            {filteredSuggestions.map((name, index) => (
+              <button
+                key={name}
+                onClick={() => handleSelect(name)}
+                className="w-full px-4 py-2.5 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
+                data-testid={`suggestion-item-${index}`}
+              >
+                <PersonAvatar name={name} avatar="" size="sm" />
+                <span>{name}</span>
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 export default function VotePage() {
   const [, setLocation] = useLocation();
   const [suggestModalOpen, setSuggestModalOpen] = useState(false);
@@ -447,7 +545,7 @@ export default function VotePage() {
   const [xpFloaters, setXpFloaters] = useState<XPFloater[]>([]);
   const floaterIdRef = useRef(0);
   
-  const [currentPaparazziIndex, setCurrentPaparazziIndex] = useState(0);
+  const [currentCurateIndex, setCurrentCurateIndex] = useState(0);
 
   const addXP = (amount: number, event?: React.MouseEvent) => {
     setXp(prev => prev + amount);
@@ -493,13 +591,13 @@ export default function VotePage() {
     addXP(10, event as React.MouseEvent);
   };
 
-  const handlePaparazziVote = (event?: React.MouseEvent) => {
+  const handleCurateVote = (event?: React.MouseEvent) => {
     addXP(10, event as React.MouseEvent);
   };
 
-  const handlePaparazziComplete = () => {
-    if (currentPaparazziIndex < paparazziPolls.length - 1) {
-      setCurrentPaparazziIndex(prev => prev + 1);
+  const handleCurateComplete = () => {
+    if (currentCurateIndex < curateProfilePolls.length - 1) {
+      setCurrentCurateIndex(prev => prev + 1);
     }
   };
 
@@ -515,7 +613,7 @@ export default function VotePage() {
     }
   };
 
-  const currentPaparazziPoll = paparazziPolls[currentPaparazziIndex];
+  const currentCuratePoll = curateProfilePolls[currentCurateIndex];
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
@@ -651,31 +749,32 @@ export default function VotePage() {
               <Camera className="h-5 w-5 text-cyan-400" />
             </div>
             <div>
-              <h2 className="text-xl font-serif font-bold">Paparazzi Pit</h2>
-              <p className="text-sm text-muted-foreground">Rapid fire! Click to choose the iconic look.</p>
+              <h2 className="text-xl font-serif font-bold">Curate the Profile</h2>
+              <p className="text-sm text-muted-foreground">Decide the official photo displayed across FameDex. Which look defines them?</p>
             </div>
           </div>
           
           <div className="max-w-md mx-auto">
             <div className="text-center mb-2 text-sm text-muted-foreground">
-              {currentPaparazziIndex + 1} of {paparazziPolls.length}
+              {currentCurateIndex + 1} of {curateProfilePolls.length}
             </div>
             <AnimatePresence mode="wait">
-              {currentPaparazziPoll && (
-                <PaparazziCard 
-                  key={currentPaparazziPoll.id}
-                  poll={currentPaparazziPoll} 
-                  onVote={handlePaparazziVote}
-                  onComplete={handlePaparazziComplete}
+              {currentCuratePoll && (
+                <CurateProfileCard 
+                  key={currentCuratePoll.id}
+                  poll={currentCuratePoll} 
+                  onVote={handleCurateVote}
+                  onComplete={handleCurateComplete}
                 />
               )}
             </AnimatePresence>
-            {currentPaparazziIndex >= paparazziPolls.length - 1 && (
+            {currentCurateIndex >= curateProfilePolls.length - 1 && (
               <div className="text-center mt-4">
                 <Button 
                   variant="outline" 
-                  onClick={() => setCurrentPaparazziIndex(0)}
+                  onClick={() => setCurrentCurateIndex(0)}
                   className="border-cyan-500/50 text-cyan-400"
+                  data-testid="button-curate-start-over"
                 >
                   Start Over
                 </Button>
@@ -684,19 +783,27 @@ export default function VotePage() {
           </div>
         </section>
 
-        <CarouselSection
-          title="Public Discourse"
-          subtitle="Weigh in on the topics that matter. Approve, stay neutral, or disapprove."
-          icon={MessageSquare}
-        >
-          {discourseTopics.map((topic) => (
-            <DiscourseCard 
-              key={topic.id} 
-              topic={topic} 
-              onVote={(choice) => handleDiscourseVote(topic.id, choice)} 
-            />
-          ))}
-        </CarouselSection>
+        <section className="mb-10">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+              <MessageSquare className="h-5 w-5 text-cyan-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-serif font-bold">The People's Voice</h2>
+              <p className="text-sm text-muted-foreground">You, The People, decide the narrative. Weigh in on the topics that matter.</p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {discourseTopics.map((topic) => (
+              <DiscourseCard 
+                key={topic.id} 
+                topic={topic} 
+                onVote={(choice) => handleDiscourseVote(topic.id, choice)} 
+              />
+            ))}
+          </div>
+        </section>
       </div>
 
       <button
@@ -721,11 +828,10 @@ export default function VotePage() {
           <div className="space-y-4 py-4">
             <div>
               <label className="text-sm font-medium mb-1 block">Name</label>
-              <Input 
-                placeholder="Enter celebrity name..."
+              <CelebrityAutocomplete 
                 value={suggestName}
-                onChange={(e) => setSuggestName(e.target.value)}
-                data-testid="input-suggest-name"
+                onChange={setSuggestName}
+                onSelect={setSuggestName}
               />
             </div>
             <div>
