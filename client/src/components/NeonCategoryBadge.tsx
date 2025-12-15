@@ -45,7 +45,7 @@ export function NeonCategoryBadge({
     return (
       <span
         className={cn(
-          "text-xs font-semibold uppercase tracking-wider",
+          "text-xs font-normal tracking-wide",
           className
         )}
         style={{ color: colors.neon }}
@@ -59,8 +59,8 @@ export function NeonCategoryBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center px-3 py-1 rounded-md text-xs font-semibold uppercase tracking-wider transition-all duration-200",
-        "bg-black/30 border",
+        "inline-flex items-center px-3 py-1.5 rounded-full text-xs font-normal tracking-wide transition-all duration-200",
+        "bg-black/12 border",
         "hover:shadow-[0_0_15px_var(--glow-color)]",
         className
       )}
