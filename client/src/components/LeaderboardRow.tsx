@@ -30,9 +30,10 @@ const getSentimentColor = (value: number): string => {
 interface LeaderboardRowProps {
   person: TrendingPerson;
   onVisitProfile: () => void;
+  onVoteNext?: () => void;
 }
 
-export function LeaderboardRow({ person, onVisitProfile }: LeaderboardRowProps) {
+export function LeaderboardRow({ person, onVisitProfile, onVoteNext }: LeaderboardRowProps) {
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
   const [voteModalOpen, setVoteModalOpen] = useState(false);
 
@@ -65,12 +66,22 @@ export function LeaderboardRow({ person, onVisitProfile }: LeaderboardRowProps) 
       }
     };
 
+    // Listen for vote next event to open this person's voting modal
+    const handleOpenVoteModal = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.personId === person.id) {
+        setVoteModalOpen(true);
+      }
+    };
+
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('sentiment-vote-updated', handleCustomUpdate);
+    window.addEventListener('open-vote-modal', handleOpenVoteModal);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('sentiment-vote-updated', handleCustomUpdate);
+      window.removeEventListener('open-vote-modal', handleOpenVoteModal);
     };
   }, [person.id]);
 
@@ -182,6 +193,7 @@ export function LeaderboardRow({ person, onVisitProfile }: LeaderboardRowProps) 
             <AnimatedSentimentVotingWidget 
               personId={person.id} 
               personName={person.name}
+              onVoteNext={onVoteNext}
             />
           </div>
         </DialogContent>

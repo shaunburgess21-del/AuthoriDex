@@ -72,6 +72,17 @@ export default function HomePage() {
     setVisibleCount(prev => Math.min(prev + 20, allPeople.length));
   };
 
+  const handleVoteNext = (currentPersonId: string) => {
+    const currentIndex = allPeople.findIndex(p => p.id === currentPersonId);
+    if (currentIndex !== -1 && currentIndex < allPeople.length - 1) {
+      const nextPerson = allPeople[currentIndex + 1];
+      // Trigger the next person's voting modal to open via a global event
+      window.dispatchEvent(new CustomEvent('open-vote-modal', {
+        detail: { personId: nextPerson.id }
+      }));
+    }
+  };
+
   // Reset visible count when filters change
   useEffect(() => {
     setVisibleCount(20);
@@ -212,6 +223,7 @@ export default function HomePage() {
                   key={person.id}
                   person={person}
                   onVisitProfile={() => handleVisitProfile(person.id)}
+                  onVoteNext={() => handleVoteNext(person.id)}
                 />
               ))}
             </div>

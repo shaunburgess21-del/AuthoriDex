@@ -11,6 +11,7 @@ interface AnimatedSentimentVotingWidgetProps {
   personId: string;
   personName: string;
   onVisitProfile?: () => void;
+  onVoteNext?: () => void;
   isProfilePage?: boolean;
 }
 
@@ -222,6 +223,7 @@ export function AnimatedSentimentVotingWidget({
   personId, 
   personName, 
   onVisitProfile,
+  onVoteNext,
   isProfilePage = false 
 }: AnimatedSentimentVotingWidgetProps) {
   const { user } = useAuth();
@@ -564,15 +566,23 @@ export function AnimatedSentimentVotingWidget({
                         View Results
                       </Button>
                     ) : (
-                      <Button
-                        onClick={handleVisitProfile}
-                        variant="outline"
-                        className="w-full"
-                        size="lg"
-                        data-testid="button-visit-profile"
-                      >
-                        Visit Profile
-                      </Button>
+                      <div className="space-y-3">
+                        <Button
+                          onClick={onVoteNext}
+                          className="w-full"
+                          size="lg"
+                          data-testid="button-vote-next"
+                        >
+                          Vote Next
+                        </Button>
+                        <button
+                          onClick={handleVisitProfile}
+                          className="w-full text-center text-sm text-primary hover:underline py-2"
+                          data-testid="link-visit-profile"
+                        >
+                          Visit Profile
+                        </button>
+                      </div>
                     )}
                   </motion.div>
                 )}
