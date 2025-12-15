@@ -25,6 +25,18 @@ Preferred communication style: Simple, everyday language.
 - **Expandable Rows**: LeaderboardRow with inline expansion using AnimatePresence/Framer Motion, custom event system for sentiment score synchronization, dynamic color-coding based on sentiment.
 - **VotingModal Architecture**: Centralized single-instance modal at HomePage level. LeaderboardRow and HeroSection trigger the modal via callbacks (onVoteClick, onCastVoteClick) instead of managing their own dialogs. Supports "Vote Next" cycling through the people list.
 - **Visuals**: Square avatars with rounded corners, supporting custom hero images and initials fallback.
+- **CategoryPill Component** (`client/src/components/CategoryPill.tsx`): Centralized category label styling with glassy neon aesthetic.
+  - **Color Mapping:**
+    - Tech: Cyan (bg-cyan-500/10, border-cyan-400/40, text-cyan-300)
+    - Music: Purple (bg-purple-500/10, border-purple-400/40, text-purple-300)
+    - Politics: Amber (bg-amber-500/10, border-amber-400/40, text-amber-300)
+    - Business: Sky (bg-sky-500/10, border-sky-400/40, text-sky-300)
+    - Sports: Emerald (bg-emerald-500/10, border-emerald-400/40, text-emerald-300)
+    - Creator/Entertainment: Pink (bg-pink-500/10, border-pink-400/40, text-pink-300)
+    - Default: Slate (for unknown categories)
+  - **Glassy styling** (Vote/Predict pages): Rounded-full pill, tinted glass background, 1px border, subtle colored text, hover opacity effect.
+  - **Text-only styling** (Home page): Uses `getCategoryTextColor()` helper for color-coded text without border/background.
+  - **Usage:** CategoryPill for pills with border, getCategoryTextColor() for text-only labels.
 
 ### Backend Architecture
 
