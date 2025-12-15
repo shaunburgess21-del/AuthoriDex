@@ -311,24 +311,24 @@ function DiscourseCard({
       <p className="text-sm text-muted-foreground mb-5 flex-grow">{topic.description}</p>
       
       {!voted ? (
-        <div className="flex gap-2">
+        <div className="flex justify-center gap-2">
           <button
             onClick={() => handleVote('oppose')}
-            className="flex-1 px-6 py-2.5 rounded-xl bg-red-500/10 border border-red-500/50 text-red-400 text-sm font-medium transition-all duration-300 hover:bg-red-500/30 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)]"
+            className="flex-1 px-4 py-2 rounded-xl bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:bg-[#FF0000]/30 hover:shadow-[0_0_15px_rgba(255,0,0,0.3)]"
             data-testid={`button-oppose-${topic.id}`}
           >
             Oppose
           </button>
           <button
             onClick={() => handleVote('neutral')}
-            className="flex-1 px-6 py-2.5 rounded-xl bg-slate-500/10 border border-slate-500/50 text-slate-400 text-sm font-medium transition-all duration-300 hover:bg-slate-500/30 hover:shadow-[0_0_15px_rgba(100,116,139,0.3)]"
+            className="flex-1 px-4 py-2 rounded-xl bg-white/10 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:bg-white/30 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)]"
             data-testid={`button-neutral-${topic.id}`}
           >
             Neutral
           </button>
           <button
             onClick={() => handleVote('support')}
-            className="flex-1 px-6 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 text-sm font-medium transition-all duration-300 hover:bg-emerald-500/30 hover:shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+            className="flex-1 px-4 py-2 rounded-xl bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:bg-[#00C853]/30 hover:shadow-[0_0_15px_rgba(0,200,83,0.3)]"
             data-testid={`button-support-${topic.id}`}
           >
             Support
