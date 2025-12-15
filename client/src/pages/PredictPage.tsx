@@ -272,7 +272,7 @@ const topGainerMarkets: TopGainerMarket[] = [
   },
   {
     id: "gainer-3",
-    category: "Entertainment",
+    category: "Creator",
     leaders: [
       { name: "MrBeast", avatar: "", currentGain: 18900 },
       { name: "Logan Paul", avatar: "", currentGain: 12100 },

@@ -29,11 +29,6 @@ const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string
     border: 'border-pink-400/40',
     text: 'text-pink-300',
   },
-  Entertainment: {
-    bg: 'bg-pink-500/10',
-    border: 'border-pink-400/40',
-    text: 'text-pink-300',
-  },
 };
 
 const DEFAULT_CATEGORY_STYLE = {

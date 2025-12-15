@@ -48,9 +48,9 @@ interface InductionCandidate {
 const inductionCandidates: InductionCandidate[] = [
   { id: "i1", name: "Jensen Huang", avatar: "", category: "Tech", currentVotes: 850, votesNeeded: 1000 },
   { id: "i2", name: "Charli XCX", avatar: "", category: "Music", currentVotes: 720, votesNeeded: 1000 },
-  { id: "i3", name: "Kai Cenat", avatar: "", category: "Entertainment", currentVotes: 945, votesNeeded: 1000 },
+  { id: "i3", name: "Kai Cenat", avatar: "", category: "Creator", currentVotes: 945, votesNeeded: 1000 },
   { id: "i4", name: "Sabrina Carpenter", avatar: "", category: "Music", currentVotes: 680, votesNeeded: 1000 },
-  { id: "i5", name: "xQc", avatar: "", category: "Entertainment", currentVotes: 590, votesNeeded: 1000 },
+  { id: "i5", name: "xQc", avatar: "", category: "Creator", currentVotes: 590, votesNeeded: 1000 },
 ];
 
 interface CurateProfilePoll {
@@ -63,8 +63,8 @@ const curateProfilePolls: CurateProfilePoll[] = [
   { id: "pp1", personName: "Taylor Swift", category: "Music" },
   { id: "pp2", personName: "Elon Musk", category: "Tech" },
   { id: "pp3", personName: "Beyoncé", category: "Music" },
-  { id: "pp4", personName: "MrBeast", category: "Entertainment" },
-  { id: "pp5", personName: "Zendaya", category: "Entertainment" },
+  { id: "pp4", personName: "MrBeast", category: "Creator" },
+  { id: "pp5", personName: "Zendaya", category: "Creator" },
   { id: "pp6", personName: "Bad Bunny", category: "Music" },
 ];
 
@@ -844,7 +844,7 @@ export default function VotePage() {
                 <SelectContent>
                   <SelectItem value="Music">Music</SelectItem>
                   <SelectItem value="Tech">Tech</SelectItem>
-                  <SelectItem value="Entertainment">Entertainment</SelectItem>
+                  <SelectItem value="Creator">Creator</SelectItem>
                   <SelectItem value="Sports">Sports</SelectItem>
                   <SelectItem value="Politics">Politics</SelectItem>
                   <SelectItem value="Business">Business</SelectItem>
