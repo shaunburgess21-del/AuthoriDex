@@ -3,6 +3,7 @@ import { SearchBar } from "@/components/SearchBar";
 import { TrendWidget } from "@/components/TrendWidget";
 import { PredictionMarketsTeaser } from "@/components/PredictionMarketsTeaser";
 import { LeaderboardRow } from "@/components/LeaderboardRow";
+import { VotingModal } from "@/components/VotingModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { SortDropdown } from "@/components/SortDropdown";
@@ -21,6 +22,8 @@ export default function HomePage() {
   const [sort, setSort] = useState("rank");
   const [visibleCount, setVisibleCount] = useState(20);
   const [, setLocation] = useLocation();
+  const [votingModalOpen, setVotingModalOpen] = useState(false);
+  const [votingPersonId, setVotingPersonId] = useState<string | null>(null);
 
   // Build query params
   const queryParams = new URLSearchParams();
@@ -72,15 +75,9 @@ export default function HomePage() {
     setVisibleCount(prev => Math.min(prev + 20, allPeople.length));
   };
 
-  const handleVoteNext = (currentPersonId: string) => {
-    const currentIndex = allPeople.findIndex(p => p.id === currentPersonId);
-    if (currentIndex !== -1 && currentIndex < allPeople.length - 1) {
-      const nextPerson = allPeople[currentIndex + 1];
-      // Trigger the next person's voting modal to open via a global event
-      window.dispatchEvent(new CustomEvent('open-vote-modal', {
-        detail: { personId: nextPerson.id }
-      }));
-    }
+  const handleVoteClick = (personId: string) => {
+    setVotingPersonId(personId);
+    setVotingModalOpen(true);
   };
 
   // Reset visible count when filters change
@@ -223,7 +220,7 @@ export default function HomePage() {
                   key={person.id}
                   person={person}
                   onVisitProfile={() => handleVisitProfile(person.id)}
-                  onVoteNext={() => handleVoteNext(person.id)}
+                  onVoteClick={() => handleVoteClick(person.id)}
                 />
               ))}
             </div>
@@ -257,6 +254,13 @@ export default function HomePage() {
           </p>
         </div>
       </footer>
+
+      <VotingModal 
+        open={votingModalOpen} 
+        onOpenChange={setVotingModalOpen}
+        initialPersonId={votingPersonId}
+        peopleList={allPeople}
+      />
     </div>
   );
 }

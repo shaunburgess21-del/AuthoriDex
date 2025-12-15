@@ -1,12 +1,9 @@
 import { TrendingPerson } from "@shared/schema";
 import { PersonAvatar } from "./PersonAvatar";
 import { RankBadge } from "./RankBadge";
-import { AnimatedSentimentVotingWidget } from "./AnimatedSentimentVotingWidget";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ExternalLink, X } from "lucide-react";
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 // Exact colors from sentiment widget - vivid gradient palette
 const SEGMENT_COLORS = [
@@ -30,12 +27,11 @@ const getSentimentColor = (value: number): string => {
 interface LeaderboardRowProps {
   person: TrendingPerson;
   onVisitProfile: () => void;
-  onVoteNext?: () => void;
+  onVoteClick?: () => void;
 }
 
-export function LeaderboardRow({ person, onVisitProfile, onVoteNext }: LeaderboardRowProps) {
+export function LeaderboardRow({ person, onVisitProfile, onVoteClick }: LeaderboardRowProps) {
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
-  const [voteModalOpen, setVoteModalOpen] = useState(false);
 
   // Load sentiment score from localStorage
   useEffect(() => {
@@ -66,22 +62,12 @@ export function LeaderboardRow({ person, onVisitProfile, onVoteNext }: Leaderboa
       }
     };
 
-    // Listen for vote next event to open this person's voting modal
-    const handleOpenVoteModal = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      if (customEvent.detail?.personId === person.id) {
-        setVoteModalOpen(true);
-      }
-    };
-
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('sentiment-vote-updated', handleCustomUpdate);
-    window.addEventListener('open-vote-modal', handleOpenVoteModal);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('sentiment-vote-updated', handleCustomUpdate);
-      window.removeEventListener('open-vote-modal', handleOpenVoteModal);
     };
   }, [person.id]);
 
@@ -148,56 +134,13 @@ export function LeaderboardRow({ person, onVisitProfile, onVoteNext }: Leaderboa
           className="font-mono font-bold text-sm min-w-14 justify-center"
           onClick={(e) => {
             e.stopPropagation();
-            setVoteModalOpen(true);
+            onVoteClick?.();
           }}
           data-testid={`button-expand-${person.id}`}
         >
           Vote
         </Button>
       </div>
-
-      {/* Vote Modal */}
-      <Dialog open={voteModalOpen} onOpenChange={setVoteModalOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              <PersonAvatar name={person.name} avatar={person.avatar} size="sm" />
-              <span>Rate {person.name}</span>
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            {/* Bio and Visit Profile Button */}
-            {person.bio && (
-              <div className="flex gap-4 items-start">
-                <p className="text-sm text-muted-foreground flex-1" data-testid={`text-bio-${person.id}`}>
-                  {person.bio}
-                </p>
-                <Button 
-                  variant="default" 
-                  size="sm"
-                  onClick={() => {
-                    setVoteModalOpen(false);
-                    onVisitProfile();
-                  }}
-                  data-testid={`button-visit-profile-${person.id}`}
-                  className="gap-2 whitespace-nowrap"
-                >
-                  Visit Profile
-                  <ExternalLink className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-
-            {/* Sentiment Voting Widget */}
-            <AnimatedSentimentVotingWidget 
-              personId={person.id} 
-              personName={person.name}
-              onVoteNext={onVoteNext}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

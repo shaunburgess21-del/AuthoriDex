@@ -15,16 +15,50 @@ import { ArrowLeft } from "lucide-react";
 interface VotingModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialPersonId?: string | null;
+  peopleList?: TrendingPerson[];
 }
 
-export function VotingModal({ open, onOpenChange }: VotingModalProps) {
+export function VotingModal({ open, onOpenChange, initialPersonId, peopleList }: VotingModalProps) {
   const [, setLocation] = useLocation();
   const [selectedPerson, setSelectedPerson] = useState<TrendingPerson | null>(null);
 
-  const { data: people = [], isLoading } = useQuery<TrendingPerson[]>({
+  const { data: fetchedPeople = [], isLoading } = useQuery<TrendingPerson[]>({
     queryKey: ['/api/trending'],
-    enabled: open,
+    enabled: open && !peopleList,
   });
+
+  // Use provided list or fetched list
+  const people = peopleList || fetchedPeople;
+
+  // When modal opens with initialPersonId, auto-select that person
+  useState(() => {
+    if (open && initialPersonId && people.length > 0) {
+      const person = people.find(p => p.id === initialPersonId);
+      if (person) {
+        setSelectedPerson(person);
+      }
+    }
+  });
+
+  // Effect to handle initialPersonId changes
+  const handleInitialPerson = () => {
+    if (open && initialPersonId && people.length > 0) {
+      const person = people.find(p => p.id === initialPersonId);
+      if (person) {
+        setSelectedPerson(person);
+      }
+    }
+  };
+
+  // Call on open/initialPersonId/people changes
+  if (open && initialPersonId && people.length > 0 && (!selectedPerson || selectedPerson.id !== initialPersonId)) {
+    const person = people.find(p => p.id === initialPersonId);
+    if (person && person.id !== selectedPerson?.id) {
+      // Defer state update to avoid render loop
+      setTimeout(() => setSelectedPerson(person), 0);
+    }
+  }
 
   const handlePersonClick = (person: TrendingPerson) => {
     setSelectedPerson(person);
@@ -39,6 +73,19 @@ export function VotingModal({ open, onOpenChange }: VotingModalProps) {
       onOpenChange(false);
       setSelectedPerson(null);
       setLocation(`/person/${selectedPerson.id}`);
+    }
+  };
+
+  const handleVoteNext = () => {
+    if (selectedPerson && people.length > 0) {
+      const currentIndex = people.findIndex(p => p.id === selectedPerson.id);
+      if (currentIndex !== -1 && currentIndex < people.length - 1) {
+        const nextPerson = people[currentIndex + 1];
+        setSelectedPerson(nextPerson);
+      } else {
+        // At end of list, go back to first person or close modal
+        setSelectedPerson(people[0]);
+      }
     }
   };
 
@@ -78,6 +125,7 @@ export function VotingModal({ open, onOpenChange }: VotingModalProps) {
                   personId={selectedPerson.id}
                   personName={selectedPerson.name}
                   onVisitProfile={handleVisitProfile}
+                  onVoteNext={handleVoteNext}
                 />
               </div>
             </ScrollArea>
