@@ -3,6 +3,7 @@ import { PersonAvatar } from "./PersonAvatar";
 import { RankBadge } from "./RankBadge";
 import { AnimatedSentimentVotingWidget } from "./AnimatedSentimentVotingWidget";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ExternalLink, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -103,20 +104,29 @@ export function LeaderboardRow({ person, onVisitProfile }: LeaderboardRowProps) 
         </div>
         {/* Sentiment Score replacing 24h/7d badges */}
         <div className="hidden md:block text-center min-w-[80px]">
-          <p className="font-mono font-semibold text-lg" data-testid={`sentiment-score-${person.id}`}>
-            {sentimentScore ? (
-              <>
-                <span
-                  style={{ color: getSentimentColor(sentimentScore) }}
-                  className="text-[22px]">
-                  {Math.round((sentimentScore / 10) * 100)}
-                </span>
-                <span className="text-muted-foreground text-[22px] translate-y-[0.5px]">%</span>
-              </>
-            ) : (
-              '—'
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p className="font-mono font-semibold text-lg cursor-help" data-testid={`sentiment-score-${person.id}`}>
+                {sentimentScore ? (
+                  <>
+                    <span
+                      style={{ color: getSentimentColor(sentimentScore) }}
+                      className="text-[22px]">
+                      {Math.round((sentimentScore / 10) * 100)}
+                    </span>
+                    <span className="text-muted-foreground text-[22px] translate-y-[0.5px]">%</span>
+                  </>
+                ) : (
+                  '—'
+                )}
+              </p>
+            </TooltipTrigger>
+            {sentimentScore && (
+              <TooltipContent>
+                {person.name} has a {Math.round((sentimentScore / 10) * 100)}% approval rating.
+              </TooltipContent>
             )}
-          </p>
+          </Tooltip>
           <p className="text-xs text-muted-foreground uppercase tracking-wide translate-y-[0.5px]">
             Sentiment
           </p>
