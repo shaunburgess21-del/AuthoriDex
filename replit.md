@@ -26,6 +26,47 @@ Preferred communication style: Simple, everyday language.
 - **VotingModal Architecture**: Centralized single-instance modal at HomePage level. LeaderboardRow and HeroSection trigger the modal via callbacks (onVoteClick, onCastVoteClick) instead of managing their own dialogs. Supports "Vote Next" cycling through the people list.
 - **Visuals**: Square avatars with rounded corners, supporting custom hero images and initials fallback.
 
+### Neon Ghost Design System
+
+**The Aesthetic:**
+- Cyberpunk Minimalism with distinct neon strokes against dark UI
+- Base: Black background (low opacity/glass), 1px neon border, matching neon text
+- Typography: Uppercase, slightly increased letter-spacing
+
+**Category Color Palette (Strict Separation from Sentiment):**
+- **Tech**: Cyan / Electric Blue (#00FFFF)
+- **Music**: Neon Purple (#D900FF)
+- **Politics**: Amber / Orange (#FFBF00)
+- **Business**: Slate Blue / Cool Grey (#A7B6C9)
+- **Creator**: Neon Pink (#FF007F) - NOT "Entertainment"
+- **Sports**: Neon Lime (#00FF88)
+
+**Sentiment Button Colors (Separate from Categories):**
+- **Support**: Neon Green (#39FF14)
+- **Neutral**: Ghost White (#F0F8FF)
+- **Oppose**: Crimson Red (#FF003F)
+
+**Component: NeonCategoryBadge (client/src/components/NeonCategoryBadge.tsx)**
+- **Primary Variant** ("The Full Ghost"): Visible 1px border + glass background (bg-black/30) + glow on hover
+  - Apply to: Card headers, filter buttons, featured tags
+- **Secondary Variant** ("The Whisper"): Text color only, no border, no background
+  - Apply to: Dense metadata lists, footers, search results
+
+**Usage:**
+```tsx
+import { NeonCategoryBadge } from "@/components/NeonCategoryBadge";
+
+// Primary variant (default)
+<NeonCategoryBadge category="Tech" />
+<NeonCategoryBadge category="Music" variant="primary" />
+
+// Secondary variant
+<NeonCategoryBadge category="Creator" variant="secondary" />
+```
+
+**Auto-Normalization:**
+- Component automatically converts "Entertainment" to "Creator" for display
+
 ### Backend Architecture
 
 **Technology Stack:**
