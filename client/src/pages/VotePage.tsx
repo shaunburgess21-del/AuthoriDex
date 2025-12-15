@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { NeonCategoryBadge } from "@/components/NeonCategoryBadge";
 import { 
   ArrowLeft, 
   Plus, 
@@ -47,9 +47,9 @@ interface InductionCandidate {
 const inductionCandidates: InductionCandidate[] = [
   { id: "i1", name: "Jensen Huang", avatar: "", category: "Tech", currentVotes: 850, votesNeeded: 1000 },
   { id: "i2", name: "Charli XCX", avatar: "", category: "Music", currentVotes: 720, votesNeeded: 1000 },
-  { id: "i3", name: "Kai Cenat", avatar: "", category: "Creator", currentVotes: 945, votesNeeded: 1000 },
+  { id: "i3", name: "Kai Cenat", avatar: "", category: "Entertainment", currentVotes: 945, votesNeeded: 1000 },
   { id: "i4", name: "Sabrina Carpenter", avatar: "", category: "Music", currentVotes: 680, votesNeeded: 1000 },
-  { id: "i5", name: "xQc", avatar: "", category: "Creator", currentVotes: 590, votesNeeded: 1000 },
+  { id: "i5", name: "xQc", avatar: "", category: "Entertainment", currentVotes: 590, votesNeeded: 1000 },
 ];
 
 interface CurateProfilePoll {
@@ -62,8 +62,8 @@ const curateProfilePolls: CurateProfilePoll[] = [
   { id: "pp1", personName: "Taylor Swift", category: "Music" },
   { id: "pp2", personName: "Elon Musk", category: "Tech" },
   { id: "pp3", personName: "Beyoncé", category: "Music" },
-  { id: "pp4", personName: "MrBeast", category: "Creator" },
-  { id: "pp5", personName: "Zendaya", category: "Creator" },
+  { id: "pp4", personName: "MrBeast", category: "Entertainment" },
+  { id: "pp5", personName: "Zendaya", category: "Entertainment" },
   { id: "pp6", personName: "Bad Bunny", category: "Music" },
 ];
 
@@ -155,7 +155,7 @@ function InductionCard({
         <div className="flex flex-col items-center text-center mb-4">
           <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="lg" />
           <h3 className="font-semibold mt-3">{candidate.name}</h3>
-          <NeonCategoryBadge category={candidate.category} variant="primary" className="mt-1" />
+          <Badge variant="secondary" className="text-xs mt-1">{candidate.category}</Badge>
         </div>
         
         <div className="mb-3">
@@ -221,7 +221,7 @@ function CurateProfileCard({
       >
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-sm">{poll.personName}</h3>
-          <NeonCategoryBadge category={poll.category} variant="primary" />
+          <Badge variant="secondary" className="text-xs">{poll.category}</Badge>
         </div>
         
         <p className="text-center text-lg font-serif font-bold text-cyan-400 mb-4">Which look defines them?</p>
@@ -305,7 +305,7 @@ function DiscourseCard({
       className="p-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col"
       data-testid={`card-discourse-${topic.id}`}
     >
-      <NeonCategoryBadge category={topic.category} variant="primary" className="mb-3" />
+      <Badge variant="secondary" className="text-xs mb-3 w-fit">{topic.category}</Badge>
       <h3 className="font-serif font-bold text-lg mb-1">{topic.headline}</h3>
       <p className="text-sm text-muted-foreground mb-5 flex-grow">{topic.description}</p>
       
@@ -843,7 +843,7 @@ export default function VotePage() {
                 <SelectContent>
                   <SelectItem value="Music">Music</SelectItem>
                   <SelectItem value="Tech">Tech</SelectItem>
-                  <SelectItem value="Creator">Creator</SelectItem>
+                  <SelectItem value="Entertainment">Entertainment</SelectItem>
                   <SelectItem value="Sports">Sports</SelectItem>
                   <SelectItem value="Politics">Politics</SelectItem>
                   <SelectItem value="Business">Business</SelectItem>

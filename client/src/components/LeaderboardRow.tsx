@@ -1,7 +1,6 @@
 import { TrendingPerson } from "@shared/schema";
 import { PersonAvatar } from "./PersonAvatar";
 import { RankBadge } from "./RankBadge";
-import { NeonCategoryBadge } from "./NeonCategoryBadge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useEffect } from "react";
@@ -87,7 +86,9 @@ export function LeaderboardRow({ person, onVisitProfile, onVoteClick }: Leaderbo
             {person.name}
           </h3>
           {person.category && (
-            <NeonCategoryBadge category={person.category} variant="secondary" />
+            <p className="text-sm text-muted-foreground truncate">
+              {person.category}
+            </p>
           )}
         </div>
         <div className="text-right hidden sm:block">

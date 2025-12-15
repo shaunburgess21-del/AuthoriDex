@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { NeonCategoryBadge } from "@/components/NeonCategoryBadge";
 import { Clock } from "lucide-react";
 
 export interface HeadToHeadBattle {
@@ -28,7 +28,7 @@ export function BattleCard({ battle, compact = false }: BattleCardProps) {
         data-testid={`card-battle-${battle.id}`}
       >
         <div className="flex items-center justify-between mb-3">
-          <NeonCategoryBadge category={battle.category} variant="primary" />
+          <Badge variant="secondary" className="text-xs">{battle.category}</Badge>
           <span className="text-xs text-muted-foreground flex items-center gap-1">
             <Clock className="h-3 w-3" />
             {battle.endTime}

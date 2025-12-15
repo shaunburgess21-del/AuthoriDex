@@ -4,7 +4,6 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { NeonCategoryBadge } from "@/components/NeonCategoryBadge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
@@ -272,7 +271,7 @@ const topGainerMarkets: TopGainerMarket[] = [
   },
   {
     id: "gainer-3",
-    category: "Creator",
+    category: "Entertainment",
     leaders: [
       { name: "MrBeast", avatar: "", currentGain: 18900 },
       { name: "Logan Paul", avatar: "", currentGain: 12100 },
@@ -910,7 +909,7 @@ function HeadToHeadCard({ market, isMarketClosed = false }: { market: HeadToHead
   return (
     <PredictCard testId={`card-h2h-${market.id}`} className={`min-w-[300px] ${isMarketClosed ? 'opacity-75' : ''}`}>
       <div className="flex items-center justify-between mb-3">
-        <NeonCategoryBadge category={market.category} variant="primary" />
+        <Badge variant="secondary" className="text-xs">{market.category}</Badge>
         <span className="text-xs text-muted-foreground flex items-center gap-1">
           <Clock className="h-3 w-3" />
           {market.endTime}
@@ -980,7 +979,7 @@ function CategoryRaceCard({ market, isMarketClosed = false }: { market: Category
   return (
     <PredictCard testId={`card-race-${market.id}`} className={`min-w-[280px] ${isMarketClosed ? 'opacity-75' : ''}`}>
       <div className="flex items-center justify-between mb-3">
-        <NeonCategoryBadge category={market.category} variant="primary" />
+        <Badge variant="secondary" className="text-xs">{market.category}</Badge>
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
           {market.timeRemaining}
@@ -1037,7 +1036,7 @@ function TopGainerCard({ market, isMarketClosed = false }: { market: TopGainerMa
   return (
     <PredictCard testId={`card-gainer-${market.id}`} className={`min-w-[280px] ${isMarketClosed ? 'opacity-75' : ''}`}>
       <div className="flex items-center justify-between mb-3">
-        <NeonCategoryBadge category={market.category} variant="primary" />
+        <Badge variant="secondary" className="text-xs">{market.category}</Badge>
         <span className="text-xs text-muted-foreground">7-day gain</span>
       </div>
       

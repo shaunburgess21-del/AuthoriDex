@@ -9,7 +9,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Filter } from "lucide-react";
-import { NeonCategoryBadge } from "./NeonCategoryBadge";
 
 interface FilterDropdownProps {
   value: string;
@@ -22,7 +21,7 @@ export function FilterDropdown({ value, onChange }: FilterDropdownProps) {
     { value: "Music", label: "Music" },
     { value: "Sports", label: "Sports" },
     { value: "Tech", label: "Tech" },
-    { value: "Creator", label: "Creator" },
+    { value: "Entertainment", label: "Entertainment" },
     { value: "Politics", label: "Politics" },
     { value: "Business", label: "Business" },
   ];
@@ -44,13 +43,8 @@ export function FilterDropdown({ value, onChange }: FilterDropdownProps) {
               key={category.value} 
               value={category.value}
               data-testid={`filter-${category.value}`}
-              className="flex items-center gap-2"
             >
-              {category.value === "all" ? (
-                <span>{category.label}</span>
-              ) : (
-                <NeonCategoryBadge category={category.value} variant="secondary" />
-              )}
+              {category.label}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
