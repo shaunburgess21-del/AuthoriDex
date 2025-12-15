@@ -123,9 +123,11 @@ The Vote page is styled as a "Community Town Hall" with cyan/teal accent theme f
 - Confetti animation on vote (ping animations), triggers +10 XP
 - Candidates: Jensen Huang, Charli XCX, Kai Cenat, Sabrina Carpenter, xQc
 
-**Section 2: Paparazzi Pit (Hot or Not Rapid-Fire)**
+**Section 2: Curate the Profile (Hot or Not Rapid-Fire)**
+- Renamed from "Paparazzi Pit" for clarity
 - Single card at a time (not carousel), shows progress "X of Y"
-- "Which look is iconic?" headline
+- "Which look defines them?" headline
+- Description: "Decide the official photo displayed across FameDex."
 - Two large clickable photo placeholders (Look A / Look B)
 - No submit button - clicking a photo:
   1. Green border flash on selected image
@@ -133,8 +135,14 @@ The Vote page is styled as a "Community Town Hall" with cyan/teal accent theme f
   3. Auto-advances to next pair after 600ms delay
 - "Start Over" button appears when all pairs completed
 
-**Section 3: Public Discourse (Carousel)**
-- Renamed from "Global Sentiment Pulse"
+**Section 3: The People's Voice (Responsive CSS Grid)**
+- Renamed from "Public Discourse"
+- Subtitle: "You, The People, decide the narrative. Weigh in on the topics that matter."
+- **Layout:** Responsive CSS Grid (NOT carousel)
+  - Desktop: 3 columns (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3`)
+  - Tablet: 2 columns
+  - Mobile: 1 column
+  - Gap: `gap-5` (20px) to prevent overlap
 - DiscourseCard components for voting on controversial topics/events
 - Each card shows: category badge, headline, description, 3 neon buttons
 - **Neon Buttons (Glass Aesthetic):**
@@ -147,7 +155,12 @@ The Vote page is styled as a "Community Town Hall" with cyan/teal accent theme f
 
 **Floating Action Button:**
 - Fixed position bottom-right (bottom-24 on mobile for nav clearance, bottom-8 on desktop)
-- Opens "Suggest a Candidate" dialog with name input and category select
+- Opens "Suggest a Candidate" dialog with autocomplete search
+- **Celebrity Autocomplete:**
+  - 30 mock celebrity names (Taylor Swift, Elon Musk, Keanu Reeves, etc.)
+  - Filters suggestions as user types (min 1 character)
+  - Shows up to 8 filtered results with PersonAvatar
+  - Clicking suggestion auto-fills the input
 - Categories: Music, Tech, Entertainment, Sports, Politics, Business
 - Submit button disabled until both fields are filled
 
