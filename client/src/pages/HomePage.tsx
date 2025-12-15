@@ -80,6 +80,14 @@ export default function HomePage() {
     setVotingModalOpen(true);
   };
 
+  const handleHeroCastVote = () => {
+    // Open modal with the first person from the list
+    if (allPeople.length > 0) {
+      setVotingPersonId(allPeople[0].id);
+      setVotingModalOpen(true);
+    }
+  };
+
   // Reset visible count when filters change
   useEffect(() => {
     setVisibleCount(20);
@@ -140,7 +148,7 @@ export default function HomePage() {
           </div>
         </div>
       </header>
-      <HeroSection />
+      <HeroSection onCastVoteClick={handleHeroCastVote} />
       <div className="container mx-auto px-4 py-12 max-w-7xl">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
           <TrendWidget title="Daily Movers" people={dailyMovers} type="daily" onPersonClick={handleVisitProfile} />
