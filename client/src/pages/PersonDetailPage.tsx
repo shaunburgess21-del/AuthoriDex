@@ -20,6 +20,7 @@ import { TrendingPerson } from "@shared/schema";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
+import { formatNumber } from "@/lib/formatNumber";
 
 export default function PersonDetailPage() {
   const { user } = useAuth();
@@ -283,7 +284,7 @@ export default function PersonDetailPage() {
               Trend Score
             </p>
             <p className="text-3xl font-mono font-bold" data-testid="text-trend-score">
-              {person.trendScore.toFixed(0)}
+              {formatNumber(person.trendScore)}
             </p>
           </Card>
           <Card className="text-center p-4">
