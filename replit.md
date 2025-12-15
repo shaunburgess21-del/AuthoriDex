@@ -144,11 +144,12 @@ The Vote page is styled as a "Community Town Hall" with cyan/teal accent theme f
   - Mobile: 1 column
   - Gap: `gap-5` (20px) to prevent overlap
 - DiscourseCard components for voting on controversial topics/events
-- Each card shows: category badge, headline, description, 3 neon buttons
-- **Neon Buttons (Glass Aesthetic):**
-  - Disapprove: Neon red border/text, red glow on hover
-  - Neutral: Amber/gold border/text, amber glow on hover
-  - Approve: Neon green border/text, green glow on hover
+- Each card shows: category badge, headline, description, 3 equal-width neon buttons in a single row
+- **Neon Ghost Buttons (Equal Width Symmetry):**
+  - Oppose: Crimson Red (#FF003F) text/border, red neon glow on hover
+  - Neutral: Ghost White (#F0F8FF) text/border, white glow on hover
+  - Support: Neon Green (#39FF14) text/border, green neon glow on hover
+  - All buttons: Dark background (black/30) with 1px border, equal flex: 1 width for symmetry
 - After voting: Shows percentage bar (Disapprove % | Neutral % | Approve %) with total votes
 - Triggers +20 XP on vote
 - Mock Topics: "Elon buys Twitter", "AI replacing jobs", "Taylor's Eras Tour pricing"

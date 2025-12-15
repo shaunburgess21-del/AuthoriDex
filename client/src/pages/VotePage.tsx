@@ -289,11 +289,11 @@ function DiscourseCard({
   onVote 
 }: { 
   topic: DiscourseTopicData; 
-  onVote: (choice: 'approve' | 'neutral' | 'disapprove') => void;
+  onVote: (choice: 'support' | 'neutral' | 'oppose') => void;
 }) {
-  const [voted, setVoted] = useState<'approve' | 'neutral' | 'disapprove' | null>(null);
+  const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(null);
 
-  const handleVote = (choice: 'approve' | 'neutral' | 'disapprove') => {
+  const handleVote = (choice: 'support' | 'neutral' | 'oppose') => {
     if (!voted) {
       setVoted(choice);
       onVote(choice);
@@ -310,47 +310,47 @@ function DiscourseCard({
       <p className="text-sm text-muted-foreground mb-5 flex-grow">{topic.description}</p>
       
       {!voted ? (
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+        <div className="flex gap-2">
           <button
-            onClick={() => handleVote('disapprove')}
-            className="flex-1 py-3 px-3 rounded-lg bg-background/50 border-2 border-red-500/60 text-red-400 font-semibold text-sm transition-all duration-200 hover:bg-red-500/10 hover:border-red-400 hover:shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:text-red-300"
-            data-testid={`button-disapprove-${topic.id}`}
+            onClick={() => handleVote('oppose')}
+            className="flex-1 py-3 px-2 rounded-md bg-black/30 border border-[#FF003F] text-[#FF003F] font-semibold text-sm transition-all duration-200 hover:bg-[#FF003F]/15 hover:shadow-[0_0_20px_rgba(255,0,63,0.4)]"
+            data-testid={`button-oppose-${topic.id}`}
           >
-            Disapprove
+            Oppose
           </button>
           <button
             onClick={() => handleVote('neutral')}
-            className="flex-1 py-3 px-3 rounded-lg bg-background/50 border-2 border-amber-500/60 text-amber-400 font-semibold text-sm transition-all duration-200 hover:bg-amber-500/10 hover:border-amber-400 hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:text-amber-300"
+            className="flex-1 py-3 px-2 rounded-md bg-black/30 border border-[#F0F8FF] text-[#F0F8FF] font-semibold text-sm transition-all duration-200 hover:bg-[#F0F8FF]/15 hover:shadow-[0_0_20px_rgba(240,248,255,0.4)]"
             data-testid={`button-neutral-${topic.id}`}
           >
             Neutral
           </button>
           <button
-            onClick={() => handleVote('approve')}
-            className="flex-1 py-3 px-3 rounded-lg bg-background/50 border-2 border-green-500/60 text-green-400 font-semibold text-sm transition-all duration-200 hover:bg-green-500/10 hover:border-green-400 hover:shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:text-green-300"
-            data-testid={`button-approve-${topic.id}`}
+            onClick={() => handleVote('support')}
+            className="flex-1 py-3 px-2 rounded-md bg-black/30 border border-[#39FF14] text-[#39FF14] font-semibold text-sm transition-all duration-200 hover:bg-[#39FF14]/15 hover:shadow-[0_0_20px_rgba(57,255,20,0.4)]"
+            data-testid={`button-support-${topic.id}`}
           >
-            Approve
+            Support
           </button>
         </div>
       ) : (
         <div className="space-y-3">
           <div className="flex gap-1 h-8 rounded-lg overflow-hidden">
             <div 
-              className="bg-red-500/80 flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
-              style={{ width: `${topic.disapprovePercent}%` }}
+              className="flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
+              style={{ width: `${topic.disapprovePercent}%`, backgroundColor: '#FF003F' }}
             >
               {topic.disapprovePercent}%
             </div>
             <div 
-              className="bg-amber-500/80 flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
-              style={{ width: `${topic.neutralPercent}%` }}
+              className="flex items-center justify-center text-xs font-bold transition-all duration-500"
+              style={{ width: `${topic.neutralPercent}%`, backgroundColor: '#F0F8FF', color: '#000' }}
             >
               {topic.neutralPercent}%
             </div>
             <div 
-              className="bg-green-500/80 flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
-              style={{ width: `${topic.approvePercent}%` }}
+              className="flex items-center justify-center text-xs font-bold text-black transition-all duration-500"
+              style={{ width: `${topic.approvePercent}%`, backgroundColor: '#39FF14' }}
             >
               {topic.approvePercent}%
             </div>
@@ -601,7 +601,7 @@ export default function VotePage() {
     }
   };
 
-  const handleDiscourseVote = (topicId: string, choice: 'approve' | 'neutral' | 'disapprove', event?: React.MouseEvent) => {
+  const handleDiscourseVote = (topicId: string, choice: 'support' | 'neutral' | 'oppose', event?: React.MouseEvent) => {
     addXP(20, event as React.MouseEvent);
   };
 
