@@ -558,7 +558,6 @@ export function AnimatedSentimentVotingWidget({
                     {isProfilePage ? (
                       <Button
                         onClick={handleViewResults}
-                        variant="outline"
                         className="w-full"
                         size="lg"
                         data-testid="button-view-results"
