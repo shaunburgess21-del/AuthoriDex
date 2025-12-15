@@ -314,21 +314,21 @@ function DiscourseCard({
         <div className="flex gap-2">
           <button
             onClick={() => handleVote('oppose')}
-            className="flex-1 py-3 px-2 rounded-md bg-black/30 border border-[#FF003F] text-[#FF003F] font-semibold text-sm transition-all duration-200 hover:bg-[#FF003F]/15 hover:shadow-[0_0_20px_rgba(255,0,63,0.4)]"
+            className="flex-1 px-6 py-2.5 rounded-xl bg-red-500/10 border border-red-500/50 text-red-400 text-sm font-medium transition-all duration-300 hover:bg-red-500/30 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)]"
             data-testid={`button-oppose-${topic.id}`}
           >
             Oppose
           </button>
           <button
             onClick={() => handleVote('neutral')}
-            className="flex-1 py-3 px-2 rounded-md bg-black/30 border border-[#F0F8FF] text-[#F0F8FF] font-semibold text-sm transition-all duration-200 hover:bg-[#F0F8FF]/15 hover:shadow-[0_0_20px_rgba(240,248,255,0.4)]"
+            className="flex-1 px-6 py-2.5 rounded-xl bg-slate-500/10 border border-slate-500/50 text-slate-400 text-sm font-medium transition-all duration-300 hover:bg-slate-500/30 hover:shadow-[0_0_15px_rgba(100,116,139,0.3)]"
             data-testid={`button-neutral-${topic.id}`}
           >
             Neutral
           </button>
           <button
             onClick={() => handleVote('support')}
-            className="flex-1 py-3 px-2 rounded-md bg-black/30 border border-[#39FF14] text-[#39FF14] font-semibold text-sm transition-all duration-200 hover:bg-[#39FF14]/15 hover:shadow-[0_0_20px_rgba(57,255,20,0.4)]"
+            className="flex-1 px-6 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 text-sm font-medium transition-all duration-300 hover:bg-emerald-500/30 hover:shadow-[0_0_15px_rgba(16,185,129,0.3)]"
             data-testid={`button-support-${topic.id}`}
           >
             Support
