@@ -336,22 +336,22 @@ function DiscourseCard({
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="flex gap-1 h-8 rounded-lg overflow-hidden">
+          <div className="flex h-10 rounded-xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-sm">
             <div 
-              className="flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
-              style={{ width: `${topic.disapprovePercent}%`, backgroundColor: '#FF003F' }}
+              className="flex items-center justify-center text-xs font-bold text-white border-r border-red-500/50 bg-red-500/20 transition-all duration-500"
+              style={{ width: `${topic.disapprovePercent}%` }}
             >
               {topic.disapprovePercent}%
             </div>
             <div 
-              className="flex items-center justify-center text-xs font-bold transition-all duration-500"
-              style={{ width: `${topic.neutralPercent}%`, backgroundColor: '#F0F8FF', color: '#000' }}
+              className="flex items-center justify-center text-xs font-bold text-white border-r border-slate-500/50 bg-slate-500/20 transition-all duration-500"
+              style={{ width: `${topic.neutralPercent}%` }}
             >
               {topic.neutralPercent}%
             </div>
             <div 
-              className="flex items-center justify-center text-xs font-bold text-black transition-all duration-500"
-              style={{ width: `${topic.approvePercent}%`, backgroundColor: '#39FF14' }}
+              className="flex items-center justify-center text-xs font-bold text-white bg-emerald-500/20 transition-all duration-500"
+              style={{ width: `${topic.approvePercent}%` }}
             >
               {topic.approvePercent}%
             </div>
