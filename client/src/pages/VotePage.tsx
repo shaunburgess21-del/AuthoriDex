@@ -345,8 +345,18 @@ function DiscourseCard({
           </button>
         </div>
       ) : (
-        <div className="space-y-2">
-          <div className="flex h-10 rounded-xl overflow-hidden border border-white/20 bg-white/5 backdrop-blur-sm">
+        <div className="flex flex-col">
+          <div className={`flex items-center justify-center gap-2 text-sm font-medium ${
+            voted === 'support' ? 'text-emerald-400' : 
+            voted === 'oppose' ? 'text-red-400' : 
+            'text-white'
+          }`} data-testid={`text-vote-confirmation-${topic.id}`}>
+            {voted === 'support' && <ThumbsUp className="h-4 w-4" />}
+            {voted === 'oppose' && <ThumbsDown className="h-4 w-4" />}
+            {voted === 'neutral' && <Minus className="h-4 w-4" />}
+            <span>You voted: {voted === 'support' ? 'Support' : voted === 'oppose' ? 'Oppose' : 'Neutral'}</span>
+          </div>
+          <div className="flex h-10 rounded-xl overflow-hidden border border-white/20 bg-white/5 backdrop-blur-sm my-3">
             <div 
               className="flex items-center justify-center text-xs font-bold text-white border-r border-red-400/60 bg-red-500/40 shadow-[inset_0_0_12px_rgba(239,68,68,0.3)] transition-all duration-500"
               style={{ width: `${topic.disapprovePercent}%` }}
@@ -371,7 +381,7 @@ function DiscourseCard({
           </p>
           <button
             onClick={handleChangeVote}
-            className="block mx-auto text-xs text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline"
+            className="block mx-auto mt-2 text-xs text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline"
             data-testid={`button-change-vote-${topic.id}`}
           >
             Change your vote
