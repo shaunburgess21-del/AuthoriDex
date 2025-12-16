@@ -1,0 +1,116 @@
+I’m working on the “People’s Voice” section on the Vote page of FameDex. I’ve attached two screenshots:
+
+Screenshot A – current implementation in Replit (three voting cards with “Oppose / Neutral / Support” buttons and a chunky 3-color percentage bar).
+
+Screenshot B – a Figma concept I prefer (title, question, large stacked buttons, thin results bar, “You voted” chip).
+
+Goal
+Refine the existing voting cards to follow the UX/UI of Screenshot B, while:
+
+Keeping the current FameDex visual language (dark background, rounded cards, subtle glows).
+
+Not changing any other parts of the Vote page or app structure.
+
+Requirements
+
+1. Card layout & hierarchy
+
+For each topic card (“Elon buys Twitter”, “AI replacing jobs”, etc.):
+
+Keep: category pill at top left (e.g. Tech, Music) using our existing pill style and category colors.
+
+Below that:
+
+Topic title (strong, larger font).
+
+Subtitle question in smaller, muted text.
+
+Under the text, show three large stacked action rows:
+
+Support (top, green accent, thumbs-up icon)
+
+Neutral (middle, neutral gray row with “—” icon)
+
+Oppose (bottom, red accent, thumbs-down icon)
+
+Each row should be a full-width button with:
+
+Left: icon
+
+Center: label (“Support / Neutral / Oppose”)
+
+Right: optional small percentage when results are shown.
+
+2. Pre-vote vs post-vote states
+
+Before the user votes on a card:
+
+All three rows use a subtle style:
+
+Light border and very dark background (no fully saturated fills yet).
+
+On hover / tap, row background can lighten slightly and show a stronger green/red border.
+
+No percentage bar or “You voted” label yet (or show placeholder percentages in a very subtle way).
+
+After the user votes:
+
+The selected row becomes “active”:
+
+Slightly brighter background and stronger border in its color (green/red/neutral).
+
+Small “You voted” chip appears aligned to the right of that row or just below it.
+
+Below the three buttons, show a results strip:
+
+A single horizontal bar divided into 3 segments for Support / Neutral / Oppose.
+
+Each segment uses a toned-down version of green / gray / red.
+
+Show numeric percentages at the right of each segment (e.g. 28%, 32%, 40%).
+
+Under the bar, show total votes (156,790 total votes) and a small “Change your vote” link.
+
+3. Interactions
+
+Clicking a row:
+
+Immediately updates the local “You voted” state for that card.
+
+Updates the results bar and percentages using the dummy data we already have (no backend/Supabase wiring needed yet).
+
+Hover states (desktop):
+
+Slight elevation and glow around the entire card.
+
+Row hover: subtle background lightening, but keep typography and icons consistent.
+
+Mobile:
+
+Cards stack vertically with full-width buttons; ensure tap targets are tall enough and spacing isn’t cramped.
+
+4. Category labels
+
+Keep the current pill style for category labels (Tech, Music, Politics, etc.) with:
+
+Dark base background + subtle colored tint + 1px border in the category color.
+
+Category text using a lighter tint of the same color.
+
+Do not introduce new shapes; just apply our color system to the existing pill component.
+
+5. Constraints
+
+Do not change the overall Vote page layout outside “The People’s Voice” section.
+
+Do not introduce new font families or global color changes.
+
+This is still test/demo mode – all vote state can be local/dummy for now. No Supabase or auth changes.
+
+Please:
+
+Refactor the existing voting card component to match this spec.
+
+Ensure the component is reusable so we can render multiple topics using the same layout.
+
+Verify the design on both desktop and mobile preview before stopping.

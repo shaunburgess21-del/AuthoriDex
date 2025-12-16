@@ -320,12 +320,12 @@ function DiscourseCard({
       {!voted ? (
         <div className="flex flex-col gap-3">
           <button
-            onClick={() => handleVote('oppose')}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
-            data-testid={`button-oppose-${topic.id}`}
+            onClick={() => handleVote('support')}
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+            data-testid={`button-support-${topic.id}`}
           >
-            <ThumbsDown className="h-4 w-4 shrink-0" />
-            <span>Oppose</span>
+            <ThumbsUp className="h-4 w-4 shrink-0" />
+            <span>Support</span>
           </button>
           <button
             onClick={() => handleVote('neutral')}
@@ -336,51 +336,74 @@ function DiscourseCard({
             <span>Neutral</span>
           </button>
           <button
-            onClick={() => handleVote('support')}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
-            data-testid={`button-support-${topic.id}`}
+            onClick={() => handleVote('oppose')}
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+            data-testid={`button-oppose-${topic.id}`}
           >
-            <ThumbsUp className="h-4 w-4 shrink-0" />
-            <span>Support</span>
+            <ThumbsDown className="h-4 w-4 shrink-0" />
+            <span>Oppose</span>
           </button>
         </div>
       ) : (
-        <div className="flex flex-col">
-          <div className="flex items-center justify-center gap-2 text-sm font-medium" data-testid={`text-vote-confirmation-${topic.id}`}>
-            {voted === 'support' && <ThumbsUp className="h-4 w-4 text-emerald-400" />}
-            {voted === 'oppose' && <ThumbsDown className="h-4 w-4 text-red-400" />}
-            {voted === 'neutral' && <Minus className="h-4 w-4 text-white" />}
-            <span style={{ color: '#9DA1AB' }}>You voted:</span>
-            <span className={voted === 'support' ? 'text-emerald-400' : voted === 'oppose' ? 'text-red-400' : 'text-white'}>
-              {voted === 'support' ? 'Support' : voted === 'oppose' ? 'Oppose' : 'Neutral'}
-            </span>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <ThumbsUp className="h-4 w-4 text-emerald-400 shrink-0" />
+            <span className="text-sm text-emerald-400 w-16 shrink-0">Support</span>
+            <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                style={{ width: `${topic.approvePercent}%` }}
+              />
+            </div>
+            <span className="text-sm text-muted-foreground w-10 text-right">{topic.approvePercent}%</span>
           </div>
-          <div className="flex h-10 rounded-xl overflow-hidden border border-white/20 bg-white/5 backdrop-blur-sm my-3">
-            <div 
-              className="flex items-center justify-center text-xs font-bold text-white border-r border-red-400/60 bg-red-500/40 shadow-[inset_0_0_12px_rgba(239,68,68,0.3)] transition-all duration-500"
-              style={{ width: `${topic.disapprovePercent}%` }}
-            >
-              {topic.disapprovePercent}%
+          
+          <div className="flex items-center gap-3">
+            <Minus className="h-4 w-4 text-slate-400 shrink-0" />
+            <span className="text-sm text-slate-400 w-16 shrink-0">Neutral</span>
+            <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-slate-500 rounded-full transition-all duration-500"
+                style={{ width: `${topic.neutralPercent}%` }}
+              />
+            </div>
+            <span className="text-sm text-muted-foreground w-10 text-right">{topic.neutralPercent}%</span>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <ThumbsDown className="h-4 w-4 text-red-400 shrink-0" />
+            <span className="text-sm text-red-400 w-16 shrink-0">Oppose</span>
+            <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-red-500 rounded-full transition-all duration-500"
+                style={{ width: `${topic.disapprovePercent}%` }}
+              />
+            </div>
+            <span className="text-sm text-muted-foreground w-10 text-right">{topic.disapprovePercent}%</span>
+          </div>
+          
+          <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Zap className="h-3.5 w-3.5" />
+              <span>{topic.totalVotes.toLocaleString()} total votes</span>
             </div>
             <div 
-              className="flex items-center justify-center text-xs font-bold text-white border-r border-slate-400/60 bg-slate-500/40 shadow-[inset_0_0_12px_rgba(100,116,139,0.3)] transition-all duration-500"
-              style={{ width: `${topic.neutralPercent}%` }}
+              className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
+                voted === 'support' 
+                  ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400' 
+                  : voted === 'oppose'
+                  ? 'bg-red-500/10 border-red-500/40 text-red-400'
+                  : 'bg-slate-500/10 border-slate-500/40 text-slate-400'
+              }`}
+              data-testid={`badge-voted-${topic.id}`}
             >
-              {topic.neutralPercent}%
-            </div>
-            <div 
-              className="flex items-center justify-center text-xs font-bold text-white bg-emerald-500/40 shadow-[inset_0_0_12px_rgba(16,185,129,0.3)] transition-all duration-500"
-              style={{ width: `${topic.approvePercent}%` }}
-            >
-              {topic.approvePercent}%
+              You voted
             </div>
           </div>
-          <p className="text-xs text-center text-muted-foreground">
-            {topic.totalVotes.toLocaleString()} total votes
-          </p>
+          
           <button
             onClick={handleChangeVote}
-            className="block mx-auto mt-2 text-xs text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline"
+            className="text-xs text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline text-center"
             data-testid={`button-change-vote-${topic.id}`}
           >
             Change your vote
