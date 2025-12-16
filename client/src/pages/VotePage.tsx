@@ -16,7 +16,10 @@ import {
   Zap,
   Crown,
   MessageSquare,
-  Search
+  Search,
+  ThumbsDown,
+  ThumbsUp,
+  Minus
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -301,9 +304,13 @@ function DiscourseCard({
     }
   };
 
+  const handleChangeVote = () => {
+    setVoted(null);
+  };
+
   return (
     <Card 
-      className="p-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col"
+      className="pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col"
       data-testid={`card-discourse-${topic.id}`}
     >
       <CategoryPill category={topic.category} className="mb-3" data-testid={`badge-category-${topic.id}`} />
@@ -311,46 +318,49 @@ function DiscourseCard({
       <p className="text-sm text-muted-foreground mb-5 flex-grow">{topic.description}</p>
       
       {!voted ? (
-        <div className="flex justify-center gap-2">
+        <div className="flex justify-center gap-3">
           <button
             onClick={() => handleVote('oppose')}
-            className="flex-1 px-4 py-2 rounded-xl bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:bg-[#FF0000]/30 hover:shadow-[0_0_15px_rgba(255,0,0,0.3)]"
+            className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
             data-testid={`button-oppose-${topic.id}`}
           >
+            <ThumbsDown className="h-4 w-4" />
             Oppose
           </button>
           <button
             onClick={() => handleVote('neutral')}
-            className="flex-1 px-4 py-2 rounded-xl bg-white/10 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:bg-white/30 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+            className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15"
             data-testid={`button-neutral-${topic.id}`}
           >
+            <Minus className="h-4 w-4" />
             Neutral
           </button>
           <button
             onClick={() => handleVote('support')}
-            className="flex-1 px-4 py-2 rounded-xl bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:bg-[#00C853]/30 hover:shadow-[0_0_15px_rgba(0,200,83,0.3)]"
+            className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
             data-testid={`button-support-${topic.id}`}
           >
+            <ThumbsUp className="h-4 w-4" />
             Support
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
-          <div className="flex h-10 rounded-xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-sm">
+        <div className="space-y-2">
+          <div className="flex h-10 rounded-xl overflow-hidden border border-white/20 bg-white/5 backdrop-blur-sm">
             <div 
-              className="flex items-center justify-center text-xs font-bold text-white border-r border-red-500/50 bg-red-500/20 transition-all duration-500"
+              className="flex items-center justify-center text-xs font-bold text-white border-r border-red-400/60 bg-red-500/40 shadow-[inset_0_0_12px_rgba(239,68,68,0.3)] transition-all duration-500"
               style={{ width: `${topic.disapprovePercent}%` }}
             >
               {topic.disapprovePercent}%
             </div>
             <div 
-              className="flex items-center justify-center text-xs font-bold text-white border-r border-slate-500/50 bg-slate-500/20 transition-all duration-500"
+              className="flex items-center justify-center text-xs font-bold text-white border-r border-slate-400/60 bg-slate-500/40 shadow-[inset_0_0_12px_rgba(100,116,139,0.3)] transition-all duration-500"
               style={{ width: `${topic.neutralPercent}%` }}
             >
               {topic.neutralPercent}%
             </div>
             <div 
-              className="flex items-center justify-center text-xs font-bold text-white bg-emerald-500/20 transition-all duration-500"
+              className="flex items-center justify-center text-xs font-bold text-white bg-emerald-500/40 shadow-[inset_0_0_12px_rgba(16,185,129,0.3)] transition-all duration-500"
               style={{ width: `${topic.approvePercent}%` }}
             >
               {topic.approvePercent}%
@@ -359,6 +369,13 @@ function DiscourseCard({
           <p className="text-xs text-center text-muted-foreground">
             {topic.totalVotes.toLocaleString()} total votes
           </p>
+          <button
+            onClick={handleChangeVote}
+            className="block mx-auto text-xs text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline"
+            data-testid={`button-change-vote-${topic.id}`}
+          >
+            Change your vote
+          </button>
         </div>
       )}
     </Card>
