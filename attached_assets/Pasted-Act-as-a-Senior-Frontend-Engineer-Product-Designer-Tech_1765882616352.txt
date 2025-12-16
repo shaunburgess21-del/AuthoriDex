@@ -1,0 +1,208 @@
+Act as a Senior Frontend Engineer + Product Designer.
+Tech: React + Tailwind. App: FameDex (dark, neon, subtle glassmorphism).
+
+Goal: Rebuild the “Induction Queue” section on the Vote page to match the latest Figma design and use a competitive race model with approval voting.
+
+1. Data & core “race” logic (dummy for now)
+
+Create a dummy array INDUCTION_CANDIDATES with at least 9–12 candidates, each:
+
+{ id, name, initials, category, votes, momentumTag }
+
+category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics".
+
+momentumTag: "Hot" | "Rising" | null.
+
+Sort candidates by votes descending and derive:
+
+rank = index + 1
+
+maxVotes = candidates[0].votes
+
+progressPercent = (votes / maxVotes) * 100 for each candidate.
+
+Progress bar + label logic:
+
+Rank #1 (leader):
+
+Show a visually full bar.
+
+Under the bar: 👑 Leader • {votes} votes.
+
+Others (rank > 1):
+
+Bar width uses progressPercent.
+
+Under the bar: Gap: -{leaderVotes - votes} • {votes} votes.
+
+Style the gap text as muted but readable; make the numeric part (-1,201) slightly lighter so it’s noticeable without looking like a button.
+
+2. Induction candidate card UI
+
+Build a reusable <InductionCandidateCard /> component that matches the latest Figma look and stays consistent with the existing “The People’s Voice” cards.
+
+Card container:
+
+Dark background, rounded corners.
+
+Border: same simple, subtle border style as “The People’s Voice” cards
+(e.g. border border-slate-700/60 bg-slate-900/60).
+
+Hover: NO scale-up. On hover, just:
+
+slightly brighten the border (e.g. towards border-slate-400/60)
+
+optional very soft outer glow / shadow.
+
+Header row (inside card):
+
+Left – Rank badge: glass pill style, not solid circles.
+
+#1 → gold tint (bg-yellow-500/10, border-yellow-500/20, text-yellow-300).
+
+#2 → cool silver/blue tint.
+
+#3 → bronze/orange tint.
+
+Use rounded-full px-3 py-1 text-xs font-medium flex items-center.
+
+Right – Momentum pill (if momentumTag is set):
+
+Text: "🔥 Hot" or "🚀 Rising".
+
+Same glass-pill recipe with red or teal accent tint.
+
+Identity block:
+
+Centered square avatar with the candidate initials (e.g. “JH”) and a subtle neon edge glow.
+
+Name below the avatar.
+
+Category label pill below the name using the same colored glass label style as elsewhere on FameDex for Tech / Music / Creator etc (dark base, tinted border, tinted text).
+
+Race bar + stats row:
+
+Cyan/blue progress bar using progressPercent.
+
+Small stats line immediately underneath:
+
+Leader: "👑 Leader • 12,406 votes".
+
+Others: "Gap: -1,201 • 11,205 votes".
+
+No extra “Share of votes” label – the bar + numbers should speak for themselves.
+
+Approval-voting button:
+
+User can vote once per candidate but support multiple candidates overall.
+
+Use React state, local only (no backend):
+
+const [votedIds, setVotedIds] = useState<Set<string>>();
+
+When clicking the button:
+
+If id not in votedIds: add it and increment that candidate’s votes by 1.
+
+If id already voted: remove it and decrement votes by 1 (simple toggle).
+
+Button visual states:
+
+Unvoted:
+
+Full-width pill button.
+
+Blue/cyan gradient with subtle glow.
+
+Label: "Vote to Induct (+1)".
+
+Voted:
+
+Full-width button switches to green/emerald glass style
+(bg-emerald-500/10 border-emerald-500/20 text-emerald-300).
+
+Label: "Voted ✓".
+
+Feel free to add a small "You voted" chip near the bar when votedIds contains this candidate.
+
+3. Section header & stats strip
+
+At the top of the section:
+
+Title: "The Induction Queue".
+
+Subtitle: "Vote on which celebrity joins the main leaderboard next. The race is on."
+
+Directly underneath, add a horizontal stats strip with three small glass pills:
+
+🕒 Ends in: 2d 14h 28m
+
+🗳️ Total votes this cycle: 127,843
+
+⭐ Top 3 will be inducted
+
+Implementation note:
+
+These values should be static/dummy for now.
+
+Do not implement countdown timers, time maths, or induction logic – just render the pills to convey the concept.
+
+At the bottom of the section, add 3 small info cards (like the Figma design), visually secondary to the main induction cards:
+
+Active voters – show a dummy number like 2,847.
+
+Votes today – show a dummy number like 1,234.
+
+Your impact – show the live count of how many candidates the user has voted for in this queue, e.g. votedIds.size.
+
+Style:
+
+Slightly smaller type and lower contrast than the candidate cards.
+
+No bright CTA buttons in these cards – they are informational only.
+
+4. “View all candidates” – inline expand / collapse
+
+Implement “View all candidates” as an inline expand on the same page (no new route, no modal):
+
+Keep a piece of state showAllCandidates (default false).
+
+Initial render:
+
+Show only the top 3 candidates, in a 3-column row on desktop.
+
+At the bottom of the induction section, centered, add a button:
+
+Default text: "View all candidates ▸".
+
+On click:
+
+Set showAllCandidates = true.
+
+Render the remaining candidates (ranks 4–N) below the first row, using the same <InductionCandidateCard /> component.
+
+Update the button label to "Collapse list ▾", which when clicked sets showAllCandidates = false and returns to showing only the top 3.
+
+Make sure:
+
+Rank badges, progress bars, gap labels, and vote states all work correctly for all candidates.
+
+Voting in the expanded list still updates the shared votedIds state and re-sorts the array if needed.
+
+Layout:
+
+Desktop: 3 cards per row.
+
+Mobile: stack cards vertically; “View all candidates” button sits under the initial row.
+
+5. Overall styling & consistency
+
+Match the overall look/feel of the existing FameDex Vote page and People’s Voice cards:
+
+Dark slate background, neon cyan primary, magenta/teal/gold as supporting accents.
+
+Simple, consistent 1px borders and soft glows – no aggressive scale transforms.
+
+Use clean, typed React code and Tailwind utilities.
+
+The priority is a smooth, engaging race experience that feels coherent with the rest of the FameDex UI, even though data is dummy for now.

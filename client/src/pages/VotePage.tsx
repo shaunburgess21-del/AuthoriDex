@@ -19,7 +19,12 @@ import {
   Search,
   ThumbsDown,
   ThumbsUp,
-  Minus
+  Minus,
+  ChevronDown,
+  Star,
+  Flame,
+  Rocket,
+  Check
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -42,18 +47,25 @@ const mockCelebrityList = [
 interface InductionCandidate {
   id: string;
   name: string;
-  avatar: string;
-  category: string;
-  currentVotes: number;
-  votesNeeded: number;
+  initials: string;
+  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics";
+  votes: number;
+  momentumTag: "Hot" | "Rising" | null;
 }
 
-const inductionCandidates: InductionCandidate[] = [
-  { id: "i1", name: "Jensen Huang", avatar: "", category: "Tech", currentVotes: 850, votesNeeded: 1000 },
-  { id: "i2", name: "Charli XCX", avatar: "", category: "Music", currentVotes: 720, votesNeeded: 1000 },
-  { id: "i3", name: "Kai Cenat", avatar: "", category: "Creator", currentVotes: 945, votesNeeded: 1000 },
-  { id: "i4", name: "Sabrina Carpenter", avatar: "", category: "Music", currentVotes: 680, votesNeeded: 1000 },
-  { id: "i5", name: "xQc", avatar: "", category: "Creator", currentVotes: 590, votesNeeded: 1000 },
+const INDUCTION_CANDIDATES: InductionCandidate[] = [
+  { id: "i1", name: "Jensen Huang", initials: "JH", category: "Tech", votes: 12406, momentumTag: "Hot" },
+  { id: "i2", name: "Charli XCX", initials: "CX", category: "Music", votes: 11205, momentumTag: "Rising" },
+  { id: "i3", name: "Kai Cenat", initials: "KC", category: "Creator", votes: 10892, momentumTag: "Hot" },
+  { id: "i4", name: "Sabrina Carpenter", initials: "SC", category: "Music", votes: 9847, momentumTag: null },
+  { id: "i5", name: "Ice Spice", initials: "IS", category: "Music", votes: 8934, momentumTag: "Rising" },
+  { id: "i6", name: "Sam Altman", initials: "SA", category: "Tech", votes: 8421, momentumTag: null },
+  { id: "i7", name: "Jenna Ortega", initials: "JO", category: "Creator", votes: 7856, momentumTag: null },
+  { id: "i8", name: "Patrick Mahomes", initials: "PM", category: "Sports", votes: 7234, momentumTag: "Hot" },
+  { id: "i9", name: "Vivek Ramaswamy", initials: "VR", category: "Politics", votes: 6891, momentumTag: null },
+  { id: "i10", name: "xQc", initials: "XQ", category: "Creator", votes: 6543, momentumTag: null },
+  { id: "i11", name: "Hailey Bieber", initials: "HB", category: "Creator", votes: 5987, momentumTag: null },
+  { id: "i12", name: "Mark Cuban", initials: "MC", category: "Business", votes: 5432, momentumTag: null },
 ];
 
 interface CurateProfilePoll {
@@ -122,73 +134,125 @@ interface XPFloater {
   amount: number;
 }
 
-function InductionCard({ 
-  candidate, 
-  onVote 
-}: { 
-  candidate: InductionCandidate; 
-  onVote: (id: string) => void;
-}) {
-  const progress = (candidate.currentVotes / candidate.votesNeeded) * 100;
-  const [hasVoted, setHasVoted] = useState(false);
-  const [showConfetti, setShowConfetti] = useState(false);
+function getRankBadgeStyle(rank: number) {
+  if (rank === 1) return "bg-yellow-500/10 border-yellow-500/20 text-yellow-300";
+  if (rank === 2) return "bg-slate-400/10 border-slate-400/20 text-slate-300";
+  if (rank === 3) return "bg-orange-500/10 border-orange-500/20 text-orange-300";
+  return "bg-slate-500/10 border-slate-500/20 text-slate-400";
+}
 
-  const handleVote = () => {
-    if (!hasVoted) {
-      setHasVoted(true);
-      setShowConfetti(true);
-      onVote(candidate.id);
-      setTimeout(() => setShowConfetti(false), 1000);
+function InductionCandidateCard({ 
+  candidate,
+  rank,
+  maxVotes,
+  isVoted,
+  onToggleVote,
+  onXPGain
+}: { 
+  candidate: InductionCandidate;
+  rank: number;
+  maxVotes: number;
+  isVoted: boolean;
+  onToggleVote: (id: string) => void;
+  onXPGain: (event: React.MouseEvent) => void;
+}) {
+  const progressPercent = rank === 1 ? 100 : (candidate.votes / maxVotes) * 100;
+  const gap = maxVotes - candidate.votes;
+
+  const handleVoteClick = (e: React.MouseEvent) => {
+    onToggleVote(candidate.id);
+    if (!isVoted) {
+      onXPGain(e);
     }
   };
 
   return (
-    <div className="px-2 pt-[3px] pb-[3px]">
-      <Card 
-        className="p-5 hover:translate-y-[-2px] hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] transition-all duration-200 relative overflow-hidden"
-        style={{ border: '1px solid rgba(148,163,184,0.18)' }}
-        onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)'}
-        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
-        data-testid={`card-induction-${candidate.id}`}
-      >
-        {showConfetti && (
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute top-2 left-1/4 w-2 h-2 bg-cyan-400 rounded-full animate-ping" />
-            <div className="absolute top-4 right-1/3 w-2 h-2 bg-cyan-300 rounded-full animate-ping delay-100" />
-            <div className="absolute top-3 right-1/4 w-2 h-2 bg-cyan-500 rounded-full animate-ping delay-200" />
+    <Card 
+      className="p-5 transition-all duration-200 hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] h-full flex flex-col"
+      style={{ border: '1px solid rgba(148,163,184,0.18)' }}
+      onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)'}
+      onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
+      data-testid={`card-induction-${candidate.id}`}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className={`rounded-full px-3 py-1 text-xs font-medium flex items-center gap-1 border ${getRankBadgeStyle(rank)}`}>
+          {rank === 1 && <Crown className="h-3 w-3" />}
+          #{rank}
+        </div>
+        {candidate.momentumTag && (
+          <div className={`rounded-full px-2.5 py-1 text-xs font-medium flex items-center gap-1 border ${
+            candidate.momentumTag === "Hot" 
+              ? "bg-red-500/10 border-red-500/20 text-red-400" 
+              : "bg-teal-500/10 border-teal-500/20 text-teal-400"
+          }`}>
+            {candidate.momentumTag === "Hot" ? <Flame className="h-3 w-3" /> : <Rocket className="h-3 w-3" />}
+            {candidate.momentumTag}
           </div>
         )}
-        
-        <div className="flex flex-col items-center text-center mb-4">
-          <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="lg" />
-          <h3 className="font-semibold mt-3">{candidate.name}</h3>
-          <CategoryPill category={candidate.category} data-testid={`badge-category-${candidate.id}`} />
-        </div>
-        
-        <div className="mb-3">
-          <div className="flex justify-between text-xs mb-1">
-            <span className="text-muted-foreground">Progress</span>
-            <span className="text-cyan-400 font-mono">{candidate.currentVotes.toLocaleString()} / {candidate.votesNeeded.toLocaleString()}</span>
+      </div>
+
+      <div className="flex flex-col items-center text-center mb-4 flex-grow">
+        <div className="relative">
+          <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 flex items-center justify-center text-lg font-bold text-cyan-400 border border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.15)]">
+            {candidate.initials}
           </div>
-          <div className="h-3 w-full bg-muted/30 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 rounded-full transition-all duration-500"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+          {isVoted && (
+            <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center">
+              <Check className="h-3 w-3 text-white" />
+            </div>
+          )}
         </div>
-        
-        <Button 
-          onClick={handleVote}
-          disabled={hasVoted}
-          className={`w-full ${hasVoted ? 'bg-cyan-600' : 'bg-cyan-500'} text-white`}
-          data-testid={`button-induct-${candidate.id}`}
-        >
-          <Vote className="h-4 w-4 mr-2" />
-          {hasVoted ? 'Voted!' : 'Vote to Induct (+1)'}
-        </Button>
-      </Card>
-    </div>
+        <h3 className="font-semibold mt-3">{candidate.name}</h3>
+        <CategoryPill category={candidate.category} data-testid={`badge-category-${candidate.id}`} />
+      </div>
+      
+      <div className="mb-4">
+        <div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 rounded-full transition-all duration-500"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+        <div className="mt-1.5 text-xs text-muted-foreground">
+          {rank === 1 ? (
+            <span className="flex items-center gap-1">
+              <Crown className="h-3 w-3 text-yellow-400" />
+              <span className="text-yellow-400/80">Leader</span>
+              <span className="mx-1">•</span>
+              <span className="text-slate-400">{candidate.votes.toLocaleString()} votes</span>
+            </span>
+          ) : (
+            <span>
+              <span className="text-slate-500">Gap: </span>
+              <span className="text-slate-400">-{gap.toLocaleString()}</span>
+              <span className="mx-1 text-slate-500">•</span>
+              <span className="text-slate-400">{candidate.votes.toLocaleString()} votes</span>
+            </span>
+          )}
+        </div>
+      </div>
+      
+      <Button 
+        onClick={handleVoteClick}
+        className={`w-full ${isVoted 
+          ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20' 
+          : 'bg-gradient-to-r from-cyan-600 to-cyan-500 text-white shadow-[0_0_15px_rgba(34,211,238,0.2)]'
+        }`}
+        data-testid={`button-induct-${candidate.id}`}
+      >
+        {isVoted ? (
+          <>
+            <Check className="h-4 w-4 mr-2" />
+            Voted
+          </>
+        ) : (
+          <>
+            <Vote className="h-4 w-4 mr-2" />
+            Vote to Induct (+1)
+          </>
+        )}
+      </Button>
+    </Card>
   );
 }
 
@@ -607,6 +671,21 @@ export default function VotePage() {
   const floaterIdRef = useRef(0);
   
   const [currentCurateIndex, setCurrentCurateIndex] = useState(0);
+  
+  const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
+  const [showAllCandidates, setShowAllCandidates] = useState(false);
+  const [candidateVotes, setCandidateVotes] = useState<Record<string, number>>(() => {
+    const votes: Record<string, number> = {};
+    INDUCTION_CANDIDATES.forEach(c => { votes[c.id] = c.votes; });
+    return votes;
+  });
+
+  const enrichedCandidates = INDUCTION_CANDIDATES.map(c => ({
+    ...c,
+    votes: candidateVotes[c.id] ?? c.votes
+  }));
+  const sortedCandidates = [...enrichedCandidates].sort((a, b) => b.votes - a.votes);
+  const maxVotes = sortedCandidates[0]?.votes || 1;
 
   const addXP = (amount: number, event?: React.MouseEvent) => {
     setXp(prev => prev + amount);
@@ -648,8 +727,22 @@ export default function VotePage() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleInductionVote = (candidateId: string, event?: React.MouseEvent) => {
-    addXP(10, event as React.MouseEvent);
+  const handleToggleVote = (candidateId: string) => {
+    setVotedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(candidateId)) {
+        newSet.delete(candidateId);
+        setCandidateVotes(v => ({ ...v, [candidateId]: (v[candidateId] || 0) - 1 }));
+      } else {
+        newSet.add(candidateId);
+        setCandidateVotes(v => ({ ...v, [candidateId]: (v[candidateId] || 0) + 1 }));
+      }
+      return newSet;
+    });
+  };
+
+  const handleInductionXP = (event: React.MouseEvent) => {
+    addXP(10, event);
   };
 
   const handleCurateVote = (event?: React.MouseEvent) => {
@@ -790,19 +883,102 @@ export default function VotePage() {
       </div>
 
       <div className="container mx-auto px-4 py-8 max-w-5xl">
-        <CarouselSection
-          title="The Induction Queue"
-          subtitle="Vote on which celebrity joins the main leaderboard next."
-          icon={Vote}
-        >
-          {inductionCandidates.map((candidate) => (
-            <InductionCard 
-              key={candidate.id} 
-              candidate={candidate} 
-              onVote={(id) => handleInductionVote(id)} 
-            />
-          ))}
-        </CarouselSection>
+        <section className="mb-10">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+              <Vote className="h-5 w-5 text-cyan-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-serif font-bold">The Induction Queue</h2>
+              <p className="text-sm text-muted-foreground">Vote on which celebrity joins the main leaderboard next. The race is on.</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 mb-6">
+            <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
+              <Clock className="h-3 w-3 text-cyan-400" />
+              <span className="text-slate-300">Ends in: {countdown}</span>
+            </div>
+            <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
+              <Vote className="h-3 w-3 text-cyan-400" />
+              <span className="text-slate-300">Total votes: {totalVotes.toLocaleString()}</span>
+            </div>
+            <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
+              <Star className="h-3 w-3 text-amber-400" />
+              <span className="text-slate-300">Top 3 will be inducted</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            {sortedCandidates.slice(0, 3).map((candidate, index) => (
+              <InductionCandidateCard
+                key={candidate.id}
+                candidate={candidate}
+                rank={index + 1}
+                maxVotes={maxVotes}
+                isVoted={votedIds.has(candidate.id)}
+                onToggleVote={handleToggleVote}
+                onXPGain={handleInductionXP}
+              />
+            ))}
+          </div>
+
+          <AnimatePresence>
+            {showAllCandidates && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.3 }}
+                className="overflow-hidden"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  {sortedCandidates.slice(3).map((candidate, index) => (
+                    <InductionCandidateCard
+                      key={candidate.id}
+                      candidate={candidate}
+                      rank={index + 4}
+                      maxVotes={maxVotes}
+                      isVoted={votedIds.has(candidate.id)}
+                      onToggleVote={handleToggleVote}
+                      onXPGain={handleInductionXP}
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="text-center mb-6">
+            <Button
+              variant="ghost"
+              onClick={() => setShowAllCandidates(!showAllCandidates)}
+              className="text-cyan-400 hover:text-cyan-300"
+              data-testid="button-view-all-candidates"
+            >
+              {showAllCandidates ? (
+                <>Collapse list <ChevronDown className="h-4 w-4 ml-1 rotate-180" /></>
+              ) : (
+                <>View all candidates <ChevronDown className="h-4 w-4 ml-1" /></>
+              )}
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-lg bg-slate-900/60 border border-slate-700/40 p-4 text-center">
+              <p className="text-xs text-muted-foreground mb-1">Active Voters</p>
+              <p className="text-lg font-mono font-semibold text-slate-300">2,847</p>
+            </div>
+            <div className="rounded-lg bg-slate-900/60 border border-slate-700/40 p-4 text-center">
+              <p className="text-xs text-muted-foreground mb-1">Votes Today</p>
+              <p className="text-lg font-mono font-semibold text-slate-300">1,234</p>
+            </div>
+            <div className="rounded-lg bg-slate-900/60 border border-slate-700/40 p-4 text-center">
+              <p className="text-xs text-muted-foreground mb-1">Your Impact</p>
+              <p className="text-lg font-mono font-semibold text-cyan-400">{votedIds.size} candidates</p>
+            </div>
+          </div>
+        </section>
 
         <section className="mb-10">
           <div className="flex items-start gap-3 mb-4">
