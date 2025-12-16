@@ -24,8 +24,11 @@ import {
   Star,
   Flame,
   Rocket,
-  Check
+  Check,
+  X,
+  ChevronRight
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { useLocation, Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -94,38 +97,31 @@ interface DiscourseTopicData {
   totalVotes: number;
 }
 
-const discourseTopics: DiscourseTopicData[] = [
-  { 
-    id: "d1", 
-    headline: "Elon buys Twitter", 
-    description: "Was the $44B acquisition a smart move?",
-    category: "Tech", 
-    approvePercent: 35, 
-    neutralPercent: 20, 
-    disapprovePercent: 45,
-    totalVotes: 89432
-  },
-  { 
-    id: "d2", 
-    headline: "AI replacing jobs", 
-    description: "Should we embrace or regulate AI in the workplace?",
-    category: "Tech", 
-    approvePercent: 28, 
-    neutralPercent: 32, 
-    disapprovePercent: 40,
-    totalVotes: 156789
-  },
-  { 
-    id: "d3", 
-    headline: "Taylor's Eras Tour pricing", 
-    description: "Are dynamic ticket prices fair to fans?",
-    category: "Music", 
-    approvePercent: 15, 
-    neutralPercent: 25, 
-    disapprovePercent: 60,
-    totalVotes: 234567
-  },
+const DISCOURSE_TOPICS: DiscourseTopicData[] = [
+  { id: "d1", headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", category: "Tech", approvePercent: 35, neutralPercent: 20, disapprovePercent: 45, totalVotes: 89432 },
+  { id: "d2", headline: "AI replacing jobs", description: "Should we embrace or regulate AI in the workplace?", category: "Tech", approvePercent: 28, neutralPercent: 32, disapprovePercent: 40, totalVotes: 156789 },
+  { id: "d3", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Music", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567 },
+  { id: "d4", headline: "Spotify's royalty model", description: "Are artists fairly compensated by streaming?", category: "Music", approvePercent: 22, neutralPercent: 28, disapprovePercent: 50, totalVotes: 145678 },
+  { id: "d5", headline: "MrBeast's philanthropy", description: "Is it genuine or just content?", category: "Creator", approvePercent: 68, neutralPercent: 20, disapprovePercent: 12, totalVotes: 98765 },
+  { id: "d6", headline: "NFL Sunday Ticket pricing", description: "Is streaming football too expensive?", category: "Sports", approvePercent: 18, neutralPercent: 22, disapprovePercent: 60, totalVotes: 76543 },
+  { id: "d7", headline: "Meta's rebrand to AI company", description: "Is the pivot from social media working?", category: "Tech", approvePercent: 25, neutralPercent: 35, disapprovePercent: 40, totalVotes: 112345 },
+  { id: "d8", headline: "Drake vs Kendrick beef", description: "Who won the rap battle?", category: "Music", approvePercent: 45, neutralPercent: 15, disapprovePercent: 40, totalVotes: 287654 },
+  { id: "d9", headline: "LeBron's longevity", description: "Greatest athlete of all time?", category: "Sports", approvePercent: 55, neutralPercent: 25, disapprovePercent: 20, totalVotes: 198765 },
+  { id: "d10", headline: "Crypto regulation", description: "Should governments control digital currencies?", category: "Business", approvePercent: 40, neutralPercent: 20, disapprovePercent: 40, totalVotes: 134567 },
+  { id: "d11", headline: "TikTok ban debate", description: "National security vs free speech?", category: "Politics", approvePercent: 35, neutralPercent: 30, disapprovePercent: 35, totalVotes: 256789 },
+  { id: "d12", headline: "OpenAI board drama", description: "Was firing Sam Altman justified?", category: "Tech", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 189432 },
+  { id: "d13", headline: "Beyonce's country album", description: "Authentic exploration or cultural appropriation?", category: "Music", approvePercent: 65, neutralPercent: 20, disapprovePercent: 15, totalVotes: 176543 },
+  { id: "d14", headline: "YouTube Premium worth it?", description: "Is ad-free viewing worth the subscription?", category: "Creator", approvePercent: 48, neutralPercent: 22, disapprovePercent: 30, totalVotes: 87654 },
+  { id: "d15", headline: "F1's US expansion", description: "Is Formula 1 becoming too commercial?", category: "Sports", approvePercent: 40, neutralPercent: 35, disapprovePercent: 25, totalVotes: 65432 },
+  { id: "d16", headline: "Billionaire space race", description: "Vanity project or advancing humanity?", category: "Tech", approvePercent: 30, neutralPercent: 25, disapprovePercent: 45, totalVotes: 145678 },
+  { id: "d17", headline: "Student loan forgiveness", description: "Fair policy or overreach?", category: "Politics", approvePercent: 52, neutralPercent: 18, disapprovePercent: 30, totalVotes: 234567 },
+  { id: "d18", headline: "Ozempic for weight loss", description: "Medical breakthrough or vanity?", category: "Business", approvePercent: 38, neutralPercent: 32, disapprovePercent: 30, totalVotes: 112345 },
+  { id: "d19", headline: "Twitch streamer earnings", description: "Are top streamers overpaid?", category: "Creator", approvePercent: 25, neutralPercent: 35, disapprovePercent: 40, totalVotes: 78965 },
+  { id: "d20", headline: "Climate activism tactics", description: "Is disruption effective or counterproductive?", category: "Politics", approvePercent: 35, neutralPercent: 25, disapprovePercent: 40, totalVotes: 167890 },
 ];
+
+const FILTER_CATEGORIES = ["All", "Tech", "Music", "Sports", "Creator", "Business", "Politics"] as const;
+type FilterCategory = typeof FILTER_CATEGORIES[number];
 
 interface XPFloater {
   id: number;
@@ -659,9 +655,12 @@ function CelebrityAutocomplete({
 
 export default function VotePage() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [suggestModalOpen, setSuggestModalOpen] = useState(false);
   const [suggestName, setSuggestName] = useState("");
   const [suggestCategory, setSuggestCategory] = useState("");
+  const [suggestReason, setSuggestReason] = useState("");
+  const [suggestUrl, setSuggestUrl] = useState("");
   const [totalVotes] = useState(127843);
   const [countdown, setCountdown] = useState("2d 14h 32m");
   
@@ -673,19 +672,55 @@ export default function VotePage() {
   const [currentCurateIndex, setCurrentCurateIndex] = useState(0);
   
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
-  const [showAllCandidates, setShowAllCandidates] = useState(false);
   const [candidateVotes, setCandidateVotes] = useState<Record<string, number>>(() => {
     const votes: Record<string, number> = {};
     INDUCTION_CANDIDATES.forEach(c => { votes[c.id] = c.votes; });
     return votes;
   });
 
+  const [inductionCategoryFilter, setInductionCategoryFilter] = useState<FilterCategory>("All");
+  const [inductionSearchQuery, setInductionSearchQuery] = useState("");
+  const [inductionOverlayOpen, setInductionOverlayOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+
+  const [topicsCategoryFilter, setTopicsCategoryFilter] = useState<FilterCategory>("All");
+  const [topicsSearchQuery, setTopicsSearchQuery] = useState("");
+  const [topicsOverlayOpen, setTopicsOverlayOpen] = useState(false);
+  const [startPollModalOpen, setStartPollModalOpen] = useState(false);
+  const [pollHeadline, setPollHeadline] = useState("");
+  const [pollCategory, setPollCategory] = useState("");
+  const [pollDescription, setPollDescription] = useState("");
+
   const enrichedCandidates = INDUCTION_CANDIDATES.map(c => ({
     ...c,
     votes: candidateVotes[c.id] ?? c.votes
   }));
+  
+  const filteredCandidates = enrichedCandidates.filter(c => {
+    const matchesCategory = inductionCategoryFilter === "All" || c.category === inductionCategoryFilter;
+    const matchesSearch = c.name.toLowerCase().includes(inductionSearchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  }).sort((a, b) => b.votes - a.votes);
+  
   const sortedCandidates = [...enrichedCandidates].sort((a, b) => b.votes - a.votes);
   const maxVotes = sortedCandidates[0]?.votes || 1;
+  const filteredMaxVotes = filteredCandidates[0]?.votes || 1;
+
+  const filteredTopics = DISCOURSE_TOPICS.filter(t => {
+    const matchesCategory = topicsCategoryFilter === "All" || t.category === topicsCategoryFilter;
+    const matchesSearch = t.headline.toLowerCase().includes(topicsSearchQuery.toLowerCase()) ||
+                         t.description.toLowerCase().includes(topicsSearchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  useEffect(() => {
+    if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen]);
 
   const addXP = (amount: number, event?: React.MouseEvent) => {
     setXp(prev => prev + amount);
@@ -764,6 +799,25 @@ export default function VotePage() {
       setSuggestModalOpen(false);
       setSuggestName("");
       setSuggestCategory("");
+      setSuggestReason("");
+      setSuggestUrl("");
+      toast({
+        title: "Suggestion submitted",
+        description: "Thanks - your suggestion was submitted for review.",
+      });
+    }
+  };
+
+  const handlePollSubmit = () => {
+    if (pollHeadline && pollCategory) {
+      setStartPollModalOpen(false);
+      setPollHeadline("");
+      setPollCategory("");
+      setPollDescription("");
+      toast({
+        title: "Poll submitted",
+        description: "Thanks - your poll was submitted for review.",
+      });
     }
   };
 
@@ -884,17 +938,35 @@ export default function VotePage() {
 
       <div className="container mx-auto px-4 py-8 max-w-5xl">
         <section className="mb-10">
-          <div className="flex items-start gap-3 mb-4">
-            <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-              <Vote className="h-5 w-5 text-cyan-400" />
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                <Vote className="h-5 w-5 text-cyan-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-serif font-bold">The Induction Queue</h2>
+                <p className="text-sm text-muted-foreground">Vote on which celebrity joins the main leaderboard next. The race is on.</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-xl font-serif font-bold">The Induction Queue</h2>
-              <p className="text-sm text-muted-foreground">Vote on which celebrity joins the main leaderboard next. The race is on.</p>
-            </div>
+            <Button
+              onClick={() => setSuggestModalOpen(true)}
+              className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
+              data-testid="button-suggest-candidate-header"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Suggest candidate
+            </Button>
+            <Button
+              size="icon"
+              onClick={() => setSuggestModalOpen(true)}
+              className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
+              data-testid="button-suggest-candidate-header-mobile"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="flex flex-wrap items-center gap-2 mb-4">
             <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
               <Clock className="h-3 w-3 text-cyan-400" />
               <span className="text-slate-300">Ends in: {countdown}</span>
@@ -909,13 +981,71 @@ export default function VotePage() {
             </div>
           </div>
 
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            {FILTER_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setInductionCategoryFilter(cat)}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
+                  inductionCategoryFilter === cat
+                    ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
+                    : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+                }`}
+                data-testid={`filter-induction-${cat.toLowerCase()}`}
+              >
+                {cat}
+              </button>
+            ))}
+            <div className="hidden md:block ml-auto">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name..."
+                  value={inductionSearchQuery}
+                  onChange={(e) => setInductionSearchQuery(e.target.value)}
+                  className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
+                  data-testid="input-induction-search"
+                />
+              </div>
+            </div>
+            <button
+              onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+              className="md:hidden ml-auto rounded-full p-2 bg-slate-800/30 border border-slate-700/40 text-slate-400"
+              data-testid="button-mobile-search-toggle"
+            >
+              <Search className="h-4 w-4" />
+            </button>
+          </div>
+
+          <AnimatePresence>
+            {mobileSearchOpen && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="md:hidden mb-4 overflow-hidden"
+              >
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by name (e.g. Elon Musk)"
+                    value={inductionSearchQuery}
+                    onChange={(e) => setInductionSearchQuery(e.target.value)}
+                    className="pl-10 bg-slate-800/30 border-slate-700/40"
+                    data-testid="input-induction-search-mobile"
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            {sortedCandidates.slice(0, 3).map((candidate, index) => (
+            {filteredCandidates.slice(0, 3).map((candidate, index) => (
               <InductionCandidateCard
                 key={candidate.id}
                 candidate={candidate}
                 rank={index + 1}
-                maxVotes={maxVotes}
+                maxVotes={filteredMaxVotes}
                 isVoted={votedIds.has(candidate.id)}
                 onToggleVote={handleToggleVote}
                 onXPGain={handleInductionXP}
@@ -923,44 +1053,21 @@ export default function VotePage() {
             ))}
           </div>
 
-          <AnimatePresence>
-            {showAllCandidates && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3 }}
-                className="overflow-hidden"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                  {sortedCandidates.slice(3).map((candidate, index) => (
-                    <InductionCandidateCard
-                      key={candidate.id}
-                      candidate={candidate}
-                      rank={index + 4}
-                      maxVotes={maxVotes}
-                      isVoted={votedIds.has(candidate.id)}
-                      onToggleVote={handleToggleVote}
-                      onXPGain={handleInductionXP}
-                    />
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {filteredCandidates.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              No candidates match your filter criteria.
+            </div>
+          )}
 
           <div className="text-center mb-6">
             <Button
               variant="ghost"
-              onClick={() => setShowAllCandidates(!showAllCandidates)}
+              onClick={() => setInductionOverlayOpen(true)}
               className="text-cyan-400 hover:text-cyan-300"
-              data-testid="button-view-all-candidates"
+              data-testid="button-view-full-candidate-list"
             >
-              {showAllCandidates ? (
-                <>Collapse list <ChevronDown className="h-4 w-4 ml-1 rotate-180" /></>
-              ) : (
-                <>View all candidates <ChevronDown className="h-4 w-4 ml-1" /></>
-              )}
+              View full candidate list
+              <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </div>
 
@@ -1021,24 +1128,89 @@ export default function VotePage() {
         </section>
 
         <section className="mb-10">
-          <div className="flex items-start gap-3 mb-4">
-            <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-              <MessageSquare className="h-5 w-5 text-cyan-400" />
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                <MessageSquare className="h-5 w-5 text-cyan-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-serif font-bold">The People's Voice</h2>
+                <p className="text-sm text-muted-foreground">You, The People, decide the narrative. Weigh in on the topics that matter.</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-xl font-serif font-bold">The People's Voice</h2>
-              <p className="text-sm text-muted-foreground">You, The People, decide the narrative. Weigh in on the topics that matter.</p>
+            <Button
+              onClick={() => setStartPollModalOpen(true)}
+              className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
+              data-testid="button-start-poll-header"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Start poll
+            </Button>
+            <Button
+              size="icon"
+              onClick={() => setStartPollModalOpen(true)}
+              className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
+              data-testid="button-start-poll-header-mobile"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            {FILTER_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setTopicsCategoryFilter(cat)}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
+                  topicsCategoryFilter === cat
+                    ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
+                    : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+                }`}
+                data-testid={`filter-topics-${cat.toLowerCase()}`}
+              >
+                {cat}
+              </button>
+            ))}
+            <div className="hidden md:block ml-auto">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search topics..."
+                  value={topicsSearchQuery}
+                  onChange={(e) => setTopicsSearchQuery(e.target.value)}
+                  className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
+                  data-testid="input-topics-search"
+                />
+              </div>
             </div>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {discourseTopics.map((topic) => (
+            {filteredTopics.slice(0, 3).map((topic) => (
               <DiscourseCard 
                 key={topic.id} 
                 topic={topic} 
                 onVote={(choice) => handleDiscourseVote(topic.id, choice)} 
               />
             ))}
+          </div>
+
+          {filteredTopics.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              No topics match your filter criteria.
+            </div>
+          )}
+
+          <div className="text-center mt-6">
+            <Button
+              variant="ghost"
+              onClick={() => setTopicsOverlayOpen(true)}
+              className="text-cyan-400 hover:text-cyan-300"
+              data-testid="button-view-all-topics"
+            >
+              View all topics
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
           </div>
         </section>
       </div>
@@ -1064,7 +1236,7 @@ export default function VotePage() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <label className="text-sm font-medium mb-1 block">Name</label>
+              <label className="text-sm font-medium mb-1 block">Candidate name *</label>
               <CelebrityAutocomplete 
                 value={suggestName}
                 onChange={setSuggestName}
@@ -1072,7 +1244,7 @@ export default function VotePage() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Category</label>
+              <label className="text-sm font-medium mb-1 block">Category *</label>
               <Select value={suggestCategory} onValueChange={setSuggestCategory}>
                 <SelectTrigger data-testid="select-suggest-category">
                   <SelectValue placeholder="Select category" />
@@ -1086,6 +1258,24 @@ export default function VotePage() {
                   <SelectItem value="Business">Business</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Why should they be on FameDex? (optional)</label>
+              <Input
+                value={suggestReason}
+                onChange={(e) => setSuggestReason(e.target.value)}
+                placeholder="Brief reason..."
+                data-testid="input-suggest-reason"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Social/profile URL (optional)</label>
+              <Input
+                value={suggestUrl}
+                onChange={(e) => setSuggestUrl(e.target.value)}
+                placeholder="https://..."
+                data-testid="input-suggest-url"
+              />
             </div>
           </div>
           <div className="flex justify-end gap-2">
@@ -1101,6 +1291,214 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={startPollModalOpen} onOpenChange={setStartPollModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-cyan-400" />
+              Start a Poll
+            </DialogTitle>
+            <DialogDescription>
+              Suggest a topic for the community to vote on.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-1 block">Headline *</label>
+              <Input
+                value={pollHeadline}
+                onChange={(e) => setPollHeadline(e.target.value)}
+                placeholder="e.g. Should AI be regulated?"
+                data-testid="input-poll-headline"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Category *</label>
+              <Select value={pollCategory} onValueChange={setPollCategory}>
+                <SelectTrigger data-testid="select-poll-category">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Music">Music</SelectItem>
+                  <SelectItem value="Tech">Tech</SelectItem>
+                  <SelectItem value="Creator">Creator</SelectItem>
+                  <SelectItem value="Sports">Sports</SelectItem>
+                  <SelectItem value="Politics">Politics</SelectItem>
+                  <SelectItem value="Business">Business</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Short description (max 140 characters)</label>
+              <Input
+                value={pollDescription}
+                onChange={(e) => setPollDescription(e.target.value.slice(0, 140))}
+                placeholder="Brief context for voters..."
+                data-testid="input-poll-description"
+              />
+              <p className="text-xs text-muted-foreground mt-1">{pollDescription.length}/140</p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setStartPollModalOpen(false)} data-testid="button-cancel-poll">Cancel</Button>
+            <Button 
+              onClick={handlePollSubmit}
+              disabled={!pollHeadline || !pollCategory}
+              className="bg-cyan-500 text-white"
+              data-testid="button-submit-poll"
+            >
+              Submit Poll
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AnimatePresence>
+        {inductionOverlayOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
+          >
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-xl font-serif font-bold">All candidates</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setInductionOverlayOpen(false)}
+                data-testid="button-close-candidates-overlay"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            <div className="sticky top-0 z-10 p-4 border-b bg-background/95 backdrop-blur-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                {FILTER_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setInductionCategoryFilter(cat)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
+                      inductionCategoryFilter === cat
+                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
+                        : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+                    }`}
+                    data-testid={`filter-overlay-induction-${cat.toLowerCase()}`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+                <div className="ml-auto">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name..."
+                      value={inductionSearchQuery}
+                      onChange={(e) => setInductionSearchQuery(e.target.value)}
+                      className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
+                      data-testid="input-overlay-induction-search"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
+                {filteredCandidates.map((candidate, index) => (
+                  <InductionCandidateCard
+                    key={candidate.id}
+                    candidate={candidate}
+                    rank={index + 1}
+                    maxVotes={filteredMaxVotes}
+                    isVoted={votedIds.has(candidate.id)}
+                    onToggleVote={handleToggleVote}
+                    onXPGain={handleInductionXP}
+                  />
+                ))}
+              </div>
+              {filteredCandidates.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground">
+                  No candidates match your filter criteria.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {topicsOverlayOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
+          >
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-xl font-serif font-bold">All topics</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setTopicsOverlayOpen(false)}
+                data-testid="button-close-topics-overlay"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            <div className="sticky top-0 z-10 p-4 border-b bg-background/95 backdrop-blur-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                {FILTER_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setTopicsCategoryFilter(cat)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
+                      topicsCategoryFilter === cat
+                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
+                        : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+                    }`}
+                    data-testid={`filter-overlay-topics-${cat.toLowerCase()}`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+                <div className="ml-auto">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search topics..."
+                      value={topicsSearchQuery}
+                      onChange={(e) => setTopicsSearchQuery(e.target.value)}
+                      className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
+                      data-testid="input-overlay-topics-search"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-5xl mx-auto">
+                {filteredTopics.map((topic) => (
+                  <DiscourseCard 
+                    key={topic.id} 
+                    topic={topic} 
+                    onVote={(choice) => handleDiscourseVote(topic.id, choice)} 
+                  />
+                ))}
+              </div>
+              {filteredTopics.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground">
+                  No topics match your filter criteria.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

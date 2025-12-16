@@ -1,0 +1,276 @@
+Act as a Lead UI/UX Engineer using React + Tailwind.
+Refactor the Vote page to:
+
+Make The Induction Queue and The People’s Voice highly engaging.
+
+Handle large lists (100+ items) via full-screen overlays, not endless scrolling.
+
+Keep the UI simple, glassy, and mobile-friendly, consistent with the existing FameDex style.
+
+A. The Induction Queue – competitive race + full-screen overlay
+1. Dummy data
+
+Create a constant array INDUCTION_CANDIDATES with at least 12 items:
+
+2. Race logic (no vote cap)
+
+maxVotes = candidates[0].votes.
+
+For each candidate:
+
+rank = index + 1.
+
+progressPercent = (votes / maxVotes) * 100.
+
+Leader (rank 1)
+
+Progress bar visually “full”.
+
+Label under bar: 👑 Leader • {votes} votes.
+
+Others (rank > 1)
+
+Progress bar width = progressPercent.
+
+Label under bar: Gap: -{maxVotes - votes} • {votes} votes.
+
+Keep the line muted, but make the gap number slightly higher contrast so it’s readable.
+
+3. Section header & stats
+
+Title: “The Induction Queue”.
+
+Subtitle: “Vote on which celebrity joins the main leaderboard next. The race is on.”
+
+On the right of this header row, add a glass pill button:
+
+Label: + Suggest candidate (desktop) / icon-only on mobile.
+
+On click: open a “Suggest candidate” modal (see 7).
+
+Below the subtitle, add a lightweight stats strip with 3 small glass pills:
+
+🕒 Ends in: 2d 14h 23m (static dummy text, no real countdown required yet).
+
+🗳️ Total votes this cycle: 127,843 (dummy).
+
+⭐ Top 3 will be inducted.
+
+These pills should be small, low-opacity, and secondary to the cards.
+
+4. Filters (category + search)
+
+Place a filter row under the stats strip:
+
+Category chips (single-select):
+
+All, Tech, Music, Sports, Creator, Business, Politics.
+
+Use the same colored glass-pill style as existing category labels.
+
+Default = All.
+
+Search:
+
+Desktop: show a standard search input with placeholder "Search by name (e.g. Elon Musk)".
+
+Mobile: show a search icon that expands into an input when tapped.
+
+Maintain filteredCandidates derived from INDUCTION_CANDIDATES using the current category + search.
+
+All rendering in this section (top cards + overlay list) must use filteredCandidates (sorted by votes).
+
+5. Candidate card component
+
+Build a reusable <InductionCandidateCard />:
+
+Outer container:
+
+Match the border style of existing People’s Voice cards for consistency:
+rounded-2xl bg-slate-900/60 border border-slate-700/60.
+
+On hover: do not scale; just slightly brighten the border (e.g. border-slate-400/60) and add a very soft shadow/glow.
+
+Header row inside card:
+
+Left: Rank glass pill with #1, #2, #3, etc.
+
+#1: gold-tinted glass (bg-yellow-500/10 border-yellow-500/25 text-yellow-300).
+
+#2: cool silver/blue tint.
+
+#3: bronze/orange tint.
+
+Right: Momentum glass pill if momentumTag exists:
+
+"🔥 Hot" in a red-tinted glass pill.
+
+"🚀 Rising" in a teal/green-tinted glass pill.
+
+Identity block:
+
+Centered square avatar with initials.
+
+Name under avatar.
+
+Category label under name using the colored glass-pill style you already use for categories.
+
+Race bar + stats:
+
+Cyan/blue progress bar using progressPercent (or full bar for leader).
+
+Text line below, per race logic above.
+
+Voting (approval voting per candidate):
+
+Maintain React state votedIds: Set<string>.
+
+If id not in votedIds:
+
+Show full-width cyan/blue button: "Vote to Induct (+1)".
+
+If id in votedIds:
+
+Show green/emerald glass button: "Voted ✓".
+
+Clicking toggles the state and adjusts that candidate’s dummy votes count.
+
+6. Main-page layout vs full list
+
+On the main Vote page, show only the top 3 filteredCandidates in a responsive grid (3 columns desktop, 1 column mobile).
+
+Under the grid, centered, add a button:
+
+"View full candidate list ▸".
+
+7. Full-screen overlay for “all candidates”
+
+Clicking "View full candidate list ▸" opens a full-screen overlay (fixed, z-50, dark backdrop).
+
+Overlay layout:
+
+Header row at the top:
+
+Title: "All candidates".
+
+Right: close icon / button (X) that closes the overlay and returns to the main Vote page without scrolling the underlying page.
+
+Sticky control bar just below the header, inside the overlay:
+
+Same category chips + search input as the main section.
+
+This bar should stay visible while the candidate list scrolls.
+
+Scrollable content area:
+
+Show all filteredCandidates in a scrollable grid/list using <InductionCandidateCard /> (cards can be slightly more compact here if needed).
+
+Make sure the overlay:
+
+Locks background scroll when open.
+
+Is fully responsive (full-screen on mobile).
+
+8. “Suggest candidate” modal
+
+Triggered by the + Suggest candidate button in the Induction Queue header.
+
+Centered modal with a simple form (front-end only):
+
+Candidate name (required).
+
+Category (dropdown).
+
+Optional short reason: “Why should they be on FameDex?”
+
+Optional URL (social/profile link).
+
+On submit:
+
+Do not modify the candidate list (no backend yet).
+
+Close the modal and show a toast/snackbar: "Thanks – your suggestion was submitted for review."
+
+Keep styles consistent with rest of the app: dark glass background, rounded corners, subtle borders.
+
+B. The People’s Voice – filters, full list, and “start poll”
+
+Reuse the same patterns for The People’s Voice further down the Vote page.
+
+Section header
+
+Title: "The People’s Voice".
+
+Subtitle: "You, the people, decide the narrative. Weigh in on the topics that matter."
+
+Right-side header button:
+
++ Start poll (desktop label; icon-only on mobile).
+
+Opens a “Start poll” modal (see 4).
+
+Filters
+
+Directly under the subtitle, add the same category chips + search pattern as Induction Queue.
+
+Filters should apply to a dummy TOPICS array before rendering.
+
+Topics list on main page
+
+Use the existing People’s Voice card layout you already have (Support / Neutral / Oppose buttons and result bars) with the improved bar contrast.
+
+Show only a small subset on the main page (e.g. top 3 filtered topics).
+
+Add a "View all topics ▸" button under the grid.
+
+Full-screen overlay for all topics
+
+Clicking "View all topics ▸" opens another full-screen overlay similar to the candidate overlay:
+
+Header: "All topics" + close X.
+
+Sticky filter bar: category chips + search.
+
+Scrollable list/grid of all filtered topics using the same card component.
+
+“Start poll” modal (suggest topic)
+
+Fields (front-end only):
+
+Headline (required) – becomes the card title.
+
+Category (dropdown).
+
+Short visible description (max ±140 characters).
+
+Optional longer description field (full context; later shown in a details modal via “View more”, not required to implement now).
+
+Optional Deadline field (text input or simple date picker).
+
+On submit:
+
+Close modal.
+
+Show toast: "Thanks – your poll was submitted for review."
+
+General styling
+
+Keep card borders, glass pills, and overall visual language consistent with existing FameDex components.
+
+Prioritise clarity and simplicity on mobile:
+
+Filters should stack nicely.
+
+Cards become a 1-column list.
+
+Overlays take up full screen with easy access to the X close button.
+
+The key goals:
+
+No scroll fatigue on the main Vote page.
+
+Strong sense of competition and progress in the Induction Queue.
+
+Easy discovery (filters/search) and contribution (+ actions) in both sections.
+
+Clean, glassy, consistent visuals across all new UI elements.
