@@ -143,7 +143,7 @@ function InductionCard({
   };
 
   return (
-    <div className="px-2">
+    <div className="px-2 pt-[3px] pb-[3px]">
       <Card 
         className="p-5 hover:translate-y-[-2px] hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] transition-all duration-200 relative overflow-hidden"
         style={{ border: '1px solid rgba(148,163,184,0.18)' }}
