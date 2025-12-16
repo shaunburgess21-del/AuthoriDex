@@ -786,7 +786,10 @@ function CommunityCard({ market, onClick, isMarketClosed = false }: { market: Co
       onClick={!isMarketClosed ? onClick : undefined}
     >
       <Card 
-        className="p-4 rounded-xl border border-border/30 bg-card/50 group-hover:border-violet-500/30 group-hover:translate-y-[-2px] group-hover:shadow-md transition-all duration-200 ease-out"
+        className="p-4 rounded-xl bg-card/50 group-hover:translate-y-[-2px] group-hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] transition-all duration-200 ease-out"
+        style={{ border: '1px solid rgba(148,163,184,0.18)' }}
+        onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)'}
+        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
         data-testid={`card-community-${market.id}`}
       >
         <div className="flex items-start justify-between mb-3">
@@ -819,7 +822,10 @@ function PredictCard({ children, className = "", testId }: { children: React.Rea
         style={{ boxShadow: "0 0 0 transparent" }}
       />
       <Card 
-        className={`p-4 rounded-xl border border-border/50 group-hover:border-violet-500/40 group-hover:translate-y-[-2px] group-hover:shadow-lg group-hover:shadow-violet-500/20 transition-all duration-200 ease-out relative overflow-visible ${className}`}
+        className={`p-4 rounded-xl group-hover:translate-y-[-2px] group-hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] transition-all duration-200 ease-out relative overflow-visible ${className}`}
+        style={{ border: '1px solid rgba(148,163,184,0.18)' }}
+        onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)'}
+        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
         data-testid={testId}
       >
         {children}

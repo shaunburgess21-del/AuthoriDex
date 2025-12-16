@@ -145,7 +145,10 @@ function InductionCard({
   return (
     <div className="px-2">
       <Card 
-        className="p-5 hover:translate-y-[-2px] hover:shadow-lg hover:border-cyan-500/40 transition-all duration-200 relative overflow-hidden"
+        className="p-5 hover:translate-y-[-2px] hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] transition-all duration-200 relative overflow-hidden"
+        style={{ border: '1px solid rgba(148,163,184,0.18)' }}
+        onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)'}
+        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
         data-testid={`card-induction-${candidate.id}`}
       >
         {showConfetti && (
@@ -220,7 +223,10 @@ function CurateProfileCard({
       transition={{ duration: 0.3 }}
     >
       <Card 
-        className="p-4 transition-all duration-200"
+        className="p-4 transition-all duration-200 hover:shadow-[0_0_20px_rgba(148,163,184,0.08)]"
+        style={{ border: '1px solid rgba(148,163,184,0.18)' }}
+        onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)'}
+        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
         data-testid={`card-curate-${poll.id}`}
       >
         <div className="flex items-center justify-between mb-3">
