@@ -310,7 +310,12 @@ function DiscourseCard({
 
   return (
     <Card 
-      className="pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col"
+      className="pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col hover:shadow-[0_0_20px_rgba(148,163,184,0.08)]"
+      style={{ 
+        border: '1px solid rgba(148,163,184,0.18)',
+      }}
+      onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)'}
+      onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
       data-testid={`card-discourse-${topic.id}`}
     >
       <CategoryPill category={topic.category} className="mb-3" data-testid={`badge-category-${topic.id}`} />
@@ -349,9 +354,9 @@ function DiscourseCard({
           <div className="flex items-center gap-3">
             <ThumbsUp className="h-4 w-4 text-emerald-400 shrink-0" />
             <span className="text-sm text-emerald-400 w-16 shrink-0">Support</span>
-            <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
               <div 
-                className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                className="h-full bg-emerald-400 rounded-full transition-all duration-500"
                 style={{ width: `${topic.approvePercent}%` }}
               />
             </div>
@@ -361,9 +366,9 @@ function DiscourseCard({
           <div className="flex items-center gap-3">
             <Minus className="h-4 w-4 text-slate-400 shrink-0" />
             <span className="text-sm text-slate-400 w-16 shrink-0">Neutral</span>
-            <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
               <div 
-                className="h-full bg-slate-500 rounded-full transition-all duration-500"
+                className="h-full bg-slate-400 rounded-full transition-all duration-500"
                 style={{ width: `${topic.neutralPercent}%` }}
               />
             </div>
@@ -373,9 +378,9 @@ function DiscourseCard({
           <div className="flex items-center gap-3">
             <ThumbsDown className="h-4 w-4 text-red-400 shrink-0" />
             <span className="text-sm text-red-400 w-16 shrink-0">Oppose</span>
-            <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
               <div 
-                className="h-full bg-red-500 rounded-full transition-all duration-500"
+                className="h-full bg-red-400 rounded-full transition-all duration-500"
                 style={{ width: `${topic.disapprovePercent}%` }}
               />
             </div>
