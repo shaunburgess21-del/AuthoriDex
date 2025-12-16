@@ -318,30 +318,30 @@ function DiscourseCard({
       <p className="text-sm text-muted-foreground mb-5 flex-grow">{topic.description}</p>
       
       {!voted ? (
-        <div className="flex justify-center gap-3">
+        <div className="flex flex-col gap-3">
           <button
             onClick={() => handleVote('oppose')}
-            className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
             data-testid={`button-oppose-${topic.id}`}
           >
-            <ThumbsDown className="h-4 w-4" />
-            Oppose
+            <ThumbsDown className="h-4 w-4 shrink-0" />
+            <span>Oppose</span>
           </button>
           <button
             onClick={() => handleVote('neutral')}
-            className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15"
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15"
             data-testid={`button-neutral-${topic.id}`}
           >
-            <Minus className="h-4 w-4" />
-            Neutral
+            <Minus className="h-4 w-4 shrink-0" />
+            <span>Neutral</span>
           </button>
           <button
             onClick={() => handleVote('support')}
-            className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
             data-testid={`button-support-${topic.id}`}
           >
-            <ThumbsUp className="h-4 w-4" />
-            Support
+            <ThumbsUp className="h-4 w-4 shrink-0" />
+            <span>Support</span>
           </button>
         </div>
       ) : (
