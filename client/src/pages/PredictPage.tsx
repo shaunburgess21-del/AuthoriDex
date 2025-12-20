@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +55,7 @@ interface PredictionMarket {
   personName: string;
   personAvatar: string;
   currentScore: number;
+  startScore: number;
   change7d: number;
   upMultiplier: number;
   downMultiplier: number;
@@ -70,6 +72,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Elon Musk",
     personAvatar: "",
     currentScore: 515809,
+    startScore: 492100,
     change7d: 4.78,
     upMultiplier: 1.7,
     downMultiplier: 2.3,
@@ -84,6 +87,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Taylor Swift",
     personAvatar: "",
     currentScore: 489234,
+    startScore: 505500,
     change7d: -3.2,
     upMultiplier: 2.1,
     downMultiplier: 1.8,
@@ -98,6 +102,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "MrBeast",
     personAvatar: "",
     currentScore: 504734,
+    startScore: 531000,
     change7d: -4.95,
     upMultiplier: 1.5,
     downMultiplier: 2.8,
@@ -112,6 +117,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Donald Trump",
     personAvatar: "",
     currentScore: 484531,
+    startScore: 501300,
     change7d: -3.35,
     upMultiplier: 1.4,
     downMultiplier: 3.2,
@@ -126,6 +132,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Kim Kardashian",
     personAvatar: "",
     currentScore: 398456,
+    startScore: 405800,
     change7d: -1.8,
     upMultiplier: 2.2,
     downMultiplier: 1.7,
@@ -140,6 +147,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Cristiano Ronaldo",
     personAvatar: "",
     currentScore: 445678,
+    startScore: 436500,
     change7d: 2.1,
     upMultiplier: 1.9,
     downMultiplier: 2.0,
@@ -154,6 +162,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Jensen Huang",
     personAvatar: "",
     currentScore: 412300,
+    startScore: 381000,
     change7d: 8.2,
     upMultiplier: 1.3,
     downMultiplier: 3.1,
@@ -168,6 +177,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Beyoncé",
     personAvatar: "",
     currentScore: 478200,
+    startScore: 471100,
     change7d: 1.5,
     upMultiplier: 1.8,
     downMultiplier: 2.1,
@@ -181,8 +191,8 @@ const mockMarkets: PredictionMarket[] = [
 interface HeadToHeadMarket {
   id: string;
   title: string;
-  person1: { name: string; avatar: string };
-  person2: { name: string; avatar: string };
+  person1: { name: string; avatar: string; currentScore: number };
+  person2: { name: string; avatar: string; currentScore: number };
   category: CategoryFilter;
   endTime: string;
   totalPool: number;
@@ -193,8 +203,8 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
   {
     id: "h2h-1",
     title: "Drake vs Kendrick",
-    person1: { name: "Drake", avatar: "" },
-    person2: { name: "Kendrick Lamar", avatar: "" },
+    person1: { name: "Drake", avatar: "", currentScore: 425600 },
+    person2: { name: "Kendrick Lamar", avatar: "", currentScore: 398200 },
     category: "music",
     endTime: "Sun 23:59 UTC",
     totalPool: 28450,
@@ -203,8 +213,8 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
   {
     id: "h2h-2",
     title: "Musk vs Zuckerberg",
-    person1: { name: "Elon Musk", avatar: "" },
-    person2: { name: "Mark Zuckerberg", avatar: "" },
+    person1: { name: "Elon Musk", avatar: "", currentScore: 515809 },
+    person2: { name: "Mark Zuckerberg", avatar: "", currentScore: 312400 },
     category: "tech",
     endTime: "Sun 23:59 UTC",
     totalPool: 19200,
@@ -213,8 +223,8 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
   {
     id: "h2h-3",
     title: "Swift vs Beyoncé",
-    person1: { name: "Taylor Swift", avatar: "" },
-    person2: { name: "Beyoncé", avatar: "" },
+    person1: { name: "Taylor Swift", avatar: "", currentScore: 489234 },
+    person2: { name: "Beyoncé", avatar: "", currentScore: 478200 },
     category: "music",
     endTime: "Sun 23:59 UTC",
     totalPool: 15780,
@@ -223,8 +233,8 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
   {
     id: "h2h-4",
     title: "Ronaldo vs Messi",
-    person1: { name: "Cristiano Ronaldo", avatar: "" },
-    person2: { name: "Lionel Messi", avatar: "" },
+    person1: { name: "Cristiano Ronaldo", avatar: "", currentScore: 445678 },
+    person2: { name: "Lionel Messi", avatar: "", currentScore: 432100 },
     category: "sports",
     endTime: "Sun 23:59 UTC",
     totalPool: 34100,
@@ -233,8 +243,8 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
   {
     id: "h2h-5",
     title: "Biden vs Trump",
-    person1: { name: "Joe Biden", avatar: "" },
-    person2: { name: "Donald Trump", avatar: "" },
+    person1: { name: "Joe Biden", avatar: "", currentScore: 298400 },
+    person2: { name: "Donald Trump", avatar: "", currentScore: 484531 },
     category: "politics",
     endTime: "Sun 23:59 UTC",
     totalPool: 45200,
@@ -243,8 +253,8 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
   {
     id: "h2h-6",
     title: "Bezos vs Musk",
-    person1: { name: "Jeff Bezos", avatar: "" },
-    person2: { name: "Elon Musk", avatar: "" },
+    person1: { name: "Jeff Bezos", avatar: "", currentScore: 287600 },
+    person2: { name: "Elon Musk", avatar: "", currentScore: 515809 },
     category: "business",
     endTime: "Sun 23:59 UTC",
     totalPool: 21800,
@@ -971,14 +981,24 @@ function CategoryRaceCard({
 function TopGainerCard({ 
   market, 
   isMarketClosed = false,
-  onSelect
+  onSelect,
+  isPredicted = false,
+  isShimmering = false
 }: { 
   market: TopGainerMarket; 
   isMarketClosed?: boolean;
   onSelect?: (name: string) => void;
+  isPredicted?: boolean;
+  isShimmering?: boolean;
 }) {
+  const handlePlacePrediction = () => {
+    if (market.leaders.length > 0) {
+      onSelect?.(market.leaders[0].name);
+    }
+  };
+
   return (
-    <PredictCard testId={`card-gainer-${market.id}`} className={isMarketClosed ? 'opacity-75' : ''}>
+    <PredictCard testId={`card-gainer-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''} ${isShimmering ? 'shimmer-once' : ''}`}>
       <div className="flex items-center justify-between mb-3">
         <CategoryPill category={market.category} />
         <span className="text-xs text-muted-foreground">7-day gain</span>
@@ -1025,7 +1045,15 @@ function TopGainerCard({
         </span>
       </div>
       
-      {isMarketClosed ? (
+      {isPredicted ? (
+        <Button 
+          size="sm" 
+          className="w-full bg-green-600/20 text-green-500 border border-green-500/30"
+          disabled
+        >
+          Predicted
+        </Button>
+      ) : isMarketClosed ? (
         <Button 
           size="sm" 
           className="w-full bg-muted text-muted-foreground cursor-not-allowed"
@@ -1039,6 +1067,7 @@ function TopGainerCard({
           size="sm" 
           className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
           data-testid={`button-place-prediction-${market.id}`}
+          onClick={handlePlacePrediction}
         >
           Place Prediction
           <ChevronRight className="h-4 w-4 ml-1" />
@@ -1137,7 +1166,7 @@ function RaceDetailOverlay({
   if (!market) return null;
   
   return (
-    <div className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-sm overflow-y-auto" data-testid="overlay-race-detail">
+    <div className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-sm overflow-y-auto premium-scrollbar" data-testid="overlay-race-detail">
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -1269,7 +1298,7 @@ function FullScreenOverlay({
   if (!open) return null;
   
   return (
-    <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto" data-testid="overlay-view-all">
+    <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto premium-scrollbar" data-testid="overlay-view-all">
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
@@ -1321,35 +1350,81 @@ function FullScreenOverlay({
   );
 }
 
+const MISSION_HEADERS: Record<string, string> = {
+  jackpot: "Predict the exact Trend Score at week's end to win the pot.",
+  updown: "Will their Trend Score be higher or lower by close?",
+  h2h: "Back your champion to win this weekly matchup.",
+  race: "Predict the #1 top performer to win.",
+  gainer: "Predict the #1 top performer to win.",
+  community: "Cast your vote on this community prediction.",
+};
+
 function StakeModal({
   open,
   onClose,
   selection,
   onConfirm,
-  walletBalance
+  walletBalance,
+  onConfirmWithAnimation
 }: {
   open: boolean;
   onClose: () => void;
-  selection: { type: string; choice: string; marketName: string; startScore?: number; currentScore?: number; crowdAvg?: number } | null;
+  selection: { type: string; choice: string; marketName: string; marketId?: string; startScore?: number; currentScore?: number; crowdSentiment?: number; estimatedPayout?: number } | null;
   onConfirm: (amount: number) => void;
   walletBalance: number;
+  onConfirmWithAnimation?: (amount: number, marketId?: string) => void;
 }) {
   const [stakeAmount, setStakeAmount] = useState("");
   const parsedAmount = parseInt(stakeAmount) || 0;
   const balanceAfter = walletBalance - parsedAmount;
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
   
   if (!selection) return null;
   
+  const missionText = MISSION_HEADERS[selection.type] || "Place your prediction on this market.";
+  const showJackpotWarning = selection.type === "jackpot";
+  
+  const triggerConfetti = () => {
+    if (confirmButtonRef.current) {
+      const rect = confirmButtonRef.current.getBoundingClientRect();
+      const x = (rect.left + rect.width / 2) / window.innerWidth;
+      const y = (rect.top + rect.height / 2) / window.innerHeight;
+      
+      confetti({
+        particleCount: 60,
+        spread: 55,
+        origin: { x, y },
+        colors: ['#06b6d4', '#a855f7', '#8b5cf6', '#22d3ee'],
+        startVelocity: 25,
+        gravity: 1.2,
+        scalar: 0.8,
+        ticks: 100,
+      });
+    }
+  };
+  
+  const handleConfirm = () => {
+    if (parsedAmount > 0 && balanceAfter >= 0) {
+      try {
+        triggerConfetti();
+      } catch (e) {
+        console.error("Confetti error:", e);
+      }
+      onConfirm(parsedAmount);
+      setStakeAmount("");
+    }
+  };
+  
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm premium-scrollbar">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Target className="h-5 w-5 text-violet-500" />
             Confirm Prediction
           </DialogTitle>
           <DialogDescription>
-            What am I predicting? What's the current state?
+            {missionText}
           </DialogDescription>
         </DialogHeader>
         
@@ -1359,6 +1434,13 @@ function StakeModal({
             <p className="text-sm font-semibold text-foreground">{selection.marketName}</p>
             <p className="text-lg font-bold text-violet-500 mt-1">{selection.choice}</p>
           </Card>
+          
+          {showJackpotWarning && (
+            <p className="text-xs text-amber-500 text-center flex items-center justify-center gap-1">
+              <Clock className="h-3 w-3" />
+              Predictions lock Thursday 5 PM UTC
+            </p>
+          )}
           
           {(selection.startScore || selection.currentScore) && (
             <div className="grid grid-cols-2 gap-3">
@@ -1377,9 +1459,15 @@ function StakeModal({
             </div>
           )}
           
-          {selection.crowdAvg && (
+          {selection.estimatedPayout && !isNaN(selection.estimatedPayout) && (
             <p className="text-xs text-muted-foreground text-center">
-              Crowd Avg Prediction: <span className="font-mono font-medium text-foreground">{selection.crowdAvg.toLocaleString()}</span>
+              Estimated Payout: <span className="font-mono font-medium text-green-500">{selection.estimatedPayout.toFixed(1)}x</span>
+            </p>
+          )}
+          
+          {selection.crowdSentiment && (
+            <p className="text-xs text-muted-foreground text-center">
+              Crowd Sentiment: <span className="font-mono font-medium text-foreground">{selection.crowdSentiment}% predict this outcome</span>
             </p>
           )}
           
@@ -1429,9 +1517,8 @@ function StakeModal({
             Cancel
           </Button>
           <Button 
-            onClick={() => {
-              if (parsedAmount > 0 && balanceAfter >= 0) onConfirm(parsedAmount);
-            }}
+            ref={confirmButtonRef}
+            onClick={handleConfirm}
             className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
             disabled={!stakeAmount || parsedAmount <= 0 || balanceAfter < 0}
             data-testid="button-confirm-stake"
@@ -1753,11 +1840,15 @@ export default function PredictPage() {
     type: string;
     choice: string;
     marketName: string;
+    marketId?: string;
     startScore?: number;
     currentScore?: number;
-    crowdAvg?: number;
+    crowdSentiment?: number;
+    estimatedPayout?: number;
   } | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
+  const [predictedMarkets, setPredictedMarkets] = useState<Set<string>>(new Set());
+  const [shimmeringMarket, setShimmeringMarket] = useState<string | null>(null);
   
   const RULES_CONTENT: Record<string, { title: string; description: string; steps: { icon: React.ReactNode; title: string; description: string }[] }> = {
     updown: {
@@ -1841,74 +1932,106 @@ export default function PredictPage() {
       type: "jackpot",
       choice: `Predict exact score for ${selectedJackpotPerson.name}`,
       marketName: "Weekly Jackpot",
-      startScore: selectedJackpotPerson.trendScore - Math.floor(Math.random() * 5000),
+      marketId: "jackpot",
+      startScore: selectedJackpotPerson.trendScore - Math.floor(selectedJackpotPerson.trendScore * 0.02),
       currentScore: selectedJackpotPerson.trendScore,
-      crowdAvg: selectedJackpotPerson.trendScore + Math.floor(Math.random() * 2000)
+      crowdSentiment: 12,
+      estimatedPayout: 8.5
     });
     setStakeModalOpen(true);
   };
 
   const handleUpDownSelect = (market: PredictionMarket, choice: "up" | "down") => {
+    const crowdSentiment = choice === "up" ? market.upPoolPercent : (100 - market.upPoolPercent);
+    const estimatedPayout = choice === "up" ? market.upMultiplier : market.downMultiplier;
     setPendingSelection({
       type: "updown",
       choice: choice === "up" ? "Trend Score UP" : "Trend Score DOWN",
       marketName: market.personName,
+      marketId: market.id,
       startScore: market.startScore,
       currentScore: market.currentScore,
-      crowdAvg: Math.round(market.currentScore * (choice === "up" ? 1.05 : 0.95))
+      crowdSentiment,
+      estimatedPayout
     });
     setStakeModalOpen(true);
   };
 
   const handleH2HSelect = (market: HeadToHeadMarket, person: 1 | 2) => {
     const chosenPerson = person === 1 ? market.person1 : market.person2;
+    const crowdSentiment = person === 1 ? market.person1Percent : (100 - market.person1Percent);
+    const estimatedPayout = person === 1 ? (100 / market.person1Percent) : (100 / (100 - market.person1Percent));
     setPendingSelection({
       type: "h2h",
       choice: chosenPerson.name,
       marketName: market.title,
+      marketId: market.id,
       currentScore: chosenPerson.currentScore,
-      crowdAvg: Math.round(market.person1.currentScore + market.person2.currentScore) / 2
+      crowdSentiment,
+      estimatedPayout: Math.round(estimatedPayout * 10) / 10
     });
     setStakeModalOpen(true);
   };
 
   const handleRaceSelect = (market: CategoryRaceMarket, runnerName: string) => {
     const runner = market.runners.find(r => r.name === runnerName);
+    const crowdSentiment = runner?.marketShare || 25;
+    const estimatedPayout = runner ? Math.round((100 / runner.marketShare) * 10) / 10 : 2.0;
     setPendingSelection({
       type: "race",
       choice: runnerName,
       marketName: market.title,
+      marketId: market.id,
       currentScore: runner?.pointsAdded,
-      crowdAvg: Math.round(market.totalPool / market.runners.length)
+      crowdSentiment,
+      estimatedPayout
     });
     setStakeModalOpen(true);
   };
 
   const handleGainerSelect = (market: TopGainerMarket, name: string) => {
     const leader = market.leaders.find(l => l.name === name);
+    const leaderIndex = market.leaders.findIndex(l => l.name === name);
+    const crowdSentiment = leaderIndex === 0 ? 45 : leaderIndex === 1 ? 32 : 23;
+    const estimatedPayout = Math.round((100 / crowdSentiment) * 10) / 10;
     setPendingSelection({
       type: "gainer",
       choice: name,
       marketName: `Top Gainer: ${market.category}`,
+      marketId: market.id,
       currentScore: leader?.currentGain,
-      crowdAvg: Math.round(market.leaders.reduce((sum, l) => sum + l.currentGain, 0) / market.leaders.length)
+      crowdSentiment,
+      estimatedPayout
     });
     setStakeModalOpen(true);
   };
 
   const handleCommunityClick = (market: CommunityMarket) => {
+    const crowdSentiment = Math.round((market.participants / (market.participants + 30)) * 100);
+    const estimatedPayout = Math.round((100 / crowdSentiment) * 10) / 10;
     setPendingSelection({
       type: "community",
       choice: "Yes",
       marketName: market.question,
-      crowdAvg: Math.round(market.participants * 0.6)
+      marketId: market.id,
+      crowdSentiment,
+      estimatedPayout
     });
     setStakeModalOpen(true);
   };
 
   const handleConfirmStake = (amount: number) => {
+    const marketId = pendingSelection?.marketId;
+    
     setWalletCredits(prev => prev - amount);
     setActivePredictions(prev => prev + 1);
+    
+    if (marketId) {
+      setPredictedMarkets(prev => new Set(prev).add(marketId));
+      setShimmeringMarket(marketId);
+      setTimeout(() => setShimmeringMarket(null), 800);
+    }
+    
     setStakeModalOpen(false);
     setPendingSelection(null);
     toast({
@@ -2159,6 +2282,8 @@ export default function PredictPage() {
                   market={market} 
                   isMarketClosed={isMarketClosed}
                   onSelect={(name) => handleGainerSelect(market, name)}
+                  isPredicted={predictedMarkets.has(market.id)}
+                  isShimmering={shimmeringMarket === market.id}
                 />
               ))}
             </div>
@@ -2325,6 +2450,8 @@ export default function PredictPage() {
               market={market} 
               isMarketClosed={isMarketClosed}
               onSelect={(name) => handleGainerSelect(market, name)}
+              isPredicted={predictedMarkets.has(market.id)}
+              isShimmering={shimmeringMarket === market.id}
             />
           ))}
       </FullScreenOverlay>

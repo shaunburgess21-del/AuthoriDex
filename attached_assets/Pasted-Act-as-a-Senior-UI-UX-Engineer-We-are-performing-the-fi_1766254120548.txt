@@ -1,0 +1,45 @@
+Act as a Senior UI/UX Engineer. We are performing the final 'Polish & Interaction' phase for the Predict Page. Implement these critical bug fixes, aesthetic updates, and the Success Animation system.
+
+1. Success Animation & Feedback:
+
+The 'Big Win' Effect: When a user successfully clicks 'Confirm Prediction' in any modal, trigger a two-part animation:
+
+Confetti Pop: A subtle burst of Cyan and Purple particles emanating from the button.
+
+Glass Shimmer: A fast-moving white-light gradient sweep across the specific market card on the main page to indicate it is 'locked in'.
+
+Post-Action State: Update the card button to a 'Predicted ✓' state (disabled/green-tinted) to show the user's participation is recorded.
+
+2. Modal Data & Bug Fixes:
+
+Fix 'NaN' Error: In the Head-to-Head modal, ensure the 'Estimated Payout' displays a real number (e.g., 1.9x) instead of 'NaN'.
+
+Market Mission Headers: Replace the placeholder 'What am I predicting?' with contextual mission text:
+
+Jackpot: 'Predict the exact Trend Score at week's end to win the pot.'
+
+H2H: 'Back your champion to win this weekly matchup.'
+
+Races/Gainer: 'Predict the #1 top performer to win.'
+
+Jackpot Rule: Add a small info line in the Jackpot modal: '⚠️ Predictions lock Thursday 5 PM UTC.'
+
+3. Interaction Logic:
+
+Top Gainer CTA: Ensure the 'Place Prediction' button on the card is functional. If clicked without a selection, it should open the modal for the current #1 leader.
+
+Race Detail List: In the Race Detail Overlay, ensure clicking any runner row correctly triggers the 'Confirm Prediction' modal for that runner.
+
+4. Aesthetic Refinements:
+
+Unique Category Colors: Inside ALL prediction cards, change the category label (e.g., Tech, Music) from uniform slate to their unique FameDex colors: Tech (Blue), Music (Magenta), Creator (Orange), Sports (Gold/Yellow), etc.
+
+Filter Toggles: Keep the 'Purple' active state for the top sticky filters for structural consistency.
+
+Premium Scrollbars: Implement custom CSS scrollbars for all overlays: a slate-700 thumb on a transparent track to match the dark-glass theme.
+
+5. Social Proof Adjustments:
+
+Crowd Sentiment: For H2H, Up/Down, and Community markets, replace 'Crowd Avg Prediction' with 'Crowd Sentiment'.
+
+Logic: Display the percentage of the total pool supporting the user's specific choice (e.g., '68% of the crowd predicts YES').

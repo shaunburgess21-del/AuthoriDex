@@ -409,4 +409,44 @@
     -webkit-mask-image: linear-gradient(to right, transparent 0%, black 24px, black calc(100% - 24px), transparent 100%);
     mask-image: linear-gradient(to right, transparent 0%, black 24px, black calc(100% - 24px), transparent 100%);
   }
+
+  /* Premium scrollbar for overlays - slate-700 thumb on transparent track */
+  .premium-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(51 65 85 / 0.6) transparent;
+  }
+  .premium-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .premium-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .premium-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgb(51 65 85 / 0.6);
+    border-radius: 9999px;
+  }
+  .premium-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(71 85 105 / 0.8);
+  }
+
+  /* Glass shimmer animation for confirmed predictions */
+  @keyframes glass-shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+  .shimmer-once {
+    animation: glass-shimmer 0.8s ease-out forwards;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.15) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+  }
 }
