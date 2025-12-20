@@ -22,17 +22,16 @@ import {
   Minus,
   ChevronDown,
   Star,
-  Flame,
-  Rocket,
   Check,
   X,
   ChevronRight,
-  Info,
+  HelpCircle,
   Calendar
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation, Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Slider from "react-slick";
@@ -55,22 +54,21 @@ interface InductionCandidate {
   initials: string;
   category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics";
   votes: number;
-  momentumTag: "Hot" | "Rising" | null;
 }
 
 const INDUCTION_CANDIDATES: InductionCandidate[] = [
-  { id: "i1", name: "Jensen Huang", initials: "JH", category: "Tech", votes: 12406, momentumTag: "Hot" },
-  { id: "i2", name: "Charli XCX", initials: "CX", category: "Music", votes: 11205, momentumTag: "Rising" },
-  { id: "i3", name: "Kai Cenat", initials: "KC", category: "Creator", votes: 10892, momentumTag: "Hot" },
-  { id: "i4", name: "Sabrina Carpenter", initials: "SC", category: "Music", votes: 9847, momentumTag: null },
-  { id: "i5", name: "Ice Spice", initials: "IS", category: "Music", votes: 8934, momentumTag: "Rising" },
-  { id: "i6", name: "Sam Altman", initials: "SA", category: "Tech", votes: 8421, momentumTag: null },
-  { id: "i7", name: "Jenna Ortega", initials: "JO", category: "Creator", votes: 7856, momentumTag: null },
-  { id: "i8", name: "Patrick Mahomes", initials: "PM", category: "Sports", votes: 7234, momentumTag: "Hot" },
-  { id: "i9", name: "Vivek Ramaswamy", initials: "VR", category: "Politics", votes: 6891, momentumTag: null },
-  { id: "i10", name: "xQc", initials: "XQ", category: "Creator", votes: 6543, momentumTag: null },
-  { id: "i11", name: "Hailey Bieber", initials: "HB", category: "Creator", votes: 5987, momentumTag: null },
-  { id: "i12", name: "Mark Cuban", initials: "MC", category: "Business", votes: 5432, momentumTag: null },
+  { id: "i1", name: "Jensen Huang", initials: "JH", category: "Tech", votes: 12406 },
+  { id: "i2", name: "Charli XCX", initials: "CX", category: "Music", votes: 11205 },
+  { id: "i3", name: "Kai Cenat", initials: "KC", category: "Creator", votes: 10892 },
+  { id: "i4", name: "Sabrina Carpenter", initials: "SC", category: "Music", votes: 9847 },
+  { id: "i5", name: "Ice Spice", initials: "IS", category: "Music", votes: 8934 },
+  { id: "i6", name: "Sam Altman", initials: "SA", category: "Tech", votes: 8421 },
+  { id: "i7", name: "Jenna Ortega", initials: "JO", category: "Creator", votes: 7856 },
+  { id: "i8", name: "Patrick Mahomes", initials: "PM", category: "Sports", votes: 7234 },
+  { id: "i9", name: "Vivek Ramaswamy", initials: "VR", category: "Politics", votes: 6891 },
+  { id: "i10", name: "xQc", initials: "XQ", category: "Creator", votes: 6543 },
+  { id: "i11", name: "Hailey Bieber", initials: "HB", category: "Creator", votes: 5987 },
+  { id: "i12", name: "Mark Cuban", initials: "MC", category: "Business", votes: 5432 },
 ];
 
 interface CurateProfilePoll {
@@ -191,27 +189,21 @@ function InductionCandidateCard({
 
   return (
     <Card 
-      className="p-5 transition-all duration-200 hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] h-full flex flex-col"
+      className="p-5 transition-all duration-200 hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] h-full flex flex-col relative"
       style={{ border: '1px solid rgba(148,163,184,0.18)' }}
       onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)'}
       onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
       data-testid={`card-induction-${candidate.id}`}
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className="absolute top-3 right-3">
+        <CategoryPill category={candidate.category} data-testid={`badge-category-${candidate.id}`} />
+      </div>
+      
+      <div className="flex items-center mb-4">
         <div className={`rounded-full px-3 py-1 text-xs font-medium flex items-center gap-1 border ${getRankBadgeStyle(rank)}`}>
           {rank === 1 && <Crown className="h-3 w-3" />}
           #{rank}
         </div>
-        {candidate.momentumTag && (
-          <div className={`rounded-full px-2.5 py-1 text-xs font-medium flex items-center gap-1 border ${
-            candidate.momentumTag === "Hot" 
-              ? "bg-red-500/10 border-red-500/20 text-red-400" 
-              : "bg-teal-500/10 border-teal-500/20 text-teal-400"
-          }`}>
-            {candidate.momentumTag === "Hot" ? <Flame className="h-3 w-3" /> : <Rocket className="h-3 w-3" />}
-            {candidate.momentumTag}
-          </div>
-        )}
       </div>
 
       <div className="flex flex-col items-center text-center mb-4 flex-grow">
@@ -226,7 +218,6 @@ function InductionCandidateCard({
           )}
         </div>
         <h3 className="font-semibold mt-3">{candidate.name}</h3>
-        <CategoryPill category={candidate.category} data-testid={`badge-category-${candidate.id}`} />
       </div>
       
       <div className="mb-4">
@@ -403,7 +394,7 @@ function DiscourseCard({
 
   return (
     <Card 
-      className="pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col hover:shadow-[0_0_20px_rgba(148,163,184,0.08)]"
+      className="pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] relative"
       style={{ 
         border: '1px solid rgba(148,163,184,0.18)',
       }}
@@ -411,7 +402,13 @@ function DiscourseCard({
       onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
       data-testid={`card-discourse-${topic.id}`}
     >
-      <CategoryPill category={topic.category} className="mb-3" data-testid={`badge-category-${topic.id}`} />
+      <div className="absolute top-3 right-3">
+        <CategoryPill category={topic.category} data-testid={`badge-category-${topic.id}`} />
+      </div>
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+        <Users className="h-3.5 w-3.5 text-cyan-400" />
+        <span>{topic.totalVotes.toLocaleString()} votes</span>
+      </div>
       <h3 className="font-serif font-bold text-lg mb-1">{topic.headline}</h3>
       <p className="text-sm text-muted-foreground mb-5 flex-grow">{topic.description}</p>
       
@@ -909,14 +906,14 @@ export default function VotePage() {
       </header>
 
       <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-cyan-500/10 via-background/95 to-cyan-500/10 backdrop-blur-xl">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-center gap-6 sm:gap-10">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-center gap-6 sm:gap-10 py-3">
             <div className="flex items-center gap-2">
               <Crown className="h-5 w-5 text-amber-400" />
               <span className="text-sm text-muted-foreground">Rank:</span>
               <span className="font-bold text-foreground" data-testid="text-user-rank">{rank}</span>
             </div>
-            <div className="h-6 w-px bg-border" />
+            <div className="h-6 w-px bg-border/50" />
             <div className="flex items-center gap-2">
               <Zap className="h-5 w-5 text-cyan-400" />
               <span className="text-sm text-muted-foreground">XP:</span>
@@ -932,12 +929,8 @@ export default function VotePage() {
               </motion.span>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div className="sticky top-[calc(4rem+3.5rem)] z-30 border-b bg-background/90 backdrop-blur-xl">
-        <div className="container mx-auto px-4 py-2">
-          <div className="flex items-center justify-center gap-2 overflow-x-auto scrollbar-hide">
+          <div className="border-t border-border/30" />
+          <div className="flex items-center justify-center gap-2 overflow-x-auto scrollbar-hide py-2">
             {SECTION_TOGGLES.map((section) => (
               <button
                 key={section}
@@ -1006,15 +999,22 @@ export default function VotePage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setRulesModalOpen("induction")}
-                  className="text-cyan-400 hover:text-cyan-300"
-                  data-testid="button-rules-induction"
-                >
-                  <Info className="h-5 w-5" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRulesModalOpen("induction")}
+                      className="text-cyan-400 hover:text-cyan-300"
+                      data-testid="button-rules-induction"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                    How it works
+                  </TooltipContent>
+                </Tooltip>
                 <Button
                   onClick={() => setSuggestModalOpen(true)}
                   className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
@@ -1046,7 +1046,7 @@ export default function VotePage() {
             </div>
             <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
               <Star className="h-3 w-3 text-amber-400" />
-              <span className="text-slate-300">Top 3 will be inducted</span>
+              <span className="text-slate-300">Top 1 will be inducted</span>
             </div>
           </div>
 
@@ -1170,15 +1170,22 @@ export default function VotePage() {
                   <p className="text-sm text-muted-foreground">Winner becomes the default profile photo across the FameDex index.</p>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setRulesModalOpen("curate")}
-                className="text-cyan-400 hover:text-cyan-300"
-                data-testid="button-rules-curate"
-              >
-                <Info className="h-5 w-5" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setRulesModalOpen("curate")}
+                    className="text-cyan-400 hover:text-cyan-300"
+                    data-testid="button-rules-curate"
+                  >
+                    <HelpCircle className="h-5 w-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                  How it works
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
           
@@ -1243,15 +1250,22 @@ export default function VotePage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setRulesModalOpen("voice")}
-                  className="text-cyan-400 hover:text-cyan-300"
-                  data-testid="button-rules-voice"
-                >
-                  <Info className="h-5 w-5" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRulesModalOpen("voice")}
+                      className="text-cyan-400 hover:text-cyan-300"
+                      data-testid="button-rules-voice"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                    How it works
+                  </TooltipContent>
+                </Tooltip>
                 <Button
                   onClick={() => setStartPollModalOpen(true)}
                   className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
@@ -1475,7 +1489,7 @@ export default function VotePage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Info className="h-5 w-5 text-cyan-400" />
+              <HelpCircle className="h-5 w-5 text-cyan-400" />
               {rulesModalOpen === "induction" && "Induction Queue Rules"}
               {rulesModalOpen === "curate" && "Curate the Profile Rules"}
               {rulesModalOpen === "voice" && "The People's Voice Rules"}
@@ -1492,7 +1506,7 @@ export default function VotePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <Crown className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Top candidates are inducted to the main leaderboard monthly</span>
+                    <span>The <span className="text-cyan-400 font-medium">#1 candidate</span> is inducted weekly</span>
                   </div>
                   <div className="flex items-start gap-2">
                     <Sparkles className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
@@ -1500,7 +1514,7 @@ export default function VotePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <Zap className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>"Hot" and "Rising" tags indicate momentum</span>
+                    <span>Weekly winner gets inducted to the main leaderboard</span>
                   </div>
                 </div>
               </div>
