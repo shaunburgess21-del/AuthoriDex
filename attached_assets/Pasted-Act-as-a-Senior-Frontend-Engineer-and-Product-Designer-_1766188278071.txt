@@ -1,0 +1,53 @@
+Act as a Senior Frontend Engineer and Product Designer. Refactor the Predict Page into a high-engagement, anti-fatigue dashboard while strictly maintaining the FameDex theme (Dark Glass, existing Category Pill styles, and Typography).
+
+1. NAVIGATION & INTENT LAYER
+Sticky Prediction Type Toggle: Add a sticky horizontal toggle under the header: [All | Weekly Jackpot | Up/Down | Head-to-Head | Category Races | Top Gainer | User Suggested].
+
+Global Search: Add a search bar below the toggle. When active, it overrides content and de-emphasizes category chips to reduce cognitive load.
+
+Domain Chips: Horizontal scrollable row: [All | Tech | Politics | Business | Music | Sports | Creator]. Must use current FameDex filled glass pill styles. These filter content within the selected Prediction Type.
+
+2. THE 3-LAYER OVERLAY SYSTEM
+Layer 1 (Preview): Each section on the main page shows ONLY the Top 2–3 cards.
+
+Layer 2 (Directory): 'View All' opens a Full-Screen Overlay with a scrollable grid of all markets for that type.
+
+Layer 3 (Deep Dive): For 'Category Races', selecting a card opens a Race Detail Overlay stacked on Layer 2. Include 'Runners' and 'Chart' tabs. Back action returns to Layer 2, not the main page.
+
+3. SECTION-SPECIFIC VISUAL RULES
+Category Races & Top Gainers:
+
+Winner = Rank #1 at close.
+
+Gold Logic: Reserved for #1 ONLY. Use a Subtle Gold Border and a Crown Icon glass pill (Icon only, no text). NO background gold fill.
+
+Ranks #2/#3: Use small text accents and Rank # icons, but keep backgrounds transparent.
+
+Tooltip: Add a '?' tooltip to the Crown icon: 'Rank is determined by market share at close time'.
+
+Head-to-Head Battles:
+
+Maintain the Deep Blue vs. Deep Purple aura split behind avatars with a central, floating metallic 'VS' badge.
+
+Weekly Up/Down:
+
+Clearly display: 'Will [Person] Trend Score be higher than start-of-week by close?'.
+
+4. PREDICT INTERACTION & WALLET (VIRTUAL)
+Selection Flow: Selecting an outcome highlights it. A sticky footer appears: 'Your prediction: [Choice]'.
+
+Stake Modal: 'Continue' opens a modal for virtual credits with presets (100 / 500 / 1000).
+
+Test Wallet: Add a wallet indicator in the header: 'Test Wallet: 10,000 credits' (clearly labeled as virtual).
+
+5. COMMUNITY PREDICTIONS
+Add a '+ Start a Prediction' action in the section header.
+
+Open a creation modal with fields for Title, Type, Category, and Description.
+
+First item in the grid must be a dashed 'Suggest a Market' placeholder.
+
+6. DATA & STATE
+Use dummy data and in-memory state for selectedType, searchQuery, walletCredits, and myPredictions.
+
+For 'Top Gainer', calculate winner based on Total Points Added (Raw points) in 7 days."
