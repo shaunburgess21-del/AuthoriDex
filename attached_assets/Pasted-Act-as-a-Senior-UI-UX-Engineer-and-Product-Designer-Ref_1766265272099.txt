@@ -1,0 +1,50 @@
+Act as a Senior UI/UX Engineer and Product Designer. Refactor the 'Vote' page to implement the final governance architecture and cumulative voting logic. Maintain the core FameDex Dark-Glass theme and typography.
+
+1. GLOBAL IDENTITY & HEADER (Space Optimization)
+Identity Migration: Move the Rank: Citizen and XP: [Value] components from the page-level sticky bar into the absolute Top Global Navigation Bar.
+
+Mobile Styling (< 768px): Hide text labels 'Rank:' and 'XP:'. Display icons + values only (e.g., 👑 Citizen | ⚡ 120) inside a single, compact glass pill on the right side of the bar.
+
+Single Sticky Layer: The Section Toggles (All, Induction Queue, Curate Profile, People's Voice) are now the ONLY sticky navigation element.
+
+Smart-Stick Logic: Toggles should only stick once the user scrolls past the 'Shape the FameDex' Hero section.
+
+2. CURATE THE PROFILE: LEADERBOARD & FILTERING
+Interactive Filtering: When a user selects a Category Chip (e.g., 'Music') above the Curate Profile stack, the next card pulled into the 'A/B' voting transition MUST adhere to that category.
+
+All-Time Leaderboard: Add a 'View Leaderboard' link to the Curate Profile section header.
+
+Overlay View (Layer 2): Clicking the link opens a full-screen overlay (consistent with the Predict page overlays).
+
+Content: A vertical list of the top-voted profile photos across the platform.
+
+Columns: [Rank] [Celebrity Name] [Winning Photo Thumbnail] [Total Votes] [Category Pill].
+
+Logic: Use Cumulative Totals; do not reset these counts.
+
+3. CARD UI & ANCHOR SYSTEM (Mandatory Fixes)
+Absolute Top-Right: Force the Category Label (Music, Tech, etc.) to the absolute top-right corner of ALL cards in Induction Queue and People's Voice.
+
+Induction Queue: Keep Rank #1 top-left. Explicitly DELETE 'Hot' and 'Rising' pills. Update text to: 'Top 1 will be inducted'.
+
+People's Voice: In the top-left, display the Total Vote Count (e.g., '87,654 votes').
+
+4. RULES MODAL & TOOLTIP PARITY
+Predict Unification: Replace all (i) icons with the (?) icon component and its exact 'How it works' dark-glass tooltip from the Predict page.
+
+Curate Profile Update: Inside the rules modal, replace 'Photo contests refresh weekly' with: 'Votes accumulate perpetually to determine the definitive all-time look.'
+
+5. START POLL MODAL: ENTITY-FIRST + TIMELINE
+Headline: Add character counter (0/80).
+
+Subject Anchor: Change 'Category' to a searchable Entity Select field. Results show: [Avatar] [Name] [Category Pill] [Tag: Leaderboard | Induction].
+
+Timeline Logic: Presets: [No Deadline (Default) | 1 Week | 1 Month] + a 'Custom' date-time picker.
+
+6. GLOBAL UI & POLISH
+Success Feedback: Trigger a Glass Shimmer + Checkmark animation on the card surface for every successful vote cast.
+
+Horizontal Scroll: Hide scrollbar tracks on all chip rows. Apply a Dynamic Gradient Mask to the right edge to indicate more content."
+
+Strategy Check: The "Photo Leaderboard"
+By using the Full-Screen Overlay, you provide a high-value "deep dive" for users without forcing them to navigate away from the voting page. They can see the winners, hit the 'X', and immediately get back to curation.

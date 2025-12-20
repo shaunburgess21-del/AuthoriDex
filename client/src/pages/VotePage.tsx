@@ -177,24 +177,53 @@ function InductionCandidateCard({
   onToggleVote: (id: string) => void;
   onXPGain: (event: React.MouseEvent) => void;
 }) {
+  const [showVoteAnimation, setShowVoteAnimation] = useState(false);
+  const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressPercent = rank === 1 ? 100 : (candidate.votes / maxVotes) * 100;
   const gap = maxVotes - candidate.votes;
 
+  useEffect(() => {
+    return () => {
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleVoteClick = (e: React.MouseEvent) => {
-    onToggleVote(candidate.id);
     if (!isVoted) {
+      setShowVoteAnimation(true);
+      animationTimeoutRef.current = setTimeout(() => setShowVoteAnimation(false), 800);
       onXPGain(e);
     }
+    onToggleVote(candidate.id);
   };
 
   return (
     <Card 
-      className="p-5 transition-all duration-200 hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] h-full flex flex-col relative"
+      className="p-5 transition-all duration-200 hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] h-full flex flex-col relative overflow-hidden"
       style={{ border: '1px solid rgba(148,163,184,0.18)' }}
       onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)'}
       onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
       data-testid={`card-induction-${candidate.id}`}
     >
+      <AnimatePresence>
+        {showVoteAnimation && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-10 pointer-events-none"
+          >
+            <motion.div
+              initial={{ x: '-100%' }}
+              animate={{ x: '200%' }}
+              transition={{ duration: 0.6, ease: 'easeInOut' }}
+              className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/20 to-transparent skew-x-12"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="absolute top-3 right-3">
         <CategoryPill category={candidate.category} data-testid={`badge-category-${candidate.id}`} />
       </div>
@@ -281,14 +310,26 @@ function CurateProfileCard({
 }) {
   const [selectedChoice, setSelectedChoice] = useState<'a' | 'b' | null>(null);
   const [isExiting, setIsExiting] = useState(false);
+  const [showShimmer, setShowShimmer] = useState(false);
+  const timeoutRef1 = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timeoutRef2 = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef1.current) clearTimeout(timeoutRef1.current);
+      if (timeoutRef2.current) clearTimeout(timeoutRef2.current);
+    };
+  }, []);
 
   const handlePick = (choice: 'a' | 'b') => {
     if (!selectedChoice) {
       setSelectedChoice(choice);
+      setShowShimmer(true);
       onVote();
-      setTimeout(() => {
+      timeoutRef1.current = setTimeout(() => {
+        setShowShimmer(false);
         setIsExiting(true);
-        setTimeout(onComplete, 300);
+        timeoutRef2.current = setTimeout(onComplete, 300);
       }, 600);
     }
   };
@@ -301,12 +342,29 @@ function CurateProfileCard({
       transition={{ duration: 0.3 }}
     >
       <Card 
-        className="p-4 transition-all duration-200 hover:shadow-[0_0_20px_rgba(148,163,184,0.08)]"
+        className="p-4 transition-all duration-200 hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] relative overflow-hidden"
         style={{ border: '1px solid rgba(148,163,184,0.18)' }}
         onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)'}
         onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
         data-testid={`card-curate-${poll.id}`}
       >
+        <AnimatePresence>
+          {showShimmer && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-10 pointer-events-none"
+            >
+              <motion.div
+                initial={{ x: '-100%' }}
+                animate={{ x: '200%' }}
+                transition={{ duration: 0.6, ease: 'easeInOut' }}
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-green-400/30 to-transparent skew-x-12"
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-sm">{poll.personName}</h3>
           <CategoryPill category={poll.category} data-testid={`badge-curate-${poll.id}`} />
@@ -333,11 +391,20 @@ function CurateProfileCard({
             </div>
             {selectedChoice === 'a' && (
               <motion.div 
-                className="absolute inset-0 bg-green-500/20"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.2 }}
-              />
+                className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 20 }}
+                  className="h-12 w-12 rounded-full bg-green-500 flex items-center justify-center shadow-lg shadow-green-500/40"
+                >
+                  <Check className="h-6 w-6 text-white" />
+                </motion.div>
+              </motion.div>
             )}
           </button>
           
@@ -359,11 +426,20 @@ function CurateProfileCard({
             </div>
             {selectedChoice === 'b' && (
               <motion.div 
-                className="absolute inset-0 bg-green-500/20"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.2 }}
-              />
+                className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 20 }}
+                  className="h-12 w-12 rounded-full bg-green-500 flex items-center justify-center shadow-lg shadow-green-500/40"
+                >
+                  <Check className="h-6 w-6 text-white" />
+                </motion.div>
+              </motion.div>
             )}
           </button>
         </div>
@@ -715,6 +791,9 @@ export default function VotePage() {
   const [pollCategory, setPollCategory] = useState("");
   const [pollDescription, setPollDescription] = useState("");
   const [pollEntitySearch, setPollEntitySearch] = useState("");
+  const [isTogglesSticky, setIsTogglesSticky] = useState(false);
+  const [curateLeaderboardOpen, setCurateLeaderboardOpen] = useState(false);
+  const heroRef = useRef<HTMLDivElement>(null);
   const [pollDuration, setPollDuration] = useState<string>("none");
   const [pollCustomDate, setPollCustomDate] = useState("");
   
@@ -791,6 +870,19 @@ export default function VotePage() {
       });
     }, 60000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (heroRef.current) {
+        const heroBottom = heroRef.current.getBoundingClientRect().bottom;
+        setIsTogglesSticky(heroBottom <= 64);
+      }
+    };
+    
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const handleToggleVote = (candidateId: string) => {
@@ -900,56 +992,57 @@ export default function VotePage() {
                 <Button variant="ghost" size="sm" data-testid="link-nav-me">Me</Button>
               </Link>
             </div>
+            
+            <div className="hidden md:flex items-center gap-3 px-3 py-1.5 rounded-full bg-slate-800/60 border border-slate-700/50">
+              <div className="flex items-center gap-1.5">
+                <Crown className="h-4 w-4 text-amber-400" />
+                <span className="text-xs text-muted-foreground">Rank:</span>
+                <span className="text-sm font-bold text-foreground" data-testid="text-user-rank">{rank}</span>
+              </div>
+              <div className="h-4 w-px bg-border/50" />
+              <div className="flex items-center gap-1.5">
+                <Zap className="h-4 w-4 text-cyan-400" />
+                <span className="text-xs text-muted-foreground">XP:</span>
+                <motion.span 
+                  key={xp}
+                  className="text-sm font-bold font-mono text-cyan-400"
+                  initial={{ scale: 1.3 }}
+                  animate={{ scale: 1 }}
+                  transition={{ duration: 0.2 }}
+                  data-testid="text-user-xp"
+                >
+                  {xp.toLocaleString()}
+                </motion.span>
+              </div>
+            </div>
+            
+            <div className="flex md:hidden items-center gap-2 px-2.5 py-1.5 rounded-full bg-slate-800/60 border border-slate-700/50">
+              <Crown className="h-3.5 w-3.5 text-amber-400" />
+              <span className="text-xs font-bold text-foreground" data-testid="text-user-rank-mobile">{rank}</span>
+              <div className="h-3 w-px bg-border/50" />
+              <Zap className="h-3.5 w-3.5 text-cyan-400" />
+              <motion.span 
+                key={`mobile-${xp}`}
+                className="text-xs font-bold font-mono text-cyan-400"
+                initial={{ scale: 1.3 }}
+                animate={{ scale: 1 }}
+                transition={{ duration: 0.2 }}
+                data-testid="text-user-xp-mobile"
+              >
+                {xp.toLocaleString()}
+              </motion.span>
+            </div>
+            
             <ThemeToggle />
           </div>
         </div>
       </header>
 
-      <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-cyan-500/10 via-background/95 to-cyan-500/10 backdrop-blur-xl">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-center gap-6 sm:gap-10 py-3">
-            <div className="flex items-center gap-2">
-              <Crown className="h-5 w-5 text-amber-400" />
-              <span className="text-sm text-muted-foreground">Rank:</span>
-              <span className="font-bold text-foreground" data-testid="text-user-rank">{rank}</span>
-            </div>
-            <div className="h-6 w-px bg-border/50" />
-            <div className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-cyan-400" />
-              <span className="text-sm text-muted-foreground">XP:</span>
-              <motion.span 
-                key={xp}
-                className="font-bold font-mono text-cyan-400"
-                initial={{ scale: 1.3 }}
-                animate={{ scale: 1 }}
-                transition={{ duration: 0.2 }}
-                data-testid="text-user-xp"
-              >
-                {xp.toLocaleString()}
-              </motion.span>
-            </div>
-          </div>
-          <div className="border-t border-border/30" />
-          <div className="flex items-center justify-center gap-2 overflow-x-auto scrollbar-hide py-2">
-            {SECTION_TOGGLES.map((section) => (
-              <button
-                key={section}
-                onClick={() => setActiveSection(section)}
-                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
-                  activeSection === section
-                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 shadow-sm shadow-cyan-500/20"
-                    : "bg-background/50 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-cyan-400/20"
-                }`}
-                data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
-              >
-                {section}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="relative overflow-hidden">
+      <div 
+        ref={heroRef}
+        id="hero-section"
+        className="relative overflow-hidden"
+      >
         <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
         <div className="container mx-auto px-4 py-12 max-w-5xl relative">
           <div className="text-center mb-8">
@@ -980,6 +1073,29 @@ export default function VotePage() {
                 <p className="text-lg font-bold font-mono text-cyan-400" data-testid="text-countdown">{countdown}</p>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className={`${isTogglesSticky ? 'sticky top-16' : ''} z-40 border-b bg-gradient-to-r from-cyan-500/10 via-background/95 to-cyan-500/10 backdrop-blur-xl transition-all`}>
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-center gap-2 overflow-x-auto scrollbar-hide py-3 relative">
+            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none z-10 md:hidden" />
+            {SECTION_TOGGLES.map((section) => (
+              <button
+                key={section}
+                onClick={() => setActiveSection(section)}
+                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                  activeSection === section
+                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 shadow-sm shadow-cyan-500/20"
+                    : "bg-background/50 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-cyan-400/20"
+                }`}
+                data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
+              >
+                {section}
+              </button>
+            ))}
+            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-10 md:hidden" />
           </div>
         </div>
       </div>
@@ -1170,26 +1286,40 @@ export default function VotePage() {
                   <p className="text-sm text-muted-foreground">Winner becomes the default profile photo across the FameDex index.</p>
                 </div>
               </div>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setRulesModalOpen("curate")}
-                    className="text-cyan-400 hover:text-cyan-300"
-                    data-testid="button-rules-curate"
-                  >
-                    <HelpCircle className="h-5 w-5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
-                  How it works
-                </TooltipContent>
-              </Tooltip>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCurateLeaderboardOpen(true)}
+                  className="text-cyan-400 hover:text-cyan-300 hidden md:flex"
+                  data-testid="button-view-curate-leaderboard"
+                >
+                  View Leaderboard
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRulesModalOpen("curate")}
+                      className="text-cyan-400 hover:text-cyan-300"
+                      data-testid="button-rules-curate"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                    How it works
+                  </TooltipContent>
+                </Tooltip>
+              </div>
             </div>
           </div>
           
-          <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
+          <div className="flex flex-wrap items-center justify-center gap-2 mb-4 relative">
+            <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-background to-transparent pointer-events-none z-10" />
+            <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-background to-transparent pointer-events-none z-10" />
             {FILTER_CATEGORIES.map((cat) => (
               <button
                 key={cat}
@@ -1436,29 +1566,90 @@ export default function VotePage() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <label className="text-sm font-medium mb-1 block">Headline *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm font-medium">Headline *</label>
+                <span className={`text-xs ${pollHeadline.length > 80 ? 'text-red-400' : 'text-muted-foreground'}`}>
+                  {pollHeadline.length}/80
+                </span>
+              </div>
               <Input
                 value={pollHeadline}
-                onChange={(e) => setPollHeadline(e.target.value)}
+                onChange={(e) => setPollHeadline(e.target.value.slice(0, 80))}
                 placeholder="e.g. Should AI be regulated?"
                 data-testid="input-poll-headline"
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Category *</label>
-              <Select value={pollCategory} onValueChange={setPollCategory}>
-                <SelectTrigger data-testid="select-poll-category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Music">Music</SelectItem>
-                  <SelectItem value="Tech">Tech</SelectItem>
-                  <SelectItem value="Creator">Creator</SelectItem>
-                  <SelectItem value="Sports">Sports</SelectItem>
-                  <SelectItem value="Politics">Politics</SelectItem>
-                  <SelectItem value="Business">Business</SelectItem>
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium mb-1 block">Subject (Entity) *</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={pollEntitySearch}
+                  onChange={(e) => setPollEntitySearch(e.target.value)}
+                  placeholder="Search for a celebrity..."
+                  className="pl-10"
+                  data-testid="input-poll-entity-search"
+                />
+              </div>
+              {pollEntitySearch && (
+                <div className="mt-2 max-h-32 overflow-y-auto rounded-lg border border-border bg-background/95">
+                  {mockCelebrityList
+                    .filter(name => name.toLowerCase().includes(pollEntitySearch.toLowerCase()))
+                    .slice(0, 5)
+                    .map((name, idx) => (
+                      <button
+                        key={name}
+                        onClick={() => {
+                          setPollCategory(name);
+                          setPollEntitySearch(name);
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-muted/50 text-left"
+                        data-testid={`poll-entity-option-${idx}`}
+                      >
+                        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 flex items-center justify-center text-xs font-bold text-cyan-400 border border-cyan-500/30">
+                          {name.split(' ').map(n => n[0]).join('')}
+                        </div>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium">{name}</span>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          Leaderboard
+                        </Badge>
+                      </button>
+                    ))}
+                  {mockCelebrityList.filter(name => name.toLowerCase().includes(pollEntitySearch.toLowerCase())).length === 0 && (
+                    <div className="px-3 py-2 text-sm text-muted-foreground">No results found</div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Timeline</label>
+              <div className="flex flex-wrap gap-2">
+                {DURATION_PRESETS.map((preset) => (
+                  <button
+                    key={preset.value}
+                    onClick={() => setPollDuration(preset.value)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                      pollDuration === preset.value
+                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
+                        : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+                    }`}
+                    data-testid={`poll-duration-${preset.value}`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              {pollDuration === "custom" && (
+                <Input
+                  type="datetime-local"
+                  value={pollCustomDate}
+                  onChange={(e) => setPollCustomDate(e.target.value)}
+                  className="mt-2"
+                  data-testid="input-poll-custom-date"
+                />
+              )}
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Short description (max 140 characters)</label>
@@ -1475,7 +1666,7 @@ export default function VotePage() {
             <Button variant="outline" onClick={() => setStartPollModalOpen(false)} data-testid="button-cancel-poll">Cancel</Button>
             <Button 
               onClick={handlePollSubmit}
-              disabled={!pollHeadline || !pollCategory}
+              disabled={!pollHeadline || !pollEntitySearch}
               className="bg-cyan-500 text-white"
               data-testid="button-submit-poll"
             >
@@ -1537,7 +1728,7 @@ export default function VotePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <Clock className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Photo contests refresh weekly</span>
+                    <span>Votes accumulate perpetually to determine the definitive all-time look</span>
                   </div>
                 </div>
               </div>
@@ -1568,6 +1759,61 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AnimatePresence>
+        {curateLeaderboardOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
+          >
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-xl font-serif font-bold">Curate Profile Leaderboard</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setCurateLeaderboardOpen(false)}
+                data-testid="button-close-curate-leaderboard"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="space-y-3 max-w-xl mx-auto">
+                {curateProfilePolls.slice(0, 10).map((poll, idx) => (
+                  <div 
+                    key={poll.id}
+                    className="flex items-center gap-4 p-4 rounded-lg bg-muted/30 border border-border"
+                    data-testid={`curate-leaderboard-item-${idx}`}
+                  >
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                      idx === 0 ? 'bg-yellow-500/20 text-yellow-300' :
+                      idx === 1 ? 'bg-slate-400/20 text-slate-300' :
+                      idx === 2 ? 'bg-orange-500/20 text-orange-300' :
+                      'bg-slate-700/30 text-slate-400'
+                    }`}>
+                      {idx + 1}
+                    </div>
+                    <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 flex items-center justify-center text-sm font-bold text-cyan-400 border border-cyan-500/30">
+                      {poll.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium">{poll.name}</p>
+                      <p className="text-xs text-muted-foreground">{poll.category}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold font-mono text-cyan-400">{((idx + 1) * 1247).toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">total votes</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {inductionOverlayOpen && (
