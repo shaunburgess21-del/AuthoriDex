@@ -1077,7 +1077,10 @@ export default function VotePage() {
         </div>
       </div>
 
-      <div className={`${isTogglesSticky ? 'sticky top-16' : ''} z-40 border-b bg-gradient-to-r from-cyan-500/10 via-background/95 to-cyan-500/10 backdrop-blur-xl transition-all`}>
+      <div 
+        className={`${isTogglesSticky ? 'sticky top-16' : ''} z-40 border-b bg-gradient-to-r from-cyan-500/10 via-background/95 to-cyan-500/10 backdrop-blur-xl transition-all`}
+        data-testid="section-toggles-container"
+      >
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-center gap-2 overflow-x-auto scrollbar-hide py-3 relative">
             <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none z-10 md:hidden" />
