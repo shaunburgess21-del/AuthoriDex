@@ -26,7 +26,9 @@ import {
   Rocket,
   Check,
   X,
-  ChevronRight
+  ChevronRight,
+  Info,
+  Calendar
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation, Link } from "wouter";
@@ -122,6 +124,31 @@ const DISCOURSE_TOPICS: DiscourseTopicData[] = [
 
 const FILTER_CATEGORIES = ["All", "Tech", "Music", "Sports", "Creator", "Business", "Politics"] as const;
 type FilterCategory = typeof FILTER_CATEGORIES[number];
+
+const SECTION_TOGGLES = ["All", "Induction Queue", "Curate Profile", "People's Voice"] as const;
+type SectionToggle = typeof SECTION_TOGGLES[number];
+
+const SECTION_RULES = {
+  induction: {
+    title: "Induction Queue Rules",
+    content: "Voted candidates with the most support at the end of the cycle are officially inducted into the FameDex Main Leaderboard. Your vote helps shape who defines the future of fame."
+  },
+  curate: {
+    title: "Curate Profile Rules",
+    content: "Which image best represents this celebrity? The winning look becomes the primary profile image across the entire platform. Only the highest quality looks make it to the index."
+  },
+  voice: {
+    title: "People's Voice Rules",
+    content: "The ultimate community pulse check. Weigh in on current events and controversies. Evergreen polls remain open; timed polls resolve at the specified deadline."
+  }
+};
+
+const DURATION_PRESETS = [
+  { label: "No Deadline", value: "none" },
+  { label: "1 Week", value: "1week" },
+  { label: "1 Month", value: "1month" },
+  { label: "Custom", value: "custom" }
+] as const;
 
 interface XPFloater {
   id: number;
@@ -690,6 +717,13 @@ export default function VotePage() {
   const [pollHeadline, setPollHeadline] = useState("");
   const [pollCategory, setPollCategory] = useState("");
   const [pollDescription, setPollDescription] = useState("");
+  const [pollEntitySearch, setPollEntitySearch] = useState("");
+  const [pollDuration, setPollDuration] = useState<string>("none");
+  const [pollCustomDate, setPollCustomDate] = useState("");
+  
+  const [activeSection, setActiveSection] = useState<SectionToggle>("All");
+  const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
+  const [curateCategoryFilter, setCurateCategoryFilter] = useState<FilterCategory>("All");
 
   const enrichedCandidates = INDUCTION_CANDIDATES.map(c => ({
     ...c,
@@ -901,6 +935,27 @@ export default function VotePage() {
         </div>
       </div>
 
+      <div className="sticky top-[calc(4rem+3.5rem)] z-30 border-b bg-background/90 backdrop-blur-xl">
+        <div className="container mx-auto px-4 py-2">
+          <div className="flex items-center justify-center gap-2 overflow-x-auto scrollbar-hide">
+            {SECTION_TOGGLES.map((section) => (
+              <button
+                key={section}
+                onClick={() => setActiveSection(section)}
+                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                  activeSection === section
+                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 shadow-sm shadow-cyan-500/20"
+                    : "bg-background/50 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-cyan-400/20"
+                }`}
+                data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
+              >
+                {section}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
         <div className="container mx-auto px-4 py-12 max-w-5xl relative">
@@ -928,7 +983,7 @@ export default function VotePage() {
             <div className="flex items-center gap-3 px-6 py-3 rounded-lg bg-muted/50 border border-border">
               <Clock className="h-5 w-5 text-cyan-400" />
               <div>
-                <p className="text-xs text-muted-foreground">Next Induction In</p>
+                <p className="text-xs text-muted-foreground">Next Governance Update</p>
                 <p className="text-lg font-bold font-mono text-cyan-400" data-testid="text-countdown">{countdown}</p>
               </div>
             </div>
@@ -937,33 +992,47 @@ export default function VotePage() {
       </div>
 
       <div className="container mx-auto px-4 py-8 max-w-5xl">
+        {(activeSection === "All" || activeSection === "Induction Queue") && (
         <section className="mb-10">
-          <div className="flex items-start justify-between gap-3 mb-4">
-            <div className="flex items-start gap-3">
-              <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-                <Vote className="h-5 w-5 text-cyan-400" />
+          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                  <Vote className="h-5 w-5 text-cyan-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-serif font-bold">The Induction Queue</h2>
+                  <p className="text-sm text-muted-foreground">Vote on which celebrity joins the main leaderboard next.</p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-xl font-serif font-bold">The Induction Queue</h2>
-                <p className="text-sm text-muted-foreground">Vote on which celebrity joins the main leaderboard next. The race is on.</p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setRulesModalOpen("induction")}
+                  className="text-cyan-400 hover:text-cyan-300"
+                  data-testid="button-rules-induction"
+                >
+                  <Info className="h-5 w-5" />
+                </Button>
+                <Button
+                  onClick={() => setSuggestModalOpen(true)}
+                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
+                  data-testid="button-suggest-candidate-header"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Suggest candidate
+                </Button>
+                <Button
+                  size="icon"
+                  onClick={() => setSuggestModalOpen(true)}
+                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
+                  data-testid="button-suggest-candidate-header-mobile"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
               </div>
             </div>
-            <Button
-              onClick={() => setSuggestModalOpen(true)}
-              className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
-              data-testid="button-suggest-candidate-header"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Suggest candidate
-            </Button>
-            <Button
-              size="icon"
-              onClick={() => setSuggestModalOpen(true)}
-              className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
-              data-testid="button-suggest-candidate-header-mobile"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -1086,18 +1155,50 @@ export default function VotePage() {
             </div>
           </div>
         </section>
+        )}
 
+        {(activeSection === "All" || activeSection === "Curate Profile") && (
         <section className="mb-10">
-          <div className="flex items-start gap-3 mb-4">
-            <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-              <Camera className="h-5 w-5 text-cyan-400" />
-            </div>
-            <div>
-              <h2 className="text-xl font-serif font-bold">Curate the Profile</h2>
-              <p className="text-sm text-muted-foreground">Decide the official photo displayed across FameDex. Which look defines them?</p>
+          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                  <Camera className="h-5 w-5 text-cyan-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-serif font-bold">Curate the Profile</h2>
+                  <p className="text-sm text-muted-foreground">Winner becomes the default profile photo across the FameDex index.</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setRulesModalOpen("curate")}
+                className="text-cyan-400 hover:text-cyan-300"
+                data-testid="button-rules-curate"
+              >
+                <Info className="h-5 w-5" />
+              </Button>
             </div>
           </div>
           
+          <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
+            {FILTER_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setCurateCategoryFilter(cat)}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
+                  curateCategoryFilter === cat
+                    ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
+                    : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+                }`}
+                data-testid={`filter-curate-${cat.toLowerCase()}`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
           <div className="max-w-md mx-auto">
             <div className="text-center mb-2 text-sm text-muted-foreground">
               {currentCurateIndex + 1} of {curateProfilePolls.length}
@@ -1126,34 +1227,49 @@ export default function VotePage() {
             )}
           </div>
         </section>
+        )}
 
+        {(activeSection === "All" || activeSection === "People's Voice") && (
         <section className="mb-10">
-          <div className="flex items-start justify-between gap-3 mb-4">
-            <div className="flex items-start gap-3">
-              <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-                <MessageSquare className="h-5 w-5 text-cyan-400" />
+          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                  <MessageSquare className="h-5 w-5 text-cyan-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-serif font-bold">The People's Voice</h2>
+                  <p className="text-sm text-muted-foreground">Weigh in on current events and controversies.</p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-xl font-serif font-bold">The People's Voice</h2>
-                <p className="text-sm text-muted-foreground">You, The People, decide the narrative. Weigh in on the topics that matter.</p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setRulesModalOpen("voice")}
+                  className="text-cyan-400 hover:text-cyan-300"
+                  data-testid="button-rules-voice"
+                >
+                  <Info className="h-5 w-5" />
+                </Button>
+                <Button
+                  onClick={() => setStartPollModalOpen(true)}
+                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
+                  data-testid="button-start-poll-header"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Start poll
+                </Button>
+                <Button
+                  size="icon"
+                  onClick={() => setStartPollModalOpen(true)}
+                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
+                  data-testid="button-start-poll-header-mobile"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
               </div>
             </div>
-            <Button
-              onClick={() => setStartPollModalOpen(true)}
-              className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
-              data-testid="button-start-poll-header"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Start poll
-            </Button>
-            <Button
-              size="icon"
-              onClick={() => setStartPollModalOpen(true)}
-              className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
-              data-testid="button-start-poll-header-mobile"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -1213,6 +1329,7 @@ export default function VotePage() {
             </Button>
           </div>
         </section>
+        )}
       </div>
 
       <button
@@ -1350,6 +1467,90 @@ export default function VotePage() {
             >
               Submit Poll
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!rulesModalOpen} onOpenChange={() => setRulesModalOpen(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Info className="h-5 w-5 text-cyan-400" />
+              {rulesModalOpen === "induction" && "Induction Queue Rules"}
+              {rulesModalOpen === "curate" && "Curate the Profile Rules"}
+              {rulesModalOpen === "voice" && "The People's Voice Rules"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4 text-sm">
+            {rulesModalOpen === "induction" && (
+              <div className="space-y-3">
+                <p className="text-muted-foreground">Vote for celebrities you want to see added to the FameDex leaderboard.</p>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <Vote className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Each user can vote <span className="text-cyan-400 font-medium">once per candidate</span></span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Crown className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Top candidates are inducted to the main leaderboard monthly</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Earn <span className="text-cyan-400 font-medium">+5 XP</span> for each vote</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Zap className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>"Hot" and "Rising" tags indicate momentum</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {rulesModalOpen === "curate" && (
+              <div className="space-y-3">
+                <p className="text-muted-foreground">Help choose the official profile photo displayed across FameDex.</p>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <Camera className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Swipe left or right to vote on profile photos</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Crown className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>The winning image becomes the official profile photo</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Earn <span className="text-cyan-400 font-medium">+3 XP</span> for each vote</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Clock className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Photo contests refresh weekly</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {rulesModalOpen === "voice" && (
+              <div className="space-y-3">
+                <p className="text-muted-foreground">Share your opinion on trending topics and current events.</p>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <MessageSquare className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Vote Yes/No on community-submitted topics</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Users className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>See how your vote compares to the community</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Earn <span className="text-cyan-400 font-medium">+2 XP</span> for each vote</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Plus className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Submit your own poll topics for community voting</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

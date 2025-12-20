@@ -1,0 +1,61 @@
+This "Interaction Grammar" alignment is the final bridge between the Predict and Vote ecosystems. By integrating the "Label Strip" headers and the "Entity-First" poll logic, you are creating a governance system that feels both authoritative and community-driven.
+
+Below is the Master Replit Prompt, now updated with the specific Rules ⓘ micro-copy.
+
+The "Vote Page Overhaul" Master Replit Prompt
+Copy/Paste this into the Replit Agent:
+
+"Act as a Senior UI/UX Engineer and Product Designer. Refactor the 'Vote' page to align with the systematic interaction grammar established on the Predict page. You must maintain the core FameDex Dark-Glass theme and typography.
+
+1. COLOR & BRAND GUARDRAILS (Strict)
+Retain Vote Accents: Do NOT use Predict Page purples for Vote Page elements. Maintain the existing Vote Page unique accent colors for buttons, progress bars, and hover states.
+
+Category Pills: Use the unique FameDex category colors (Tech: Blue, Music: Magenta, Creator: Orange, etc.) for all card labels.
+
+2. NAVIGATION & HERO SYSTEM
+Double-Sticky Header:
+
+Layer 1 (Top-Most): Keep the existing Rank: Citizen | XP bar as the top-most sticky layer.
+
+Layer 2 (Below Hero): Add a second sticky row for Section Toggles: [All | Induction Queue | Curate Profile | People's Voice]. Selecting a toggle filters the view to that section only.
+
+Global Governance Hero: Repurpose stat bubbles to: 'Total Votes Cast' (Global across all 3 sections) and 'Next Governance Update' (System reset timer, e.g., '2d 14h').
+
+3. THE 'SECTION HEADER CONTAINER' & RULES (ⓘ)
+The Divider: Implement the 'Label Strip' style for each of the three voting sections.
+
+Style: A thin, full-width glass panel with a subtle radial gradient using the Vote Page accent color (fading to transparent).
+
+Rules ⓘ Icons: Place an info icon (ⓘ) in each Section Header. Clicking it opens a modal with the following text (use your discretion for the best layout):
+
+Induction Queue Rules: 'Voted candidates with the most support at the end of the cycle are officially inducted into the FameDex Main Leaderboard. Your vote helps shape who defines the future of fame.'
+
+Curate Profile Rules: 'Which image best represents this celebrity? The winning look becomes the primary profile image across the entire platform. Only the highest quality looks make it to the index.'
+
+People's Voice Rules: 'The ultimate community pulse check. Weigh in on current events and controversies. Evergreen polls remain open; timed polls resolve at the specified deadline.'
+
+4. CARD POLISH & FILTERING
+Induction Queue: Keep Rank #1 top-left; move Category Pill to top-right. Remove 'Hot/Rising' pills entirely.
+
+Curate the Profile: Add domain chips [All | Tech | Music | etc.] above the stack. Include the rule line: 'Winner becomes the default profile photo across the FameDex index'.
+
+People's Voice Cards: Move category pill to top-right. Top-left must show Total Vote Count (e.g., '87k votes').
+
+5. START POLL MODAL UPGRADE
+Headline: Add character counter (0/80).
+
+Entity Select: Replace 'Category' with a searchable entity field querying Leaderboard + Induction Queue data.
+
+Duration (Hybrid Logic): Presets [No Deadline (Default) | 1 Week | 1 Month] + a 'Custom' date-time picker.
+
+6. GLOBAL UI & POLISH
+Success Feedback: Trigger a Glass Shimmer + Checkmark animation on a successful vote.
+
+Scrollbars: Hide scrollbar tracks on horizontal chip rows; use the FameDex Slate-700 / Transparent theme for vertical bars."
+
+Pre-Flight Strategy Check
+[ ] The Identity Bar: Ensure the Rank: Citizen bar doesn't get pushed off-screen when the Section Toggles stick.
+
+[ ] Entity Search Results: In the "Start Poll" modal, verify that the search results are easy to distinguish (e.g., showing a small 'Leaderboard' badge vs. 'Induction' badge).
+
+[ ] Evergreen Polls: For "No Deadline" polls in the People's Voice, make sure the UI doesn't show a placeholder or "0d 0h 0m" timer—it should simply remain clean without a clock.
