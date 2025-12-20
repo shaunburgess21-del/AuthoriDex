@@ -1039,11 +1039,13 @@ function RaceDetailOverlay({
       <div className="container mx-auto px-4 py-6 max-w-2xl">
         {activeTab === "runners" ? (
           <div className="space-y-3">
+            <p className="text-sm text-muted-foreground mb-4">Tap a runner to place your prediction</p>
             {market.runners.map((runner, i) => (
               <Card 
                 key={runner.name}
-                className={`p-4 cursor-pointer transition-all hover:shadow-lg ${i === 0 ? 'border-amber-500/30' : 'hover:border-violet-500/30'}`}
+                className={`p-4 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] ${i === 0 ? 'border-amber-500/30' : 'hover:border-violet-500/30'}`}
                 onClick={() => onSelectRunner(runner.name)}
+                data-testid={`button-select-runner-${i}`}
               >
                 <div className="flex items-center gap-4">
                   <div className="relative">
@@ -1066,6 +1068,7 @@ function RaceDetailOverlay({
                     <p className="font-mono text-lg font-bold text-violet-500">{runner.marketShare}%</p>
                     <p className="text-xs text-muted-foreground">market share</p>
                   </div>
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
                 </div>
               </Card>
             ))}
