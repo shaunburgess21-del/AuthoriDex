@@ -1,0 +1,45 @@
+Act as a Senior UI/UX Engineer. Refactor the Predict Page to implement the final 10% polish for mobile intuition, section-level hierarchy, and data-rich modals. Maintain the existing FameDex dark-glass theme and current Category Pill styles.
+
+1. MOBILE UI: 'CLEAN SCROLL' SYSTEM
+Hide Scrollbars: For both 'Intent Toggles' (Prediction Types) and 'Domain Chips' (Categories), keep horizontal scrolling but hide scrollbar tracks completely (WebKit and Firefox).
+
+Dynamic Gradient Mask: Apply a linear-gradient mask (12-24px) to the right edge of scrollable containers by default. If the user scrolls away from the left edge, apply the mask to the left edge as well. This should signal 'content continues' without clipping text excessively.
+
+Mobile Labels: Display Icon + Short Text for all Prediction Type toggles on mobile: [Jackpot, Up/Down, H2H, Races, Gainer, Community]. Ensure no layout shift occurs between active/inactive states.
+
+2. SECTION HEADERS: THE 'LABEL STRIP'
+Visual Anchor: Wrap each section header (Title, Subtitle, 'View All') in a thin glass container with a subtle purple-to-transparent radial gradient.
+
+Content:
+
+Left: Title + Subtitle.
+
+Right: 'View All' link + a small Rules ⓘ icon.
+
+Education: Clicking Rules ⓘ opens a short, section-specific explainer modal (e.g., 'How Up/Down works').
+
+3. 'CONFIRM PREDICTION' MODAL: DATA & CONVERSION
+Every prediction modal (Jackpot, H2H, etc.) must answer: What am I predicting? What is the current state? What is my balance?
+
+Functional Input: Add a numeric input field for the specific prediction (e.g., 'Exact Trend Score' for Jackpot).
+
+Confidence Kit: > * Snapshot: Display 'Start Score' (market open) vs. 'Current Score'.
+
+Consensus: Add one muted line: 'Crowd Avg Prediction: [Value]'.
+
+Wallet: Display 'Current Balance' and 'Balance After Stake' (using test credits).
+
+4. TOP GAINER LOGIC REFINEMENT
+Primary Metric: For 'Top Gainer' cards, the primary big metric is Total Points Added (Raw points) in the last 7 days.
+
+Secondary Metric: Show the % Gain as a smaller secondary line below the raw points to provide comparative context.
+
+5. DESKTOP LAYOUT POLISH
+Control Alignment: Align the top control bar (Toggles, Search, Chips) to the same max-width container as the card feed.
+
+Search Width: Reduce the search bar max-width to 420px.
+
+First-Time Visit: Auto-trigger a 'How Predict Works' welcome modal for new visitors using a localStorage flag.
+
+6. DATA & CATEGORY CONSISTENCY
+Pill Styles: Ensure all Category Labels (Music, Tech, etc.) maintain the current FameDex 'Ghost Glass Pill' style (low opacity fill + thin border + colored tint), NOT the outlined-only style."

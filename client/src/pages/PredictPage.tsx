@@ -324,7 +324,7 @@ const categoryRaceMarkets: CategoryRaceMarket[] = [
 interface TopGainerMarket {
   id: string;
   category: CategoryFilter;
-  leaders: { name: string; avatar: string; currentGain: number }[];
+  leaders: { name: string; avatar: string; currentGain: number; percentGain: number }[];
   totalPool: number;
   endTime: string;
 }
@@ -334,9 +334,9 @@ const topGainerMarkets: TopGainerMarket[] = [
     id: "gainer-1",
     category: "music",
     leaders: [
-      { name: "Taylor Swift", avatar: "", currentGain: 12450 },
-      { name: "Drake", avatar: "", currentGain: 8920 },
-      { name: "Bad Bunny", avatar: "", currentGain: 7340 },
+      { name: "Taylor Swift", avatar: "", currentGain: 12450, percentGain: 4.2 },
+      { name: "Drake", avatar: "", currentGain: 8920, percentGain: 3.8 },
+      { name: "Bad Bunny", avatar: "", currentGain: 7340, percentGain: 2.9 },
     ],
     totalPool: 14200,
     endTime: "Sun 23:59 UTC",
@@ -345,9 +345,9 @@ const topGainerMarkets: TopGainerMarket[] = [
     id: "gainer-2",
     category: "tech",
     leaders: [
-      { name: "Jensen Huang", avatar: "", currentGain: 15780 },
-      { name: "Elon Musk", avatar: "", currentGain: 11200 },
-      { name: "Sam Altman", avatar: "", currentGain: 9850 },
+      { name: "Jensen Huang", avatar: "", currentGain: 15780, percentGain: 8.5 },
+      { name: "Elon Musk", avatar: "", currentGain: 11200, percentGain: 2.1 },
+      { name: "Sam Altman", avatar: "", currentGain: 9850, percentGain: 5.2 },
     ],
     totalPool: 19800,
     endTime: "Sun 23:59 UTC",
@@ -356,9 +356,9 @@ const topGainerMarkets: TopGainerMarket[] = [
     id: "gainer-3",
     category: "creator",
     leaders: [
-      { name: "MrBeast", avatar: "", currentGain: 18900 },
-      { name: "Logan Paul", avatar: "", currentGain: 12100 },
-      { name: "KSI", avatar: "", currentGain: 8750 },
+      { name: "MrBeast", avatar: "", currentGain: 18900, percentGain: 6.1 },
+      { name: "Logan Paul", avatar: "", currentGain: 12100, percentGain: 4.8 },
+      { name: "KSI", avatar: "", currentGain: 8750, percentGain: 3.5 },
     ],
     totalPool: 11500,
     endTime: "Sun 23:59 UTC",
@@ -367,9 +367,9 @@ const topGainerMarkets: TopGainerMarket[] = [
     id: "gainer-4",
     category: "sports",
     leaders: [
-      { name: "Cristiano Ronaldo", avatar: "", currentGain: 9800 },
-      { name: "LeBron James", avatar: "", currentGain: 8900 },
-      { name: "Lionel Messi", avatar: "", currentGain: 7200 },
+      { name: "Cristiano Ronaldo", avatar: "", currentGain: 9800, percentGain: 2.4 },
+      { name: "LeBron James", avatar: "", currentGain: 8900, percentGain: 1.9 },
+      { name: "Lionel Messi", avatar: "", currentGain: 7200, percentGain: 1.6 },
     ],
     totalPool: 13400,
     endTime: "Sun 23:59 UTC",
@@ -450,15 +450,152 @@ type MarketType = "JACKPOT_EXACT" | "BINARY_TREND" | "VERSUS" | "COMMUNITY" | "R
 
 const FIRST_VISIT_KEY = "famedex_predict_first_visit";
 
-const PREDICTION_TYPES: { id: PredictionType; label: string; icon: React.ReactNode }[] = [
-  { id: "all", label: "All", icon: <Sparkles className="h-4 w-4" /> },
-  { id: "jackpot", label: "Weekly Jackpot", icon: <Crown className="h-4 w-4" /> },
-  { id: "updown", label: "Up/Down", icon: <TrendingUp className="h-4 w-4" /> },
-  { id: "h2h", label: "Head-to-Head", icon: <Swords className="h-4 w-4" /> },
-  { id: "races", label: "Category Races", icon: <Flag className="h-4 w-4" /> },
-  { id: "gainer", label: "Top Gainer", icon: <BarChart3 className="h-4 w-4" /> },
-  { id: "community", label: "User Suggested", icon: <Users className="h-4 w-4" /> },
+const PREDICTION_TYPES: { id: PredictionType; label: string; mobileLabel: string; icon: React.ReactNode }[] = [
+  { id: "all", label: "All Markets", mobileLabel: "All", icon: <Sparkles className="h-4 w-4" /> },
+  { id: "jackpot", label: "Weekly Jackpot", mobileLabel: "Jackpot", icon: <Crown className="h-4 w-4" /> },
+  { id: "updown", label: "Up/Down", mobileLabel: "Up/Down", icon: <TrendingUp className="h-4 w-4" /> },
+  { id: "h2h", label: "Head-to-Head", mobileLabel: "H2H", icon: <Swords className="h-4 w-4" /> },
+  { id: "races", label: "Category Races", mobileLabel: "Races", icon: <Flag className="h-4 w-4" /> },
+  { id: "gainer", label: "Top Gainer", mobileLabel: "Gainer", icon: <BarChart3 className="h-4 w-4" /> },
+  { id: "community", label: "User Suggested", mobileLabel: "Community", icon: <Users className="h-4 w-4" /> },
 ];
+
+function HorizontalScroll({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollState, setScrollState] = useState<"start" | "middle" | "end">("start");
+  
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    
+    const handleScroll = () => {
+      const { scrollLeft, scrollWidth, clientWidth } = el;
+      const maxScroll = scrollWidth - clientWidth;
+      if (scrollLeft <= 2) {
+        setScrollState("start");
+      } else if (scrollLeft >= maxScroll - 2) {
+        setScrollState("end");
+      } else {
+        setScrollState("middle");
+      }
+    };
+    
+    el.addEventListener("scroll", handleScroll);
+    handleScroll();
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, []);
+  
+  const maskClass = scrollState === "start" ? "scroll-mask-right" 
+    : scrollState === "end" ? "scroll-mask-left" 
+    : "scroll-mask-both";
+  
+  return (
+    <div 
+      ref={scrollRef}
+      className={`flex gap-2 overflow-x-auto scrollbar-hide ${maskClass} ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SectionHeader({ 
+  title, 
+  subtitle, 
+  onViewAll, 
+  onRulesClick,
+  rulesTitle 
+}: { 
+  title: string; 
+  subtitle: string; 
+  onViewAll?: () => void;
+  onRulesClick?: () => void;
+  rulesTitle?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between mb-4 px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-transparent to-transparent border border-violet-500/10 backdrop-blur-sm">
+      <div className="flex-1 min-w-0">
+        <h2 className="text-lg sm:text-xl font-serif font-bold truncate">{title}</h2>
+        <p className="text-xs sm:text-sm text-muted-foreground truncate">{subtitle}</p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0 ml-3">
+        {onRulesClick && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-7 w-7"
+                onClick={onRulesClick}
+                data-testid={`button-rules-${title.toLowerCase().replace(/\s+/g, '-')}`}
+              >
+                <HelpCircle className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>How it works</TooltipContent>
+          </Tooltip>
+        )}
+        {onViewAll && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-violet-500 hover:text-violet-400"
+            onClick={onViewAll}
+          >
+            View All
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RulesModal({ 
+  open, 
+  onClose, 
+  title, 
+  description,
+  steps 
+}: { 
+  open: boolean; 
+  onClose: () => void; 
+  title: string;
+  description: string;
+  steps: { icon: React.ReactNode; title: string; description: string }[];
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <HelpCircle className="h-5 w-5 text-violet-500" />
+            {title}
+          </DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4 py-4">
+          {steps.map((step, i) => (
+            <div key={i} className="flex items-start gap-3">
+              <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+                {step.icon}
+              </div>
+              <div>
+                <h4 className="font-semibold text-sm">{step.title}</h4>
+                <p className="text-xs text-muted-foreground">{step.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        <Button onClick={onClose} className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600">
+          Got it
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -874,7 +1011,10 @@ function TopGainerCard({
             </div>
             <PersonAvatar name={leader.name} avatar={leader.avatar} size="xs" />
             <span className="text-sm flex-1 truncate">{leader.name}</span>
-            <span className="text-xs font-mono text-green-500">+{leader.currentGain.toLocaleString()}</span>
+            <div className="text-right">
+              <p className="text-xs font-mono font-bold text-green-500">+{leader.currentGain.toLocaleString()} pts</p>
+              <p className="text-[10px] font-mono text-muted-foreground">+{leader.percentGain}%</p>
+            </div>
           </div>
         ))}
       </div>
@@ -1185,14 +1325,18 @@ function StakeModal({
   open,
   onClose,
   selection,
-  onConfirm
+  onConfirm,
+  walletBalance
 }: {
   open: boolean;
   onClose: () => void;
-  selection: { type: string; choice: string; marketName: string } | null;
+  selection: { type: string; choice: string; marketName: string; startScore?: number; currentScore?: number; crowdAvg?: number } | null;
   onConfirm: (amount: number) => void;
+  walletBalance: number;
 }) {
   const [stakeAmount, setStakeAmount] = useState("");
+  const parsedAmount = parseInt(stakeAmount) || 0;
+  const balanceAfter = walletBalance - parsedAmount;
   
   if (!selection) return null;
   
@@ -1204,15 +1348,40 @@ function StakeModal({
             <Target className="h-5 w-5 text-violet-500" />
             Confirm Prediction
           </DialogTitle>
+          <DialogDescription>
+            What am I predicting? What's the current state?
+          </DialogDescription>
         </DialogHeader>
         
         <div className="py-4 space-y-4">
           <Card className="p-3 bg-violet-500/5 border-violet-500/20">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">{selection.marketName}</span>
-            </p>
+            <p className="text-xs text-muted-foreground mb-1">Market</p>
+            <p className="text-sm font-semibold text-foreground">{selection.marketName}</p>
             <p className="text-lg font-bold text-violet-500 mt-1">{selection.choice}</p>
           </Card>
+          
+          {(selection.startScore || selection.currentScore) && (
+            <div className="grid grid-cols-2 gap-3">
+              {selection.startScore && (
+                <Card className="p-2.5 bg-muted/30">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Start Score</p>
+                  <p className="font-mono font-bold text-sm">{selection.startScore.toLocaleString()}</p>
+                </Card>
+              )}
+              {selection.currentScore && (
+                <Card className="p-2.5 bg-muted/30">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Score</p>
+                  <p className="font-mono font-bold text-sm">{selection.currentScore.toLocaleString()}</p>
+                </Card>
+              )}
+            </div>
+          )}
+          
+          {selection.crowdAvg && (
+            <p className="text-xs text-muted-foreground text-center">
+              Crowd Avg Prediction: <span className="font-mono font-medium text-foreground">{selection.crowdAvg.toLocaleString()}</span>
+            </p>
+          )}
           
           <div className="space-y-2">
             <label className="text-sm font-medium">Stake Amount</label>
@@ -1240,6 +1409,19 @@ function StakeModal({
               </Button>
             ))}
           </div>
+          
+          <div className="flex items-center justify-between text-xs pt-2 border-t">
+            <div>
+              <span className="text-muted-foreground">Current Balance: </span>
+              <span className="font-mono font-medium">{walletBalance.toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">After Stake: </span>
+              <span className={`font-mono font-medium ${balanceAfter < 0 ? 'text-red-500' : 'text-green-500'}`}>
+                {balanceAfter >= 0 ? balanceAfter.toLocaleString() : 'Insufficient'}
+              </span>
+            </div>
+          </div>
         </div>
         
         <div className="flex gap-2">
@@ -1248,11 +1430,10 @@ function StakeModal({
           </Button>
           <Button 
             onClick={() => {
-              const amount = parseInt(stakeAmount) || 0;
-              if (amount > 0) onConfirm(amount);
+              if (parsedAmount > 0 && balanceAfter >= 0) onConfirm(parsedAmount);
             }}
             className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-            disabled={!stakeAmount || parseInt(stakeAmount) <= 0}
+            disabled={!stakeAmount || parsedAmount <= 0 || balanceAfter < 0}
             data-testid="button-confirm-stake"
           >
             Confirm
@@ -1566,13 +1747,65 @@ export default function PredictPage() {
   const [viewAllCategory, setViewAllCategory] = useState<string | null>(null);
   const [selectedRace, setSelectedRace] = useState<CategoryRaceMarket | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   
   const [pendingSelection, setPendingSelection] = useState<{
     type: string;
     choice: string;
     marketName: string;
+    startScore?: number;
+    currentScore?: number;
+    crowdAvg?: number;
   } | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
+  
+  const RULES_CONTENT: Record<string, { title: string; description: string; steps: { icon: React.ReactNode; title: string; description: string }[] }> = {
+    updown: {
+      title: "How Up/Down Works",
+      description: "Predict if someone's trend score will go up or down this week",
+      steps: [
+        { icon: <TrendingUp className="h-4 w-4 text-violet-500" />, title: "Pick a Direction", description: "Choose UP if you think their trend score will increase, or DOWN if you think it will decrease." },
+        { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Stake Your Credits", description: "The more you stake, the more you can win. Your potential return depends on the pool split." },
+        { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Wait for Results", description: "When the market closes Sunday 23:59 UTC, winners split the pool proportionally." },
+      ]
+    },
+    h2h: {
+      title: "How Head-to-Head Works",
+      description: "Predict who will gain more trend points this week",
+      steps: [
+        { icon: <Swords className="h-4 w-4 text-violet-500" />, title: "Pick Your Winner", description: "Choose which person you think will gain more trend points by the end of the week." },
+        { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Stake Your Credits", description: "Your potential multiplier depends on how many others picked the same side." },
+        { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Winner Takes the Pool", description: "If your pick gains more points, you split the total pool with other winners." },
+      ]
+    },
+    races: {
+      title: "How Category Races Work",
+      description: "Predict the top gainer in a specific category",
+      steps: [
+        { icon: <Flag className="h-4 w-4 text-violet-500" />, title: "Pick Your Runner", description: "Choose who you think will be the top gainer in the category by week's end." },
+        { icon: <Crown className="h-4 w-4 text-violet-500" />, title: "Market Share Matters", description: "The #1 spot is determined by who gets the most prediction backing (market share)." },
+        { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Big Wins for Underdogs", description: "Picking lower-ranked runners can yield higher returns if they surge ahead." },
+      ]
+    },
+    gainer: {
+      title: "How Top Gainer Works",
+      description: "Predict which celebrity will add the most raw points",
+      steps: [
+        { icon: <BarChart3 className="h-4 w-4 text-violet-500" />, title: "Raw Points Focus", description: "This market tracks total points ADDED, not percentage gain. Big names can add more raw points." },
+        { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Pick Your Horse", description: "Choose who you think will add the most absolute trend points this week." },
+        { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Winner Determined by Data", description: "The person with the highest raw point increase when the market closes wins." },
+      ]
+    },
+    community: {
+      title: "How Community Predictions Work",
+      description: "User-created markets for unique predictions",
+      steps: [
+        { icon: <Users className="h-4 w-4 text-violet-500" />, title: "Created by the Community", description: "Anyone can suggest a prediction market for the community to bet on." },
+        { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Binary Outcomes", description: "Most community predictions have Yes/No outcomes determined by verifiable events." },
+        { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Community Resolution", description: "Markets are resolved based on public information and community consensus." },
+      ]
+    }
+  };
   
   const marketCycle = useMarketCycle();
   const isMarketClosed = marketCycle.status === "CLOSED";
@@ -1607,7 +1840,10 @@ export default function PredictPage() {
     setPendingSelection({
       type: "jackpot",
       choice: `Predict exact score for ${selectedJackpotPerson.name}`,
-      marketName: "Weekly Jackpot"
+      marketName: "Weekly Jackpot",
+      startScore: selectedJackpotPerson.trendScore - Math.floor(Math.random() * 5000),
+      currentScore: selectedJackpotPerson.trendScore,
+      crowdAvg: selectedJackpotPerson.trendScore + Math.floor(Math.random() * 2000)
     });
     setStakeModalOpen(true);
   };
@@ -1616,35 +1852,46 @@ export default function PredictPage() {
     setPendingSelection({
       type: "updown",
       choice: choice === "up" ? "Trend Score UP" : "Trend Score DOWN",
-      marketName: market.personName
+      marketName: market.personName,
+      startScore: market.startScore,
+      currentScore: market.currentScore,
+      crowdAvg: Math.round(market.currentScore * (choice === "up" ? 1.05 : 0.95))
     });
     setStakeModalOpen(true);
   };
 
   const handleH2HSelect = (market: HeadToHeadMarket, person: 1 | 2) => {
-    const chosenName = person === 1 ? market.person1.name : market.person2.name;
+    const chosenPerson = person === 1 ? market.person1 : market.person2;
     setPendingSelection({
       type: "h2h",
-      choice: chosenName,
-      marketName: market.title
+      choice: chosenPerson.name,
+      marketName: market.title,
+      currentScore: chosenPerson.currentScore,
+      crowdAvg: Math.round(market.person1.currentScore + market.person2.currentScore) / 2
     });
     setStakeModalOpen(true);
   };
 
   const handleRaceSelect = (market: CategoryRaceMarket, runnerName: string) => {
+    const runner = market.runners.find(r => r.name === runnerName);
     setPendingSelection({
       type: "race",
       choice: runnerName,
-      marketName: market.title
+      marketName: market.title,
+      currentScore: runner?.pointsAdded,
+      crowdAvg: Math.round(market.totalPool / market.runners.length)
     });
     setStakeModalOpen(true);
   };
 
   const handleGainerSelect = (market: TopGainerMarket, name: string) => {
+    const leader = market.leaders.find(l => l.name === name);
     setPendingSelection({
       type: "gainer",
       choice: name,
-      marketName: `Top Gainer: ${market.category}`
+      marketName: `Top Gainer: ${market.category}`,
+      currentScore: leader?.currentGain,
+      crowdAvg: Math.round(market.leaders.reduce((sum, l) => sum + l.currentGain, 0) / market.leaders.length)
     });
     setStakeModalOpen(true);
   };
@@ -1653,7 +1900,8 @@ export default function PredictPage() {
     setPendingSelection({
       type: "community",
       choice: "Yes",
-      marketName: market.question
+      marketName: market.question,
+      crowdAvg: Math.round(market.participants * 0.6)
     });
     setStakeModalOpen(true);
   };
@@ -1751,30 +1999,31 @@ export default function PredictPage() {
       </header>
 
       <div className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+        <div className="container mx-auto px-4 py-3 max-w-6xl">
+          <HorizontalScroll className="pb-1">
             {PREDICTION_TYPES.map((type) => (
               <button
                 key={type.id}
                 onClick={() => setSelectedType(type.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
                   selectedType === type.id
-                    ? 'bg-violet-500/20 text-violet-400 border border-violet-400/40'
-                    : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                    ? 'bg-violet-500/20 text-violet-400 border border-violet-400/40 shadow-sm shadow-violet-500/20'
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent'
                 }`}
                 data-testid={`toggle-type-${type.id}`}
               >
                 {type.icon}
+                <span className="sm:hidden">{type.mobileLabel}</span>
                 <span className="hidden sm:inline">{type.label}</span>
               </button>
             ))}
-          </div>
+          </HorizontalScroll>
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-4">
+      <div className="container mx-auto px-4 py-4 max-w-6xl">
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative flex-1 max-w-md">
+          <div className="relative flex-1 max-w-[420px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="text"
@@ -1786,7 +2035,7 @@ export default function PredictPage() {
             />
           </div>
           
-          <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
+          <HorizontalScroll className="sm:pb-0">
             {CATEGORY_FILTERS.map((cat) => (
               <button
                 key={cat.id}
@@ -1801,7 +2050,7 @@ export default function PredictPage() {
                 {cat.label}
               </button>
             ))}
-          </div>
+          </HorizontalScroll>
         </div>
 
         <div className="flex items-center gap-4 mb-6 md:hidden">
@@ -1834,22 +2083,12 @@ export default function PredictPage() {
 
         {showSection("updown") && filteredUpDown.length > 0 && (
           <section className="mb-10">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-xl font-serif font-bold">Weekly Up / Down</h2>
-                <p className="text-sm text-muted-foreground">Will their trend score be higher or lower this week?</p>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setViewAllCategory("weekly")}
-                className="text-violet-500"
-                data-testid="button-view-all-updown"
-              >
-                View All
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
+            <SectionHeader
+              title="Weekly Up / Down"
+              subtitle="Will their trend score be higher or lower this week?"
+              onViewAll={() => setViewAllCategory("weekly")}
+              onRulesClick={() => setRulesModalOpen("updown")}
+            />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredUpDown.slice(0, 3).map((market) => (
                 <WeeklyUpDownCard 
@@ -1865,22 +2104,12 @@ export default function PredictPage() {
 
         {showSection("h2h") && filteredH2H.length > 0 && (
           <section className="mb-10">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-xl font-serif font-bold">Head-to-Head Battles</h2>
-                <p className="text-sm text-muted-foreground">Curated matchups - who will gain more?</p>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setViewAllCategory("h2h")}
-                className="text-violet-500"
-                data-testid="button-view-all-h2h"
-              >
-                View All
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
+            <SectionHeader
+              title="Head-to-Head Battles"
+              subtitle="Curated matchups - who will gain more?"
+              onViewAll={() => setViewAllCategory("h2h")}
+              onRulesClick={() => setRulesModalOpen("h2h")}
+            />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredH2H.slice(0, 3).map((market) => (
                 <HeadToHeadCard 
@@ -1896,22 +2125,12 @@ export default function PredictPage() {
 
         {showSection("races") && filteredRaces.length > 0 && (
           <section className="mb-10">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-xl font-serif font-bold">Category Races</h2>
-                <p className="text-sm text-muted-foreground">Competition within sectors - pick the winner</p>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setViewAllCategory("races")}
-                className="text-violet-500"
-                data-testid="button-view-all-races"
-              >
-                View All
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
+            <SectionHeader
+              title="Category Races"
+              subtitle="Competition within sectors - pick the winner"
+              onViewAll={() => setViewAllCategory("races")}
+              onRulesClick={() => setRulesModalOpen("races")}
+            />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredRaces.slice(0, 3).map((market) => (
                 <CategoryRaceCard 
@@ -1927,22 +2146,12 @@ export default function PredictPage() {
 
         {showSection("gainer") && filteredGainers.length > 0 && (
           <section className="mb-10">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-xl font-serif font-bold">Top Gainer Predictions</h2>
-                <p className="text-sm text-muted-foreground">Who will gain the most raw points in 7 days?</p>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setViewAllCategory("gainers")}
-                className="text-violet-500"
-                data-testid="button-view-all-gainers"
-              >
-                View All
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
+            <SectionHeader
+              title="Top Gainer Predictions"
+              subtitle="Who will gain the most raw points in 7 days?"
+              onViewAll={() => setViewAllCategory("gainers")}
+              onRulesClick={() => setRulesModalOpen("gainer")}
+            />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredGainers.slice(0, 3).map((market) => (
                 <TopGainerCard 
@@ -1958,23 +2167,39 @@ export default function PredictPage() {
 
         {showSection("community") && (
           <section className="mb-10">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-muted-foreground" />
-                <h2 className="text-xl font-serif font-bold">Community Predictions</h2>
+            <div className="flex items-center justify-between mb-4 px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-transparent to-transparent border border-violet-500/10 backdrop-blur-sm">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-serif font-bold truncate">Community Predictions</h2>
+                </div>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">User-suggested markets from the community</p>
               </div>
-              <Button 
-                variant="outline"
-                size="sm"
-                onClick={() => setCreateModalOpen(true)}
-                className="border-violet-500/30 text-violet-500"
-                data-testid="button-start-prediction"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">Start a Prediction</span>
-              </Button>
+              <div className="flex items-center gap-2 shrink-0 ml-3">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-7 w-7"
+                      onClick={() => setRulesModalOpen("community")}
+                    >
+                      <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>How it works</TooltipContent>
+                </Tooltip>
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCreateModalOpen(true)}
+                  className="border-violet-500/30 text-violet-500"
+                  data-testid="button-start-prediction"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Start</span>
+                </Button>
+              </div>
             </div>
-            <p className="text-sm text-muted-foreground mb-4">User-suggested markets from the community</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <SuggestMarketCard onClick={() => setCreateModalOpen(true)} />
               {filteredCommunity.slice(0, 3).map((market) => (
@@ -2127,6 +2352,7 @@ export default function PredictPage() {
         }}
         selection={pendingSelection}
         onConfirm={handleConfirmStake}
+        walletBalance={walletCredits}
       />
 
       <CreatePredictionModal
@@ -2134,6 +2360,16 @@ export default function PredictPage() {
         onClose={() => setCreateModalOpen(false)}
         onSubmit={handleCreatePrediction}
       />
+
+      {rulesModalOpen && RULES_CONTENT[rulesModalOpen] && (
+        <RulesModal
+          open={!!rulesModalOpen}
+          onClose={() => setRulesModalOpen(null)}
+          title={RULES_CONTENT[rulesModalOpen].title}
+          description={RULES_CONTENT[rulesModalOpen].description}
+          steps={RULES_CONTENT[rulesModalOpen].steps}
+        />
+      )}
 
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-t md:hidden">
         <div className="flex items-center justify-around h-16">

@@ -386,4 +386,27 @@
   .dark .insights-scroll {
     scrollbar-color: rgba(255, 255, 255, 0.06) transparent;
   }
+
+  /* Hide scrollbars completely for mobile clean scroll */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Gradient mask for scroll containers - signals more content */
+  .scroll-mask-right {
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+  }
+  .scroll-mask-left {
+    -webkit-mask-image: linear-gradient(to left, black calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to left, black calc(100% - 24px), transparent 100%);
+  }
+  .scroll-mask-both {
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 24px, black calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0%, black 24px, black calc(100% - 24px), transparent 100%);
+  }
 }
