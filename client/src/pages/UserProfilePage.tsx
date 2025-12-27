@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { UserMenu } from "@/components/UserMenu";
 import { ArrowLeft, Star, TrendingUp, Calendar, Award } from "lucide-react";
 import { UserVote, UserFavourite } from "@shared/schema";
 import { format } from "date-fns";
@@ -117,7 +117,7 @@ export default function UserProfilePage() {
               <span className="font-serif font-bold text-xl">FameDex</span>
             </div>
           </div>
-          <ThemeToggle />
+          <UserMenu />
         </div>
       </header>
 

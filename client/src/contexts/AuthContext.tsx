@@ -2,11 +2,41 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase";
 
+export interface UserProfile {
+  id: string;
+  username: string;
+  displayName: string;
+  avatar: string | null;
+  xp: number;
+  level: number;
+  citizenLevel: "Newcomer" | "Citizen" | "Verified" | "Elder" | "Founder";
+  totalPredictions: number;
+  totalVotes: number;
+  winRate: number;
+}
+
+const MOCK_USER_PROFILE: UserProfile = {
+  id: "mock-user-123",
+  username: "FameFan42",
+  displayName: "Fame Fan",
+  avatar: null,
+  xp: 2450,
+  level: 12,
+  citizenLevel: "Citizen",
+  totalPredictions: 47,
+  totalVotes: 312,
+  winRate: 68.5,
+};
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  profile: UserProfile | null;
+  isLoggedIn: boolean;
   signOut: () => Promise<void>;
+  mockLogin: () => void;
+  mockLogout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -15,6 +45,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isMockLoggedIn, setIsMockLoggedIn] = useState(() => {
+    const saved = localStorage.getItem("famedex_mock_auth");
+    return saved === "true";
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -61,10 +95,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     const supabase = await getSupabase();
     await supabase.auth.signOut();
+    setIsMockLoggedIn(false);
+    localStorage.removeItem("famedex_mock_auth");
   };
 
+  const mockLogin = () => {
+    setIsMockLoggedIn(true);
+    localStorage.setItem("famedex_mock_auth", "true");
+  };
+
+  const mockLogout = () => {
+    setIsMockLoggedIn(false);
+    localStorage.removeItem("famedex_mock_auth");
+  };
+
+  const isLoggedIn = !!user || isMockLoggedIn;
+  const profile = isLoggedIn ? MOCK_USER_PROFILE : null;
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, signOut }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      session, 
+      loading, 
+      profile,
+      isLoggedIn,
+      signOut,
+      mockLogin,
+      mockLogout,
+    }}>
       {children}
     </AuthContext.Provider>
   );

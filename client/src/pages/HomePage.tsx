@@ -2,7 +2,7 @@ import { HeroSection } from "@/components/HeroSection";
 import { SearchBar } from "@/components/SearchBar";
 import { LeaderboardRow } from "@/components/LeaderboardRow";
 import { VotingModal } from "@/components/VotingModal";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { UserMenu } from "@/components/UserMenu";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { SortDropdown } from "@/components/SortDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -492,7 +492,7 @@ export default function HomePage() {
                 Me
               </Button>
             </div>
-            <ThemeToggle />
+            <UserMenu />
           </div>
         </div>
       </header>

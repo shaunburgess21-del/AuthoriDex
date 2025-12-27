@@ -6,7 +6,7 @@ import { TrendBadge } from "@/components/TrendBadge";
 import { RankBadge } from "@/components/RankBadge";
 import { TrendChart } from "@/components/TrendChart";
 import { StatCard } from "@/components/StatCard";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { UserMenu } from "@/components/UserMenu";
 import { PlatformInsightsSection } from "@/components/PlatformInsightsSection";
 import { AnimatedSentimentVotingWidget } from "@/components/AnimatedSentimentVotingWidget";
 import { CommunityInsights } from "@/components/CommunityInsights";
@@ -221,7 +221,7 @@ export default function PersonDetailPage() {
                 Me
               </Button>
             </div>
-            <ThemeToggle />
+            <UserMenu />
           </div>
         </div>
       </header>

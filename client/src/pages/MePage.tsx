@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { UserMenu } from "@/components/UserMenu";
 import { UserAvatar } from "@/components/UserAvatar";
 import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut } from "lucide-react";
 import { useLocation } from "wouter";
@@ -46,7 +46,7 @@ export default function MePage() {
                 Me
               </Button>
             </div>
-            <ThemeToggle />
+            <UserMenu />
           </div>
         </div>
       </header>

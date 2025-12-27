@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CategoryPill } from "@/components/CategoryPill";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { UserMenu } from "@/components/UserMenu";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
@@ -2116,7 +2116,7 @@ export default function PredictPage() {
                 <Button variant="ghost" size="sm">Me</Button>
               </Link>
             </div>
-            <ThemeToggle />
+            <UserMenu />
           </div>
         </div>
       </header>
