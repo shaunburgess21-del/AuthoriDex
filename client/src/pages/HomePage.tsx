@@ -9,10 +9,13 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
+import { WeeklyJackpotCard } from "@/components/predict/WeeklyJackpotCard";
+import { InductionLeaderboardSlice, INDUCTION_CANDIDATES } from "@/components/vote/InductionLeaderboardSlice";
+import { PeoplesVoicePoll, DISCOURSE_TOPICS } from "@/components/vote/PeoplesVoicePoll";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus } from "lucide-react";
+import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Flame } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
@@ -22,17 +25,6 @@ import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tool
 
 type HomeView = "leaderboard" | "predict" | "vote";
 const CATEGORY_OPTIONS = ["All", "Tech", "Music", "Politics", "Sports", "Creator"] as const;
-
-const INDUCTION_CANDIDATES = [
-  { id: "i1", name: "Jensen Huang", initials: "JH", category: "Tech" as const, votes: 12406 },
-  { id: "i2", name: "Charli XCX", initials: "CX", category: "Music" as const, votes: 11205 },
-  { id: "i3", name: "Kai Cenat", initials: "KC", category: "Creator" as const, votes: 10892 },
-];
-
-const DISCOURSE_TOPICS = [
-  { id: "d1", headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", category: "Tech", approvePercent: 35, neutralPercent: 20, disapprovePercent: 45, totalVotes: 89432 },
-  { id: "d3", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Music", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567 },
-];
 
 function MarketPulseCard({ 
   title, 
@@ -235,98 +227,66 @@ function TrendGraphOverlay({
   );
 }
 
-function PredictHookView({ topGainer, onExplore }: { topGainer?: TrendingPerson; onExplore: () => void }) {
+function PredictHookView({ 
+  trendingPeople, 
+  isLoading, 
+  onExplore 
+}: { 
+  trendingPeople: TrendingPerson[]; 
+  isLoading: boolean;
+  onExplore: () => void;
+}) {
   const marketState = useMarketCycle();
+  const [selectedPerson, setSelectedPerson] = useState<TrendingPerson | null>(null);
   
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="space-y-6"
+      className="max-w-2xl mx-auto space-y-6"
     >
       <MarketCycleHero marketState={marketState} />
       
-      <Card className="relative overflow-hidden border-amber-500/20 bg-gradient-to-br from-amber-500/5 via-orange-500/5 to-card">
-        <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent" />
-        <CardContent className="relative p-6 md:p-8">
-          <div className="flex flex-col md:flex-row items-center gap-6">
-            <div className="flex-shrink-0">
-              <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 flex items-center justify-center">
-                <Trophy className="h-10 w-10 text-amber-400" />
-              </div>
-            </div>
-            <div className="flex-1 text-center md:text-left">
-              <Badge className="mb-2 bg-amber-500/20 text-amber-300 border-amber-400/40">Weekly Jackpot</Badge>
-              <h3 className="text-2xl md:text-3xl font-serif font-bold mb-2">Predict the Top Gainer</h3>
-              <p className="text-muted-foreground mb-4">
-                Guess who gains the most by Sunday close.
-              </p>
-              <div className="flex items-center gap-4 justify-center md:justify-start">
-                <div className="text-center">
-                  <p className="text-2xl font-mono font-bold text-amber-400">50,000</p>
-                  <p className="text-xs text-muted-foreground">Pool: credits</p>
-                </div>
-                <div className="h-8 w-px bg-border" />
-                <div className="text-center">
-                  <p className="text-2xl font-mono font-bold text-amber-400">{marketState.timeRemaining.days}d {marketState.timeRemaining.hours}h {marketState.timeRemaining.minutes}m</p>
-                  <p className="text-xs text-muted-foreground">Time Remaining</p>
-                </div>
-              </div>
-            </div>
-            <Button 
-              className="bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold px-6"
-              onClick={onExplore}
-              data-testid="button-enter-jackpot"
-            >
-              Enter Jackpot
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="bg-violet-500/10 text-violet-300 border-violet-400/30">
+            <Flame className="h-3 w-3 mr-1" />
+            Hot
+          </Badge>
+          <span className="text-sm text-muted-foreground">Featured Market</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Users className="h-3.5 w-3.5 text-amber-400" />
+          <span>247 predicting now</span>
+        </div>
+      </div>
+      
+      <WeeklyJackpotCard
+        onEnterJackpot={onExplore}
+        isMarketClosed={marketState.status === "CLOSED"}
+        timeRemaining={marketState.timeRemaining}
+        trendingPeople={trendingPeople}
+        selectedPerson={selectedPerson}
+        onSelectPerson={setSelectedPerson}
+        isLoading={isLoading}
+        compact={true}
+      />
 
-      {topGainer && (
-        <Card className="border-sky-500/20 bg-slate-900/40" data-testid="top-gainer-card">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-sky-400" />
-              <CardTitle className="text-sm font-medium">Current #1 Top Gainer</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-2">
-            <div className="flex items-center gap-4 p-3 rounded-lg bg-sky-500/5 border border-sky-500/20">
-              <div className="relative">
-                <PersonAvatar name={topGainer.name} avatar={topGainer.avatar} size="lg" />
-                <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-amber-500 flex items-center justify-center">
-                  <Crown className="h-3 w-3 text-white" />
-                </div>
-              </div>
-              <div className="flex-1">
-                <p className="font-semibold text-lg">{topGainer.name}</p>
-                <CategoryPill category={topGainer.category || "Tech"} />
-              </div>
-              <div className="text-right">
-                <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-                  topGainer.change7d >= 0 
-                    ? "bg-green-500/20 text-green-400 border border-green-500/30" 
-                    : "bg-red-500/20 text-red-400 border border-red-500/30"
-                }`}>
-                  {topGainer.change7d >= 0 ? "+" : ""}{topGainer.change7d.toFixed(1)}%
-                </span>
-                <p className="text-xs text-muted-foreground mt-1">This Week</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="text-center">
-        <Link href="/predict">
-          <span className="text-blue-400 hover:text-blue-300 underline underline-offset-4 text-sm cursor-pointer" data-testid="link-view-all-predict">
-            View All Prediction Markets →
-          </span>
-        </Link>
+      <div className="flex flex-col items-center gap-3 pt-2">
+        <Button 
+          size="lg"
+          className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-semibold px-8 shadow-lg shadow-violet-500/20"
+          onClick={onExplore}
+          data-testid="button-explore-markets"
+        >
+          <Sparkles className="h-4 w-4 mr-2" />
+          Explore All Prediction Markets
+          <ChevronRight className="h-4 w-4 ml-1" />
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          Up/Down • Head-to-Head • Category Races • Community Markets
+        </p>
       </div>
     </motion.div>
   );
@@ -337,129 +297,73 @@ function VoteHookView({
 }: { 
   onExplore: () => void;
 }) {
-  const topCandidate = INDUCTION_CANDIDATES[0];
-  const maxVotes = INDUCTION_CANDIDATES[0].votes;
-  const gap = 1205;
-  const topTopic = DISCOURSE_TOPICS[0];
+  const [votedCandidates, setVotedCandidates] = useState<Set<string>>(new Set());
+  
+  const handleToggleVote = (id: string) => {
+    setVotedCandidates(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+  
+  const handlePollVote = (topicId: string, choice: 'support' | 'neutral' | 'oppose') => {
+    console.log(`Voted ${choice} on topic ${topicId}`);
+  };
   
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="space-y-6"
+      className="max-w-3xl mx-auto space-y-6"
     >
-      <Card 
-        className="p-5 bg-slate-900/60 border border-slate-700/40 backdrop-blur-sm"
-        data-testid="induction-hook-card"
-      >
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
-              <Vote className="h-4 w-4 text-cyan-400" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-sm">Induction Queue</h3>
-              <p className="text-xs text-muted-foreground">#1 Candidate</p>
-            </div>
-          </div>
-          <Badge className="bg-amber-500/20 text-amber-300 border-amber-400/40">
-            <Crown className="h-3 w-3 mr-1" />
-            Leader
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="bg-cyan-500/10 text-cyan-300 border-cyan-400/30">
+            <Flame className="h-3 w-3 mr-1" />
+            Active
           </Badge>
+          <span className="text-sm text-muted-foreground">Community Governance</span>
         </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Users className="h-3.5 w-3.5 text-cyan-400" />
+          <span>1.2M+ total votes</span>
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <InductionLeaderboardSlice
+          candidates={INDUCTION_CANDIDATES}
+          limit={3}
+          votedCandidates={votedCandidates}
+          onToggleVote={handleToggleVote}
+        />
         
-        <div className="flex items-center gap-4 mb-4">
-          <div className="relative">
-            <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 flex items-center justify-center text-lg font-bold text-cyan-400 border border-cyan-500/30">
-              {topCandidate.initials}
-            </div>
-          </div>
-          <div className="flex-1">
-            <p className="font-semibold text-lg">{topCandidate.name}</p>
-            <CategoryPill category={topCandidate.category} />
-          </div>
-        </div>
+        <PeoplesVoicePoll
+          topic={DISCOURSE_TOPICS[0]}
+          onVote={handlePollVote}
+        />
+      </div>
 
-        <div className="mb-4">
-          <div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 rounded-full"
-              style={{ width: '100%' }}
-            />
-          </div>
-          <div className="mt-1.5 text-xs text-muted-foreground flex items-center gap-1">
-            <span className="text-slate-400">Gap: +{gap.toLocaleString()}</span>
-            <span className="mx-1">•</span>
-            <span className="text-slate-400">{topCandidate.votes.toLocaleString()} votes to induct</span>
-          </div>
-        </div>
-
+      <div className="flex flex-col items-center gap-3 pt-2">
         <Button 
-          className="w-full bg-gradient-to-r from-cyan-600 to-cyan-500 text-white"
+          size="lg"
+          className="bg-gradient-to-r from-cyan-600 to-teal-500 text-white font-semibold px-8 shadow-lg shadow-cyan-500/20"
           onClick={onExplore}
-          data-testid="button-vote-to-induct"
+          data-testid="button-explore-governance"
         >
           <Vote className="h-4 w-4 mr-2" />
-          Vote to Induct
+          Go to Governance Hub
+          <ChevronRight className="h-4 w-4 ml-1" />
         </Button>
-      </Card>
-
-      <Card 
-        className="pt-6 px-5 pb-5 bg-slate-900/60 border border-slate-700/40 backdrop-blur-sm"
-        data-testid="trending-poll-card"
-      >
-        <div className="flex items-center justify-between mb-3">
-          <CategoryPill category={topTopic.category} />
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5 text-cyan-400" />
-            <span>{topTopic.totalVotes.toLocaleString()} votes</span>
-          </div>
-        </div>
-        
-        <h3 className="font-serif font-bold text-lg mb-1">{topTopic.headline}</h3>
-        <p className="text-sm text-muted-foreground mb-5">{topTopic.description}</p>
-        
-        <div className="flex flex-col gap-3">
-          <button
-            className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
-            data-testid="button-support"
-          >
-            <div className="flex items-center gap-3">
-              <ThumbsUp className="h-4 w-4" />
-              <span>Support</span>
-            </div>
-            <span className="font-mono">{topTopic.approvePercent}%</span>
-          </button>
-          <button
-            className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/5 border border-white/40 text-white text-sm font-medium transition-all hover:border-white/80 hover:bg-white/15"
-            data-testid="button-neutral"
-          >
-            <div className="flex items-center gap-3">
-              <Minus className="h-4 w-4" />
-              <span>Neutral</span>
-            </div>
-            <span className="font-mono">{topTopic.neutralPercent}%</span>
-          </button>
-          <button
-            className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
-            data-testid="button-oppose"
-          >
-            <div className="flex items-center gap-3">
-              <ThumbsDown className="h-4 w-4" />
-              <span>Oppose</span>
-            </div>
-            <span className="font-mono">{topTopic.disapprovePercent}%</span>
-          </button>
-        </div>
-      </Card>
-
-      <div className="text-center">
-        <Link href="/vote">
-          <span className="text-blue-400 hover:text-blue-300 underline underline-offset-4 text-sm cursor-pointer" data-testid="link-view-all-vote">
-            View All Governance →
-          </span>
-        </Link>
+        <p className="text-xs text-muted-foreground">
+          Inductions • Profile Curation • Community Polls
+        </p>
       </div>
     </motion.div>
   );
@@ -767,7 +671,8 @@ export default function HomePage() {
 
           {activeView === "predict" && (
             <PredictHookView 
-              topGainer={topGainers[0]} 
+              trendingPeople={allPeople} 
+              isLoading={isLoading}
               onExplore={() => setLocation("/predict")} 
             />
           )}
