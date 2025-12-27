@@ -19,14 +19,9 @@ const ZONE_LABELS = ['Hate', 'Dislike', 'Neutral', 'Like', 'Love'];
 
 const SEGMENT_COLORS = [
   { bg: '#FF0000', glow: '#FF0000' },
-  { bg: '#FF1744', glow: '#FF1744' },
   { bg: '#FF6D00', glow: '#FF6D00' },
-  { bg: '#FF9100', glow: '#FF9100' },
   { bg: '#FFC400', glow: '#FFC400' },
-  { bg: '#FFEA00', glow: '#FFEA00' },
-  { bg: '#C6FF00', glow: '#C6FF00' },
   { bg: '#76FF03', glow: '#76FF03' },
-  { bg: '#00E676', glow: '#00E676' },
   { bg: '#00C853', glow: '#00C853' },
 ];
 
@@ -39,18 +34,14 @@ const ZONE_COLORS = {
 };
 
 const getZoneLabel = (value: number) => {
-  if (value <= 2) return ZONE_LABELS[0];
-  if (value <= 4) return ZONE_LABELS[1];
-  if (value <= 6) return ZONE_LABELS[2];
-  if (value <= 8) return ZONE_LABELS[3];
-  return ZONE_LABELS[4];
+  return ZONE_LABELS[value - 1] || ZONE_LABELS[2];
 };
 
 const getApprovalMessage = (value: number, personName: string) => {
-  if (value <= 2) return `You strongly disapprove of ${personName}!`;
-  if (value <= 4) return `You disapprove of ${personName}.`;
-  if (value <= 6) return `You have a neutral opinion about ${personName}.`;
-  if (value <= 8) return `You approve of ${personName}.`;
+  if (value === 1) return `You strongly disapprove of ${personName}!`;
+  if (value === 2) return `You disapprove of ${personName}.`;
+  if (value === 3) return `You have a neutral opinion about ${personName}.`;
+  if (value === 4) return `You approve of ${personName}.`;
   return `You strongly approve of ${personName}!`;
 };
 
@@ -76,11 +67,11 @@ const generateMockCommunityStats = (personId: string) => {
   );
   
   const averageRating = (
-    (normalized['Hate'] * 1.5 + 
-     normalized['Dislike'] * 3.5 + 
-     normalized['Neutral'] * 5.5 + 
-     normalized['Like'] * 7.5 + 
-     normalized['Love'] * 9.5) / 100
+    (normalized['Hate'] * 1 + 
+     normalized['Dislike'] * 2 + 
+     normalized['Neutral'] * 3 + 
+     normalized['Like'] * 4 + 
+     normalized['Love'] * 5) / 100
   ).toFixed(1);
   
   return {
@@ -157,10 +148,10 @@ function CommunityResultsView({ personName, personId, userVote, onBackToVoting }
             style={{ color: SEGMENT_COLORS[Math.round(stats.averageRating) - 1]?.bg || '#888' }}
             data-testid="text-average-rating"
           >
-            {stats.averageRating}/10
+            {stats.averageRating}/5
           </p>
           <p className="text-xs text-muted-foreground">
-            {getZoneLabel(stats.averageRating)}
+            {getZoneLabel(Math.round(stats.averageRating))}
           </p>
         </div>
       </div>
@@ -211,7 +202,7 @@ function CommunityResultsView({ personName, personId, userVote, onBackToVoting }
             className="font-bold"
             style={{ color: SEGMENT_COLORS[userVote - 1]?.bg || '#888' }}
           >
-            {userVote}/10 - {getZoneLabel(userVote)}
+            {userVote}/5 - {getZoneLabel(userVote)}
           </span>
         </div>
       </div>
@@ -311,7 +302,7 @@ export function AnimatedSentimentVotingWidget({
     setShowingResults(false);
   };
 
-  const displayValue = currentValue || 5;
+  const displayValue = currentValue || 3;
   const activeZone = getZoneLabel(displayValue);
 
   return (
@@ -356,8 +347,7 @@ export function AnimatedSentimentVotingWidget({
               <div className="relative mb-3 h-16 flex items-center pointer-events-none">
                 {ZONE_LABELS.map((label, index) => {
                   const isActive = activeZone === label;
-                  const centerSegment = 1.5 + (index * 2);
-                  const labelPosition = (centerSegment - 1) / 9;
+                  const labelPosition = (index + 0.5) / 5;
                   
                   return (
                     <motion.div
@@ -376,7 +366,7 @@ export function AnimatedSentimentVotingWidget({
                       transition={{ duration: 0.3 }}
                     >
                       <div className={`
-                        px-4 py-2 rounded-xl border transition-all duration-300
+                        px-3 sm:px-4 py-2 rounded-xl border transition-all duration-300 text-sm sm:text-base
                         ${isActive 
                           ? 'bg-card text-foreground border-border scale-110' 
                           : 'bg-transparent text-muted-foreground border-border/50'
@@ -401,8 +391,8 @@ export function AnimatedSentimentVotingWidget({
               </div>
 
               <div className="relative px-2">
-                <div className="flex justify-between gap-1 absolute inset-x-2 -top-16 -bottom-20 pointer-events-none">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => {
+                <div className="flex justify-between gap-2 absolute inset-x-2 -top-16 -bottom-20 pointer-events-none">
+                  {[1, 2, 3, 4, 5].map((value) => {
                     return (
                       <div
                         key={value}
@@ -414,8 +404,8 @@ export function AnimatedSentimentVotingWidget({
                   })}
                 </div>
                 
-                <div className="flex justify-between gap-1">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => {
+                <div className="flex justify-between gap-2">
+                  {[1, 2, 3, 4, 5].map((value) => {
                     const isActive = value === displayValue;
                     const isFilled = value <= displayValue;
                     const color = SEGMENT_COLORS[value - 1];
@@ -427,7 +417,7 @@ export function AnimatedSentimentVotingWidget({
                         onClick={() => handleSegmentClick(value)}
                         tabIndex={0}
                         role="button"
-                        aria-label={`Select ${value} out of 10`}
+                        aria-label={`Select ${value} out of 5 - ${ZONE_LABELS[value - 1]}`}
                         data-testid={`segment-${value}`}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
@@ -438,16 +428,16 @@ export function AnimatedSentimentVotingWidget({
                       >
                         <div className="h-4" />
                         <motion.div
-                          className="w-full h-3.5 rounded-full cursor-pointer"
+                          className="w-full h-5 rounded-full cursor-pointer"
                           style={{
                             backgroundColor: color.bg,
                             opacity: isFilled ? 1 : 0.4,
                             boxShadow: isFilled 
-                              ? `0 0 8px ${color.glow}60, 0 2px 4px rgba(0,0,0,0.3)`
+                              ? `0 0 10px ${color.glow}60, 0 2px 4px rgba(0,0,0,0.3)`
                               : 'none',
                           }}
                           animate={{
-                            scale: isActive ? 1.05 : 1,
+                            scale: isActive ? 1.08 : 1,
                           }}
                           transition={{ type: "spring", stiffness: 400, damping: 25 }}
                         />
@@ -463,11 +453,11 @@ export function AnimatedSentimentVotingWidget({
                     style={{
                       top: '-18px',
                     }}
-                    initial={{ opacity: 0, scale: 0, left: `calc(0.5rem + (100% - 1rem) * ${(displayValue - 0.5) / 10})` }}
+                    initial={{ opacity: 0, scale: 0, left: `calc(0.5rem + (100% - 1rem) * ${(displayValue - 0.5) / 5})` }}
                     animate={{ 
                       opacity: 1, 
                       scale: 1,
-                      left: `calc(0.5rem + (100% - 1rem) * ${(displayValue - 0.5) / 10})`,
+                      left: `calc(0.5rem + (100% - 1rem) * ${(displayValue - 0.5) / 5})`,
                       x: '-50%'
                     }}
                     transition={{ type: "spring", stiffness: 400, damping: 25 }}
@@ -478,8 +468,8 @@ export function AnimatedSentimentVotingWidget({
                         data-testid="needle-line"
                         style={{
                           height: '55px',
-                          backgroundColor: SEGMENT_COLORS[displayValue - 1].bg,
-                          boxShadow: `0 0 12px ${SEGMENT_COLORS[displayValue - 1].glow}60`,
+                          backgroundColor: SEGMENT_COLORS[displayValue - 1]?.bg,
+                          boxShadow: `0 0 12px ${SEGMENT_COLORS[displayValue - 1]?.glow}60`,
                         }}
                         animate={{
                           scaleY: isDragging ? 1.1 : 1,
@@ -489,11 +479,11 @@ export function AnimatedSentimentVotingWidget({
                         className="w-6 h-6 rounded-full pointer-events-none"
                         data-testid="needle-circle"
                         style={{
-                          backgroundColor: SEGMENT_COLORS[displayValue - 1].bg,
+                          backgroundColor: SEGMENT_COLORS[displayValue - 1]?.bg,
                           borderWidth: '3px',
                           borderStyle: 'solid',
                           borderColor: '#ffffff',
-                          boxShadow: `0 0 16px ${SEGMENT_COLORS[displayValue - 1].glow}70, 0 4px 8px rgba(0,0,0,0.3)`,
+                          boxShadow: `0 0 16px ${SEGMENT_COLORS[displayValue - 1]?.glow}70, 0 4px 8px rgba(0,0,0,0.3)`,
                         }}
                         animate={{
                           scale: isDragging ? 1.15 : 1,
@@ -504,8 +494,8 @@ export function AnimatedSentimentVotingWidget({
                 )}
               </div>
 
-              <div className="flex justify-between gap-1 px-2 mt-[25px] mb-[25px]">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+              <div className="flex justify-between gap-2 px-2 mt-[25px] mb-[25px]">
+                {[1, 2, 3, 4, 5].map((num) => (
                   <div
                     key={num}
                     className={`flex-1 text-center text-muted-foreground mt-[7px] mb-[7px] ${
@@ -548,7 +538,7 @@ export function AnimatedSentimentVotingWidget({
                   >
                     <div className="space-y-1">
                       <p className="text-lg font-semibold text-foreground">
-                        Your Vote: {displayValue}/10 - {activeZone}
+                        Your Vote: {displayValue}/5 - {activeZone}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {getApprovalMessage(displayValue, personName)}
