@@ -6,20 +6,33 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { SortDropdown } from "@/components/SortDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { TrendBadge } from "@/components/TrendBadge";
+import { CategoryPill } from "@/components/CategoryPill";
+import { MarketCycleHero } from "@/components/MarketCycleHero";
+import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, ArrowUpRight } from "lucide-react";
-import { useState, useEffect, lazy, Suspense } from "react";
+import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 type HomeView = "leaderboard" | "predict" | "vote";
 const CATEGORY_OPTIONS = ["All", "Tech", "Music", "Politics", "Sports", "Creator"] as const;
+
+const INDUCTION_CANDIDATES = [
+  { id: "i1", name: "Jensen Huang", initials: "JH", category: "Tech" as const, votes: 12406 },
+  { id: "i2", name: "Charli XCX", initials: "CX", category: "Music" as const, votes: 11205 },
+  { id: "i3", name: "Kai Cenat", initials: "KC", category: "Creator" as const, votes: 10892 },
+];
+
+const DISCOURSE_TOPICS = [
+  { id: "d1", headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", category: "Tech", approvePercent: 35, neutralPercent: 20, disapprovePercent: 45, totalVotes: 89432 },
+  { id: "d3", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Music", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567 },
+];
 
 function MarketPulseCard({ 
   title, 
@@ -34,33 +47,49 @@ function MarketPulseCard({
   type: "daily" | "gainer" | "dropper";
   onPersonClick: (id: string) => void;
 }) {
-  const colorClass = type === "daily" ? "text-blue-400" : type === "gainer" ? "text-sky-400" : "text-blue-300";
-  const bgClass = type === "daily" ? "bg-blue-500/10 border-blue-500/20" : type === "gainer" ? "bg-sky-500/10 border-sky-500/20" : "bg-blue-400/10 border-blue-400/20";
+  const iconColor = type === "daily" ? "text-blue-400" : type === "gainer" ? "text-sky-400" : "text-blue-300";
   
   return (
-    <Card className={`min-w-[280px] md:min-w-0 shrink-0 md:shrink border ${bgClass} bg-card/50 backdrop-blur-sm`} data-testid={`pulse-card-${type}`}>
+    <Card 
+      className="min-w-[280px] md:min-w-0 shrink-0 md:shrink bg-slate-900/60 border border-slate-700/40 backdrop-blur-sm" 
+      data-testid={`pulse-card-${type}`}
+    >
       <CardHeader className="pb-2 px-4 pt-4">
         <div className="flex items-center gap-2">
-          <Icon className={`h-4 w-4 ${colorClass}`} />
-          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+          <Icon className={`h-4 w-4 ${iconColor}`} />
+          <CardTitle className="text-sm font-medium text-slate-200">{title}</CardTitle>
         </div>
       </CardHeader>
       <CardContent className="px-4 pb-4 space-y-2">
-        {people.slice(0, 3).map((person, idx) => (
-          <div
-            key={person.id}
-            className="flex items-center gap-2 p-2 rounded-lg hover-elevate cursor-pointer bg-muted/30"
-            onClick={() => onPersonClick(person.id)}
-            data-testid={`pulse-item-${person.id}`}
-          >
-            <span className="font-mono text-xs font-bold text-muted-foreground w-4">{idx + 1}</span>
-            <PersonAvatar name={person.name} avatar={person.avatar} size="xs" />
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-xs truncate">{person.name}</p>
+        {people.slice(0, 5).map((person, idx) => {
+          const changeValue = type === "daily" ? person.change24h : person.change7d;
+          if (changeValue === undefined || changeValue === null || isNaN(changeValue)) return null;
+          const isPositive = changeValue >= 0;
+          return (
+            <div
+              key={person.id}
+              className="flex items-center gap-2 p-2 rounded-lg hover-elevate cursor-pointer bg-slate-800/40"
+              onClick={() => onPersonClick(person.id)}
+              data-testid={`pulse-item-${person.id}`}
+            >
+              <span className="font-mono text-xs font-bold text-slate-500 w-4">{idx + 1}</span>
+              <PersonAvatar name={person.name} avatar={person.avatar} size="xs" />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-xs truncate text-slate-200">{person.name}</p>
+                <p className="text-[10px] text-slate-500">{person.category}</p>
+              </div>
+              <span 
+                className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                  isPositive 
+                    ? "bg-green-500/20 text-green-400 border border-green-500/30" 
+                    : "bg-red-500/20 text-red-400 border border-red-500/30"
+                }`}
+              >
+                {isPositive ? "+" : ""}{changeValue.toFixed(1)}%
+              </span>
             </div>
-            <TrendBadge value={type === "daily" ? person.change24h : person.change7d} size="sm" />
-          </div>
-        ))}
+          );
+        })}
       </CardContent>
     </Card>
   );
@@ -207,6 +236,8 @@ function TrendGraphOverlay({
 }
 
 function PredictHookView({ topGainer, onExplore }: { topGainer?: TrendingPerson; onExplore: () => void }) {
+  const marketState = useMarketCycle();
+  
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -214,54 +245,75 @@ function PredictHookView({ topGainer, onExplore }: { topGainer?: TrendingPerson;
       exit={{ opacity: 0, y: -20 }}
       className="space-y-6"
     >
-      <Card className="relative overflow-hidden border-blue-500/20 bg-gradient-to-br from-blue-500/5 via-card to-card">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-transparent" />
+      <MarketCycleHero marketState={marketState} />
+      
+      <Card className="relative overflow-hidden border-amber-500/20 bg-gradient-to-br from-amber-500/5 via-orange-500/5 to-card">
+        <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent" />
         <CardContent className="relative p-6 md:p-8">
           <div className="flex flex-col md:flex-row items-center gap-6">
             <div className="flex-shrink-0">
-              <div className="h-20 w-20 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center">
-                <Trophy className="h-10 w-10 text-blue-400" />
+              <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 flex items-center justify-center">
+                <Trophy className="h-10 w-10 text-amber-400" />
               </div>
             </div>
             <div className="flex-1 text-center md:text-left">
-              <Badge className="mb-2 bg-blue-500/20 text-blue-300 border-blue-400/40">Weekly Jackpot</Badge>
+              <Badge className="mb-2 bg-amber-500/20 text-amber-300 border-amber-400/40">Weekly Jackpot</Badge>
               <h3 className="text-2xl md:text-3xl font-serif font-bold mb-2">Predict the Top Gainer</h3>
               <p className="text-muted-foreground mb-4">
-                Stake your credits on who will rise the most this week. Winners share the pool!
+                Guess who gains the most by Sunday close.
               </p>
               <div className="flex items-center gap-4 justify-center md:justify-start">
                 <div className="text-center">
-                  <p className="text-2xl font-mono font-bold text-blue-400">25,000</p>
-                  <p className="text-xs text-muted-foreground">Credit Pool</p>
+                  <p className="text-2xl font-mono font-bold text-amber-400">50,000</p>
+                  <p className="text-xs text-muted-foreground">Pool: credits</p>
                 </div>
                 <div className="h-8 w-px bg-border" />
                 <div className="text-center">
-                  <p className="text-2xl font-mono font-bold text-blue-400">3d 14h</p>
-                  <p className="text-xs text-muted-foreground">Time Left</p>
+                  <p className="text-2xl font-mono font-bold text-amber-400">{marketState.timeRemaining.days}d {marketState.timeRemaining.hours}h {marketState.timeRemaining.minutes}m</p>
+                  <p className="text-xs text-muted-foreground">Time Remaining</p>
                 </div>
               </div>
             </div>
+            <Button 
+              className="bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold px-6"
+              onClick={onExplore}
+              data-testid="button-enter-jackpot"
+            >
+              Enter Jackpot
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
           </div>
         </CardContent>
       </Card>
 
       {topGainer && (
-        <Card className="border-sky-500/20" data-testid="top-gainer-card">
+        <Card className="border-sky-500/20 bg-slate-900/40" data-testid="top-gainer-card">
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-sky-400" />
-              <CardTitle className="text-sm font-medium">Current Leader</CardTitle>
+              <CardTitle className="text-sm font-medium">Current #1 Top Gainer</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="pt-2">
             <div className="flex items-center gap-4 p-3 rounded-lg bg-sky-500/5 border border-sky-500/20">
-              <PersonAvatar name={topGainer.name} avatar={topGainer.avatar} size="lg" />
+              <div className="relative">
+                <PersonAvatar name={topGainer.name} avatar={topGainer.avatar} size="lg" />
+                <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-amber-500 flex items-center justify-center">
+                  <Crown className="h-3 w-3 text-white" />
+                </div>
+              </div>
               <div className="flex-1">
                 <p className="font-semibold text-lg">{topGainer.name}</p>
-                <p className="text-sm text-muted-foreground">{topGainer.category}</p>
+                <CategoryPill category={topGainer.category || "Tech"} />
               </div>
               <div className="text-right">
-                <TrendBadge value={topGainer.change7d} size="lg" />
+                <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                  topGainer.change7d >= 0 
+                    ? "bg-green-500/20 text-green-400 border border-green-500/30" 
+                    : "bg-red-500/20 text-red-400 border border-red-500/30"
+                }`}>
+                  {topGainer.change7d >= 0 ? "+" : ""}{topGainer.change7d.toFixed(1)}%
+                </span>
                 <p className="text-xs text-muted-foreground mt-1">This Week</p>
               </div>
             </div>
@@ -270,32 +322,26 @@ function PredictHookView({ topGainer, onExplore }: { topGainer?: TrendingPerson;
       )}
 
       <div className="text-center">
-        <Button onClick={onExplore} className="bg-blue-600 hover:bg-blue-700" data-testid="button-explore-predict">
-          Explore All Markets
-          <ChevronRight className="h-4 w-4 ml-1" />
-        </Button>
+        <Link href="/predict">
+          <span className="text-blue-400 hover:text-blue-300 underline underline-offset-4 text-sm cursor-pointer" data-testid="link-view-all-predict">
+            View All Prediction Markets →
+          </span>
+        </Link>
       </div>
     </motion.div>
   );
 }
 
 function VoteHookView({ 
-  topCandidate, 
   onExplore 
 }: { 
-  topCandidate?: TrendingPerson;
   onExplore: () => void;
 }) {
-  const mockPoll = {
-    question: "Who will dominate headlines next month?",
-    options: [
-      { label: "Taylor Swift", votes: 2847 },
-      { label: "Elon Musk", votes: 2156 },
-      { label: "MrBeast", votes: 1923 }
-    ],
-    totalVotes: 6926
-  };
-
+  const topCandidate = INDUCTION_CANDIDATES[0];
+  const maxVotes = INDUCTION_CANDIDATES[0].votes;
+  const gap = 1205;
+  const topTopic = DISCOURSE_TOPICS[0];
+  
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -303,73 +349,117 @@ function VoteHookView({
       exit={{ opacity: 0, y: -20 }}
       className="space-y-6"
     >
-      <Card className="border-blue-500/20" data-testid="induction-hook-card">
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-blue-400" />
-              <CardTitle className="text-sm font-medium">Induction Queue</CardTitle>
+      <Card 
+        className="p-5 bg-slate-900/60 border border-slate-700/40 backdrop-blur-sm"
+        data-testid="induction-hook-card"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+              <Vote className="h-4 w-4 text-cyan-400" />
             </div>
-            <Badge className="bg-blue-500/20 text-blue-300 border-blue-400/40">#1 Candidate</Badge>
+            <div>
+              <h3 className="font-semibold text-sm">Induction Queue</h3>
+              <p className="text-xs text-muted-foreground">#1 Candidate</p>
+            </div>
           </div>
-        </CardHeader>
-        <CardContent className="pt-2">
-          {topCandidate ? (
-            <div className="flex items-center gap-4 p-4 rounded-lg bg-blue-500/5 border border-blue-500/20">
-              <PersonAvatar name={topCandidate.name} avatar={topCandidate.avatar} size="lg" />
-              <div className="flex-1">
-                <p className="font-semibold text-lg">{topCandidate.name}</p>
-                <p className="text-sm text-muted-foreground">{topCandidate.category}</p>
-                <div className="flex items-center gap-2 mt-2">
-                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500 rounded-full" style={{ width: '78%' }} />
-                  </div>
-                  <span className="text-xs text-muted-foreground">78% to induction</span>
-                </div>
-              </div>
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                <Vote className="h-4 w-4 mr-1" />
-                Vote
-              </Button>
+          <Badge className="bg-amber-500/20 text-amber-300 border-amber-400/40">
+            <Crown className="h-3 w-3 mr-1" />
+            Leader
+          </Badge>
+        </div>
+        
+        <div className="flex items-center gap-4 mb-4">
+          <div className="relative">
+            <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 flex items-center justify-center text-lg font-bold text-cyan-400 border border-cyan-500/30">
+              {topCandidate.initials}
             </div>
-          ) : (
-            <p className="text-muted-foreground text-center py-4">No candidates available</p>
-          )}
-        </CardContent>
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold text-lg">{topCandidate.name}</p>
+            <CategoryPill category={topCandidate.category} />
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 rounded-full"
+              style={{ width: '100%' }}
+            />
+          </div>
+          <div className="mt-1.5 text-xs text-muted-foreground flex items-center gap-1">
+            <span className="text-slate-400">Gap: +{gap.toLocaleString()}</span>
+            <span className="mx-1">•</span>
+            <span className="text-slate-400">{topCandidate.votes.toLocaleString()} votes to induct</span>
+          </div>
+        </div>
+
+        <Button 
+          className="w-full bg-gradient-to-r from-cyan-600 to-cyan-500 text-white"
+          onClick={onExplore}
+          data-testid="button-vote-to-induct"
+        >
+          <Vote className="h-4 w-4 mr-2" />
+          Vote to Induct
+        </Button>
       </Card>
 
-      <Card className="border-blue-500/20" data-testid="trending-poll-card">
-        <CardHeader className="pb-2">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-blue-400" />
-            <CardTitle className="text-sm font-medium">Trending Poll</CardTitle>
+      <Card 
+        className="pt-6 px-5 pb-5 bg-slate-900/60 border border-slate-700/40 backdrop-blur-sm"
+        data-testid="trending-poll-card"
+      >
+        <div className="flex items-center justify-between mb-3">
+          <CategoryPill category={topTopic.category} />
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Users className="h-3.5 w-3.5 text-cyan-400" />
+            <span>{topTopic.totalVotes.toLocaleString()} votes</span>
           </div>
-        </CardHeader>
-        <CardContent className="pt-2">
-          <p className="font-medium mb-4">{mockPoll.question}</p>
-          <div className="space-y-2">
-            {mockPoll.options.map((option, idx) => {
-              const percent = Math.round((option.votes / mockPoll.totalVotes) * 100);
-              return (
-                <div key={idx} className="relative">
-                  <div className="absolute inset-0 bg-blue-500/10 rounded-lg" style={{ width: `${percent}%` }} />
-                  <div className="relative flex items-center justify-between p-3 rounded-lg border border-blue-500/20 hover-elevate cursor-pointer">
-                    <span className="font-medium text-sm">{option.label}</span>
-                    <span className="text-xs text-muted-foreground">{percent}%</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <p className="text-xs text-muted-foreground mt-3 text-center">{mockPoll.totalVotes.toLocaleString()} votes</p>
-        </CardContent>
+        </div>
+        
+        <h3 className="font-serif font-bold text-lg mb-1">{topTopic.headline}</h3>
+        <p className="text-sm text-muted-foreground mb-5">{topTopic.description}</p>
+        
+        <div className="flex flex-col gap-3">
+          <button
+            className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+            data-testid="button-support"
+          >
+            <div className="flex items-center gap-3">
+              <ThumbsUp className="h-4 w-4" />
+              <span>Support</span>
+            </div>
+            <span className="font-mono">{topTopic.approvePercent}%</span>
+          </button>
+          <button
+            className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/5 border border-white/40 text-white text-sm font-medium transition-all hover:border-white/80 hover:bg-white/15"
+            data-testid="button-neutral"
+          >
+            <div className="flex items-center gap-3">
+              <Minus className="h-4 w-4" />
+              <span>Neutral</span>
+            </div>
+            <span className="font-mono">{topTopic.neutralPercent}%</span>
+          </button>
+          <button
+            className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+            data-testid="button-oppose"
+          >
+            <div className="flex items-center gap-3">
+              <ThumbsDown className="h-4 w-4" />
+              <span>Oppose</span>
+            </div>
+            <span className="font-mono">{topTopic.disapprovePercent}%</span>
+          </button>
+        </div>
       </Card>
 
       <div className="text-center">
-        <Button onClick={onExplore} className="bg-blue-600 hover:bg-blue-700" data-testid="button-explore-vote">
-          Explore All Voting
-          <ChevronRight className="h-4 w-4 ml-1" />
-        </Button>
+        <Link href="/vote">
+          <span className="text-blue-400 hover:text-blue-300 underline underline-offset-4 text-sm cursor-pointer" data-testid="link-view-all-vote">
+            View All Governance →
+          </span>
+        </Link>
       </div>
     </motion.div>
   );
@@ -684,7 +774,6 @@ export default function HomePage() {
 
           {activeView === "vote" && (
             <VoteHookView 
-              topCandidate={allPeople[0]} 
               onExplore={() => setLocation("/vote")} 
             />
           )}

@@ -1,0 +1,31 @@
+Act as a Senior UI/UX Engineer. We are performing a REVERSION and RECTIFICATION pass on the Home Page ONLY. PRIORITIZE REUSING existing components from the /components folder or other pages over writing ANY new HTML/CSS/JS. DO NOT add new features, invent data/text, or make unrequested changes.
+
+CRITICAL RULES – READ AND FOLLOW FIRST:
+- Preserve ALL existing visual styles, colors (blue accents only), typography, spacing, shadows, borders, animations, and layouts pixel-perfect from the previous stable build.
+- DO NOT redesign, restyle, or modify any component unless explicitly instructed in the steps below.
+- DO NOT create placeholder/fake data, text, or copy—always pull from real/existing sources (e.g., live vote gaps, pool sizes).
+- If a component exists (e.g., in /components or on Predict/Vote pages), import and reuse it exactly—do not duplicate or alter.
+- DO NOT change global CSS, nav bars, Hero section, footer, or any non-mentioned elements.
+- Ensure mobile responsiveness: 3-column desktop rows become swipeable single-row on mobile with hidden scrollbars; no overlaps on any screen size.
+- After each change, mentally validate: Does this match the original design? If not, revert.
+
+1. RESTORE MARKET PULSE CARDS
+* Action: Completely delete/replace the current generic list/scoreboard style for 'Daily Movers', 'Weekly Gainers', and 'Weekly Droppers'.
+* Requirement: Re-implement the ORIGINAL cards exactly as in the previous stable build—dark glass containers, compact vertical lists of 1-5 entries, with small avatars, names/categories, and green/red pill-shaped % change indicators (e.g., +4.7% in green, -3.2% in red). Reuse any existing MarketPulse or similar component if available. Position in a 3-column row below Hero (swipeable on mobile).
+
+2. CORRECT THE PREDICT TOGGLE
+* Action: Remove the current 'Predict the Top Gainer' info box and any invented text/icons.
+* Requirement: Import and display the EXACT Weekly Jackpot Hero Card component from the dedicated Predict page (gold/orange gradient button like 'Enter Jackpot', celebrity image/rank, timer like 'Time Remaining: 1d 12h 1m', pool stat like 'Pool: 50,000 credits'). Use real/live data. Below it, show ONLY the #1 Top Gainer card reused from Predict page (e.g., name, category, % change pill). Add a simple text link 'View All Prediction Markets →' at the bottom (blue underline, no button).
+
+3. CORRECT THE VOTE TOGGLE
+* Action: Remove the current custom horizontal 'Induction Queue' bar and the vertical polling list with invented questions/percentages.
+* Requirement: Reuse the EXACT #1 Induction Queue card/component from the Vote page (e.g., photo, name like 'Jensen Huang', category pill, progress bar with vote gap text like 'Gap: +1201 / 1205 votes to induct', 'Vote to Induct' button). Below it, reuse the EXACT top/trending People's Voice poll card from Vote page (question text, options with Support/Neutral/Oppose buttons, real vote counts/percentages). Use real/live data. Add a simple text link 'View All Governance →' at the bottom (blue underline, no button).
+
+4. HEADER & NAVIGATION STABILITY
+* Consistency Check: Ensure the sticky toggle navigation [Leaderboard (Default) | Predict | Vote] does not overlap with the Hero, Rank/XP Identity Bar, footer, or any other elements on scroll/desktop/mobile. Preserve its exact styling and behavior from the current build.
+
+POST-BUILD VALIDATION:
+- Confirm Market Pulse cards look identical to pre-update (vertical lists, pill %).
+- Confirm Predict toggle mirrors Predict page exactly (no new copy like 'Stake your credits').
+- Confirm Vote toggle uses real cards from Vote page (no summaries or inventions).
+- If any mismatch, auto-revert to previous stable state.
