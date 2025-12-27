@@ -1,0 +1,37 @@
+Act as a Senior UI/UX Engineer and Product Designer. Refactor the Home Page into a high-conversion 'Command Center' using a modular, three-way toggle system. BASE RULE: Maintain the existing Home Page Blue Accent theme, dark-glass styling, and typography. Do NOT change existing component styles or data models unless explicitly instructed.
+
+1. TOP-LEVEL RESTRUCTURING (Targeted Only)
+Hero Section: Keep the current 'Global Influence Tracker' Hero and background exactly as is.
+
+Market Pulse Row: Relocate 'Daily Movers', 'Weekly Gainers', and 'Weekly Droppers' into a single 3-column row directly below the Hero section.
+
+Mobile UX: These cards must be a single-row horizontal scroll (swipeable) with hidden scrollbars.
+
+2. THE HOME INTENT TOGGLE (3-Choice Model)
+Placement: Below the Pulse Row, add a sticky toggle bar: [Leaderboard (Default) | Predict | Vote].
+
+Leaderboard View: Display the main table as currently designed.
+
+Trends Sub-Tab/Overlay: Add a 'Compare Momentum' button that opens a full-screen overlay containing a 7-Day Multi-Line Trend Graph.
+
+Graph Filtering: Inside the Trends overlay, add the standard Category Toggles [All | Tech | Music | Politics | Sports | Creator]. Selecting a category updates the graph to show the Top 5 celebrities in that specific category.
+
+Predict Hook: Show the 'Weekly Jackpot' Hero Card and the #1 'Top Gainer' card. Include an 'Explore All' link that navigates to the Predict page.
+
+Vote Hook: Show the #1 Induction Queue candidate and the Top Trending Poll from People's Voice. Include an 'Explore All' link that navigates to the Vote page.
+
+3. UI REFINEMENTS & BRAND GUARDRAILS
+Color Palette: Strictly use Blue Accents for all Home Page elements. Do NOT use Predict Page purple here.
+
+Micro-Animations: Progress bars and graph lines should animate/fill when the toggle view switches.
+
+Performance: Lazy-load the 'Predict' and 'Vote' data only when their respective toggles are clicked. Horizontal chip rows must hide scrollbars but remain swipeable."
+
+Trends Graph Visual Configuration
+To ensure Replit handles the data fetch correctly, I've structured the graph logic as follows:
+
+The "Top 5" Logic: When "Music" is selected, the graph queries the leaderboard for the top 5 sorted by Rank within the "Music" category (e.g., Taylor Swift, Beyoncé, Drake, etc.).
+
+The Legend: Each line should have a corresponding legend item at the bottom that acts as a toggle to hide/show that specific celebrity's line.
+
+Graph Colors: The lines should use high-contrast primary colors (Blue, Magenta, Green, Orange, Yellow) to ensure they are easily distinguishable on the dark background.
