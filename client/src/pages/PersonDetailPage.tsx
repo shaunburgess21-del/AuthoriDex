@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { TrendBadge } from "@/components/TrendBadge";
 import { TrendChart } from "@/components/TrendChart";
@@ -13,7 +14,11 @@ import { ProfileTabs } from "@/components/ProfileTabs";
 import { PredictTab } from "@/components/PredictTab";
 import { PolymarketBetsWidget } from "@/components/PolymarketBetsWidget";
 import { CelebrityInfoModal } from "@/components/CelebrityInfoModal";
-import { ArrowLeft, Share2, Star, TrendingUp, Users, Eye, DollarSign, Globe, MessageSquare, Trophy, Zap } from "lucide-react";
+import { CategoryPill } from "@/components/CategoryPill";
+import { ArrowLeft, Share2, Star, TrendingUp, Users, Eye, DollarSign, Globe, MessageSquare, Trophy, Zap, Camera, Check, X, Search, ThumbsUp, ThumbsDown, Minus, HelpCircle } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
@@ -21,6 +26,362 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatNumber";
+
+interface CurateProfilePoll {
+  id: string;
+  personName: string;
+  category: string;
+}
+
+interface FeaturedPoll {
+  id: string;
+  headline: string;
+  description: string;
+  subjectEntity: string;
+  approvePercent: number;
+  neutralPercent: number;
+  disapprovePercent: number;
+  totalVotes: number;
+  createdAt: Date;
+}
+
+const FEATURED_POLLS_DATA: FeaturedPoll[] = [
+  { id: "fp1", headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", subjectEntity: "Elon Musk", approvePercent: 35, neutralPercent: 20, disapprovePercent: 45, totalVotes: 89432, createdAt: new Date("2024-12-20") },
+  { id: "fp2", headline: "Tesla's Cybertruck success", description: "Is it living up to the hype?", subjectEntity: "Elon Musk", approvePercent: 42, neutralPercent: 28, disapprovePercent: 30, totalVotes: 67891, createdAt: new Date("2024-12-18") },
+  { id: "fp3", headline: "SpaceX Mars timeline", description: "Will they really reach Mars by 2030?", subjectEntity: "Elon Musk", approvePercent: 38, neutralPercent: 32, disapprovePercent: 30, totalVotes: 54321, createdAt: new Date("2024-12-15") },
+  { id: "fp4", headline: "Neuralink progress", description: "Breakthrough or overpromise?", subjectEntity: "Elon Musk", approvePercent: 28, neutralPercent: 35, disapprovePercent: 37, totalVotes: 43210, createdAt: new Date("2024-12-10") },
+  { id: "fp5", headline: "X Platform rebrand", description: "Better or worse than Twitter?", subjectEntity: "Elon Musk", approvePercent: 25, neutralPercent: 30, disapprovePercent: 45, totalVotes: 98765, createdAt: new Date("2024-12-05") },
+  { id: "fp6", headline: "Trump's 2024 campaign", description: "Will he win the election?", subjectEntity: "Donald Trump", approvePercent: 48, neutralPercent: 12, disapprovePercent: 40, totalVotes: 234567, createdAt: new Date("2024-12-22") },
+  { id: "fp7", headline: "Trump on TikTok ban", description: "Should TikTok be banned?", subjectEntity: "Donald Trump", approvePercent: 52, neutralPercent: 18, disapprovePercent: 30, totalVotes: 156789, createdAt: new Date("2024-12-19") },
+  { id: "fp8", headline: "MAGA economic policies", description: "Good for the economy?", subjectEntity: "Donald Trump", approvePercent: 45, neutralPercent: 20, disapprovePercent: 35, totalVotes: 145678, createdAt: new Date("2024-12-14") },
+  { id: "fp9", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", subjectEntity: "Taylor Swift", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567, createdAt: new Date("2024-12-21") },
+  { id: "fp10", headline: "Taylor & Travis relationship", description: "Power couple or PR stunt?", subjectEntity: "Taylor Swift", approvePercent: 65, neutralPercent: 22, disapprovePercent: 13, totalVotes: 189432, createdAt: new Date("2024-12-17") },
+  { id: "fp11", headline: "Beyoncé's country album", description: "Authentic exploration or cultural appropriation?", subjectEntity: "Beyoncé", approvePercent: 65, neutralPercent: 20, disapprovePercent: 15, totalVotes: 176543, createdAt: new Date("2024-12-20") },
+  { id: "fp12", headline: "MrBeast's philanthropy", description: "Is it genuine or just content?", subjectEntity: "MrBeast", approvePercent: 68, neutralPercent: 20, disapprovePercent: 12, totalVotes: 98765, createdAt: new Date("2024-12-19") },
+];
+
+function CurateProfileCardProfile({ 
+  poll, 
+  onVote,
+  onComplete 
+}: { 
+  poll: CurateProfilePoll; 
+  onVote: () => void;
+  onComplete: () => void;
+}) {
+  const [selectedChoice, setSelectedChoice] = useState<'a' | 'b' | null>(null);
+  const [isExiting, setIsExiting] = useState(false);
+  const [showShimmer, setShowShimmer] = useState(false);
+  const timeoutRef1 = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timeoutRef2 = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef1.current) clearTimeout(timeoutRef1.current);
+      if (timeoutRef2.current) clearTimeout(timeoutRef2.current);
+    };
+  }, []);
+
+  const handlePick = (choice: 'a' | 'b') => {
+    if (!selectedChoice) {
+      setSelectedChoice(choice);
+      setShowShimmer(true);
+      onVote();
+      timeoutRef1.current = setTimeout(() => {
+        setShowShimmer(false);
+        setIsExiting(true);
+        timeoutRef2.current = setTimeout(onComplete, 300);
+      }, 600);
+    }
+  };
+
+  return (
+    <motion.div 
+      className="w-full"
+      initial={{ opacity: 1, x: 0 }}
+      animate={{ opacity: isExiting ? 0 : 1, x: isExiting ? -100 : 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <Card 
+        className="p-4 transition-all duration-200 hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] relative overflow-hidden"
+        style={{ border: '1px solid rgba(148,163,184,0.18)' }}
+        data-testid={`card-curate-profile-${poll.id}`}
+      >
+        <AnimatePresence>
+          {showShimmer && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-10 pointer-events-none"
+            >
+              <motion.div
+                initial={{ x: '-100%' }}
+                animate={{ x: '200%' }}
+                transition={{ duration: 0.6, ease: 'easeInOut' }}
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-green-400/30 to-transparent skew-x-12"
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
+        <p className="text-center text-lg font-serif font-bold text-cyan-400 mb-4">Which look defines them?</p>
+        
+        <div className="grid grid-cols-2 gap-4">
+          <button
+            onClick={() => handlePick('a')}
+            disabled={!!selectedChoice}
+            className={`relative aspect-square rounded-lg bg-muted flex items-center justify-center border-3 transition-all duration-300 group cursor-pointer overflow-hidden ${
+              selectedChoice === 'a' 
+                ? 'border-green-500 ring-4 ring-green-500/30 scale-105' 
+                : selectedChoice === 'b'
+                ? 'border-muted opacity-40 scale-95'
+                : 'border-transparent hover:border-cyan-500/50 hover:scale-102'
+            }`}
+            data-testid={`button-curate-photo-a-${poll.id}`}
+          >
+            <div className="text-center">
+              <Camera className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+              <span className="text-sm text-muted-foreground font-medium">Look A</span>
+            </div>
+            {selectedChoice === 'a' && (
+              <motion.div 
+                className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 20 }}
+                  className="h-12 w-12 rounded-full bg-green-500 flex items-center justify-center shadow-lg shadow-green-500/40"
+                >
+                  <Check className="h-6 w-6 text-white" />
+                </motion.div>
+              </motion.div>
+            )}
+          </button>
+          
+          <button
+            onClick={() => handlePick('b')}
+            disabled={!!selectedChoice}
+            className={`relative aspect-square rounded-lg bg-muted flex items-center justify-center border-3 transition-all duration-300 group cursor-pointer overflow-hidden ${
+              selectedChoice === 'b' 
+                ? 'border-green-500 ring-4 ring-green-500/30 scale-105' 
+                : selectedChoice === 'a'
+                ? 'border-muted opacity-40 scale-95'
+                : 'border-transparent hover:border-cyan-500/50 hover:scale-102'
+            }`}
+            data-testid={`button-curate-photo-b-${poll.id}`}
+          >
+            <div className="text-center">
+              <Camera className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+              <span className="text-sm text-muted-foreground font-medium">Look B</span>
+            </div>
+            {selectedChoice === 'b' && (
+              <motion.div 
+                className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 20 }}
+                  className="h-12 w-12 rounded-full bg-green-500 flex items-center justify-center shadow-lg shadow-green-500/40"
+                >
+                  <Check className="h-6 w-6 text-white" />
+                </motion.div>
+              </motion.div>
+            )}
+          </button>
+        </div>
+      </Card>
+    </motion.div>
+  );
+}
+
+function FeaturedPollCard({ 
+  poll, 
+  onVote 
+}: { 
+  poll: FeaturedPoll; 
+  onVote: (choice: 'support' | 'neutral' | 'oppose') => void;
+}) {
+  const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(null);
+
+  const handleVote = (choice: 'support' | 'neutral' | 'oppose') => {
+    if (!voted) {
+      setVoted(choice);
+      onVote(choice);
+    }
+  };
+
+  return (
+    <Card 
+      className="pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] relative"
+      style={{ border: '1px solid rgba(148,163,184,0.18)' }}
+      data-testid={`card-featured-poll-${poll.id}`}
+    >
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+        <Users className="h-3.5 w-3.5 text-cyan-400" />
+        <span>{poll.totalVotes.toLocaleString()} votes</span>
+      </div>
+      <h3 className="font-serif font-bold text-lg mb-1">{poll.headline}</h3>
+      <p className="text-sm text-muted-foreground mb-5 flex-grow">{poll.description}</p>
+      
+      {!voted ? (
+        <div className="flex flex-col gap-3">
+          <button
+            onClick={() => handleVote('support')}
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+            data-testid={`button-poll-support-${poll.id}`}
+          >
+            <ThumbsUp className="h-4 w-4 shrink-0" />
+            <span>Support</span>
+          </button>
+          <button
+            onClick={() => handleVote('neutral')}
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15"
+            data-testid={`button-poll-neutral-${poll.id}`}
+          >
+            <Minus className="h-4 w-4 shrink-0" />
+            <span>Neutral</span>
+          </button>
+          <button
+            onClick={() => handleVote('oppose')}
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+            data-testid={`button-poll-oppose-${poll.id}`}
+          >
+            <ThumbsDown className="h-4 w-4 shrink-0" />
+            <span>Oppose</span>
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <ThumbsUp className="h-4 w-4 text-emerald-400 shrink-0" />
+            <span className="text-sm text-emerald-400 w-16 shrink-0">Support</span>
+            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-emerald-400 rounded-full transition-all duration-500"
+                style={{ width: `${poll.approvePercent}%` }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground w-10 text-right">{poll.approvePercent}%</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Minus className="h-4 w-4 text-slate-400 shrink-0" />
+            <span className="text-sm text-slate-400 w-16 shrink-0">Neutral</span>
+            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-slate-400 rounded-full transition-all duration-500"
+                style={{ width: `${poll.neutralPercent}%` }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground w-10 text-right">{poll.neutralPercent}%</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <ThumbsDown className="h-4 w-4 text-red-400 shrink-0" />
+            <span className="text-sm text-red-400 w-16 shrink-0">Oppose</span>
+            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-red-400 rounded-full transition-all duration-500"
+                style={{ width: `${poll.disapprovePercent}%` }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground w-10 text-right">{poll.disapprovePercent}%</span>
+          </div>
+          <button
+            onClick={() => setVoted(null)}
+            className="text-xs text-muted-foreground hover:text-foreground mt-2 underline"
+            data-testid={`button-change-vote-${poll.id}`}
+          >
+            Change vote
+          </button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ViewAllPollsOverlay({
+  open,
+  onClose,
+  title,
+  polls,
+  onVote
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  polls: FeaturedPoll[];
+  onVote: (pollId: string, choice: 'support' | 'neutral' | 'oppose') => void;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [open]);
+  
+  if (!open) return null;
+
+  const filteredPolls = polls.filter(p => 
+    !searchQuery || p.headline.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    p.description.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto premium-scrollbar" data-testid="overlay-view-all-polls">
+      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-serif font-bold text-xl">{title}</h2>
+            <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-polls-overlay">
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+          
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search polls..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+              data-testid="input-polls-overlay-search"
+            />
+          </div>
+        </div>
+      </div>
+      
+      <div className="container mx-auto px-4 py-6 max-w-4xl">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredPolls.map((poll) => (
+            <FeaturedPollCard 
+              key={poll.id} 
+              poll={poll} 
+              onVote={(choice) => onVote(poll.id, choice)}
+            />
+          ))}
+        </div>
+        {filteredPolls.length === 0 && (
+          <div className="text-center py-12 text-muted-foreground">
+            No polls found matching your search.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function PersonDetailPage() {
   const { user } = useAuth();
@@ -30,6 +391,8 @@ export default function PersonDetailPage() {
   const [isFavorited, setIsFavorited] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+  const [showAllPollsOverlay, setShowAllPollsOverlay] = useState(false);
+  const [curateCompleted, setCurateCompleted] = useState(false);
 
   // Handle URL query param for tab
   useEffect(() => {
@@ -391,6 +754,128 @@ export default function PersonDetailPage() {
                 isProfilePage={true}
               />
             </div>
+
+            {/* Curate the Profile Section */}
+            <section className="mb-8">
+              <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                      <Camera className="h-5 w-5 text-cyan-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-serif font-bold">Curate the Profile</h2>
+                      <p className="text-sm text-muted-foreground">Help choose the best profile photo</p>
+                    </div>
+                  </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" data-testid="button-curate-info">
+                        <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p>Vote on which image best represents this celebrity. The winning look becomes their primary profile image.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+
+              {!curateCompleted ? (
+                <div className="max-w-md mx-auto">
+                  <CurateProfileCardProfile
+                    poll={{ id: `curate-${person.id}`, personName: person.name, category: person.category || "General" }}
+                    onVote={() => {}}
+                    onComplete={() => setCurateCompleted(true)}
+                  />
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="h-16 w-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-4">
+                    <Check className="h-8 w-8 text-green-500" />
+                  </div>
+                  <p className="text-lg font-semibold mb-2">Thanks for voting!</p>
+                  <p className="text-sm text-muted-foreground mb-4">Your vote helps determine their official profile image.</p>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setCurateCompleted(false)}
+                    className="border-cyan-500/50 text-cyan-400"
+                    data-testid="button-curate-vote-again"
+                  >
+                    Vote on Another Look
+                  </Button>
+                </div>
+              )}
+            </section>
+
+            {/* Featured Polls Section */}
+            {(() => {
+              const personPolls = FEATURED_POLLS_DATA
+                .filter(p => p.subjectEntity === person.name)
+                .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+              
+              if (personPolls.length === 0) return null;
+
+              const displayPolls = personPolls.slice(0, 3);
+              const hasMore = personPolls.length > 3;
+
+              return (
+                <section className="mb-8">
+                  <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                          <MessageSquare className="h-5 w-5 text-cyan-400" />
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-serif font-bold">Featured Polls</h2>
+                          <p className="text-sm text-muted-foreground">{personPolls.length} poll{personPolls.length !== 1 ? 's' : ''} about {person.name}</p>
+                        </div>
+                      </div>
+                      {hasMore && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => setShowAllPollsOverlay(true)}
+                          className="text-cyan-400 hover:text-cyan-300"
+                          data-testid="button-view-all-polls"
+                        >
+                          View all
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {displayPolls.map((poll) => (
+                      <FeaturedPollCard 
+                        key={poll.id} 
+                        poll={poll} 
+                        onVote={(choice) => {
+                          toast({
+                            title: "Vote Recorded",
+                            description: `You voted "${choice}" on "${poll.headline}"`,
+                          });
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  <ViewAllPollsOverlay
+                    open={showAllPollsOverlay}
+                    onClose={() => setShowAllPollsOverlay(false)}
+                    title={`All Polls about ${person.name}`}
+                    polls={personPolls}
+                    onVote={(pollId, choice) => {
+                      toast({
+                        title: "Vote Recorded",
+                        description: `Your vote has been recorded.`,
+                      });
+                    }}
+                  />
+                </section>
+              );
+            })()}
 
             {/* Community Insights */}
             <div className="mb-8">
