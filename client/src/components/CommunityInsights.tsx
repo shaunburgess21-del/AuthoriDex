@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ThumbsUp, ThumbsDown, Plus, X, Loader2, MessageCircle } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Plus, X, Loader2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { ThreadedComments } from "./ThreadedComments";
 
 // Utility: Get sentiment color based on 1-10 vote (matches Cast Your Vote widget)
 function getSentimentColor(vote: number): string {
@@ -94,6 +95,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
   const [newInsight, setNewInsight] = useState("");
   const [userVotes, setUserVotes] = useState<Record<string, string>>({});
   const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set());
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [displayCount, setDisplayCount] = useState(4); // Show 4 posts initially
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const isLoadingRef = useRef(false); // Mutable ref to prevent race conditions
@@ -263,6 +265,18 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
 
   const toggleExpanded = (insightId: string) => {
     setExpandedPosts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(insightId)) {
+        newSet.delete(insightId);
+      } else {
+        newSet.add(insightId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleComments = (insightId: string) => {
+    setExpandedComments(prev => {
       const newSet = new Set(prev);
       if (newSet.has(insightId)) {
         newSet.delete(insightId);
@@ -516,15 +530,14 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
                       <span data-testid={`text-downvotes-${insight.id}`}>{insight.downvotes}</span>
                     </button>
 
-                    {/* Reply Button */}
-                    <button
-                      className="flex items-center gap-1.5 px-2 py-1 rounded-md text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-all"
-                      data-testid={`button-reply-${insight.id}`}
-                    >
-                      <MessageCircle className="h-4 w-4" />
-                      <span>Reply</span>
-                    </button>
                   </div>
+
+                  {/* Threaded Comments Section */}
+                  <ThreadedComments
+                    insightId={insight.id}
+                    isOpen={expandedComments.has(insight.id)}
+                    onToggle={() => toggleComments(insight.id)}
+                  />
                 </div>
               </div>
             );
