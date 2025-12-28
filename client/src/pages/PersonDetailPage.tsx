@@ -217,9 +217,6 @@ export default function PersonDetailPage() {
               <Button variant="ghost" size="sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
                 Predict
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/me")} data-testid="nav-me-desktop">
-                Me
-              </Button>
             </div>
             <UserMenu />
           </div>
