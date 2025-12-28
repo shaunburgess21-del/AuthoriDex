@@ -464,6 +464,17 @@ const communityMarkets: CommunityMarket[] = [
     participants: 92,
     category: "tech",
   },
+  {
+    id: "community-8",
+    creatorName: "XPlatformFan",
+    question: "Will X (Twitter) add new AI features?",
+    personName: "Elon Musk",
+    personAvatar: "",
+    totalPool: 2850,
+    endTime: "Sun 23:59 UTC",
+    participants: 64,
+    category: "tech",
+  },
 ];
 
 const BASE_JACKPOT_POOL = 50000;
@@ -952,7 +963,7 @@ function ViewAllCommunityOverlay({
               <h2 className="text-lg font-serif font-bold">Community Predictions</h2>
               <p className="text-sm text-muted-foreground">{filteredMarkets.length} predictions about {personName}</p>
             </div>
-            <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-community-overlay">
+            <Button variant="ghost" size="icon" onClick={onClose} className="relative z-20" data-testid="button-close-community-overlay">
               <X className="h-5 w-5" />
             </Button>
           </div>
