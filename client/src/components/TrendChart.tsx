@@ -147,22 +147,8 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-4">
+      <CardHeader className="pb-4">
         <CardTitle className="text-lg font-serif">Trend History</CardTitle>
-        <div className="flex gap-1 flex-wrap">
-          {(["1D", "7D", "30D", "6M", "1Y", "ALL"] as TimeRange[]).map((range) => (
-            <Button
-              key={range}
-              variant={timeRange === range ? "default" : "outline"}
-              size="sm"
-              onClick={() => setTimeRange(range)}
-              className="text-xs px-2"
-              data-testid={`button-timerange-${range}`}
-            >
-              {range}
-            </Button>
-          ))}
-        </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -258,6 +244,22 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
             </ResponsiveContainer>
           </div>
         )}
+        
+        {/* Time range buttons - positioned below chart like Polymarket */}
+        <div className="flex gap-1 mt-4">
+          {(["1D", "7D", "30D", "6M", "1Y", "ALL"] as TimeRange[]).map((range) => (
+            <Button
+              key={range}
+              variant={timeRange === range ? "default" : "outline"}
+              size="sm"
+              onClick={() => setTimeRange(range)}
+              className="text-xs px-3"
+              data-testid={`button-timerange-${range}`}
+            >
+              {range}
+            </Button>
+          ))}
+        </div>
       </CardContent>
     </Card>
   );
