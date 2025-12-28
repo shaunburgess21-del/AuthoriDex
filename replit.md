@@ -28,10 +28,18 @@ Preferred communication style: Simple, everyday language.
 - **Mock Data System**: Generates realistic trend scores, historical data, and platform-specific insights for development and UX iteration. Includes sentiment voting with an animated segmented design and accessibility features.
 
 ### Data Storage
-- **Current**: In-memory storage using Map data structures for development.
-- **Planned**: PostgreSQL with Drizzle ORM for a robust relational database.
-    - **Schema**: `users` (authentication), `trending_people` (person data with UUID primary keys and type-safe schema).
+- **Current**: Hybrid storage - In-memory for trending data, PostgreSQL for persistent data.
+- **PostgreSQL Database**: Neon-backed PostgreSQL with Drizzle ORM.
+    - **Schema**: `users` (authentication), `trending_people` (person data), `celebrity_profiles` (AI-generated biographical data with 30-day caching).
     - **Migration**: Drizzle Kit.
+
+### AI-Generated Celebrity Profiles
+- **Feature**: Info modal on celebrity profile pages displays AI-generated biographical data.
+- **Data Fields**: Short bio, long bio (expandable), known for, origin country, current location, estimated net worth.
+- **Caching**: Profiles stored in PostgreSQL `celebrity_profiles` table, regenerated only after 30 days.
+- **Cost Control**: 30-day caching minimizes API calls - repeat clicks load from database, not AI.
+- **Frontend**: Glass-morphism modal with "Read more" expand/collapse and "Last updated" timestamp.
+- **Flags**: Country flags displayed using country-flag-icons (full name on desktop, ISO code on mobile).
 
 ## External Dependencies
 
