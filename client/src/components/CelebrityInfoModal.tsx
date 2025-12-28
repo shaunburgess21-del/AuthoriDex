@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Info, MapPin, DollarSign, Sparkles, Loader2 } from "lucide-react";
+import { Info, MapPin, DollarSign, Sparkles, Loader2, ChevronDown, ChevronUp, Clock } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import * as Flags from "country-flag-icons/react/3x2";
 
@@ -9,6 +9,7 @@ interface CelebrityProfile {
   personId: string;
   personName: string;
   shortBio: string;
+  longBio: string | null;
   knownFor: string;
   fromCountry: string;
   fromCountryCode: string;
@@ -45,8 +46,22 @@ function CountryDisplay({ countryCode, countryName }: { countryCode: string; cou
   );
 }
 
+function formatLastUpdated(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${diffDays >= 14 ? 's' : ''} ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 export function CelebrityInfoModal({ personId, personName }: CelebrityInfoModalProps) {
   const [open, setOpen] = useState(false);
+  const [showFullBio, setShowFullBio] = useState(false);
   
   const { data: profile, isLoading, error } = useQuery<CelebrityProfile>({
     queryKey: ['/api/celebrity-profile', personId],
@@ -54,7 +69,10 @@ export function CelebrityInfoModal({ personId, personName }: CelebrityInfoModalP
   });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      setOpen(isOpen);
+      if (!isOpen) setShowFullBio(false);
+    }}>
       <DialogTrigger asChild>
         <Button
           variant="ghost"
@@ -65,7 +83,7 @@ export function CelebrityInfoModal({ personId, personName }: CelebrityInfoModalP
           <Info className="h-4 w-4 text-muted-foreground" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md bg-background/95 backdrop-blur-xl border border-border/50">
+      <DialogContent className="sm:max-w-md bg-background/95 backdrop-blur-xl border border-border/50 max-h-[85vh] overflow-y-auto">
         <DialogHeader className="flex flex-row items-center justify-between">
           <DialogTitle className="text-xl font-serif">{personName}</DialogTitle>
           <DialogDescription className="sr-only">
@@ -87,8 +105,31 @@ export function CelebrityInfoModal({ personId, personName }: CelebrityInfoModalP
           <div className="space-y-6">
             <div className="space-y-4">
               <div>
-                <h4 className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Short Bio</h4>
-                <p className="text-sm leading-relaxed" data-testid="text-celebrity-bio">{profile.shortBio}</p>
+                <h4 className="text-xs uppercase tracking-wide text-muted-foreground mb-1">About</h4>
+                <p className="text-sm leading-relaxed" data-testid="text-celebrity-bio">
+                  {showFullBio && profile.longBio ? profile.longBio : profile.shortBio}
+                </p>
+                {profile.longBio && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2 h-7 px-2 text-xs text-primary hover:text-primary/80"
+                    onClick={() => setShowFullBio(!showFullBio)}
+                    data-testid="button-read-more"
+                  >
+                    {showFullBio ? (
+                      <>
+                        <ChevronUp className="h-3 w-3 mr-1" />
+                        Show less
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-3 w-3 mr-1" />
+                        Read more
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
               
               <div>
@@ -135,9 +176,15 @@ export function CelebrityInfoModal({ personId, personName }: CelebrityInfoModalP
               </p>
             </div>
             
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-2 border-t border-border/50">
-              <Sparkles className="h-3 w-3" />
-              <span>AI-generated content. May not be 100% accurate.</span>
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground pt-2 border-t border-border/50">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="h-3 w-3" />
+                <span>AI-generated content. May not be 100% accurate.</span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <Clock className="h-3 w-3" />
+                <span data-testid="text-last-updated">{formatLastUpdated(profile.generatedAt)}</span>
+              </div>
             </div>
           </div>
         ) : null}

@@ -1,18 +1,7 @@
-import { type User, type InsertUser, type TrendingPerson } from "@shared/schema";
+import { type User, type InsertUser, type TrendingPerson, type CelebrityProfile, type InsertCelebrityProfile, celebrityProfiles } from "@shared/schema";
 import { randomUUID } from "crypto";
-
-export interface CelebrityProfile {
-  personId: string;
-  personName: string;
-  shortBio: string;
-  knownFor: string;
-  fromCountry: string;
-  fromCountryCode: string;
-  basedIn: string;
-  basedInCountryCode: string;
-  estimatedNetWorth: string;
-  generatedAt: Date;
-}
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -22,18 +11,17 @@ export interface IStorage {
   getTrendingPerson(id: string): Promise<TrendingPerson | undefined>;
   updateTrendingPeople(people: TrendingPerson[]): Promise<void>;
   getCelebrityProfile(personId: string): Promise<CelebrityProfile | undefined>;
-  setCelebrityProfile(profile: CelebrityProfile): Promise<void>;
+  setCelebrityProfile(profile: InsertCelebrityProfile): Promise<CelebrityProfile>;
+  updateCelebrityProfile(personId: string, profile: Partial<InsertCelebrityProfile>): Promise<CelebrityProfile | undefined>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<string, User>;
   private trendingPeople: Map<string, TrendingPerson>;
-  private celebrityProfiles: Map<string, CelebrityProfile>;
 
   constructor() {
     this.users = new Map();
     this.trendingPeople = new Map();
-    this.celebrityProfiles = new Map();
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -69,11 +57,29 @@ export class MemStorage implements IStorage {
   }
 
   async getCelebrityProfile(personId: string): Promise<CelebrityProfile | undefined> {
-    return this.celebrityProfiles.get(personId);
+    const [profile] = await db
+      .select()
+      .from(celebrityProfiles)
+      .where(eq(celebrityProfiles.personId, personId))
+      .limit(1);
+    return profile;
   }
 
-  async setCelebrityProfile(profile: CelebrityProfile): Promise<void> {
-    this.celebrityProfiles.set(profile.personId, profile);
+  async setCelebrityProfile(profile: InsertCelebrityProfile): Promise<CelebrityProfile> {
+    const [created] = await db
+      .insert(celebrityProfiles)
+      .values(profile)
+      .returning();
+    return created;
+  }
+
+  async updateCelebrityProfile(personId: string, profile: Partial<InsertCelebrityProfile>): Promise<CelebrityProfile | undefined> {
+    const [updated] = await db
+      .update(celebrityProfiles)
+      .set({ ...profile, generatedAt: new Date() })
+      .where(eq(celebrityProfiles.personId, personId))
+      .returning();
+    return updated;
   }
 }
 

@@ -215,3 +215,26 @@ export const insertInsightVoteSchema = createInsertSchema(insightVotes).omit({
 
 export type InsightVote = typeof insightVotes.$inferSelect;
 export type InsertInsightVote = z.infer<typeof insertInsightVoteSchema>;
+
+// Celebrity Profiles - AI-generated biographical data with caching
+export const celebrityProfiles = pgTable("celebrity_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  personId: varchar("person_id").notNull().unique(),
+  personName: text("person_name").notNull(),
+  shortBio: text("short_bio").notNull(),
+  longBio: text("long_bio"), // Extended bio for "read more"
+  knownFor: text("known_for").notNull(),
+  fromCountry: text("from_country").notNull(),
+  fromCountryCode: varchar("from_country_code", { length: 2 }).notNull(),
+  basedIn: text("based_in").notNull(),
+  basedInCountryCode: varchar("based_in_country_code", { length: 2 }).notNull(),
+  estimatedNetWorth: text("estimated_net_worth").notNull(),
+  generatedAt: timestamp("generated_at").notNull().defaultNow(),
+});
+
+export const insertCelebrityProfileSchema = createInsertSchema(celebrityProfiles).omit({
+  id: true,
+});
+
+export type CelebrityProfile = typeof celebrityProfiles.$inferSelect;
+export type InsertCelebrityProfile = z.infer<typeof insertCelebrityProfileSchema>;

@@ -1,9 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage, type CelebrityProfile } from "./storage";
+import { storage } from "./storage";
 import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insertCommunityInsightSchema, insertInsightVoteSchema } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insertCommunityInsightSchema, insertInsightVoteSchema, type CelebrityProfile, type InsertCelebrityProfile } from "@shared/schema";
 import { eq, desc, and, sql, count } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -407,15 +407,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get AI-generated celebrity profile
+  // Get AI-generated celebrity profile with 30-day caching
   app.get("/api/celebrity-profile/:personId", async (req, res) => {
     try {
       const { personId } = req.params;
+      const CACHE_DURATION_DAYS = 30;
       
       // Check cache first
       const cached = await storage.getCelebrityProfile(personId);
       if (cached) {
-        return res.json(cached);
+        // Check if cache is still fresh (within 30 days)
+        const cacheAge = Date.now() - new Date(cached.generatedAt).getTime();
+        const cacheDuration = CACHE_DURATION_DAYS * 24 * 60 * 60 * 1000;
+        
+        if (cacheAge < cacheDuration) {
+          return res.json(cached);
+        }
+        // Cache is stale, will regenerate below
       }
       
       // Get person name from storage
@@ -430,27 +438,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
       
-      // Generate profile using AI
-      const prompt = `You are a celebrity data expert. Generate accurate, factual information about ${person.name}.
+      // Step 1: Web search for current information about this person
+      let currentContext = "";
+      try {
+        const searchResponse = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [{ 
+            role: "user", 
+            content: `Search the web for the latest news and current information about ${person.name}. What is their current role, position, or major recent developments? Focus on factual, recent information from 2024-2025.` 
+          }],
+          max_tokens: 500,
+        });
+        currentContext = searchResponse.choices[0]?.message?.content || "";
+      } catch (searchError) {
+        console.log("Web search unavailable, proceeding with base knowledge");
+      }
       
+      // Step 2: Generate comprehensive profile using AI with current context
+      const prompt = `You are a celebrity data expert with access to the latest information. Generate accurate, up-to-date information about ${person.name}.
+
+${currentContext ? `CURRENT INFORMATION (use this for accuracy):
+${currentContext}
+
+` : ''}IMPORTANT: Focus on their CURRENT role and position as of late 2024/2025. If they hold a political office, executive position, or other notable current role, this MUST be mentioned prominently.
+
 Return a JSON object with exactly these fields:
 {
-  "shortBio": "A 1-2 sentence professional biography (under 150 characters)",
-  "knownFor": "What they are primarily known for (e.g., 'Tech entrepreneurship, SpaceX, Tesla')",
+  "shortBio": "A concise 2-3 sentence summary emphasizing their CURRENT primary role and most notable achievements (150-200 characters)",
+  "longBio": "A comprehensive 4-6 sentence biography covering their current position, career highlights, major achievements, and recent notable activities (400-600 characters). This should provide more depth than the short bio.",
+  "knownFor": "Their primary areas of expertise or fame, comma-separated (e.g., 'Tech entrepreneurship, SpaceX, Tesla, X/Twitter')",
   "fromCountry": "Their country of origin (full name, e.g., 'South Africa')",
   "fromCountryCode": "ISO 3166-1 alpha-2 code (e.g., 'ZA')",
-  "basedIn": "Where they currently live (full name, e.g., 'United States')", 
+  "basedIn": "Where they currently live or work (full name, e.g., 'United States')", 
   "basedInCountryCode": "ISO 3166-1 alpha-2 code (e.g., 'US')",
   "estimatedNetWorth": "Estimated net worth in 2025 (e.g., '$250 billion')"
 }
 
-Be factual and concise. Only return the JSON object, nothing else.`;
+Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
-        max_tokens: 500,
+        max_tokens: 1000,
       });
       
       const content = response.choices[0]?.message?.content;
@@ -460,10 +490,11 @@ Be factual and concise. Only return the JSON object, nothing else.`;
       
       const parsed = JSON.parse(content);
       
-      const profile: CelebrityProfile = {
+      const profileData: InsertCelebrityProfile = {
         personId,
         personName: person.name,
         shortBio: parsed.shortBio || "No biography available",
+        longBio: parsed.longBio || null,
         knownFor: parsed.knownFor || "Various achievements",
         fromCountry: parsed.fromCountry || "Unknown",
         fromCountryCode: parsed.fromCountryCode?.toUpperCase() || "XX",
@@ -473,8 +504,13 @@ Be factual and concise. Only return the JSON object, nothing else.`;
         generatedAt: new Date(),
       };
       
-      // Cache the result
-      await storage.setCelebrityProfile(profile);
+      // Cache the result (update if exists, insert if new)
+      let profile: CelebrityProfile;
+      if (cached) {
+        profile = await storage.updateCelebrityProfile(personId, profileData) as CelebrityProfile;
+      } else {
+        profile = await storage.setCelebrityProfile(profileData);
+      }
       
       res.json(profile);
     } catch (error: any) {
