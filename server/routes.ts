@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insertCommunityInsightSchema, insertInsightVoteSchema, type CelebrityProfile, type InsertCelebrityProfile } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, type CelebrityProfile, type InsertCelebrityProfile } from "@shared/schema";
 import { eq, desc, and, sql, count } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -403,6 +403,207 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(voteMap);
     } catch (error) {
       console.error("Error fetching user votes:", error);
+      res.status(500).json({ error: "Failed to fetch user votes" });
+    }
+  });
+
+  // ===== INSIGHT COMMENTS API =====
+  
+  // Get all comments for an insight (with nested structure)
+  app.get("/api/insight-comments/:insightId", async (req, res) => {
+    try {
+      const { insightId } = req.params;
+      
+      // Fetch all comments for this insight
+      const comments = await db
+        .select()
+        .from(insightComments)
+        .where(eq(insightComments.insightId, insightId))
+        .orderBy(desc(insightComments.createdAt));
+
+      // Fetch vote counts for all comments
+      const commentIds = comments.map(c => c.id);
+      
+      let voteCounts: Record<string, { upvotes: number; downvotes: number }> = {};
+      
+      if (commentIds.length > 0) {
+        const upvoteCounts = await db
+          .select({ 
+            commentId: commentVotes.commentId, 
+            count: count() 
+          })
+          .from(commentVotes)
+          .where(and(
+            sql`${commentVotes.commentId} IN ${commentIds}`,
+            eq(commentVotes.voteType, 'up')
+          ))
+          .groupBy(commentVotes.commentId);
+          
+        const downvoteCounts = await db
+          .select({ 
+            commentId: commentVotes.commentId, 
+            count: count() 
+          })
+          .from(commentVotes)
+          .where(and(
+            sql`${commentVotes.commentId} IN ${commentIds}`,
+            eq(commentVotes.voteType, 'down')
+          ))
+          .groupBy(commentVotes.commentId);
+          
+        // Build vote counts map
+        for (const id of commentIds) {
+          const up = upvoteCounts.find(v => v.commentId === id);
+          const down = downvoteCounts.find(v => v.commentId === id);
+          voteCounts[id] = {
+            upvotes: up ? Number(up.count) : 0,
+            downvotes: down ? Number(down.count) : 0,
+          };
+        }
+      }
+
+      // Add vote counts to comments
+      const commentsWithVotes = comments.map(comment => ({
+        ...comment,
+        upvotes: voteCounts[comment.id]?.upvotes || 0,
+        downvotes: voteCounts[comment.id]?.downvotes || 0,
+      }));
+
+      res.json(commentsWithVotes);
+    } catch (error: any) {
+      console.error("Error fetching comments:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch comments" });
+    }
+  });
+
+  // Create a new comment (protected route)
+  app.post("/api/insight-comments", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { insightId, parentId, username, content } = req.body;
+      
+      // Validate required fields
+      if (!insightId || !content) {
+        return res.status(400).json({ error: "insightId and content are required" });
+      }
+
+      // Create the comment
+      const [newComment] = await db
+        .insert(insightComments)
+        .values({
+          insightId,
+          parentId: parentId || null,
+          userId,
+          username: username || userId.substring(0, 8),
+          content,
+        })
+        .returning();
+
+      res.status(201).json({
+        ...newComment,
+        upvotes: 0,
+        downvotes: 0,
+      });
+    } catch (error: any) {
+      console.error("Error creating comment:", error);
+      res.status(500).json({ error: error.message || "Failed to create comment" });
+    }
+  });
+
+  // Vote on a comment (protected route)
+  app.post("/api/insight-comments/:id/vote", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { voteType } = req.body;
+      const userId = req.userId!;
+
+      if (!voteType || !['up', 'down'].includes(voteType)) {
+        return res.status(400).json({ error: "voteType must be 'up' or 'down'" });
+      }
+
+      // Check if user already voted
+      const existingVote = await db
+        .select()
+        .from(commentVotes)
+        .where(and(
+          eq(commentVotes.commentId, id),
+          eq(commentVotes.userId, userId)
+        ))
+        .limit(1);
+
+      if (existingVote.length > 0) {
+        if (existingVote[0].voteType === voteType) {
+          // Same vote - remove it (toggle off)
+          await db
+            .delete(commentVotes)
+            .where(and(
+              eq(commentVotes.commentId, id),
+              eq(commentVotes.userId, userId)
+            ));
+        } else {
+          // Different vote - update it
+          await db
+            .update(commentVotes)
+            .set({ voteType })
+            .where(and(
+              eq(commentVotes.commentId, id),
+              eq(commentVotes.userId, userId)
+            ));
+        }
+      } else {
+        // Create new vote
+        await db
+          .insert(commentVotes)
+          .values({
+            commentId: id,
+            userId,
+            voteType,
+          });
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error voting on comment:", error);
+      res.status(500).json({ error: error.message || "Failed to vote" });
+    }
+  });
+
+  // Get user's vote status for comments (protected route)
+  app.get("/api/insight-comments/:insightId/votes", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { insightId } = req.params;
+      const userId = req.userId!;
+      
+      // Get all comments for this insight
+      const insightCommentsData = await db
+        .select({ id: insightComments.id })
+        .from(insightComments)
+        .where(eq(insightComments.insightId, insightId));
+
+      const commentIds = insightCommentsData.map(c => c.id);
+
+      if (commentIds.length === 0) {
+        return res.json({});
+      }
+
+      // Get user's votes for these comments
+      const votes = await db
+        .select()
+        .from(commentVotes)
+        .where(and(
+          eq(commentVotes.userId, userId),
+          sql`${commentVotes.commentId} IN ${commentIds}`
+        ));
+
+      // Convert to map: commentId -> voteType
+      const voteMap = votes.reduce((acc, vote) => {
+        acc[vote.commentId] = vote.voteType;
+        return acc;
+      }, {} as Record<string, string>);
+
+      res.json(voteMap);
+    } catch (error) {
+      console.error("Error fetching user comment votes:", error);
       res.status(500).json({ error: "Failed to fetch user votes" });
     }
   });

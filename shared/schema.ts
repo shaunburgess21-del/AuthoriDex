@@ -216,6 +216,44 @@ export const insertInsightVoteSchema = createInsertSchema(insightVotes).omit({
 export type InsightVote = typeof insightVotes.$inferSelect;
 export type InsertInsightVote = z.infer<typeof insertInsightVoteSchema>;
 
+// Insight Comments - threaded comments on community insights
+export const insightComments = pgTable("insight_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  insightId: varchar("insight_id").notNull().references(() => communityInsights.id, { onDelete: "cascade" }),
+  parentId: varchar("parent_id"), // null for top-level comments, references parent comment for replies
+  userId: varchar("user_id").notNull(), // Supabase auth user ID
+  username: text("username").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertInsightCommentSchema = createInsertSchema(insightComments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsightComment = typeof insightComments.$inferSelect;
+export type InsertInsightComment = z.infer<typeof insertInsightCommentSchema>;
+
+// Comment Votes - tracks upvotes/downvotes on comments
+export const commentVotes = pgTable("comment_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  commentId: varchar("comment_id").notNull().references(() => insightComments.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(), // Supabase auth user ID
+  voteType: text("vote_type").notNull(), // 'up' or 'down'
+  votedAt: timestamp("voted_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueUserComment: unique().on(table.userId, table.commentId),
+}));
+
+export const insertCommentVoteSchema = createInsertSchema(commentVotes).omit({
+  id: true,
+  votedAt: true,
+});
+
+export type CommentVote = typeof commentVotes.$inferSelect;
+export type InsertCommentVote = z.infer<typeof insertCommentVoteSchema>;
+
 // Celebrity Profiles - AI-generated biographical data with caching
 export const celebrityProfiles = pgTable("celebrity_profiles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
