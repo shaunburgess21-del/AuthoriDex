@@ -262,16 +262,6 @@ export default function PersonDetailPage() {
                   <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
                   {isFavorited ? "Favorited" : "Favorite"}
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  onClick={handlePredictClick}
-                  data-testid="button-predict-on"
-                >
-                  <Zap className="h-4 w-4" />
-                  Predict
-                </Button>
               </div>
             </div>
           </div>
