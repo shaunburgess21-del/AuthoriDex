@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { TrendBadge } from "@/components/TrendBadge";
-import { RankBadge } from "@/components/RankBadge";
 import { TrendChart } from "@/components/TrendChart";
 import { StatCard } from "@/components/StatCard";
 import { UserMenu } from "@/components/UserMenu";
@@ -13,6 +12,7 @@ import { CommunityInsights } from "@/components/CommunityInsights";
 import { ProfileTabs } from "@/components/ProfileTabs";
 import { PredictTab } from "@/components/PredictTab";
 import { PolymarketBetsWidget } from "@/components/PolymarketBetsWidget";
+import { CelebrityInfoModal } from "@/components/CelebrityInfoModal";
 import { ArrowLeft, Share2, Star, TrendingUp, Users, Eye, DollarSign, Globe, MessageSquare, Trophy, Zap } from "lucide-react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -235,7 +235,7 @@ export default function PersonDetailPage() {
                 </h1>
                 <div className="flex items-center gap-2 mb-4 flex-wrap">
                   <p className="text-lg text-muted-foreground">{person.category}</p>
-                  <RankBadge rank={person.rank} />
+                  <CelebrityInfoModal personId={person.id} personName={person.name} />
                 </div>
                 {person.bio && (
                   <p className="text-sm text-muted-foreground leading-relaxed mb-4" data-testid="text-person-bio">
