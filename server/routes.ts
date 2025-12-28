@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage, type CelebrityProfile } from "./storage";
 import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
 import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insertCommunityInsightSchema, insertInsightVoteSchema } from "@shared/schema";
@@ -8,6 +8,7 @@ import { eq, desc, and, sql, count } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, type AuthRequest } from "./auth-middleware";
+import OpenAI from "openai";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Using local PostgreSQL database instead of Supabase
@@ -403,6 +404,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user votes:", error);
       res.status(500).json({ error: "Failed to fetch user votes" });
+    }
+  });
+
+  // Get AI-generated celebrity profile
+  app.get("/api/celebrity-profile/:personId", async (req, res) => {
+    try {
+      const { personId } = req.params;
+      
+      // Check cache first
+      const cached = await storage.getCelebrityProfile(personId);
+      if (cached) {
+        return res.json(cached);
+      }
+      
+      // Get person name from storage
+      const person = await storage.getTrendingPerson(personId);
+      if (!person) {
+        return res.status(404).json({ error: "Person not found" });
+      }
+      
+      // Initialize OpenAI with Replit AI Integrations
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+      
+      // Generate profile using AI
+      const prompt = `You are a celebrity data expert. Generate accurate, factual information about ${person.name}.
+      
+Return a JSON object with exactly these fields:
+{
+  "shortBio": "A 1-2 sentence professional biography (under 150 characters)",
+  "knownFor": "What they are primarily known for (e.g., 'Tech entrepreneurship, SpaceX, Tesla')",
+  "fromCountry": "Their country of origin (full name, e.g., 'South Africa')",
+  "fromCountryCode": "ISO 3166-1 alpha-2 code (e.g., 'ZA')",
+  "basedIn": "Where they currently live (full name, e.g., 'United States')", 
+  "basedInCountryCode": "ISO 3166-1 alpha-2 code (e.g., 'US')",
+  "estimatedNetWorth": "Estimated net worth in 2025 (e.g., '$250 billion')"
+}
+
+Be factual and concise. Only return the JSON object, nothing else.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        max_tokens: 500,
+      });
+      
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error("No response from AI");
+      }
+      
+      const parsed = JSON.parse(content);
+      
+      const profile: CelebrityProfile = {
+        personId,
+        personName: person.name,
+        shortBio: parsed.shortBio || "No biography available",
+        knownFor: parsed.knownFor || "Various achievements",
+        fromCountry: parsed.fromCountry || "Unknown",
+        fromCountryCode: parsed.fromCountryCode?.toUpperCase() || "XX",
+        basedIn: parsed.basedIn || "Unknown",
+        basedInCountryCode: parsed.basedInCountryCode?.toUpperCase() || "XX",
+        estimatedNetWorth: parsed.estimatedNetWorth || "Not available",
+        generatedAt: new Date(),
+      };
+      
+      // Cache the result
+      await storage.setCelebrityProfile(profile);
+      
+      res.json(profile);
+    } catch (error: any) {
+      console.error("Error generating celebrity profile:", error);
+      res.status(500).json({ error: "Failed to generate profile", message: error.message });
     }
   });
 
