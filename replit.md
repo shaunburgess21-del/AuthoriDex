@@ -15,6 +15,7 @@ Preferred communication style: Simple, everyday language.
 - **State Management**: React Query for server state (5-minute refetch), React hooks for local UI state.
 - **Styling**: Design tokens via CSS variables, custom utility classes, glassy neon aesthetic for category pills with specific color mapping for different categories (e.g., Tech: Cyan, Music: Purple).
 - **Interactive Elements**: Expandable leaderboard rows with animations, a centralized VotingModal supporting "Vote Next" functionality, and square avatars with rounded corners.
+- **Celebrity Profile Vote Tab**: Features "Curate the Profile" section for photo voting on the current celebrity, "Featured Polls" section showing top 3 polls filtered by subject entity with a "View all" modal overlay, positioned between the sentiment voting widget and Community Insights.
 - **Page Structure**:
     - **Home Page**: Features a Hero Section, Trend Widgets, Prediction Markets Teaser (carousel), and a filterable/sortable Leaderboard.
     - **Vote Page**: Designed as a "Community Town Hall" with a cyan/teal theme. Includes a gamified XP bar, sections for "Induction Queue" (voting new celebrities), "Curate the Profile" (image hot-or-not), and "The People's Voice" (voting on topics with neon ghost buttons). A floating action button allows suggesting candidates.
