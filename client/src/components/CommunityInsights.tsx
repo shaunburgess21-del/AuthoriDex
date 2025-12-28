@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ChevronUp, ChevronDown, Plus, X, Loader2 } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Plus, X, Loader2, MessageCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
@@ -424,106 +424,106 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
                 } : undefined}
                 data-testid={`card-insight-${insight.id}`}
               >
-                <div className="flex gap-4">
-                  {/* Voting Column - Avatar-style arrows */}
-                  <div className="flex flex-col items-center gap-2">
+                {/* Reddit-style layout: Header -> Content -> Actions */}
+                <div className="space-y-3">
+                  {/* Header: Avatar + Username + Sentiment Pill + Timestamp */}
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-8 w-8 flex-shrink-0">
+                      <AvatarFallback>
+                        {insight.username.substring(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <span className="font-semibold text-sm" data-testid={`text-username-${insight.id}`}>
+                        {insight.username}
+                      </span>
+                      {/* Sentiment Glass Pill Badge */}
+                      {insight.sentimentVote && (
+                        <span 
+                          className="text-xs px-2 py-0.5 rounded-full backdrop-blur-sm border"
+                          style={{
+                            backgroundColor: `${getSentimentColor(insight.sentimentVote)}15`,
+                            color: getSentimentColor(insight.sentimentVote),
+                            borderColor: `${getSentimentColor(insight.sentimentVote)}40`,
+                            boxShadow: `0 0 8px ${getSentimentColor(insight.sentimentVote)}20`,
+                          }}
+                          data-testid={`badge-sentiment-${insight.id}`}
+                        >
+                          Voted {insight.sentimentVote}/10
+                        </span>
+                      )}
+                      {rankBadge && (
+                        <Badge 
+                          variant="secondary" 
+                          className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-xs"
+                          data-testid={`badge-rank-${insight.id}`}
+                        >
+                          {rankBadge.label}
+                        </Badge>
+                      )}
+                      <span className="text-xs text-muted-foreground" data-testid={`text-timestamp-${insight.id}`}>
+                        {formatDistanceToNow(new Date(insight.createdAt), { addSuffix: true })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="pl-11">
+                    <p className="text-sm leading-relaxed break-words" data-testid={`text-content-${insight.id}`}>
+                      {isExpanded ? insight.content : preview}
+                      {isTruncated && !isExpanded && "..."}
+                    </p>
+                    {isTruncated && (
+                      <button
+                        onClick={() => toggleExpanded(insight.id)}
+                        className="text-xs text-primary hover:underline mt-1"
+                        data-testid={`button-toggle-${insight.id}`}
+                      >
+                        {isExpanded ? "Show Less" : "Show More"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Actions Bar: Voting + Reply (Reddit-style bottom bar) */}
+                  <div className="flex items-center gap-4 pl-11">
+                    {/* Thumbs Up */}
                     <button
                       onClick={() => handleVote(insight.id, "up")}
                       disabled={!user}
-                      className={`flex items-center justify-center w-10 h-10 rounded-md transition-all ${
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-sm transition-all ${
                         userVote === "up" 
-                          ? "bg-green-500/20 text-green-500 border border-green-500/30" 
-                          : "bg-muted/50 text-muted-foreground hover-elevate active-elevate-2"
+                          ? "bg-green-500/20 text-green-500" 
+                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                       } ${!user ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                       data-testid={`button-upvote-${insight.id}`}
                     >
-                      <ChevronUp className="h-6 w-6" />
+                      <ThumbsUp className={`h-4 w-4 ${userVote === "up" ? "fill-current" : ""}`} />
+                      <span data-testid={`text-upvotes-${insight.id}`}>{insight.upvotes}</span>
                     </button>
-                    <span
-                      className={`font-mono font-bold text-base ${getVoteColor(netVotes)}`}
-                      data-testid={`text-vote-count-${insight.id}`}
-                    >
-                      {netVotes}
-                    </span>
+
+                    {/* Thumbs Down */}
                     <button
                       onClick={() => handleVote(insight.id, "down")}
                       disabled={!user}
-                      className={`flex items-center justify-center w-10 h-10 rounded-md transition-all ${
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-sm transition-all ${
                         userVote === "down" 
-                          ? "bg-red-500/20 text-red-500 border border-red-500/30" 
-                          : "bg-muted/50 text-muted-foreground hover-elevate active-elevate-2"
+                          ? "bg-red-500/20 text-red-500" 
+                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                       } ${!user ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                       data-testid={`button-downvote-${insight.id}`}
                     >
-                      <ChevronDown className="h-6 w-6" />
+                      <ThumbsDown className={`h-4 w-4 ${userVote === "down" ? "fill-current" : ""}`} />
+                      <span data-testid={`text-downvotes-${insight.id}`}>{insight.downvotes}</span>
                     </button>
-                  </div>
 
-                  {/* Content Column */}
-                  <div className="flex-1 space-y-2 min-w-0">
-                    <div className="flex items-start gap-3">
-                      <Avatar className="h-8 w-8 flex-shrink-0">
-                        <AvatarFallback>
-                          {insight.username.substring(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-sm" data-testid={`text-username-${insight.id}`}>
-                            {insight.username}
-                          </span>
-                          <span className="text-xs text-muted-foreground" data-testid={`text-timestamp-${insight.id}`}>
-                            {formatDistanceToNow(new Date(insight.createdAt), { addSuffix: true })}
-                          </span>
-                          {rankBadge && (
-                            <Badge 
-                              variant="secondary" 
-                              className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30"
-                              data-testid={`badge-rank-${insight.id}`}
-                            >
-                              {rankBadge.label}
-                            </Badge>
-                          )}
-                          {insight.sentimentVote && (
-                            <Badge 
-                              variant="secondary"
-                              style={{
-                                backgroundColor: `${getSentimentColor(insight.sentimentVote)}20`,
-                                color: getSentimentColor(insight.sentimentVote),
-                                borderColor: `${getSentimentColor(insight.sentimentVote)}30`,
-                              }}
-                              data-testid={`badge-sentiment-${insight.id}`}
-                            >
-                              Voted {insight.sentimentVote}/10
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="mt-2 text-sm leading-relaxed break-words" data-testid={`text-content-${insight.id}`}>
-                          {isExpanded ? insight.content : preview}
-                          {isTruncated && !isExpanded && "..."}
-                        </p>
-                        {isTruncated && (
-                          <button
-                            onClick={() => toggleExpanded(insight.id)}
-                            className="text-xs text-primary hover:underline mt-1"
-                            data-testid={`button-toggle-${insight.id}`}
-                          >
-                            {isExpanded ? "Show Less" : "Show More"}
-                          </button>
-                        )}
-                        
-                        {/* Vote Breakdown */}
-                        <div className="flex items-center gap-3 mt-2 text-xs">
-                          <span className="text-green-500" data-testid={`text-upvotes-${insight.id}`}>
-                            Upvotes - {insight.upvotes}
-                          </span>
-                          <span className="text-muted-foreground">|</span>
-                          <span className="text-red-500" data-testid={`text-downvotes-${insight.id}`}>
-                            Downvotes - {insight.downvotes}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                    {/* Reply Button */}
+                    <button
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-md text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-all"
+                      data-testid={`button-reply-${insight.id}`}
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      <span>Reply</span>
+                    </button>
                   </div>
                 </div>
               </div>
