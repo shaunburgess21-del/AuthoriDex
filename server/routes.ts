@@ -438,29 +438,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
       
-      // Step 1: Web search for current information about this person
-      let currentContext = "";
-      try {
-        const searchResponse = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [{ 
-            role: "user", 
-            content: `Search the web for the latest news and current information about ${person.name}. What is their current role, position, or major recent developments? Focus on factual, recent information from 2024-2025.` 
-          }],
-          max_tokens: 500,
-        });
-        currentContext = searchResponse.choices[0]?.message?.content || "";
-      } catch (searchError) {
-        console.log("Web search unavailable, proceeding with base knowledge");
-      }
-      
-      // Step 2: Generate comprehensive profile using AI with current context
-      const prompt = `You are a celebrity data expert with access to the latest information. Generate accurate, up-to-date information about ${person.name}.
+      // Generate comprehensive profile using AI
+      // Note: Using gpt-4o for better knowledge of current events (training cutoff: Oct 2023+)
+      const currentYear = new Date().getFullYear();
+      const prompt = `You are a celebrity data expert. Generate accurate, factual information about ${person.name}.
 
-${currentContext ? `CURRENT INFORMATION (use this for accuracy):
-${currentContext}
-
-` : ''}IMPORTANT: Focus on their CURRENT role and position as of late 2024/2025. If they hold a political office, executive position, or other notable current role, this MUST be mentioned prominently.
+CRITICAL INSTRUCTIONS:
+1. This person's data will be cached for 30 days, so accuracy is essential.
+2. If this person is a politician, CEO, or public figure, state their CURRENT title/position as of ${currentYear}.
+3. For politicians: If they are currently serving in office (president, prime minister, governor, etc.), this MUST be stated clearly.
+4. For business leaders: State their current company and role.
+5. Use your most recent knowledge - prefer information from 2023-${currentYear} when relevant.
+6. If someone was recently elected or appointed to a new role, mention this prominently.
 
 Return a JSON object with exactly these fields:
 {
