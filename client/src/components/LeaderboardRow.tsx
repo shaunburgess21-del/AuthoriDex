@@ -125,7 +125,7 @@ export function LeaderboardRow({ person, onVisitProfile, onVoteClick }: Leaderbo
             )}
           </Tooltip>
           <p className="text-xs text-muted-foreground uppercase tracking-wide translate-y-[0.5px]">
-            Sentiment
+            Approval
           </p>
         </div>
         <Button 
