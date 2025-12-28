@@ -16,7 +16,7 @@ export function HeroSection({ onCastVoteClick }: HeroSectionProps) {
       <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/70 to-background" />
       <div className="relative h-full flex flex-col items-center justify-center px-4 text-center">
         <h1 className="text-5xl md:text-7xl font-serif font-bold mb-6 tracking-tight max-w-4xl">
-          Global Influence <span className="text-primary">Index</span>
+          Global Fame <span className="text-primary">Index</span>
         </h1>
         
         <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">Discover real-time insights, cast your vote and make your prediction on the world's most influential people</p>
