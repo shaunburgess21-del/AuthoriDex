@@ -988,49 +988,6 @@ export default function VotePage() {
               <Link href="/predict">
                 <Button variant="ghost" size="sm" data-testid="link-nav-predict">Predict</Button>
               </Link>
-              <Link href="/me">
-                <Button variant="ghost" size="sm" data-testid="link-nav-me">Me</Button>
-              </Link>
-            </div>
-            
-            <div className="hidden md:flex items-center gap-3 px-3 py-1.5 rounded-full bg-slate-800/60 border border-slate-700/50">
-              <div className="flex items-center gap-1.5">
-                <Crown className="h-4 w-4 text-amber-400" />
-                <span className="text-xs text-muted-foreground">Rank:</span>
-                <span className="text-sm font-bold text-foreground" data-testid="text-user-rank">{rank}</span>
-              </div>
-              <div className="h-4 w-px bg-border/50" />
-              <div className="flex items-center gap-1.5">
-                <Zap className="h-4 w-4 text-cyan-400" />
-                <span className="text-xs text-muted-foreground">XP:</span>
-                <motion.span 
-                  key={xp}
-                  className="text-sm font-bold font-mono text-cyan-400"
-                  initial={{ scale: 1.3 }}
-                  animate={{ scale: 1 }}
-                  transition={{ duration: 0.2 }}
-                  data-testid="text-user-xp"
-                >
-                  {xp.toLocaleString()}
-                </motion.span>
-              </div>
-            </div>
-            
-            <div className="flex md:hidden items-center gap-2 px-2.5 py-1.5 rounded-full bg-slate-800/60 border border-slate-700/50">
-              <Crown className="h-3.5 w-3.5 text-amber-400" />
-              <span className="text-xs font-bold text-foreground" data-testid="text-user-rank-mobile">{rank}</span>
-              <div className="h-3 w-px bg-border/50" />
-              <Zap className="h-3.5 w-3.5 text-cyan-400" />
-              <motion.span 
-                key={`mobile-${xp}`}
-                className="text-xs font-bold font-mono text-cyan-400"
-                initial={{ scale: 1.3 }}
-                animate={{ scale: 1 }}
-                transition={{ duration: 0.2 }}
-                data-testid="text-user-xp-mobile"
-              >
-                {xp.toLocaleString()}
-              </motion.span>
             </div>
             
             <UserMenu />

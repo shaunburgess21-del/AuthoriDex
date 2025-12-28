@@ -37,6 +37,7 @@ import {
   TrendingUp,
   Target,
   Zap,
+  Wallet,
 } from "lucide-react";
 import { SiDiscord, SiX } from "react-icons/si";
 
@@ -223,6 +224,19 @@ function UserMenuContent({
 
       <div className="px-4 pb-3">
         <XPProgressBar xp={profile?.xp || 0} level={profile?.level || 1} />
+      </div>
+
+      <div className="px-4 pb-3">
+        <div className="flex items-center justify-between p-2.5 rounded-lg bg-violet-500/10 border border-violet-500/30">
+          <div className="flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-violet-400" />
+            <span className="text-sm text-muted-foreground">Predict Credits</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono font-bold text-sm">10,000</span>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/30 text-violet-400">TEST</Badge>
+          </div>
+        </div>
       </div>
 
       <Separator className="my-1" />
