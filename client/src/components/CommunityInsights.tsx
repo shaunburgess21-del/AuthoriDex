@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ChevronUp, ChevronDown, Plus, X } from "lucide-react";
+import { ChevronUp, ChevronDown, Plus, X, Loader2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
@@ -96,6 +96,8 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
   const [userVotes, setUserVotes] = useState<Record<string, string>>({});
   const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set());
   const [displayCount, setDisplayCount] = useState(4); // Show 4 posts initially
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Fetch insights
   const { data: insights = [], isLoading, refetch } = useQuery<CommunityInsight[]>({
@@ -271,9 +273,35 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
     });
   };
 
-  const loadMore = () => {
-    setDisplayCount(15);
-  };
+  // Infinite scroll: load more when bottom element is visible
+  const loadMore = useCallback(() => {
+    if (isLoadingMore || displayCount >= insights.length) return;
+    
+    setIsLoadingMore(true);
+    // Simulate a small delay for smooth UX (in production this would be actual API fetch)
+    setTimeout(() => {
+      setDisplayCount(prev => Math.min(prev + 4, insights.length));
+      setIsLoadingMore(false);
+    }, 300);
+  }, [isLoadingMore, displayCount, insights.length]);
+
+  // Intersection Observer for infinite scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoadingMore && displayCount < insights.length) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [loadMore, isLoadingMore, displayCount, insights.length]);
 
   // Rank insights by net votes (for gold/silver/bronze borders)
   const rankedInsights = [...insights].sort((a, b) => {
@@ -294,17 +322,20 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
 
   if (isLoading) {
     return (
-      <Card className="p-6">
+      <div className="p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-serif font-bold">Community Insights</h2>
         </div>
-        <p className="text-muted-foreground">Loading insights...</p>
-      </Card>
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-muted-foreground">Loading insights...</span>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className="p-6">
+    <div className="px-6 pt-6">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-serif font-bold" data-testid="text-community-insights-title">
           Community Insights
@@ -361,7 +392,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
         </div>
       )}
 
-      <div className="space-y-4 max-w-2xl mx-auto max-h-96 overflow-y-auto insights-scroll">
+      <div className="space-y-4 max-w-2xl mx-auto">
         {insights.length === 0 ? (
           <div className="p-8 text-center border rounded-md border-border">
             <p className="text-muted-foreground">
@@ -494,30 +525,29 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
           })
         )}
 
-        {/* Load More / View Less Buttons */}
-        <div className="flex justify-center pt-2 gap-2">
-          {hasMore && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={loadMore}
-              data-testid="button-load-more"
-            >
-              Load More
-            </Button>
-          )}
-          {displayCount > 4 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setDisplayCount(4)}
-              data-testid="button-view-less"
-            >
-              View Less
-            </Button>
-          )}
-        </div>
+        {/* Infinite scroll trigger element */}
+        {hasMore && (
+          <div 
+            ref={loadMoreRef} 
+            className="flex justify-center py-6"
+            data-testid="infinite-scroll-trigger"
+          >
+            {isLoadingMore && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm">Loading more insights...</span>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* End of list indicator */}
+        {!hasMore && insights.length > 0 && (
+          <div className="flex justify-center py-6 text-muted-foreground text-sm">
+            You've seen all {insights.length} insights
+          </div>
+        )}
       </div>
-    </Card>
+    </div>
   );
 }
