@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -97,6 +96,7 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
   const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set());
   const [displayCount, setDisplayCount] = useState(4); // Show 4 posts initially
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const isLoadingRef = useRef(false); // Mutable ref to prevent race conditions
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Fetch insights
@@ -275,33 +275,39 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
 
   // Infinite scroll: load more when bottom element is visible
   const loadMore = useCallback(() => {
-    if (isLoadingMore || displayCount >= insights.length) return;
+    // Use ref to prevent race conditions from stale closure
+    if (isLoadingRef.current) return;
     
+    isLoadingRef.current = true;
     setIsLoadingMore(true);
+    
     // Simulate a small delay for smooth UX (in production this would be actual API fetch)
     setTimeout(() => {
       setDisplayCount(prev => Math.min(prev + 4, insights.length));
       setIsLoadingMore(false);
+      isLoadingRef.current = false;
     }, 300);
-  }, [isLoadingMore, displayCount, insights.length]);
+  }, [insights.length]);
 
   // Intersection Observer for infinite scroll
   useEffect(() => {
+    const currentRef = loadMoreRef.current;
+    if (!currentRef) return;
+    
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && !isLoadingMore && displayCount < insights.length) {
+        // Use ref check instead of state to avoid stale closure
+        if (entries[0].isIntersecting && !isLoadingRef.current && displayCount < insights.length) {
           loadMore();
         }
       },
       { threshold: 0.1 }
     );
 
-    if (loadMoreRef.current) {
-      observer.observe(loadMoreRef.current);
-    }
+    observer.observe(currentRef);
 
     return () => observer.disconnect();
-  }, [loadMore, isLoadingMore, displayCount, insights.length]);
+  }, [loadMore, displayCount, insights.length]);
 
   // Rank insights by net votes (for gold/silver/bronze borders)
   const rankedInsights = [...insights].sort((a, b) => {
