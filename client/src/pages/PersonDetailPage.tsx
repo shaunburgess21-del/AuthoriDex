@@ -233,13 +233,13 @@ export default function PersonDetailPage() {
             <PersonAvatar name={person.name} avatar={person.avatar} size="xl" />
             <div className="flex-1 flex flex-col justify-between h-48">
               <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-4xl font-serif font-bold" data-testid="text-person-name">
-                    {person.name}
-                  </h1>
+                <h1 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-person-name">
+                  {person.name}
+                </h1>
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                  <p className="text-lg text-muted-foreground">{person.category}</p>
                   <RankBadge rank={person.rank} />
                 </div>
-                <p className="text-lg text-muted-foreground mb-4">{person.category}</p>
                 {person.bio && (
                   <p className="text-sm text-muted-foreground leading-relaxed mb-4" data-testid="text-person-bio">
                     {person.bio}
