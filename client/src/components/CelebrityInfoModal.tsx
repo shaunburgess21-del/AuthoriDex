@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Info, MapPin, DollarSign, Sparkles, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -68,6 +68,9 @@ export function CelebrityInfoModal({ personId, personName }: CelebrityInfoModalP
       <DialogContent className="sm:max-w-md bg-background/95 backdrop-blur-xl border border-border/50">
         <DialogHeader className="flex flex-row items-center justify-between">
           <DialogTitle className="text-xl font-serif">{personName}</DialogTitle>
+          <DialogDescription className="sr-only">
+            AI-generated profile information for {personName}
+          </DialogDescription>
         </DialogHeader>
         
         {isLoading ? (
