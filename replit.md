@@ -28,7 +28,8 @@ Preferred communication style: Simple, everyday language.
 - **Data Providers**:
     - `server/providers/wiki.ts` - Fetches Wikipedia pageviews (24h and 7d average) for velocity calculation
     - `server/providers/gdelt.ts` - Fetches GDELT news mention counts for each celebrity
-    - Prepared for: Serper.dev (Google Trends), X API (when keys provided)
+    - `server/providers/serper.ts` - Fetches Google Search results for search volume/delta
+    - `server/providers/x-api.ts` - Fetches X/Twitter quote/reply velocity (rate limited for Basic tier)
 - **Scoring Engine** (`server/scoring/`):
     - `normalize.ts` - Fairness algorithm that re-normalizes weights when platforms are missing
     - `trendScore.ts` - Computes final trend score (70% velocity, 30% mass)
@@ -58,13 +59,18 @@ Preferred communication style: Simple, everyday language.
 
 ## External Dependencies
 
-### Third-Party API Services
-- **News API**: News mentions.
-- **YouTube Data API**: Video views and popularity.
-- **Spotify Web API**: Artist follower counts.
-- **SERP API (Google Trends)**: Search interest trends.
-- **Google Fonts**: Inter, Space Grotesk, JetBrains Mono.
-- **Neon Database**: PostgreSQL provider.
+### Third-Party API Services (Active)
+- **Wikipedia API**: Free pageview data (24h and 7d averages)
+- **GDELT API**: Free news mention counts and trends
+- **Serper.dev API**: Google search results for search volume (API key required)
+- **X/Twitter API**: Quote/reply velocity metrics (Basic tier, 10K reads/month)
+- **Google Fonts**: Inter, Space Grotesk, JetBrains Mono
+- **Neon Database**: PostgreSQL provider
+
+### Required Environment Secrets
+- `SERPER_API_KEY` - For Google search data
+- `X_API_KEY` - X/Twitter API key
+- `X_API_SECRET` - X/Twitter API secret
 
 ### Key Libraries
 - **UI Components**: Radix UI.
