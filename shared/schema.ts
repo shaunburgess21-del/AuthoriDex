@@ -28,6 +28,10 @@ export const trackedPeople = pgTable("tracked_people", {
   bio: text("bio"),
   youtubeId: text("youtube_id"),
   spotifyId: text("spotify_id"),
+  wikiSlug: text("wiki_slug"),
+  xHandle: text("x_handle"),
+  instagramHandle: text("instagram_handle"),
+  tiktokHandle: text("tiktok_handle"),
 });
 
 export const insertTrackedPersonSchema = createInsertSchema(trackedPeople).omit({
@@ -47,9 +51,39 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   spotifyFollowers: real("spotify_followers").notNull().default(0),
   searchVolume: real("search_volume").notNull().default(0),
   trendScore: real("trend_score").notNull(),
+  wikiPageviews: real("wiki_pageviews").default(0),
+  wikiDelta: real("wiki_delta").default(0),
+  newsDelta: real("news_delta").default(0),
+  searchDelta: real("search_delta").default(0),
+  xQuoteVelocity: real("x_quote_velocity").default(0),
+  xReplyVelocity: real("x_reply_velocity").default(0),
+  massScore: real("mass_score").default(0),
+  velocityScore: real("velocity_score").default(0),
+  confidence: real("confidence").default(1.0),
+  momentum: text("momentum").default("Stable"),
+  drivers: text("drivers").array(),
 }, (table) => ({
   uniquePersonTimestamp: unique().on(table.personId, table.timestamp),
 }));
+
+// API Cache - stores raw API responses to prevent redundant calls
+export const apiCache = pgTable("api_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cacheKey: text("cache_key").notNull().unique(),
+  provider: text("provider").notNull(),
+  personId: varchar("person_id"),
+  responseData: text("response_data").notNull(),
+  fetchedAt: timestamp("fetched_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
+export const insertApiCacheSchema = createInsertSchema(apiCache).omit({
+  id: true,
+  fetchedAt: true,
+});
+
+export type ApiCache = typeof apiCache.$inferSelect;
+export type InsertApiCache = z.infer<typeof insertApiCacheSchema>;
 
 export const insertTrendSnapshotSchema = createInsertSchema(trendSnapshots).omit({
   id: true,
