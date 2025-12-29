@@ -39,13 +39,36 @@ function MarketPulseCard({
   type: "daily" | "gainer" | "dropper";
   onPersonClick: (id: string) => void;
 }) {
-  const iconColor = type === "daily" ? "text-blue-400" : type === "gainer" ? "text-sky-400" : "text-blue-300";
+  const iconColor = type === "daily" ? "text-blue-400" : type === "gainer" ? "text-green-400" : "text-red-400";
+  
+  const borderColor = type === "daily" 
+    ? "rgb(59, 130, 246)" // blue-500
+    : type === "gainer" 
+      ? "rgb(34, 197, 94)" // green-500
+      : "rgb(239, 68, 68)"; // red-500
   
   return (
-    <Card 
-      className="min-w-[280px] md:min-w-0 shrink-0 md:shrink bg-slate-900/60 border border-slate-700/40 backdrop-blur-sm" 
+    <div 
+      className="relative min-w-[280px] md:min-w-0 shrink-0 md:shrink group"
       data-testid={`pulse-card-${type}`}
     >
+      <div 
+        className="absolute inset-0 rounded-lg pointer-events-none transition-opacity duration-300"
+        style={{
+          background: `linear-gradient(135deg, ${borderColor} 0%, ${borderColor}40 30%, transparent 60%)`,
+          padding: '1px',
+          opacity: 1,
+        }}
+      />
+      <div 
+        className="absolute inset-0 rounded-lg pointer-events-none transition-opacity duration-300 opacity-0 group-hover:opacity-100"
+        style={{
+          boxShadow: `inset 0 0 0 1.5px ${borderColor}`,
+        }}
+      />
+      <Card 
+        className="relative bg-slate-900/60 border-0 backdrop-blur-sm h-full" 
+      >
       <CardHeader className="pb-2 px-4 pt-4">
         <div className="flex items-center gap-2">
           <Icon className={`h-4 w-4 ${iconColor}`} />
@@ -83,7 +106,8 @@ function MarketPulseCard({
           );
         })}
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 }
 
