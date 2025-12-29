@@ -25,13 +25,27 @@ Preferred communication style: Simple, everyday language.
 ### Backend
 - **Technology Stack**: Node.js with Express.js, TypeScript, Drizzle ORM.
 - **API Design**: RESTful endpoints with query parameter support, focus on separation of concerns.
-- **Data Aggregation**: Multi-source API aggregation system, currently using mock data.
-- **Mock Data System**: Generates realistic trend scores, historical data, and platform-specific insights for development and UX iteration. Includes sentiment voting with an animated segmented design and accessibility features.
+- **Data Providers**:
+    - `server/providers/wiki.ts` - Fetches Wikipedia pageviews (24h and 7d average) for velocity calculation
+    - `server/providers/gdelt.ts` - Fetches GDELT news mention counts for each celebrity
+    - Prepared for: Serper.dev (Google Trends), X API (when keys provided)
+- **Scoring Engine** (`server/scoring/`):
+    - `normalize.ts` - Fairness algorithm that re-normalizes weights when platforms are missing
+    - `trendScore.ts` - Computes final trend score (70% velocity, 30% mass)
+    - `utils.ts` - Log-normalization to prevent follower count dominance (10K-1B → 0-100 scale)
+- **Data Jobs**:
+    - `server/jobs/ingest.ts` - Full data ingestion from all API sources
+    - `server/jobs/quick-score.ts` - Fast scoring using cached API data
 
 ### Data Storage
-- **Current**: Hybrid storage - In-memory for trending data, PostgreSQL for persistent data.
 - **PostgreSQL Database**: Neon-backed PostgreSQL with Drizzle ORM.
-    - **Schema**: `users` (authentication), `trending_people` (person data), `celebrity_profiles` (AI-generated biographical data with 30-day caching).
+    - **Schema**: 
+        - `users` (authentication)
+        - `tracked_people` (165 celebrities with wikiSlug, xHandle, instagramHandle, youtubeId)
+        - `trending_people` (calculated rankings and scores)
+        - `trend_snapshots` (historical trend data for graphs)
+        - `api_cache` (cached API responses with TTL for rate limit management)
+        - `celebrity_profiles` (AI-generated biographical data with 30-day caching)
     - **Migration**: Drizzle Kit.
 
 ### AI-Generated Celebrity Profiles
