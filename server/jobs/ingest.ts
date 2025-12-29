@@ -3,6 +3,8 @@ import { trackedPeople, trendSnapshots, trendingPeople } from "@shared/schema";
 import { desc, eq } from "drizzle-orm";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
 import { fetchBatchGdeltNews } from "../providers/gdelt";
+import { fetchSerperBatch } from "../providers/serper";
+import { fetchXBatch } from "../providers/x-api";
 import { computeTrendScore } from "../scoring/trendScore";
 
 export interface IngestResult {
@@ -30,6 +32,15 @@ export async function runDataIngestion(): Promise<IngestResult> {
       people.map(p => ({ id: p.id, name: p.name }))
     );
 
+    const serperData = await fetchSerperBatch(
+      people.map(p => p.name),
+      2,
+      1000
+    );
+
+    const xHandles = people.filter(p => p.xHandle).map(p => p.xHandle!);
+    const xData = await fetchXBatch(xHandles, 30);
+
     const scoreResults: Array<{
       person: typeof people[0];
       score: ReturnType<typeof computeTrendScore>;
@@ -39,14 +50,18 @@ export async function runDataIngestion(): Promise<IngestResult> {
       try {
         const wiki = wikiData.get(person.id);
         const news = gdeltData.get(person.id);
+        const serper = serperData.get(person.name.toLowerCase());
+        const xMetrics = person.xHandle 
+          ? xData.get(person.xHandle.toLowerCase().replace("@", ""))
+          : null;
 
         const inputs = {
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiDelta: wiki?.delta || 0,
           newsDelta: news?.delta || 0,
-          searchDelta: 0,
-          xQuoteVelocity: 0,
-          xReplyVelocity: 0,
+          searchDelta: serper?.delta || 0,
+          xQuoteVelocity: xMetrics?.quoteVelocity || 0,
+          xReplyVelocity: xMetrics?.replyVelocity || 0,
           activePlatforms: {
             wiki: !!person.wikiSlug,
             x: !!person.xHandle,
@@ -61,15 +76,15 @@ export async function runDataIngestion(): Promise<IngestResult> {
           personId: person.id,
           trendScore: scoreResult.trendScore,
           newsCount: news?.articleCount24h || 0,
-          searchVolume: 0,
+          searchVolume: serper?.searchVolume || 0,
           youtubeViews: 0,
           spotifyFollowers: 0,
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiDelta: wiki?.delta || 0,
           newsDelta: news?.delta || 0,
-          searchDelta: 0,
-          xQuoteVelocity: 0,
-          xReplyVelocity: 0,
+          searchDelta: serper?.delta || 0,
+          xQuoteVelocity: xMetrics?.quoteVelocity || 0,
+          xReplyVelocity: xMetrics?.replyVelocity || 0,
           massScore: scoreResult.massScore,
           velocityScore: scoreResult.velocityScore,
           confidence: scoreResult.confidence,
