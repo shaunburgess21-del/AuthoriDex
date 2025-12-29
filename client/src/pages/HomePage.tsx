@@ -41,31 +41,17 @@ function MarketPulseCard({
 }) {
   const iconColor = type === "daily" ? "text-blue-400" : type === "gainer" ? "text-green-400" : "text-red-400";
   
-  const borderColor = type === "daily" 
-    ? "rgb(59, 130, 246)" // blue-500
+  const borderClass = type === "daily" 
+    ? "pulse-border-blue" 
     : type === "gainer" 
-      ? "rgb(34, 197, 94)" // green-500
-      : "rgb(239, 68, 68)"; // red-500
+      ? "pulse-border-green" 
+      : "pulse-border-red";
   
   return (
     <div 
-      className="relative min-w-[280px] md:min-w-0 shrink-0 md:shrink group"
+      className={`min-w-[280px] md:min-w-0 shrink-0 md:shrink ${borderClass}`}
       data-testid={`pulse-card-${type}`}
     >
-      <div 
-        className="absolute inset-0 rounded-lg pointer-events-none transition-opacity duration-300"
-        style={{
-          background: `linear-gradient(135deg, ${borderColor} 0%, ${borderColor}40 30%, transparent 60%)`,
-          padding: '1px',
-          opacity: 1,
-        }}
-      />
-      <div 
-        className="absolute inset-0 rounded-lg pointer-events-none transition-opacity duration-300 opacity-0 group-hover:opacity-100"
-        style={{
-          boxShadow: `inset 0 0 0 1.5px ${borderColor}`,
-        }}
-      />
       <Card 
         className="relative bg-slate-900/60 border-0 backdrop-blur-sm h-full" 
       >
