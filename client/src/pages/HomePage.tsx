@@ -48,13 +48,10 @@ function MarketPulseCard({
       : "pulse-border-red";
   
   return (
-    <div 
-      className={`min-w-[280px] md:min-w-0 shrink-0 md:shrink ${borderClass}`}
+    <Card 
+      className={`min-w-[280px] md:min-w-0 shrink-0 md:shrink bg-slate-900/60 border-0 backdrop-blur-sm h-full ${borderClass}`}
       data-testid={`pulse-card-${type}`}
     >
-      <Card 
-        className="relative bg-slate-900/60 border-0 backdrop-blur-sm h-full" 
-      >
       <CardHeader className="pb-2 px-4 pt-4">
         <div className="flex items-center gap-2">
           <Icon className={`h-4 w-4 ${iconColor}`} />
@@ -92,8 +89,7 @@ function MarketPulseCard({
           );
         })}
       </CardContent>
-      </Card>
-    </div>
+    </Card>
   );
 }
 

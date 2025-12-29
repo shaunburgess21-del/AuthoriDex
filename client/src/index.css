@@ -467,98 +467,73 @@
     animation: attention-pulse 1s ease-out forwards;
   }
 
-  /* Market Pulse Card gradient border effect */
+  /* Market Pulse Card gradient border effect using box-shadows */
   .pulse-border-blue,
   .pulse-border-green,
   .pulse-border-red {
     position: relative;
     border-radius: 0.5rem;
-    overflow: hidden;
   }
 
-  /* Default state: gradient border fading from top-left to bottom-right */
-  .pulse-border-blue::before,
-  .pulse-border-green::before,
-  .pulse-border-red::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 0.5rem;
-    padding: 2px;
-    pointer-events: none;
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    transition: opacity 0.3s ease;
+  /* Blue gradient border (Daily Movers) - prominent top-left fading to bottom-right */
+  .pulse-border-blue {
+    box-shadow: 
+      /* Top edge - strongest */
+      0 -2px 0 0 rgb(59, 130, 246),
+      /* Left edge - strongest */
+      -2px 0 0 0 rgb(59, 130, 246),
+      /* Top-left corner glow */
+      -3px -3px 8px -2px rgba(59, 130, 246, 0.5),
+      /* Right edge - faded */
+      2px 0 0 0 rgba(59, 130, 246, 0.15),
+      /* Bottom edge - faded */
+      0 2px 0 0 rgba(59, 130, 246, 0.15);
+    transition: box-shadow 0.3s ease;
+  }
+  .pulse-border-blue:hover {
+    box-shadow: 
+      0 -2px 0 0 rgb(59, 130, 246),
+      -2px 0 0 0 rgb(59, 130, 246),
+      2px 0 0 0 rgb(59, 130, 246),
+      0 2px 0 0 rgb(59, 130, 246),
+      0 0 12px 2px rgba(59, 130, 246, 0.3);
   }
 
-  /* Hover state: full solid border */
-  .pulse-border-blue::after,
-  .pulse-border-green::after,
-  .pulse-border-red::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 0.5rem;
-    padding: 2px;
-    pointer-events: none;
-    opacity: 0;
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    transition: opacity 0.3s ease;
+  /* Green gradient border (Weekly Gainers) */
+  .pulse-border-green {
+    box-shadow: 
+      0 -2px 0 0 rgb(34, 197, 94),
+      -2px 0 0 0 rgb(34, 197, 94),
+      -3px -3px 8px -2px rgba(34, 197, 94, 0.5),
+      2px 0 0 0 rgba(34, 197, 94, 0.15),
+      0 2px 0 0 rgba(34, 197, 94, 0.15);
+    transition: box-shadow 0.3s ease;
+  }
+  .pulse-border-green:hover {
+    box-shadow: 
+      0 -2px 0 0 rgb(34, 197, 94),
+      -2px 0 0 0 rgb(34, 197, 94),
+      2px 0 0 0 rgb(34, 197, 94),
+      0 2px 0 0 rgb(34, 197, 94),
+      0 0 12px 2px rgba(34, 197, 94, 0.3);
   }
 
-  .pulse-border-blue:hover::before,
-  .pulse-border-green:hover::before,
-  .pulse-border-red:hover::before {
-    opacity: 0;
+  /* Red gradient border (Weekly Droppers) */
+  .pulse-border-red {
+    box-shadow: 
+      0 -2px 0 0 rgb(239, 68, 68),
+      -2px 0 0 0 rgb(239, 68, 68),
+      -3px -3px 8px -2px rgba(239, 68, 68, 0.5),
+      2px 0 0 0 rgba(239, 68, 68, 0.15),
+      0 2px 0 0 rgba(239, 68, 68, 0.15);
+    transition: box-shadow 0.3s ease;
   }
-
-  .pulse-border-blue:hover::after,
-  .pulse-border-green:hover::after,
-  .pulse-border-red:hover::after {
-    opacity: 1;
-  }
-
-  /* Blue gradient (Daily Movers) */
-  .pulse-border-blue::before {
-    background: linear-gradient(135deg, 
-      rgb(59, 130, 246) 0%, 
-      rgba(59, 130, 246, 0.6) 20%, 
-      rgba(59, 130, 246, 0.2) 50%, 
-      transparent 70%
-    );
-  }
-  .pulse-border-blue::after {
-    background: rgb(59, 130, 246);
-  }
-
-  /* Green gradient (Weekly Gainers) */
-  .pulse-border-green::before {
-    background: linear-gradient(135deg, 
-      rgb(34, 197, 94) 0%, 
-      rgba(34, 197, 94, 0.6) 20%, 
-      rgba(34, 197, 94, 0.2) 50%, 
-      transparent 70%
-    );
-  }
-  .pulse-border-green::after {
-    background: rgb(34, 197, 94);
-  }
-
-  /* Red gradient (Weekly Droppers) */
-  .pulse-border-red::before {
-    background: linear-gradient(135deg, 
-      rgb(239, 68, 68) 0%, 
-      rgba(239, 68, 68, 0.6) 20%, 
-      rgba(239, 68, 68, 0.2) 50%, 
-      transparent 70%
-    );
-  }
-  .pulse-border-red::after {
-    background: rgb(239, 68, 68);
+  .pulse-border-red:hover {
+    box-shadow: 
+      0 -2px 0 0 rgb(239, 68, 68),
+      -2px 0 0 0 rgb(239, 68, 68),
+      2px 0 0 0 rgb(239, 68, 68),
+      0 2px 0 0 rgb(239, 68, 68),
+      0 0 12px 2px rgba(239, 68, 68, 0.3);
   }
 }
