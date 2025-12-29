@@ -46,6 +46,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ success: false, error: error.message });
     }
   });
+  
+  // Run data ingestion - fetches real data from Wikipedia and GDELT
+  app.post("/api/admin/ingest", async (req, res) => {
+    try {
+      const { runDataIngestion } = await import("./jobs/ingest");
+      const result = await runDataIngestion();
+      res.json({ 
+        success: true, 
+        message: "Data ingestion complete",
+        ...result
+      });
+    } catch (error: any) {
+      console.error("Ingestion error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Get all trending people
   app.get("/api/trending", async (req, res) => {
     try {
