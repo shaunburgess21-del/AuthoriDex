@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type TrendingPerson, type CelebrityProfile, type InsertCelebrityProfile, celebrityProfiles } from "@shared/schema";
+import { type User, type InsertUser, type TrendingPerson, type CelebrityProfile, type InsertCelebrityProfile, celebrityProfiles, trendingPeople } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, asc } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -42,10 +42,27 @@ export class MemStorage implements IStorage {
   }
 
   async getTrendingPeople(): Promise<TrendingPerson[]> {
+    const dbPeople = await db
+      .select()
+      .from(trendingPeople)
+      .orderBy(asc(trendingPeople.rank));
+    
+    if (dbPeople.length > 0) {
+      return dbPeople;
+    }
     return Array.from(this.trendingPeople.values());
   }
 
   async getTrendingPerson(id: string): Promise<TrendingPerson | undefined> {
+    const [person] = await db
+      .select()
+      .from(trendingPeople)
+      .where(eq(trendingPeople.id, id))
+      .limit(1);
+    
+    if (person) {
+      return person;
+    }
     return this.trendingPeople.get(id);
   }
 
