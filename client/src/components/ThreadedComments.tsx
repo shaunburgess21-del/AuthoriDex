@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown, ChevronUp, Send, Loader2 } from "lucide-react";
+import { ThumbsUp, ThumbsDown, MessageCircle, ChevronDown, ChevronUp, Send, Loader2, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,13 +26,29 @@ interface ThreadedCommentsProps {
   isOpen: boolean;
   onToggle: () => void;
   commentCount?: number;
+  userSentimentVote?: number | null;
 }
 
-export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0 }: ThreadedCommentsProps) {
+const ratingLabels = ["Hate", "Dislike", "Neutral", "Like", "Love"];
+const ratingColors = ["#dc2626", "#f97316", "#fbbf24", "#84cc16", "#22c55e"];
+
+function getRatingLabel(vote: number | null | undefined): string {
+  if (!vote) return "";
+  const index = Math.min(Math.max(Math.round((vote - 1) / 2), 0), 4);
+  return ratingLabels[index];
+}
+
+function getRatingColor(vote: number | null | undefined): string {
+  if (!vote) return "#6b7280";
+  const index = Math.min(Math.max(Math.round((vote - 1) / 2), 0), 4);
+  return ratingColors[index];
+}
+
+export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0, userSentimentVote }: ThreadedCommentsProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [newComment, setNewComment] = useState("");
-  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<{ id: string; username: string } | null>(null);
   const [replyContent, setReplyContent] = useState("");
   const [userVotes, setUserVotes] = useState<Record<string, string>>({});
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
@@ -189,6 +205,11 @@ export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0
     createCommentMutation.mutate({ content: replyContent, parentId });
   };
 
+  const startReply = (comment: Comment) => {
+    setReplyingTo({ id: comment.id, username: comment.username });
+    setReplyContent(`@${comment.username} `);
+  };
+
   const toggleReplies = (commentId: string) => {
     setExpandedReplies(prev => {
       const newSet = new Set(prev);
@@ -239,50 +260,53 @@ export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0
                 {comment.content}
               </p>
               
-              <div className="flex items-center gap-3 mt-2">
+              <div className="flex items-center gap-1 mt-2">
                 <button
                   onClick={() => handleVote(comment.id, "up")}
                   disabled={!user}
-                  className={`flex items-center gap-1 text-xs transition-colors ${
+                  className={`p-1 rounded transition-colors ${
                     userVote === "up" 
-                      ? "text-green-500" 
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "text-green-500 bg-green-500/10" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   } ${!user ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                   data-testid={`button-comment-upvote-${comment.id}`}
                 >
                   <ThumbsUp className={`h-3.5 w-3.5 ${userVote === "up" ? "fill-current" : ""}`} />
-                  <span>{comment.upvotes}</span>
                 </button>
+
+                <span className={`text-xs font-medium min-w-[1.5rem] text-center ${
+                  netVotes > 0 ? "text-green-500" : netVotes < 0 ? "text-red-500" : "text-muted-foreground"
+                }`}>
+                  {netVotes > 0 ? `+${netVotes}` : netVotes}
+                </span>
 
                 <button
                   onClick={() => handleVote(comment.id, "down")}
                   disabled={!user}
-                  className={`flex items-center gap-1 text-xs transition-colors ${
+                  className={`p-1 rounded transition-colors ${
                     userVote === "down" 
-                      ? "text-red-500" 
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "text-red-500 bg-red-500/10" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   } ${!user ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                   data-testid={`button-comment-downvote-${comment.id}`}
                 >
                   <ThumbsDown className={`h-3.5 w-3.5 ${userVote === "down" ? "fill-current" : ""}`} />
-                  <span>{comment.downvotes}</span>
                 </button>
 
                 {depth < maxDepth && (
                   <button
-                    onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => startReply(comment)}
+                    className="p-1 ml-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
                     data-testid={`button-comment-reply-${comment.id}`}
                   >
                     <MessageCircle className="h-3.5 w-3.5" />
-                    <span>Reply</span>
                   </button>
                 )}
 
                 {hasReplies && (
                   <button
                     onClick={() => toggleReplies(comment.id)}
-                    className="flex items-center gap-1 text-xs text-primary hover:underline"
+                    className="flex items-center gap-1 ml-2 text-xs text-primary hover:underline"
                     data-testid={`button-toggle-replies-${comment.id}`}
                   >
                     {isRepliesExpanded ? (
@@ -293,47 +317,52 @@ export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0
                     ) : (
                       <>
                         <ChevronDown className="h-3.5 w-3.5" />
-                        <span>Show {replies.length} {replies.length === 1 ? 'reply' : 'replies'}</span>
+                        <span>{replies.length} {replies.length === 1 ? 'reply' : 'replies'}</span>
                       </>
                     )}
                   </button>
                 )}
               </div>
 
-              {replyingTo === comment.id && (
-                <div className="mt-3 flex gap-2">
-                  <Textarea
-                    placeholder="Write a reply..."
-                    value={replyContent}
-                    onChange={(e) => setReplyContent(e.target.value)}
-                    rows={2}
-                    className="resize-none text-sm"
-                    data-testid={`textarea-reply-${comment.id}`}
-                  />
-                  <div className="flex flex-col gap-1">
-                    <Button
-                      size="icon"
-                      onClick={() => handleSubmitReply(comment.id)}
-                      disabled={createCommentMutation.isPending || !replyContent.trim()}
-                      data-testid={`button-submit-reply-${comment.id}`}
-                    >
-                      {createCommentMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Send className="h-4 w-4" />
-                      )}
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => {
-                        setReplyingTo(null);
-                        setReplyContent("");
-                      }}
-                      data-testid={`button-cancel-reply-${comment.id}`}
-                    >
-                      <ChevronUp className="h-4 w-4" />
-                    </Button>
+              {replyingTo?.id === comment.id && (
+                <div className="mt-3 p-3 bg-muted/30 rounded-lg">
+                  <div className="text-xs text-muted-foreground mb-2">
+                    Replying to @{replyingTo.username}
+                  </div>
+                  <div className="flex gap-2">
+                    <Textarea
+                      placeholder="Write a reply..."
+                      value={replyContent}
+                      onChange={(e) => setReplyContent(e.target.value)}
+                      rows={2}
+                      className="resize-none text-sm"
+                      data-testid={`textarea-reply-${comment.id}`}
+                    />
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        size="icon"
+                        onClick={() => handleSubmitReply(comment.id)}
+                        disabled={createCommentMutation.isPending || !replyContent.trim()}
+                        data-testid={`button-submit-reply-${comment.id}`}
+                      >
+                        {createCommentMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => {
+                          setReplyingTo(null);
+                          setReplyContent("");
+                        }}
+                        data-testid={`button-cancel-reply-${comment.id}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -354,16 +383,39 @@ export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0
     <div className="pl-11" data-testid={`comments-section-${insightId}`}>
       <button
         onClick={onToggle}
-        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-all"
+        className="flex items-center gap-1.5 p-1.5 rounded-md text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-all"
         data-testid={`button-toggle-comments-${insightId}`}
       >
         <MessageCircle className="h-4 w-4" />
-        <span>{displayedCount > 0 ? `${displayedCount} Comments` : "Comment"}</span>
+        {displayedCount > 0 && <span className="text-xs">{displayedCount}</span>}
         {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
       </button>
 
       {isOpen && (
         <div className="mt-3 space-y-3" data-testid={`comments-expanded-${insightId}`}>
+          {user && userSentimentVote && (
+            <div className="p-3 bg-muted/30 rounded-lg mb-4">
+              <div className="text-xs font-medium text-muted-foreground mb-2">Your Rating</div>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                  <div 
+                    className="h-full rounded-full transition-all"
+                    style={{ 
+                      width: `${(userSentimentVote / 10) * 100}%`,
+                      backgroundColor: getRatingColor(userSentimentVote)
+                    }}
+                  />
+                </div>
+                <span 
+                  className="text-sm font-medium"
+                  style={{ color: getRatingColor(userSentimentVote) }}
+                >
+                  {userSentimentVote}/10 - {getRatingLabel(userSentimentVote)}
+                </span>
+              </div>
+            </div>
+          )}
+
           {user && (
             <div className="flex gap-2">
               <Avatar className="h-6 w-6 flex-shrink-0">

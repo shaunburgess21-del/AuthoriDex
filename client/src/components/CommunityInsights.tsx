@@ -4,32 +4,21 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ThumbsUp, ThumbsDown, Plus, X, Loader2 } from "lucide-react";
+import { ThumbsUp, ThumbsDown, MessageCircle, Plus, X, Loader2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { ThreadedComments } from "./ThreadedComments";
+import { PostOverlayModal } from "./PostOverlayModal";
 
-// Utility: Get sentiment color based on 1-10 vote (matches Cast Your Vote widget)
 function getSentimentColor(vote: number): string {
-  // Color gradient matching SentimentVotingWidget
   const colors = [
-    "#dc2626", // 1 - red
-    "#e63946", // 2 - red-orange
-    "#f97316", // 3 - orange
-    "#fa9c3c", // 4 - orange-yellow
-    "#fbbf24", // 5 - yellow
-    "#c1d42d", // 6 - yellow-lime
-    "#84cc16", // 7 - lime
-    "#5bca30", // 8 - lime-green
-    "#22c55e", // 9 - green
-    "#22c55e", // 10 - green
+    "#dc2626", "#e63946", "#f97316", "#fa9c3c", "#fbbf24",
+    "#c1d42d", "#84cc16", "#5bca30", "#22c55e", "#22c55e",
   ];
-  return colors[vote - 1] || colors[4]; // Default to yellow if invalid
+  return colors[vote - 1] || colors[4];
 }
 
-// Utility: Get rank badge info (gold/silver/bronze)
 interface RankBadge {
   rank: number;
   label: string;
@@ -42,28 +31,27 @@ function getRankBadge(rank: number): RankBadge | null {
     return {
       rank: 1,
       label: "Top",
-      borderColor: "rgba(245, 158, 11, 0.6)", // amber-500 with 60% opacity
+      borderColor: "rgba(245, 158, 11, 0.6)",
       boxShadow: "0 0 20px rgba(245, 158, 11, 0.15)",
     };
   } else if (rank === 2) {
     return {
       rank: 2,
       label: "2nd",
-      borderColor: "rgba(148, 163, 184, 0.6)", // slate-400 with 60% opacity
+      borderColor: "rgba(148, 163, 184, 0.6)",
       boxShadow: "0 0 20px rgba(148, 163, 184, 0.15)",
     };
   } else if (rank === 3) {
     return {
       rank: 3,
       label: "3rd",
-      borderColor: "rgba(234, 88, 12, 0.6)", // orange-600 with 60% opacity
+      borderColor: "rgba(234, 88, 12, 0.6)",
       boxShadow: "0 0 20px rgba(234, 88, 12, 0.15)",
     };
   }
   return null;
 }
 
-// Utility: Truncate text to character limit
 function truncateText(text: string, limit: number): { preview: string; isTruncated: boolean } {
   if (text.length <= limit) {
     return { preview: text, isTruncated: false };
@@ -95,18 +83,16 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
   const [newInsight, setNewInsight] = useState("");
   const [userVotes, setUserVotes] = useState<Record<string, string>>({});
   const [expandedPosts, setExpandedPosts] = useState<Set<string>>(new Set());
-  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
-  const [displayCount, setDisplayCount] = useState(4); // Show 4 posts initially
+  const [selectedInsight, setSelectedInsight] = useState<CommunityInsight | null>(null);
+  const [displayCount, setDisplayCount] = useState(4);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const isLoadingRef = useRef(false); // Mutable ref to prevent race conditions
+  const isLoadingRef = useRef(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  // Fetch insights
   const { data: insights = [], isLoading, refetch } = useQuery<CommunityInsight[]>({
     queryKey: [`/api/community-insights/${personId}`],
   });
 
-  // Fetch user's votes
   useEffect(() => {
     if (!user) return;
 
@@ -135,7 +121,6 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
     fetchUserVotes();
   }, [personId, user]);
 
-  // Create insight mutation
   const createInsightMutation = useMutation({
     mutationFn: async (content: string) => {
       if (!user) throw new Error("Must be logged in to post");
@@ -184,7 +169,6 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
     },
   });
 
-  // Vote mutation
   const voteMutation = useMutation({
     mutationFn: async ({ insightId, voteType }: { insightId: string; voteType: string }) => {
       if (!user) throw new Error("Must be logged in to vote");
@@ -212,12 +196,14 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
       return response;
     },
     onSuccess: (_, variables) => {
-      // Update local vote state immediately
-      setUserVotes(prev => ({
-        ...prev,
-        [variables.insightId]: variables.voteType,
-      }));
-      // Refetch insights to get updated vote counts
+      setUserVotes(prev => {
+        if (prev[variables.insightId] === variables.voteType) {
+          const newVotes = { ...prev };
+          delete newVotes[variables.insightId];
+          return newVotes;
+        }
+        return { ...prev, [variables.insightId]: variables.voteType };
+      });
       queryClient.invalidateQueries({ queryKey: [`/api/community-insights/${personId}`] });
     },
     onError: (error: any) => {
@@ -257,12 +243,6 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
 
   const getNetVotes = (insight: CommunityInsight) => insight.upvotes - insight.downvotes;
 
-  const getVoteColor = (netVotes: number) => {
-    if (netVotes > 0) return "text-green-500";
-    if (netVotes < 0) return "text-red-500";
-    return "text-muted-foreground";
-  };
-
   const toggleExpanded = (insightId: string) => {
     setExpandedPosts(prev => {
       const newSet = new Set(prev);
@@ -275,27 +255,16 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
     });
   };
 
-  const toggleComments = (insightId: string) => {
-    setExpandedComments(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(insightId)) {
-        newSet.delete(insightId);
-      } else {
-        newSet.add(insightId);
-      }
-      return newSet;
-    });
+  const openPostOverlay = (insight: CommunityInsight) => {
+    setSelectedInsight(insight);
   };
 
-  // Infinite scroll: load more when bottom element is visible
   const loadMore = useCallback(() => {
-    // Use ref to prevent race conditions from stale closure
     if (isLoadingRef.current) return;
     
     isLoadingRef.current = true;
     setIsLoadingMore(true);
     
-    // Simulate a small delay for smooth UX (in production this would be actual API fetch)
     setTimeout(() => {
       setDisplayCount(prev => Math.min(prev + 4, insights.length));
       setIsLoadingMore(false);
@@ -303,14 +272,12 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
     }, 300);
   }, [insights.length]);
 
-  // Intersection Observer for infinite scroll
   useEffect(() => {
     const currentRef = loadMoreRef.current;
     if (!currentRef) return;
     
     const observer = new IntersectionObserver(
       (entries) => {
-        // Use ref check instead of state to avoid stale closure
         if (entries[0].isIntersecting && !isLoadingRef.current && displayCount < insights.length) {
           loadMore();
         }
@@ -323,20 +290,17 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
     return () => observer.disconnect();
   }, [loadMore, displayCount, insights.length]);
 
-  // Rank insights by net votes (for gold/silver/bronze borders)
   const rankedInsights = [...insights].sort((a, b) => {
     const aNet = getNetVotes(a);
     const bNet = getNetVotes(b);
-    if (aNet !== bNet) return bNet - aNet; // Sort by net votes descending
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // Tie-breaker: most recent first
+    if (aNet !== bNet) return bNet - aNet;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
-  // Get rank for an insight (1-indexed)
   const getInsightRank = (insightId: string): number => {
     return rankedInsights.findIndex(i => i.id === insightId) + 1;
   };
 
-  // Get display limit for insights
   const displayedInsights = insights.slice(0, displayCount);
   const hasMore = insights.length > displayCount;
 
@@ -431,16 +395,15 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
             return (
               <div
                 key={insight.id}
-                className="p-4 border rounded-md bg-card"
+                className="p-4 border rounded-md bg-card cursor-pointer hover:bg-muted/30 transition-colors"
                 style={rankBadge ? {
                   borderColor: rankBadge.borderColor,
                   boxShadow: rankBadge.boxShadow,
                 } : undefined}
+                onClick={() => openPostOverlay(insight)}
                 data-testid={`card-insight-${insight.id}`}
               >
-                {/* Reddit-style layout: Header -> Content -> Actions */}
                 <div className="space-y-3">
-                  {/* Header: Avatar + Username + Sentiment Pill + Timestamp */}
                   <div className="flex items-center gap-3">
                     <Avatar className="h-8 w-8 flex-shrink-0">
                       <AvatarFallback>
@@ -451,7 +414,6 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
                       <span className="font-semibold text-sm" data-testid={`text-username-${insight.id}`}>
                         {insight.username}
                       </span>
-                      {/* Sentiment Glass Pill Badge */}
                       {insight.sentimentVote && (
                         <span 
                           className="text-xs px-2 py-0.5 rounded-full backdrop-blur-sm border"
@@ -481,7 +443,6 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
                     </div>
                   </div>
 
-                  {/* Content */}
                   <div className="pl-11">
                     <p className="text-sm leading-relaxed break-words" data-testid={`text-content-${insight.id}`}>
                       {isExpanded ? insight.content : preview}
@@ -489,7 +450,10 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
                     </p>
                     {isTruncated && (
                       <button
-                        onClick={() => toggleExpanded(insight.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleExpanded(insight.id);
+                        }}
                         className="text-xs text-primary hover:underline mt-1"
                         data-testid={`button-toggle-${insight.id}`}
                       >
@@ -498,53 +462,59 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
                     )}
                   </div>
 
-                  {/* Actions Bar: Voting + Reply (Reddit-style bottom bar) */}
-                  <div className="flex items-center gap-4 pl-11">
-                    {/* Thumbs Up */}
+                  <div 
+                    className="flex items-center gap-1 pl-11"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <button
                       onClick={() => handleVote(insight.id, "up")}
                       disabled={!user}
-                      className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-sm transition-all ${
+                      className={`p-1.5 rounded-md transition-all ${
                         userVote === "up" 
-                          ? "bg-green-500/20 text-green-500" 
-                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                          ? "text-green-500 bg-green-500/10" 
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                       } ${!user ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                       data-testid={`button-upvote-${insight.id}`}
                     >
                       <ThumbsUp className={`h-4 w-4 ${userVote === "up" ? "fill-current" : ""}`} />
-                      <span data-testid={`text-upvotes-${insight.id}`}>{insight.upvotes}</span>
                     </button>
 
-                    {/* Thumbs Down */}
+                    <span 
+                      className={`text-sm font-medium min-w-[2.5rem] text-center ${
+                        netVotes > 0 ? "text-green-500" : netVotes < 0 ? "text-red-500" : "text-muted-foreground"
+                      }`}
+                      data-testid={`text-netvotes-${insight.id}`}
+                    >
+                      {netVotes > 0 ? `+${netVotes}` : netVotes}
+                    </span>
+
                     <button
                       onClick={() => handleVote(insight.id, "down")}
                       disabled={!user}
-                      className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-sm transition-all ${
+                      className={`p-1.5 rounded-md transition-all ${
                         userVote === "down" 
-                          ? "bg-red-500/20 text-red-500" 
-                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                          ? "text-red-500 bg-red-500/10" 
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                       } ${!user ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
                       data-testid={`button-downvote-${insight.id}`}
                     >
                       <ThumbsDown className={`h-4 w-4 ${userVote === "down" ? "fill-current" : ""}`} />
-                      <span data-testid={`text-downvotes-${insight.id}`}>{insight.downvotes}</span>
                     </button>
 
+                    <button
+                      onClick={() => openPostOverlay(insight)}
+                      className="flex items-center gap-1.5 p-1.5 ml-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
+                      data-testid={`button-comments-${insight.id}`}
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                    </button>
                   </div>
-
-                  {/* Threaded Comments Section */}
-                  <ThreadedComments
-                    insightId={insight.id}
-                    isOpen={expandedComments.has(insight.id)}
-                    onToggle={() => toggleComments(insight.id)}
-                  />
                 </div>
               </div>
             );
           })
         )}
 
-        {/* Infinite scroll trigger element */}
         {hasMore && (
           <div 
             ref={loadMoreRef} 
@@ -560,13 +530,20 @@ export function CommunityInsights({ personId, personName }: CommunityInsightsPro
           </div>
         )}
         
-        {/* End of list indicator */}
         {!hasMore && insights.length > 0 && (
           <div className="flex justify-center py-6 text-muted-foreground text-sm">
             You've seen all {insights.length} insights
           </div>
         )}
       </div>
+
+      <PostOverlayModal
+        insight={selectedInsight}
+        isOpen={!!selectedInsight}
+        onClose={() => setSelectedInsight(null)}
+        userVote={selectedInsight ? userVotes[selectedInsight.id] : undefined}
+        onVote={handleVote}
+      />
     </div>
   );
 }
