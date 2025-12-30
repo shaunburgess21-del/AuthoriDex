@@ -28,9 +28,19 @@ export async function runDataIngestion(): Promise<IngestResult> {
       people.map(p => ({ id: p.id, wikiSlug: p.wikiSlug }))
     );
 
-    const gdeltData = await fetchBatchGdeltNews(
-      people.map(p => ({ id: p.id, name: p.name }))
-    );
+    // GDELT has SSL certificate issues (Dec 2024) - wrap with timeout and fallback
+    let gdeltData = new Map<string, any>();
+    try {
+      const gdeltPromise = fetchBatchGdeltNews(
+        people.map(p => ({ id: p.id, name: p.name }))
+      );
+      const timeoutPromise = new Promise<Map<string, any>>((_, reject) => 
+        setTimeout(() => reject(new Error('GDELT timeout')), 30000)
+      );
+      gdeltData = await Promise.race([gdeltPromise, timeoutPromise]);
+    } catch (err) {
+      console.log('[Ingest] GDELT fetch failed (certificate/timeout), continuing with other sources');
+    }
 
     const serperData = await fetchSerperBatch(
       people.map(p => p.name),
