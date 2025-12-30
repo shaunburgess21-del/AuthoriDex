@@ -62,6 +62,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ success: false, error: error.message });
     }
   });
+  
+  // Seed historical trend data for graphs
+  app.post("/api/admin/seed-history", async (req, res) => {
+    try {
+      const { seedHistoricalSnapshots } = await import("./jobs/seed-history");
+      const { days = 7 } = req.body;
+      const result = await seedHistoricalSnapshots(days);
+      res.json({ 
+        success: true, 
+        message: `Created ${result.created} historical snapshots`,
+        ...result
+      });
+    } catch (error: any) {
+      console.error("Seed history error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 
   // Get all trending people
   app.get("/api/trending", async (req, res) => {

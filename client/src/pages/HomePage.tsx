@@ -139,10 +139,12 @@ function TrendGraphOverlay({
     
     filteredPeople.forEach((person, idx) => {
       const data = historyQueries[idx]?.data || [];
-      data.forEach((point: { date: string; time: string; trendScore: number }) => {
-        const key = point.date;
+      data.forEach((point: { timestamp: string; date: string; time: string; trendScore: number }) => {
+        const key = point.timestamp;
         if (!allTimestamps.has(key)) {
-          allTimestamps.set(key, { date: key });
+          const d = new Date(point.timestamp);
+          const label = `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:00`;
+          allTimestamps.set(key, { date: label, timestamp: point.timestamp });
         }
         const entry = allTimestamps.get(key)!;
         entry[person.id] = point.trendScore;
@@ -151,11 +153,11 @@ function TrendGraphOverlay({
     
     return Array.from(allTimestamps.values())
       .sort((a, b) => {
-        const dateA = new Date(a.date as string);
-        const dateB = new Date(b.date as string);
+        const dateA = new Date(a.timestamp as string);
+        const dateB = new Date(b.timestamp as string);
         return dateA.getTime() - dateB.getTime();
       })
-      .slice(-14);
+      .slice(-28);
   }, [historyQueries, filteredPeople]);
 
   const toggleLine = (id: string) => {
