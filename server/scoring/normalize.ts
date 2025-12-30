@@ -15,21 +15,24 @@ export interface StandardWeights {
 
 export const STANDARD_WEIGHTS: StandardWeights = {
   mass: {
-    wiki: 0.4,
-    x: 0.2,
+    wiki: 0.3,
+    x: 0.35,
     instagram: 0.2,
-    youtube: 0.2,
+    youtube: 0.15,
   },
   velocity: {
     wikiDelta: 0.15,
-    newsDelta: 0.25,
-    searchDelta: 0.35,
-    xVelocity: 0.25,
+    newsDelta: 0.20,
+    searchDelta: 0.25,
+    xVelocity: 0.40,
   },
 };
 
-export const MASS_ALLOCATION = 0.3;
-export const VELOCITY_ALLOCATION = 0.7;
+export const MASS_ALLOCATION = 0.25;
+export const VELOCITY_ALLOCATION = 0.75;
+
+export const MISSING_X_PENALTY = 0.6;
+export const WIKI_DOMINANCE_CAP = 0.4;
 
 export interface ActivePlatforms {
   wiki: boolean;

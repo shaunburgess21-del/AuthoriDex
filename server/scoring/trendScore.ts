@@ -3,6 +3,8 @@ import {
   calculateDynamicVelocityWeights,
   MASS_ALLOCATION,
   VELOCITY_ALLOCATION,
+  MISSING_X_PENALTY,
+  WIKI_DOMINANCE_CAP,
   ActivePlatforms
 } from "./normalize";
 import { 
@@ -57,7 +59,9 @@ export function computeTrendScore(
     hasX || inputs.activePlatforms.x
   );
   
-  const wikiMassScore = normalizeMass(inputs.wikiPageviews * 365);
+  let wikiMassScore = normalizeMass(inputs.wikiPageviews * 365);
+  wikiMassScore = Math.min(wikiMassScore, wikiMassScore * WIKI_DOMINANCE_CAP + 50);
+  
   const followerScore = inputs.totalFollowers 
     ? normalizeMass(inputs.totalFollowers) 
     : 0;
@@ -69,12 +73,14 @@ export function computeTrendScore(
     (followerScore * massWeights.youtube)
   );
   
-  const wikiVelocityScore = normalizeVelocity(inputs.wikiDelta);
+  let wikiVelocityScore = normalizeVelocity(inputs.wikiDelta);
+  wikiVelocityScore = Math.min(wikiVelocityScore, wikiVelocityScore * WIKI_DOMINANCE_CAP + 30);
+  
   const newsVelocityScore = normalizeVelocity(inputs.newsDelta);
   const searchVelocityScore = normalizeVelocity(inputs.searchDelta);
   
   const xTotalVelocity = inputs.xQuoteVelocity + inputs.xReplyVelocity;
-  const xVelocityScore = Math.min(100, xTotalVelocity);
+  const xVelocityScore = Math.min(100, xTotalVelocity * 2);
   
   const velocityScore = (
     (wikiVelocityScore * velocityWeights.wikiDelta) +
@@ -91,9 +97,14 @@ export function computeTrendScore(
   if (hasSearch) dataSourceCount++;
   if (hasX) dataSourceCount++;
   
-  const confidence = dataSourceCount >= 3 ? 1.2 : 
-                     dataSourceCount >= 2 ? 1.0 : 
-                     dataSourceCount >= 1 ? 0.9 : 0.8;
+  const hasXHandle = inputs.activePlatforms.x;
+  const xPenalty = hasXHandle ? 1.0 : MISSING_X_PENALTY;
+  
+  let confidence = dataSourceCount >= 3 ? 1.3 : 
+                   dataSourceCount >= 2 ? 1.0 : 
+                   dataSourceCount >= 1 ? 0.8 : 0.6;
+  
+  confidence = confidence * xPenalty;
   
   const trendScore = clamp(rawScore * confidence * 10000, 0, 1000000);
   
