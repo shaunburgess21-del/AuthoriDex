@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { startSnapshotScheduler } from "./jobs/snapshot-scheduler";
 
 const app = express();
 app.use(express.json());
@@ -71,5 +72,7 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    
+    startSnapshotScheduler(60 * 60 * 1000);
   });
 })();
