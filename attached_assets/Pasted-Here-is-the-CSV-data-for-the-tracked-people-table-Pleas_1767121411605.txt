@@ -1,0 +1,107 @@
+Here is the CSV data for the tracked_people table.
+
+Please import this list immediately. It is formatted with the required headers: name, category, wiki_slug, and x_handle.
+
+Code snippet
+
+name,category,wiki_slug,x_handle
+Elon Musk,Tech,Elon_Musk,elonmusk
+Donald Trump,Politics,Donald_Trump,realDonaldTrump
+Taylor Swift,Music,Taylor_Swift,taylorswift13
+Cristiano Ronaldo,Sports,Cristiano_Ronaldo,Cristiano
+Mr Beast,Creator,MrBeast,MrBeast
+Jensen Huang,Tech,Jensen_Huang,nvidia
+Narendra Modi,Politics,Narendra_Modi,narendramodi
+Lionel Messi,Sports,Lionel_Messi,TeamMessi
+Sam Altman,Tech,Sam_Altman,sama
+Beyoncé,Music,Beyoncé,Beyonce
+Mark Zuckerberg,Tech,Mark_Zuckerberg,finkd
+Joe Rogan,Creator,Joe_Rogan,joerogan
+Vladimir Putin,Politics,Vladimir_Putin,KremlinRussia_E
+Jeff Bezos,Business,Jeff_Bezos,JeffBezos
+LeBron James,Sports,LeBron_James,KingJames
+Xi Jinping,Politics,Xi_Jinping,
+Kendrick Lamar,Music,Kendrick_Lamar,kendricklamar
+Kylian Mbappé,Sports,Kylian_Mbappé,KMbappe
+Tim Cook,Tech,Tim_Cook,tim_cook
+Kai Cenat,Creator,Kai_Cenat,KaiCenat
+Drake,Music,Drake_(musician),Drake
+Satya Nadella,Tech,Satya_Nadella,satyanadella
+Bill Gates,Tech,Bill_Gates,BillGates
+Rihanna,Music,Rihanna,rihanna
+Virat Kohli,Sports,Virat_Kohli,imVkohli
+Logan Paul,Creator,Logan_Paul,LoganPaul
+Volodymyr Zelenskyy,Politics,Volodymyr_Zelenskyy,ZelenskyyUa
+Bad Bunny,Music,Bad_Bunny,sanbenito
+Larry Ellison,Tech,Larry_Ellison,larryellison
+Theo Von,Creator,Theo_Von,@TheoVon
+Emmanuel Macron,Politics,Emmanuel_Macron,EmmanuelMacron
+Lewis Hamilton,Sports,Lewis_Hamilton,LewisHamilton
+IShowSpeed,Creator,IShowSpeed,ishowspeedsui
+Sundar Pichai,Tech,Sundar_Pichai,sundarpichai
+Stephen Curry,Sports,Stephen_Curry,StephenCurry30
+Charli D'Amelio,Creator,Charli_D'Amelio,charlidamelio
+Lisa Su,Tech,Lisa_Su,LisaSu
+Keir Starmer,Politics,Keir_Starmer,Keir_Starmer
+Max Verstappen,Sports,Max_Verstappen,Max33Verstappen
+KSI,Creator,KSI,KSI
+Giorgia Meloni,Politics,Giorgia_Meloni,GiorgiaMeloni
+Travis Scott,Music,Travis_Scott,trvisXX
+Vitalik Buterin,Tech,Vitalik_Buterin,VitalikButerin
+Robert F. Kennedy Jr.,Politics,Robert_F._Kennedy_Jr.,RobertKennedyJr
+Tulsi Gabbard,Politics,Tulsi_Gabbard,TulsiGabbard
+Mohammed bin Salman,Politics,Mohammed_bin_Salman,
+Rory McIlroy,Sports,Rory_McIlroy,McIlroyRory
+Karoline Leavitt,Politics,Karoline_Leavitt,kleavittnh
+Khaby Lame,Creator,Khaby_Lame,KhabyLame
+Tom Brady,Sports,Tom_Brady,TomBrady
+Masayoshi Son,Business,Masayoshi_Son,masason
+Justin Trudeau,Politics,Justin_Trudeau,JustinTrudeau
+Ariana Grande,Music,Ariana_Grande,ArianaGrande
+Neymar,Sports,Neymar,neymarjr
+Michael Dell,Business,Michael_Dell,MichaelDell
+Lula da Silva,Politics,Luiz_Inácio_Lula_da_Silva,LulaOficial
+Billie Eilish,Music,Billie_Eilish,billieeilish
+Lex Fridman,Creator,Lex_Fridman,lexfridman
+Pony Ma,Tech,Ma_Huateng,
+Recep Tayyip Erdoğan,Politics,Recep_Tayyip_Erdoğan,RTErdogan
+Erling Haaland,Sports,Erling_Haaland,ErlingHaaland
+Palmer Luckey,Tech,Palmer_Luckey,PalmerLuckey
+Javier Milei,Politics,Javier_Milei,JMilei
+Lisa (Blackpink),Music,Lisa_(rapper),BLACKPINK
+Adele,Music,Adele,Adele
+Conor McGregor,Sports,Conor_McGregor,TheNotoriousMMA
+Demis Hassabis,Tech,Demis_Hassabis,demishassabis
+Benjamin Netanyahu,Politics,Benjamin_Netanyahu,netanyahu
+Changpeng Zhao,Business,Changpeng_Zhao,
+Reed Hastings,Business,Reed_Hastings,reedhastings
+Viktor Orbán,Politics,Viktor_Orbán,PM_ViktorOrban
+Alexandria Ocasio-Cortez,Politics,Alexandria_Ocasio-Cortez,AOC
+Ed Sheeran,Music,Ed_Sheeran,edsheeran
+Ursula von der Leyen,Politics,Ursula_von_der_Leyen,vonderleyen
+Nayib Bukele,Politics,Nayib_Bukele,nayibbukele
+Chamath Palihapitiya,Business,Chamath_Palihapitiya,chamath
+David Sacks,Business,David_Sacks,DavidSacks
+Shayne Coplan,Tech,Shayne_Coplan,shayne_coplan
+Tiger Woods,Sports,Tiger_Woods,TigerWoods
+Ray Dalio,Business,Ray_Dalio,RayDalio
+Peter Thiel,Business,Peter_Thiel,peterthiel
+Kash Patel,Politics,Kash_Patel,Kash
+Scott Bessent,Business,Scott_Bessent,ScottBessent
+Marco Rubio,Politics,Marco_Rubio,marcorubio
+JD Vance,Politics,JD_Vance,JDVance
+Pete Hegseth,Politics,Pete_Hegseth,PeteHegseth
+J.K. Rowling,Creator,J._K._Rowling,jk_rowling
+Tucker Carlson,Creator,Tucker_Carlson,TuckerCarlson
+Scottie Scheffler,Sports,Scottie_Scheffler,
+Bryson DeChambeau,Sports,Bryson_DeChambeau,b_dechambeau
+Gavin Newsom,Politics,Gavin_Newsom,GavinNewsom
+Novak Djokovic,Sports,Novak_Djokovic,DjokerNole
+Nicki Minaj,Music,Nicki_Minaj,NICKIMINAJ
+Jake Paul,Creator,Jake_Paul,jakepaul
+Brian Armstrong,Tech,Brian_Armstrong,brian_armstrong
+Kim Kardashian,Creator,Kim_Kardashian,KimKardashian
+Kylie Jenner,Creator,Kylie_Jenner,KylieJenner
+Kendall Jenner,Creator,Kendall_Jenner,KendallJenner
+Piers Morgan,Creator,Piers_Morgan,piersmorgan
+Nick Fuentes,Politics,Nick_Fuentes,NickJFuentes

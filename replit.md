@@ -40,15 +40,24 @@ Preferred communication style: Simple, everyday language.
     - `server/jobs/snapshot-scheduler.ts` - Hourly trend snapshots for chart data (auto-starts with server)
 
 ### Data Storage
-- **PostgreSQL Database**: Neon-backed PostgreSQL with Drizzle ORM.
-    - **Schema**: 
-        - `users` (authentication)
-        - `tracked_people` (100 celebrities with wikiSlug, xHandle, instagramHandle, youtubeId)
+- **PostgreSQL Database**: Supabase-backed PostgreSQL (FameDex 2026 project) with Drizzle ORM.
+    - **Core Schema**: 
+        - `users` (authentication + gamification: xpPoints, reputationRank, predictCredits, currentStreak, walletAddress)
+        - `tracked_people` (100 celebrities with wikiSlug, xHandle, status: 'main_leaderboard' | 'induction_queue')
         - `trending_people` (calculated rankings and scores)
         - `trend_snapshots` (historical trend data for graphs)
         - `api_cache` (cached API responses with TTL for rate limit management)
         - `celebrity_profiles` (AI-generated biographical data with 30-day caching)
-    - **Migration**: Drizzle Kit.
+    - **Gamification Schema**:
+        - `ranks` (7-tier system: Citizen → Hall of Famer, with XP thresholds and vote multipliers)
+        - `votes` (unified polymorphic voting with JSONB metadata for prediction price tracking)
+        - `induction_candidates` (potential new celebrities for community voting)
+        - `celebrity_images` (multiple photos per celebrity for profile curation)
+    - **Community Schema**:
+        - `community_insights`, `insight_votes`, `insight_comments`, `comment_votes`
+        - `platform_insights`, `insight_items`
+        - `user_votes`, `user_favourites`
+    - **Migration**: Drizzle Kit with `npx drizzle-kit push`.
 
 ### AI-Generated Celebrity Profiles
 - **Feature**: Info modal on celebrity profile pages displays AI-generated biographical data.
@@ -66,7 +75,7 @@ Preferred communication style: Simple, everyday language.
 - **Serper.dev API**: Google search results for search volume (API key required)
 - **X/Twitter API**: Quote/reply velocity metrics (Basic tier, 10K reads/month)
 - **Google Fonts**: Inter, Space Grotesk, JetBrains Mono
-- **Neon Database**: PostgreSQL provider
+- **Supabase**: PostgreSQL database provider (FameDex 2026 project)
 
 ### Required Environment Secrets
 - `SERPER_API_KEY` - For Google search data
