@@ -133,9 +133,11 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
   return { processed, errors };
 }
 
-runQuickScoring()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error("Quick scoring failed:", error);
-    process.exit(1);
-  });
+if (process.argv[1]?.endsWith('quick-score.ts')) {
+  runQuickScoring()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error("Quick scoring failed:", error);
+      process.exit(1);
+    });
+}
