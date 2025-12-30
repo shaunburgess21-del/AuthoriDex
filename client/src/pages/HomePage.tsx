@@ -546,16 +546,32 @@ export default function HomePage() {
     <div className="min-h-screen pb-20 md:pb-0">
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <button 
+            onClick={() => {
+              setActiveView("leaderboard");
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            data-testid="button-logo-home"
+          >
             <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
               <span className="text-white font-bold font-serif text-lg">F</span>
             </div>
             <span className="font-serif font-bold text-xl">FameDex</span>
-          </div>
+          </button>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-1 mr-2">
-              <Button variant="ghost" size="sm" className="text-blue-400" data-testid="nav-home-desktop">
-                Home
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-blue-400" 
+                onClick={() => {
+                  setActiveView("leaderboard");
+                  document.getElementById("leaderboard")?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                data-testid="nav-leaderboard-desktop"
+              >
+                Leaderboard
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setLocation("/vote")} data-testid="nav-vote-desktop">
                 Vote
