@@ -37,12 +37,13 @@ Preferred communication style: Simple, everyday language.
 - **Data Jobs**:
     - `server/jobs/ingest.ts` - Full data ingestion from all API sources
     - `server/jobs/quick-score.ts` - Fast scoring using cached API data
+    - `server/jobs/snapshot-scheduler.ts` - Hourly trend snapshots for chart data (auto-starts with server)
 
 ### Data Storage
 - **PostgreSQL Database**: Neon-backed PostgreSQL with Drizzle ORM.
     - **Schema**: 
         - `users` (authentication)
-        - `tracked_people` (165 celebrities with wikiSlug, xHandle, instagramHandle, youtubeId)
+        - `tracked_people` (100 celebrities with wikiSlug, xHandle, instagramHandle, youtubeId)
         - `trending_people` (calculated rankings and scores)
         - `trend_snapshots` (historical trend data for graphs)
         - `api_cache` (cached API responses with TTL for rate limit management)
