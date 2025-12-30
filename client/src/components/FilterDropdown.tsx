@@ -34,7 +34,7 @@ export function FilterDropdown({ value, onChange }: FilterDropdownProps) {
           Filter
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
+      <DropdownMenuContent align="end" className="w-48 z-50">
         <DropdownMenuLabel>Category</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
