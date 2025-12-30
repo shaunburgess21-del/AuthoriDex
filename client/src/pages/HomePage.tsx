@@ -346,7 +346,10 @@ function PredictHookView({
         <Button 
           size="lg"
           className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-semibold px-8 shadow-lg shadow-violet-500/20"
-          onClick={onExplore}
+          onClick={() => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            onExplore();
+          }}
           data-testid="button-explore-markets"
         >
           <Sparkles className="h-4 w-4 mr-2" />
