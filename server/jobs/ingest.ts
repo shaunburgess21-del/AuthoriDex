@@ -152,3 +152,13 @@ export async function getLastIngestionTime(): Promise<Date | null> {
 
   return lastSnapshot?.timestamp || null;
 }
+
+if (process.argv[1]?.endsWith('ingest.ts')) {
+  runDataIngestion().then((result) => {
+    console.log('[Ingest] Final result:', result);
+    process.exit(0);
+  }).catch((err) => {
+    console.error('[Ingest] Fatal error:', err);
+    process.exit(1);
+  });
+}
