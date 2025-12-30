@@ -1,0 +1,74 @@
+This is excellent feedback from the Replit Planning Agent. It is absolutely correct: **Generic prompts break existing code.**
+
+We must pivot immediately. Instead of asking Replit to "create" new systems from scratch, we need to ask it to **extend** your existing architecture (`tracked_people`, `trending_people`, etc.).
+
+To do this safely, I need to see your **Current Schema**.
+
+### **Step 1: Provide Your Current Schema**
+
+I cannot write safe SQL or TypeScript updates without knowing what is already there.
+
+**Option A: From Replit (Best Option)**
+Look in your file tree for one of these files and **copy/paste the entire content here**:
+
+* `shared/schema.ts` (Most likely location)
+* `server/db/schema.ts`
+* `drizzle.config.ts`
+
+**Option B: From Supabase (If Replit is confusing)**
+
+1. Go to your Supabase Dashboard.
+2. Click **SQL Editor** (icon on the left).
+3. Paste this command and run it:
+```sql
+SELECT *
+FROM information_schema.tables
+WHERE table_schema = 'public';
+
+```
+
+
+4. Copy the output (or just screenshot your **Table Editor** view showing the column names for `tracked_people` and `users`).
+
+---
+
+### **Step 2: Answers to Replit's Critical Questions**
+
+While you get that schema, here is how we will address the "Missing Integration Points" Replit warned about.
+
+**1. Connecting Images to Existing Celebs**
+
+* **Replit's Worry:** *"How does the existing `tracked_people` table connect to new image tables?"*
+* **The Fix:** We will use a **Foreign Key**. The new `celebrity_images` table will have a column `celebrity_id` that strictly references `tracked_people.id`.
+* **Naming Convention:** We won't rely on filenames (like "elon_musk.jpg"). We will rely on IDs. The upload script will read the `tracked_people` table, get Elon's UUID, and then upload the image to `/leaderboard/[UUID]/image_1.jpg`.
+
+**2. The "Circular Dependency" (XP -> Rank -> Vote Weight)**
+
+* **Replit's Worry:** *"XP affects vote weight (circular dependency that needs planning)"*
+* **The Fix:** We handle this in the **Transaction Logic**.
+* When a user clicks "Vote":
+* 1. Server reads User's current `total_xp`.
+
+
+* 2. Server calculates Rank (e.g., >25k XP = Legend).
+
+
+* 3. Server applies Multiplier (Legend = 1.5x).
+
+
+* 4. Server commits the vote.
+
+
+* 5. Server awards +10 XP to User. (This XP helps them for the *next* vote, not the current one).
+
+
+
+
+
+**3. The 200 Induction Candidates**
+
+* **Replit's Worry:** *"Do you have the 200 candidate names ready?"*
+* **The Fix:** **Yes, we do.** We generated that CSV/Excel list in our previous turn (Rank 101–353). We just need to convert that CSV into a JSON object for the upload script.
+
+**Action Item:**
+Please **paste your `schema.ts` file** (or equivalent) in your next response. Once I have that, I will rewrite the prompts to be **"Schema-Aware"** so they integrate perfectly with your current setup.

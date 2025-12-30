@@ -1,0 +1,59 @@
+We have now connected the API's - things are looking good - the graphs are displaying financial-style graphs with real movement patterns which is positive - however, there is alot more work to do. I am going to start writing an obvious task list of items we need to address, but this task list won't cover everything as we are finding out new things as we go. Please note I do not want to write one mega prompt to address all the below - but rather write individual prompts in the order that you recommend I should tackle each one - to make it easier for Replit to understand and which would be the natural progression in design and implementation - to ensure we do not duplicate or have to overide previous build requests. Please list the order in which I should address each of the below:
+
+
+
+1. Regarding Main Profile Photos that are displayed for celebrities on Main Leaderboard: The placeholder images that we had uploaded directly to Replit previously were removed after we installed the API's. I think Replit needed to do this becasue they had to clear all the dummie data used before we applied the live API's. With that said, we now need to generate all the images (which we have started creating) and upload them to the Supabase database, so that Replit can access these images and apply them as the profile photos to the existing leaderboard celebrities.
+
+
+
+3. Regarding the section "Curate Profile" - on the Vote section: On the same note with Profile Images - I am unsure if you recall, but on the "Vote" section - we have the vote option for FameDex users to "Curate Profile" photos (i.e. decide on which photo will be displayed as the main profile photo for that celebrity), so essentially - the users will decide which photo is displayed as the main profile photo. With that said - we will be uploading approx. 5 photos of each celebrity to the Supabase - and then these photos will be used for users to vote which profile photo they prefer. So we need the system to be able to identify which photo belongs to wich celebrity - so it can display the correct photos side by side in the voting section - curate profile for each celebrity - and automatically display the one with the highest votes at any given time. So regarding point 1 and 2 above... can you explain how we can 1. upload all photos to SupaBase and 2. label them so that Replit knows which ones to allocate correctly and then we will need to work on a prompt for Replit to manage this entire process automatically.
+
+
+
+4. Regarding the section "The Induction Queue" - Potential New Inducties: As of current - we have uploaded a static list of 100 celebrities to FameDex - which is showing correctly on FameDex as the main Leaderboard and fetching data for each. However, we now need to upload a list of around 200 additional "candicates" that can be used as the induction que on the voting page. FameDex does not need to collect API data on these individuals as they won't have their own profile pages or be listed on the main leaderboard. However, FameDex will need to use this list to update all the "Induction Que" vote cards for each of these canditates so that FameDex users can begin voting on who should be the next celebrity to be included on the main Leaderboard. Initially (to save time) we will just create one image for each of these inducties so the profile photo can be displayed on their "Vote card" and we will add more images of the people who appear to be close to being inducted (having the most votes) so that when they are inducted - Replit will be able to access the additional photos for purpose of selecting the maiin profile photo to be displayed. The reason I am detailing this is because I want you to explain the best approach to achieve this, 1. for uploading image cache to Supabase for this particular purpose and then for Replit to automate this process. N.B. after uploading the list and all images - at first we don't want to activate the weekly induction process until such time we have got everything in order. We would like Replit to pause the system and until such time we instruct it to begin, then it can start the weekly timer of automatically inducting the canditates with the highest votes on a weekly basis. This will start off with 1 canditate per week and then progress to 2, 3 etc as time goes on and we obtain more users voting on FameDex.
+
+
+
+5. Regarding the FameDex User profile page / My Account (not the celebrity profile pages): Now that we have Supabase connected - we need to start ironing out how the "My Account" will appear and function on FameDex from a UI/UX perspective and promote optimal engagment from users on FameDex.
+
+
+
+6. Regarding the user ranking system, we can use the following User Rank Tiers:
+
+1. Citizen (0-499 XP)
+
+2. Rising Star (500-1,999 XP)
+
+3. Influencer (2,000-4,999 XP)
+
+4. Trendsetter (5,000-9,999 XP)
+
+5. Icon (10,000-24,999 XP)
+
+7. Legend (25,000-49,999 XP)
+
+8. Hall of Famer (50,000+ XP)
+
+We need to design Core Mechanics: How XP is Earned XP should be straightforward but progressive - start small, scale with consistency to encourage habits. Track via user profile (e.g., in our backend DB or Magic Labs metadata). Base Actions (Daily/Repeatable): Daily Login/Return: +10 XP (capped at 1x/day). Encourages habitual visits; detect via session timestamps. Vote on a Poll/Induction: +10 XP per vote (max 5/day to prevent spam). Ties to
+
+governance. Make a Prediction: +20 XP per entry. Bonus Multipliers (Volatility/Engagement):Streaks: +10% XP bonus per day of consecutive logins (e.g., Day 3: +30% total). Resets after 24h miss—builds FOMO. Accuracy Bonuses: +100 XP if your prediction/vote wins (e.g., correct rank in Jackpot or inducted celeb). Use post-event hooks to award. Social Shares: +50 XP for sharing rank/achievement on social platform such as X
+
+(verified via callback URL). Caps & Anti-Abuse: Daily XP cap at 500 to prevent bots; decay inactive XP by 5%/week for fairness.
+
+
+
+7. Regarding the rules around the user ranking system and what benefits each rank is awarded with - we need to design these. But there are a few obvious ones to us - for eaxample:
+
+7.1. As a user climbs the ranks - their vote should count slightly more on votes for "Induction Que" and "Curate Profile" (N.B. not for "Community Polls" since "Community Polls" will strictyly always have an equal 1:1 vote count for any vote - since the purpose of the Community Polls is to seek the absolute truth on what the world really thinks on a topic so "Community Polls" are strictly always counted as one vote per real person, now and always into the future!) - for example "Rising Star counts 1.1 x towards "Induction Que" and "Curate Profile" votes and 1.2x for next rank, 1.3x for next rank and so on.
+
+7.2. As a user climbs the ranks - they will be able to suggest a poll on the Vote page or suggest a community prediction on the predict page or suggest a profile photo to display alongside the running photos for other users to vote which is displayed as the main profile photo of a celebrity etc.  A "Citizen" should see the "Start Poll" or "Start Prediction" but if they click the + button - a pop-up will say they need to be a certain rank before suggestion a poll or prediction. If a user is a certain rank - they can suggest new inducties to join the induction list. If a user becomes a very high rank. I want you to make suggestions for additional rules/rewards/benefits that make sense for the different ranks on FameDex (must be applicable to FameDex) and then also suggest where the "white paper" explaing to users how to increase their rank and the XP points rewarded, for what and how much for each activity etc.
+
+
+
+8. Regarding the Community Nav Bar side panel after selecting user profile image: the buttons (such as Setting gear icon, [Activity] - My Predictions, My Votes, Leaderboard, Support, Help Center, Documentation, Terms of Use etc) are not currently clickable - we need to make this Nav bar a living, functional nav bar, firstly make them clickable and they should go to sections/pages which are popluated with relevant information. We will need help with this. For example - in "Documentation" we will include a FameDex "White Paper" explaining how FameDex collects data from API's in order to govern how the trend scores are calculated and that these are governed completely by thrird parties and not manipulated. This we don't have to address until such time we have finalised the algorithm and weighting of API plugins - but I am just noting down for now to be included in the task list.
+
+
+
+9. Regarding the "user leaderboard" located in the Community Nav Bar side panel after selecting user profile image: After selecting the user "leaderboard" - we want to display a similar leaderboard to celeb leaderboard - searchable table with username, rank tier, total
+
+XP, 7-day change (↑↓ arrows), and category filters (e.g., Top Predictors, Top Voters etc) but will be a separate leaderboard dedicated for FameDex users.

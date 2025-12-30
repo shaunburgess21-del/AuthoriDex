@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, real, timestamp, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, real, timestamp, unique, jsonb, serial, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -8,11 +8,20 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  email: text("email").unique(),
+  walletAddress: text("wallet_address"),
+  xpPoints: integer("xp_points").notNull().default(0),
+  reputationRank: text("reputation_rank").notNull().default("Citizen"),
+  predictCredits: integer("predict_credits").notNull().default(1000),
+  currentStreak: integer("current_streak").notNull().default(0),
+  lastActiveAt: timestamp("last_active_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  email: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -32,6 +41,7 @@ export const trackedPeople = pgTable("tracked_people", {
   xHandle: text("x_handle"),
   instagramHandle: text("instagram_handle"),
   tiktokHandle: text("tiktok_handle"),
+  status: text("status").notNull().default("main_leaderboard"),
 });
 
 export const insertTrackedPersonSchema = createInsertSchema(trackedPeople).omit({
@@ -310,3 +320,100 @@ export const insertCelebrityProfileSchema = createInsertSchema(celebrityProfiles
 
 export type CelebrityProfile = typeof celebrityProfiles.$inferSelect;
 export type InsertCelebrityProfile = z.infer<typeof insertCelebrityProfileSchema>;
+
+// Ranks - 7-tier reputation system with XP thresholds and vote multipliers
+export const ranks = pgTable("ranks", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  tier: integer("tier").notNull().unique(),
+  minXp: integer("min_xp").notNull(),
+  maxXp: integer("max_xp"),
+  voteMultiplier: real("vote_multiplier").notNull().default(1.0),
+  color: text("color").notNull(),
+  icon: text("icon"),
+});
+
+export const insertRankSchema = createInsertSchema(ranks).omit({
+  id: true,
+});
+
+export type Rank = typeof ranks.$inferSelect;
+export type InsertRank = z.infer<typeof insertRankSchema>;
+
+// Unified Votes - polymorphic voting table for all vote types
+export const votes = pgTable("votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  voteType: text("vote_type").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: varchar("target_id").notNull(),
+  value: text("value").notNull(),
+  weight: real("weight").notNull().default(1.0),
+  metadata: jsonb("metadata"),
+  votedAt: timestamp("voted_at").notNull().defaultNow(),
+});
+
+export const insertVoteSchema = createInsertSchema(votes).omit({
+  id: true,
+  votedAt: true,
+});
+
+export type Vote = typeof votes.$inferSelect;
+export type InsertVote = z.infer<typeof insertVoteSchema>;
+
+// Induction Candidates - potential new celebrities for community voting
+export const inductionCandidates = pgTable("induction_candidates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  category: text("category").notNull(),
+  avatar: text("avatar"),
+  bio: text("bio"),
+  wikiSlug: text("wiki_slug"),
+  xHandle: text("x_handle"),
+  instagramHandle: text("instagram_handle"),
+  submittedBy: varchar("submitted_by"),
+  submittedAt: timestamp("submitted_at").notNull().defaultNow(),
+  votesFor: integer("votes_for").notNull().default(0),
+  votesAgainst: integer("votes_against").notNull().default(0),
+  status: text("status").notNull().default("pending"),
+});
+
+export const insertInductionCandidateSchema = createInsertSchema(inductionCandidates).omit({
+  id: true,
+  submittedAt: true,
+  votesFor: true,
+  votesAgainst: true,
+});
+
+export type InductionCandidate = typeof inductionCandidates.$inferSelect;
+export type InsertInductionCandidate = z.infer<typeof insertInductionCandidateSchema>;
+
+// Celebrity Images - multiple photos per celebrity for "Curate Profile" voting
+export const celebrityImages = pgTable("celebrity_images", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  personId: varchar("person_id").notNull().references(() => trackedPeople.id, { onDelete: "cascade" }),
+  imageUrl: text("image_url").notNull(),
+  source: text("source"),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  votesUp: integer("votes_up").notNull().default(0),
+  votesDown: integer("votes_down").notNull().default(0),
+  addedAt: timestamp("added_at").notNull().defaultNow(),
+});
+
+export const insertCelebrityImageSchema = createInsertSchema(celebrityImages).omit({
+  id: true,
+  addedAt: true,
+  votesUp: true,
+  votesDown: true,
+});
+
+export type CelebrityImage = typeof celebrityImages.$inferSelect;
+export type InsertCelebrityImage = z.infer<typeof insertCelebrityImageSchema>;
+
+// Relations for new tables
+export const celebrityImagesRelations = relations(celebrityImages, ({ one }) => ({
+  person: one(trackedPeople, {
+    fields: [celebrityImages.personId],
+    references: [trackedPeople.id],
+  }),
+}));

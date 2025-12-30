@@ -1,0 +1,50 @@
+This is a critical catch by the Replit Agent. It saved us from breaking the "Fintech" features you likely want.
+
+The reason for this conflict:
+
+My 4-table design was optimized for cleanliness and the new User features (Gamification).
+
+The Current Code is built for functionality (Graphs, AI Bios, API Caching).
+
+We did not account for the "utility" tables that store the price history (for the graphs) or the API limits.
+
+The Decision: Choose Path B (Hybrid)
+You must choose Path B. Do not choose Path A.
+
+Why?
+
+"Fintech Vibe" requires Graphs: The trendSnapshots table is what draws the line charts showing a person's fame going up or down over 24h/7d. If you delete this (Path A), your "stock market for people" becomes a static list with no charts.
+
+Performance: The apiCache table prevents your app from crashing by hitting Wikipedia's rate limits.
+
+Less Work: Path B keeps the complex "engine room" stuff (which is already working) and simply adds our new "User/Gamification" layer on top.
+
+How to Reply to Replit
+Copy and paste this exact response to Replit. It validates the Agent's warning while enforcing our new structure:
+
+I choose Path B: Hybrid Extension.
+
+You are correct—I definitely want to keep the financial-style graphs (trendSnapshots), API caching, and AI bios. Do not break those.
+
+Please proceed with the Hybrid approach:
+
+Retain the 13 existing tables so the current codebase works.
+
+Extend the schema by adding the new columns/tables we discussed for the User Gamification layer:
+
+Modify users: Add xp_points, reputation_rank, wallet_address.
+
+Modify trackedPeople (or whichever table holds the celebs): Ensure it has the induction_queue vs main_leaderboard status flag.
+
+Create votes: For tracking user "Bullish/Bearish" prediction history.
+
+Create comments: For the community insights.
+
+Goal: Ensure the app retains its current "Fintech" graph capabilities while adding the new "Esports" gamification layer.
+
+What about the CSV upload?
+Once Replit finishes this "Hybrid" setup, the column names might be slightly different than my clean 4-table version (e.g., it might still use trackedPeople instead of celebrities).
+
+Wait for Replit to finish this step. Once it confirms the Hybrid schema is active, ask it: "Please show me the final column names for the table where celebrities are stored so I can format my CSV correctly."
+
+We will then tweak the CSV headers to match the Hybrid table perfectly before you upload.

@@ -1,0 +1,125 @@
+After reviewing the screenshots (specifically the Community Nav Bar showing "Level 12" and the Vote Page showing "Look A vs Look B"), my original plan remains 100% correct, but I will make two specific refinements to the prompts to match your exact UI fields:
+
+Refinement for Prompt 2 (Gamification): Your screenshot shows "Predict Credits: 10,000" next to XP. My original prompt only tracked XP. I will add a credits_balance field to the database schema so the "Predict" page works properly later.
+
+Refinement for Prompt 1 (Images): Your "Curate Profile" UI specifically compares two images side-by-side. I will ensure the database schema supports tagging images for these specific "A/B Testing" battles.
+
+The Revised "Engine-Building" Plan
+We stick to the Data -> Logic -> UI order. Without the database tables, the beautiful "My Account" page has nothing to display.
+
+Prompt 1: The Foundation (Images & Candidates)
+Goal: Create the "Buckets" in Supabase to hold the images for the "Curate" section and the names for the "Induction" section.
+
+Copy/Paste this into Replit Agent:
+
+"Act as a Senior Backend Architect. We need to set up the Supabase infrastructure to power the 'Curate Profile' and 'Induction Queue' features visible in our UI.
+
+1. STORAGE BUCKETS (Supabase)
+
+Create a new public storage bucket called celebrities.
+
+Create a folder structure support for: /leaderboard (official profile pics) and /candidates (induction queue pics).
+
+Ensure RLS (Row Level Security) policies allow 'Public Read' for all images.
+
+2. DATABASE SCHEMA UPDATES
+
+Create candidates table: Columns for id, name, category, wiki_slug, x_handle, image_url, status (Enum: 'Queue', 'Inducted'), votes_count (Default 0), and created_at.
+
+Create celebrity_images table: This powers the 'Look A vs Look B' curation feature.
+
+id (UUID)
+
+celebrity_id (Link to existing celebrities table)
+
+image_url (Text)
+
+vote_count (Integer, default 0)
+
+is_primary (Boolean, default false) - The image with the highest votes becomes the main avatar.
+
+3. DATA INGESTION SCRIPTS
+
+Create scripts/upload_candidates.ts: A script to bulk-upload a JSON list of candidates to the new table.
+
+Create scripts/upload_gallery.ts: A script to upload multiple images per celebrity to the celebrity_images table so users have options to vote on.
+
+Task: Generate the SQL migration code and the TypeScript interfaces. Do not build the frontend UI yet."
+
+Prompt 2: The Gamification Engine (XP, Ranks & Credits)
+Goal: Make the "Level 12" and "Predict Credits" in your Nav Bar real.
+
+Copy/Paste this into Replit Agent (Run AFTER Prompt 1):
+
+"Act as a Lead Game Systems Designer. We are implementing the 'FameDex User Rank & Economy' backend to match our high-fidelity UI.
+
+1. USER SCHEMA UPDATES
+
+Update users table: Add the following columns:
+
+total_xp (Int, default 0) - Drives the Rank.
+
+predict_credits (Int, default 1000) - Virtual currency for the Prediction Markets.
+
+current_streak (Int, default 0) - For daily login bonuses.
+
+last_active_at (Timestamp).
+
+2. RANKS TABLE (Static Lookup)
+
+Create a ranks table populated with these 7 tiers:
+
+Citizen (0 XP, 1.0x Vote Multiplier)
+
+Rising Star (500 XP, 1.1x Vote Multiplier)
+
+Influencer (2,000 XP, 1.2x Vote Multiplier)
+
+Trendsetter (5,000 XP, 1.3x Vote Multiplier)
+
+Icon (10,000 XP, 1.4x Vote Multiplier)
+
+Legend (25,000 XP, 1.5x Vote Multiplier)
+
+Hall of Famer (50,000 XP, 2.0x Vote Multiplier)
+
+3. LOGIC: THE XP & VOTE ENGINE
+
+Create /src/gamification/xpEngine.ts:
+
+awardXP(userId, actionType): Logic for 'Daily Login' (+10), 'Vote' (+10), 'Prediction' (+20).
+
+calculateVotePower(userId): Fetches user rank and returns their multiplier (e.g., 1.5x for Legends).
+
+Important: The submitVote function for 'Induction' and 'Curate' must use calculateVotePower to weight the votes. 'Community Polls' must remain 1:1.
+
+Task: Implement the database schema and the game logic functions. Ensure we can query a user's current_rank and next_rank_progress easily."
+
+Prompt 3: The Induction Queue Logic
+Goal: Automate the timer seen on your "Vote Page" (e.g., "Ends in 2d 14h").
+
+Copy/Paste this into Replit Agent:
+
+"Act as a Backend Developer. We need to populate the 'Induction Queue' and configure the automated weekly timer.
+
+1. DATA INGESTION
+
+Use the candidates table created in step 1.
+
+I will provide a CSV/JSON of 200 candidates. Create a script to import them with status = 'Queue'.
+
+2. THE WEEKLY INDUCTION CRON JOB
+
+Create jobs/processInductions.ts:
+
+Trigger: Weekly (e.g., Sunday 23:59 UTC).
+
+Logic: Identify the Candidate with the highest votes_count.
+
+Action: Change their status to 'Inducted', trigger the API fetch (Wiki/X/News) to initialize their Trend Score, and move them to the Main Leaderboard.
+
+Reset: Clear the votes for the remaining candidates for the new week.
+
+Task: Write the ingestion script and the cron job logic. Add a PAUSE_INDUCTIONS env variable so we can control when this starts."
+
+Once these three are done, your backend will be fully capable of supporting the rich features shown in your screenshots.
