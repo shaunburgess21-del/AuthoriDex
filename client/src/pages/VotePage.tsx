@@ -1064,17 +1064,24 @@ export default function VotePage() {
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div className="flex items-center gap-2">
+            <button 
+              onClick={() => {
+                setLocation("/");
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+              data-testid="button-logo-home"
+            >
               <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
                 <span className="text-primary-foreground font-bold font-serif text-lg">F</span>
               </div>
               <span className="font-serif font-bold text-xl">FameDex</span>
-            </div>
+            </button>
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-4">
-              <Link href="/">
-                <Button variant="ghost" size="sm" data-testid="link-nav-home">Home</Button>
+              <Link href="/#leaderboard">
+                <Button variant="ghost" size="sm" data-testid="link-nav-leaderboard">Leaderboard</Button>
               </Link>
               <Link href="/vote">
                 <Button variant="ghost" size="sm" className="text-cyan-400" data-testid="link-nav-vote">Vote</Button>

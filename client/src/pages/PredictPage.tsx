@@ -2088,18 +2088,25 @@ export default function PredictPage() {
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div className="flex items-center gap-2">
+            <button 
+              onClick={() => {
+                setLocation("/");
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+              data-testid="button-logo-home"
+            >
               <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
                 <span className="text-white font-bold font-serif text-lg">F</span>
               </div>
               <span className="font-serif font-bold text-xl hidden sm:block">FameDex</span>
-            </div>
+            </button>
           </div>
           
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-4">
-              <Link href="/">
-                <Button variant="ghost" size="sm">Home</Button>
+              <Link href="/#leaderboard">
+                <Button variant="ghost" size="sm">Leaderboard</Button>
               </Link>
               <Link href="/vote">
                 <Button variant="ghost" size="sm">Vote</Button>
