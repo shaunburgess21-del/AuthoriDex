@@ -56,7 +56,7 @@ export async function fetchXData(handle: string): Promise<XMetrics | null> {
 
   const cleanHandle = handle.replace("@", "");
   const cacheKey = `x:metrics:${cleanHandle.toLowerCase()}`;
-  const CACHE_TTL_HOURS = 24;
+  const CACHE_TTL_HOURS = 8; // 8 hours = 3 fetches per day (within 10K/month limit)
 
   try {
     const [cached] = await db

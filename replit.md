@@ -29,7 +29,7 @@ Preferred communication style: Simple, everyday language.
     - `server/providers/wiki.ts` - Fetches Wikipedia pageviews (24h and 7d average) for velocity calculation
     - `server/providers/gdelt.ts` - Fetches GDELT news mention counts for each celebrity
     - `server/providers/serper.ts` - Fetches Google Search results for search volume/delta
-    - `server/providers/x-api.ts` - Fetches X/Twitter quote/reply velocity (rate limited for Basic tier)
+    - `server/providers/x-api.ts` - Fetches X/Twitter quote/reply velocity (3x/day, 8-hour cache TTL, ~9K calls/month within 10K Basic tier limit)
 - **Scoring Engine** (`server/scoring/`):
     - `normalize.ts` - Fairness algorithm that re-normalizes weights when platforms are missing
     - `trendScore.ts` - Computes final trend score (70% velocity, 30% mass)

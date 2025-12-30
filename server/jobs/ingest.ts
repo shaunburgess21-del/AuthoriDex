@@ -39,7 +39,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     );
 
     const xHandles = people.filter(p => p.xHandle).map(p => p.xHandle!);
-    const xData = await fetchXBatch(xHandles, 30);
+    const xData = await fetchXBatch(xHandles, 100); // Fetch all 100 celebrities (3x/day = 9K calls/month, within 10K limit)
 
     const scoreResults: Array<{
       person: typeof people[0];
