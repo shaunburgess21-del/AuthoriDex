@@ -423,7 +423,10 @@ function VoteHookView({
         <Button 
           size="lg"
           className="bg-gradient-to-r from-cyan-600 to-teal-500 text-white font-semibold px-8 shadow-lg shadow-cyan-500/20"
-          onClick={onExplore}
+          onClick={() => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            onExplore();
+          }}
           data-testid="button-explore-governance"
         >
           <Vote className="h-4 w-4 mr-2" />
