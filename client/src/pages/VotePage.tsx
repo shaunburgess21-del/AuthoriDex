@@ -71,19 +71,112 @@ const INDUCTION_CANDIDATES: InductionCandidate[] = [
   { id: "i12", name: "Mark Cuban", initials: "MC", category: "Business", votes: 5432 },
 ];
 
+interface PhotoOption {
+  id: string;
+  description: string;
+  votes: number;
+  isLeading: boolean;
+}
+
 interface CurateProfilePoll {
   id: string;
   personName: string;
   category: string;
+  totalVotes: number;
+  photoOptions: PhotoOption[];
 }
 
 const curateProfilePolls: CurateProfilePoll[] = [
-  { id: "pp1", personName: "Taylor Swift", category: "Music" },
-  { id: "pp2", personName: "Elon Musk", category: "Tech" },
-  { id: "pp3", personName: "Beyoncé", category: "Music" },
-  { id: "pp4", personName: "MrBeast", category: "Creator" },
-  { id: "pp5", personName: "Zendaya", category: "Creator" },
-  { id: "pp6", personName: "Bad Bunny", category: "Music" },
+  { 
+    id: "pp1", 
+    personName: "Taylor Swift", 
+    category: "Music",
+    totalVotes: 24680,
+    photoOptions: [
+      { id: "ts1", description: "Eras Tour red outfit", votes: 8934, isLeading: true },
+      { id: "ts2", description: "Grammy Awards 2024", votes: 6721, isLeading: false },
+      { id: "ts3", description: "Midnights album cover", votes: 5432, isLeading: false },
+      { id: "ts4", description: "NFL game candid", votes: 3593, isLeading: false },
+    ]
+  },
+  { 
+    id: "pp2", 
+    personName: "Elon Musk", 
+    category: "Tech",
+    totalVotes: 18543,
+    photoOptions: [
+      { id: "em1", description: "SpaceX launch event", votes: 7234, isLeading: true },
+      { id: "em2", description: "Tesla factory tour", votes: 5421, isLeading: false },
+      { id: "em3", description: "X/Twitter HQ", votes: 3654, isLeading: false },
+      { id: "em4", description: "Neuralink presentation", votes: 2234, isLeading: false },
+    ]
+  },
+  { 
+    id: "pp3", 
+    personName: "Beyoncé", 
+    category: "Music",
+    totalVotes: 21456,
+    photoOptions: [
+      { id: "b1", description: "Renaissance tour silver", votes: 9876, isLeading: true },
+      { id: "b2", description: "Cowboy Carter promo", votes: 6543, isLeading: false },
+      { id: "b3", description: "Grammys red carpet", votes: 5037, isLeading: false },
+    ]
+  },
+  { 
+    id: "pp4", 
+    personName: "MrBeast", 
+    category: "Creator",
+    totalVotes: 15678,
+    photoOptions: [
+      { id: "mb1", description: "Challenge video thumbnail", votes: 6789, isLeading: true },
+      { id: "mb2", description: "Beast Burger launch", votes: 4567, isLeading: false },
+      { id: "mb3", description: "Philanthropy event", votes: 4322, isLeading: false },
+    ]
+  },
+  { 
+    id: "pp5", 
+    personName: "Zendaya", 
+    category: "Creator",
+    totalVotes: 19234,
+    photoOptions: [
+      { id: "z1", description: "Met Gala 2024", votes: 8765, isLeading: true },
+      { id: "z2", description: "Dune premiere", votes: 5432, isLeading: false },
+      { id: "z3", description: "Challengers press tour", votes: 5037, isLeading: false },
+    ]
+  },
+  { 
+    id: "pp6", 
+    personName: "Bad Bunny", 
+    category: "Music",
+    totalVotes: 16789,
+    photoOptions: [
+      { id: "bb1", description: "Most Wanted Tour", votes: 7654, isLeading: true },
+      { id: "bb2", description: "Grammy performance", votes: 5123, isLeading: false },
+      { id: "bb3", description: "WWE appearance", votes: 4012, isLeading: false },
+    ]
+  },
+  { 
+    id: "pp7", 
+    personName: "LeBron James", 
+    category: "Sports",
+    totalVotes: 22345,
+    photoOptions: [
+      { id: "lj1", description: "Lakers game dunk", votes: 9234, isLeading: true },
+      { id: "lj2", description: "All-Star 2024", votes: 7654, isLeading: false },
+      { id: "lj3", description: "40K points milestone", votes: 5457, isLeading: false },
+    ]
+  },
+  { 
+    id: "pp8", 
+    personName: "Donald Trump", 
+    category: "Politics",
+    totalVotes: 28976,
+    photoOptions: [
+      { id: "dt1", description: "Campaign rally 2024", votes: 12345, isLeading: true },
+      { id: "dt2", description: "Mar-a-Lago press conf", votes: 9876, isLeading: false },
+      { id: "dt3", description: "Debate stage", votes: 6755, isLeading: false },
+    ]
+  },
 ];
 
 interface DiscourseTopicData {
@@ -793,6 +886,7 @@ export default function VotePage() {
   const [pollEntitySearch, setPollEntitySearch] = useState("");
   const [isTogglesSticky, setIsTogglesSticky] = useState(false);
   const [curateLeaderboardOpen, setCurateLeaderboardOpen] = useState(false);
+  const [selectedCuratePerson, setSelectedCuratePerson] = useState<CurateProfilePoll | null>(null);
   const heroRef = useRef<HTMLDivElement>(null);
   const [pollDuration, setPollDuration] = useState<string>("none");
   const [pollCustomDate, setPollCustomDate] = useState("");
@@ -1252,9 +1346,9 @@ export default function VotePage() {
                   size="sm"
                   onClick={() => setCurateLeaderboardOpen(true)}
                   className="text-cyan-400 hover:text-cyan-300 hidden md:flex"
-                  data-testid="button-view-curate-leaderboard"
+                  data-testid="button-view-curate-results"
                 >
-                  View Leaderboard
+                  View Results
                   <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
                 <Tooltip>
@@ -1728,49 +1822,202 @@ export default function VotePage() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
           >
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-xl font-serif font-bold">Curate Profile Leaderboard</h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setCurateLeaderboardOpen(false)}
-                data-testid="button-close-curate-leaderboard"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="space-y-3 max-w-xl mx-auto">
-                {curateProfilePolls.slice(0, 10).map((poll, idx) => (
-                  <div 
-                    key={poll.id}
-                    className="flex items-center gap-4 p-4 rounded-lg bg-muted/30 border border-border"
-                    data-testid={`curate-leaderboard-item-${idx}`}
-                  >
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                      idx === 0 ? 'bg-yellow-500/20 text-yellow-300' :
-                      idx === 1 ? 'bg-slate-400/20 text-slate-300' :
-                      idx === 2 ? 'bg-orange-500/20 text-orange-300' :
-                      'bg-slate-700/30 text-slate-400'
-                    }`}>
-                      {idx + 1}
-                    </div>
-                    <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 flex items-center justify-center text-sm font-bold text-cyan-400 border border-cyan-500/30">
-                      {poll.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium">{poll.name}</p>
-                      <p className="text-xs text-muted-foreground">{poll.category}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold font-mono text-cyan-400">{((idx + 1) * 1247).toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">total votes</p>
+            {selectedCuratePerson ? (
+              <>
+                <div className="flex items-center justify-between p-4 border-b">
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setSelectedCuratePerson(null)}
+                      data-testid="button-back-curate-results"
+                    >
+                      <ArrowLeft className="h-5 w-5" />
+                    </Button>
+                    <div>
+                      <h2 className="text-xl font-serif font-bold">{selectedCuratePerson.personName}</h2>
+                      <p className="text-sm text-muted-foreground">Choose the best profile photo</p>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      setSelectedCuratePerson(null);
+                      setCurateLeaderboardOpen(false);
+                    }}
+                    data-testid="button-close-curate-detail"
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-4">
+                  <div className="max-w-lg mx-auto space-y-4">
+                    <div className="text-center mb-6">
+                      <div className="h-20 w-20 rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 flex items-center justify-center text-2xl font-bold text-cyan-400 border border-cyan-500/30 mx-auto mb-3">
+                        {selectedCuratePerson.personName.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                      </div>
+                      <Badge variant="outline" className="bg-cyan-500/10 text-cyan-300 border-cyan-400/30">
+                        {selectedCuratePerson.category}
+                      </Badge>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        {selectedCuratePerson.totalVotes.toLocaleString()} total votes
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {selectedCuratePerson.photoOptions
+                        .sort((a, b) => b.votes - a.votes)
+                        .map((photo, idx) => {
+                          const percentage = Math.round((photo.votes / selectedCuratePerson.totalVotes) * 100);
+                          return (
+                            <motion.div
+                              key={photo.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: idx * 0.1 }}
+                              className={`relative p-4 rounded-lg border transition-all cursor-pointer hover-elevate ${
+                                photo.isLeading 
+                                  ? 'bg-cyan-500/10 border-cyan-500/40' 
+                                  : 'bg-muted/30 border-border hover:border-cyan-500/30'
+                              }`}
+                              onClick={() => {
+                                // Handle vote for this photo option
+                              }}
+                              data-testid={`photo-option-${photo.id}`}
+                            >
+                              <div className="flex items-center gap-4">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                                  idx === 0 ? 'bg-yellow-500/20 text-yellow-300' :
+                                  idx === 1 ? 'bg-slate-400/20 text-slate-300' :
+                                  idx === 2 ? 'bg-orange-500/20 text-orange-300' :
+                                  'bg-slate-700/30 text-slate-400'
+                                }`}>
+                                  {idx + 1}
+                                </div>
+                                <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center border border-slate-600 shrink-0">
+                                  <Camera className="h-6 w-6 text-slate-500" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <p className="font-medium truncate">{photo.description}</p>
+                                    {photo.isLeading && (
+                                      <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-400/30 text-xs shrink-0">
+                                        <Crown className="h-3 w-3 mr-1" />
+                                        Leading
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 h-2 bg-slate-700/50 rounded-full overflow-hidden">
+                                      <motion.div 
+                                        className={`h-full rounded-full ${photo.isLeading ? 'bg-cyan-500' : 'bg-slate-500'}`}
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${percentage}%` }}
+                                        transition={{ duration: 0.5, delay: idx * 0.1 }}
+                                      />
+                                    </div>
+                                    <span className="text-sm font-mono text-muted-foreground w-12 text-right">{percentage}%</span>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {photo.votes.toLocaleString()} votes
+                                  </p>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant={photo.isLeading ? "outline" : "default"}
+                                  className={photo.isLeading 
+                                    ? "border-cyan-500/50 text-cyan-400" 
+                                    : "bg-cyan-500 hover:bg-cyan-600 text-white"
+                                  }
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Handle vote
+                                  }}
+                                  data-testid={`button-vote-photo-${photo.id}`}
+                                >
+                                  <ThumbsUp className="h-4 w-4 mr-1" />
+                                  Vote
+                                </Button>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                    </div>
+                    
+                    <p className="text-center text-xs text-muted-foreground mt-6">
+                      The photo with the most votes becomes the official profile image for {selectedCuratePerson.personName} across FameDex.
+                    </p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between p-4 border-b">
+                  <div>
+                    <h2 className="text-xl font-serif font-bold">Profile Photo Results</h2>
+                    <p className="text-sm text-muted-foreground">Current winning photos for each celebrity</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setCurateLeaderboardOpen(false)}
+                    data-testid="button-close-curate-results"
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-4">
+                  <div className="space-y-3 max-w-xl mx-auto">
+                    {curateProfilePolls
+                      .sort((a, b) => b.totalVotes - a.totalVotes)
+                      .map((poll, idx) => {
+                        const leadingPhoto = poll.photoOptions.find(p => p.isLeading);
+                        return (
+                          <motion.div 
+                            key={poll.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: idx * 0.05 }}
+                            className="flex items-center gap-4 p-4 rounded-lg bg-muted/30 border border-border hover:border-cyan-500/30 cursor-pointer transition-all hover-elevate"
+                            onClick={() => setSelectedCuratePerson(poll)}
+                            data-testid={`curate-results-item-${poll.id}`}
+                          >
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
+                              idx === 0 ? 'bg-yellow-500/20 text-yellow-300' :
+                              idx === 1 ? 'bg-slate-400/20 text-slate-300' :
+                              idx === 2 ? 'bg-orange-500/20 text-orange-300' :
+                              'bg-slate-700/30 text-slate-400'
+                            }`}>
+                              {idx + 1}
+                            </div>
+                            <div className="h-14 w-14 rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 flex items-center justify-center text-lg font-bold text-cyan-400 border border-cyan-500/30 shrink-0">
+                              {poll.personName.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{poll.personName}</p>
+                              <p className="text-xs text-muted-foreground">{poll.category}</p>
+                              {leadingPhoto && (
+                                <p className="text-xs text-cyan-400 truncate mt-0.5">
+                                  <Crown className="h-3 w-3 inline mr-1" />
+                                  {leadingPhoto.description}
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="font-bold font-mono text-cyan-400">{poll.totalVotes.toLocaleString()}</p>
+                              <p className="text-xs text-muted-foreground">total votes</p>
+                            </div>
+                            <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                          </motion.div>
+                        );
+                      })}
+                  </div>
+                </div>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
