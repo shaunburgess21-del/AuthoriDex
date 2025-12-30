@@ -16,8 +16,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Flame } from "lucide-react";
-import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useMemo } from "react";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
@@ -117,20 +117,46 @@ function TrendGraphOverlay({
 
   const lineColors = ["#3b82f6", "#60a5fa", "#2563eb", "#1d4ed8", "#93c5fd"];
 
-  const generateMockTrendData = () => {
-    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    return days.map((day, dayIdx) => {
-      const dataPoint: Record<string, string | number> = { day };
-      filteredPeople.forEach((person, personIdx) => {
-        const baseScore = person.trendScore || 50;
-        const variation = Math.sin((dayIdx + personIdx) * 0.5) * 15 + Math.random() * 10;
-        dataPoint[person.id] = Math.round(baseScore + variation);
-      });
-      return dataPoint;
-    });
-  };
+  const historyQueries = useQueries({
+    queries: filteredPeople.map(person => ({
+      queryKey: [`/api/trending/${person.id}/history`, 7],
+      queryFn: async () => {
+        const res = await fetch(`/api/trending/${person.id}/history?days=7`);
+        if (!res.ok) return [];
+        return res.json();
+      },
+      enabled: open && filteredPeople.length > 0,
+      staleTime: 5 * 60 * 1000,
+    })),
+  });
 
-  const trendData = generateMockTrendData();
+  const isLoadingHistory = historyQueries.some(q => q.isLoading);
+
+  const trendData = useMemo(() => {
+    if (historyQueries.some(q => q.isLoading) || filteredPeople.length === 0) return [];
+    
+    const allTimestamps = new Map<string, Record<string, string | number>>();
+    
+    filteredPeople.forEach((person, idx) => {
+      const data = historyQueries[idx]?.data || [];
+      data.forEach((point: { date: string; time: string; trendScore: number }) => {
+        const key = point.date;
+        if (!allTimestamps.has(key)) {
+          allTimestamps.set(key, { date: key });
+        }
+        const entry = allTimestamps.get(key)!;
+        entry[person.id] = point.trendScore;
+      });
+    });
+    
+    return Array.from(allTimestamps.values())
+      .sort((a, b) => {
+        const dateA = new Date(a.date as string);
+        const dateB = new Date(b.date as string);
+        return dateA.getTime() - dateB.getTime();
+      })
+      .slice(-14);
+  }, [historyQueries, filteredPeople]);
 
   const toggleLine = (id: string) => {
     setVisibleLines(prev => ({ ...prev, [id]: !prev[id] }));
@@ -176,34 +202,71 @@ function TrendGraphOverlay({
         <Card className="mb-6">
           <CardContent className="p-4 md:p-6">
             <div className="h-[350px] md:h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <RechartsLineChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis dataKey="day" stroke="rgba(255,255,255,0.5)" fontSize={12} />
-                  <YAxis stroke="rgba(255,255,255,0.5)" fontSize={12} />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'rgba(0,0,0,0.9)', 
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  {filteredPeople.map((person, idx) => (
-                    visibleLines[person.id] && (
-                      <Line
-                        key={person.id}
-                        type="monotone"
-                        dataKey={person.id}
-                        name={person.name}
-                        stroke={lineColors[idx % lineColors.length]}
-                        strokeWidth={2}
-                        dot={{ fill: lineColors[idx % lineColors.length], strokeWidth: 0, r: 4 }}
-                        activeDot={{ r: 6, stroke: lineColors[idx % lineColors.length], strokeWidth: 2 }}
-                      />
-                    )
-                  ))}
-                </RechartsLineChart>
-              </ResponsiveContainer>
+              {isLoadingHistory ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-500 border-r-transparent"></div>
+                    <p className="mt-4 text-sm text-muted-foreground">Loading trend history...</p>
+                  </div>
+                </div>
+              ) : trendData.length === 0 ? (
+                <div className="h-full flex items-center justify-center">
+                  <p className="text-muted-foreground">No trend data available yet</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsLineChart data={trendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                    <XAxis 
+                      dataKey="date" 
+                      stroke="rgba(255,255,255,0.5)" 
+                      fontSize={12}
+                      tickFormatter={(value) => {
+                        const parts = value.split('/');
+                        if (parts.length >= 2) {
+                          return `${parts[0]}/${parts[1]}`;
+                        }
+                        return value;
+                      }}
+                    />
+                    <YAxis 
+                      stroke="rgba(255,255,255,0.5)" 
+                      fontSize={12}
+                      tickFormatter={(value) => {
+                        if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+                        if (value >= 1000) return `${(value / 1000).toFixed(0)}K`;
+                        return value;
+                      }}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'rgba(0,0,0,0.9)', 
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '8px'
+                      }}
+                      formatter={(value: number, name: string) => {
+                        const formatted = value >= 1000 ? `${(value / 1000).toFixed(1)}K` : value;
+                        return [formatted, name];
+                      }}
+                    />
+                    {filteredPeople.map((person, idx) => (
+                      visibleLines[person.id] && (
+                        <Line
+                          key={person.id}
+                          type="monotone"
+                          dataKey={person.id}
+                          name={person.name}
+                          stroke={lineColors[idx % lineColors.length]}
+                          strokeWidth={2}
+                          dot={{ fill: lineColors[idx % lineColors.length], strokeWidth: 0, r: 3 }}
+                          activeDot={{ r: 6, stroke: lineColors[idx % lineColors.length], strokeWidth: 2 }}
+                          connectNulls
+                        />
+                      )
+                    ))}
+                  </RechartsLineChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </CardContent>
         </Card>
