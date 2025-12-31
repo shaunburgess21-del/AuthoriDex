@@ -26,8 +26,11 @@ import {
   X,
   ChevronRight,
   HelpCircle,
-  Calendar
+  Calendar,
+  Swords
 } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation, Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -216,7 +219,7 @@ const DISCOURSE_TOPICS: DiscourseTopicData[] = [
 const FILTER_CATEGORIES = ["All", "Tech", "Music", "Sports", "Creator", "Business", "Politics"] as const;
 type FilterCategory = typeof FILTER_CATEGORIES[number];
 
-const SECTION_TOGGLES = ["All", "Induction Queue", "Curate Profile", "People's Voice"] as const;
+const SECTION_TOGGLES = ["All", "Induction Queue", "Curate Profile", "Face-Offs", "People's Voice"] as const;
 type SectionToggle = typeof SECTION_TOGGLES[number];
 
 const SECTION_RULES = {
@@ -227,6 +230,10 @@ const SECTION_RULES = {
   curate: {
     title: "Curate Profile Rules",
     content: "Which image best represents this celebrity? The winning look becomes the primary profile image across the entire platform. Only the highest quality looks make it to the index."
+  },
+  faceoffs: {
+    title: "Face-Offs Rules",
+    content: "Pick your side in head-to-head matchups! Vote for your favorite in classic A vs B showdowns. Each vote earns XP and contributes to the community consensus."
   },
   voice: {
     title: "People's Voice Rules",
@@ -246,6 +253,121 @@ interface XPFloater {
   x: number;
   y: number;
   amount: number;
+}
+
+interface FaceOffData {
+  id: string;
+  category: string;
+  title: string;
+  optionAText: string;
+  optionAImage: string | null;
+  optionBText: string;
+  optionBImage: string | null;
+  isActive: boolean;
+  createdAt: string;
+  optionAVotes: number;
+  optionBVotes: number;
+  totalVotes: number;
+  optionAPercent: number;
+  optionBPercent: number;
+}
+
+function VersusCard({ 
+  faceOff, 
+  userVote, 
+  onVote 
+}: { 
+  faceOff: FaceOffData; 
+  userVote: string | null;
+  onVote: (faceOffId: string, option: 'option_a' | 'option_b', event?: React.MouseEvent) => void;
+}) {
+  const hasVoted = userVote !== null;
+  const votedA = userVote === 'option_a';
+  const votedB = userVote === 'option_b';
+  
+  return (
+    <Card className="relative overflow-hidden bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50">
+      <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-purple-500/5" />
+      
+      <div className="relative p-4">
+        <div className="flex items-center justify-between mb-3">
+          <Badge variant="secondary" className="bg-slate-700/50 text-slate-300 text-xs">
+            {faceOff.category}
+          </Badge>
+          <span className="text-xs text-muted-foreground">{faceOff.totalVotes.toLocaleString()} votes</span>
+        </div>
+        
+        <h3 className="text-sm font-medium text-center mb-4 text-slate-200">{faceOff.title}</h3>
+        
+        <div className="flex items-stretch gap-2">
+          <button
+            onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_a', e)}
+            disabled={hasVoted}
+            className={`flex-1 p-3 rounded-lg border transition-all ${
+              hasVoted
+                ? votedA
+                  ? 'bg-cyan-500/20 border-cyan-500/50'
+                  : 'bg-slate-800/50 border-slate-700/30 opacity-60'
+                : 'bg-slate-800/50 border-slate-700/50 hover:border-cyan-500/50 hover:bg-cyan-500/10 cursor-pointer'
+            }`}
+            data-testid={`button-vote-a-${faceOff.id}`}
+          >
+            <div className="text-center">
+              <span className="font-semibold text-sm block mb-1">{faceOff.optionAText}</span>
+              {hasVoted && (
+                <span className={`text-lg font-bold ${votedA ? 'text-cyan-400' : 'text-slate-400'}`}>
+                  {faceOff.optionAPercent}%
+                </span>
+              )}
+            </div>
+          </button>
+          
+          <div className="flex items-center justify-center w-10 shrink-0">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center shadow-lg shadow-purple-500/20">
+              <span className="text-xs font-bold text-white">VS</span>
+            </div>
+          </div>
+          
+          <button
+            onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_b', e)}
+            disabled={hasVoted}
+            className={`flex-1 p-3 rounded-lg border transition-all ${
+              hasVoted
+                ? votedB
+                  ? 'bg-purple-500/20 border-purple-500/50'
+                  : 'bg-slate-800/50 border-slate-700/30 opacity-60'
+                : 'bg-slate-800/50 border-slate-700/50 hover:border-purple-500/50 hover:bg-purple-500/10 cursor-pointer'
+            }`}
+            data-testid={`button-vote-b-${faceOff.id}`}
+          >
+            <div className="text-center">
+              <span className="font-semibold text-sm block mb-1">{faceOff.optionBText}</span>
+              {hasVoted && (
+                <span className={`text-lg font-bold ${votedB ? 'text-purple-400' : 'text-slate-400'}`}>
+                  {faceOff.optionBPercent}%
+                </span>
+              )}
+            </div>
+          </button>
+        </div>
+        
+        {hasVoted && (
+          <div className="mt-3">
+            <div className="h-2 rounded-full bg-slate-700/50 overflow-hidden flex">
+              <div 
+                className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-500"
+                style={{ width: `${faceOff.optionAPercent}%` }}
+              />
+              <div 
+                className="h-full bg-gradient-to-r from-purple-400 to-purple-500 transition-all duration-500"
+                style={{ width: `${faceOff.optionBPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
 }
 
 function getRankBadgeStyle(rank: number) {
@@ -880,6 +1002,10 @@ export default function VotePage() {
   const [topicsSearchQuery, setTopicsSearchQuery] = useState("");
   const [topicsOverlayOpen, setTopicsOverlayOpen] = useState(false);
   const [startPollModalOpen, setStartPollModalOpen] = useState(false);
+  
+  const [faceOffsCategoryFilter, setFaceOffsCategoryFilter] = useState<FilterCategory>("All");
+  const [faceOffsSearchQuery, setFaceOffsSearchQuery] = useState("");
+  const [faceOffsOverlayOpen, setFaceOffsOverlayOpen] = useState(false);
   const [pollHeadline, setPollHeadline] = useState("");
   const [pollCategory, setPollCategory] = useState("");
   const [pollDescription, setPollDescription] = useState("");
@@ -917,14 +1043,58 @@ export default function VotePage() {
     return matchesCategory && matchesSearch;
   });
 
+  const { data: faceOffs = [], isLoading: faceOffsLoading } = useQuery<FaceOffData[]>({
+    queryKey: ['/api/face-offs'],
+    staleTime: 60 * 1000,
+  });
+  
+  const [faceOffUserVotes, setFaceOffUserVotes] = useState<Record<string, string>>({});
+  
+  const faceOffVoteMutation = useMutation({
+    mutationFn: async ({ faceOffId, option }: { faceOffId: string; option: 'option_a' | 'option_b' }) => {
+      const response = await apiRequest('POST', `/api/face-offs/${faceOffId}/vote`, { option });
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      setFaceOffUserVotes(prev => ({ ...prev, [variables.faceOffId]: variables.option }));
+      queryClient.invalidateQueries({ queryKey: ['/api/face-offs'] });
+      toast({
+        title: "Vote recorded!",
+        description: "Your Face-Off vote has been counted.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit vote",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  const handleFaceOffVote = (faceOffId: string, option: 'option_a' | 'option_b', event?: React.MouseEvent) => {
+    faceOffVoteMutation.mutate({ faceOffId, option });
+    if (event) {
+      addXP(5, event);
+    }
+  };
+  
+  const filteredFaceOffs = faceOffs.filter(f => {
+    const matchesCategory = faceOffsCategoryFilter === "All" || f.category === faceOffsCategoryFilter;
+    const matchesSearch = f.title.toLowerCase().includes(faceOffsSearchQuery.toLowerCase()) ||
+                         f.optionAText.toLowerCase().includes(faceOffsSearchQuery.toLowerCase()) ||
+                         f.optionBText.toLowerCase().includes(faceOffsSearchQuery.toLowerCase());
+    return matchesCategory && matchesSearch && f.isActive;
+  });
+
   useEffect(() => {
-    if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen) {
+    if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen || faceOffsOverlayOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen]);
+  }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen, faceOffsOverlayOpen]);
 
   const addXP = (amount: number, event?: React.MouseEvent) => {
     setXp(prev => prev + amount);
@@ -1423,6 +1593,108 @@ export default function VotePage() {
                 </Button>
               </div>
             )}
+          </div>
+        </section>
+        )}
+
+        {(activeSection === "All" || activeSection === "Face-Offs") && (
+        <section className="mb-10">
+          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-purple-500/5 via-purple-500/10 to-cyan-500/5 border border-purple-500/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center shrink-0">
+                  <Swords className="h-5 w-5 text-purple-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-serif font-bold">Face-Offs</h2>
+                  <p className="text-sm text-muted-foreground">Vote on A vs B matchups. Who wins?</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRulesModalOpen("faceoffs")}
+                      className="text-purple-400 hover:text-purple-300"
+                      data-testid="button-rules-faceoffs"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                    How it works
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            {FILTER_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setFaceOffsCategoryFilter(cat)}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
+                  faceOffsCategoryFilter === cat
+                    ? "bg-purple-500/20 border-purple-500/40 text-purple-300"
+                    : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+                }`}
+                data-testid={`filter-faceoffs-${cat.toLowerCase()}`}
+              >
+                {cat}
+              </button>
+            ))}
+            <div className="hidden md:block ml-auto">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search matchups..."
+                  value={faceOffsSearchQuery}
+                  onChange={(e) => setFaceOffsSearchQuery(e.target.value)}
+                  className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
+                  data-testid="input-faceoffs-search"
+                />
+              </div>
+            </div>
+          </div>
+          
+          {faceOffsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {[1, 2, 3].map(i => (
+                <Card key={i} className="h-40 bg-slate-800/30 animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {filteredFaceOffs.slice(0, 3).map((faceOff) => (
+                <VersusCard 
+                  key={faceOff.id} 
+                  faceOff={faceOff} 
+                  userVote={faceOffUserVotes[faceOff.id] || null}
+                  onVote={handleFaceOffVote}
+                />
+              ))}
+            </div>
+          )}
+
+          {filteredFaceOffs.length === 0 && !faceOffsLoading && (
+            <div className="text-center py-8 text-muted-foreground">
+              No face-offs match your filter criteria.
+            </div>
+          )}
+
+          <div className="text-center mt-6">
+            <Button
+              variant="ghost"
+              onClick={() => setFaceOffsOverlayOpen(true)}
+              className="text-purple-400 hover:text-purple-300"
+              data-testid="button-view-all-faceoffs"
+            >
+              View all matchups
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
           </div>
         </section>
         )}
@@ -2168,6 +2440,83 @@ export default function VotePage() {
               {filteredTopics.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
                   No topics match your filter criteria.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {faceOffsOverlayOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
+          >
+            <div className="flex items-center justify-between p-4 border-b border-purple-500/20">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center">
+                  <Swords className="h-4 w-4 text-purple-400" />
+                </div>
+                <h2 className="text-xl font-serif font-bold">All Face-Offs</h2>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setFaceOffsOverlayOpen(false)}
+                data-testid="button-close-faceoffs-overlay"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            <div className="sticky top-0 z-10 p-4 border-b border-purple-500/10 bg-background/95 backdrop-blur-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                {FILTER_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setFaceOffsCategoryFilter(cat)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
+                      faceOffsCategoryFilter === cat
+                        ? "bg-purple-500/20 border-purple-500/40 text-purple-300"
+                        : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+                    }`}
+                    data-testid={`filter-overlay-faceoffs-${cat.toLowerCase()}`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+                <div className="ml-auto">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search matchups..."
+                      value={faceOffsSearchQuery}
+                      onChange={(e) => setFaceOffsSearchQuery(e.target.value)}
+                      className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
+                      data-testid="input-overlay-faceoffs-search"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-5xl mx-auto">
+                {filteredFaceOffs.map((faceOff) => (
+                  <VersusCard 
+                    key={faceOff.id} 
+                    faceOff={faceOff} 
+                    userVote={faceOffUserVotes[faceOff.id] || null}
+                    onVote={handleFaceOffVote}
+                  />
+                ))}
+              </div>
+              {filteredFaceOffs.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground">
+                  No face-offs match your filter criteria.
                 </div>
               )}
             </div>

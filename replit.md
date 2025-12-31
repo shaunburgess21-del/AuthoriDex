@@ -18,7 +18,7 @@ Preferred communication style: Simple, everyday language.
 - **Celebrity Profile Vote Tab**: Features "Curate the Profile" section for photo voting on the current celebrity, "Featured Polls" section showing top 3 polls filtered by subject entity with a "View all" modal overlay, positioned between the sentiment voting widget and Community Insights.
 - **Page Structure**:
     - **Home Page**: Features a Hero Section, Trend Widgets, Prediction Markets Teaser (carousel), and a filterable/sortable Leaderboard.
-    - **Vote Page**: Designed as a "Community Town Hall" with a cyan/teal theme. Includes a gamified XP bar, sections for "Induction Queue" (voting new celebrities), "Curate the Profile" (image hot-or-not), and "The People's Voice" (voting on topics with neon ghost buttons). A floating action button allows suggesting candidates.
+    - **Vote Page**: Designed as a "Community Town Hall" with a cyan/teal theme. Includes a gamified XP bar, sections for "Induction Queue" (voting new celebrities), "Curate the Profile" (image hot-or-not), "Face-Offs" (A vs B binary choices with premium Versus cards), and "The People's Voice" (voting on topics with neon ghost buttons). A floating action button allows suggesting candidates.
     - **Predict Page**: Implements parimutuel prediction markets with a "test mode" using virtual credits, styled with a Royal Purple theme. Features a multi-layer information architecture (Preview, Directory, Deep Dive), a sticky prediction type toggle, global search, category filters, and various market types (Up/Down, Head-to-Head, Category Races, Top Gainer, Community Predictions). A StakeModal handles credit deductions and active predictions.
     - **Me Page**: Placeholder for user profiles, votes, and favorites.
 
@@ -53,6 +53,7 @@ Preferred communication style: Simple, everyday language.
         - `votes` (unified polymorphic voting with JSONB metadata for prediction price tracking)
         - `induction_candidates` (potential new celebrities for community voting)
         - `celebrity_images` (multiple photos per celebrity for profile curation)
+        - `face_offs` (A vs B binary choice voting questions with category, title, optionA/optionB text/image)
     - **Community Schema**:
         - `community_insights`, `insight_votes`, `insight_comments`, `comment_votes`
         - `platform_insights`, `insight_items`

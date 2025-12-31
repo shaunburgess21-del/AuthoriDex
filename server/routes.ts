@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, type CelebrityProfile, type InsertCelebrityProfile } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote } from "@shared/schema";
 import { eq, desc, and, sql, count } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -789,6 +789,163 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
     } catch (error: any) {
       console.error("Polymarket proxy error:", error.message);
       res.status(500).json({ error: "Failed to fetch prediction markets", markets: [] });
+    }
+  });
+
+  // ==================== Face-Offs API ====================
+  
+  // Get all face-offs with vote counts
+  app.get("/api/face-offs", async (req, res) => {
+    try {
+      const { category, active } = req.query;
+      
+      // Get all face-offs
+      let faceOffList = await db.select().from(faceOffs).orderBy(desc(faceOffs.createdAt));
+      
+      // Filter by category if provided
+      if (category && category !== 'All') {
+        faceOffList = faceOffList.filter(f => f.category === category);
+      }
+      
+      // Filter by active status if provided
+      if (active === 'true') {
+        faceOffList = faceOffList.filter(f => f.isActive);
+      }
+      
+      // Get vote counts for each face-off
+      const faceOffsWithVotes = await Promise.all(faceOffList.map(async (faceOff) => {
+        const voteResults = await db.select({
+          value: votes.value,
+          count: count(),
+        })
+        .from(votes)
+        .where(and(
+          eq(votes.voteType, 'face_off'),
+          eq(votes.targetId, faceOff.id)
+        ))
+        .groupBy(votes.value);
+        
+        const optionAVotes = voteResults.find(v => v.value === 'option_a')?.count || 0;
+        const optionBVotes = voteResults.find(v => v.value === 'option_b')?.count || 0;
+        const totalVotes = Number(optionAVotes) + Number(optionBVotes);
+        
+        return {
+          ...faceOff,
+          optionAVotes: Number(optionAVotes),
+          optionBVotes: Number(optionBVotes),
+          totalVotes,
+          optionAPercent: totalVotes > 0 ? Math.round((Number(optionAVotes) / totalVotes) * 100) : 50,
+          optionBPercent: totalVotes > 0 ? Math.round((Number(optionBVotes) / totalVotes) * 100) : 50,
+        };
+      }));
+      
+      res.json(faceOffsWithVotes);
+    } catch (error: any) {
+      console.error("Error fetching face-offs:", error.message);
+      res.status(500).json({ error: "Failed to fetch face-offs" });
+    }
+  });
+  
+  // Get user's votes on face-offs
+  app.get("/api/face-offs/user-votes", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const userVotes = await db.select()
+        .from(votes)
+        .where(and(
+          eq(votes.userId, userId),
+          eq(votes.voteType, 'face_off')
+        ));
+      
+      // Convert to a map of faceOffId -> votedOption
+      const voteMap: Record<string, string> = {};
+      userVotes.forEach(vote => {
+        voteMap[vote.targetId] = vote.value;
+      });
+      
+      res.json(voteMap);
+    } catch (error: any) {
+      console.error("Error fetching user face-off votes:", error.message);
+      res.status(500).json({ error: "Failed to fetch user votes" });
+    }
+  });
+  
+  // Submit a vote on a face-off
+  app.post("/api/face-offs/:id/vote", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const { id } = req.params;
+      const { option } = req.body;
+      
+      if (!option || (option !== 'option_a' && option !== 'option_b')) {
+        return res.status(400).json({ error: "Invalid option. Must be 'option_a' or 'option_b'" });
+      }
+      
+      // Check if face-off exists
+      const [faceOff] = await db.select().from(faceOffs).where(eq(faceOffs.id, id));
+      if (!faceOff) {
+        return res.status(404).json({ error: "Face-off not found" });
+      }
+      
+      // Check if user already voted
+      const [existingVote] = await db.select()
+        .from(votes)
+        .where(and(
+          eq(votes.userId, userId),
+          eq(votes.voteType, 'face_off'),
+          eq(votes.targetId, id)
+        ));
+      
+      if (existingVote) {
+        return res.status(400).json({ error: "You have already voted on this face-off" });
+      }
+      
+      // Insert the vote
+      await db.insert(votes).values({
+        userId,
+        voteType: 'face_off',
+        targetType: 'face_off',
+        targetId: id,
+        value: option,
+        weight: 1.0,
+      });
+      
+      // Get updated vote counts
+      const voteResults = await db.select({
+        value: votes.value,
+        count: count(),
+      })
+      .from(votes)
+      .where(and(
+        eq(votes.voteType, 'face_off'),
+        eq(votes.targetId, id)
+      ))
+      .groupBy(votes.value);
+      
+      const optionAVotes = voteResults.find(v => v.value === 'option_a')?.count || 0;
+      const optionBVotes = voteResults.find(v => v.value === 'option_b')?.count || 0;
+      const totalVotes = Number(optionAVotes) + Number(optionBVotes);
+      
+      res.json({
+        success: true,
+        optionAVotes: Number(optionAVotes),
+        optionBVotes: Number(optionBVotes),
+        totalVotes,
+        optionAPercent: totalVotes > 0 ? Math.round((Number(optionAVotes) / totalVotes) * 100) : 50,
+        optionBPercent: totalVotes > 0 ? Math.round((Number(optionBVotes) / totalVotes) * 100) : 50,
+        votedOption: option,
+      });
+    } catch (error: any) {
+      console.error("Error submitting face-off vote:", error.message);
+      res.status(500).json({ error: "Failed to submit vote" });
     }
   });
 

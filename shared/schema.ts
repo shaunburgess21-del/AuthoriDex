@@ -410,6 +410,27 @@ export const insertCelebrityImageSchema = createInsertSchema(celebrityImages).om
 export type CelebrityImage = typeof celebrityImages.$inferSelect;
 export type InsertCelebrityImage = z.infer<typeof insertCelebrityImageSchema>;
 
+// Face-Offs - A vs B binary choice voting questions
+export const faceOffs = pgTable("face_offs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  category: text("category").notNull(),
+  title: text("title").notNull(),
+  optionAText: text("option_a_text").notNull(),
+  optionAImage: text("option_a_image"),
+  optionBText: text("option_b_text").notNull(),
+  optionBImage: text("option_b_image"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertFaceOffSchema = createInsertSchema(faceOffs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type FaceOff = typeof faceOffs.$inferSelect;
+export type InsertFaceOff = z.infer<typeof insertFaceOffSchema>;
+
 // Relations for new tables
 export const celebrityImagesRelations = relations(celebrityImages, ({ one }) => ({
   person: one(trackedPeople, {
