@@ -286,15 +286,15 @@ function VersusCard({
   const votedB = userVote === 'option_b';
   
   return (
-    <Card className="relative overflow-hidden bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50">
-      <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-purple-500/5" />
+    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50 hover-elevate">
+      <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-teal-500/5 rounded-lg" />
       
       <div className="relative p-4">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 gap-2">
+          <span className="text-xs text-muted-foreground">{faceOff.totalVotes.toLocaleString()} votes</span>
           <Badge variant="secondary" className="bg-slate-700/50 text-slate-300 text-xs">
             {faceOff.category}
           </Badge>
-          <span className="text-xs text-muted-foreground">{faceOff.totalVotes.toLocaleString()} votes</span>
         </div>
         
         <h3 className="text-sm font-medium text-center mb-4 text-slate-200">{faceOff.title}</h3>
@@ -303,7 +303,7 @@ function VersusCard({
           <button
             onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_a', e)}
             disabled={hasVoted}
-            className={`flex-1 p-3 rounded-lg border transition-all ${
+            className={`flex-1 p-3 rounded-lg border transition-all flex flex-col items-center ${
               hasVoted
                 ? votedA
                   ? 'bg-cyan-500/20 border-cyan-500/50'
@@ -312,18 +312,25 @@ function VersusCard({
             }`}
             data-testid={`button-vote-a-${faceOff.id}`}
           >
-            <div className="text-center">
-              <span className="font-semibold text-sm block mb-1">{faceOff.optionAText}</span>
-              {hasVoted && (
-                <span className={`text-lg font-bold ${votedA ? 'text-cyan-400' : 'text-slate-400'}`}>
-                  {faceOff.optionAPercent}%
-                </span>
-              )}
-            </div>
+            {faceOff.optionAImage && (
+              <div className="w-16 h-16 rounded-lg overflow-hidden mb-2 border border-slate-600/50">
+                <img 
+                  src={faceOff.optionAImage} 
+                  alt={faceOff.optionAText}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+            <span className="font-semibold text-sm text-center">{faceOff.optionAText}</span>
+            {hasVoted && (
+              <span className={`text-lg font-bold mt-1 ${votedA ? 'text-cyan-400' : 'text-slate-400'}`}>
+                {faceOff.optionAPercent}%
+              </span>
+            )}
           </button>
           
           <div className="flex items-center justify-center w-10 shrink-0">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center shadow-lg shadow-purple-500/20">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center shadow-lg shadow-cyan-500/20">
               <span className="text-xs font-bold text-white">VS</span>
             </div>
           </div>
@@ -331,23 +338,30 @@ function VersusCard({
           <button
             onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_b', e)}
             disabled={hasVoted}
-            className={`flex-1 p-3 rounded-lg border transition-all ${
+            className={`flex-1 p-3 rounded-lg border transition-all flex flex-col items-center ${
               hasVoted
                 ? votedB
-                  ? 'bg-purple-500/20 border-purple-500/50'
+                  ? 'bg-teal-500/20 border-teal-500/50'
                   : 'bg-slate-800/50 border-slate-700/30 opacity-60'
-                : 'bg-slate-800/50 border-slate-700/50 hover:border-purple-500/50 hover:bg-purple-500/10 cursor-pointer'
+                : 'bg-slate-800/50 border-slate-700/50 hover:border-teal-500/50 hover:bg-teal-500/10 cursor-pointer'
             }`}
             data-testid={`button-vote-b-${faceOff.id}`}
           >
-            <div className="text-center">
-              <span className="font-semibold text-sm block mb-1">{faceOff.optionBText}</span>
-              {hasVoted && (
-                <span className={`text-lg font-bold ${votedB ? 'text-purple-400' : 'text-slate-400'}`}>
-                  {faceOff.optionBPercent}%
-                </span>
-              )}
-            </div>
+            {faceOff.optionBImage && (
+              <div className="w-16 h-16 rounded-lg overflow-hidden mb-2 border border-slate-600/50">
+                <img 
+                  src={faceOff.optionBImage} 
+                  alt={faceOff.optionBText}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+            <span className="font-semibold text-sm text-center">{faceOff.optionBText}</span>
+            {hasVoted && (
+              <span className={`text-lg font-bold mt-1 ${votedB ? 'text-teal-400' : 'text-slate-400'}`}>
+                {faceOff.optionBPercent}%
+              </span>
+            )}
           </button>
         </div>
         
@@ -359,7 +373,7 @@ function VersusCard({
                 style={{ width: `${faceOff.optionAPercent}%` }}
               />
               <div 
-                className="h-full bg-gradient-to-r from-purple-400 to-purple-500 transition-all duration-500"
+                className="h-full bg-gradient-to-r from-teal-400 to-teal-500 transition-all duration-500"
                 style={{ width: `${faceOff.optionBPercent}%` }}
               />
             </div>
@@ -1599,11 +1613,11 @@ export default function VotePage() {
 
         {(activeSection === "All" || activeSection === "Face-Offs") && (
         <section className="mb-10">
-          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-purple-500/5 via-purple-500/10 to-cyan-500/5 border border-purple-500/20">
+          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center shrink-0">
-                  <Swords className="h-5 w-5 text-purple-400" />
+                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                  <Swords className="h-5 w-5 text-cyan-400" />
                 </div>
                 <div>
                   <h2 className="text-xl font-serif font-bold">Face-Offs</h2>
@@ -1617,7 +1631,7 @@ export default function VotePage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setRulesModalOpen("faceoffs")}
-                      className="text-purple-400 hover:text-purple-300"
+                      className="text-cyan-400 hover:text-cyan-300"
                       data-testid="button-rules-faceoffs"
                     >
                       <HelpCircle className="h-5 w-5" />
@@ -1638,7 +1652,7 @@ export default function VotePage() {
                 onClick={() => setFaceOffsCategoryFilter(cat)}
                 className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
                   faceOffsCategoryFilter === cat
-                    ? "bg-purple-500/20 border-purple-500/40 text-purple-300"
+                    ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
                     : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
                 }`}
                 data-testid={`filter-faceoffs-${cat.toLowerCase()}`}
@@ -1689,7 +1703,7 @@ export default function VotePage() {
             <Button
               variant="ghost"
               onClick={() => setFaceOffsOverlayOpen(true)}
-              className="text-purple-400 hover:text-purple-300"
+              className="text-cyan-400 hover:text-cyan-300"
               data-testid="button-view-all-faceoffs"
             >
               View all matchups
@@ -2455,10 +2469,10 @@ export default function VotePage() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
           >
-            <div className="flex items-center justify-between p-4 border-b border-purple-500/20">
+            <div className="flex items-center justify-between p-4 border-b border-cyan-500/20">
               <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center">
-                  <Swords className="h-4 w-4 text-purple-400" />
+                <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+                  <Swords className="h-4 w-4 text-cyan-400" />
                 </div>
                 <h2 className="text-xl font-serif font-bold">All Face-Offs</h2>
               </div>
@@ -2472,7 +2486,7 @@ export default function VotePage() {
               </Button>
             </div>
             
-            <div className="sticky top-0 z-10 p-4 border-b border-purple-500/10 bg-background/95 backdrop-blur-sm">
+            <div className="sticky top-0 z-10 p-4 border-b border-cyan-500/10 bg-background/95 backdrop-blur-sm">
               <div className="flex flex-wrap items-center gap-2">
                 {FILTER_CATEGORIES.map((cat) => (
                   <button
@@ -2480,7 +2494,7 @@ export default function VotePage() {
                     onClick={() => setFaceOffsCategoryFilter(cat)}
                     className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
                       faceOffsCategoryFilter === cat
-                        ? "bg-purple-500/20 border-purple-500/40 text-purple-300"
+                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
                         : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
                     }`}
                     data-testid={`filter-overlay-faceoffs-${cat.toLowerCase()}`}
