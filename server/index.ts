@@ -3,6 +3,40 @@ import path from "path";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startSnapshotScheduler } from "./jobs/snapshot-scheduler";
+import { runDataIngestion } from "./jobs/ingest";
+
+// Data ingestion interval: 8 hours (matches X API cache TTL)
+const INGESTION_INTERVAL_MS = 8 * 60 * 60 * 1000; // 8 hours in ms
+
+let lastIngestionTime: Date | null = null;
+
+async function scheduledIngestion() {
+  log("[Ingestion Scheduler] Starting scheduled data ingestion...");
+  const startTime = new Date();
+  
+  try {
+    const result = await runDataIngestion();
+    lastIngestionTime = new Date();
+    log(`[Ingestion Scheduler] Complete: ${result.processed} processed, ${result.errors} errors, ${result.duration}ms`);
+    log(`[Ingestion Scheduler] Next ingestion scheduled for: ${new Date(Date.now() + INGESTION_INTERVAL_MS).toISOString()}`);
+  } catch (error) {
+    log(`[Ingestion Scheduler] Error during ingestion: ${error}`);
+  }
+}
+
+function startIngestionScheduler() {
+  log(`[Ingestion Scheduler] Starting (interval: ${INGESTION_INTERVAL_MS / 1000 / 60 / 60} hours)`);
+  
+  // Run initial ingestion after 30 second delay (let server fully initialize)
+  setTimeout(() => {
+    scheduledIngestion();
+  }, 30000);
+  
+  // Schedule recurring ingestion every 8 hours
+  setInterval(() => {
+    scheduledIngestion();
+  }, INGESTION_INTERVAL_MS);
+}
 
 const app = express();
 app.use(express.json());
@@ -73,6 +107,10 @@ app.use((req, res, next) => {
   }, () => {
     log(`serving on port ${port}`);
     
+    // Start hourly snapshot scheduler (captures data points for graphs)
     startSnapshotScheduler(60 * 60 * 1000);
+    
+    // Start data ingestion scheduler (fetches fresh API data every 8 hours)
+    startIngestionScheduler();
   });
 })();
