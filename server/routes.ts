@@ -7,7 +7,7 @@ import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insight
 import { eq, desc, and, sql, count } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
-import { requireAuth, type AuthRequest } from "./auth-middleware";
+import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -846,18 +846,19 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
     }
   });
   
-  // Get user's votes on face-offs
-  app.get("/api/face-offs/user-votes", requireAuth, async (req: AuthRequest, res) => {
+  // Get user's votes on face-offs (supports anonymous via session ID)
+  app.get("/api/face-offs/user-votes", optionalAuth, async (req: AuthRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) {
-        return res.status(401).json({ error: "Unauthorized" });
+      // Use userId if logged in, otherwise use session ID
+      const voterId = req.userId || req.sessionId;
+      if (!voterId) {
+        return res.json({});
       }
       
       const userVotes = await db.select()
         .from(votes)
         .where(and(
-          eq(votes.userId, userId),
+          eq(votes.userId, voterId),
           eq(votes.voteType, 'face_off')
         ));
       
@@ -874,12 +875,13 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
     }
   });
   
-  // Submit a vote on a face-off
-  app.post("/api/face-offs/:id/vote", requireAuth, async (req: AuthRequest, res) => {
+  // Submit a vote on a face-off (supports anonymous via session ID)
+  app.post("/api/face-offs/:id/vote", optionalAuth, async (req: AuthRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) {
-        return res.status(401).json({ error: "Unauthorized" });
+      // Use userId if logged in, otherwise use session ID for anonymous voting
+      const voterId = req.userId || req.sessionId;
+      if (!voterId) {
+        return res.status(400).json({ error: "Unable to track vote - no session available" });
       }
       
       const { id } = req.params;
@@ -895,11 +897,11 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         return res.status(404).json({ error: "Face-off not found" });
       }
       
-      // Check if user already voted
+      // Check if user/session already voted
       const [existingVote] = await db.select()
         .from(votes)
         .where(and(
-          eq(votes.userId, userId),
+          eq(votes.userId, voterId),
           eq(votes.voteType, 'face_off'),
           eq(votes.targetId, id)
         ));
@@ -910,7 +912,7 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       
       // Insert the vote
       await db.insert(votes).values({
-        userId,
+        userId: voterId,
         voteType: 'face_off',
         targetType: 'face_off',
         targetId: id,
