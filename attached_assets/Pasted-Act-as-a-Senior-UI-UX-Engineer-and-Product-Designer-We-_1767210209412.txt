@@ -1,0 +1,72 @@
+Act as a Senior UI/UX Engineer and Product Designer.
+We are extending the existing FameDex Vote Page. You must not break or refactor existing sections (Induction Queue, Curate Profile, Community Polls). Add a new voting category called “Head‑to‑Head Picks” (you may suggest a slightly better name, but keep it short, premium, and consistent with FameDex).
+
+1) Add new Vote Page section + integrate into navigation
+Add Head‑to‑Head Picks as a new section following the same layout system as existing Vote sections.
+
+If Vote page has section toggles (All / Induction / Curate / Community Polls), include Head‑to‑Head Picks in that toggle row.
+
+Maintain the FameDex dark-glass theme, typography, spacing, and category pill styles.
+
+2) Dummy data (required)
+Create a dummy array of 20 matchups using ONLY these categories:
+Tech, Politics, Business, Sports, Music, Creator
+
+Each matchup should include:
+
+id
+
+category
+
+leftOption (title + optional subtitle + image/avatar)
+
+rightOption (title + optional subtitle + image/avatar)
+
+votesLeft, votesRight
+
+Do NOT include endsAt or any deadline logic.
+
+3) Card design (fabricate best UI, mobile-first)
+Design a premium 2-option “versus” card optimized for mobile:
+
+Top-right: Category pill (use FameDex category colors)
+
+Center: two option panels side-by-side with a VS badge between them
+
+Each option shows: image/avatar + title, and the entire option panel is tappable to vote.
+
+Do NOT add any top-left rank/hotness indicator.
+
+After voting (results state)
+Show results using the existing % split bar component already used on “Community Poll” result cards (reuse the same visual system).
+
+This Head‑to‑Head split bar is 2-way only (Left vs Right) — no Neutral.
+
+Show percent labels (e.g., 58% / 42%).
+
+Mark the user’s selected side (check or subtle glow).
+
+Include “Change vote” behavior consistent with Community Polls (same UX pattern).
+
+4) Section behavior (reduce scroll fatigue)
+On “All” view: show only the top 2–3 Head‑to‑Head cards
+
+Add a View all Head‑to‑Head Picks button that opens a full-screen overlay
+
+Overlay must include:
+
+sticky category chips (same 6 categories)
+
+search input
+
+hidden/themed scrollbars (no white scrollbars)
+
+5) Interaction polish
+Instant UI response (optimistic update) using local state for now
+
+Subtle success animation consistent with the rest of FameDex
+
+Ensure thumb-friendly touch targets on mobile
+
+Output
+Implement the new section and overlay, wire it into the existing Vote Page, and keep code modular (new components in the Vote page folder). Avoid changing unrelated files.
