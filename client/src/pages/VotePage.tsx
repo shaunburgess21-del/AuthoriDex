@@ -290,78 +290,89 @@ function VersusCard({
       <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-teal-500/5 rounded-lg" />
       
       <div className="relative p-4">
-        <div className="flex items-center justify-between mb-3 gap-2">
-          <span className="text-xs text-muted-foreground">{faceOff.totalVotes.toLocaleString()} votes</span>
-          <Badge variant="secondary" className="bg-slate-700/50 text-slate-300 text-xs">
-            {faceOff.category}
-          </Badge>
+        <div className="flex items-center justify-between mb-4 gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Users className="h-3.5 w-3.5 text-cyan-400" />
+            <span>{faceOff.totalVotes.toLocaleString()} votes</span>
+          </div>
+          <CategoryPill category={faceOff.category} data-testid={`badge-faceoff-${faceOff.id}`} />
         </div>
         
-        <h3 className="text-sm font-medium text-center mb-4 text-slate-200">{faceOff.title}</h3>
-        
-        <div className="flex items-stretch gap-2">
+        <div className="flex items-stretch gap-3">
           <button
             onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_a', e)}
             disabled={hasVoted}
-            className={`flex-1 p-3 rounded-lg border transition-all flex flex-col items-center ${
+            className={`flex-1 rounded-lg border transition-all overflow-hidden relative ${
               hasVoted
                 ? votedA
-                  ? 'bg-cyan-500/20 border-cyan-500/50'
-                  : 'bg-slate-800/50 border-slate-700/30 opacity-60'
-                : 'bg-slate-800/50 border-slate-700/50 hover:border-cyan-500/50 hover:bg-cyan-500/10 cursor-pointer'
+                  ? 'border-cyan-500/50 ring-2 ring-cyan-500/30'
+                  : 'border-slate-700/30 opacity-60'
+                : 'border-slate-700/50 hover:border-cyan-500/50 cursor-pointer'
             }`}
+            style={{ minHeight: '140px' }}
             data-testid={`button-vote-a-${faceOff.id}`}
           >
-            {faceOff.optionAImage && (
-              <div className="w-16 h-16 rounded-lg overflow-hidden mb-2 border border-slate-600/50">
+            {faceOff.optionAImage ? (
+              <div className="absolute inset-0">
                 <img 
                   src={faceOff.optionAImage} 
                   alt={faceOff.optionAText}
                   className="w-full h-full object-cover"
                 />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
               </div>
+            ) : (
+              <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedA ? 'from-cyan-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
             )}
-            <span className="font-semibold text-sm text-center">{faceOff.optionAText}</span>
-            {hasVoted && (
-              <span className={`text-lg font-bold mt-1 ${votedA ? 'text-cyan-400' : 'text-slate-400'}`}>
-                {faceOff.optionAPercent}%
-              </span>
-            )}
+            <div className="relative h-full flex flex-col items-center justify-end p-3">
+              <span className="font-semibold text-sm text-center text-white drop-shadow-lg">{faceOff.optionAText}</span>
+              {hasVoted && (
+                <span className={`text-xl font-bold mt-1 ${votedA ? 'text-cyan-400' : 'text-slate-300'}`}>
+                  {faceOff.optionAPercent}%
+                </span>
+              )}
+            </div>
           </button>
           
-          <div className="flex items-center justify-center w-10 shrink-0">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-              <span className="text-xs font-bold text-white">VS</span>
+          <div className="flex items-center justify-center w-12 shrink-0">
+            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
+              <span className="text-xs font-bold text-slate-200">VS</span>
             </div>
           </div>
           
           <button
             onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_b', e)}
             disabled={hasVoted}
-            className={`flex-1 p-3 rounded-lg border transition-all flex flex-col items-center ${
+            className={`flex-1 rounded-lg border transition-all overflow-hidden relative ${
               hasVoted
                 ? votedB
-                  ? 'bg-teal-500/20 border-teal-500/50'
-                  : 'bg-slate-800/50 border-slate-700/30 opacity-60'
-                : 'bg-slate-800/50 border-slate-700/50 hover:border-teal-500/50 hover:bg-teal-500/10 cursor-pointer'
+                  ? 'border-teal-500/50 ring-2 ring-teal-500/30'
+                  : 'border-slate-700/30 opacity-60'
+                : 'border-slate-700/50 hover:border-teal-500/50 cursor-pointer'
             }`}
+            style={{ minHeight: '140px' }}
             data-testid={`button-vote-b-${faceOff.id}`}
           >
-            {faceOff.optionBImage && (
-              <div className="w-16 h-16 rounded-lg overflow-hidden mb-2 border border-slate-600/50">
+            {faceOff.optionBImage ? (
+              <div className="absolute inset-0">
                 <img 
                   src={faceOff.optionBImage} 
                   alt={faceOff.optionBText}
                   className="w-full h-full object-cover"
                 />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
               </div>
+            ) : (
+              <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? 'from-teal-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
             )}
-            <span className="font-semibold text-sm text-center">{faceOff.optionBText}</span>
-            {hasVoted && (
-              <span className={`text-lg font-bold mt-1 ${votedB ? 'text-teal-400' : 'text-slate-400'}`}>
-                {faceOff.optionBPercent}%
-              </span>
-            )}
+            <div className="relative h-full flex flex-col items-center justify-end p-3">
+              <span className="font-semibold text-sm text-center text-white drop-shadow-lg">{faceOff.optionBText}</span>
+              {hasVoted && (
+                <span className={`text-xl font-bold mt-1 ${votedB ? 'text-teal-400' : 'text-slate-300'}`}>
+                  {faceOff.optionBPercent}%
+                </span>
+              )}
+            </div>
           </button>
         </div>
         
