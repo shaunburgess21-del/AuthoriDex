@@ -219,8 +219,14 @@ const DISCOURSE_TOPICS: DiscourseTopicData[] = [
 const FILTER_CATEGORIES = ["All", "Tech", "Music", "Sports", "Creator", "Business", "Politics"] as const;
 type FilterCategory = typeof FILTER_CATEGORIES[number];
 
-const SECTION_TOGGLES = ["All", "Induction Queue", "Curate Profile", "Face-Offs", "People's Voice"] as const;
+const SECTION_TOGGLES = ["All", "Face-Offs", "People's Voice", "Induction Queue", "Curate Profile"] as const;
 type SectionToggle = typeof SECTION_TOGGLES[number];
+
+const isGovernanceSection = (section: SectionToggle) => 
+  section === "Induction Queue" || section === "Curate Profile";
+
+const isPublicOpinionSection = (section: SectionToggle) =>
+  section === "Face-Offs" || section === "People's Voice";
 
 const SECTION_RULES = {
   induction: {
@@ -1035,16 +1041,16 @@ export default function VotePage() {
   const [pollCategory, setPollCategory] = useState("");
   const [pollDescription, setPollDescription] = useState("");
   const [pollEntitySearch, setPollEntitySearch] = useState("");
-  const [isTogglesSticky, setIsTogglesSticky] = useState(false);
   const [curateLeaderboardOpen, setCurateLeaderboardOpen] = useState(false);
   const [selectedCuratePerson, setSelectedCuratePerson] = useState<CurateProfilePoll | null>(null);
-  const heroRef = useRef<HTMLDivElement>(null);
   const [pollDuration, setPollDuration] = useState<string>("none");
   const [pollCustomDate, setPollCustomDate] = useState("");
   
   const [activeSection, setActiveSection] = useState<SectionToggle>("All");
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   const [curateCategoryFilter, setCurateCategoryFilter] = useState<FilterCategory>("All");
+  const [globalVoteSearchQuery, setGlobalVoteSearchQuery] = useState("");
+  const [globalCategoryFilter, setGlobalCategoryFilter] = useState<FilterCategory>("All");
 
   const enrichedCandidates = INDUCTION_CANDIDATES.map(c => ({
     ...c,
@@ -1169,18 +1175,6 @@ export default function VotePage() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const handleScroll = () => {
-      if (heroRef.current) {
-        const heroBottom = heroRef.current.getBoundingClientRect().bottom;
-        setIsTogglesSticky(heroBottom <= 64);
-      }
-    };
-    
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll();
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   const handleToggleVote = (candidateId: string) => {
     setVotedIds(prev => {
@@ -1300,59 +1294,20 @@ export default function VotePage() {
       </header>
 
       <div 
-        ref={heroRef}
-        id="hero-section"
-        className="relative overflow-hidden"
-      >
-        <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
-        <div className="container mx-auto px-4 py-12 max-w-5xl relative">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 mb-4">
-              <Sparkles className="h-4 w-4 text-cyan-400" />
-              <span className="text-sm text-cyan-400 font-medium">Community Governance</span>
-            </div>
-            <h1 className="text-4xl md:text-5xl font-serif font-bold mb-3" data-testid="text-vote-title">
-              Shape the FameDex
-            </h1>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              Vote on new inductees, curate profile images, and rate global sentiment. Your opinion powers the index.
-            </p>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row justify-center gap-6 mb-8">
-            <div className="flex items-center gap-3 px-6 py-3 rounded-lg bg-muted/50 border border-border">
-              <Users className="h-5 w-5 text-cyan-400" />
-              <div>
-                <p className="text-xs text-muted-foreground">Total Votes Cast</p>
-                <p className="text-lg font-bold font-mono text-cyan-400" data-testid="text-total-votes">{totalVotes.toLocaleString()}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 px-6 py-3 rounded-lg bg-muted/50 border border-border">
-              <Clock className="h-5 w-5 text-cyan-400" />
-              <div>
-                <p className="text-xs text-muted-foreground">Next Governance Update</p>
-                <p className="text-lg font-bold font-mono text-cyan-400" data-testid="text-countdown">{countdown}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div 
-        className={`${isTogglesSticky ? 'sticky top-16' : ''} z-40 border-b bg-gradient-to-r from-cyan-500/10 via-background/95 to-cyan-500/10 backdrop-blur-xl transition-all`}
+        className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b"
         data-testid="section-toggles-container"
       >
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-center gap-2 overflow-x-auto scrollbar-hide py-3 relative">
+        <div className="container mx-auto px-4 py-3 max-w-5xl">
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 relative">
             <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none z-10 md:hidden" />
             {SECTION_TOGGLES.map((section) => (
               <button
                 key={section}
                 onClick={() => setActiveSection(section)}
-                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
                   activeSection === section
-                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 shadow-sm shadow-cyan-500/20"
-                    : "bg-background/50 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-cyan-400/20"
+                    ? "bg-cyan-500/20 text-cyan-400 border border-cyan-400/40 shadow-sm shadow-cyan-500/20"
+                    : "bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent"
                 }`}
                 data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
               >
@@ -1364,7 +1319,294 @@ export default function VotePage() {
         </div>
       </div>
 
+      <div className="container mx-auto px-4 py-4 max-w-5xl">
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="relative flex-1 max-w-[420px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search votes..."
+              value={globalVoteSearchQuery}
+              onChange={(e) => setGlobalVoteSearchQuery(e.target.value)}
+              className="pl-9"
+              data-testid="input-global-vote-search"
+            />
+          </div>
+          
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            {FILTER_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setGlobalCategoryFilter(cat)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all backdrop-blur-sm ${
+                  globalCategoryFilter === cat
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 shadow-sm shadow-cyan-500/20'
+                    : 'bg-background/50 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-cyan-400/20'
+                }`}
+                data-testid={`chip-category-${cat.toLowerCase()}`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="container mx-auto px-4 py-8 max-w-5xl">
+        {/* ZONE 1: Public Opinion - Face-Offs Section (First) */}
+        {(activeSection === "All" || activeSection === "Face-Offs") && (
+        <section className="mb-10">
+          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                  <Swords className="h-5 w-5 text-cyan-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-serif font-bold">Face-Offs</h2>
+                  <p className="text-sm text-muted-foreground">Vote on A vs B matchups. Who wins?</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRulesModalOpen("faceoffs")}
+                      className="text-cyan-400 hover:text-cyan-300"
+                      data-testid="button-rules-faceoffs"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                    How it works
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            {FILTER_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setFaceOffsCategoryFilter(cat)}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
+                  faceOffsCategoryFilter === cat
+                    ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
+                    : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+                }`}
+                data-testid={`filter-faceoffs-${cat.toLowerCase()}`}
+              >
+                {cat}
+              </button>
+            ))}
+            <div className="hidden md:block ml-auto">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search matchups..."
+                  value={faceOffsSearchQuery}
+                  onChange={(e) => setFaceOffsSearchQuery(e.target.value)}
+                  className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
+                  data-testid="input-faceoffs-search"
+                />
+              </div>
+            </div>
+          </div>
+          
+          {faceOffsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {[1, 2, 3].map(i => (
+                <Card key={i} className="h-40 bg-slate-800/30 animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {filteredFaceOffs.slice(0, 3).map((faceOff) => (
+                <VersusCard 
+                  key={faceOff.id} 
+                  faceOff={faceOff} 
+                  userVote={faceOffUserVotes[faceOff.id] || null}
+                  onVote={handleFaceOffVote}
+                />
+              ))}
+            </div>
+          )}
+
+          {filteredFaceOffs.length === 0 && !faceOffsLoading && (
+            <div className="text-center py-8 text-muted-foreground">
+              No face-offs match your filter criteria.
+            </div>
+          )}
+
+          <div className="text-center mt-6">
+            <Button
+              variant="ghost"
+              onClick={() => setFaceOffsOverlayOpen(true)}
+              className="text-cyan-400 hover:text-cyan-300"
+              data-testid="button-view-all-faceoffs"
+            >
+              View all matchups
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </section>
+        )}
+
+        {/* ZONE 1: Public Opinion - People's Voice Section (Second) */}
+        {(activeSection === "All" || activeSection === "People's Voice") && (
+        <section className="mb-10">
+          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                  <MessageSquare className="h-5 w-5 text-cyan-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-serif font-bold">The People's Voice</h2>
+                  <p className="text-sm text-muted-foreground">Weigh in on current events and controversies.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRulesModalOpen("voice")}
+                      className="text-cyan-400 hover:text-cyan-300"
+                      data-testid="button-rules-voice"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                    How it works
+                  </TooltipContent>
+                </Tooltip>
+                <Button
+                  onClick={() => setStartPollModalOpen(true)}
+                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
+                  data-testid="button-start-poll-header"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Start poll
+                </Button>
+                <Button
+                  size="icon"
+                  onClick={() => setStartPollModalOpen(true)}
+                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
+                  data-testid="button-start-poll-header-mobile"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            {FILTER_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setTopicsCategoryFilter(cat)}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
+                  topicsCategoryFilter === cat
+                    ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
+                    : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+                }`}
+                data-testid={`filter-topics-${cat.toLowerCase()}`}
+              >
+                {cat}
+              </button>
+            ))}
+            <div className="hidden md:block ml-auto">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search topics..."
+                  value={topicsSearchQuery}
+                  onChange={(e) => setTopicsSearchQuery(e.target.value)}
+                  className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
+                  data-testid="input-topics-search"
+                />
+              </div>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredTopics.slice(0, 3).map((topic) => (
+              <DiscourseCard 
+                key={topic.id} 
+                topic={topic} 
+                onVote={(choice) => handleDiscourseVote(topic.id, choice)} 
+              />
+            ))}
+          </div>
+
+          {filteredTopics.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              No topics match your filter criteria.
+            </div>
+          )}
+
+          <div className="text-center mt-6">
+            <Button
+              variant="ghost"
+              onClick={() => setTopicsOverlayOpen(true)}
+              className="text-cyan-400 hover:text-cyan-300"
+              data-testid="button-view-all-topics"
+            >
+              View all topics
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </section>
+        )}
+
+        {/* GOVERNANCE HEADER DIVIDER - Shows between Zone 1 and Zone 3 */}
+        {/* Show when: All, Induction Queue, or Curate Profile is selected */}
+        {/* Hide when: Face-Offs or People's Voice is selected */}
+        {(activeSection === "All" || isGovernanceSection(activeSection)) && (
+        <div className="relative overflow-hidden mb-10">
+          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
+          <div className="relative py-8">
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 mb-4">
+                <Sparkles className="h-4 w-4 text-cyan-400" />
+                <span className="text-sm text-cyan-400 font-medium">Community Governance</span>
+              </div>
+              <h2 className="text-3xl md:text-4xl font-serif font-bold mb-3" data-testid="text-governance-title">
+                Shape the FameDex
+              </h2>
+              <p className="text-muted-foreground max-w-2xl mx-auto">
+                Vote on new inductees and curate profile images. Your opinion powers the index.
+              </p>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row justify-center gap-6">
+              <div className="flex items-center gap-3 px-6 py-3 rounded-lg bg-muted/50 border border-border">
+                <Users className="h-5 w-5 text-cyan-400" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Total Votes Cast</p>
+                  <p className="text-lg font-bold font-mono text-cyan-400" data-testid="text-total-votes">{totalVotes.toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 px-6 py-3 rounded-lg bg-muted/50 border border-border">
+                <Clock className="h-5 w-5 text-cyan-400" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Next Governance Update</p>
+                  <p className="text-lg font-bold font-mono text-cyan-400" data-testid="text-countdown">{countdown}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        )}
+
+        {/* ZONE 3: Governance - Induction Queue Section */}
         {(activeSection === "All" || activeSection === "Induction Queue") && (
         <section className="mb-10">
           <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
@@ -1537,6 +1779,7 @@ export default function VotePage() {
         </section>
         )}
 
+        {/* ZONE 3: Governance - Curate Profile Section */}
         {(activeSection === "All" || activeSection === "Curate Profile") && (
         <section className="mb-10">
           <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
@@ -1626,217 +1869,6 @@ export default function VotePage() {
                 </Button>
               </div>
             )}
-          </div>
-        </section>
-        )}
-
-        {(activeSection === "All" || activeSection === "Face-Offs") && (
-        <section className="mb-10">
-          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-                  <Swords className="h-5 w-5 text-cyan-400" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-serif font-bold">Face-Offs</h2>
-                  <p className="text-sm text-muted-foreground">Vote on A vs B matchups. Who wins?</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setRulesModalOpen("faceoffs")}
-                      className="text-cyan-400 hover:text-cyan-300"
-                      data-testid="button-rules-faceoffs"
-                    >
-                      <HelpCircle className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
-                    How it works
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            {FILTER_CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setFaceOffsCategoryFilter(cat)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
-                  faceOffsCategoryFilter === cat
-                    ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
-                    : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
-                }`}
-                data-testid={`filter-faceoffs-${cat.toLowerCase()}`}
-              >
-                {cat}
-              </button>
-            ))}
-            <div className="hidden md:block ml-auto">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search matchups..."
-                  value={faceOffsSearchQuery}
-                  onChange={(e) => setFaceOffsSearchQuery(e.target.value)}
-                  className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
-                  data-testid="input-faceoffs-search"
-                />
-              </div>
-            </div>
-          </div>
-          
-          {faceOffsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {[1, 2, 3].map(i => (
-                <Card key={i} className="h-40 bg-slate-800/30 animate-pulse" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {filteredFaceOffs.slice(0, 3).map((faceOff) => (
-                <VersusCard 
-                  key={faceOff.id} 
-                  faceOff={faceOff} 
-                  userVote={faceOffUserVotes[faceOff.id] || null}
-                  onVote={handleFaceOffVote}
-                />
-              ))}
-            </div>
-          )}
-
-          {filteredFaceOffs.length === 0 && !faceOffsLoading && (
-            <div className="text-center py-8 text-muted-foreground">
-              No face-offs match your filter criteria.
-            </div>
-          )}
-
-          <div className="text-center mt-6">
-            <Button
-              variant="ghost"
-              onClick={() => setFaceOffsOverlayOpen(true)}
-              className="text-cyan-400 hover:text-cyan-300"
-              data-testid="button-view-all-faceoffs"
-            >
-              View all matchups
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          </div>
-        </section>
-        )}
-
-        {(activeSection === "All" || activeSection === "People's Voice") && (
-        <section className="mb-10">
-          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-                  <MessageSquare className="h-5 w-5 text-cyan-400" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-serif font-bold">The People's Voice</h2>
-                  <p className="text-sm text-muted-foreground">Weigh in on current events and controversies.</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setRulesModalOpen("voice")}
-                      className="text-cyan-400 hover:text-cyan-300"
-                      data-testid="button-rules-voice"
-                    >
-                      <HelpCircle className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
-                    How it works
-                  </TooltipContent>
-                </Tooltip>
-                <Button
-                  onClick={() => setStartPollModalOpen(true)}
-                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
-                  data-testid="button-start-poll-header"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Start poll
-                </Button>
-                <Button
-                  size="icon"
-                  onClick={() => setStartPollModalOpen(true)}
-                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
-                  data-testid="button-start-poll-header-mobile"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            {FILTER_CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setTopicsCategoryFilter(cat)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
-                  topicsCategoryFilter === cat
-                    ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
-                    : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
-                }`}
-                data-testid={`filter-topics-${cat.toLowerCase()}`}
-              >
-                {cat}
-              </button>
-            ))}
-            <div className="hidden md:block ml-auto">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search topics..."
-                  value={topicsSearchQuery}
-                  onChange={(e) => setTopicsSearchQuery(e.target.value)}
-                  className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
-                  data-testid="input-topics-search"
-                />
-              </div>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredTopics.slice(0, 3).map((topic) => (
-              <DiscourseCard 
-                key={topic.id} 
-                topic={topic} 
-                onVote={(choice) => handleDiscourseVote(topic.id, choice)} 
-              />
-            ))}
-          </div>
-
-          {filteredTopics.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              No topics match your filter criteria.
-            </div>
-          )}
-
-          <div className="text-center mt-6">
-            <Button
-              variant="ghost"
-              onClick={() => setTopicsOverlayOpen(true)}
-              className="text-cyan-400 hover:text-cyan-300"
-              data-testid="button-view-all-topics"
-            >
-              View all topics
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
           </div>
         </section>
         )}
