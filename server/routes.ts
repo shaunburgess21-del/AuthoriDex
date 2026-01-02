@@ -3,12 +3,13 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote } from "@shared/schema";
 import { eq, desc, and, sql, count } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
+import { gamificationService } from "./services/gamification";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Using local PostgreSQL database instead of Supabase
@@ -920,6 +921,21 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         weight: 1.0,
       });
       
+      // Award XP for authenticated users only (not anonymous sessions)
+      let xpResult = null;
+      if (req.userId) {
+        try {
+          xpResult = await gamificationService.awardXp(
+            req.userId,
+            'vote_face_off',
+            `face_off_${id}_${req.userId}`, // Unique idempotency key
+            { faceOffId: id, votedOption: option }
+          );
+        } catch (xpError) {
+          console.error("XP award failed:", xpError);
+        }
+      }
+      
       // Get updated vote counts
       const voteResults = await db.select({
         value: votes.value,
@@ -944,10 +960,95 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         optionAPercent: totalVotes > 0 ? Math.round((Number(optionAVotes) / totalVotes) * 100) : 50,
         optionBPercent: totalVotes > 0 ? Math.round((Number(optionBVotes) / totalVotes) * 100) : 50,
         votedOption: option,
+        xpAwarded: xpResult?.success ? xpResult.xpAwarded : 0,
       });
     } catch (error: any) {
       console.error("Error submitting face-off vote:", error.message);
       res.status(500).json({ error: "Failed to submit vote" });
+    }
+  });
+
+  // ============================================================================
+  // GAMIFICATION ROUTES
+  // ============================================================================
+
+  // Get user gamification stats (XP, rank, capabilities, credits)
+  app.get("/api/gamification/stats", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const stats = await gamificationService.getUserStats(req.userId!);
+      if (!stats) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json(stats);
+    } catch (error: any) {
+      console.error("Error fetching user stats:", error.message);
+      res.status(500).json({ error: "Failed to fetch user stats" });
+    }
+  });
+
+  // Check a specific permission
+  app.get("/api/gamification/check-permission/:capability", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { capability } = req.params;
+      const hasPermission = await gamificationService.checkPermission(req.userId!, capability as any);
+      res.json({ capability, hasPermission });
+    } catch (error: any) {
+      console.error("Error checking permission:", error.message);
+      res.status(500).json({ error: "Failed to check permission" });
+    }
+  });
+
+  // NOTE: XP awarding is handled INTERNALLY by action handlers (votes, comments, etc.)
+  // There is NO public endpoint for XP awards - this prevents forging
+  // XP is awarded via gamificationService.awardXp() called directly in handlers
+
+  // NOTE: Credit adjustments are handled INTERNALLY by prediction handlers
+  // Debits occur when placing predictions (via stake handlers)
+  // Credits occur when winning predictions (via settlement handlers)
+
+  // Get XP history for current user
+  app.get("/api/gamification/xp-history", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const history = await gamificationService.getXpHistory(req.userId!, limit);
+      res.json(history);
+    } catch (error: any) {
+      console.error("Error fetching XP history:", error.message);
+      res.status(500).json({ error: "Failed to fetch XP history" });
+    }
+  });
+
+  // Get credit history for current user
+  app.get("/api/gamification/credit-history", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const history = await gamificationService.getCreditHistory(req.userId!, limit);
+      res.json(history);
+    } catch (error: any) {
+      console.error("Error fetching credit history:", error.message);
+      res.status(500).json({ error: "Failed to fetch credit history" });
+    }
+  });
+
+  // Get daily XP summary (for showing remaining caps)
+  app.get("/api/gamification/daily-summary", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const summary = await gamificationService.getDailyXpSummary(req.userId!);
+      res.json(summary);
+    } catch (error: any) {
+      console.error("Error fetching daily summary:", error.message);
+      res.status(500).json({ error: "Failed to fetch daily summary" });
+    }
+  });
+
+  // Get available XP actions (for UI display)
+  app.get("/api/gamification/xp-actions", async (req, res) => {
+    try {
+      const actions = await db.select().from(xpActions).where(eq(xpActions.isActive, true));
+      res.json(actions);
+    } catch (error: any) {
+      console.error("Error fetching XP actions:", error.message);
+      res.status(500).json({ error: "Failed to fetch XP actions" });
     }
   });
 

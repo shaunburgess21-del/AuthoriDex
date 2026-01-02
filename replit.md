@@ -48,12 +48,22 @@ Preferred communication style: Simple, everyday language.
         - `trend_snapshots` (historical trend data for graphs)
         - `api_cache` (cached API responses with TTL for rate limit management)
         - `celebrity_profiles` (AI-generated biographical data with 30-day caching)
-    - **Gamification Schema**:
+    - **Gamification Schema (Phase 1 - Ledger-Based Economy)**:
+        - `xp_ledger` (immutable XP transaction log - source of truth, with idempotency keys, metadata JSONB)
+        - `credit_ledger` (immutable credit transaction log with wallet_type: 'VIRTUAL'|'REAL', balanceAfter snapshots)
+        - `xp_actions` (data-driven XP values and daily caps - Game Master table)
         - `ranks` (7-tier system: Citizen → Hall of Famer, with XP thresholds and vote multipliers)
         - `votes` (unified polymorphic voting with JSONB metadata for prediction price tracking)
         - `induction_candidates` (potential new celebrities for community voting)
         - `celebrity_images` (multiple photos per celebrity for profile curation)
         - `face_offs` (A vs B binary choice voting questions with category, title, optionA/optionB text/image)
+    - **Gamification Service** (`server/services/gamification.ts`):
+        - `awardXp()` - Awards XP with daily cap enforcement, idempotency, auto-rank recalculation
+        - `adjustCredits()` - Credit transactions with audit trail (balanceAfter snapshots)
+        - `checkPermission()` - Abstract capability checks (can_post_insight, can_vote_induction, etc.)
+        - `recalculateUserRank()` - Updates user rank based on XP thresholds
+        - `getVoteMultiplier()` - Returns rank-based vote weight (1.0x for Face-Offs/Polls for "1 Person = 1 Vote" integrity)
+    - **Security**: XP/credit endpoints restricted to whitelisted actions; high-value awards (prediction_win, bonuses) server-side only
     - **Community Schema**:
         - `community_insights`, `insight_votes`, `insight_comments`, `comment_votes`
         - `platform_insights`, `insight_items`

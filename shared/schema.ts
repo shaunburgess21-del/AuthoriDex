@@ -438,3 +438,94 @@ export const celebrityImagesRelations = relations(celebrityImages, ({ one }) => 
     references: [trackedPeople.id],
   }),
 }));
+
+// ============================================================================
+// GAMIFICATION ECONOMY TABLES (Phase 1)
+// ============================================================================
+
+// XP Actions - Data-driven XP values and daily caps (Game Master table)
+export const xpActions = pgTable("xp_actions", {
+  id: serial("id").primaryKey(),
+  actionKey: text("action_key").notNull().unique(), // e.g., 'vote_sentiment', 'vote_face_off', 'post_insight'
+  displayName: text("display_name").notNull(),
+  xpValue: integer("xp_value").notNull(),
+  dailyCap: integer("daily_cap"), // null = unlimited
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  effectiveDate: timestamp("effective_date").notNull().defaultNow(),
+  expiryDate: timestamp("expiry_date"), // null = never expires
+});
+
+export const insertXpActionSchema = createInsertSchema(xpActions).omit({
+  id: true,
+});
+
+export type XpAction = typeof xpActions.$inferSelect;
+export type InsertXpAction = z.infer<typeof insertXpActionSchema>;
+
+// XP Ledger - Immutable transaction log for XP awards (Source of Truth)
+export const xpLedger = pgTable("xp_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  actionType: text("action_type").notNull(), // References xpActions.actionKey
+  xpDelta: integer("xp_delta").notNull(), // Can be negative for deductions
+  idempotencyKey: text("idempotency_key").notNull(), // Prevents duplicate awards
+  source: text("source").notNull().default("user_action"), // 'user_action', 'legacy_migration', 'admin_adjustment'
+  metadata: jsonb("metadata"), // Flexible: { targetId, targetType, ip_address, device_id, etc. }
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueIdempotency: unique().on(table.userId, table.idempotencyKey),
+}));
+
+export const insertXpLedgerSchema = createInsertSchema(xpLedger).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type XpLedger = typeof xpLedger.$inferSelect;
+export type InsertXpLedger = z.infer<typeof insertXpLedgerSchema>;
+
+// Credit Ledger - Immutable transaction log for virtual/real credits (Source of Truth)
+export const creditLedger = pgTable("credit_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  txnType: text("txn_type").notNull(), // 'prediction_stake', 'prediction_payout', 'bonus', 'admin_adjustment'
+  amount: integer("amount").notNull(), // Positive = credit, Negative = debit
+  walletType: text("wallet_type").notNull().default("VIRTUAL"), // 'VIRTUAL' (Phase 1), 'REAL' (Phase 2)
+  balanceAfter: integer("balance_after").notNull(), // Snapshot for audit
+  source: text("source").notNull().default("user_action"),
+  complianceStatus: text("compliance_status").default("pending"), // For future Phase 2
+  idempotencyKey: text("idempotency_key").notNull(),
+  metadata: jsonb("metadata"), // { predictionId, ip_address, device_id, etc. }
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueIdempotency: unique().on(table.userId, table.idempotencyKey),
+}));
+
+export const insertCreditLedgerSchema = createInsertSchema(creditLedger).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type CreditLedger = typeof creditLedger.$inferSelect;
+export type InsertCreditLedger = z.infer<typeof insertCreditLedgerSchema>;
+
+// Relations for gamification tables
+export const xpLedgerRelations = relations(xpLedger, ({ one }) => ({
+  user: one(users, {
+    fields: [xpLedger.userId],
+    references: [users.id],
+  }),
+}));
+
+export const creditLedgerRelations = relations(creditLedger, ({ one }) => ({
+  user: one(users, {
+    fields: [creditLedger.userId],
+    references: [users.id],
+  }),
+}));
+
+export const usersRelations = relations(users, ({ many }) => ({
+  xpLedgerEntries: many(xpLedger),
+  creditLedgerEntries: many(creditLedger),
+}));
