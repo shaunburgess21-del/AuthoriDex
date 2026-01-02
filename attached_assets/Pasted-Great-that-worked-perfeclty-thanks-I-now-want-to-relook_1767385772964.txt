@@ -1,0 +1,53 @@
+Great that worked perfeclty - thanks.
+
+
+
+I now want to relook at the Vote Page structure.
+
+
+
+Currently - We have the heading: "Shape the FameDex" with glass pill above - "Community Governance" and subtext below - "Vote on new inductees, curate profile images, and rate global sentiment. Your opinion powers the index." with two containers of text: "Total Votes Cast - 127,843" and "Next Governance Update - 2d 14h 32m" as you can see in the screenshot.
+
+
+
+Then we have the sticky filter header with Vote Section Types to filter the Vote Section Types below.
+
+
+
+The Vote Section Types that "Shape The FameDex" are currently - 1. Indcution Queue (Voting on which celebrity should next appear on the main FameDex leaderboard.) and 2. Curate Profile Images (Voting on which profile image should be the main one displayed for a particular celebrity wherever they appear on FameDex).
+
+
+
+The other vote type section categories we have are not about shaping how FameDex appears. Instead, and far more crucially, they embody the timeless principle of "Vox Populi, Vox Dei"—the voice of the people as the voice of God. By harnessing these votes, we empower users to contribute to a collective wisdom, gathering authentic insights and data that reveal what the world truly thinks on pivotal topics. This democratic vote will inspires a more transparent, people-driven platform where every vote helps illuminate shared truths and spark meaningful conversations. These two sections are the "Face-Offs" and "The Peoples Voice"
+
+
+
+The reason I am explaining the above leads me to the structural change I want refactor on the Vote Page. Since the "Face-Offs" and "The Peoples Voice" are most important - we would like to refactor the "Vote" page to show these sections first.
+
+
+
+See attached screenshot of the "Predict" page as well just for reference - The top section displays the category labels (Predict section types) as filters, with the search bar and the industry category labels as filters - namely: All, Tech, Politics, Business, Music, Sports, Creator... so that users can filter (if they choose) what cards to display below each category heading below. If they do not filter - then cards below each vote type section will show at random based on all ("All" filter will be selected by default). 
+
+
+
+Like the predict page structure - the Vote Page should mimic the predict page (Upper section) layout and show the Vote section types - namely: All, Face-Offs, People's Voice, Induction, Queue, Curate Profile... with the search bar and the industry category labels as filters - namely: All, Tech, Politics, Business, Music, Sports, Creator... so that users can filter.
+
+
+
+Then the "Face-Offs" and "The Peoples Voice" sections can be repositioned just below this filter section.
+
+
+
+Then the existing heading section: "Shape the FameDex" with glass pill above - "Community Governance" and subtext below - "Vote on new inductees and curate profile images. Your opinion powers the index." as well as the "Indcution Queue" and "Curate Profile Images" - can be placed below the two above sections.
+
+
+
+Please not if a user selects either of the filters at the top for "Indcution Queue" or"Curate Profile Images" then the heading "Shape the FameDex" with glass pill above - "Community Governance" and subtext below - "Vote on new inductees and curate profile images. Your opinion powers the Index." should remain.
+
+
+
+So to recap - we are basically just reaarranging the layout of the vote page - must not chnage design.
+
+
+
+Please put this into a simple prompt for Replit to understand fully.

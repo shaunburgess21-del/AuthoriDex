@@ -1,0 +1,57 @@
+This is a smart UX move. You are effectively splitting the page into two distinct "Zones":
+
+Zone 1: Public Opinion (Face-Offs, People's Voice) - High engagement, fun.
+
+Zone 2: Governance (Induction, Curate) - Maintenance, serious duties.
+
+Moving the "Fun" stuff to the top will definitely increase interaction rates.
+
+Here is the prompt for Replit. It explicitly instructs the AI to treat the "Shape the FameDex" header as a Section Divider rather than a Page Header, and to copy the sophisticated filtering from your Predict page.
+
+Copy and paste this into Replit:
+
+COPY AND PASTE THIS INTO REPLIT:
+
+I need to refactor the layout of the VotePage to prioritize "Public Opinion" features over "Governance" features.
+
+1. The New Layout Hierarchy (Vertical Order) Please rearrange the page components in this exact order:
+
+Top (Sticky): The Filter Section (Vote Types + Industry Categories + Search).
+
+Note: This should mimic the layout of the PredictPage header.
+
+Tabs: "All", "Face-Offs", "People's Voice" (formerly Community Polls), "Induction Queue", "Curate Profile".
+
+Zone 1 (Public Opinion):
+
+Face-Offs Section: (Display first).
+
+People's Voice Section: (Display second).
+
+Zone 2 (Governance Header):
+
+The existing "Shape the FameDex" / "Community Governance" banner with the stats and timer.
+
+Logic: This header acts as a divider. It should appear below Zone 1 but above Zone 2.
+
+Zone 3 (Governance Content):
+
+Induction Queue Section.
+
+Curate Profile Images Section.
+
+2. Filter Logic
+
+Default ("All"): Show the full page in the order above (Zone 1 -> Header -> Zone 3).
+
+"Face-Offs" or "People's Voice" selected: Show only Zone 1 content. Hide the "Shape the FameDex" governance header.
+
+"Induction" or "Curate" selected: Show the "Shape the FameDex" governance header at the top, followed by the specific section.
+
+3. Design Requirements
+
+Do not redesign the cards. Keep the existing card designs.
+
+Filter Bar: Ensure the Industry Category pills (Tech, Sports, etc.) and Search Bar appear inside the top filter section, just like they do on the PredictPage.
+
+Action: Please update VotePage.tsx to reflect this new reordered layout and conditional header logic.
