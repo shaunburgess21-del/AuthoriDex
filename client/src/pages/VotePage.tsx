@@ -1073,7 +1073,14 @@ export default function VotePage() {
     staleTime: 60 * 1000,
   });
   
-  const [faceOffUserVotes, setFaceOffUserVotes] = useState<Record<string, string>>({});
+  const { data: existingFaceOffVotes = {} } = useQuery<Record<string, string>>({
+    queryKey: ['/api/face-offs/user-votes'],
+    staleTime: 60 * 1000,
+  });
+  
+  const [localFaceOffVotes, setLocalFaceOffVotes] = useState<Record<string, string>>({});
+  
+  const faceOffUserVotes = { ...existingFaceOffVotes, ...localFaceOffVotes };
   
   const faceOffVoteMutation = useMutation({
     mutationFn: async ({ faceOffId, option }: { faceOffId: string; option: 'option_a' | 'option_b' }) => {
@@ -1081,8 +1088,9 @@ export default function VotePage() {
       return response.json();
     },
     onSuccess: (data, variables) => {
-      setFaceOffUserVotes(prev => ({ ...prev, [variables.faceOffId]: variables.option }));
+      setLocalFaceOffVotes((prev: Record<string, string>) => ({ ...prev, [variables.faceOffId]: variables.option }));
       queryClient.invalidateQueries({ queryKey: ['/api/face-offs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/face-offs/user-votes'] });
       toast({
         title: "Vote recorded!",
         description: "Your Face-Off vote has been counted.",
