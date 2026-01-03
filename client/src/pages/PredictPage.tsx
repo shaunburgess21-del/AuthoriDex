@@ -1696,7 +1696,7 @@ function CelebritySearchModal({
           </div>
         </div>
         
-        <ScrollArea className="flex-1 min-h-0 max-h-[400px]">
+        <div className="h-[350px] overflow-y-auto">
           <div className="p-2">
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
@@ -1724,7 +1724,7 @@ function CelebritySearchModal({
               ))
             )}
           </div>
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
