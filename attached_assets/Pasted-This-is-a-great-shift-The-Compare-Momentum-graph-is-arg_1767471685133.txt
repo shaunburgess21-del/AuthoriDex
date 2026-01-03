@@ -1,0 +1,107 @@
+This is a great shift. The "Compare Momentum" graph is arguably the most "Fintech" feature of the entire app. It needs to feel like a Bloomberg Terminal, not a broken spreadsheet.
+
+Here is the breakdown of the fixes, the design strategy, and the prompt to get it right.
+
+1. The Diagnosis: Why is the X-Axis Broken?
+"Dates are all showing as 1/3"
+
+The Cause: Replit likely "hard-coded" the mock data during a previous edit to save time. It probably wrote date: "1/3" for every single data point instead of calculating Today - 1 Day. The "Prevention" Fix: We must instruct Replit to use Dynamic Date Generation (e.g., new Date().setDate(today - i)) for all mock data. This ensures that no matter when you view the app, the chart shows "Today" and the past 6 days correctly.
+
+2. Feature: Time Range Toggles
+You requested: 1D, 7D, 30D, 6M, 1Y, ALL. Crucial Constraint: Does your backend calculate Trend Scores every hour or every day?
+
+Daily Scraper: If you only scrape data once a day, a 1D chart is just a single dot (useless).
+
+Recommendation: Remove 1D for Phase 1. Start with 7D (Default), 30D, 3M, 1Y. This feels professional without requiring hourly data updates.
+
+3. Design: The "Neon-Financial" Color Palette
+5 shades of blue is bad UX. You need High Contrast Differentiation. Since the chart is always on a dark background (Glassmorphism), we should use a "Cyber-Fintech" palette that pops against black.
+
+Suggested Palette (Fixed Order):
+
+Rank #1: Neon Cyan (#00E5FF) - The Leader, bright and futuristic.
+
+Rank #2: Electric Purple (#D500F9) - High contrast to Cyan.
+
+Rank #3: Lime Green (#76FF03) - Positive, growth vibe.
+
+Rank #4: Hot Pink (#FF1744) - Alarming, distinct.
+
+Rank #5: Safety Orange (#FF9100) - Distinct from the others.
+
+Why this works: No matter which 5 people are shown (Top 5 Overall or Top 5 Music), these colors will always clearly differentiate the lines.
+
+4. UX "Fabrication" Improvements
+To make this feel "Premium," we need two interactive features:
+
+Interactive Legend: Users should be able to click "Elon Musk" in the legend to hide/show his line. This is standard stock chart behavior to reduce clutter.
+
+Hover Tooltips: When I drag my finger/mouse over the chart, it shouldn't just show the date. It should show a floating box with the Rank # and Trend Score for all 5 people at that specific moment.
+
+The Master Prompt for Replit
+This prompt addresses the bug, implements the new design, and locks in the dynamic data logic.
+
+COPY AND PASTE THIS INTO REPLIT:
+
+I need to overhaul the "Compare Momentum" Graph Component to fix a data bug and improve the UX.
+
+1. Bug Fix: The X-Axis Dates
+
+Issue: The chart currently shows "1/3" for every single date on the X-axis.
+
+Cause: The mock data/formatting likely has a hard-coded date string.
+
+The Fix: Please update the mock data generator to be Dynamic.
+
+Use date-fns or native JS to generate dates relative to Today.
+
+Formula: date = new Date() - i * days.
+
+This ensures the graph always shows the correct "Past 7 Days" regardless of when the user views it.
+
+2. New Feature: Time Range Toggles
+
+Add a segmented control toggle above the graph: [ 7D | 30D | 3M | 1Y ].
+
+Logic:
+
+7D (Default): Show daily data points for the last 7 days.
+
+30D: Show daily data points for the last 30 days.
+
+3M: Show weekly averages.
+
+1Y: Show monthly averages.
+
+Note: For now, you can generate mock history data for these longer ranges so we can test the UI.
+
+3. Design Upgrade: High-Contrast Palette
+
+The current "Shades of Blue" are confusing. Please switch to this "Cyber-Fintech" Palette for the 5 lines (applied in order 1-5):
+
+#00E5FF (Neon Cyan)
+
+#D500F9 (Electric Purple)
+
+#76FF03 (Lime Green)
+
+#FF1744 (Hot Pink)
+
+#FF9100 (Safety Orange)
+
+4. UX "Fabrication" Improvements
+
+Interactive Legend: Ensure the legend items (names) are clickable. Clicking a name should toggle visibility of that line on/off.
+
+Rich Tooltip: Custom Recharts tooltip. When hovering, show a glass-morphism box listing:
+
+The Date.
+
+Sorted list of the 5 celebrities with their Score at that timestamp.
+
+Colored dot matching their line color next to their name.
+
+Action: Please refactor the MomentumGraph component to implement these fixes and features.
+
+A Note on "Ensuring it stays fixed"
+In the prompt above, the specific instruction "Use date-fns to generate dates relative to Today" is the technical instruction that prevents the "hard-coded 1/3" issue from coming back. It forces the code to calculate the date every time the page loads.
