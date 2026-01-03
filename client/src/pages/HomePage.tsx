@@ -636,9 +636,9 @@ export default function HomePage() {
       <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-blue-500/5 via-background/95 to-blue-500/5 backdrop-blur-xl">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-center gap-2 py-3">
-            {(["leaderboard", "predict", "vote"] as HomeView[]).map((view) => {
-              const icons = { leaderboard: Target, predict: LineChart, vote: Vote };
-              const labels = { leaderboard: "Leaderboard", predict: "Predict", vote: "Vote" };
+            {(["leaderboard", "vote", "predict"] as HomeView[]).map((view) => {
+              const icons = { leaderboard: Target, vote: Vote, predict: LineChart };
+              const labels = { leaderboard: "Leaderboard", vote: "Vote", predict: "Predict" };
               const Icon = icons[view];
               return (
                 <button
