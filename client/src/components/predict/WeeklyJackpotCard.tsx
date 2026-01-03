@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Crown, ChevronDown, Search, Lock } from "lucide-react";
 import { TrendingPerson } from "@shared/schema";
@@ -18,6 +19,95 @@ export interface WeeklyJackpotCardProps {
   compact?: boolean;
 }
 
+function CelebritySearchModal({
+  open,
+  onOpenChange,
+  trendingPeople,
+  selectedPerson,
+  onSelectPerson,
+  isLoading
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  trendingPeople: TrendingPerson[];
+  selectedPerson: TrendingPerson | null;
+  onSelectPerson: (person: TrendingPerson) => void;
+  isLoading: boolean;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  
+  const filteredPeople = (trendingPeople || []).filter(person =>
+    person.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleSelectPerson = (person: TrendingPerson) => {
+    onSelectPerson(person);
+    onOpenChange(false);
+    setSearchQuery("");
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0">
+        <DialogHeader className="px-4 pt-4 pb-0">
+          <DialogTitle className="flex items-center gap-2">
+            <Crown className="h-5 w-5 text-amber-500" />
+            Select Celebrity
+          </DialogTitle>
+          <DialogDescription>
+            Choose who you want to predict for the Weekly Jackpot
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="px-4 py-3 border-b">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search by name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+              autoFocus
+              data-testid="input-jackpot-search-modal"
+            />
+          </div>
+        </div>
+        
+        <ScrollArea className="flex-1 min-h-0 max-h-[400px]">
+          <div className="p-2">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-amber-500 border-r-transparent" />
+              </div>
+            ) : filteredPeople.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No results found</p>
+            ) : (
+              filteredPeople.map((person) => (
+                <button
+                  key={person.id}
+                  onClick={() => handleSelectPerson(person)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors ${
+                    selectedPerson?.id === person.id ? 'bg-amber-500/10 border border-amber-500/30' : ''
+                  }`}
+                  data-testid={`modal-option-person-${person.id}`}
+                >
+                  <PersonAvatar name={person.name} avatar={person.avatar || ""} size="sm" />
+                  <div className="flex-1 text-left">
+                    <p className="font-medium text-sm">{person.name}</p>
+                    <p className="text-xs text-muted-foreground">Rank #{person.rank}</p>
+                  </div>
+                  <span className="text-xs font-mono text-muted-foreground">{Math.round(person.trendScore).toLocaleString()}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function WeeklyJackpotCard({ 
   onEnterJackpot, 
   isMarketClosed = false,
@@ -28,29 +118,7 @@ export function WeeklyJackpotCard({
   isLoading = false,
   compact = false
 }: WeeklyJackpotCardProps) {
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const filteredPeople = (trendingPeople || []).filter(person =>
-    person.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleSelectPerson = (person: TrendingPerson) => {
-    onSelectPerson(person);
-    setDropdownOpen(false);
-    setSearchQuery("");
-  };
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
 
   return (
     <div 
@@ -74,9 +142,9 @@ export function WeeklyJackpotCard({
               </Badge>
             </div>
             
-            <div className="relative mb-4" ref={dropdownRef}>
+            <div className="mb-4">
               <button
-                onClick={() => setDropdownOpen(!dropdownOpen)}
+                onClick={() => setSearchModalOpen(true)}
                 className={`w-full ${compact ? '' : 'max-w-md'} flex items-center justify-between gap-2 px-4 py-3 rounded-lg border-2 border-amber-500/40 bg-background/80 backdrop-blur-sm hover:border-amber-500/60 transition-colors`}
                 data-testid="dropdown-jackpot-person"
               >
@@ -95,52 +163,8 @@ export function WeeklyJackpotCard({
                     </span>
                   )}
                 </div>
-                <ChevronDown className={`h-5 w-5 text-amber-500 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className="h-5 w-5 text-amber-500" />
               </button>
-              
-              {dropdownOpen && (
-                <div className="absolute top-full left-0 right-0 mt-2 rounded-lg border border-border bg-background shadow-xl z-50">
-                  <div className="p-2 border-b">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="text"
-                        placeholder="Search by name..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9"
-                        autoFocus
-                        data-testid="input-jackpot-search"
-                      />
-                    </div>
-                  </div>
-                  <ScrollArea className="h-[280px]">
-                    <div className="p-1">
-                      {filteredPeople.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">No results found</p>
-                      ) : (
-                        filteredPeople.map((person) => (
-                          <button
-                            key={person.id}
-                            onClick={() => handleSelectPerson(person)}
-                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors ${
-                              selectedPerson?.id === person.id ? 'bg-amber-500/10 border border-amber-500/30' : ''
-                            }`}
-                            data-testid={`option-person-${person.id}`}
-                          >
-                            <PersonAvatar name={person.name} avatar={person.avatar || ""} size="sm" />
-                            <div className="flex-1 text-left">
-                              <p className="font-medium text-sm">{person.name}</p>
-                              <p className="text-xs text-muted-foreground">#{person.rank}</p>
-                            </div>
-                            <span className="text-xs font-mono">{Math.round(person.trendScore).toLocaleString()}</span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </ScrollArea>
-                </div>
-              )}
             </div>
             
             <p className={`text-sm text-muted-foreground mb-4 ${compact ? '' : 'max-w-md'}`}>
@@ -188,6 +212,15 @@ export function WeeklyJackpotCard({
           </div>
         </div>
       </div>
+      
+      <CelebritySearchModal
+        open={searchModalOpen}
+        onOpenChange={setSearchModalOpen}
+        trendingPeople={trendingPeople}
+        selectedPerson={selectedPerson}
+        onSelectPerson={onSelectPerson}
+        isLoading={isLoading}
+      />
     </div>
   );
 }
