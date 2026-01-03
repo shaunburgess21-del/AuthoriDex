@@ -46,9 +46,6 @@ export default function MePage() {
               <Button variant="ghost" size="sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
                 Predict
               </Button>
-              <Button variant="ghost" size="sm" className="text-primary" data-testid="nav-me-desktop">
-                Me
-              </Button>
             </div>
             <UserMenu />
           </div>
