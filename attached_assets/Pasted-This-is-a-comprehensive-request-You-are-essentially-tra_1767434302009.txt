@@ -1,0 +1,95 @@
+This is a comprehensive request. You are essentially transforming the Home Page from a static "Preview" into an active "Feed." This is a massive UX improvement because it reduces friction—users can just tap-tap-tap without leaving the home screen.
+
+I have structured the prompt into 3 Clear Parts for Replit:
+
+The "Interactive Deck" Logic: Creating the "Tinder-style" engine.
+
+The Vote Tab Implementation: Applying it to Face-Offs/Polls.
+
+The Predict Tab Implementation: Applying it to Markets.
+
+I also included your "Side Note" regarding the Curate Profile grid on the main page as a specific sub-task, so Replit handles it all in one go.
+
+The Master Prompt for Replit (Home Page Overhaul)
+COPY AND PASTE THIS INTO REPLIT:
+
+I need to overhaul the Home page "Vote" and "Predict" toggles to change them from static previews into interactive "Tinder-style" card decks.
+
+1. The Core Concept: "Interactive Card Deck" Instead of a grid or horizontal scroll, each section (e.g., Face-Offs) must display only one card at a time.
+
+Interaction: When a user interacts (Votes/Predicts) OR clicks a "Skip" button below the card, the current card vanishes, and the next card in the queue immediately appears.
+
+UX: Seamless transition. No swiping gestures required, just button clicks that trigger the next item.
+
+Component: Please create a reusable wrapper component (e.g., CardDeckContainer) that handles this "Queue" logic.
+
+Mirroring: You MUST reuse the exact card components from the Vote and Predict pages (FaceOffCard, PollCard, PredictionCard). Do not create new card designs. If we update the main pages, the Home page must reflect those changes automatically.
+
+2. Home Page: "VOTE" Toggle Overhaul When the "Vote" toggle is selected, the layout should look like this:
+
+A. Filters (Sticky Top):
+
+Row 1: Vote Section Pills (All, Face-Offs, People's Voice, Induction, Curate).
+
+Row 2: Search Bar.
+
+Row 3: Industry Category Pills (All, Tech, Politics, etc.).
+
+Logic: These filters determine which cards appear in the decks below.
+
+B. The Sections (Stacked Vertically):
+
+Section 1: Face-Offs:
+
+Header: "Face-Offs" + Subtext "Vote on A vs B matchups."
+
+Content: The CardDeckContainer showing one FaceOffCard at a time.
+
+Section 2: The People's Voice:
+
+Header: "The People's Voice" + Subtext.
+
+Content: The CardDeckContainer showing one PollCard (Approve/Neutral/Oppose) at a time.
+
+Section 3 & 4: Induction Queue & Curate Profile (Same logic).
+
+C. Bottom: Keep the "Go to Governance Hub" button.
+
+3. Home Page: "PREDICT" Toggle Overhaul When the "Predict" toggle is selected:
+
+A. Filters: Same structure as Vote tab (Section Pills, Search, Industry Pills), but specific to Prediction markets.
+
+B. The Sections:
+
+Top: "Weekly Jackpot" (Keep existing display).
+
+Section 1: Up/Down Prediction:
+
+Header: "Up/Down Prediction" + Subtext.
+
+Content: The CardDeckContainer showing one PredictionCard (Up/Down variant).
+
+Interaction: Clicking Up/Down opens the existing Prediction Modal. Upon confirmation, the card cycles to the next one.
+
+Section 2: Head-to-Head Battles:
+
+Content: The CardDeckContainer showing one PredictionCard (H2H variant).
+
+C. Bottom: Keep the "Explore All Prediction Markets" button.
+
+4. Bonus Task: Update Main Vote Page
+
+On the Main Vote Page (not Home), please update the "Curate Profile" section.
+
+Change it from a single-card stack to a Grid Layout (3 cards wide on desktop, scrollable on mobile).
+
+Add a "View All" button that opens an overlay to see all images.
+
+Action: Please implement the CardDeckContainer logic and refactor the Home Page Vote/Predict tabs to match this interactive flow.
+
+Why this prompt is safe:
+"Reuse Components": I emphasized strictly reusing FaceOffCard etc. This prevents Replit from creating "Home Page specific" cards that look different or break when you update the main site.
+
+"CardDeckContainer": By asking for a wrapper component, we ensure the "Skip/Next" logic is written once and applied everywhere, rather than duplicating it 5 times.
+
+Clear Hierarchy: The breakdown of Filters -> Sections -> Bottom Button ensures the layout remains structured.
