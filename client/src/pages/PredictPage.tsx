@@ -2207,7 +2207,7 @@ export default function PredictPage() {
           <section className="mb-10">
             <SectionHeader
               title="Weekly Up / Down"
-              subtitle="Will their trend score be higher or lower this week?"
+              subtitle="Will their trend score be higher or lower by the end of this week?"
               onViewAll={() => setViewAllCategory("weekly")}
               onRulesClick={() => setRulesModalOpen("updown")}
             />
