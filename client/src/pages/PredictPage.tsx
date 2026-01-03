@@ -526,7 +526,7 @@ function SectionHeader({
     <div className="flex items-center justify-between mb-4 px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-transparent to-transparent border border-violet-500/10 backdrop-blur-sm">
       <div className="flex-1 min-w-0">
         <h2 className="text-lg sm:text-xl font-serif font-bold truncate">{title}</h2>
-        <p className="text-xs sm:text-sm text-muted-foreground truncate">{subtitle}</p>
+        <p className="text-xs sm:text-sm text-muted-foreground truncate">Curated matchups - who will gain more by the end of this week?</p>
       </div>
       <div className="flex items-center gap-2 shrink-0 ml-3">
         {onRulesClick && (
