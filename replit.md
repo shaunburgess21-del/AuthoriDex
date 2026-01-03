@@ -16,6 +16,13 @@ Preferred communication style: Simple, everyday language.
 - **Styling**: Design tokens via CSS variables, custom utility classes, glassy neon aesthetic for category pills with specific color mapping for different categories (e.g., Tech: Cyan, Music: Purple).
 - **Interactive Elements**: Expandable leaderboard rows with animations, a centralized VotingModal supporting "Vote Next" functionality, and square avatars with rounded corners.
 - **Celebrity Profile Vote Tab**: Features "Curate the Profile" section for photo voting on the current celebrity, "Featured Polls" section showing top 3 polls filtered by subject entity with a "View all" modal overlay, positioned between the sentiment voting widget and Community Insights.
+- **Compare Momentum Graph**: Bloomberg-style momentum comparison chart with:
+    - **Time Range Toggles**: 7D (default), 30D, 90D, ALL - config-driven via `TIME_RANGE_OPTIONS` constant
+    - **High-Contrast Color Palette**: Cyan (#22D3EE), Violet (#A855F7), Emerald (#10B981), Amber (#F59E0B), Rose (#F43F5E)
+    - **Fallback Data Generation**: When historical data < 3 days, generates simulated realistic trends
+    - **Rich Tooltips**: Glassmorphism-styled tooltip showing date + all celebrities sorted by score
+    - **Interactive Legend**: Click celebrity names to show/hide lines
+    - **Category Filtering**: Top 5 overall or filtered by category (Tech, Music, Politics, Sports, Creator)
 - **Page Structure**:
     - **Home Page**: Features a Hero Section, Trend Widgets, Prediction Markets Teaser (carousel), and a filterable/sortable Leaderboard.
     - **Vote Page**: Designed as a "Community Town Hall" with a cyan/teal theme. Reorganized layout prioritizes engagement:

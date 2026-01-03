@@ -209,7 +209,6 @@ function TrendGraphOverlay({
   const [selectedCategory, setSelectedCategory] = useState<typeof CATEGORY_OPTIONS[number]>("All");
   const [selectedTimeRange, setSelectedTimeRange] = useState<typeof TIME_RANGE_OPTIONS[number]>(TIME_RANGE_OPTIONS[0]);
   const [visibleLines, setVisibleLines] = useState<Record<string, boolean>>({});
-  const [usingFallbackData, setUsingFallbackData] = useState(false);
 
   const filteredPeople = selectedCategory === "All" 
     ? allPeople.slice(0, 5)
@@ -236,15 +235,15 @@ function TrendGraphOverlay({
 
   const isLoadingHistory = historyQueries.some(q => q.isLoading);
 
-  const trendData = useMemo(() => {
-    if (historyQueries.some(q => q.isLoading) || filteredPeople.length === 0) return [];
+  const { trendData, usingFallbackData } = useMemo(() => {
+    if (historyQueries.some(q => q.isLoading) || filteredPeople.length === 0) {
+      return { trendData: [], usingFallbackData: false };
+    }
     
     const allTimestamps = new Map<string, Record<string, string | number>>();
-    let hasRealData = false;
     
     filteredPeople.forEach((person, idx) => {
       const data = historyQueries[idx]?.data || [];
-      if (data.length > 0) hasRealData = true;
       
       data.forEach((point: { timestamp: string; date: string; time: string; trendScore: number }) => {
         const key = point.timestamp;
@@ -275,12 +274,13 @@ function TrendGraphOverlay({
     const minRequiredDays = Math.min(selectedTimeRange.days, 3);
     
     if (uniqueDates.size < minRequiredDays) {
-      setUsingFallbackData(true);
-      return generateFallbackHistory(filteredPeople, selectedTimeRange.days);
+      return { 
+        trendData: generateFallbackHistory(filteredPeople, selectedTimeRange.days), 
+        usingFallbackData: true 
+      };
     }
     
-    setUsingFallbackData(false);
-    return realData;
+    return { trendData: realData, usingFallbackData: false };
   }, [historyQueries, filteredPeople, selectedTimeRange]);
 
   const toggleLine = (id: string) => {
