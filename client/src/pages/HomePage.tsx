@@ -108,6 +108,95 @@ function MarketPulseCard({
   );
 }
 
+const TIME_RANGE_OPTIONS = [
+  { key: "7D", label: "7D", days: 7 },
+  { key: "30D", label: "30D", days: 30 },
+  { key: "90D", label: "90D", days: 90 },
+  { key: "ALL", label: "ALL", days: 365 },
+] as const;
+
+const MOMENTUM_COLORS = [
+  "#22D3EE", // Cyan - matches FameDex teal theme
+  "#A855F7", // Violet - ties to Predict page purple
+  "#10B981", // Emerald - growth, positivity
+  "#F59E0B", // Amber - warm, distinct
+  "#F43F5E", // Rose - attention, clear contrast
+];
+
+function generateFallbackHistory(
+  people: TrendingPerson[],
+  days: number
+): Record<string, string | number>[] {
+  const now = Date.now();
+  const dataPoints: Record<string, string | number>[] = [];
+  const pointsPerDay = days <= 7 ? 4 : days <= 30 ? 2 : 1;
+  const totalPoints = Math.min(days * pointsPerDay, 100);
+  const intervalMs = (days * 24 * 60 * 60 * 1000) / totalPoints;
+
+  for (let i = totalPoints - 1; i >= 0; i--) {
+    const timestamp = new Date(now - i * intervalMs);
+    const entry: Record<string, string | number> = {
+      date: `${timestamp.getMonth() + 1}/${timestamp.getDate()}`,
+      fullDate: timestamp.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      timestamp: timestamp.toISOString(),
+    };
+
+    people.forEach((person, idx) => {
+      const baseScore = person.trendScore || 50000 + idx * 10000;
+      const variation = Math.sin((i / totalPoints) * Math.PI * 2 + idx) * 0.15;
+      const trend = (1 - i / totalPoints) * 0.1 * (idx % 2 === 0 ? 1 : -1);
+      const noise = (Math.random() - 0.5) * 0.05;
+      entry[person.id] = Math.round(baseScore * (1 + variation + trend + noise));
+    });
+
+    dataPoints.push(entry);
+  }
+
+  return dataPoints;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{ name: string; value: number; color: string; dataKey: string }>;
+  label?: string;
+  people: TrendingPerson[];
+  colors: string[];
+}
+
+function MomentumTooltip({ active, payload, label, people, colors }: CustomTooltipProps) {
+  if (!active || !payload || payload.length === 0) return null;
+
+  const sortedPayload = [...payload].sort((a, b) => (b.value || 0) - (a.value || 0));
+
+  return (
+    <div className="bg-black/90 backdrop-blur-sm border border-white/10 rounded-lg p-3 shadow-xl min-w-[180px]">
+      <p className="text-xs text-muted-foreground mb-2 font-medium border-b border-white/10 pb-2">{label}</p>
+      <div className="space-y-1.5">
+        {sortedPayload.map((entry, idx) => {
+          const personIdx = people.findIndex(p => p.id === entry.dataKey);
+          const color = colors[personIdx % colors.length];
+          const formattedValue = entry.value >= 1000000 
+            ? `${(entry.value / 1000000).toFixed(1)}M` 
+            : entry.value >= 1000 
+              ? `${(entry.value / 1000).toFixed(1)}K` 
+              : entry.value;
+          
+          return (
+            <div key={entry.dataKey} className="flex items-center gap-2">
+              <span 
+                className="w-2.5 h-2.5 rounded-full shrink-0" 
+                style={{ backgroundColor: color }}
+              />
+              <span className="text-xs text-white/80 flex-1 truncate">{entry.name}</span>
+              <span className="text-xs font-mono font-medium text-white">{formattedValue}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function TrendGraphOverlay({
   open,
   onClose,
@@ -118,7 +207,9 @@ function TrendGraphOverlay({
   allPeople: TrendingPerson[];
 }) {
   const [selectedCategory, setSelectedCategory] = useState<typeof CATEGORY_OPTIONS[number]>("All");
+  const [selectedTimeRange, setSelectedTimeRange] = useState<typeof TIME_RANGE_OPTIONS[number]>(TIME_RANGE_OPTIONS[0]);
   const [visibleLines, setVisibleLines] = useState<Record<string, boolean>>({});
+  const [usingFallbackData, setUsingFallbackData] = useState(false);
 
   const filteredPeople = selectedCategory === "All" 
     ? allPeople.slice(0, 5)
@@ -130,13 +221,11 @@ function TrendGraphOverlay({
     setVisibleLines(initial);
   }, [selectedCategory, allPeople]);
 
-  const lineColors = ["#3b82f6", "#60a5fa", "#2563eb", "#1d4ed8", "#93c5fd"];
-
   const historyQueries = useQueries({
     queries: filteredPeople.map(person => ({
-      queryKey: [`/api/trending/${person.id}/history`, 7],
+      queryKey: [`/api/trending/${person.id}/history`, selectedTimeRange.days],
       queryFn: async () => {
-        const res = await fetch(`/api/trending/${person.id}/history?days=7`);
+        const res = await fetch(`/api/trending/${person.id}/history?days=${selectedTimeRange.days}`);
         if (!res.ok) return [];
         return res.json();
       },
@@ -151,29 +240,48 @@ function TrendGraphOverlay({
     if (historyQueries.some(q => q.isLoading) || filteredPeople.length === 0) return [];
     
     const allTimestamps = new Map<string, Record<string, string | number>>();
+    let hasRealData = false;
     
     filteredPeople.forEach((person, idx) => {
       const data = historyQueries[idx]?.data || [];
+      if (data.length > 0) hasRealData = true;
+      
       data.forEach((point: { timestamp: string; date: string; time: string; trendScore: number }) => {
         const key = point.timestamp;
         if (!allTimestamps.has(key)) {
           const d = new Date(point.timestamp);
-          const label = `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:00`;
-          allTimestamps.set(key, { date: label, timestamp: point.timestamp });
+          const label = selectedTimeRange.days <= 7 
+            ? `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:00`
+            : `${d.getMonth() + 1}/${d.getDate()}`;
+          allTimestamps.set(key, { 
+            date: label, 
+            fullDate: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: selectedTimeRange.days <= 7 ? 'numeric' : undefined }),
+            timestamp: point.timestamp 
+          });
         }
         const entry = allTimestamps.get(key)!;
         entry[person.id] = point.trendScore;
       });
     });
     
-    return Array.from(allTimestamps.values())
+    const realData = Array.from(allTimestamps.values())
       .sort((a, b) => {
         const dateA = new Date(a.timestamp as string);
         const dateB = new Date(b.timestamp as string);
         return dateA.getTime() - dateB.getTime();
-      })
-      .slice(-28);
-  }, [historyQueries, filteredPeople]);
+      });
+
+    const uniqueDates = new Set(realData.map(d => (d.timestamp as string).split('T')[0]));
+    const minRequiredDays = Math.min(selectedTimeRange.days, 3);
+    
+    if (uniqueDates.size < minRequiredDays) {
+      setUsingFallbackData(true);
+      return generateFallbackHistory(filteredPeople, selectedTimeRange.days);
+    }
+    
+    setUsingFallbackData(false);
+    return realData;
+  }, [historyQueries, filteredPeople, selectedTimeRange]);
 
   const toggleLine = (id: string) => {
     setVisibleLines(prev => ({ ...prev, [id]: !prev[id] }));
@@ -192,28 +300,52 @@ function TrendGraphOverlay({
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-serif font-bold">Compare Momentum</h2>
-            <p className="text-sm text-muted-foreground">7-Day Trend Analysis</p>
+            <p className="text-sm text-muted-foreground">
+              {selectedTimeRange.key === "ALL" ? "All-Time" : `${selectedTimeRange.days}-Day`} Trend Analysis
+              {usingFallbackData && (
+                <span className="ml-2 text-amber-400/80 text-xs">(Simulated data - collecting real history)</span>
+              )}
+            </p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-trends">
             <X className="h-5 w-5" />
           </Button>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-4 mb-6">
-          {CATEGORY_OPTIONS.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
-                selectedCategory === cat
-                  ? "bg-blue-500/20 text-blue-300 border border-blue-400/40"
-                  : "bg-muted/50 border border-border/50 text-muted-foreground hover:bg-muted/80"
-              }`}
-              data-testid={`trend-category-${cat.toLowerCase()}`}
-            >
-              {cat}
-            </button>
-          ))}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
+          <div className="flex items-center gap-1 bg-muted/30 rounded-lg p-1 border border-border/50">
+            {TIME_RANGE_OPTIONS.map(range => (
+              <button
+                key={range.key}
+                onClick={() => setSelectedTimeRange(range)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  selectedTimeRange.key === range.key
+                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-400/40"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                }`}
+                data-testid={`trend-range-${range.key.toLowerCase()}`}
+              >
+                {range.label}
+              </button>
+            ))}
+          </div>
+          
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide flex-1">
+            {CATEGORY_OPTIONS.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+                  selectedCategory === cat
+                    ? "bg-blue-500/20 text-blue-300 border border-blue-400/40"
+                    : "bg-muted/50 border border-border/50 text-muted-foreground hover:bg-muted/80"
+                }`}
+                data-testid={`trend-category-${cat.toLowerCase()}`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
         </div>
 
         <Card className="mb-6">
@@ -222,7 +354,7 @@ function TrendGraphOverlay({
               {isLoadingHistory ? (
                 <div className="h-full flex items-center justify-center">
                   <div className="text-center">
-                    <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-500 border-r-transparent"></div>
+                    <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-cyan-500 border-r-transparent"></div>
                     <p className="mt-4 text-sm text-muted-foreground">Loading trend history...</p>
                   </div>
                 </div>
@@ -233,38 +365,30 @@ function TrendGraphOverlay({
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsLineChart data={trendData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                     <XAxis 
                       dataKey="date" 
-                      stroke="rgba(255,255,255,0.5)" 
-                      fontSize={12}
-                      tickFormatter={(value) => {
-                        const parts = value.split('/');
-                        if (parts.length >= 2) {
-                          return `${parts[0]}/${parts[1]}`;
-                        }
-                        return value;
-                      }}
+                      stroke="rgba(255,255,255,0.4)" 
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                      interval="preserveStartEnd"
+                      minTickGap={40}
                     />
                     <YAxis 
-                      stroke="rgba(255,255,255,0.5)" 
-                      fontSize={12}
+                      stroke="rgba(255,255,255,0.4)" 
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
                       tickFormatter={(value) => {
                         if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
                         if (value >= 1000) return `${(value / 1000).toFixed(0)}K`;
                         return value;
                       }}
+                      width={50}
                     />
                     <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'rgba(0,0,0,0.9)', 
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        borderRadius: '8px'
-                      }}
-                      formatter={(value: number, name: string) => {
-                        const formatted = value >= 1000 ? `${(value / 1000).toFixed(1)}K` : value;
-                        return [formatted, name];
-                      }}
+                      content={<MomentumTooltip people={filteredPeople} colors={MOMENTUM_COLORS} />}
                     />
                     {filteredPeople.map((person, idx) => (
                       visibleLines[person.id] && (
@@ -273,10 +397,15 @@ function TrendGraphOverlay({
                           type="monotone"
                           dataKey={person.id}
                           name={person.name}
-                          stroke={lineColors[idx % lineColors.length]}
-                          strokeWidth={2}
-                          dot={{ fill: lineColors[idx % lineColors.length], strokeWidth: 0, r: 3 }}
-                          activeDot={{ r: 6, stroke: lineColors[idx % lineColors.length], strokeWidth: 2 }}
+                          stroke={MOMENTUM_COLORS[idx % MOMENTUM_COLORS.length]}
+                          strokeWidth={2.5}
+                          dot={false}
+                          activeDot={{ 
+                            r: 6, 
+                            stroke: MOMENTUM_COLORS[idx % MOMENTUM_COLORS.length], 
+                            strokeWidth: 2,
+                            fill: 'rgba(0,0,0,0.8)'
+                          }}
                           connectNulls
                         />
                       )
@@ -302,7 +431,7 @@ function TrendGraphOverlay({
             >
               <span 
                 className="w-3 h-3 rounded-full" 
-                style={{ backgroundColor: lineColors[idx % lineColors.length] }}
+                style={{ backgroundColor: MOMENTUM_COLORS[idx % MOMENTUM_COLORS.length] }}
               />
               {person.name}
             </button>
