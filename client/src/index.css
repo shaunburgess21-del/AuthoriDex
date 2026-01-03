@@ -467,73 +467,134 @@
     animation: attention-pulse 1s ease-out forwards;
   }
 
-  /* Market Pulse Card gradient border effect using box-shadows */
-  .pulse-border-blue,
-  .pulse-border-green,
-  .pulse-border-red {
+  /* ===== MARKET PULSE CARDS - Premium Glow Design ===== */
+  
+  /* Base styles for all pulse cards */
+  .pulse-card-blue,
+  .pulse-card-green,
+  .pulse-card-red {
     position: relative;
-    border-radius: 0.5rem;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+  }
+  
+  /* Accent bar at top - pseudo-element */
+  .pulse-card-blue::before,
+  .pulse-card-green::before,
+  .pulse-card-red::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    z-index: 10;
+  }
+  
+  /* Ambient glow behind card - pseudo-element */
+  .pulse-card-blue::after,
+  .pulse-card-green::after,
+  .pulse-card-red::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.3s ease;
   }
 
-  /* Blue gradient border (Daily Movers) - prominent top-left fading to bottom-right */
-  .pulse-border-blue {
+  /* ===== BLUE (Daily Movers) ===== */
+  .pulse-card-blue {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
+                linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.2);
     box-shadow: 
-      /* Top edge - strongest */
-      0 -2px 0 0 rgb(59, 130, 246),
-      /* Left edge - strongest */
-      -2px 0 0 0 rgb(59, 130, 246),
-      /* Top-left corner glow */
-      -3px -3px 8px -2px rgba(59, 130, 246, 0.5),
-      /* Right edge - faded */
-      2px 0 0 0 rgba(59, 130, 246, 0.15),
-      /* Bottom edge - faded */
-      0 2px 0 0 rgba(59, 130, 246, 0.15);
-    transition: box-shadow 0.3s ease;
+      0 4px 20px -4px rgba(59, 130, 246, 0.15),
+      0 0 40px -10px rgba(59, 130, 246, 0.1);
   }
-  .pulse-border-blue:hover {
-    box-shadow: 
-      0 -2px 0 0 rgb(59, 130, 246),
-      -2px 0 0 0 rgb(59, 130, 246),
-      2px 0 0 0 rgb(59, 130, 246),
-      0 2px 0 0 rgb(59, 130, 246),
-      0 0 12px 2px rgba(59, 130, 246, 0.3);
+  .pulse-card-blue::before {
+    background: linear-gradient(90deg, rgb(59, 130, 246) 0%, rgba(59, 130, 246, 0.3) 100%);
   }
-
-  /* Green gradient border (Weekly Gainers) */
-  .pulse-border-green {
-    box-shadow: 
-      0 -2px 0 0 rgb(34, 197, 94),
-      -2px 0 0 0 rgb(34, 197, 94),
-      -3px -3px 8px -2px rgba(34, 197, 94, 0.5),
-      2px 0 0 0 rgba(34, 197, 94, 0.15),
-      0 2px 0 0 rgba(34, 197, 94, 0.15);
-    transition: box-shadow 0.3s ease;
+  .pulse-card-blue::after {
+    background: radial-gradient(ellipse at top left, rgba(59, 130, 246, 0.3) 0%, transparent 60%);
   }
-  .pulse-border-green:hover {
+  .pulse-card-blue:hover {
+    transform: translateY(-2px);
+    border-color: rgba(59, 130, 246, 0.4);
     box-shadow: 
-      0 -2px 0 0 rgb(34, 197, 94),
-      -2px 0 0 0 rgb(34, 197, 94),
-      2px 0 0 0 rgb(34, 197, 94),
-      0 2px 0 0 rgb(34, 197, 94),
-      0 0 12px 2px rgba(34, 197, 94, 0.3);
+      0 8px 30px -4px rgba(59, 130, 246, 0.25),
+      0 0 50px -10px rgba(59, 130, 246, 0.2);
+  }
+  .pulse-card-blue:hover::after {
+    opacity: 1;
   }
 
-  /* Red gradient border (Weekly Droppers) */
-  .pulse-border-red {
+  /* ===== GREEN (Weekly Gainers) ===== */
+  .pulse-card-green {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, transparent 40%),
+                linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+    border: 1px solid rgba(34, 197, 94, 0.2);
     box-shadow: 
-      0 -2px 0 0 rgb(239, 68, 68),
-      -2px 0 0 0 rgb(239, 68, 68),
-      -3px -3px 8px -2px rgba(239, 68, 68, 0.5),
-      2px 0 0 0 rgba(239, 68, 68, 0.15),
-      0 2px 0 0 rgba(239, 68, 68, 0.15);
-    transition: box-shadow 0.3s ease;
+      0 4px 20px -4px rgba(34, 197, 94, 0.15),
+      0 0 40px -10px rgba(34, 197, 94, 0.1);
   }
-  .pulse-border-red:hover {
+  .pulse-card-green::before {
+    background: linear-gradient(90deg, rgb(34, 197, 94) 0%, rgba(34, 197, 94, 0.3) 100%);
+  }
+  .pulse-card-green::after {
+    background: radial-gradient(ellipse at top left, rgba(34, 197, 94, 0.3) 0%, transparent 60%);
+  }
+  .pulse-card-green:hover {
+    transform: translateY(-2px);
+    border-color: rgba(34, 197, 94, 0.4);
     box-shadow: 
-      0 -2px 0 0 rgb(239, 68, 68),
-      -2px 0 0 0 rgb(239, 68, 68),
-      2px 0 0 0 rgb(239, 68, 68),
-      0 2px 0 0 rgb(239, 68, 68),
-      0 0 12px 2px rgba(239, 68, 68, 0.3);
+      0 8px 30px -4px rgba(34, 197, 94, 0.25),
+      0 0 50px -10px rgba(34, 197, 94, 0.2);
   }
+  .pulse-card-green:hover::after {
+    opacity: 1;
+  }
+
+  /* ===== RED (Weekly Droppers) ===== */
+  .pulse-card-red {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, transparent 40%),
+                linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    box-shadow: 
+      0 4px 20px -4px rgba(239, 68, 68, 0.15),
+      0 0 40px -10px rgba(239, 68, 68, 0.1);
+  }
+  .pulse-card-red::before {
+    background: linear-gradient(90deg, rgb(239, 68, 68) 0%, rgba(239, 68, 68, 0.3) 100%);
+  }
+  .pulse-card-red::after {
+    background: radial-gradient(ellipse at top left, rgba(239, 68, 68, 0.3) 0%, transparent 60%);
+  }
+  .pulse-card-red:hover {
+    transform: translateY(-2px);
+    border-color: rgba(239, 68, 68, 0.4);
+    box-shadow: 
+      0 8px 30px -4px rgba(239, 68, 68, 0.25),
+      0 0 50px -10px rgba(239, 68, 68, 0.2);
+  }
+  .pulse-card-red:hover::after {
+    opacity: 1;
+  }
+
+  /* Icon glow rings for pulse cards */
+  .pulse-icon-blue {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%);
+    box-shadow: 0 0 20px -4px rgba(59, 130, 246, 0.4);
+  }
+  .pulse-icon-green {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(34, 197, 94, 0.1) 100%);
+    box-shadow: 0 0 20px -4px rgba(34, 197, 94, 0.4);
+  }
+  .pulse-icon-red {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
+    box-shadow: 0 0 20px -4px rgba(239, 68, 68, 0.4);
+  }
+
 }

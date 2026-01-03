@@ -39,57 +39,75 @@ function MarketPulseCard({
   type: "daily" | "gainer" | "dropper";
   onPersonClick: (id: string) => void;
 }) {
-  const iconColor = type === "daily" ? "text-blue-400" : type === "gainer" ? "text-green-400" : "text-red-400";
+  const colorConfig = {
+    daily: {
+      iconColor: "text-blue-400",
+      cardClass: "pulse-card-blue",
+      iconBgClass: "pulse-icon-blue",
+    },
+    gainer: {
+      iconColor: "text-green-400",
+      cardClass: "pulse-card-green",
+      iconBgClass: "pulse-icon-green",
+    },
+    dropper: {
+      iconColor: "text-red-400",
+      cardClass: "pulse-card-red",
+      iconBgClass: "pulse-icon-red",
+    },
+  };
   
-  const borderClass = type === "daily" 
-    ? "pulse-border-blue" 
-    : type === "gainer" 
-      ? "pulse-border-green" 
-      : "pulse-border-red";
+  const { iconColor, cardClass, iconBgClass } = colorConfig[type];
   
   return (
-    <Card 
-      className={`min-w-[280px] md:min-w-0 shrink-0 md:shrink bg-slate-900/60 border-0 backdrop-blur-sm h-full ${borderClass}`}
+    <div 
+      className={`min-w-[280px] md:min-w-0 shrink-0 md:shrink h-full rounded-xl ${cardClass}`}
       data-testid={`pulse-card-${type}`}
     >
-      <CardHeader className="pb-2 px-4 pt-4">
-        <div className="flex items-center gap-2">
-          <Icon className={`h-4 w-4 ${iconColor}`} />
-          <CardTitle className="text-sm font-medium text-slate-200">{title}</CardTitle>
+      <div className="p-4 pt-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${iconBgClass}`}>
+            <Icon className={`h-4 w-4 ${iconColor}`} />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-100">{title}</h3>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Top 5</p>
+          </div>
         </div>
-      </CardHeader>
-      <CardContent className="px-4 pb-4 space-y-2">
-        {people.slice(0, 5).map((person, idx) => {
-          const changeValue = type === "daily" ? person.change24h : person.change7d;
-          if (changeValue === undefined || changeValue === null || isNaN(changeValue)) return null;
-          const isPositive = changeValue >= 0;
-          return (
-            <div
-              key={person.id}
-              className="flex items-center gap-2 p-2 rounded-lg hover-elevate cursor-pointer bg-slate-800/40"
-              onClick={() => onPersonClick(person.id)}
-              data-testid={`pulse-item-${person.id}`}
-            >
-              <span className="font-mono text-xs font-bold text-slate-500 w-4">{idx + 1}</span>
-              <PersonAvatar name={person.name} avatar={person.avatar} size="xs" />
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-xs truncate text-slate-200">{person.name}</p>
-                <p className="text-[10px] text-slate-500">{person.category}</p>
-              </div>
-              <span 
-                className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                  isPositive 
-                    ? "bg-green-500/20 text-green-400 border border-green-500/30" 
-                    : "bg-red-500/20 text-red-400 border border-red-500/30"
-                }`}
+        
+        <div className="space-y-1.5">
+          {people.slice(0, 5).map((person, idx) => {
+            const changeValue = type === "daily" ? person.change24h : person.change7d;
+            if (changeValue === undefined || changeValue === null || isNaN(changeValue)) return null;
+            const isPositive = changeValue >= 0;
+            return (
+              <div
+                key={person.id}
+                className="flex items-center gap-2.5 p-2 rounded-lg hover-elevate cursor-pointer bg-slate-800/30 border border-slate-700/30 transition-colors hover:border-slate-600/50"
+                onClick={() => onPersonClick(person.id)}
+                data-testid={`pulse-item-${person.id}`}
               >
-                {isPositive ? "+" : ""}{changeValue.toFixed(1)}%
-              </span>
-            </div>
-          );
-        })}
-      </CardContent>
-    </Card>
+                <span className="font-mono text-xs font-bold text-slate-500 w-4 text-center">{idx + 1}</span>
+                <PersonAvatar name={person.name} avatar={person.avatar} size="xs" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-xs truncate text-slate-200">{person.name}</p>
+                  <p className="text-[10px] text-slate-500">{person.category}</p>
+                </div>
+                <span 
+                  className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
+                    isPositive 
+                      ? "bg-green-500/15 text-green-400" 
+                      : "bg-red-500/15 text-red-400"
+                  }`}
+                >
+                  {isPositive ? "+" : ""}{changeValue.toFixed(1)}%
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 
