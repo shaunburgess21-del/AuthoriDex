@@ -385,6 +385,12 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
   const [stakeModal, setStakeModal] = useState<StakeModalState | null>(null);
   const [predictions, setPredictions] = useState<Set<string>>(new Set());
   const pendingCycleCallbackRef = useRef<(() => void) | null>(null);
+  
+  const [upDownInteracted, setUpDownInteracted] = useState(false);
+  const [h2hInteracted, setH2hInteracted] = useState(false);
+  const [raceInteracted, setRaceInteracted] = useState(false);
+  const [communityInteracted, setCommunityInteracted] = useState(false);
+  const [pendingPrediction, setPendingPrediction] = useState<string | null>(null);
 
   const filteredUpDown = useMemo(() =>
     MOCK_MARKETS.filter(m => {
@@ -429,8 +435,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
     [categoryFilter, searchQuery, predictions]
   );
 
-  const handleUpDownPredict = useCallback((marketId: string, direction: 'up' | 'down', personName: string, multiplier: number, onComplete: () => void) => {
-    pendingCycleCallbackRef.current = onComplete;
+  const handleUpDownPredict = useCallback((marketId: string, direction: 'up' | 'down', personName: string, multiplier: number) => {
     setStakeModal({
       isOpen: true,
       type: 'updown',
@@ -439,17 +444,13 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
       personName,
       multiplier,
       onConfirm: () => {
-        setPredictions(prev => new Set(prev).add(marketId));
-        setTimeout(() => {
-          pendingCycleCallbackRef.current?.();
-          pendingCycleCallbackRef.current = null;
-        }, 300);
+        setPendingPrediction(marketId);
+        setUpDownInteracted(true);
       },
     });
   }, []);
 
-  const handleH2HPredict = useCallback((marketId: string, selection: 'person1' | 'person2', personName: string, onComplete: () => void) => {
-    pendingCycleCallbackRef.current = onComplete;
+  const handleH2HPredict = useCallback((marketId: string, selection: 'person1' | 'person2', personName: string) => {
     setStakeModal({
       isOpen: true,
       type: 'h2h',
@@ -457,17 +458,13 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
       selection,
       personName,
       onConfirm: () => {
-        setPredictions(prev => new Set(prev).add(marketId));
-        setTimeout(() => {
-          pendingCycleCallbackRef.current?.();
-          pendingCycleCallbackRef.current = null;
-        }, 300);
+        setPendingPrediction(marketId);
+        setH2hInteracted(true);
       },
     });
   }, []);
 
-  const handleRacePredict = useCallback((raceId: string, runnerName: string, onComplete: () => void) => {
-    pendingCycleCallbackRef.current = onComplete;
+  const handleRacePredict = useCallback((raceId: string, runnerName: string) => {
     setStakeModal({
       isOpen: true,
       type: 'race',
@@ -475,17 +472,13 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
       selection: runnerName,
       personName: runnerName,
       onConfirm: () => {
-        setPredictions(prev => new Set(prev).add(raceId));
-        setTimeout(() => {
-          pendingCycleCallbackRef.current?.();
-          pendingCycleCallbackRef.current = null;
-        }, 300);
+        setPendingPrediction(raceId);
+        setRaceInteracted(true);
       },
     });
   }, []);
 
-  const handleCommunityPredict = useCallback((marketId: string, optionId: string, optionText: string, onComplete: () => void) => {
-    pendingCycleCallbackRef.current = onComplete;
+  const handleCommunityPredict = useCallback((marketId: string, optionId: string, optionText: string) => {
     setStakeModal({
       isOpen: true,
       type: 'community',
@@ -493,11 +486,8 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
       selection: optionText,
       personName: optionText,
       onConfirm: () => {
-        setPredictions(prev => new Set(prev).add(marketId));
-        setTimeout(() => {
-          pendingCycleCallbackRef.current?.();
-          pendingCycleCallbackRef.current = null;
-        }, 300);
+        setPendingPrediction(marketId);
+        setCommunityInteracted(true);
       },
     });
   }, []);
@@ -600,10 +590,19 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
           </div>
           <CardDeckContainer
             items={filteredUpDown}
-            renderCard={(market, onComplete) => (
+            viewType="predict"
+            hasInteracted={upDownInteracted}
+            onAdvance={() => {
+              if (pendingPrediction) {
+                setPredictions(prev => new Set(prev).add(pendingPrediction));
+                setPendingPrediction(null);
+              }
+              setUpDownInteracted(false);
+            }}
+            renderCard={(market) => (
               <UpDownCard
                 market={market}
-                onPredict={(id, dir, name, mult) => handleUpDownPredict(id, dir, name, mult, onComplete)}
+                onPredict={(id, dir, name, mult) => handleUpDownPredict(id, dir, name, mult)}
               />
             )}
             emptyMessage="No up/down markets match your filters"
@@ -619,10 +618,19 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
           </div>
           <CardDeckContainer
             items={filteredH2H}
-            renderCard={(market, onComplete) => (
+            viewType="predict"
+            hasInteracted={h2hInteracted}
+            onAdvance={() => {
+              if (pendingPrediction) {
+                setPredictions(prev => new Set(prev).add(pendingPrediction));
+                setPendingPrediction(null);
+              }
+              setH2hInteracted(false);
+            }}
+            renderCard={(market) => (
               <H2HCard
                 market={market}
-                onPredict={(id, sel, name) => handleH2HPredict(id, sel, name, onComplete)}
+                onPredict={(id, sel, name) => handleH2HPredict(id, sel, name)}
               />
             )}
             emptyMessage="No head-to-head markets match your filters"
@@ -638,10 +646,19 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
           </div>
           <CardDeckContainer
             items={filteredRaces}
-            renderCard={(race, onComplete) => (
+            viewType="predict"
+            hasInteracted={raceInteracted}
+            onAdvance={() => {
+              if (pendingPrediction) {
+                setPredictions(prev => new Set(prev).add(pendingPrediction));
+                setPendingPrediction(null);
+              }
+              setRaceInteracted(false);
+            }}
+            renderCard={(race) => (
               <RaceCard
                 race={race}
-                onPredict={(id, name) => handleRacePredict(id, name, onComplete)}
+                onPredict={(id, name) => handleRacePredict(id, name)}
               />
             )}
             emptyMessage="No category races match your filters"
@@ -657,10 +674,19 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
           </div>
           <CardDeckContainer
             items={filteredCommunity}
-            renderCard={(market, onComplete) => (
+            viewType="predict"
+            hasInteracted={communityInteracted}
+            onAdvance={() => {
+              if (pendingPrediction) {
+                setPredictions(prev => new Set(prev).add(pendingPrediction));
+                setPendingPrediction(null);
+              }
+              setCommunityInteracted(false);
+            }}
+            renderCard={(market) => (
               <CommunityCard
                 market={market}
-                onPredict={(id, optId, optText) => handleCommunityPredict(id, optId, optText, onComplete)}
+                onPredict={(id, optId, optText) => handleCommunityPredict(id, optId, optText)}
               />
             )}
             emptyMessage="No community markets match your filters"

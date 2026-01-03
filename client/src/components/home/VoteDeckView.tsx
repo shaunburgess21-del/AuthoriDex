@@ -350,6 +350,11 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   const [pollVotes, setPollVotes] = useState<Record<string, string>>({});
   const [inductionVotes, setInductionVotes] = useState<Set<string>>(new Set());
   const [curateVotes, setCurateVotes] = useState<Record<string, string>>({});
+  
+  const [faceOffInteracted, setFaceOffInteracted] = useState(false);
+  const [pollInteracted, setPollInteracted] = useState(false);
+  const [inductionInteracted, setInductionInteracted] = useState(false);
+  const [curateInteracted, setCurateInteracted] = useState(false);
 
   const filteredFaceOffs = useMemo(() => 
     FACE_OFF_DATA.filter(fo => {
@@ -483,13 +488,16 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
           </div>
           <CardDeckContainer
             items={filteredFaceOffs}
-            renderCard={(fo, onComplete) => (
+            viewType="vote"
+            hasInteracted={faceOffInteracted}
+            onAdvance={() => setFaceOffInteracted(false)}
+            renderCard={(fo) => (
               <VersusCard
                 faceOff={fo}
                 userVote={faceOffVotes[fo.id] || null}
                 onVote={(id, opt) => {
                   handleFaceOffVote(id, opt);
-                  setTimeout(onComplete, 800);
+                  setFaceOffInteracted(true);
                 }}
               />
             )}
@@ -506,13 +514,16 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
           </div>
           <CardDeckContainer
             items={filteredPolls}
-            renderCard={(topic, onComplete) => (
+            viewType="vote"
+            hasInteracted={pollInteracted}
+            onAdvance={() => setPollInteracted(false)}
+            renderCard={(topic) => (
               <PollCard
                 topic={topic}
                 userVote={pollVotes[topic.id] || null}
                 onVote={(id, choice) => {
                   handlePollVote(id, choice);
-                  setTimeout(onComplete, 800);
+                  setPollInteracted(true);
                 }}
               />
             )}
@@ -529,13 +540,16 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
           </div>
           <CardDeckContainer
             items={filteredInduction}
-            renderCard={(candidate, onComplete) => (
+            viewType="vote"
+            hasInteracted={inductionInteracted}
+            onAdvance={() => setInductionInteracted(false)}
+            renderCard={(candidate) => (
               <InductionCard
                 candidate={candidate}
                 isVoted={inductionVotes.has(candidate.id)}
                 onVote={(id) => {
                   handleInductionVote(id);
-                  setTimeout(onComplete, 600);
+                  setInductionInteracted(true);
                 }}
               />
             )}
@@ -552,13 +566,16 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
           </div>
           <CardDeckContainer
             items={filteredCurate}
-            renderCard={(poll, onComplete) => (
+            viewType="vote"
+            hasInteracted={curateInteracted}
+            onAdvance={() => setCurateInteracted(false)}
+            renderCard={(poll) => (
               <CurateCard
                 poll={poll}
                 selectedPhoto={curateVotes[poll.id] || null}
                 onVote={(pollId, photoId) => {
                   handleCurateVote(pollId, photoId);
-                  setTimeout(onComplete, 800);
+                  setCurateInteracted(true);
                 }}
               />
             )}

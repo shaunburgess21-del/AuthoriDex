@@ -3,13 +3,17 @@ import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+type ViewType = "vote" | "predict";
+
 interface CardDeckContainerProps<T> {
   items: T[];
-  renderCard: (item: T, onComplete: () => void) => React.ReactNode;
+  renderCard: (item: T, onInteract: () => void) => React.ReactNode;
   onSkip?: (item: T) => void;
   emptyMessage?: string;
-  showSkip?: boolean;
-  skipLabel?: string;
+  showBottomButton?: boolean;
+  viewType?: ViewType;
+  hasInteracted?: boolean;
+  onAdvance?: () => void;
 }
 
 export function CardDeckContainer<T>({
@@ -17,8 +21,10 @@ export function CardDeckContainer<T>({
   renderCard,
   onSkip,
   emptyMessage = "No items available",
-  showSkip = true,
-  skipLabel = "Skip"
+  showBottomButton = true,
+  viewType = "vote",
+  hasInteracted = false,
+  onAdvance
 }: CardDeckContainerProps<T>) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState<"left" | "right">("left");
@@ -30,13 +36,14 @@ export function CardDeckContainer<T>({
     }
   }, [items.length, currentIndex]);
 
-  const handleComplete = useCallback(() => {
+  const advanceToNext = useCallback(() => {
     setDirection("left");
     setCurrentIndex((prev) => {
       if (items.length <= 1) return 0;
       return (prev + 1) % items.length;
     });
-  }, [items.length]);
+    onAdvance?.();
+  }, [items.length, onAdvance]);
 
   const handleSkip = useCallback(() => {
     if (items[currentIndex]) {
@@ -47,7 +54,16 @@ export function CardDeckContainer<T>({
       if (items.length <= 1) return 0;
       return (prev + 1) % items.length;
     });
-  }, [currentIndex, items, onSkip]);
+    onAdvance?.();
+  }, [currentIndex, items, onSkip, onAdvance]);
+
+  const handleBottomButtonClick = useCallback(() => {
+    if (hasInteracted) {
+      advanceToNext();
+    } else {
+      handleSkip();
+    }
+  }, [hasInteracted, advanceToNext, handleSkip]);
 
   if (items.length === 0) {
     return (
@@ -58,6 +74,10 @@ export function CardDeckContainer<T>({
   }
 
   const currentItem = items[currentIndex % items.length];
+  
+  const buttonLabel = hasInteracted 
+    ? viewType === "vote" ? "Vote Next" : "Predict Next"
+    : "Skip";
 
   return (
     <div className="relative">
@@ -69,20 +89,24 @@ export function CardDeckContainer<T>({
           exit={{ opacity: 0, x: direction === "left" ? -100 : 100 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
         >
-          {renderCard(currentItem, handleComplete)}
+          {renderCard(currentItem, advanceToNext)}
         </motion.div>
       </AnimatePresence>
       
-      {showSkip && (
+      {showBottomButton && (
         <div className="flex justify-center mt-3">
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleSkip}
-            className="text-muted-foreground hover:text-foreground text-xs"
-            data-testid="button-skip-card"
+            onClick={handleBottomButtonClick}
+            className={`text-xs transition-all ${
+              hasInteracted 
+                ? "text-cyan-400 hover:text-cyan-300 font-medium" 
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            data-testid={hasInteracted ? "button-next-card" : "button-skip-card"}
           >
-            {skipLabel}
+            {buttonLabel}
             <ChevronRight className="h-3 w-3 ml-1" />
           </Button>
         </div>
