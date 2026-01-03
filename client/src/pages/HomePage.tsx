@@ -85,7 +85,7 @@ function MarketPulseCard({
                 data-testid={`pulse-item-${person.id}`}
               >
                 <span className="font-mono font-bold text-slate-500 w-4 text-center text-[14px]">{idx + 1}</span>
-                <PersonAvatar name={person.name} avatar={person.avatar} size="xs" />
+                <PersonAvatar name={person.name} avatar={person.avatar} size="sm" />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-xs truncate text-slate-200">{person.name}</p>
                   <p className="text-[10px] text-slate-500">{person.category}</p>
