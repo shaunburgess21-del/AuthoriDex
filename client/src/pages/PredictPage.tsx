@@ -523,7 +523,7 @@ function SectionHeader({
   rulesTitle?: string;
 }) {
   return (
-    <div className="flex items-center justify-between mb-4 px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-transparent to-transparent border border-violet-500/10 backdrop-blur-sm">
+    <div className="flex items-center justify-between mb-4 px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm">
       <div className="flex-1 min-w-0">
         <h2 className="text-lg sm:text-xl font-serif font-bold truncate">{title}</h2>
         <p className="text-xs sm:text-sm text-muted-foreground truncate">Curated matchups - who will gain more by the end of this week?</p>
@@ -2323,7 +2323,7 @@ export default function PredictPage() {
 
         {showSection("community") && (
           <section className="mb-10">
-            <div className="flex items-center justify-between mb-4 px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-transparent to-transparent border border-violet-500/10 backdrop-blur-sm">
+            <div className="flex items-center justify-between mb-4 px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <h2 className="text-lg sm:text-xl font-serif font-bold truncate">Community Predictions</h2>
