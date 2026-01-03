@@ -7,11 +7,8 @@ import { FilterDropdown } from "@/components/FilterDropdown";
 import { SortDropdown } from "@/components/SortDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
-import { MarketCycleHero } from "@/components/MarketCycleHero";
-import { useMarketCycle } from "@/hooks/useMarketCycle";
-import { WeeklyJackpotCard } from "@/components/predict/WeeklyJackpotCard";
-import { InductionLeaderboardSlice, INDUCTION_CANDIDATES } from "@/components/vote/InductionLeaderboardSlice";
-import { PeoplesVoicePoll, DISCOURSE_TOPICS } from "@/components/vote/PeoplesVoicePoll";
+import { VoteDeckView } from "@/components/home/VoteDeckView";
+import { PredictDeckView } from "@/components/home/PredictDeckView";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -311,154 +308,6 @@ function TrendGraphOverlay({
             </button>
           ))}
         </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function PredictHookView({ 
-  trendingPeople, 
-  isLoading, 
-  onExplore 
-}: { 
-  trendingPeople: TrendingPerson[]; 
-  isLoading: boolean;
-  onExplore: () => void;
-}) {
-  const marketState = useMarketCycle();
-  const [selectedPerson, setSelectedPerson] = useState<TrendingPerson | null>(null);
-  
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="max-w-2xl mx-auto space-y-6"
-    >
-      <MarketCycleHero marketState={marketState} />
-      
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="bg-violet-500/10 text-violet-300 border-violet-400/30">
-            <Flame className="h-3 w-3 mr-1" />
-            Hot
-          </Badge>
-          <span className="text-sm text-muted-foreground">Featured Market</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Users className="h-3.5 w-3.5 text-amber-400" />
-          <span>247 predicting now</span>
-        </div>
-      </div>
-      
-      <WeeklyJackpotCard
-        onEnterJackpot={onExplore}
-        isMarketClosed={marketState.status === "CLOSED"}
-        timeRemaining={marketState.timeRemaining}
-        trendingPeople={trendingPeople}
-        selectedPerson={selectedPerson}
-        onSelectPerson={setSelectedPerson}
-        isLoading={isLoading}
-        compact={true}
-      />
-
-      <div className="flex flex-col items-center gap-3 pt-2">
-        <Button 
-          size="lg"
-          className="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-semibold px-8 shadow-lg shadow-violet-500/20"
-          onClick={() => {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            onExplore();
-          }}
-          data-testid="button-explore-markets"
-        >
-          <Sparkles className="h-4 w-4 mr-2" />
-          Explore All Prediction Markets
-          <ChevronRight className="h-4 w-4 ml-1" />
-        </Button>
-        <p className="text-xs text-muted-foreground">
-          Up/Down • Head-to-Head • Category Races • Community Markets
-        </p>
-      </div>
-    </motion.div>
-  );
-}
-
-function VoteHookView({ 
-  onExplore 
-}: { 
-  onExplore: () => void;
-}) {
-  const [votedCandidates, setVotedCandidates] = useState<Set<string>>(new Set());
-  
-  const handleToggleVote = (id: string) => {
-    setVotedCandidates(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-  
-  const handlePollVote = (topicId: string, choice: 'support' | 'neutral' | 'oppose') => {
-    console.log(`Voted ${choice} on topic ${topicId}`);
-  };
-  
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="max-w-3xl mx-auto space-y-6"
-    >
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="bg-cyan-500/10 text-cyan-300 border-cyan-400/30">
-            <Flame className="h-3 w-3 mr-1" />
-            Active
-          </Badge>
-          <span className="text-sm text-muted-foreground">Community Governance</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Users className="h-3.5 w-3.5 text-cyan-400" />
-          <span>1.2M+ total votes</span>
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <InductionLeaderboardSlice
-          candidates={INDUCTION_CANDIDATES}
-          limit={3}
-          votedCandidates={votedCandidates}
-          onToggleVote={handleToggleVote}
-        />
-        
-        <PeoplesVoicePoll
-          topic={DISCOURSE_TOPICS[0]}
-          onVote={handlePollVote}
-        />
-      </div>
-
-      <div className="flex flex-col items-center gap-3 pt-2">
-        <Button 
-          size="lg"
-          className="bg-gradient-to-r from-cyan-600 to-teal-500 text-white font-semibold px-8 shadow-lg shadow-cyan-500/20"
-          onClick={() => {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            onExplore();
-          }}
-          data-testid="button-explore-governance"
-        >
-          <Vote className="h-4 w-4 mr-2" />
-          Go to Governance Hub
-          <ChevronRight className="h-4 w-4 ml-1" />
-        </Button>
-        <p className="text-xs text-muted-foreground">
-          Inductions • Profile Curation • Community Polls
-        </p>
       </div>
     </motion.div>
   );
@@ -778,7 +627,7 @@ export default function HomePage() {
           )}
 
           {activeView === "predict" && (
-            <PredictHookView 
+            <PredictDeckView 
               trendingPeople={allPeople} 
               isLoading={isLoading}
               onExplore={() => setLocation("/predict")} 
@@ -786,7 +635,7 @@ export default function HomePage() {
           )}
 
           {activeView === "vote" && (
-            <VoteHookView 
+            <VoteDeckView 
               onExplore={() => setLocation("/vote")} 
             />
           )}
