@@ -37,8 +37,8 @@ export default function MePage() {
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-1 mr-2">
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/")} data-testid="nav-home-desktop">
-                Home
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/#leaderboard")} data-testid="nav-leaderboard-desktop">
+                Leaderboard
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setLocation("/vote")} data-testid="nav-vote-desktop">
                 Vote
