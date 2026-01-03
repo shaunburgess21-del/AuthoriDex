@@ -611,9 +611,11 @@ function CurateProfileCard({
             </motion.div>
           )}
         </AnimatePresence>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-sm">{poll.personName}</h3>
+        <div className="absolute top-3 right-3">
           <CategoryPill category={poll.category} data-testid={`badge-curate-${poll.id}`} />
+        </div>
+        <div className="mb-3">
+          <h3 className="font-semibold text-sm">{poll.personName}</h3>
         </div>
         
         <p className="text-center text-lg font-serif font-bold text-cyan-400 mb-4">Which look defines them?</p>
