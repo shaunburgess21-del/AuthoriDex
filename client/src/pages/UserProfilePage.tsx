@@ -126,7 +126,10 @@ export default function UserProfilePage() {
               <Button variant="ghost" size="sm" onClick={() => setLocation("/#leaderboard")} data-testid="nav-leaderboard-desktop">
                 Leaderboard
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/vote")} data-testid="nav-vote-desktop">
+              <Button variant="ghost" size="sm" onClick={() => {
+                setLocation("/vote");
+                window.scrollTo(0, 0);
+              }} data-testid="nav-vote-desktop">
                 Vote
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
