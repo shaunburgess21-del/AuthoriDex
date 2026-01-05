@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { trackedPeople, trendSnapshots, trendingPeople } from "@shared/schema";
-import { desc, eq } from "drizzle-orm";
+import { trackedPeople, trendSnapshots, trendingPeople, celebrityImages } from "@shared/schema";
+import { desc, eq, sql } from "drizzle-orm";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
 import { fetchBatchGdeltNews } from "../providers/gdelt";
 import { fetchSerperBatch } from "../providers/serper";
@@ -112,15 +112,40 @@ export async function runDataIngestion(): Promise<IngestResult> {
 
     scoreResults.sort((a, b) => b.score.trendScore - a.score.trendScore);
 
+    // Fetch primary images for all celebrities (from celebrity_images table)
+    // Order by personId first, then by isPrimary (desc) and vote score (desc)
+    // This ensures when we iterate, we see the "best" image for each person first
+    const allImages = await db
+      .select()
+      .from(celebrityImages)
+      .orderBy(
+        celebrityImages.personId,
+        desc(celebrityImages.isPrimary), 
+        desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`)
+      );
+    
+    // Build a map of personId -> primary image URL (O(n) - one pass)
+    const primaryImageMap = new Map<string, string>();
+    for (const img of allImages) {
+      // Only set if not already set (first image for each personId is the "best")
+      if (!primaryImageMap.has(img.personId)) {
+        primaryImageMap.set(img.personId, img.imageUrl);
+      }
+    }
+    console.log(`[Ingest] Loaded ${primaryImageMap.size} primary avatar images from celebrity_images`);
+
     await db.delete(trendingPeople);
 
     for (let i = 0; i < scoreResults.length; i++) {
       const { person, score } = scoreResults[i];
+      
+      // Use celebrity_images primary image, fallback to tracked_people avatar
+      const avatarUrl = primaryImageMap.get(person.id) || person.avatar;
 
       await db.insert(trendingPeople).values({
         id: person.id,
         name: person.name,
-        avatar: person.avatar,
+        avatar: avatarUrl,
         bio: person.bio,
         rank: i + 1,
         trendScore: score.trendScore,
@@ -131,7 +156,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
         target: trendingPeople.id,
         set: {
           name: person.name,
-          avatar: person.avatar,
+          avatar: avatarUrl,
           bio: person.bio,
           rank: i + 1,
           trendScore: score.trendScore,

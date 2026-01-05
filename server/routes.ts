@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote } from "@shared/schema";
 import { eq, desc, and, sql, count } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -272,6 +272,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching platform insights:", error);
       res.status(500).json({ error: "Failed to fetch platform insights" });
+    }
+  });
+
+  // Get all images for a celebrity (for "Curate Profile" voting)
+  app.get("/api/people/:id/images", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const images = await db
+        .select()
+        .from(celebrityImages)
+        .where(eq(celebrityImages.personId, id))
+        .orderBy(desc(celebrityImages.isPrimary), desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`));
+      
+      res.json(images);
+    } catch (error) {
+      console.error("Error fetching celebrity images:", error);
+      res.status(500).json({ error: "Failed to fetch celebrity images" });
+    }
+  });
+
+  // Get primary avatar for a celebrity (most voted or marked as primary)
+  app.get("/api/people/:id/avatar", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const [primaryImage] = await db
+        .select()
+        .from(celebrityImages)
+        .where(eq(celebrityImages.personId, id))
+        .orderBy(desc(celebrityImages.isPrimary), desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`))
+        .limit(1);
+      
+      if (primaryImage) {
+        res.json({ imageUrl: primaryImage.imageUrl });
+      } else {
+        res.json({ imageUrl: null });
+      }
+    } catch (error) {
+      console.error("Error fetching primary avatar:", error);
+      res.status(500).json({ error: "Failed to fetch primary avatar" });
     }
   });
 
