@@ -1,0 +1,52 @@
+I now want to focus on uplaoding the photos to Supabase and getting Replit to pull the data (images) from Supabase and apply all the images to the correct avatars for each celebrity: "2. The Upload Process (Supabase vs. Replit)
+You must upload directly to Supabase Storage.
+Replit is for code, not for hosting 500+ high-resolution images. If you upload these to Replit, the project will become slow and might hit storage limits.
+The Workflow:
+
+Create Bucket: In Supabase, create a Storage Bucket named celebrities.
+Upload: Drag and drop your folders directly into the Supabase Storage dashboard.
+Database Sync: Run a script (via Replit) to tell the database: "Hey, 5 images for Elon exist at these URLs."
+3. Future-Proofing (User Suggestions)
+You asked about the future ability for users to suggest photos.
+
+The Architecture: We already designed the celebrity_images table.
+The Logic:
+Phase 1 (Now): You upload images. The database column uploaded_by_user_id will be NULL (or your Admin ID). These are auto-approved.
+Phase 2 (Future): Users upload. uploaded_by_user_id = UserXYZ. status = pending. You approve them in the Admin Panel, and they appear in the voting list.
+Result: The system works exactly the same for both; only the "Approval Status" differs.
+4. Considerations
+File Size: Ensure images are optimized (WebP or JPG, under 200KB if possible). Don't upload 5MB PNGs, or the app will be slow on mobile.
+Aspect Ratio: Try to crop them all to the same ratio (e.g., 1:1 Square or 3:4 Portrait) before uploading. If they are mixed sizes, the "Grid" layout will look messy.
+Action Plan & Prompt for Replit
+You need Replit to create a "Seeding Script". Instead of you manually typing 500 rows into the database, Replit can write a script that scans your Supabase Bucket and inserts the records for you.
+Step 1: Your Homework (Before asking Replit)
+
+Rename your files locally to firstname-lastname-number.jpg.
+Go to Supabase Dashboard -> Storage -> Create New Bucket called celebrity_images.
+Upload all your images there. (You can create folders per celebrity elon-musk/1.jpg or just dump them all if named correctly). Folders are cleaner.
+Step 2: The Prompt for Replit
+Once the images are sitting in Supabase, use this prompt to connect them to the App.
+COPY AND PASTE THIS INTO REPLIT:
+
+I have manually uploaded the celebrity images for the Top 100 Leaderboard directly to the Supabase Storage Bucket named celebrity_images.
+The Context
+
+I have created folders in the bucket matching the celebrity slugs (e.g., celebrity_images/elon-musk/1.jpg).
+There are roughly 5 images per celebrity.
+These images are currently sitting in Storage, but the celebrity_images Database Table is empty. The app doesn't know they exist yet.
+The Task
+Please write a "Seeding Script" (TypeScript) that I can run once to populate the database.
+Script Logic:
+
+Fetch all rows from the tracked_people table to get the celebrity id and slug (e.g., Elon Musk).
+For each celebrity, loop 1 to 5.
+Construct the public URL: https://[project-ref].supabase.co/storage/v1/object/public/celebrity_images/[slug]/[i].jpg
+Insert a row into the celebrity_images table with:
+celebrity_id: The ID from step 1.
+image_url: The URL from step 3.
+is_verified: true (since these are Admin uploads).
+vote_score: 0.
+Action:
+Create this script (scripts/seed_images.ts) so I can run it to link my storage files to the database."
+
+However, before we begin - I want to do the following: We would like to replace two celebrities in the existing 100 celebrity main leaderboard with different celebrities.  The two which will be removed and placed in induction list: 1. Justin Trudeau and 2. Lula Da Silva.  The twwo celebs we will replace them with: 1. Michael Saylor and 2. Bill Ackman.  I have already added the file names (slug format) for the two new celebs and added images into those files - so we are good to go.  However, before we proceed to upload to SupaBase - I want to know the best way to replace the celebs in the main leaderboard.  Must I do this directly on Replit as a prompt - or should I replace the celeb details directkly in Supabase?  Once we have addressed this - we can then focus on uploading to supabase and getting them linked to Replit leaderboard 
