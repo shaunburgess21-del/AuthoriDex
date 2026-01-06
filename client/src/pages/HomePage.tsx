@@ -14,8 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Flame } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useQuery, useQueries, useInfiniteQuery } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
+import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
+import { Loader2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -442,31 +444,68 @@ function TrendGraphOverlay({
   );
 }
 
+const PAGE_SIZE = 20;
+
+interface TrendingResponse {
+  data: TrendingPerson[];
+  totalCount: number;
+  hasMore: boolean;
+}
+
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [sort, setSort] = useState("rank");
-  const [visibleCount, setVisibleCount] = useState(20);
   const [, setLocation] = useLocation();
   const [votingModalOpen, setVotingModalOpen] = useState(false);
   const [votingPersonId, setVotingPersonId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
 
-  const queryParams = new URLSearchParams();
-  if (searchQuery) queryParams.set('search', searchQuery);
-  if (category !== 'all') queryParams.set('category', category);
-  if (sort) queryParams.set('sort', sort);
-
-  const { data: allPeople = [], isLoading, error } = useQuery<TrendingPerson[]>({
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    error,
+  } = useInfiniteQuery<TrendingResponse>({
     queryKey: ['/api/trending', searchQuery, category, sort],
-    queryFn: async () => {
+    queryFn: async ({ pageParam = 0 }) => {
+      const queryParams = new URLSearchParams();
+      if (searchQuery) queryParams.set('search', searchQuery);
+      if (category !== 'all') queryParams.set('category', category);
+      if (sort) queryParams.set('sort', sort);
+      queryParams.set('limit', String(PAGE_SIZE));
+      queryParams.set('offset', String(pageParam));
+      
       const response = await fetch(`/api/trending?${queryParams}`);
       if (!response.ok) throw new Error('Failed to fetch');
       return response.json();
     },
+    getNextPageParam: (lastPage, allPages) => {
+      const loadedCount = allPages.reduce((sum, page) => sum + page.data.length, 0);
+      return loadedCount < lastPage.totalCount ? loadedCount : undefined;
+    },
+    initialPageParam: 0,
     refetchInterval: 5 * 60 * 1000,
   });
+
+  const allPeople = useMemo(() => {
+    return data?.pages.flatMap(page => page.data) ?? [];
+  }, [data]);
+
+  const totalCount = data?.pages[0]?.totalCount ?? 0;
+
+  const { ref: loadMoreRef, isIntersecting } = useIntersectionObserver<HTMLDivElement>({
+    enabled: hasNextPage && !isFetchingNextPage,
+  });
+
+  useEffect(() => {
+    if (isIntersecting && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [isIntersecting, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const { data: topGainers = [] } = useQuery<TrendingPerson[]>({
     queryKey: ['/api/trending/movers/gainers'],
@@ -491,11 +530,6 @@ export default function HomePage() {
     setSearchQuery("");
     setCategory("all");
     setSort("rank");
-    setVisibleCount(20);
-  };
-
-  const handleLoadMore = () => {
-    setVisibleCount(prev => Math.min(prev + 20, allPeople.length));
   };
 
   const handleVoteClick = (personId: string) => {
@@ -509,10 +543,6 @@ export default function HomePage() {
       setVotingModalOpen(true);
     }
   };
-
-  useEffect(() => {
-    setVisibleCount(20);
-  }, [searchQuery, category, sort]);
 
   const hasActiveFilters = searchQuery || category !== "all" || sort !== "rank";
 
@@ -729,7 +759,7 @@ export default function HomePage() {
                     </div>
                   </div>
                   <div>
-                    {allPeople.slice(0, visibleCount).map((person) => (
+                    {allPeople.map((person) => (
                       <LeaderboardRow
                         key={person.id}
                         person={person}
@@ -738,17 +768,34 @@ export default function HomePage() {
                       />
                     ))}
                   </div>
-                  {allPeople.length > visibleCount && (
-                    <div className="p-6 border-t text-center">
-                      <Button 
-                        variant="outline" 
-                        onClick={handleLoadMore}
-                        data-testid="button-load-more"
-                      >
-                        Load More ({allPeople.length - visibleCount} remaining)
-                      </Button>
+                  
+                  {/* Infinite scroll trigger element */}
+                  {hasNextPage && (
+                    <div 
+                      ref={loadMoreRef}
+                      className="p-6 border-t text-center"
+                      data-testid="infinite-scroll-trigger"
+                    >
+                      {isFetchingNextPage ? (
+                        <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Loading more...</span>
+                        </div>
+                      ) : (
+                        <div className="text-muted-foreground text-sm">
+                          Showing {allPeople.length} of {totalCount}
+                        </div>
+                      )}
                     </div>
                   )}
+                  
+                  {/* All loaded message */}
+                  {!hasNextPage && allPeople.length > 0 && (
+                    <div className="p-4 border-t text-center text-muted-foreground text-sm">
+                      Showing all {allPeople.length} results
+                    </div>
+                  )}
+                  
                   {allPeople.length === 0 && !isLoading && (
                     <div className="p-12 text-center">
                       <p className="text-muted-foreground">
