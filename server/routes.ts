@@ -81,10 +81,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all trending people
+  // Get all trending people with pagination support
   app.get("/api/trending", async (req, res) => {
     try {
-      const { search, category, sort } = req.query;
+      const { search, category, sort, limit, offset } = req.query;
       
       let people = await storage.getTrendingPeople();
       
@@ -120,7 +120,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         people.sort((a, b) => b.change7d - a.change7d);
       }
 
-      res.json(people);
+      // Store total count before pagination
+      const totalCount = people.length;
+
+      // Apply pagination if limit is provided
+      if (limit && typeof limit === 'string') {
+        const limitNum = parseInt(limit, 10);
+        const offsetNum = offset && typeof offset === 'string' ? parseInt(offset, 10) : 0;
+        
+        if (!isNaN(limitNum) && limitNum > 0) {
+          people = people.slice(offsetNum, offsetNum + limitNum);
+        }
+      }
+
+      // Return paginated response with totalCount
+      res.json({
+        data: people,
+        totalCount,
+        hasMore: limit ? (parseInt(offset as string || '0', 10) + people.length) < totalCount : false
+      });
     } catch (error) {
       console.error("Error fetching trending people:", error);
       res.status(500).json({ error: "Failed to fetch trending data" });
