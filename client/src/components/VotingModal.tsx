@@ -23,13 +23,13 @@ export function VotingModal({ open, onOpenChange, initialPersonId, peopleList }:
   const [, setLocation] = useLocation();
   const [selectedPerson, setSelectedPerson] = useState<TrendingPerson | null>(null);
 
-  const { data: fetchedPeople = [], isLoading } = useQuery<TrendingPerson[]>({
+  const { data: fetchedResponse, isLoading } = useQuery<{ data: TrendingPerson[], totalCount: number, hasMore: boolean }>({
     queryKey: ['/api/trending'],
     enabled: open && !peopleList,
   });
 
   // Use provided list or fetched list
-  const people = peopleList || fetchedPeople;
+  const people = peopleList || fetchedResponse?.data || [];
 
   // When modal opens with initialPersonId, auto-select that person
   useEffect(() => {

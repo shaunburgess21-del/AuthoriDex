@@ -1933,9 +1933,10 @@ export default function PredictPage() {
   const marketCycle = useMarketCycle();
   const isMarketClosed = marketCycle.status === "CLOSED";
   
-  const { data: trendingPeople = [], isLoading: isLoadingPeople } = useQuery<TrendingPerson[]>({
+  const { data: trendingResponse, isLoading: isLoadingPeople } = useQuery<{ data: TrendingPerson[], totalCount: number, hasMore: boolean }>({
     queryKey: ['/api/trending?sort=rank'],
   });
+  const trendingPeople = trendingResponse?.data || [];
   
   const [selectedJackpotPerson, setSelectedJackpotPerson] = useState<TrendingPerson | null>(null);
   
