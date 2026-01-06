@@ -11,15 +11,20 @@ import { UserMenu } from "@/components/UserMenu";
 import { ArrowLeft, Star, TrendingUp, Calendar, Award } from "lucide-react";
 import { UserVote, UserFavourite } from "@shared/schema";
 import { format } from "date-fns";
+import { voteToApprovalPercent } from "@/lib/utils";
 
-const SEGMENT_COLORS = [
-  '#FF0000', '#FF1744', '#FF6D00', '#FF9100', '#FFC400',
-  '#FFEA00', '#C6FF00', '#76FF03', '#00E676', '#00C853',
+// 1-5 scale colors: vivid gradient from red (1) to green (5)
+const SEGMENT_COLORS_5 = [
+  '#FF0000', // 1 - Pure red (0%)
+  '#FF9100', // 2 - Orange (25%)
+  '#FFC400', // 3 - Golden amber (50% - Neutral)
+  '#76FF03', // 4 - Neon green (75%)
+  '#00C853', // 5 - Pure green (100%)
 ];
 
 const getSentimentColor = (value: number): string => {
-  if (value < 1 || value > 10) return '#888888';
-  return SEGMENT_COLORS[value - 1];
+  if (value < 1 || value > 5) return '#888888';
+  return SEGMENT_COLORS_5[value - 1];
 };
 
 export default function UserProfilePage() {
@@ -166,13 +171,13 @@ export default function UserProfilePage() {
                     </div>
                     <div className="text-center p-3 rounded-lg bg-muted/30">
                       <div className="text-2xl font-bold">
-                        {averageRating > 0 ? `${Math.round((averageRating / 10) * 100)}%` : "—"}
+                        {averageRating > 0 ? `${voteToApprovalPercent(averageRating)}%` : "—"}
                       </div>
                       <div className="text-xs text-muted-foreground uppercase tracking-wide">Avg Rating</div>
                     </div>
                     <div className="text-center p-3 rounded-lg bg-muted/30">
                       <div className="text-2xl font-bold">
-                        {votes.filter(v => v.rating >= 8).length}
+                        {votes.filter(v => v.rating >= 4).length}
                       </div>
                       <div className="text-xs text-muted-foreground uppercase tracking-wide">High Scores</div>
                     </div>
@@ -273,10 +278,10 @@ export default function UserProfilePage() {
                           className="text-xl font-bold"
                           style={{ color: getSentimentColor(vote.rating) }}
                         >
-                          {Math.round((vote.rating / 10) * 100)}%
+                          {voteToApprovalPercent(vote.rating)}%
                         </div>
                         <Badge variant="secondary" className="text-xs">
-                          {vote.rating}/10
+                          {vote.rating}/5
                         </Badge>
                       </div>
                     </div>

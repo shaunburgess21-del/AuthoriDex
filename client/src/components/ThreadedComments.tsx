@@ -8,6 +8,7 @@ import { formatDistanceToNow } from "date-fns";
 import { queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { voteToApprovalPercent } from "@/lib/utils";
 
 interface Comment {
   id: string;
@@ -29,19 +30,18 @@ interface ThreadedCommentsProps {
   userSentimentVote?: number | null;
 }
 
+// 1-5 scale labels and colors
 const ratingLabels = ["Hate", "Dislike", "Neutral", "Like", "Love"];
 const ratingColors = ["#dc2626", "#f97316", "#fbbf24", "#84cc16", "#22c55e"];
 
 function getRatingLabel(vote: number | null | undefined): string {
-  if (!vote) return "";
-  const index = Math.min(Math.max(Math.round((vote - 1) / 2), 0), 4);
-  return ratingLabels[index];
+  if (!vote || vote < 1 || vote > 5) return "";
+  return ratingLabels[vote - 1];
 }
 
 function getRatingColor(vote: number | null | undefined): string {
-  if (!vote) return "#6b7280";
-  const index = Math.min(Math.max(Math.round((vote - 1) / 2), 0), 4);
-  return ratingColors[index];
+  if (!vote || vote < 1 || vote > 5) return "#6b7280";
+  return ratingColors[vote - 1];
 }
 
 export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0, userSentimentVote }: ThreadedCommentsProps) {
@@ -401,7 +401,7 @@ export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0
                   <div 
                     className="h-full rounded-full transition-all"
                     style={{ 
-                      width: `${(userSentimentVote / 10) * 100}%`,
+                      width: `${voteToApprovalPercent(userSentimentVote)}%`,
                       backgroundColor: getRatingColor(userSentimentVote)
                     }}
                   />
@@ -410,7 +410,7 @@ export function ThreadedComments({ insightId, isOpen, onToggle, commentCount = 0
                   className="text-sm font-medium"
                   style={{ color: getRatingColor(userSentimentVote) }}
                 >
-                  {userSentimentVote}/10 - {getRatingLabel(userSentimentVote)}
+                  {userSentimentVote}/5 - {getRatingLabel(userSentimentVote)}
                 </span>
               </div>
             </div>

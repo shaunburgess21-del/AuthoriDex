@@ -4,24 +4,20 @@ import { RankBadge } from "./RankBadge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useEffect } from "react";
+import { voteToApprovalPercent } from "@/lib/utils";
 
-// Exact colors from sentiment widget - vivid gradient palette
-const SEGMENT_COLORS = [
-  '#FF0000', // 1 - Pure vivid red
-  '#FF1744', // 2 - Bright crimson
-  '#FF6D00', // 3 - Vivid orange
-  '#FF9100', // 4 - Bright orange
-  '#FFC400', // 5 - Golden amber
-  '#FFEA00', // 6 - Brilliant yellow
-  '#C6FF00', // 7 - Electric lime
-  '#76FF03', // 8 - Neon green
-  '#00E676', // 9 - Vibrant emerald
-  '#00C853', // 10 - Pure green
+// 1-5 scale colors: vivid gradient from red (1) to green (5)
+const SEGMENT_COLORS_5 = [
+  '#FF0000', // 1 - Pure red (0%)
+  '#FF9100', // 2 - Orange (25%)
+  '#FFC400', // 3 - Golden amber (50% - Neutral)
+  '#76FF03', // 4 - Neon green (75%)
+  '#00C853', // 5 - Pure green (100%)
 ];
 
 const getSentimentColor = (value: number): string => {
-  if (value < 1 || value > 10) return '#888888'; // Fallback color
-  return SEGMENT_COLORS[value - 1];
+  if (value < 1 || value > 5) return '#888888'; // Fallback color
+  return SEGMENT_COLORS_5[value - 1];
 };
 
 interface LeaderboardRowProps {
@@ -109,7 +105,7 @@ export function LeaderboardRow({ person, onVisitProfile, onVoteClick }: Leaderbo
                     <span
                       style={{ color: getSentimentColor(sentimentScore) }}
                       className="text-[22px]">
-                      {Math.round((sentimentScore / 10) * 100)}
+                      {voteToApprovalPercent(sentimentScore)}
                     </span>
                     <span className="text-muted-foreground text-[22px] translate-y-[0.5px]">%</span>
                   </>
@@ -120,7 +116,7 @@ export function LeaderboardRow({ person, onVisitProfile, onVoteClick }: Leaderbo
             </TooltipTrigger>
             {sentimentScore && (
               <TooltipContent>
-                {person.name} has a {Math.round((sentimentScore / 10) * 100)}% approval rating.
+                {person.name} has a {voteToApprovalPercent(sentimentScore)}% approval rating.
               </TooltipContent>
             )}
           </Tooltip>
