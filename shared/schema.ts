@@ -510,6 +510,32 @@ export const insertCreditLedgerSchema = createInsertSchema(creditLedger).omit({
 export type CreditLedger = typeof creditLedger.$inferSelect;
 export type InsertCreditLedger = z.infer<typeof insertCreditLedgerSchema>;
 
+// User Profiles - linked to Supabase Auth, stores profile info and role
+export const profiles = pgTable("profiles", {
+  id: varchar("id").primaryKey(), // Supabase Auth user ID (not auto-generated)
+  username: text("username").unique(),
+  fullName: text("full_name"),
+  avatarUrl: text("avatar_url"),
+  isPublic: boolean("is_public").notNull().default(true),
+  role: text("role").notNull().default("user"), // 'user', 'admin', 'moderator'
+  rank: text("rank").notNull().default("Citizen"), // From ranks table: Citizen, Verified, etc.
+  xpPoints: integer("xp_points").notNull().default(0),
+  predictCredits: integer("predict_credits").notNull().default(1000),
+  currentStreak: integer("current_streak").notNull().default(0),
+  totalVotes: integer("total_votes").notNull().default(0),
+  totalPredictions: integer("total_predictions").notNull().default(0),
+  winRate: real("win_rate").notNull().default(0),
+  lastActiveAt: timestamp("last_active_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertProfileSchema = createInsertSchema(profiles).omit({
+  createdAt: true,
+});
+
+export type Profile = typeof profiles.$inferSelect;
+export type InsertProfile = z.infer<typeof insertProfileSchema>;
+
 // Relations for gamification tables
 export const xpLedgerRelations = relations(xpLedger, ({ one }) => ({
   user: one(users, {
@@ -528,4 +554,8 @@ export const creditLedgerRelations = relations(creditLedger, ({ one }) => ({
 export const usersRelations = relations(users, ({ many }) => ({
   xpLedgerEntries: many(xpLedger),
   creditLedgerEntries: many(creditLedger),
+}));
+
+export const profilesRelations = relations(profiles, ({ many }) => ({
+  votes: many(votes),
 }));

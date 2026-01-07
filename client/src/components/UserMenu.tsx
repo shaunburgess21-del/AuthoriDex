@@ -76,22 +76,24 @@ function useMediaQuery(query: string) {
   return matches;
 }
 
-function CitizenBadge({ level }: { level: UserProfile["citizenLevel"] }) {
-  const badgeConfig = {
-    Newcomer: { color: "bg-slate-500/20 text-slate-300 border-slate-500/30", icon: User },
-    Citizen: { color: "bg-blue-500/20 text-blue-300 border-blue-500/30", icon: Shield },
-    Verified: { color: "bg-green-500/20 text-green-300 border-green-500/30", icon: Shield },
-    Elder: { color: "bg-purple-500/20 text-purple-300 border-purple-500/30", icon: Sparkles },
-    Founder: { color: "bg-amber-500/20 text-amber-300 border-amber-500/30", icon: Trophy },
+function RankBadgeDisplay({ rank }: { rank: string }) {
+  const badgeConfig: Record<string, { color: string; icon: typeof User }> = {
+    "Citizen": { color: "bg-blue-500/20 text-blue-300 border-blue-500/30", icon: Shield },
+    "Engaged": { color: "bg-green-500/20 text-green-300 border-green-500/30", icon: Shield },
+    "Contributor": { color: "bg-teal-500/20 text-teal-300 border-teal-500/30", icon: Sparkles },
+    "Influencer": { color: "bg-purple-500/20 text-purple-300 border-purple-500/30", icon: Sparkles },
+    "Trendsetter": { color: "bg-pink-500/20 text-pink-300 border-pink-500/30", icon: Sparkles },
+    "Fame Maker": { color: "bg-orange-500/20 text-orange-300 border-orange-500/30", icon: Trophy },
+    "Hall of Famer": { color: "bg-amber-500/20 text-amber-300 border-amber-500/30", icon: Trophy },
   };
 
-  const config = badgeConfig[level];
+  const config = badgeConfig[rank] || badgeConfig["Citizen"];
   const Icon = config.icon;
 
   return (
     <Badge variant="outline" className={`${config.color} text-xs`}>
       <Icon className="h-3 w-3 mr-1" />
-      {level}
+      {rank}
     </Badge>
   );
 }
@@ -194,36 +196,39 @@ function UserMenuContent({
     );
   }
 
+  const displayName = profile?.fullName || profile?.username || "User";
+  const xpLevel = Math.floor((profile?.xpPoints || 0) / 500) + 1;
+
   return (
     <div className="space-y-1">
       <div className="p-4 pb-3">
         <div className="flex items-start gap-3">
           <Avatar className="h-12 w-12 rounded-full">
-            {profile?.avatar ? (
-              <AvatarImage src={profile.avatar} alt={profile.displayName} />
+            {profile?.avatarUrl ? (
+              <AvatarImage src={profile.avatarUrl} alt={displayName} />
             ) : (
               <AvatarFallback className="rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
-                {profile?.displayName.slice(0, 2).toUpperCase() || "U"}
+                {displayName.slice(0, 2).toUpperCase()}
               </AvatarFallback>
             )}
           </Avatar>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold truncate">{profile?.displayName}</h3>
+              <h3 className="font-semibold truncate">{displayName}</h3>
               <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" data-testid="button-settings">
                 <Settings className="h-3.5 w-3.5" />
               </Button>
             </div>
             <p className="text-xs text-muted-foreground truncate">@{profile?.username}</p>
             <div className="mt-1.5">
-              <CitizenBadge level={profile?.citizenLevel || "Newcomer"} />
+              <RankBadgeDisplay rank={profile?.rank || "Citizen"} />
             </div>
           </div>
         </div>
       </div>
 
       <div className="px-4 pb-3">
-        <XPProgressBar xp={profile?.xp || 0} level={profile?.level || 1} />
+        <XPProgressBar xp={profile?.xpPoints || 0} level={xpLevel} />
       </div>
 
       <div className="px-4 pb-3">
@@ -233,8 +238,8 @@ function UserMenuContent({
             <span className="text-sm text-muted-foreground">Predict Credits</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-mono font-bold text-sm">10,000</span>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/30 text-violet-400">TEST</Badge>
+            <span className="font-mono font-bold text-sm">{(profile?.predictCredits || 0).toLocaleString()}</span>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/30 text-violet-400">VIRTUAL</Badge>
           </div>
         </div>
       </div>
@@ -362,7 +367,7 @@ function UserMenuContent({
 
 export function UserMenu() {
   const [, setLocation] = useLocation();
-  const { isLoggedIn, profile, mockLogin, mockLogout } = useAuth();
+  const { isLoggedIn, profile, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -371,22 +376,34 @@ export function UserMenu() {
     setLocation(path);
     setSheetOpen(false);
   };
+  
+  const handleSignIn = () => {
+    setLocation("/login");
+    setSheetOpen(false);
+  };
+  
+  const handleSignOut = async () => {
+    await signOut();
+    setSheetOpen(false);
+    setLocation("/");
+  };
 
+  const avatarDisplayName = profile?.fullName || profile?.username || "User";
   const avatarButton = (
     <button
       className="h-9 w-9 rounded-full ring-2 ring-blue-500/30 hover:ring-blue-500/60 transition-all overflow-hidden flex items-center justify-center bg-muted"
       data-testid="button-user-menu"
     >
       {isLoggedIn && profile ? (
-        profile.avatar ? (
+        profile.avatarUrl ? (
           <img 
-            src={profile.avatar} 
-            alt={profile.displayName} 
+            src={profile.avatarUrl} 
+            alt={avatarDisplayName} 
             className="h-full w-full object-cover"
           />
         ) : (
           <div className="h-full w-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
-            {profile.displayName.slice(0, 2).toUpperCase()}
+            {avatarDisplayName.slice(0, 2).toUpperCase()}
           </div>
         )
       ) : (
@@ -404,15 +421,15 @@ export function UserMenu() {
           data-testid="button-user-menu"
         >
           {isLoggedIn && profile ? (
-            profile.avatar ? (
+            profile.avatarUrl ? (
               <img 
-                src={profile.avatar} 
-                alt={profile.displayName} 
+                src={profile.avatarUrl} 
+                alt={avatarDisplayName} 
                 className="h-full w-full object-cover"
               />
             ) : (
               <div className="h-full w-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
-                {profile.displayName.slice(0, 2).toUpperCase()}
+                {avatarDisplayName.slice(0, 2).toUpperCase()}
               </div>
             )
           ) : (
@@ -431,8 +448,8 @@ export function UserMenu() {
               theme={theme}
               onToggleTheme={toggleTheme}
               onNavigate={handleNavigate}
-              onSignIn={mockLogin}
-              onSignOut={mockLogout}
+              onSignIn={handleSignIn}
+              onSignOut={handleSignOut}
               onClose={() => setSheetOpen(false)}
             />
           </SheetContent>
@@ -453,8 +470,8 @@ export function UserMenu() {
           theme={theme}
           onToggleTheme={toggleTheme}
           onNavigate={handleNavigate}
-          onSignIn={mockLogin}
-          onSignOut={mockLogout}
+          onSignIn={handleSignIn}
+          onSignOut={handleSignOut}
         />
       </DropdownMenuContent>
     </DropdownMenu>

@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile } from "@shared/schema";
 import { eq, desc, and, sql, count } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -1108,6 +1108,185 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
     } catch (error: any) {
       console.error("Error fetching XP actions:", error.message);
       res.status(500).json({ error: "Failed to fetch XP actions" });
+    }
+  });
+
+  // ==================== PROFILE ENDPOINTS ====================
+  
+  // Admin emails that get special privileges
+  const ADMIN_EMAILS = ["shaun.burgess21@gmail.com"];
+  
+  // Sync profile after Supabase auth - creates profile if doesn't exist
+  // Implements admin backdoor for specific emails
+  app.post("/api/profile/sync", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      
+      // Get user details from Supabase
+      const { data: { user }, error: userError } = await supabaseServer.auth.admin.getUserById(userId);
+      
+      if (userError || !user) {
+        return res.status(400).json({ error: "Could not fetch user details" });
+      }
+      
+      const email = user.email;
+      const fullName = user.user_metadata?.full_name || user.user_metadata?.name || null;
+      const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
+      
+      // Check if profile exists
+      const existing = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+      
+      if (existing.length > 0) {
+        // Update existing profile (update avatar/name if changed)
+        const updateData: Partial<Profile> = {
+          lastActiveAt: new Date(),
+        };
+        if (fullName && !existing[0].fullName) updateData.fullName = fullName;
+        if (avatarUrl && !existing[0].avatarUrl) updateData.avatarUrl = avatarUrl;
+        
+        await db.update(profiles).set(updateData).where(eq(profiles.id, userId));
+        const updated = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+        return res.json(updated[0]);
+      }
+      
+      // Create new profile
+      const isAdmin = email && ADMIN_EMAILS.includes(email.toLowerCase());
+      const username = email ? email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "") + Math.floor(Math.random() * 1000) : `user${Date.now()}`;
+      
+      const newProfile = {
+        id: userId,
+        username,
+        fullName,
+        avatarUrl,
+        isPublic: true,
+        role: isAdmin ? "admin" : "user",
+        rank: isAdmin ? "Hall of Famer" : "Citizen",
+        xpPoints: isAdmin ? 100000 : 0, // Admin starts with high XP
+        predictCredits: 1000,
+        currentStreak: 0,
+        totalVotes: 0,
+        totalPredictions: 0,
+        winRate: 0,
+        lastActiveAt: new Date(),
+      };
+      
+      await db.insert(profiles).values(newProfile);
+      
+      console.log(`Created profile for ${email} - Role: ${newProfile.role}, Rank: ${newProfile.rank}`);
+      
+      res.json(newProfile);
+    } catch (error: any) {
+      console.error("Error syncing profile:", error.message);
+      res.status(500).json({ error: "Failed to sync profile" });
+    }
+  });
+  
+  // Get current user's profile
+  app.get("/api/profile/me", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const profile = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+      
+      if (profile.length === 0) {
+        return res.status(404).json({ error: "Profile not found. Please sync your profile first." });
+      }
+      
+      res.json(profile[0]);
+    } catch (error: any) {
+      console.error("Error fetching profile:", error.message);
+      res.status(500).json({ error: "Failed to fetch profile" });
+    }
+  });
+  
+  // Update current user's profile
+  app.patch("/api/profile/me", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { username, fullName, avatarUrl, isPublic } = req.body;
+      
+      // Build update object with only provided fields
+      const updateData: Partial<Profile> = {};
+      if (username !== undefined) {
+        // Validate username uniqueness
+        const existingUsername = await db.select().from(profiles)
+          .where(and(eq(profiles.username, username), sql`${profiles.id} != ${userId}`))
+          .limit(1);
+        if (existingUsername.length > 0) {
+          return res.status(400).json({ error: "Username already taken" });
+        }
+        updateData.username = username;
+      }
+      if (fullName !== undefined) updateData.fullName = fullName;
+      if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
+      if (isPublic !== undefined) updateData.isPublic = isPublic;
+      
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ error: "No fields to update" });
+      }
+      
+      await db.update(profiles).set(updateData).where(eq(profiles.id, userId));
+      const updated = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+      
+      res.json(updated[0]);
+    } catch (error: any) {
+      console.error("Error updating profile:", error.message);
+      res.status(500).json({ error: "Failed to update profile" });
+    }
+  });
+  
+  // Get public profile by username
+  app.get("/api/profile/u/:username", async (req, res) => {
+    try {
+      const { username } = req.params;
+      const profile = await db.select().from(profiles).where(eq(profiles.username, username)).limit(1);
+      
+      if (profile.length === 0) {
+        return res.status(404).json({ error: "Profile not found" });
+      }
+      
+      // If profile is private, return limited info
+      if (!profile[0].isPublic) {
+        return res.json({
+          username: profile[0].username,
+          avatarUrl: profile[0].avatarUrl,
+          rank: profile[0].rank,
+          isPublic: false,
+          message: "This profile is private"
+        });
+      }
+      
+      // Return full public profile
+      res.json({
+        username: profile[0].username,
+        fullName: profile[0].fullName,
+        avatarUrl: profile[0].avatarUrl,
+        rank: profile[0].rank,
+        xpPoints: profile[0].xpPoints,
+        totalVotes: profile[0].totalVotes,
+        totalPredictions: profile[0].totalPredictions,
+        winRate: profile[0].winRate,
+        isPublic: true,
+        createdAt: profile[0].createdAt,
+      });
+    } catch (error: any) {
+      console.error("Error fetching public profile:", error.message);
+      res.status(500).json({ error: "Failed to fetch profile" });
+    }
+  });
+  
+  // Check if current user is admin
+  app.get("/api/profile/is-admin", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const profile = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+      
+      res.json({ 
+        isAdmin: profile.length > 0 && profile[0].role === "admin",
+        role: profile.length > 0 ? profile[0].role : null
+      });
+    } catch (error: any) {
+      console.error("Error checking admin status:", error.message);
+      res.status(500).json({ error: "Failed to check admin status" });
     }
   });
 
