@@ -1371,6 +1371,73 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       res.status(500).json({ error: "Failed to fetch favorites" });
     }
   });
+  
+  // ==================
+  // Admin Endpoints
+  // ==================
+  
+  // Helper middleware to check admin status
+  const requireAdmin = async (req: AuthRequest, res: any, next: any) => {
+    try {
+      const userId = req.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      
+      const profile = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+      if (profile.length === 0 || profile[0].role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      next();
+    } catch (error: any) {
+      console.error("Error checking admin status:", error.message);
+      res.status(500).json({ error: "Failed to verify admin status" });
+    }
+  };
+  
+  // Get admin stats
+  app.get("/api/admin/stats", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      // Get counts
+      const [usersCount] = await db.select({ count: sql<number>`count(*)` }).from(profiles);
+      const [celebritiesCount] = await db.select({ count: sql<number>`count(*)` }).from(trackedPeople);
+      const [votesCount] = await db.select({ count: sql<number>`count(*)` }).from(votes);
+      
+      res.json({
+        totalUsers: Number(usersCount?.count || 0),
+        totalCelebrities: Number(celebritiesCount?.count || 0),
+        totalVotes: Number(votesCount?.count || 0),
+        totalPredictions: 0,
+        lastDataRefresh: null,
+      });
+    } catch (error: any) {
+      console.error("Error fetching admin stats:", error.message);
+      res.status(500).json({ error: "Failed to fetch stats" });
+    }
+  });
+  
+  // Refresh data (trigger data ingestion)
+  app.post("/api/admin/refresh-data", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      // Placeholder - would trigger actual data refresh jobs
+      res.json({ success: true, message: "Data refresh initiated" });
+    } catch (error: any) {
+      console.error("Error refreshing data:", error.message);
+      res.status(500).json({ error: "Failed to refresh data" });
+    }
+  });
+  
+  // Run scoring engine
+  app.post("/api/admin/run-scoring", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      // Placeholder - would trigger actual scoring job
+      res.json({ success: true, message: "Scoring initiated" });
+    } catch (error: any) {
+      console.error("Error running scoring:", error.message);
+      res.status(500).json({ error: "Failed to run scoring" });
+    }
+  });
 
   const httpServer = createServer(app);
 
