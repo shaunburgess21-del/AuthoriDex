@@ -33,7 +33,16 @@ Preferred communication style: Simple, everyday language.
         - Sticky filter bar with section tabs, global search, and category pills
         - A floating action button allows suggesting candidates.
     - **Predict Page**: Implements parimutuel prediction markets with a "test mode" using virtual credits, styled with a Royal Purple theme. Features a multi-layer information architecture (Preview, Directory, Deep Dive), a sticky prediction type toggle, global search, category filters, and various market types (Up/Down, Head-to-Head, Category Races, Top Gainer, Community Predictions). A StakeModal handles credit deductions and active predictions.
-    - **Me Page**: Placeholder for user profiles, votes, and favorites.
+    - **Me Page**: User account dashboard showing XP, credits, rank, votes, and predictions.
+        - Sub-routes: `/me/votes`, `/me/predictions`, `/me/favorites`, `/me/settings`
+        - RankBadge component with 7-tier color-coded styling
+        - Settings page for profile updates (username, display name, privacy toggle)
+    - **Public Profiles**: `/u/:username` route shows public user profiles with XP progress, voting stats
+        - Privacy toggle (isPublic) controls visibility - private profiles show "Private Profile" message
+    - **Admin Panel**: `/admin` route for site management (admin-only access)
+        - Protected by requireAdmin middleware
+        - Stats dashboard: users, celebrities, votes, predictions counts
+        - Data refresh and scoring engine controls
 
 ### Backend
 - **Technology Stack**: Node.js with Express.js, TypeScript, Drizzle ORM.
@@ -70,6 +79,7 @@ Preferred communication style: Simple, everyday language.
         - `induction_candidates` (potential new celebrities for community voting)
         - `celebrity_images` (multiple photos per celebrity for profile curation)
         - `face_offs` (A vs B binary choice voting questions with category, title, optionA/optionB text/image)
+        - `profiles` (user profiles keyed by Supabase Auth ID, with username, fullName, avatarUrl, isPublic, role, rank, XP/votes/predictions stats)
     - **Gamification Service** (`server/services/gamification.ts`):
         - `awardXp()` - Awards XP with daily cap enforcement, idempotency, auto-rank recalculation
         - `adjustCredits()` - Credit transactions with audit trail (balanceAfter snapshots)
@@ -77,6 +87,7 @@ Preferred communication style: Simple, everyday language.
         - `recalculateUserRank()` - Updates user rank based on XP thresholds
         - `getVoteMultiplier()` - Returns rank-based vote weight (1.0x for Face-Offs/Polls for "1 Person = 1 Vote" integrity)
     - **Security**: XP/credit endpoints restricted to whitelisted actions; high-value awards (prediction_win, bonuses) server-side only
+    - **Admin Backdoor**: shaun.burgess21@gmail.com auto-assigned admin role + "Hall of Famer" rank + 100,000 XP on signup
     - **Community Schema**:
         - `community_insights`, `insight_votes`, `insight_comments`, `comment_votes`
         - `platform_insights`, `insight_items`
