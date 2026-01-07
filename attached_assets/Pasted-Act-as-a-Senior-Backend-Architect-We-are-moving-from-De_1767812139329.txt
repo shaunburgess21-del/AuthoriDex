@@ -1,0 +1,73 @@
+Act as a Senior Backend Architect. We are moving from "Demo Mode" to "Production Auth".
+
+The Goal:
+
+Activate the "My Account" profile pages using real Supabase Authentication and seed the database with specific "Founding Votes" to establish an initial hierarchy.
+
+Constraint Checklist (CRITICAL):
+
+Additive Only: Do not rename or delete existing tables. Only add new tables if strictly necessary.
+
+Phase 2 "Real Money" Protection: You previously built a shell for wallet_type ('VIRTUAL' vs 'REAL'). You MUST align this new Auth work with that structure. Do not simplify it back to a basic integer. Ensure the UI currently only displays 'VIRTUAL', but the backend keeps the structure ready for 'REAL'.
+
+UI Preservation: Keep the header "Profile Icon" exactly as is.
+
+Step 1: The "User Profile" Architecture & Triggers
+
+Create a public.profiles table (if not exists) keyed by the Supabase Auth id.
+
+Columns: id (references auth.users), username (unique), full_name, avatar_url, is_public (default true), role (default 'user').
+
+CRITICAL: Create a Supabase Post-Signup Trigger.
+
+Logic: When a new user signs up, automatically insert a row into public.profiles.
+
+Admin Backdoor: If the email is shaun.burgess21@gmail.com, set role = 'admin' and rank = 'Hall of Famer' automatically.
+
+Step 2: Authentication & Routing
+
+Auth Flow: Connect the "Sign Up / Log In" UI to the existing Supabase project.
+
+Routing:
+
+Create /me (My Account Dashboard).
+
+Sub-routes: /me/votes, /me/predictions, /me/favorites, /me/settings.
+
+Navigation: Update the Profile Side-Drawer to show real user data (Avatar, XP, Credits) instead of the dummy "Fame Fan".
+
+Step 3: Public Profiles
+
+Create a public route /u/:username.
+
+If is_public = false, hide activity.
+
+Step 4: The "Founding Seed" Script (Specific Counts)
+
+We need to set exact initial vote counts to establish the leaderboard hierarchy (e.g., Elon = 4250, Palmer = 450).
+
+Task: Write a script (scripts/seed_specific_votes.ts) that:
+
+Accepts a hardcoded Map or JSON object inside the file (e.g., {'elon-musk': 4250, 'palmer-luckey': 450}).
+
+For each celebrity, inserts that many "System Votes" (or anonymous votes) into the database to match the target number.
+
+Important: Do not delete existing votes; just add enough to reach the target.
+
+Action:
+
+Implement the Auth/Profile system and generate the seeding script so I can input my specific numbers.
+
+Before you paste:
+
+Insert your Email: In Step 1 of the prompt, replace [INSERT YOUR EMAIL HERE] with the actual email address you will use to sign up (e.g., shaun@famedex.com).
+
+Run the Prompt.
+
+After Replit finishes:
+
+Sign up with that specific email.
+
+You should immediately see yourself as a "Hall of Famer" (or at least have the Admin role in the database).
+
+Then, open the scripts/seed_specific_votes.ts file Replit creates, paste your list of numbers (Elon: 4250, etc.), and run it to set your leaderboard!
