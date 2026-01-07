@@ -12,6 +12,11 @@ import UserProfilePage from "@/pages/UserProfilePage";
 import PredictPage from "@/pages/PredictPage";
 import VotePage from "@/pages/VotePage";
 import MePage from "@/pages/MePage";
+import VotesPage from "@/pages/me/VotesPage";
+import PredictionsPage from "@/pages/me/PredictionsPage";
+import FavoritesPage from "@/pages/me/FavoritesPage";
+import SettingsPage from "@/pages/me/SettingsPage";
+import PublicProfilePage from "@/pages/PublicProfilePage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -24,6 +29,11 @@ function Router() {
       <Route path="/predict" component={PredictPage} />
       <Route path="/vote" component={VotePage} />
       <Route path="/me" component={MePage} />
+      <Route path="/me/votes" component={VotesPage} />
+      <Route path="/me/predictions" component={PredictionsPage} />
+      <Route path="/me/favorites" component={FavoritesPage} />
+      <Route path="/me/settings" component={SettingsPage} />
+      <Route path="/u/:username" component={PublicProfilePage} />
       <Route component={NotFound} />
     </Switch>
   );

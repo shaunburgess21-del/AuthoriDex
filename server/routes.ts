@@ -1289,6 +1289,88 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       res.status(500).json({ error: "Failed to check admin status" });
     }
   });
+  
+  // ==================
+  // /me User Activity Endpoints
+  // ==================
+  
+  // Get user's votes
+  app.get("/api/me/votes", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      
+      // Get votes from votes table
+      const userVotes = await db.select().from(votes).where(eq(votes.userId, userId)).orderBy(desc(votes.createdAt)).limit(50);
+      
+      // Transform votes to include target names
+      const votesWithDetails = await Promise.all(userVotes.map(async (vote) => {
+        let targetName = "Unknown";
+        
+        // Try to get celebrity name if it's a celebrity vote
+        if (vote.subjectId) {
+          const person = await db.select({ name: trackedPeople.name }).from(trackedPeople).where(eq(trackedPeople.id, vote.subjectId)).limit(1);
+          if (person.length > 0) {
+            targetName = person[0].name;
+          }
+        }
+        
+        return {
+          id: vote.id,
+          voteType: vote.voteType,
+          value: vote.weight || 1,
+          targetName,
+          createdAt: vote.createdAt,
+        };
+      }));
+      
+      res.json(votesWithDetails);
+    } catch (error: any) {
+      console.error("Error fetching user votes:", error.message);
+      res.status(500).json({ error: "Failed to fetch votes" });
+    }
+  });
+  
+  // Get user's predictions (placeholder for now)
+  app.get("/api/me/predictions", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      // For now, return empty array until predictions system is fully implemented
+      res.json([]);
+    } catch (error: any) {
+      console.error("Error fetching user predictions:", error.message);
+      res.status(500).json({ error: "Failed to fetch predictions" });
+    }
+  });
+  
+  // Get user's favorites
+  app.get("/api/me/favorites", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      
+      // Get user favorites from userFavourites table
+      const userFavs = await db.select().from(userFavourites).where(eq(userFavourites.userId, Number(userId))).limit(50);
+      
+      // Get celebrity details for each favorite
+      const favoritesWithDetails = await Promise.all(userFavs.map(async (fav) => {
+        const person = await db.select().from(trackedPeople).where(eq(trackedPeople.id, fav.personId)).limit(1);
+        const trending = await db.select().from(trendingPeople).where(eq(trendingPeople.personId, fav.personId)).limit(1);
+        
+        return {
+          id: fav.id,
+          celebrityId: fav.personId,
+          name: person[0]?.name || "Unknown",
+          imageUrl: person[0]?.imageUrl || null,
+          category: person[0]?.category || "Other",
+          rank: trending[0]?.rank || 999,
+          change: trending[0]?.percentChange || 0,
+        };
+      }));
+      
+      res.json(favoritesWithDetails);
+    } catch (error: any) {
+      console.error("Error fetching user favorites:", error.message);
+      res.status(500).json({ error: "Failed to fetch favorites" });
+    }
+  });
 
   const httpServer = createServer(app);
 
