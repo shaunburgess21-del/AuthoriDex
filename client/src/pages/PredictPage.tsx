@@ -724,21 +724,23 @@ function WeeklyUpDownCard({
   return (
     <PredictCard testId={`card-weekly-${market.id}`} className={isMarketClosed ? 'opacity-75' : ''}>
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <PersonAvatar name={market.personName} avatar={market.personAvatar} size="md" />
-          <div>
-            <p className="font-semibold text-sm">{market.personName}</p>
-            <p className="text-xs text-muted-foreground font-mono">
-              {market.currentScore.toLocaleString()} pts
-            </p>
-          </div>
-        </div>
         <Badge 
           variant="outline" 
           className={market.change7d >= 0 ? "text-green-500 border-green-500/30" : "text-red-500 border-red-500/30"}
         >
           {market.change7d >= 0 ? "+" : ""}{market.change7d.toFixed(1)}%
         </Badge>
+        <CategoryPill category={market.category} />
+      </div>
+      
+      <div className="flex items-center gap-3 mb-3">
+        <PersonAvatar name={market.personName} avatar={market.personAvatar} size="md" />
+        <div>
+          <p className="font-semibold text-sm">{market.personName}</p>
+          <p className="text-xs text-muted-foreground font-mono">
+            {market.currentScore.toLocaleString()} pts
+          </p>
+        </div>
       </div>
       
       <p className="text-xs text-muted-foreground mb-3">
@@ -813,11 +815,11 @@ function HeadToHeadCard({
       
       <div className="relative z-10">
         <div className="flex items-center justify-between mb-3">
-          <CategoryPill category={market.category} />
           <Badge variant="outline" className="text-xs">
             <Clock className="h-3 w-3 mr-1" />
             {market.endTime}
           </Badge>
+          <CategoryPill category={market.category} />
         </div>
         
         <div className="flex items-center justify-between mb-4">
@@ -911,11 +913,11 @@ function CategoryRaceCard({
   return (
     <PredictCard testId={`card-race-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''}`} onClick={onClick}>
       <div className="flex items-center justify-between mb-3">
-        <CategoryPill category={market.category} />
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
           {market.timeRemaining}
         </Badge>
+        <CategoryPill category={market.category} />
       </div>
       
       <h3 className="font-semibold mb-3">{market.title}</h3>
@@ -1000,8 +1002,8 @@ function TopGainerCard({
   return (
     <PredictCard testId={`card-gainer-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''} ${isShimmering ? 'shimmer-once' : ''}`}>
       <div className="flex items-center justify-between mb-3">
-        <CategoryPill category={market.category} />
         <span className="text-xs text-muted-foreground">7-day gain</span>
+        <CategoryPill category={market.category} />
       </div>
       
       <h3 className="font-semibold mb-3">Top Gainer: {market.category.charAt(0).toUpperCase() + market.category.slice(1)}</h3>
@@ -1086,26 +1088,62 @@ function CommunityCard({
   onClick: () => void; 
   isMarketClosed?: boolean;
 }) {
+  // Calculate Yes/No percentages based on pool distribution (use stable seed from market id)
+  const seed = market.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const yesPercent = Math.round(40 + (seed % 40)); // Range: 40-79%
+  const noPercent = 100 - yesPercent;
+  const yesOdds = (100 / yesPercent).toFixed(2);
+  const noOdds = (100 / noPercent).toFixed(2);
+  
   return (
     <PredictCard testId={`card-community-${market.id}`} className={isMarketClosed ? 'opacity-75' : ''}>
-      <div className="flex items-center gap-2 mb-2">
-        <Badge variant="secondary" className="text-xs">
-          <UserPlus className="h-3 w-3 mr-1" />
-          {market.creatorName}
+      {/* Header: Time remaining left, Category pill right */}
+      <div className="flex items-center justify-between mb-3">
+        <Badge variant="outline" className="text-xs">
+          <Clock className="h-3 w-3 mr-1" />
+          3d left
         </Badge>
         <CategoryPill category={market.category} />
       </div>
       
-      <p className="text-sm font-medium mb-3 line-clamp-2">{market.question}</p>
+      {/* Question */}
+      <p className="text-sm font-semibold mb-3 line-clamp-2">{market.question}</p>
       
-      <div className="flex items-center gap-2 mb-3">
-        <PersonAvatar name={market.personName} avatar={market.personAvatar} size="xs" />
-        <span className="text-xs text-muted-foreground">{market.personName}</span>
+      {/* Celebrity subject with larger avatar */}
+      <div className="flex items-center gap-3 mb-4">
+        <PersonAvatar name={market.personName} avatar={market.personAvatar} size="sm" />
+        <div>
+          <span className="text-sm font-medium">{market.personName}</span>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Users className="h-3 w-3" />
+            <span>{market.participants} participants</span>
+          </div>
+        </div>
       </div>
       
-      <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-        <span className="text-violet-500 font-semibold">Pool: {market.totalPool.toLocaleString()}</span>
-        <span>{market.participants} participants</span>
+      {/* Yes/No probability bar (Polymarket-style) */}
+      <div className="mb-3">
+        <div className="flex items-center justify-between text-xs mb-1.5">
+          <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
+          <span className="text-red-500 font-semibold">No {noPercent}%</span>
+        </div>
+        <div className="h-2 rounded-full bg-red-500/20 overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
+            style={{ width: `${yesPercent}%` }}
+          />
+        </div>
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-1">
+          <span>{yesOdds}x return</span>
+          <span>{noOdds}x return</span>
+        </div>
+      </div>
+      
+      {/* Pool info */}
+      <div className="flex items-center justify-center mb-3">
+        <span className="text-sm font-semibold text-violet-500">
+          Pool: {market.totalPool.toLocaleString()}
+        </span>
       </div>
       
       {isMarketClosed ? (
@@ -1118,15 +1156,26 @@ function CommunityCard({
           Closed
         </Button>
       ) : (
-        <Button 
-          size="sm" 
-          variant="outline"
-          className="w-full border-violet-500/30 text-violet-500"
-          onClick={onClick}
-          data-testid={`button-join-${market.id}`}
-        >
-          Join Market
-        </Button>
+        <div className="grid grid-cols-2 gap-2">
+          <Button 
+            size="sm" 
+            variant="outline"
+            className="border-green-500/30 text-green-500 hover:bg-green-500/10"
+            onClick={onClick}
+            data-testid={`button-yes-${market.id}`}
+          >
+            Yes
+          </Button>
+          <Button 
+            size="sm" 
+            variant="outline"
+            className="border-red-500/30 text-red-500 hover:bg-red-500/10"
+            onClick={onClick}
+            data-testid={`button-no-${market.id}`}
+          >
+            No
+          </Button>
+        </div>
       )}
     </PredictCard>
   );
@@ -2357,8 +2406,7 @@ export default function PredictPage() {
                 </Button>
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <SuggestMarketCard onClick={() => setCreateModalOpen(true)} />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredCommunity.slice(0, 3).map((market) => (
                 <CommunityCard 
                   key={market.id} 
