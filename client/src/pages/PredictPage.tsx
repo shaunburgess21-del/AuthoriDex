@@ -1029,7 +1029,7 @@ function TopGainerCard({
                 <span className="text-xs font-bold text-violet-500 w-5 text-center">#{i + 1}</span>
               )}
             </div>
-            <PersonAvatar name={leader.name} avatar={leader.avatar} size="xs" />
+            <PersonAvatar name={leader.name} avatar={leader.avatar} size="sm" />
             <span className="text-sm flex-1 truncate">{leader.name}</span>
             <div className="text-right">
               <p className="text-xs font-mono font-bold text-green-500">+{leader.currentGain.toLocaleString()} pts</p>
