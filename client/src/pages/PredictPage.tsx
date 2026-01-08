@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -1987,6 +1987,67 @@ export default function PredictPage() {
   });
   const trendingPeople = trendingResponse?.data || [];
   
+  // Create avatar lookup map from trending people (name -> avatar URL)
+  const avatarLookup = useMemo(() => {
+    const lookup: Record<string, string> = {};
+    for (const person of trendingPeople) {
+      lookup[person.name.toLowerCase()] = person.avatar || "";
+    }
+    return lookup;
+  }, [trendingPeople]);
+  
+  // Helper to get avatar from lookup (case-insensitive)
+  const getAvatar = useCallback((name: string) => {
+    return avatarLookup[name.toLowerCase()] || "";
+  }, [avatarLookup]);
+  
+  // Hydrate mock markets with real avatar URLs
+  const hydratedMarkets = useMemo(() => {
+    return mockMarkets.map(market => ({
+      ...market,
+      personAvatar: getAvatar(market.personName),
+    }));
+  }, [getAvatar]);
+  
+  // Hydrate head-to-head markets with real avatar URLs
+  const hydratedH2H = useMemo(() => {
+    return headToHeadMarkets.map(market => ({
+      ...market,
+      person1: { ...market.person1, avatar: getAvatar(market.person1.name) },
+      person2: { ...market.person2, avatar: getAvatar(market.person2.name) },
+    }));
+  }, [getAvatar]);
+  
+  // Hydrate category races with real avatar URLs
+  const hydratedRaces = useMemo(() => {
+    return categoryRaceMarkets.map(race => ({
+      ...race,
+      runners: race.runners.map(runner => ({
+        ...runner,
+        avatar: getAvatar(runner.name),
+      })),
+    }));
+  }, [getAvatar]);
+  
+  // Hydrate top gainer data with real avatar URLs
+  const hydratedGainers = useMemo(() => {
+    return topGainerMarkets.map(gainer => ({
+      ...gainer,
+      leaders: gainer.leaders.map(leader => ({
+        ...leader,
+        avatar: getAvatar(leader.name),
+      })),
+    }));
+  }, [getAvatar]);
+  
+  // Hydrate community markets with real avatar URLs
+  const hydratedCommunity = useMemo(() => {
+    return communityMarkets.map(market => ({
+      ...market,
+      personAvatar: getAvatar(market.personName),
+    }));
+  }, [getAvatar]);
+  
   const [selectedJackpotPerson, setSelectedJackpotPerson] = useState<TrendingPerson | null>(null);
   
   useEffect(() => {
@@ -2129,27 +2190,27 @@ export default function PredictPage() {
     });
   };
 
-  const filteredUpDown = mockMarkets.filter(m => 
+  const filteredUpDown = hydratedMarkets.filter(m => 
     (categoryFilter === "all" || m.category === categoryFilter) &&
     (!globalSearchQuery || m.personName.toLowerCase().includes(globalSearchQuery.toLowerCase()))
   );
 
-  const filteredH2H = headToHeadMarkets.filter(m => 
+  const filteredH2H = hydratedH2H.filter(m => 
     (categoryFilter === "all" || m.category === categoryFilter) &&
     (!globalSearchQuery || m.title.toLowerCase().includes(globalSearchQuery.toLowerCase()))
   );
 
-  const filteredRaces = categoryRaceMarkets.filter(m => 
+  const filteredRaces = hydratedRaces.filter(m => 
     (categoryFilter === "all" || m.category === categoryFilter) &&
     (!globalSearchQuery || m.title.toLowerCase().includes(globalSearchQuery.toLowerCase()))
   );
 
-  const filteredGainers = topGainerMarkets.filter(m => 
+  const filteredGainers = hydratedGainers.filter(m => 
     (categoryFilter === "all" || m.category === categoryFilter) &&
     (!globalSearchQuery || m.category.toLowerCase().includes(globalSearchQuery.toLowerCase()))
   );
 
-  const filteredCommunity = communityMarkets.filter(m => 
+  const filteredCommunity = hydratedCommunity.filter(m => 
     (categoryFilter === "all" || m.category === categoryFilter) &&
     (!globalSearchQuery || m.question.toLowerCase().includes(globalSearchQuery.toLowerCase()))
   );
@@ -2439,7 +2500,7 @@ export default function PredictPage() {
         searchQuery={overlaySearchQuery}
         onSearchChange={setOverlaySearchQuery}
       >
-        {mockMarkets
+        {hydratedMarkets
           .filter(m => 
             (overlayCategoryFilter === "all" || m.category === overlayCategoryFilter) &&
             (!overlaySearchQuery || m.personName.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
@@ -2462,7 +2523,7 @@ export default function PredictPage() {
         searchQuery={overlaySearchQuery}
         onSearchChange={setOverlaySearchQuery}
       >
-        {headToHeadMarkets
+        {hydratedH2H
           .filter(m => 
             (overlayCategoryFilter === "all" || m.category === overlayCategoryFilter) &&
             (!overlaySearchQuery || m.title.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
@@ -2485,7 +2546,7 @@ export default function PredictPage() {
         searchQuery={overlaySearchQuery}
         onSearchChange={setOverlaySearchQuery}
       >
-        {categoryRaceMarkets
+        {hydratedRaces
           .filter(m => 
             (overlayCategoryFilter === "all" || m.category === overlayCategoryFilter) &&
             (!overlaySearchQuery || m.title.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
@@ -2511,7 +2572,7 @@ export default function PredictPage() {
         searchQuery={overlaySearchQuery}
         onSearchChange={setOverlaySearchQuery}
       >
-        {topGainerMarkets
+        {hydratedGainers
           .filter(m => 
             (overlayCategoryFilter === "all" || m.category === overlayCategoryFilter) &&
             (!overlaySearchQuery || m.category.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
