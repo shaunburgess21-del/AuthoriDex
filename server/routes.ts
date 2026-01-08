@@ -854,7 +854,7 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
 
   // ==================== Face-Offs API ====================
   
-  // Get all face-offs with vote counts
+  // Get all face-offs with vote counts (with dynamic avatar lookup from tracked_people)
   app.get("/api/face-offs", async (req, res) => {
     try {
       const { category, active } = req.query;
@@ -872,7 +872,18 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         faceOffList = faceOffList.filter(f => f.isActive);
       }
       
-      // Get vote counts for each face-off
+      // Build a lookup map for celebrity avatars (name -> avatar URL)
+      const celebrities = await db.select({
+        name: trackedPeople.name,
+        avatar: trackedPeople.avatar,
+      }).from(trackedPeople);
+      
+      const avatarLookup: Record<string, string | null> = {};
+      for (const celeb of celebrities) {
+        avatarLookup[celeb.name.toLowerCase()] = celeb.avatar;
+      }
+      
+      // Get vote counts for each face-off and dynamically resolve avatars
       const faceOffsWithVotes = await Promise.all(faceOffList.map(async (faceOff) => {
         const voteResults = await db.select({
           value: votes.value,
@@ -889,8 +900,14 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         const optionBVotes = voteResults.find(v => v.value === 'option_b')?.count || 0;
         const totalVotes = Number(optionAVotes) + Number(optionBVotes);
         
+        // Dynamically resolve avatars from tracked_people (fallback to snapshot)
+        const optionAImageResolved = avatarLookup[faceOff.optionAText.toLowerCase()] || faceOff.optionAImage;
+        const optionBImageResolved = avatarLookup[faceOff.optionBText.toLowerCase()] || faceOff.optionBImage;
+        
         return {
           ...faceOff,
+          optionAImage: optionAImageResolved,
+          optionBImage: optionBImageResolved,
           optionAVotes: Number(optionAVotes),
           optionBVotes: Number(optionBVotes),
           totalVotes,
