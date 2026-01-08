@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -74,111 +74,72 @@ const INDUCTION_CANDIDATES: InductionCandidate[] = [
   { id: "i12", name: "Mark Cuban", initials: "MC", category: "Business", votes: 5432 },
 ];
 
-interface PhotoOption {
+interface CelebrityImage {
   id: string;
-  description: string;
-  votes: number;
-  isLeading: boolean;
+  personId: string;
+  imageUrl: string;
+  source: string | null;
+  isPrimary: boolean;
+  votesUp: number;
+  votesDown: number;
+  addedAt: string;
 }
 
 interface CurateProfilePoll {
   id: string;
+  personId: string;
   personName: string;
   category: string;
-  totalVotes: number;
-  photoOptions: PhotoOption[];
 }
 
 const curateProfilePolls: CurateProfilePoll[] = [
   { 
     id: "pp1", 
+    personId: "852662d2-2b12-437f-ada7-1553bd5569b7",
     personName: "Taylor Swift", 
     category: "Music",
-    totalVotes: 24680,
-    photoOptions: [
-      { id: "ts1", description: "Eras Tour red outfit", votes: 8934, isLeading: true },
-      { id: "ts2", description: "Grammy Awards 2024", votes: 6721, isLeading: false },
-      { id: "ts3", description: "Midnights album cover", votes: 5432, isLeading: false },
-      { id: "ts4", description: "NFL game candid", votes: 3593, isLeading: false },
-    ]
   },
   { 
     id: "pp2", 
+    personId: "4fdd8495-87ba-4808-a0c8-0034f7240813",
     personName: "Elon Musk", 
     category: "Tech",
-    totalVotes: 18543,
-    photoOptions: [
-      { id: "em1", description: "SpaceX launch event", votes: 7234, isLeading: true },
-      { id: "em2", description: "Tesla factory tour", votes: 5421, isLeading: false },
-      { id: "em3", description: "X/Twitter HQ", votes: 3654, isLeading: false },
-      { id: "em4", description: "Neuralink presentation", votes: 2234, isLeading: false },
-    ]
   },
   { 
     id: "pp3", 
+    personId: "670e5278-f359-4558-abb8-ea0caa371395",
     personName: "Beyoncé", 
     category: "Music",
-    totalVotes: 21456,
-    photoOptions: [
-      { id: "b1", description: "Renaissance tour silver", votes: 9876, isLeading: true },
-      { id: "b2", description: "Cowboy Carter promo", votes: 6543, isLeading: false },
-      { id: "b3", description: "Grammys red carpet", votes: 5037, isLeading: false },
-    ]
   },
   { 
     id: "pp4", 
-    personName: "MrBeast", 
-    category: "Creator",
-    totalVotes: 15678,
-    photoOptions: [
-      { id: "mb1", description: "Challenge video thumbnail", votes: 6789, isLeading: true },
-      { id: "mb2", description: "Beast Burger launch", votes: 4567, isLeading: false },
-      { id: "mb3", description: "Philanthropy event", votes: 4322, isLeading: false },
-    ]
+    personId: "ee953fcf-3f7f-4ed7-a94f-6338d49a952f",
+    personName: "Mark Zuckerberg", 
+    category: "Tech",
   },
   { 
     id: "pp5", 
-    personName: "Zendaya", 
-    category: "Creator",
-    totalVotes: 19234,
-    photoOptions: [
-      { id: "z1", description: "Met Gala 2024", votes: 8765, isLeading: true },
-      { id: "z2", description: "Dune premiere", votes: 5432, isLeading: false },
-      { id: "z3", description: "Challengers press tour", votes: 5037, isLeading: false },
-    ]
+    personId: "3a5bbf27-b9c2-4315-a4dc-7944d9878d0d",
+    personName: "Bad Bunny", 
+    category: "Music",
   },
   { 
     id: "pp6", 
-    personName: "Bad Bunny", 
-    category: "Music",
-    totalVotes: 16789,
-    photoOptions: [
-      { id: "bb1", description: "Most Wanted Tour", votes: 7654, isLeading: true },
-      { id: "bb2", description: "Grammy performance", votes: 5123, isLeading: false },
-      { id: "bb3", description: "WWE appearance", votes: 4012, isLeading: false },
-    ]
+    personId: "aad572b3-c66a-4cad-bfa0-78b41eb41dfd",
+    personName: "Cristiano Ronaldo", 
+    category: "Sports",
   },
   { 
     id: "pp7", 
-    personName: "LeBron James", 
-    category: "Sports",
-    totalVotes: 22345,
-    photoOptions: [
-      { id: "lj1", description: "Lakers game dunk", votes: 9234, isLeading: true },
-      { id: "lj2", description: "All-Star 2024", votes: 7654, isLeading: false },
-      { id: "lj3", description: "40K points milestone", votes: 5457, isLeading: false },
-    ]
+    personId: "3417182d-d51a-4ff2-ae60-c35781ad9aff",
+    personName: "Drake", 
+    category: "Music",
   },
   { 
     id: "pp8", 
-    personName: "Donald Trump", 
-    category: "Politics",
-    totalVotes: 28976,
-    photoOptions: [
-      { id: "dt1", description: "Campaign rally 2024", votes: 12345, isLeading: true },
-      { id: "dt2", description: "Mar-a-Lago press conf", votes: 9876, isLeading: false },
-      { id: "dt3", description: "Debate stage", votes: 6755, isLeading: false },
-    ]
+    personId: "0b9bd1d6-0f66-4665-8cec-05d87908e3a1",
+    personName: "Kendrick Lamar", 
+    category: "Music",
   },
 ];
 
@@ -548,17 +509,57 @@ function InductionCandidateCard({
 function CurateProfileCard({ 
   poll, 
   onVote,
-  onComplete 
+  onComplete,
+  onViewResults
 }: { 
   poll: CurateProfilePoll; 
   onVote: () => void;
   onComplete: () => void;
+  onViewResults: (poll: CurateProfilePoll) => void;
 }) {
   const [selectedChoice, setSelectedChoice] = useState<'a' | 'b' | null>(null);
   const [isExiting, setIsExiting] = useState(false);
   const [showShimmer, setShowShimmer] = useState(false);
+  const [showResults, setShowResults] = useState(false);
   const timeoutRef1 = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timeoutRef2 = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { toast } = useToast();
+
+  // Fetch celebrity images for this person
+  const { data: images = [], isLoading } = useQuery<CelebrityImage[]>({
+    queryKey: ['/api/people', poll.personId, 'images'],
+  });
+
+  // Pick two random images deterministically based on poll id
+  const [imageA, imageB] = useMemo(() => {
+    if (images.length < 2) return [null, null];
+    // Use poll id as seed for consistent random selection
+    const seed = poll.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const shuffled = [...images].sort((a, b) => {
+      const hashA = (a.id.charCodeAt(0) + seed) % 100;
+      const hashB = (b.id.charCodeAt(0) + seed) % 100;
+      return hashA - hashB;
+    });
+    return [shuffled[0], shuffled[1]];
+  }, [images, poll.id]);
+
+  // Vote mutation
+  const voteMutation = useMutation({
+    mutationFn: async ({ imageId, direction }: { imageId: string; direction: 'up' | 'down' }) => {
+      const response = await apiRequest('POST', `/api/people/${poll.personId}/images/${imageId}/vote`, { direction });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/people', poll.personId, 'images'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to record vote",
+        variant: "destructive",
+      });
+    },
+  });
 
   useEffect(() => {
     return () => {
@@ -568,17 +569,33 @@ function CurateProfileCard({
   }, []);
 
   const handlePick = (choice: 'a' | 'b') => {
-    if (!selectedChoice) {
+    if (!selectedChoice && imageA && imageB) {
       setSelectedChoice(choice);
       setShowShimmer(true);
       onVote();
+      
+      // Vote up for selected, vote down for other
+      const selectedImage = choice === 'a' ? imageA : imageB;
+      const otherImage = choice === 'a' ? imageB : imageA;
+      voteMutation.mutate({ imageId: selectedImage.id, direction: 'up' });
+      voteMutation.mutate({ imageId: otherImage.id, direction: 'down' });
+      
       timeoutRef1.current = setTimeout(() => {
         setShowShimmer(false);
-        setIsExiting(true);
-        timeoutRef2.current = setTimeout(onComplete, 300);
+        setShowResults(true);
       }, 600);
     }
   };
+
+  const handleContinue = () => {
+    setIsExiting(true);
+    timeoutRef2.current = setTimeout(onComplete, 300);
+  };
+
+  // Calculate total votes for this person's images
+  const totalVotes = useMemo(() => {
+    return images.reduce((sum, img) => sum + img.votesUp + img.votesDown, 0);
+  }, [images]);
 
   return (
     <motion.div 
@@ -618,79 +635,133 @@ function CurateProfileCard({
           <h3 className="font-semibold text-sm">{poll.personName}</h3>
         </div>
         
-        <p className="text-center text-lg font-serif font-bold text-cyan-400 mb-4">Which look defines them?</p>
-        
-        <div className="grid grid-cols-2 gap-4">
-          <button
-            onClick={() => handlePick('a')}
-            disabled={!!selectedChoice}
-            className={`relative aspect-square rounded-lg bg-muted flex items-center justify-center border-3 transition-all duration-300 group cursor-pointer overflow-hidden ${
-              selectedChoice === 'a' 
-                ? 'border-green-500 ring-4 ring-green-500/30 scale-105' 
-                : selectedChoice === 'b'
-                ? 'border-muted opacity-40 scale-95'
-                : 'border-transparent hover:border-cyan-500/50 hover:scale-102'
-            }`}
-            data-testid={`button-photo-a-${poll.id}`}
-          >
-            <div className="text-center">
-              <Camera className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-              <span className="text-sm text-muted-foreground font-medium">Look A</span>
-            </div>
-            {selectedChoice === 'a' && (
-              <motion.div 
-                className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.3 }}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
+          </div>
+        ) : !imageA || !imageB ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Camera className="h-10 w-10 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No images available</p>
+          </div>
+        ) : showResults ? (
+          <div className="text-center py-4">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              className="h-12 w-12 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-3"
+            >
+              <Check className="h-6 w-6 text-green-400" />
+            </motion.div>
+            <p className="font-medium text-green-400 mb-1">Vote recorded!</p>
+            <p className="text-xs text-muted-foreground mb-4">{totalVotes.toLocaleString()} total votes</p>
+            <div className="flex gap-2 justify-center">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onViewResults(poll)}
+                className="border-cyan-500/50 text-cyan-400"
+                data-testid={`button-view-results-${poll.id}`}
               >
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 20 }}
-                  className="h-12 w-12 rounded-full bg-green-500 flex items-center justify-center shadow-lg shadow-green-500/40"
-                >
-                  <Check className="h-6 w-6 text-white" />
-                </motion.div>
-              </motion.div>
-            )}
-          </button>
-          
-          <button
-            onClick={() => handlePick('b')}
-            disabled={!!selectedChoice}
-            className={`relative aspect-square rounded-lg bg-muted flex items-center justify-center border-3 transition-all duration-300 group cursor-pointer overflow-hidden ${
-              selectedChoice === 'b' 
-                ? 'border-green-500 ring-4 ring-green-500/30 scale-105' 
-                : selectedChoice === 'a'
-                ? 'border-muted opacity-40 scale-95'
-                : 'border-transparent hover:border-cyan-500/50 hover:scale-102'
-            }`}
-            data-testid={`button-photo-b-${poll.id}`}
-          >
-            <div className="text-center">
-              <Camera className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-              <span className="text-sm text-muted-foreground font-medium">Look B</span>
-            </div>
-            {selectedChoice === 'b' && (
-              <motion.div 
-                className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.3 }}
+                View Results
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleContinue}
+                className="bg-cyan-500 hover:bg-cyan-600 text-white"
+                data-testid={`button-next-${poll.id}`}
               >
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 20 }}
-                  className="h-12 w-12 rounded-full bg-green-500 flex items-center justify-center shadow-lg shadow-green-500/40"
-                >
-                  <Check className="h-6 w-6 text-white" />
-                </motion.div>
-              </motion.div>
-            )}
-          </button>
-        </div>
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="text-center text-lg font-serif font-bold text-cyan-400 mb-4">Which look defines them?</p>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => handlePick('a')}
+                disabled={!!selectedChoice}
+                className={`relative aspect-square rounded-lg overflow-hidden border-3 transition-all duration-300 group cursor-pointer ${
+                  selectedChoice === 'a' 
+                    ? 'border-green-500 ring-4 ring-green-500/30 scale-105' 
+                    : selectedChoice === 'b'
+                    ? 'border-muted opacity-40 scale-95'
+                    : 'border-transparent hover:border-cyan-500/50 hover:scale-102'
+                }`}
+                data-testid={`button-photo-a-${poll.id}`}
+              >
+                <img 
+                  src={imageA.imageUrl} 
+                  alt={`${poll.personName} Look A`}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                  <span className="text-xs text-white font-medium">Look A</span>
+                </div>
+                {selectedChoice === 'a' && (
+                  <motion.div 
+                    className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 20 }}
+                      className="h-12 w-12 rounded-full bg-green-500 flex items-center justify-center shadow-lg shadow-green-500/40"
+                    >
+                      <Check className="h-6 w-6 text-white" />
+                    </motion.div>
+                  </motion.div>
+                )}
+              </button>
+              
+              <button
+                onClick={() => handlePick('b')}
+                disabled={!!selectedChoice}
+                className={`relative aspect-square rounded-lg overflow-hidden border-3 transition-all duration-300 group cursor-pointer ${
+                  selectedChoice === 'b' 
+                    ? 'border-green-500 ring-4 ring-green-500/30 scale-105' 
+                    : selectedChoice === 'a'
+                    ? 'border-muted opacity-40 scale-95'
+                    : 'border-transparent hover:border-cyan-500/50 hover:scale-102'
+                }`}
+                data-testid={`button-photo-b-${poll.id}`}
+              >
+                <img 
+                  src={imageB.imageUrl} 
+                  alt={`${poll.personName} Look B`}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                  <span className="text-xs text-white font-medium">Look B</span>
+                </div>
+                {selectedChoice === 'b' && (
+                  <motion.div 
+                    className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 20 }}
+                      className="h-12 w-12 rounded-full bg-green-500 flex items-center justify-center shadow-lg shadow-green-500/40"
+                    >
+                      <Check className="h-6 w-6 text-white" />
+                    </motion.div>
+                  </motion.div>
+                )}
+              </button>
+            </div>
+          </>
+        )}
       </Card>
     </motion.div>
   );
@@ -1856,6 +1927,10 @@ export default function VotePage() {
                   poll={currentCuratePoll} 
                   onVote={handleCurateVote}
                   onComplete={handleCurateComplete}
+                  onViewResults={(poll) => {
+                    setSelectedCuratePerson(poll);
+                    setCurateLeaderboardOpen(true);
+                  }}
                 />
               )}
             </AnimatePresence>

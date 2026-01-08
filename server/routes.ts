@@ -334,6 +334,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Vote on a celebrity image (for Curate Profile feature)
+  app.post("/api/people/:personId/images/:imageId/vote", optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const { personId, imageId } = req.params;
+      const { direction } = req.body;
+      
+      if (!direction || (direction !== 'up' && direction !== 'down')) {
+        return res.status(400).json({ error: "Invalid direction. Must be 'up' or 'down'" });
+      }
+      
+      // Check if image exists and belongs to the person
+      const [image] = await db.select()
+        .from(celebrityImages)
+        .where(and(
+          eq(celebrityImages.id, imageId),
+          eq(celebrityImages.personId, personId)
+        ));
+      
+      if (!image) {
+        return res.status(404).json({ error: "Image not found" });
+      }
+      
+      // Update the vote count
+      if (direction === 'up') {
+        await db.update(celebrityImages)
+          .set({ votesUp: sql`${celebrityImages.votesUp} + 1` })
+          .where(eq(celebrityImages.id, imageId));
+      } else {
+        await db.update(celebrityImages)
+          .set({ votesDown: sql`${celebrityImages.votesDown} + 1` })
+          .where(eq(celebrityImages.id, imageId));
+      }
+      
+      // Fetch updated image
+      const [updatedImage] = await db.select()
+        .from(celebrityImages)
+        .where(eq(celebrityImages.id, imageId));
+      
+      res.json(updatedImage);
+    } catch (error) {
+      console.error("Error voting on celebrity image:", error);
+      res.status(500).json({ error: "Failed to vote on image" });
+    }
+  });
+
   // Get community insights for a person with vote counts
   app.get("/api/community-insights/:personId", async (req, res) => {
     try {
