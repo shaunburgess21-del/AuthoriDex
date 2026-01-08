@@ -2201,7 +2201,6 @@ export default function PredictPage() {
           </div>
         </div>
       </header>
-
       <div className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b">
         <div className="container mx-auto px-4 py-3 max-w-6xl">
           <HorizontalScroll className="pb-1">
@@ -2224,7 +2223,6 @@ export default function PredictPage() {
           </HorizontalScroll>
         </div>
       </div>
-
       <div className="container mx-auto px-4 py-4 max-w-6xl">
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1 max-w-[420px]">
@@ -2269,7 +2267,6 @@ export default function PredictPage() {
           </div>
         </div>
       </div>
-
       <div className="container mx-auto px-4 max-w-6xl">
         <MarketCycleHero marketState={marketCycle} />
 
@@ -2402,7 +2399,7 @@ export default function PredictPage() {
                   data-testid="button-start-prediction"
                 >
                   <Plus className="h-4 w-4 mr-1" />
-                  <span className="hidden sm:inline">Start</span>
+                  <span className="hidden sm:inline">Suggest</span>
                 </Button>
               </div>
             </div>
@@ -2429,12 +2426,10 @@ export default function PredictPage() {
           </button>
         </div>
       </div>
-
       <FirstTimeModal 
         open={showFirstTimeModal} 
         onClose={handleCloseFirstTimeModal} 
       />
-
       <FullScreenOverlay
         open={viewAllCategory === "weekly"}
         onClose={() => setViewAllCategory(null)}
@@ -2458,7 +2453,6 @@ export default function PredictPage() {
             />
           ))}
       </FullScreenOverlay>
-
       <FullScreenOverlay
         open={viewAllCategory === "h2h"}
         onClose={() => setViewAllCategory(null)}
@@ -2482,7 +2476,6 @@ export default function PredictPage() {
             />
           ))}
       </FullScreenOverlay>
-
       <FullScreenOverlay
         open={viewAllCategory === "races"}
         onClose={() => setViewAllCategory(null)}
@@ -2509,7 +2502,6 @@ export default function PredictPage() {
             />
           ))}
       </FullScreenOverlay>
-
       <FullScreenOverlay
         open={viewAllCategory === "gainers"}
         onClose={() => setViewAllCategory(null)}
@@ -2535,7 +2527,6 @@ export default function PredictPage() {
             />
           ))}
       </FullScreenOverlay>
-
       <RaceDetailOverlay
         market={selectedRace}
         onClose={() => setSelectedRace(null)}
@@ -2550,7 +2541,6 @@ export default function PredictPage() {
           }
         }}
       />
-
       <StakeModal
         open={stakeModalOpen}
         onClose={() => {
@@ -2561,13 +2551,11 @@ export default function PredictPage() {
         onConfirm={handleConfirmStake}
         walletBalance={walletCredits}
       />
-
       <CreatePredictionModal
         open={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
         onSubmit={handleCreatePrediction}
       />
-
       {rulesModalOpen && RULES_CONTENT[rulesModalOpen] && (
         <RulesModal
           open={!!rulesModalOpen}
@@ -2577,7 +2565,6 @@ export default function PredictPage() {
           steps={RULES_CONTENT[rulesModalOpen].steps}
         />
       )}
-
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-t md:hidden">
         <div className="flex items-center justify-around h-16">
           <Link href="/">
