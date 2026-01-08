@@ -1147,6 +1147,15 @@ export default function VotePage() {
     return matchesCategory && matchesSearch;
   });
 
+  const { data: detailImages = [] } = useQuery<CelebrityImage[]>({
+    queryKey: ['/api/people', selectedCuratePerson?.personId, 'images'],
+    enabled: !!selectedCuratePerson,
+  });
+
+  const detailTotalVotes = useMemo(() => {
+    return detailImages.reduce((sum, img) => sum + img.votesUp + img.votesDown, 0);
+  }, [detailImages]);
+
   const { data: faceOffs = [], isLoading: faceOffsLoading } = useQuery<FaceOffData[]>({
     queryKey: ['/api/face-offs'],
     staleTime: 60 * 1000,
@@ -2283,15 +2292,18 @@ export default function VotePage() {
                         {selectedCuratePerson.category}
                       </Badge>
                       <p className="text-sm text-muted-foreground mt-2">
-                        {selectedCuratePerson.totalVotes.toLocaleString()} total votes
+                        {detailTotalVotes.toLocaleString()} total votes
                       </p>
                     </div>
                     
                     <div className="space-y-3">
-                      {selectedCuratePerson.photoOptions
-                        .sort((a, b) => b.votes - a.votes)
+                      {detailImages
+                        .sort((a, b) => (b.votesUp - b.votesDown) - (a.votesUp - a.votesDown))
                         .map((photo, idx) => {
-                          const percentage = Math.round((photo.votes / selectedCuratePerson.totalVotes) * 100);
+                          const votes = photo.votesUp + photo.votesDown;
+                          const percentage = detailTotalVotes > 0 ? Math.round((votes / detailTotalVotes) * 100) : 0;
+                          const isLeading = idx === 0 && votes > 0;
+                          
                           return (
                             <motion.div
                               key={photo.id}
@@ -2299,12 +2311,12 @@ export default function VotePage() {
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ delay: idx * 0.1 }}
                               className={`relative p-4 rounded-lg border transition-all cursor-pointer hover-elevate ${
-                                photo.isLeading 
+                                isLeading 
                                   ? 'bg-cyan-500/10 border-cyan-500/40' 
                                   : 'bg-muted/30 border-border hover:border-cyan-500/30'
                               }`}
                               onClick={() => {
-                                // Handle vote for this photo option
+                                // Handled via button
                               }}
                               data-testid={`photo-option-${photo.id}`}
                             >
@@ -2317,13 +2329,17 @@ export default function VotePage() {
                                 }`}>
                                   {idx + 1}
                                 </div>
-                                <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center border border-slate-600 shrink-0">
-                                  <Camera className="h-6 w-6 text-slate-500" />
+                                <div className="h-16 w-16 rounded-lg overflow-hidden border border-slate-600 shrink-0">
+                                  <img 
+                                    src={photo.imageUrl} 
+                                    alt={`${selectedCuratePerson.personName} look ${idx + 1}`}
+                                    className="w-full h-full object-cover"
+                                  />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-1">
-                                    <p className="font-medium truncate">{photo.description}</p>
-                                    {photo.isLeading && (
+                                    <p className="font-medium truncate">Look {idx + 1}</p>
+                                    {isLeading && (
                                       <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-400/30 text-xs shrink-0">
                                         <Crown className="h-3 w-3 mr-1" />
                                         Leading
@@ -2333,7 +2349,7 @@ export default function VotePage() {
                                   <div className="flex items-center gap-2">
                                     <div className="flex-1 h-2 bg-slate-700/50 rounded-full overflow-hidden">
                                       <motion.div 
-                                        className={`h-full rounded-full ${photo.isLeading ? 'bg-cyan-500' : 'bg-slate-500'}`}
+                                        className={`h-full rounded-full ${isLeading ? 'bg-cyan-500' : 'bg-slate-500'}`}
                                         initial={{ width: 0 }}
                                         animate={{ width: `${percentage}%` }}
                                         transition={{ duration: 0.5, delay: idx * 0.1 }}
@@ -2342,19 +2358,18 @@ export default function VotePage() {
                                     <span className="text-sm font-mono text-muted-foreground w-12 text-right">{percentage}%</span>
                                   </div>
                                   <p className="text-xs text-muted-foreground mt-1">
-                                    {photo.votes.toLocaleString()} votes
+                                    {votes.toLocaleString()} votes
                                   </p>
                                 </div>
                                 <Button
                                   size="sm"
-                                  variant={photo.isLeading ? "outline" : "default"}
-                                  className={photo.isLeading 
+                                  variant={isLeading ? "outline" : "default"}
+                                  className={isLeading 
                                     ? "border-cyan-500/50 text-cyan-400" 
                                     : "bg-cyan-500 hover:bg-cyan-600 text-white"
                                   }
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    // Handle vote
                                   }}
                                   data-testid={`button-vote-photo-${photo.id}`}
                                 >
