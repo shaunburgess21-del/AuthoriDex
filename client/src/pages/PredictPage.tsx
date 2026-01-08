@@ -1481,7 +1481,7 @@ function StakeModal({
           <Card className="p-3 bg-violet-500/5 border-violet-500/20">
             <p className="text-xs text-muted-foreground mb-1">Market</p>
             <p className="text-sm font-semibold text-foreground">{selection.marketName}</p>
-            <p className="text-lg font-bold text-violet-500 mt-1">{selection.choice}</p>
+            <p className="text-lg font-bold mt-1 text-[#00c853]">{selection.choice}</p>
           </Card>
           
           {showJackpotWarning && (
