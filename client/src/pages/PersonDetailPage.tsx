@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,8 +29,18 @@ import { formatNumber } from "@/lib/formatNumber";
 
 interface CurateProfilePoll {
   id: string;
+  personId: number | string;
   personName: string;
   category: string;
+}
+
+interface CelebrityImage {
+  id: number;
+  personId: number;
+  imageUrl: string;
+  sourceType: string;
+  votesUp: number;
+  votesDown: number;
 }
 
 interface FeaturedPoll {
@@ -74,6 +84,16 @@ function CurateProfileCardProfile({
   const [showShimmer, setShowShimmer] = useState(false);
   const timeoutRef1 = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timeoutRef2 = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { data: images = [] } = useQuery<CelebrityImage[]>({
+    queryKey: [`/api/people/${poll.personId}/images`],
+    enabled: !!poll.personId,
+  });
+
+  const [imageA, imageB] = useMemo(() => {
+    if (images.length < 2) return [null, null];
+    return [images[0], images[1]];
+  }, [images]);
 
   useEffect(() => {
     return () => {
@@ -131,7 +151,7 @@ function CurateProfileCardProfile({
           <button
             onClick={() => handlePick('a')}
             disabled={!!selectedChoice}
-            className={`relative aspect-square rounded-lg bg-muted flex items-center justify-center border-3 transition-all duration-300 group cursor-pointer overflow-hidden ${
+            className={`relative aspect-square rounded-lg overflow-hidden border-3 transition-all duration-300 group cursor-pointer ${
               selectedChoice === 'a' 
                 ? 'border-green-500 ring-4 ring-green-500/30 scale-105' 
                 : selectedChoice === 'b'
@@ -140,10 +160,25 @@ function CurateProfileCardProfile({
             }`}
             data-testid={`button-curate-photo-a-${poll.id}`}
           >
-            <div className="text-center">
-              <Camera className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-              <span className="text-sm text-muted-foreground font-medium">Look A</span>
-            </div>
+            {imageA ? (
+              <>
+                <img 
+                  src={imageA.imageUrl} 
+                  alt={`${poll.personName} Look A`}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                  <span className="text-xs text-white font-medium">Look A</span>
+                </div>
+              </>
+            ) : (
+              <div className="w-full h-full bg-muted flex items-center justify-center">
+                <div className="text-center">
+                  <Camera className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+                  <span className="text-sm text-muted-foreground font-medium">Look A</span>
+                </div>
+              </div>
+            )}
             {selectedChoice === 'a' && (
               <motion.div 
                 className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
@@ -166,7 +201,7 @@ function CurateProfileCardProfile({
           <button
             onClick={() => handlePick('b')}
             disabled={!!selectedChoice}
-            className={`relative aspect-square rounded-lg bg-muted flex items-center justify-center border-3 transition-all duration-300 group cursor-pointer overflow-hidden ${
+            className={`relative aspect-square rounded-lg overflow-hidden border-3 transition-all duration-300 group cursor-pointer ${
               selectedChoice === 'b' 
                 ? 'border-green-500 ring-4 ring-green-500/30 scale-105' 
                 : selectedChoice === 'a'
@@ -175,10 +210,25 @@ function CurateProfileCardProfile({
             }`}
             data-testid={`button-curate-photo-b-${poll.id}`}
           >
-            <div className="text-center">
-              <Camera className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-              <span className="text-sm text-muted-foreground font-medium">Look B</span>
-            </div>
+            {imageB ? (
+              <>
+                <img 
+                  src={imageB.imageUrl} 
+                  alt={`${poll.personName} Look B`}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                  <span className="text-xs text-white font-medium">Look B</span>
+                </div>
+              </>
+            ) : (
+              <div className="w-full h-full bg-muted flex items-center justify-center">
+                <div className="text-center">
+                  <Camera className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+                  <span className="text-sm text-muted-foreground font-medium">Look B</span>
+                </div>
+              </div>
+            )}
             {selectedChoice === 'b' && (
               <motion.div 
                 className="absolute inset-0 bg-green-500/20 flex items-center justify-center"
@@ -791,7 +841,7 @@ export default function PersonDetailPage() {
               {!curateCompleted ? (
                 <div className="max-w-md mx-auto">
                   <CurateProfileCardProfile
-                    poll={{ id: `curate-${person.id}`, personName: person.name, category: person.category || "General" }}
+                    poll={{ id: `curate-${person.id}`, personId: person.id, personName: person.name, category: person.category || "General" }}
                     onVote={() => {}}
                     onComplete={() => setCurateCompleted(true)}
                   />
