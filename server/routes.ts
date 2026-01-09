@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile } from "@shared/schema";
 import { eq, desc, and, sql, count } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -1362,15 +1362,15 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       const userId = req.userId!;
       
       // Get votes from votes table
-      const userVotes = await db.select().from(votes).where(eq(votes.userId, userId)).orderBy(desc(votes.createdAt)).limit(50);
+      const userVotes = await db.select().from(votes).where(eq(votes.userId, userId)).orderBy(desc(votes.votedAt)).limit(50);
       
       // Transform votes to include target names
       const votesWithDetails = await Promise.all(userVotes.map(async (vote) => {
         let targetName = "Unknown";
         
-        // Try to get celebrity name if it's a celebrity vote
-        if (vote.subjectId) {
-          const person = await db.select({ name: trackedPeople.name }).from(trackedPeople).where(eq(trackedPeople.id, vote.subjectId)).limit(1);
+        // Try to get celebrity name if it's a celebrity-related vote
+        if (vote.targetId) {
+          const person = await db.select({ name: trackedPeople.name }).from(trackedPeople).where(eq(trackedPeople.id, vote.targetId)).limit(1);
           if (person.length > 0) {
             targetName = person[0].name;
           }
@@ -1381,7 +1381,7 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
           voteType: vote.voteType,
           value: vote.weight || 1,
           targetName,
-          createdAt: vote.createdAt,
+          createdAt: vote.votedAt,
         };
       }));
       
@@ -1409,21 +1409,21 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       const userId = req.userId!;
       
       // Get user favorites from userFavourites table
-      const userFavs = await db.select().from(userFavourites).where(eq(userFavourites.userId, Number(userId))).limit(50);
+      const userFavs = await db.select().from(userFavourites).where(eq(userFavourites.userId, userId)).limit(50);
       
       // Get celebrity details for each favorite
       const favoritesWithDetails = await Promise.all(userFavs.map(async (fav) => {
         const person = await db.select().from(trackedPeople).where(eq(trackedPeople.id, fav.personId)).limit(1);
-        const trending = await db.select().from(trendingPeople).where(eq(trendingPeople.personId, fav.personId)).limit(1);
+        const trending = await db.select().from(trendingPeople).where(eq(trendingPeople.id, fav.personId)).limit(1);
         
         return {
           id: fav.id,
           celebrityId: fav.personId,
           name: person[0]?.name || "Unknown",
-          imageUrl: person[0]?.imageUrl || null,
+          imageUrl: person[0]?.avatar || null,
           category: person[0]?.category || "Other",
           rank: trending[0]?.rank || 999,
-          change: trending[0]?.percentChange || 0,
+          change: trending[0]?.change24h || 0,
         };
       }));
       
@@ -1482,23 +1482,150 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
   // Refresh data (trigger data ingestion)
   app.post("/api/admin/refresh-data", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      // Placeholder - would trigger actual data refresh jobs
-      res.json({ success: true, message: "Data refresh initiated" });
+      const { runDataIngestion } = await import("./jobs/ingest");
+      const result = await runDataIngestion();
+      res.json({ 
+        success: true, 
+        message: "Data refresh completed",
+        processed: result.processed,
+        errors: result.errors,
+        duration: result.duration,
+      });
     } catch (error: any) {
       console.error("Error refreshing data:", error.message);
       res.status(500).json({ error: "Failed to refresh data" });
     }
   });
   
-  // Run scoring engine
+  // Run scoring engine (recalculates rankings using cached API data)
   app.post("/api/admin/run-scoring", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      // Placeholder - would trigger actual scoring job
-      res.json({ success: true, message: "Scoring initiated" });
+      const { runQuickScoring } = await import("./jobs/quick-score");
+      const result = await runQuickScoring();
+      res.json({ 
+        success: true, 
+        message: "Scoring and rankings updated",
+        processed: result.processed,
+        errors: result.errors,
+      });
     } catch (error: any) {
       console.error("Error running scoring:", error.message);
       res.status(500).json({ error: "Failed to run scoring" });
     }
+  });
+
+  // ===========================================
+  // CRON ENDPOINTS (Serverless/Vercel Compatible)
+  // ===========================================
+  // These endpoints can be triggered by external schedulers (Vercel Cron, GitHub Actions, etc.)
+  // They use API key authentication instead of user session auth for serverless compatibility
+  
+  const verifyCronSecret = (req: any, res: any, next: any) => {
+    const authHeader = req.headers.authorization;
+    const cronSecret = process.env.CRON_SECRET;
+    
+    // If CRON_SECRET is not set, allow access (development mode)
+    if (!cronSecret) {
+      console.warn('[Cron] Warning: CRON_SECRET not set. Cron endpoints are unprotected.');
+      return next();
+    }
+    
+    if (!authHeader || authHeader !== `Bearer ${cronSecret}`) {
+      return res.status(401).json({ error: 'Unauthorized: Invalid or missing cron secret' });
+    }
+    
+    next();
+  };
+  
+  // Capture hourly snapshots for trend graphs
+  // Call this every hour via external scheduler
+  app.post("/api/cron/capture-snapshots", verifyCronSecret, async (req, res) => {
+    const startTime = Date.now();
+    try {
+      const { captureHourlySnapshots } = await import("./jobs/snapshot-scheduler");
+      const result = await captureHourlySnapshots();
+      
+      res.json({
+        success: true,
+        message: "Snapshots captured successfully",
+        captured: result.captured,
+        errors: result.errors,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Snapshot capture error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+  
+  // Run full data ingestion from external APIs
+  // Call this every 8 hours via external scheduler
+  app.post("/api/cron/refresh-data", verifyCronSecret, async (req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runDataIngestion } = await import("./jobs/ingest");
+      const result = await runDataIngestion();
+      
+      res.json({
+        success: true,
+        message: "Data ingestion completed",
+        processed: result.processed,
+        errors: result.errors,
+        duration: result.duration,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Data ingestion error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+  
+  // Run scoring and update rankings (uses cached API data)
+  // Call this after data ingestion or on-demand to recalculate trending rankings
+  // Note: This is different from capture-snapshots - this updates the trending_people table
+  app.post("/api/cron/run-scoring", verifyCronSecret, async (req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runQuickScoring } = await import("./jobs/quick-score");
+      const result = await runQuickScoring();
+      
+      res.json({
+        success: true,
+        message: "Scoring and rankings updated",
+        processed: result.processed,
+        errors: result.errors,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Scoring error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+  
+  // Health check for cron jobs (useful for monitoring)
+  app.get("/api/cron/health", (req, res) => {
+    res.json({
+      status: "ok",
+      serverTime: new Date().toISOString(),
+      cronSecretConfigured: !!process.env.CRON_SECRET,
+    });
   });
 
   const httpServer = createServer(app);

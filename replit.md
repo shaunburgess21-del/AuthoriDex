@@ -59,7 +59,19 @@ Preferred communication style: Simple, everyday language.
 - **Data Jobs**:
     - `server/jobs/ingest.ts` - Full data ingestion from all API sources
     - `server/jobs/quick-score.ts` - Fast scoring using cached API data
-    - `server/jobs/snapshot-scheduler.ts` - Hourly trend snapshots for chart data (auto-starts with server)
+    - `server/jobs/snapshot-scheduler.ts` - Hourly trend snapshots for chart data (auto-starts with server unless serverless mode)
+
+### Serverless Architecture (Vercel-Ready)
+- **Stateless Design**: All state stored in Supabase Database, no local file or in-memory persistence
+- **Environment Detection**: `SERVERLESS_MODE=true` or `VERCEL=1` disables background schedulers
+- **Modular Services**: Business logic (gamification, scoring) separated from API routes for portability
+- **Cron Endpoints**: Scheduled tasks exposed as standalone API endpoints:
+    - `POST /api/cron/capture-snapshots` - Hourly trend snapshots (trigger via external scheduler)
+    - `POST /api/cron/refresh-data` - Data ingestion from APIs (trigger every 8 hours)
+    - `POST /api/cron/run-scoring` - Re-calculate trend scores on demand
+    - `GET /api/cron/health` - Health check for cron monitoring
+- **Cron Authentication**: Set `CRON_SECRET` env var; endpoints require `Authorization: Bearer <secret>` header
+- **No Hardcoded URLs**: Use `process.env.BASE_URL` or `window.location.origin` for all redirects/callbacks
 
 ### Data Storage
 - **PostgreSQL Database**: Supabase-backed PostgreSQL (FameDex 2026 project) with Drizzle ORM.

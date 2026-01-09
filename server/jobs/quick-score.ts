@@ -8,6 +8,10 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
   
   let processed = 0;
   let errors = 0;
+  
+  // Truncate to the hour for idempotency - multiple runs within same hour will conflict
+  const hourTimestamp = new Date();
+  hourTimestamp.setMinutes(0, 0, 0);
 
   try {
     const people = await db.select().from(trackedPeople);
@@ -75,6 +79,7 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
 
         await db.insert(trendSnapshots).values({
           personId: person.id,
+          timestamp: hourTimestamp, // Truncated to hour for idempotency
           trendScore: scoreResult.trendScore,
           newsCount: news?.articleCount24h || 0,
           searchVolume: 0,
@@ -91,7 +96,7 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
           confidence: scoreResult.confidence,
           momentum: scoreResult.momentum,
           drivers: scoreResult.drivers,
-        });
+        }).onConflictDoNothing();
 
         scoreResults.push({ person, score: scoreResult });
         processed++;

@@ -5,18 +5,21 @@ import { setupVite, serveStatic, log } from "./vite";
 import { startSnapshotScheduler } from "./jobs/snapshot-scheduler";
 import { runDataIngestion } from "./jobs/ingest";
 
+// ===========================================
+// SERVERLESS MODE DETECTION
+// ===========================================
+// When SERVERLESS_MODE=true (e.g., on Vercel), background schedulers are disabled.
+// Instead, use the /api/cron/* endpoints triggered by external schedulers.
+const SERVERLESS_MODE = process.env.SERVERLESS_MODE === "true" || process.env.VERCEL === "1";
+
 // Data ingestion interval: 8 hours (matches X API cache TTL)
 const INGESTION_INTERVAL_MS = 8 * 60 * 60 * 1000; // 8 hours in ms
 
-let lastIngestionTime: Date | null = null;
-
 async function scheduledIngestion() {
   log("[Ingestion Scheduler] Starting scheduled data ingestion...");
-  const startTime = new Date();
   
   try {
     const result = await runDataIngestion();
-    lastIngestionTime = new Date();
     log(`[Ingestion Scheduler] Complete: ${result.processed} processed, ${result.errors} errors, ${result.duration}ms`);
     log(`[Ingestion Scheduler] Next ingestion scheduled for: ${new Date(Date.now() + INGESTION_INTERVAL_MS).toISOString()}`);
   } catch (error) {
@@ -25,6 +28,11 @@ async function scheduledIngestion() {
 }
 
 function startIngestionScheduler() {
+  if (SERVERLESS_MODE) {
+    log("[Ingestion Scheduler] Skipped - serverless mode enabled. Use /api/cron/refresh-data instead.");
+    return;
+  }
+  
   log(`[Ingestion Scheduler] Starting (interval: ${INGESTION_INTERVAL_MS / 1000 / 60 / 60} hours)`);
   
   // Run initial ingestion after 30 second delay (let server fully initialize)

@@ -8,6 +8,10 @@ export async function captureHourlySnapshots(): Promise<{ captured: number; erro
   
   let captured = 0;
   let errors = 0;
+  
+  // Truncate to the hour for idempotency - multiple runs within same hour will conflict
+  const hourTimestamp = new Date();
+  hourTimestamp.setMinutes(0, 0, 0);
 
   try {
     const people = await db.select().from(trackedPeople);
@@ -67,6 +71,7 @@ export async function captureHourlySnapshots(): Promise<{ captured: number; erro
 
         await db.insert(trendSnapshots).values({
           personId: person.id,
+          timestamp: hourTimestamp, // Truncated to hour for idempotency
           trendScore: scoreResult.trendScore,
           newsCount: news?.articleCount24h || 0,
           searchVolume: serper?.searchVolume || 0,
@@ -83,7 +88,7 @@ export async function captureHourlySnapshots(): Promise<{ captured: number; erro
           confidence: scoreResult.confidence,
           momentum: scoreResult.momentum,
           drivers: scoreResult.drivers,
-        });
+        }).onConflictDoNothing();
 
         captured++;
       } catch (error) {
@@ -103,7 +108,15 @@ export async function captureHourlySnapshots(): Promise<{ captured: number; erro
 
 let snapshotInterval: NodeJS.Timeout | null = null;
 
+// Serverless mode detection
+const SERVERLESS_MODE = process.env.SERVERLESS_MODE === "true" || process.env.VERCEL === "1";
+
 export function startSnapshotScheduler(intervalMs: number = 60 * 60 * 1000) {
+  if (SERVERLESS_MODE) {
+    console.log("[Snapshot] Skipped - serverless mode enabled. Use /api/cron/capture-snapshots instead.");
+    return;
+  }
+  
   console.log(`[Snapshot] Starting scheduler (interval: ${intervalMs / 1000 / 60} minutes)`);
   
   captureHourlySnapshots();
