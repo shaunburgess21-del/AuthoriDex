@@ -37,7 +37,13 @@ function Router() {
       <Route path="/me/favorites" component={FavoritesPage} />
       <Route path="/me/settings" component={SettingsPage} />
       <Route path="/u/:username" component={PublicProfilePage} />
-      <Route path="/admin-test" component={AdminTestPage} />
+      <Route path="/admin-test">
+        {() => (
+          <div className="min-h-screen flex items-center justify-center bg-green-100">
+            <h1 className="text-4xl font-bold text-green-600">INLINE TEST SUCCESS</h1>
+          </div>
+        )}
+      </Route>
       <Route path="/admin" component={AdminDashboard} />
       <Route component={NotFound} />
     </Switch>
