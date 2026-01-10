@@ -22,6 +22,7 @@ import AdminTestPage from "@/pages/AdminTestPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
+  console.log("--- ROUTER VERSION CHECK: UPDATED ---");
   return (
     <Switch>
       <Route path="/" component={HomePage} />
