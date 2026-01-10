@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 import { 
   LayoutDashboard, 
   Users, 
@@ -33,6 +34,8 @@ import {
   Eye,
   MoreHorizontal,
   Loader2,
+  MessageSquare,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,11 +52,19 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
-type AdminSection = "overview" | "cms" | "settlement" | "users" | "tools";
+type AdminSection = "overview" | "celebrities" | "cms" | "moderation" | "settlement" | "users" | "tools";
 
 interface AdminStats {
   totalUsers: number;
@@ -95,6 +106,86 @@ interface PredictionMarket {
   createdAt: string;
 }
 
+interface AuditLogEntry {
+  id: string;
+  adminId: string;
+  adminEmail: string;
+  actionType: string;
+  targetTable: string;
+  targetId: string | null;
+  previousData: any;
+  newData: any;
+  metadata: any;
+  createdAt: string;
+}
+
+interface Celebrity {
+  id: string;
+  name: string;
+  category: string;
+  status: string;
+  avatar: string | null;
+  wikiSlug: string | null;
+  xHandle: string | null;
+  displayOrder: number;
+}
+
+interface FaceOff {
+  id: string;
+  title: string;
+  category: string;
+  optionAText: string;
+  optionAImage: string | null;
+  optionBText: string;
+  optionBImage: string | null;
+  isActive: boolean;
+  displayOrder: number;
+  createdAt: string;
+}
+
+interface CommunityInsight {
+  id: string;
+  personId: string;
+  userId: string;
+  content: string;
+  createdAt: string;
+  upvotes: number;
+  downvotes: number;
+}
+
+interface InsightComment {
+  id: string;
+  insightId: string;
+  userId: string;
+  content: string;
+  createdAt: string;
+}
+
+// Helper function to get auth headers
+async function getAuthHeaders(): Promise<HeadersInit> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error("Not authenticated");
+  }
+  return {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${session.access_token}`,
+  };
+}
+
+// Fetch with auth helper
+async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
+  const headers = await getAuthHeaders();
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...headers,
+      ...options.headers,
+    },
+    credentials: "include",
+  });
+}
+
 export default function AdminDashboard() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -102,10 +193,34 @@ export default function AdminDashboard() {
   const { user, isAdmin, profileLoading, profile } = useAuth();
   const [activeSection, setActiveSection] = useState<AdminSection>("overview");
   const [searchQuery, setSearchQuery] = useState("");
+  const [celebritySearch, setCelebritySearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [creditAdjustment, setCreditAdjustment] = useState({ amount: 0, reason: "" });
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  
+  const [showCelebrityModal, setShowCelebrityModal] = useState(false);
+  const [editingCelebrity, setEditingCelebrity] = useState<Celebrity | null>(null);
+  const [celebrityForm, setCelebrityForm] = useState({
+    name: "",
+    category: "Tech",
+    status: "main_leaderboard",
+    wikiSlug: "",
+    xHandle: "",
+  });
+  
+  const [showFaceOffModal, setShowFaceOffModal] = useState(false);
+  const [editingFaceOff, setEditingFaceOff] = useState<FaceOff | null>(null);
+  const [faceOffForm, setFaceOffForm] = useState({
+    title: "",
+    category: "Tech",
+    optionAText: "",
+    optionBText: "",
+    isActive: true,
+  });
+  
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; name: string } | null>(null);
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS (React rules of hooks)
   
@@ -113,7 +228,7 @@ export default function AdminDashboard() {
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<AdminStats>({
     queryKey: ["/api/admin/stats"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/stats", { credentials: "include" });
+      const res = await fetchWithAuth("/api/admin/stats");
       if (!res.ok) throw new Error("Failed to fetch admin stats");
       return res.json();
     },
@@ -128,7 +243,7 @@ export default function AdminDashboard() {
       const params = new URLSearchParams();
       if (searchQuery) params.set("search", searchQuery);
       const url = `/api/admin/users${params.toString() ? `?${params.toString()}` : ""}`;
-      const res = await fetch(url, { credentials: "include" });
+      const res = await fetchWithAuth(url);
       if (!res.ok) throw new Error("Failed to fetch users");
       return res.json();
     },
@@ -139,7 +254,7 @@ export default function AdminDashboard() {
   const { data: markets, isLoading: marketsLoading } = useQuery<PredictionMarket[]>({
     queryKey: ["/api/admin/markets"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/markets", { credentials: "include" });
+      const res = await fetchWithAuth("/api/admin/markets");
       if (!res.ok) throw new Error("Failed to fetch markets");
       return res.json();
     },
@@ -150,17 +265,73 @@ export default function AdminDashboard() {
   const { data: trafficStats, isLoading: trafficLoading, refetch: refetchTraffic } = useQuery<TrafficStats>({
     queryKey: ["/api/admin/traffic"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/traffic", { credentials: "include" });
+      const res = await fetchWithAuth("/api/admin/traffic");
       if (!res.ok) throw new Error("Failed to fetch traffic stats");
       return res.json();
     },
     enabled: isAdmin && activeSection === "overview",
   });
 
+  // Fetch audit logs - only when admin and on overview section
+  const { data: auditLogs, isLoading: auditLogsLoading } = useQuery<AuditLogEntry[]>({
+    queryKey: ["/api/admin/audit-log"],
+    queryFn: async () => {
+      const res = await fetchWithAuth("/api/admin/audit-log");
+      if (!res.ok) throw new Error("Failed to fetch audit logs");
+      return res.json();
+    },
+    enabled: isAdmin && activeSection === "overview",
+  });
+
+  // Fetch celebrities - only when admin and on celebrities section
+  const { data: celebrities, isLoading: celebritiesLoading } = useQuery<Celebrity[]>({
+    queryKey: ["/api/admin/celebrities"],
+    queryFn: async () => {
+      const res = await fetchWithAuth("/api/admin/celebrities");
+      if (!res.ok) throw new Error("Failed to fetch celebrities");
+      return res.json();
+    },
+    enabled: isAdmin && activeSection === "celebrities",
+  });
+
+  // Fetch face-offs - only when admin and on cms section
+  const { data: faceOffs, isLoading: faceOffsLoading } = useQuery<FaceOff[]>({
+    queryKey: ["/api/admin/face-offs"],
+    queryFn: async () => {
+      const res = await fetchWithAuth("/api/admin/face-offs");
+      if (!res.ok) throw new Error("Failed to fetch face-offs");
+      return res.json();
+    },
+    enabled: isAdmin && activeSection === "cms",
+  });
+
+  // Fetch insights for moderation
+  const { data: moderationInsights, isLoading: insightsLoading } = useQuery<CommunityInsight[]>({
+    queryKey: ["/api/admin/moderation/insights"],
+    queryFn: async () => {
+      const res = await fetchWithAuth("/api/admin/moderation/insights");
+      if (!res.ok) throw new Error("Failed to fetch insights");
+      return res.json();
+    },
+    enabled: isAdmin && activeSection === "moderation",
+  });
+
+  // Fetch comments for moderation
+  const { data: moderationComments, isLoading: commentsLoading } = useQuery<InsightComment[]>({
+    queryKey: ["/api/admin/moderation/comments"],
+    queryFn: async () => {
+      const res = await fetchWithAuth("/api/admin/moderation/comments");
+      if (!res.ok) throw new Error("Failed to fetch comments");
+      return res.json();
+    },
+    enabled: isAdmin && activeSection === "moderation",
+  });
+
   // System tool mutations
   const refreshDataMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/admin/refresh-data");
+      const res = await fetchWithAuth("/api/admin/refresh-data", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to refresh data");
       return res.json();
     },
     onSuccess: (data: any) => {
@@ -181,7 +352,8 @@ export default function AdminDashboard() {
 
   const runScoringMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/admin/run-scoring");
+      const res = await fetchWithAuth("/api/admin/run-scoring", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to run scoring");
       return res.json();
     },
     onSuccess: (data: any) => {
@@ -202,7 +374,8 @@ export default function AdminDashboard() {
 
   const captureSnapshotsMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/admin/capture-snapshots");
+      const res = await fetchWithAuth("/api/admin/capture-snapshots", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to capture snapshots");
       return res.json();
     },
     onSuccess: (data: any) => {
@@ -223,7 +396,11 @@ export default function AdminDashboard() {
   // Credit adjustment mutation
   const adjustCreditsMutation = useMutation({
     mutationFn: async (params: { userId: string; amount: number; reason: string }) => {
-      const res = await apiRequest("POST", "/api/admin/adjust-credits", params);
+      const res = await fetchWithAuth("/api/admin/adjust-credits", { 
+        method: "POST", 
+        body: JSON.stringify(params) 
+      });
+      if (!res.ok) throw new Error("Failed to adjust credits");
       return res.json();
     },
     onSuccess: () => {
@@ -249,7 +426,11 @@ export default function AdminDashboard() {
   // Ban user mutation
   const banUserMutation = useMutation({
     mutationFn: async (params: { userId: string; reason: string }) => {
-      const res = await apiRequest("POST", "/api/admin/ban-user", params);
+      const res = await fetchWithAuth("/api/admin/ban-user", { 
+        method: "POST", 
+        body: JSON.stringify(params) 
+      });
+      if (!res.ok) throw new Error("Failed to ban user");
       return res.json();
     },
     onSuccess: () => {
@@ -265,6 +446,161 @@ export default function AdminDashboard() {
         description: error.message,
         variant: "destructive",
       });
+    },
+  });
+
+  // Celebrity mutations
+  const createCelebrityMutation = useMutation({
+    mutationFn: async (data: typeof celebrityForm) => {
+      const res = await fetchWithAuth("/api/admin/celebrities", { 
+        method: "POST", 
+        body: JSON.stringify(data) 
+      });
+      if (!res.ok) throw new Error("Failed to create celebrity");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Celebrity Created", description: "New celebrity added successfully" });
+      setShowCelebrityModal(false);
+      setEditingCelebrity(null);
+      setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Create Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateCelebrityMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: typeof celebrityForm }) => {
+      const res = await fetchWithAuth(`/api/admin/celebrities/${id}`, { 
+        method: "PATCH", 
+        body: JSON.stringify(data) 
+      });
+      if (!res.ok) throw new Error("Failed to update celebrity");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Celebrity Updated", description: "Celebrity updated successfully" });
+      setShowCelebrityModal(false);
+      setEditingCelebrity(null);
+      setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteCelebrityMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetchWithAuth(`/api/admin/celebrities/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete celebrity");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Celebrity Deleted", description: "Celebrity removed successfully" });
+      setShowDeleteConfirm(false);
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Face-Off mutations
+  const createFaceOffMutation = useMutation({
+    mutationFn: async (data: typeof faceOffForm) => {
+      const res = await fetchWithAuth("/api/admin/face-offs", { 
+        method: "POST", 
+        body: JSON.stringify(data) 
+      });
+      if (!res.ok) throw new Error("Failed to create face-off");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Face-Off Created", description: "New face-off added successfully" });
+      setShowFaceOffModal(false);
+      setEditingFaceOff(null);
+      setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", isActive: true });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/face-offs"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Create Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateFaceOffMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: typeof faceOffForm }) => {
+      const res = await fetchWithAuth(`/api/admin/face-offs/${id}`, { 
+        method: "PATCH", 
+        body: JSON.stringify(data) 
+      });
+      if (!res.ok) throw new Error("Failed to update face-off");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Face-Off Updated", description: "Face-off updated successfully" });
+      setShowFaceOffModal(false);
+      setEditingFaceOff(null);
+      setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", isActive: true });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/face-offs"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteFaceOffMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetchWithAuth(`/api/admin/face-offs/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete face-off");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Face-Off Deleted", description: "Face-off removed successfully" });
+      setShowDeleteConfirm(false);
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/face-offs"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Moderation mutations
+  const deleteInsightMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetchWithAuth(`/api/admin/moderation/insights/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete insight");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Insight Deleted", description: "Insight removed successfully" });
+      setShowDeleteConfirm(false);
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/moderation/insights"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteCommentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetchWithAuth(`/api/admin/moderation/comments/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete comment");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Comment Deleted", description: "Comment removed successfully" });
+      setShowDeleteConfirm(false);
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/moderation/comments"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -337,7 +673,9 @@ export default function AdminDashboard() {
 
   const sidebarItems = [
     { id: "overview" as const, label: "Overview", icon: LayoutDashboard },
+    { id: "celebrities" as const, label: "Celebrities", icon: Star },
     { id: "cms" as const, label: "Game CMS", icon: Gamepad2 },
+    { id: "moderation" as const, label: "Moderation", icon: Shield },
     { id: "settlement" as const, label: "Settlement", icon: Gavel },
     { id: "users" as const, label: "Users", icon: Users },
     { id: "tools" as const, label: "System Tools", icon: Settings },
@@ -350,6 +688,72 @@ export default function AdminDashboard() {
       amount: creditAdjustment.amount,
       reason: creditAdjustment.reason,
     });
+  };
+
+  const openEditCelebrity = (celebrity: Celebrity) => {
+    setEditingCelebrity(celebrity);
+    setCelebrityForm({
+      name: celebrity.name,
+      category: celebrity.category,
+      status: celebrity.status,
+      wikiSlug: celebrity.wikiSlug || "",
+      xHandle: celebrity.xHandle || "",
+    });
+    setShowCelebrityModal(true);
+  };
+
+  const openEditFaceOff = (faceOff: FaceOff) => {
+    setEditingFaceOff(faceOff);
+    setFaceOffForm({
+      title: faceOff.title,
+      category: faceOff.category,
+      optionAText: faceOff.optionAText,
+      optionBText: faceOff.optionBText,
+      isActive: faceOff.isActive,
+    });
+    setShowFaceOffModal(true);
+  };
+
+  const handleSaveCelebrity = () => {
+    if (editingCelebrity) {
+      updateCelebrityMutation.mutate({ id: editingCelebrity.id, data: celebrityForm });
+    } else {
+      createCelebrityMutation.mutate(celebrityForm);
+    }
+  };
+
+  const handleSaveFaceOff = () => {
+    if (editingFaceOff) {
+      updateFaceOffMutation.mutate({ id: editingFaceOff.id, data: faceOffForm });
+    } else {
+      createFaceOffMutation.mutate(faceOffForm);
+    }
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!deleteTarget) return;
+    if (deleteTarget.type === "celebrity") {
+      deleteCelebrityMutation.mutate(deleteTarget.id);
+    } else if (deleteTarget.type === "faceoff") {
+      deleteFaceOffMutation.mutate(deleteTarget.id);
+    } else if (deleteTarget.type === "insight") {
+      deleteInsightMutation.mutate(deleteTarget.id);
+    } else if (deleteTarget.type === "comment") {
+      deleteCommentMutation.mutate(deleteTarget.id);
+    }
+  };
+
+  const filteredCelebrities = celebrities?.filter(c => 
+    celebritySearch === "" || 
+    c.name.toLowerCase().includes(celebritySearch.toLowerCase()) ||
+    c.category.toLowerCase().includes(celebritySearch.toLowerCase())
+  );
+
+  const getActionBadgeColor = (actionType: string) => {
+    if (actionType.startsWith("CREATE")) return "bg-emerald-500/20 text-emerald-400";
+    if (actionType.startsWith("UPDATE")) return "bg-amber-500/20 text-amber-400";
+    if (actionType.startsWith("DELETE")) return "bg-red-500/20 text-red-400";
+    return "bg-violet-500/20 text-violet-400";
   };
 
   return (
@@ -578,17 +982,175 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
-            {/* Recent Activity Placeholder */}
+            {/* Audit Log Viewer */}
             <Card>
               <CardHeader>
                 <CardTitle>Recent Admin Activity</CardTitle>
                 <CardDescription>Latest actions from admin audit log</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  <Activity className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p>Activity log will appear here</p>
-                </div>
+                {auditLogsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                ) : auditLogs && auditLogs.length > 0 ? (
+                  <div className="space-y-3" data-testid="audit-log-list">
+                    {auditLogs.slice(0, 10).map((log) => (
+                      <div
+                        key={log.id}
+                        className="flex items-center justify-between p-3 rounded-lg border"
+                        data-testid={`audit-log-${log.id}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Badge className={cn("text-xs", getActionBadgeColor(log.actionType))}>
+                            {log.actionType}
+                          </Badge>
+                          <div>
+                            <p className="text-sm font-medium">{log.targetTable}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Admin: {log.adminEmail || log.adminId}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(log.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Activity className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No audit log entries yet</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Celebrities Section */}
+        {activeSection === "celebrities" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold">Celebrities</h2>
+                <p className="text-muted-foreground">Manage tracked celebrities and influencers</p>
+              </div>
+              <Button 
+                onClick={() => {
+                  setEditingCelebrity(null);
+                  setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "" });
+                  setShowCelebrityModal(true);
+                }}
+                data-testid="button-add-celebrity"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Celebrity
+              </Button>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name or category..."
+                  value={celebritySearch}
+                  onChange={(e) => setCelebritySearch(e.target.value)}
+                  className="pl-10"
+                  data-testid="input-celebrity-search"
+                />
+              </div>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Celebrity List</CardTitle>
+                <CardDescription>
+                  {filteredCelebrities ? `${filteredCelebrities.length} celebrities found` : "Loading..."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {celebritiesLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                ) : filteredCelebrities && filteredCelebrities.length > 0 ? (
+                  <div className="space-y-3" data-testid="celebrity-list">
+                    {filteredCelebrities.map((celebrity) => (
+                      <div
+                        key={celebrity.id}
+                        className="flex items-center justify-between p-3 rounded-lg border"
+                        data-testid={`celebrity-row-${celebrity.id}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {celebrity.avatar ? (
+                            <img 
+                              src={celebrity.avatar} 
+                              alt={celebrity.name} 
+                              className="h-10 w-10 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                              <Star className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div>
+                            <p className="font-medium">{celebrity.name}</p>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Badge variant="outline" className="text-xs">{celebrity.category}</Badge>
+                              <Badge 
+                                variant={celebrity.status === "main_leaderboard" ? "default" : "secondary"}
+                                className="text-xs"
+                              >
+                                {celebrity.status === "main_leaderboard" ? "Main" : "Induction"}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEditCelebrity(celebrity)}
+                            data-testid={`button-edit-celebrity-${celebrity.id}`}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => {
+                              setDeleteTarget({ type: "celebrity", id: celebrity.id, name: celebrity.name });
+                              setShowDeleteConfirm(true);
+                            }}
+                            data-testid={`button-delete-celebrity-${celebrity.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Star className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No celebrities found</p>
+                    <Button 
+                      className="mt-4" 
+                      onClick={() => {
+                        setEditingCelebrity(null);
+                        setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "" });
+                        setShowCelebrityModal(true);
+                      }}
+                      data-testid="button-create-first-celebrity"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add First Celebrity
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -683,16 +1245,90 @@ export default function AdminDashboard() {
 
               <TabsContent value="faceoffs" className="mt-4">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Face-Off Queue</CardTitle>
-                    <CardDescription>Manage and reorder Face-Off voting questions</CardDescription>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle>Face-Off Queue</CardTitle>
+                      <CardDescription>Manage Face-Off voting questions</CardDescription>
+                    </div>
+                    <Button 
+                      size="sm"
+                      onClick={() => {
+                        setEditingFaceOff(null);
+                        setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", isActive: true });
+                        setShowFaceOffModal(true);
+                      }}
+                      data-testid="button-add-faceoff"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Face-Off
+                    </Button>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-center py-8 text-muted-foreground">
-                      <ArrowUpDown className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>Drag and drop to reorder Face-Offs</p>
-                      <p className="text-sm mt-1">Feature coming soon</p>
-                    </div>
+                    {faceOffsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : faceOffs && faceOffs.length > 0 ? (
+                      <div className="space-y-3" data-testid="faceoff-list">
+                        {faceOffs.map((faceOff) => (
+                          <div
+                            key={faceOff.id}
+                            className="flex items-center justify-between p-3 rounded-lg border"
+                            data-testid={`faceoff-row-${faceOff.id}`}
+                          >
+                            <div className="flex-1">
+                              <p className="font-medium">{faceOff.title}</p>
+                              <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                                <Badge variant="outline" className="text-xs">{faceOff.category}</Badge>
+                                <span>{faceOff.optionAText} vs {faceOff.optionBText}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Badge variant={faceOff.isActive ? "default" : "secondary"}>
+                                {faceOff.isActive ? "Active" : "Inactive"}
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openEditFaceOff(faceOff)}
+                                data-testid={`button-edit-faceoff-${faceOff.id}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => {
+                                  setDeleteTarget({ type: "faceoff", id: faceOff.id, name: faceOff.title });
+                                  setShowDeleteConfirm(true);
+                                }}
+                                data-testid={`button-delete-faceoff-${faceOff.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <ArrowUpDown className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p>No face-offs yet</p>
+                        <Button 
+                          className="mt-4" 
+                          onClick={() => {
+                            setEditingFaceOff(null);
+                            setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", isActive: true });
+                            setShowFaceOffModal(true);
+                          }}
+                          data-testid="button-create-first-faceoff"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create First Face-Off
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -708,6 +1344,134 @@ export default function AdminDashboard() {
                       <UserCheck className="h-12 w-12 mx-auto mb-3 opacity-50" />
                       <p>No pending induction candidates</p>
                     </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+        )}
+
+        {/* Moderation Section */}
+        {activeSection === "moderation" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold">Content Moderation</h2>
+              <p className="text-muted-foreground">Review and moderate user-generated content</p>
+            </div>
+
+            <Tabs defaultValue="insights" className="w-full">
+              <TabsList>
+                <TabsTrigger value="insights" data-testid="tab-insights">
+                  Insights
+                </TabsTrigger>
+                <TabsTrigger value="comments" data-testid="tab-comments">
+                  Comments
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="insights" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Community Insights</CardTitle>
+                    <CardDescription>User-generated insights and posts</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {insightsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : moderationInsights && moderationInsights.length > 0 ? (
+                      <div className="space-y-3" data-testid="insights-list">
+                        {moderationInsights.map((insight) => (
+                          <div
+                            key={insight.id}
+                            className="flex items-start justify-between p-3 rounded-lg border"
+                            data-testid={`insight-row-${insight.id}`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm line-clamp-2">{insight.content}</p>
+                              <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                                <span>User: {insight.userId}</span>
+                                <span>•</span>
+                                <span>{new Date(insight.createdAt).toLocaleString()}</span>
+                                <span>•</span>
+                                <span className="text-emerald-500">+{insight.upvotes}</span>
+                                <span className="text-red-500">-{insight.downvotes}</span>
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive ml-2"
+                              onClick={() => {
+                                setDeleteTarget({ type: "insight", id: insight.id, name: "this insight" });
+                                setShowDeleteConfirm(true);
+                              }}
+                              data-testid={`button-delete-insight-${insight.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p>No insights to moderate</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="comments" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Comments</CardTitle>
+                    <CardDescription>Comments on insights and posts</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {commentsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : moderationComments && moderationComments.length > 0 ? (
+                      <div className="space-y-3" data-testid="comments-list">
+                        {moderationComments.map((comment) => (
+                          <div
+                            key={comment.id}
+                            className="flex items-start justify-between p-3 rounded-lg border"
+                            data-testid={`comment-row-${comment.id}`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm line-clamp-2">{comment.content}</p>
+                              <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                                <span>User: {comment.userId}</span>
+                                <span>•</span>
+                                <span>{new Date(comment.createdAt).toLocaleString()}</span>
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive ml-2"
+                              onClick={() => {
+                                setDeleteTarget({ type: "comment", id: comment.id, name: "this comment" });
+                                setShowDeleteConfirm(true);
+                              }}
+                              data-testid={`button-delete-comment-${comment.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p>No comments to moderate</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -1066,6 +1830,237 @@ export default function AdminDashboard() {
                 </>
               ) : (
                 "Confirm Adjustment"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Celebrity Modal */}
+      <Dialog open={showCelebrityModal} onOpenChange={setShowCelebrityModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingCelebrity ? "Edit Celebrity" : "Add Celebrity"}</DialogTitle>
+            <DialogDescription>
+              {editingCelebrity ? "Update celebrity information" : "Add a new celebrity to track"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="celeb-name">Name</Label>
+              <Input
+                id="celeb-name"
+                value={celebrityForm.name}
+                onChange={(e) => setCelebrityForm({ ...celebrityForm, name: e.target.value })}
+                placeholder="Celebrity name"
+                data-testid="input-celebrity-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="celeb-category">Category</Label>
+              <Select 
+                value={celebrityForm.category} 
+                onValueChange={(value) => setCelebrityForm({ ...celebrityForm, category: value })}
+              >
+                <SelectTrigger data-testid="select-celebrity-category">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Tech">Tech</SelectItem>
+                  <SelectItem value="Entertainment">Entertainment</SelectItem>
+                  <SelectItem value="Sports">Sports</SelectItem>
+                  <SelectItem value="Politics">Politics</SelectItem>
+                  <SelectItem value="Business">Business</SelectItem>
+                  <SelectItem value="Music">Music</SelectItem>
+                  <SelectItem value="Science">Science</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="celeb-status">Status</Label>
+              <Select 
+                value={celebrityForm.status} 
+                onValueChange={(value) => setCelebrityForm({ ...celebrityForm, status: value })}
+              >
+                <SelectTrigger data-testid="select-celebrity-status">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="main_leaderboard">Main Leaderboard</SelectItem>
+                  <SelectItem value="induction_queue">Induction Queue</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="celeb-wiki">Wikipedia Slug (optional)</Label>
+              <Input
+                id="celeb-wiki"
+                value={celebrityForm.wikiSlug}
+                onChange={(e) => setCelebrityForm({ ...celebrityForm, wikiSlug: e.target.value })}
+                placeholder="e.g., Elon_Musk"
+                data-testid="input-celebrity-wiki"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="celeb-x">X Handle (optional)</Label>
+              <Input
+                id="celeb-x"
+                value={celebrityForm.xHandle}
+                onChange={(e) => setCelebrityForm({ ...celebrityForm, xHandle: e.target.value })}
+                placeholder="e.g., @elonmusk"
+                data-testid="input-celebrity-xhandle"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCelebrityModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveCelebrity}
+              disabled={!celebrityForm.name || createCelebrityMutation.isPending || updateCelebrityMutation.isPending}
+              data-testid="button-save-celebrity"
+            >
+              {(createCelebrityMutation.isPending || updateCelebrityMutation.isPending) ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                editingCelebrity ? "Update Celebrity" : "Add Celebrity"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Face-Off Modal */}
+      <Dialog open={showFaceOffModal} onOpenChange={setShowFaceOffModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingFaceOff ? "Edit Face-Off" : "Create Face-Off"}</DialogTitle>
+            <DialogDescription>
+              {editingFaceOff ? "Update face-off details" : "Create a new face-off voting question"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="faceoff-title">Title</Label>
+              <Input
+                id="faceoff-title"
+                value={faceOffForm.title}
+                onChange={(e) => setFaceOffForm({ ...faceOffForm, title: e.target.value })}
+                placeholder="Face-off title"
+                data-testid="input-faceoff-title"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="faceoff-category">Category</Label>
+              <Select 
+                value={faceOffForm.category} 
+                onValueChange={(value) => setFaceOffForm({ ...faceOffForm, category: value })}
+              >
+                <SelectTrigger data-testid="select-faceoff-category">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Tech">Tech</SelectItem>
+                  <SelectItem value="Entertainment">Entertainment</SelectItem>
+                  <SelectItem value="Sports">Sports</SelectItem>
+                  <SelectItem value="Politics">Politics</SelectItem>
+                  <SelectItem value="Business">Business</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="faceoff-option-a">Option A</Label>
+              <Input
+                id="faceoff-option-a"
+                value={faceOffForm.optionAText}
+                onChange={(e) => setFaceOffForm({ ...faceOffForm, optionAText: e.target.value })}
+                placeholder="First option"
+                data-testid="input-faceoff-option-a"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="faceoff-option-b">Option B</Label>
+              <Input
+                id="faceoff-option-b"
+                value={faceOffForm.optionBText}
+                onChange={(e) => setFaceOffForm({ ...faceOffForm, optionBText: e.target.value })}
+                placeholder="Second option"
+                data-testid="input-faceoff-option-b"
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="faceoff-active"
+                checked={faceOffForm.isActive}
+                onCheckedChange={(checked) => setFaceOffForm({ ...faceOffForm, isActive: checked })}
+                data-testid="switch-faceoff-active"
+              />
+              <Label htmlFor="faceoff-active">Active</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowFaceOffModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveFaceOff}
+              disabled={
+                !faceOffForm.title || 
+                !faceOffForm.optionAText || 
+                !faceOffForm.optionBText || 
+                createFaceOffMutation.isPending || 
+                updateFaceOffMutation.isPending
+              }
+              data-testid="button-save-faceoff"
+            >
+              {(createFaceOffMutation.isPending || updateFaceOffMutation.isPending) ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                editingFaceOff ? "Update Face-Off" : "Create Face-Off"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Delete</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {deleteTarget?.name}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={
+                deleteCelebrityMutation.isPending || 
+                deleteFaceOffMutation.isPending || 
+                deleteInsightMutation.isPending || 
+                deleteCommentMutation.isPending
+              }
+              data-testid="button-confirm-delete"
+            >
+              {(deleteCelebrityMutation.isPending || deleteFaceOffMutation.isPending || deleteInsightMutation.isPending || deleteCommentMutation.isPending) ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
               )}
             </Button>
           </DialogFooter>

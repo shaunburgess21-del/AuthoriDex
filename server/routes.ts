@@ -1802,6 +1802,551 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
     }
   });
 
+  // Get audit log entries
+  app.get("/api/admin/audit-log", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { limit: limitParam, actionType, targetTable } = req.query;
+      const limitNum = Math.min(parseInt(limitParam as string) || 50, 200);
+      
+      let query = db.select().from(adminAuditLog).orderBy(desc(adminAuditLog.createdAt)).limit(limitNum);
+      
+      const logs = await query;
+      
+      // Filter in JS for simplicity (small dataset)
+      let filteredLogs = logs;
+      if (actionType && typeof actionType === 'string') {
+        filteredLogs = filteredLogs.filter(log => log.actionType === actionType);
+      }
+      if (targetTable && typeof targetTable === 'string') {
+        filteredLogs = filteredLogs.filter(log => log.targetTable === targetTable);
+      }
+      
+      res.json(filteredLogs);
+    } catch (error: any) {
+      console.error("Error fetching audit log:", error.message);
+      res.status(500).json({ error: "Failed to fetch audit log" });
+    }
+  });
+
+  // Get all celebrities for management
+  app.get("/api/admin/celebrities", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { search, status } = req.query;
+      
+      let celebrities = await db.select().from(trackedPeople).orderBy(trackedPeople.name);
+      
+      if (search && typeof search === 'string') {
+        const searchLower = search.toLowerCase();
+        celebrities = celebrities.filter(c => 
+          c.name.toLowerCase().includes(searchLower) ||
+          (c.category && c.category.toLowerCase().includes(searchLower))
+        );
+      }
+      
+      if (status && typeof status === 'string') {
+        celebrities = celebrities.filter(c => c.status === status);
+      }
+      
+      res.json(celebrities);
+    } catch (error: any) {
+      console.error("Error fetching celebrities:", error.message);
+      res.status(500).json({ error: "Failed to fetch celebrities" });
+    }
+  });
+
+  // Update celebrity
+  app.patch("/api/admin/celebrities/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { name, category, status, wikiSlug, xHandle, avatar } = req.body;
+      const adminId = req.userId!;
+      
+      const [existing] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Celebrity not found" });
+      }
+      
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (category !== undefined) updates.category = category;
+      if (status !== undefined) updates.status = status;
+      if (wikiSlug !== undefined) updates.wikiSlug = wikiSlug;
+      if (xHandle !== undefined) updates.xHandle = xHandle;
+      if (avatar !== undefined) updates.avatar = avatar;
+      
+      await db.update(trackedPeople).set(updates).where(eq(trackedPeople.id, id));
+      
+      // Audit log
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'update_celebrity',
+        targetTable: 'tracked_people',
+        targetId: id,
+        previousData: existing,
+        newData: updates,
+      });
+      
+      const [updated] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, id));
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating celebrity:", error.message);
+      res.status(500).json({ error: "Failed to update celebrity" });
+    }
+  });
+
+  // Delete celebrity
+  app.delete("/api/admin/celebrities/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const adminId = req.userId!;
+      
+      const [existing] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Celebrity not found" });
+      }
+      
+      await db.delete(trackedPeople).where(eq(trackedPeople.id, id));
+      
+      // Audit log
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'delete_celebrity',
+        targetTable: 'tracked_people',
+        targetId: id,
+        previousData: existing,
+      });
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting celebrity:", error.message);
+      res.status(500).json({ error: "Failed to delete celebrity" });
+    }
+  });
+
+  // Add new celebrity
+  app.post("/api/admin/celebrities", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { name, category, status, wikiSlug, xHandle, avatar } = req.body;
+      const adminId = req.userId!;
+      
+      if (!name) {
+        return res.status(400).json({ error: "Name is required" });
+      }
+      
+      const [created] = await db.insert(trackedPeople).values({
+        name,
+        category: category || 'Other',
+        status: status || 'main_leaderboard',
+        wikiSlug: wikiSlug || null,
+        xHandle: xHandle || null,
+        avatar: avatar || null,
+      }).returning();
+      
+      // Audit log
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'create_celebrity',
+        targetTable: 'tracked_people',
+        targetId: created.id,
+        newData: created,
+      });
+      
+      res.json(created);
+    } catch (error: any) {
+      console.error("Error creating celebrity:", error.message);
+      res.status(500).json({ error: "Failed to create celebrity" });
+    }
+  });
+
+  // Get celebrity images for management
+  app.get("/api/admin/celebrities/:id/images", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const images = await db.select().from(celebrityImages)
+        .where(eq(celebrityImages.personId, id))
+        .orderBy(desc(celebrityImages.isPrimary), desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`));
+      res.json(images);
+    } catch (error: any) {
+      console.error("Error fetching celebrity images:", error.message);
+      res.status(500).json({ error: "Failed to fetch images" });
+    }
+  });
+
+  // Add celebrity image
+  app.post("/api/admin/celebrities/:id/images", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { imageUrl, isPrimary } = req.body;
+      const adminId = req.userId!;
+      
+      if (!imageUrl) {
+        return res.status(400).json({ error: "Image URL is required" });
+      }
+      
+      // If setting as primary, unset all other primary images
+      if (isPrimary) {
+        await db.update(celebrityImages).set({ isPrimary: false }).where(eq(celebrityImages.personId, id));
+      }
+      
+      const [created] = await db.insert(celebrityImages).values({
+        personId: id,
+        imageUrl,
+        isPrimary: isPrimary || false,
+      }).returning();
+      
+      // Audit log
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'add_celebrity_image',
+        targetTable: 'celebrity_images',
+        targetId: created.id,
+        newData: created,
+      });
+      
+      res.json(created);
+    } catch (error: any) {
+      console.error("Error adding celebrity image:", error.message);
+      res.status(500).json({ error: "Failed to add image" });
+    }
+  });
+
+  // Delete celebrity image
+  app.delete("/api/admin/celebrities/:id/images/:imageId", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id, imageId } = req.params;
+      const adminId = req.userId!;
+      
+      const [existing] = await db.select().from(celebrityImages)
+        .where(and(eq(celebrityImages.id, imageId), eq(celebrityImages.personId, id)));
+      
+      if (!existing) {
+        return res.status(404).json({ error: "Image not found" });
+      }
+      
+      await db.delete(celebrityImages).where(eq(celebrityImages.id, imageId));
+      
+      // Audit log
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'delete_celebrity_image',
+        targetTable: 'celebrity_images',
+        targetId: imageId,
+        previousData: existing,
+      });
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting celebrity image:", error.message);
+      res.status(500).json({ error: "Failed to delete image" });
+    }
+  });
+
+  // Set primary celebrity image
+  app.post("/api/admin/celebrities/:id/images/:imageId/set-primary", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id, imageId } = req.params;
+      const adminId = req.userId!;
+      
+      // Unset all primary images for this celebrity
+      await db.update(celebrityImages).set({ isPrimary: false }).where(eq(celebrityImages.personId, id));
+      
+      // Set the new primary
+      await db.update(celebrityImages).set({ isPrimary: true }).where(eq(celebrityImages.id, imageId));
+      
+      // Also update the main avatar on tracked_people
+      const [image] = await db.select().from(celebrityImages).where(eq(celebrityImages.id, imageId));
+      if (image) {
+        await db.update(trackedPeople).set({ avatar: image.imageUrl }).where(eq(trackedPeople.id, id));
+      }
+      
+      // Audit log
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'set_primary_image',
+        targetTable: 'celebrity_images',
+        targetId: imageId,
+        metadata: { personId: id },
+      });
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error setting primary image:", error.message);
+      res.status(500).json({ error: "Failed to set primary image" });
+    }
+  });
+
+  // Get community insights for moderation
+  app.get("/api/admin/moderation/insights", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { status } = req.query;
+      
+      let insights = await db.select({
+        id: communityInsights.id,
+        personId: communityInsights.personId,
+        userId: communityInsights.userId,
+        content: communityInsights.content,
+        createdAt: communityInsights.createdAt,
+        upvotes: sql<number>`(SELECT COUNT(*) FROM insight_votes WHERE insight_id = ${communityInsights.id} AND vote_type = 'up')`,
+        downvotes: sql<number>`(SELECT COUNT(*) FROM insight_votes WHERE insight_id = ${communityInsights.id} AND vote_type = 'down')`,
+      }).from(communityInsights).orderBy(desc(communityInsights.createdAt)).limit(100);
+      
+      res.json(insights);
+    } catch (error: any) {
+      console.error("Error fetching insights for moderation:", error.message);
+      res.status(500).json({ error: "Failed to fetch insights" });
+    }
+  });
+
+  // Delete community insight (moderation)
+  app.delete("/api/admin/moderation/insights/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const adminId = req.userId!;
+      
+      const [existing] = await db.select().from(communityInsights).where(eq(communityInsights.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Insight not found" });
+      }
+      
+      // Delete associated votes and comments first
+      await db.delete(insightVotes).where(eq(insightVotes.insightId, id));
+      await db.delete(insightComments).where(eq(insightComments.insightId, id));
+      await db.delete(communityInsights).where(eq(communityInsights.id, id));
+      
+      // Audit log
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'delete_insight',
+        targetTable: 'community_insights',
+        targetId: id,
+        previousData: existing,
+        metadata: { reason },
+      });
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting insight:", error.message);
+      res.status(500).json({ error: "Failed to delete insight" });
+    }
+  });
+
+  // Get comments for moderation
+  app.get("/api/admin/moderation/comments", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const comments = await db.select({
+        id: insightComments.id,
+        insightId: insightComments.insightId,
+        userId: insightComments.userId,
+        content: insightComments.content,
+        createdAt: insightComments.createdAt,
+      }).from(insightComments).orderBy(desc(insightComments.createdAt)).limit(100);
+      
+      res.json(comments);
+    } catch (error: any) {
+      console.error("Error fetching comments for moderation:", error.message);
+      res.status(500).json({ error: "Failed to fetch comments" });
+    }
+  });
+
+  // Delete comment (moderation)
+  app.delete("/api/admin/moderation/comments/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const adminId = req.userId!;
+      
+      const [existing] = await db.select().from(insightComments).where(eq(insightComments.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Comment not found" });
+      }
+      
+      // Delete associated votes first
+      await db.delete(commentVotes).where(eq(commentVotes.commentId, id));
+      await db.delete(insightComments).where(eq(insightComments.id, id));
+      
+      // Audit log
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'delete_comment',
+        targetTable: 'insight_comments',
+        targetId: id,
+        previousData: existing,
+        metadata: { reason },
+      });
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting comment:", error.message);
+      res.status(500).json({ error: "Failed to delete comment" });
+    }
+  });
+
+  // Face-Offs CRUD
+  app.get("/api/admin/face-offs", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const faceOffList = await db.select().from(faceOffs).orderBy(faceOffs.displayOrder, desc(faceOffs.createdAt));
+      res.json(faceOffList);
+    } catch (error: any) {
+      console.error("Error fetching face-offs:", error.message);
+      res.status(500).json({ error: "Failed to fetch face-offs" });
+    }
+  });
+
+  app.post("/api/admin/face-offs", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive } = req.body;
+      const adminId = req.userId!;
+      
+      if (!title || !optionAText || !optionBText) {
+        return res.status(400).json({ error: "Title and both options are required" });
+      }
+      
+      // Get next display order
+      const [maxOrder] = await db.select({ max: sql<number>`COALESCE(MAX(display_order), 0)` }).from(faceOffs);
+      const nextOrder = (maxOrder?.max || 0) + 1;
+      
+      const [created] = await db.insert(faceOffs).values({
+        title,
+        category: category || 'General',
+        optionAText,
+        optionAImage: optionAImage || null,
+        optionBText,
+        optionBImage: optionBImage || null,
+        isActive: isActive !== false,
+        displayOrder: nextOrder,
+      }).returning();
+      
+      // Audit log
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'create_faceoff',
+        targetTable: 'face_offs',
+        targetId: created.id,
+        newData: created,
+      });
+      
+      res.json(created);
+    } catch (error: any) {
+      console.error("Error creating face-off:", error.message);
+      res.status(500).json({ error: "Failed to create face-off" });
+    }
+  });
+
+  app.patch("/api/admin/face-offs/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, displayOrder } = req.body;
+      const adminId = req.userId!;
+      
+      const [existing] = await db.select().from(faceOffs).where(eq(faceOffs.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Face-off not found" });
+      }
+      
+      const updates: any = {};
+      if (title !== undefined) updates.title = title;
+      if (category !== undefined) updates.category = category;
+      if (optionAText !== undefined) updates.optionAText = optionAText;
+      if (optionAImage !== undefined) updates.optionAImage = optionAImage;
+      if (optionBText !== undefined) updates.optionBText = optionBText;
+      if (optionBImage !== undefined) updates.optionBImage = optionBImage;
+      if (isActive !== undefined) updates.isActive = isActive;
+      if (displayOrder !== undefined) updates.displayOrder = displayOrder;
+      
+      await db.update(faceOffs).set(updates).where(eq(faceOffs.id, id));
+      
+      // Audit log
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'update_faceoff',
+        targetTable: 'face_offs',
+        targetId: id,
+        previousData: existing,
+        newData: updates,
+      });
+      
+      const [updated] = await db.select().from(faceOffs).where(eq(faceOffs.id, id));
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating face-off:", error.message);
+      res.status(500).json({ error: "Failed to update face-off" });
+    }
+  });
+
+  app.delete("/api/admin/face-offs/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const adminId = req.userId!;
+      
+      const [existing] = await db.select().from(faceOffs).where(eq(faceOffs.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Face-off not found" });
+      }
+      
+      // Delete associated votes first
+      await db.delete(votes).where(and(eq(votes.voteType, 'face_off'), eq(votes.targetId, id)));
+      await db.delete(faceOffs).where(eq(faceOffs.id, id));
+      
+      // Audit log
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'delete_faceoff',
+        targetTable: 'face_offs',
+        targetId: id,
+        previousData: existing,
+      });
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting face-off:", error.message);
+      res.status(500).json({ error: "Failed to delete face-off" });
+    }
+  });
+
+  // Reorder face-offs
+  app.post("/api/admin/face-offs/reorder", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { orderedIds } = req.body;
+      const adminId = req.userId!;
+      
+      if (!Array.isArray(orderedIds)) {
+        return res.status(400).json({ error: "orderedIds must be an array" });
+      }
+      
+      // Update each face-off with its new order
+      for (let i = 0; i < orderedIds.length; i++) {
+        await db.update(faceOffs).set({ displayOrder: i + 1 }).where(eq(faceOffs.id, orderedIds[i]));
+      }
+      
+      // Audit log
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'reorder_faceoffs',
+        targetTable: 'face_offs',
+        targetId: 'bulk',
+        newData: { orderedIds },
+      });
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error reordering face-offs:", error.message);
+      res.status(500).json({ error: "Failed to reorder face-offs" });
+    }
+  });
+
   // ===========================================
   // CRON ENDPOINTS (Serverless/Vercel Compatible)
   // ===========================================

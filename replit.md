@@ -40,14 +40,17 @@ Preferred communication style: Simple, everyday language.
     - **Public Profiles**: `/u/:username` route shows public user profiles with XP progress, voting stats
         - Privacy toggle (isPublic) controls visibility - private profiles show "Private Profile" message
     - **Admin Panel**: `/admin` route for comprehensive site management (admin-only access)
-        - Protected by requireAuth + requireAdmin middleware
-        - **Sidebar Navigation**: Overview, Game CMS, Settlement, Users, System Tools
-        - **Overview**: Stats dashboard (users, celebrities, votes, predictions), quick actions, recent admin activity
-        - **Game CMS**: Prediction market manager (create/edit markets), Face-Off queue ordering, Induction queue approvals
+        - Protected by requireAuth + requireAdmin middleware (validates Supabase JWT)
+        - Frontend uses `fetchWithAuth` helper to send Authorization: Bearer tokens
+        - **Sidebar Navigation**: Overview, Celebrities, Game CMS, Moderation, Settlement, Users, System Tools
+        - **Overview**: Stats dashboard (users, celebrities, votes, predictions), traffic analytics, audit log viewer showing recent admin actions
+        - **Celebrities**: Full CRUD for tracked_people table with search, add/edit/delete modals, category and status management
+        - **Game CMS**: Prediction market manager, Face-Off CRUD with title/category/options, Induction queue approvals
+        - **Moderation**: Content moderation for community insights and comments with delete functionality
         - **Settlement Center**: Resolve closed markets, distribute payouts, view settlement history
         - **Users & Moderation**: Search users, adjust credits (with confirmation modal + "ADJUST" safety), ban users, view user details
         - **System Tools**: Manual triggers for data refresh, scoring engine, snapshot capture
-        - All admin write actions logged to `admin_audit_log` table for audit trail
+        - All admin write actions logged to `admin_audit_log` table for audit trail (13 logging points covering all CRUD operations)
 
 ### Backend
 - **Technology Stack**: Node.js with Express.js, TypeScript, Drizzle ORM.
