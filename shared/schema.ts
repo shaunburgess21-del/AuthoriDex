@@ -420,6 +420,7 @@ export const faceOffs = pgTable("face_offs", {
   optionBText: text("option_b_text").notNull(),
   optionBImage: text("option_b_image"),
   isActive: boolean("is_active").notNull().default(true),
+  displayOrder: integer("display_order").notNull().default(0), // For admin drag-and-drop ordering
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -559,3 +560,139 @@ export const usersRelations = relations(users, ({ many }) => ({
 export const profilesRelations = relations(profiles, ({ many }) => ({
   votes: many(votes),
 }));
+
+// ============================================================================
+// PREDICTION MARKETS TABLES (Admin Dashboard)
+// ============================================================================
+
+// Prediction Markets - Core table for all prediction market types
+export const predictionMarkets = pgTable("prediction_markets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  marketType: text("market_type").notNull(), // 'jackpot', 'updown', 'h2h', 'race', 'gainer', 'community'
+  status: text("status").notNull().default("OPEN"), // 'OPEN', 'CLOSED_PENDING', 'RESOLVED', 'VOID'
+  title: text("title").notNull(),
+  slug: text("slug").notNull().unique(),
+  summary: text("summary"),
+  rules: text("rules"),
+  metadata: jsonb("metadata"), // Flexible: { threshold, metric, jackpotRules, etc. }
+  startAt: timestamp("start_at").notNull().defaultNow(),
+  endAt: timestamp("end_at").notNull(),
+  resolvedAt: timestamp("resolved_at"),
+  voidReason: text("void_reason"),
+  createdBy: varchar("created_by"), // Admin who created it
+  settledBy: varchar("settled_by"), // Admin who settled it
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPredictionMarketSchema = createInsertSchema(predictionMarkets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type PredictionMarket = typeof predictionMarkets.$inferSelect;
+export type InsertPredictionMarket = z.infer<typeof insertPredictionMarketSchema>;
+
+// Market Entries - Options/candidates within a market
+export const marketEntries = pgTable("market_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  marketId: varchar("market_id").notNull().references(() => predictionMarkets.id, { onDelete: "cascade" }),
+  entryType: text("entry_type").notNull().default("custom"), // 'person' (linked to tracked_people) or 'custom'
+  personId: varchar("person_id").references(() => trackedPeople.id), // Nullable - for celebrity-based entries
+  label: text("label").notNull(), // Display name (snapshotted for non-person entries)
+  description: text("description"),
+  displayOrder: integer("display_order").notNull().default(0),
+  totalStake: integer("total_stake").notNull().default(0), // Total credits staked on this entry
+  resolutionStatus: text("resolution_status").notNull().default("pending"), // 'pending', 'winner', 'loser', 'void'
+  resolutionNotes: text("resolution_notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertMarketEntrySchema = createInsertSchema(marketEntries).omit({
+  id: true,
+  createdAt: true,
+  totalStake: true,
+});
+
+export type MarketEntry = typeof marketEntries.$inferSelect;
+export type InsertMarketEntry = z.infer<typeof insertMarketEntrySchema>;
+
+// Market Bets - User stakes on market entries
+export const marketBets = pgTable("market_bets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  marketId: varchar("market_id").notNull().references(() => predictionMarkets.id, { onDelete: "cascade" }),
+  entryId: varchar("entry_id").notNull().references(() => marketEntries.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  stakeAmount: integer("stake_amount").notNull(),
+  potentialPayout: integer("potential_payout"), // Calculated at bet time
+  status: text("status").notNull().default("active"), // 'active', 'won', 'lost', 'void', 'refunded'
+  settledAt: timestamp("settled_at"),
+  payoutAmount: integer("payout_amount"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertMarketBetSchema = createInsertSchema(marketBets).omit({
+  id: true,
+  createdAt: true,
+  settledAt: true,
+  payoutAmount: true,
+});
+
+export type MarketBet = typeof marketBets.$inferSelect;
+export type InsertMarketBet = z.infer<typeof insertMarketBetSchema>;
+
+// Relations for prediction markets
+export const predictionMarketsRelations = relations(predictionMarkets, ({ many }) => ({
+  entries: many(marketEntries),
+  bets: many(marketBets),
+}));
+
+export const marketEntriesRelations = relations(marketEntries, ({ one, many }) => ({
+  market: one(predictionMarkets, {
+    fields: [marketEntries.marketId],
+    references: [predictionMarkets.id],
+  }),
+  person: one(trackedPeople, {
+    fields: [marketEntries.personId],
+    references: [trackedPeople.id],
+  }),
+  bets: many(marketBets),
+}));
+
+export const marketBetsRelations = relations(marketBets, ({ one }) => ({
+  market: one(predictionMarkets, {
+    fields: [marketBets.marketId],
+    references: [predictionMarkets.id],
+  }),
+  entry: one(marketEntries, {
+    fields: [marketBets.entryId],
+    references: [marketEntries.id],
+  }),
+}));
+
+// ============================================================================
+// ADMIN AUDIT LOG (Immutable)
+// ============================================================================
+
+// Admin Audit Log - Immutable record of all admin actions
+export const adminAuditLog = pgTable("admin_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adminId: varchar("admin_id").notNull(), // References profiles.id
+  adminEmail: text("admin_email"), // Cached for quick display
+  actionType: text("action_type").notNull(), // 'ban_user', 'adjust_credits', 'resolve_market', 'create_market', etc.
+  targetTable: text("target_table").notNull(), // 'users', 'prediction_markets', 'face_offs', etc.
+  targetId: varchar("target_id").notNull(),
+  previousData: jsonb("previous_data"), // Snapshot before change
+  newData: jsonb("new_data"), // Snapshot after change
+  metadata: jsonb("metadata"), // Additional context: { reason, ip_address, user_agent, etc. }
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLog).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type AdminAuditLog = typeof adminAuditLog.$inferSelect;
+export type InsertAdminAuditLog = z.infer<typeof insertAdminAuditLogSchema>;
