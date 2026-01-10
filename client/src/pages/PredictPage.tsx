@@ -523,10 +523,10 @@ function SectionHeader({
   rulesTitle?: string;
 }) {
   return (
-    <div className="flex items-center justify-between mb-4 px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm">
+    <div className="flex items-center justify-between mb-2 px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm">
       <div className="flex-1 min-w-0">
         <h2 className="text-lg sm:text-xl font-serif font-bold truncate">{title}</h2>
-        <p className="text-xs sm:text-sm text-muted-foreground truncate">Curated matchups - who will gain more by the end of this week?</p>
+        <p className="text-xs sm:text-sm text-muted-foreground truncate">{subtitle}</p>
       </div>
       <div className="flex items-center gap-2 shrink-0 ml-3">
         {onRulesClick && (
@@ -556,6 +556,53 @@ function SectionHeader({
             <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         )}
+      </div>
+    </div>
+  );
+}
+
+function SectionFilterBar({
+  categoryFilter,
+  onCategoryChange,
+  searchQuery,
+  onSearchChange,
+  searchPlaceholder = "Search...",
+  testIdPrefix
+}: {
+  categoryFilter: CategoryFilter;
+  onCategoryChange: (cat: CategoryFilter) => void;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+  searchPlaceholder?: string;
+  testIdPrefix: string;
+}) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+        {CATEGORY_FILTERS.map((cat) => (
+          <button
+            key={cat.id}
+            onClick={() => onCategoryChange(cat.id)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+              categoryFilter === cat.id
+                ? 'bg-violet-500/20 text-violet-300 border border-violet-400/40 shadow-sm shadow-violet-500/20'
+                : 'bg-slate-800/30 border border-slate-700/40 text-slate-400 hover:border-violet-400/20'
+            }`}
+            data-testid={`${testIdPrefix}-category-${cat.id}`}
+          >
+            {cat.label}
+          </button>
+        ))}
+      </div>
+      <div className="relative sm:ml-auto">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder={searchPlaceholder}
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="pl-10 h-8 w-full sm:w-48 bg-slate-800/30 border-slate-700/40"
+          data-testid={`${testIdPrefix}-search`}
+        />
       </div>
     </div>
   );
@@ -1910,6 +1957,18 @@ export default function PredictPage() {
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [overlaySearchQuery, setOverlaySearchQuery] = useState("");
   const [overlayCategoryFilter, setOverlayCategoryFilter] = useState<CategoryFilter>("all");
+  
+  // Section-specific filters
+  const [updownCategory, setUpdownCategory] = useState<CategoryFilter>("all");
+  const [updownSearch, setUpdownSearch] = useState("");
+  const [h2hCategory, setH2hCategory] = useState<CategoryFilter>("all");
+  const [h2hSearch, setH2hSearch] = useState("");
+  const [racesCategory, setRacesCategory] = useState<CategoryFilter>("all");
+  const [racesSearch, setRacesSearch] = useState("");
+  const [gainerCategory, setGainerCategory] = useState<CategoryFilter>("all");
+  const [gainerSearch, setGainerSearch] = useState("");
+  const [communityCategory, setCommunityCategory] = useState<CategoryFilter>("all");
+  const [communitySearch, setCommunitySearch] = useState("");
   const [walletCredits, setWalletCredits] = useState(10000);
   const [activePredictions, setActivePredictions] = useState(0);
   const [viewAllCategory, setViewAllCategory] = useState<string | null>(null);
@@ -2190,29 +2249,35 @@ export default function PredictPage() {
     });
   };
 
+  // Section-specific filtering logic
   const filteredUpDown = hydratedMarkets.filter(m => 
-    (categoryFilter === "all" || m.category === categoryFilter) &&
-    (!globalSearchQuery || m.personName.toLowerCase().includes(globalSearchQuery.toLowerCase()))
+    (updownCategory === "all" || m.category === updownCategory) &&
+    (!updownSearch || m.personName.toLowerCase().includes(updownSearch.toLowerCase()))
   );
 
   const filteredH2H = hydratedH2H.filter(m => 
-    (categoryFilter === "all" || m.category === categoryFilter) &&
-    (!globalSearchQuery || m.title.toLowerCase().includes(globalSearchQuery.toLowerCase()))
+    (h2hCategory === "all" || m.category === h2hCategory) &&
+    (!h2hSearch || m.title.toLowerCase().includes(h2hSearch.toLowerCase()) || 
+     m.person1.name.toLowerCase().includes(h2hSearch.toLowerCase()) ||
+     m.person2.name.toLowerCase().includes(h2hSearch.toLowerCase()))
   );
 
   const filteredRaces = hydratedRaces.filter(m => 
-    (categoryFilter === "all" || m.category === categoryFilter) &&
-    (!globalSearchQuery || m.title.toLowerCase().includes(globalSearchQuery.toLowerCase()))
+    (racesCategory === "all" || m.category === racesCategory) &&
+    (!racesSearch || m.title.toLowerCase().includes(racesSearch.toLowerCase()) ||
+     m.runners.some(r => r.name.toLowerCase().includes(racesSearch.toLowerCase())))
   );
 
   const filteredGainers = hydratedGainers.filter(m => 
-    (categoryFilter === "all" || m.category === categoryFilter) &&
-    (!globalSearchQuery || m.category.toLowerCase().includes(globalSearchQuery.toLowerCase()))
+    (gainerCategory === "all" || m.category === gainerCategory) &&
+    (!gainerSearch || m.category.toLowerCase().includes(gainerSearch.toLowerCase()) ||
+     m.leaders.some(l => l.name.toLowerCase().includes(gainerSearch.toLowerCase())))
   );
 
   const filteredCommunity = hydratedCommunity.filter(m => 
-    (categoryFilter === "all" || m.category === categoryFilter) &&
-    (!globalSearchQuery || m.question.toLowerCase().includes(globalSearchQuery.toLowerCase()))
+    (communityCategory === "all" || m.category === communityCategory) &&
+    (!communitySearch || m.question.toLowerCase().includes(communitySearch.toLowerCase()) ||
+     m.personName.toLowerCase().includes(communitySearch.toLowerCase()))
   );
 
   const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
@@ -2343,7 +2408,7 @@ export default function PredictPage() {
           />
         )}
 
-        {showSection("updown") && filteredUpDown.length > 0 && (
+        {showSection("updown") && (
           <section className="mb-10">
             <SectionHeader
               title="Weekly Up / Down"
@@ -2351,20 +2416,34 @@ export default function PredictPage() {
               onViewAll={() => setViewAllCategory("weekly")}
               onRulesClick={() => setRulesModalOpen("updown")}
             />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredUpDown.slice(0, 3).map((market) => (
-                <WeeklyUpDownCard 
-                  key={market.id} 
-                  market={market} 
-                  isMarketClosed={isMarketClosed}
-                  onSelect={(choice) => handleUpDownSelect(market, choice)}
-                />
-              ))}
-            </div>
+            <SectionFilterBar
+              categoryFilter={updownCategory}
+              onCategoryChange={setUpdownCategory}
+              searchQuery={updownSearch}
+              onSearchChange={setUpdownSearch}
+              searchPlaceholder="Search celebrities..."
+              testIdPrefix="updown"
+            />
+            {filteredUpDown.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredUpDown.slice(0, 3).map((market) => (
+                  <WeeklyUpDownCard 
+                    key={market.id} 
+                    market={market} 
+                    isMarketClosed={isMarketClosed}
+                    onSelect={(choice) => handleUpDownSelect(market, choice)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No markets match your filters
+              </div>
+            )}
           </section>
         )}
 
-        {showSection("h2h") && filteredH2H.length > 0 && (
+        {showSection("h2h") && (
           <section className="mb-10">
             <SectionHeader
               title="Head-to-Head Battles"
@@ -2372,20 +2451,34 @@ export default function PredictPage() {
               onViewAll={() => setViewAllCategory("h2h")}
               onRulesClick={() => setRulesModalOpen("h2h")}
             />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredH2H.slice(0, 3).map((market) => (
-                <HeadToHeadCard 
-                  key={market.id} 
-                  market={market} 
-                  isMarketClosed={isMarketClosed}
-                  onSelect={(person) => handleH2HSelect(market, person)}
-                />
-              ))}
-            </div>
+            <SectionFilterBar
+              categoryFilter={h2hCategory}
+              onCategoryChange={setH2hCategory}
+              searchQuery={h2hSearch}
+              onSearchChange={setH2hSearch}
+              searchPlaceholder="Search matchups..."
+              testIdPrefix="h2h"
+            />
+            {filteredH2H.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredH2H.slice(0, 3).map((market) => (
+                  <HeadToHeadCard 
+                    key={market.id} 
+                    market={market} 
+                    isMarketClosed={isMarketClosed}
+                    onSelect={(person) => handleH2HSelect(market, person)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No matchups match your filters
+              </div>
+            )}
           </section>
         )}
 
-        {showSection("races") && filteredRaces.length > 0 && (
+        {showSection("races") && (
           <section className="mb-10">
             <SectionHeader
               title="Category Races"
@@ -2393,20 +2486,34 @@ export default function PredictPage() {
               onViewAll={() => setViewAllCategory("races")}
               onRulesClick={() => setRulesModalOpen("races")}
             />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredRaces.slice(0, 3).map((market) => (
-                <CategoryRaceCard 
-                  key={market.id} 
-                  market={market} 
-                  isMarketClosed={isMarketClosed}
-                  onClick={() => setSelectedRace(market)}
-                />
-              ))}
-            </div>
+            <SectionFilterBar
+              categoryFilter={racesCategory}
+              onCategoryChange={setRacesCategory}
+              searchQuery={racesSearch}
+              onSearchChange={setRacesSearch}
+              searchPlaceholder="Search races..."
+              testIdPrefix="races"
+            />
+            {filteredRaces.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredRaces.slice(0, 3).map((market) => (
+                  <CategoryRaceCard 
+                    key={market.id} 
+                    market={market} 
+                    isMarketClosed={isMarketClosed}
+                    onClick={() => setSelectedRace(market)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No races match your filters
+              </div>
+            )}
           </section>
         )}
 
-        {showSection("gainer") && filteredGainers.length > 0 && (
+        {showSection("gainer") && (
           <section className="mb-10">
             <SectionHeader
               title="Top Gainer Predictions"
@@ -2414,24 +2521,38 @@ export default function PredictPage() {
               onViewAll={() => setViewAllCategory("gainers")}
               onRulesClick={() => setRulesModalOpen("gainer")}
             />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredGainers.slice(0, 3).map((market) => (
-                <TopGainerCard 
-                  key={market.id} 
-                  market={market} 
-                  isMarketClosed={isMarketClosed}
-                  onSelect={(name) => handleGainerSelect(market, name)}
-                  isPredicted={predictedMarkets.has(market.id)}
-                  isShimmering={shimmeringMarket === market.id}
-                />
-              ))}
-            </div>
+            <SectionFilterBar
+              categoryFilter={gainerCategory}
+              onCategoryChange={setGainerCategory}
+              searchQuery={gainerSearch}
+              onSearchChange={setGainerSearch}
+              searchPlaceholder="Search gainers..."
+              testIdPrefix="gainer"
+            />
+            {filteredGainers.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredGainers.slice(0, 3).map((market) => (
+                  <TopGainerCard 
+                    key={market.id} 
+                    market={market} 
+                    isMarketClosed={isMarketClosed}
+                    onSelect={(name) => handleGainerSelect(market, name)}
+                    isPredicted={predictedMarkets.has(market.id)}
+                    isShimmering={shimmeringMarket === market.id}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No gainers match your filters
+              </div>
+            )}
           </section>
         )}
 
         {showSection("community") && (
           <section className="mb-10">
-            <div className="flex items-center justify-between mb-4 px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm">
+            <div className="flex items-center justify-between mb-2 px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <h2 className="text-lg sm:text-xl font-serif font-bold truncate">Community Predictions</h2>
@@ -2464,16 +2585,30 @@ export default function PredictPage() {
                 </Button>
               </div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredCommunity.slice(0, 3).map((market) => (
-                <CommunityCard 
-                  key={market.id} 
-                  market={market} 
-                  onClick={() => handleCommunityClick(market)}
-                  isMarketClosed={isMarketClosed}
-                />
-              ))}
-            </div>
+            <SectionFilterBar
+              categoryFilter={communityCategory}
+              onCategoryChange={setCommunityCategory}
+              searchQuery={communitySearch}
+              onSearchChange={setCommunitySearch}
+              searchPlaceholder="Search predictions..."
+              testIdPrefix="community"
+            />
+            {filteredCommunity.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredCommunity.slice(0, 3).map((market) => (
+                  <CommunityCard 
+                    key={market.id} 
+                    market={market} 
+                    onClick={() => handleCommunityClick(market)}
+                    isMarketClosed={isMarketClosed}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No predictions match your filters
+              </div>
+            )}
           </section>
         )}
 
