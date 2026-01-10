@@ -3,8 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile } from "@shared/schema";
-import { eq, desc, and, sql, count } from "drizzle-orm";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, pageViews, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile } from "@shared/schema";
+import { eq, desc, and, sql, count, gte } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
@@ -17,6 +17,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // seedSupabasePersons().catch(err => {
   //   console.error('Failed to seed Supabase:', err);
   // });
+
+  // ============ PAGE VIEW TRACKING MIDDLEWARE ============
+  // Log page views for analytics (only frontend routes, not API calls)
+  app.use(async (req, res, next) => {
+    // Skip API calls, static assets, and health checks
+    if (req.path.startsWith('/api/') || 
+        req.path.startsWith('/assets/') ||
+        req.path.includes('.') ||
+        req.path === '/favicon.ico') {
+      return next();
+    }
+    
+    // Log the page view asynchronously (don't block the response)
+    setImmediate(async () => {
+      try {
+        await db.insert(pageViews).values({
+          path: req.path,
+          userAgent: req.headers['user-agent'] || null,
+          referrer: req.headers['referer'] || null,
+          sessionId: req.sessionID || null,
+        });
+      } catch (err) {
+        // Silently fail - don't break the app if analytics fails
+        console.error('[PageView] Failed to log:', err);
+      }
+    });
+    
+    next();
+  });
   
   // Supabase config endpoint for client
   app.get("/api/config/supabase", (req, res) => {
@@ -1533,6 +1562,56 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
     } catch (error: any) {
       console.error("Error fetching admin stats:", error.message);
       res.status(500).json({ error: "Failed to fetch stats" });
+    }
+  });
+
+  // Get traffic stats for admin dashboard
+  app.get("/api/admin/traffic", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+      
+      // Total page views (all time)
+      const [totalViews] = await db.select({ count: sql<number>`count(*)` }).from(pageViews);
+      
+      // Today's page views
+      const [todayViews] = await db.select({ count: sql<number>`count(*)` })
+        .from(pageViews)
+        .where(gte(pageViews.createdAt, today));
+      
+      // Last 7 days
+      const [weekViews] = await db.select({ count: sql<number>`count(*)` })
+        .from(pageViews)
+        .where(gte(pageViews.createdAt, sevenDaysAgo));
+      
+      // Last 30 days
+      const [monthViews] = await db.select({ count: sql<number>`count(*)` })
+        .from(pageViews)
+        .where(gte(pageViews.createdAt, thirtyDaysAgo));
+      
+      // Top pages (last 7 days)
+      const topPages = await db.select({
+        path: pageViews.path,
+        views: sql<number>`count(*)`,
+      })
+        .from(pageViews)
+        .where(gte(pageViews.createdAt, sevenDaysAgo))
+        .groupBy(pageViews.path)
+        .orderBy(sql`count(*) DESC`)
+        .limit(5);
+      
+      res.json({
+        total: Number(totalViews?.count || 0),
+        today: Number(todayViews?.count || 0),
+        last7Days: Number(weekViews?.count || 0),
+        last30Days: Number(monthViews?.count || 0),
+        topPages: topPages.map(p => ({ path: p.path, views: Number(p.views) })),
+      });
+    } catch (error: any) {
+      console.error("Error fetching traffic stats:", error.message);
+      res.status(500).json({ error: "Failed to fetch traffic stats" });
     }
   });
   
