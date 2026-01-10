@@ -107,17 +107,55 @@ export default function AdminDashboard() {
   console.log("[AdminDashboard] - isAdmin (from useAuth):", isAdmin);
   console.log("[AdminDashboard] - profileLoading:", profileLoading);
 
-  // Show loading while checking auth
+  // Show loading while auth is initializing
   if (profileLoading) {
+    console.log("[AdminDashboard] Showing loading state - profileLoading:", profileLoading);
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground">Checking admin access...</p>
+        </div>
       </div>
     );
   }
 
-  // Show access denied for non-admins (no redirect, just display denial)
+  // If user is not logged in at all, prompt them to sign in
+  if (!user) {
+    console.log("[AdminDashboard] User not logged in");
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="p-8 text-center max-w-md">
+          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <h2 className="text-xl font-semibold mb-2">Sign In Required</h2>
+          <p className="text-muted-foreground mb-4">
+            Please sign in to access the admin panel.
+          </p>
+          <Button onClick={() => setLocation("/")} data-testid="button-go-home">
+            Go to Homepage
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  // User is logged in but profile hasn't loaded yet - wait for it
+  if (profile === null) {
+    console.log("[AdminDashboard] Waiting for profile to load - user is logged in but profile is null");
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Now profile is loaded - check if user is admin
+  // Only show access denied AFTER we have confirmed the profile role
   if (!isAdmin) {
+    console.log("[AdminDashboard] ACCESS DENIED - profile loaded, role is:", profile?.role);
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Card className="p-8 text-center max-w-md">
@@ -125,6 +163,9 @@ export default function AdminDashboard() {
           <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
           <p className="text-muted-foreground mb-4">
             You do not have permission to access the admin panel.
+          </p>
+          <p className="text-xs text-muted-foreground mb-4">
+            Debug: Role = "{profile?.role}" | Expected = "admin"
           </p>
           <Button onClick={() => setLocation("/")} data-testid="button-go-home">
             Go to Homepage
