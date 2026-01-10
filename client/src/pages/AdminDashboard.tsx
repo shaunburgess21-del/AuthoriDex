@@ -88,6 +88,9 @@ interface PredictionMarket {
 }
 
 export default function AdminDashboard() {
+  // DIAGNOSTIC: This MUST print if the component is mounting at all
+  console.log("!!! ADMIN DASHBOARD MOUNTING !!!");
+  
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
