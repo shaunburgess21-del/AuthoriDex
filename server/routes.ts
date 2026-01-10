@@ -1455,33 +1455,62 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
   // Admin Endpoints
   // ==================
   
-  // Helper middleware to check admin status
-  // Helper middleware to check admin status
+  // Helper middleware to check admin status with VERBOSE debugging
   const requireAdmin = async (req: AuthRequest, res: any, next: any) => {
     try {
       const userId = req.userId;
+      console.log(`\n========== ADMIN ACCESS CHECK ==========`);
+      console.log(`[requireAdmin] Step 1 - UserId from request: ${userId}`);
+      
       if (!userId) {
+        console.log(`[requireAdmin] FAIL - No userId in request`);
         return res.status(401).json({ error: "Authentication required" });
       }
 
       // Check 1: Look at the Profiles table (Database)
       const profile = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+      const dbRole = profile.length > 0 ? profile[0].role : "NO_PROFILE_FOUND";
       const isDbAdmin = profile.length > 0 && profile[0].role === "admin";
+      console.log(`[requireAdmin] Step 2 - Database profile found: ${profile.length > 0}`);
+      console.log(`[requireAdmin] Step 3 - DB Role value: "${dbRole}" (type: ${typeof dbRole})`);
+      console.log(`[requireAdmin] Step 4 - isDbAdmin check (role === "admin"): ${isDbAdmin}`);
 
-      // Check 2: Look at Supabase Auth Metadata (The fix we applied earlier)
-      const { data: { user } } = await supabaseServer.auth.admin.getUserById(userId);
+      // Check 2: Look at Supabase Auth Metadata
+      const { data: { user }, error: authError } = await supabaseServer.auth.admin.getUserById(userId);
+      if (authError) {
+        console.log(`[requireAdmin] Step 5 - Supabase auth error: ${authError.message}`);
+      }
+      const authEmail = user?.email || "NO_EMAIL";
+      const authEmailLower = authEmail.toLowerCase();
+      const authMetaRole = user?.user_metadata?.role || "NOT_SET";
       const isAuthAdmin = user?.user_metadata?.role === 'admin';
-
-      console.log(`Admin Access Request: ${userId} | DB Role: ${isDbAdmin} | Auth Role: ${isAuthAdmin}`);
+      
+      console.log(`[requireAdmin] Step 5 - Supabase Auth email: "${authEmail}"`);
+      console.log(`[requireAdmin] Step 6 - Email (lowercase): "${authEmailLower}"`);
+      console.log(`[requireAdmin] Step 7 - Supabase Auth metadata role: "${authMetaRole}"`);
+      console.log(`[requireAdmin] Step 8 - isAuthAdmin check: ${isAuthAdmin}`);
+      
+      // Check against ADMIN_EMAILS list (case-insensitive)
+      const adminEmailsLower = ADMIN_EMAILS.map(e => e.toLowerCase());
+      const isInAdminList = adminEmailsLower.includes(authEmailLower);
+      console.log(`[requireAdmin] Step 9 - ADMIN_EMAILS list: [${ADMIN_EMAILS.join(", ")}]`);
+      console.log(`[requireAdmin] Step 10 - Is email in ADMIN_EMAILS (case-insensitive)? ${isInAdminList}`);
+      
+      console.log(`[requireAdmin] SUMMARY: isDbAdmin=${isDbAdmin}, isAuthAdmin=${isAuthAdmin}, isInAdminList=${isInAdminList}`);
 
       // If EITHER is true, let them in
       if (isDbAdmin || isAuthAdmin) {
+        console.log(`[requireAdmin] ACCESS GRANTED - Reason: ${isDbAdmin ? "DB_ROLE" : "AUTH_METADATA"}`);
+        console.log(`==========================================\n`);
         return next();
       }
 
+      console.log(`[requireAdmin] ACCESS DENIED - Neither DB role nor Auth metadata is 'admin'`);
+      console.log(`==========================================\n`);
       return res.status(403).json({ error: "Admin access required" });
     } catch (error: any) {
-      console.error("Error checking admin status:", error.message);
+      console.error("[requireAdmin] ERROR:", error.message);
+      console.log(`==========================================\n`);
       res.status(500).json({ error: "Failed to verify admin status" });
     }
   };

@@ -91,13 +91,21 @@ export default function AdminDashboard() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { user, isAdmin, profileLoading } = useAuth();
+  const { user, isAdmin, profileLoading, profile } = useAuth();
   const [activeSection, setActiveSection] = useState<AdminSection>("overview");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [creditAdjustment, setCreditAdjustment] = useState({ amount: 0, reason: "" });
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+
+  // DEBUG LOGGING for admin access
+  console.log("[AdminDashboard] Render Check:");
+  console.log("[AdminDashboard] - user:", user?.id);
+  console.log("[AdminDashboard] - profile:", profile);
+  console.log("[AdminDashboard] - profile?.role:", profile?.role);
+  console.log("[AdminDashboard] - isAdmin (from useAuth):", isAdmin);
+  console.log("[AdminDashboard] - profileLoading:", profileLoading);
 
   // Show loading while checking auth
   if (profileLoading) {
