@@ -88,9 +88,6 @@ interface PredictionMarket {
 }
 
 export default function AdminDashboard() {
-  // DIAGNOSTIC: This MUST print if the component is mounting at all
-  console.log("!!! ADMIN DASHBOARD MOUNTING !!!");
-  
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -102,89 +99,21 @@ export default function AdminDashboard() {
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [confirmText, setConfirmText] = useState("");
 
-  // DEBUG LOGGING for admin access
-  console.log("[AdminDashboard] Render Check:");
-  console.log("[AdminDashboard] - user:", user?.id);
-  console.log("[AdminDashboard] - profile:", profile);
-  console.log("[AdminDashboard] - profile?.role:", profile?.role);
-  console.log("[AdminDashboard] - isAdmin (from useAuth):", isAdmin);
-  console.log("[AdminDashboard] - profileLoading:", profileLoading);
-
-  // Show loading while auth is initializing
-  if (profileLoading) {
-    console.log("[AdminDashboard] Showing loading state - profileLoading:", profileLoading);
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">Checking admin access...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // If user is not logged in at all, prompt them to sign in
-  if (!user) {
-    console.log("[AdminDashboard] User not logged in");
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="p-8 text-center max-w-md">
-          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <h2 className="text-xl font-semibold mb-2">Sign In Required</h2>
-          <p className="text-muted-foreground mb-4">
-            Please sign in to access the admin panel.
-          </p>
-          <Button onClick={() => setLocation("/")} data-testid="button-go-home">
-            Go to Homepage
-          </Button>
-        </Card>
-      </div>
-    );
-  }
-
-  // User is logged in but profile hasn't loaded yet - wait for it
-  if (profile === null) {
-    console.log("[AdminDashboard] Waiting for profile to load - user is logged in but profile is null");
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading profile...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Now profile is loaded - check if user is admin
-  // Only show access denied AFTER we have confirmed the profile role
-  if (!isAdmin) {
-    console.log("[AdminDashboard] ACCESS DENIED - profile loaded, role is:", profile?.role);
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="p-8 text-center max-w-md">
-          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
-          <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
-          <p className="text-muted-foreground mb-4">
-            You do not have permission to access the admin panel.
-          </p>
-          <p className="text-xs text-muted-foreground mb-4">
-            Debug: Role = "{profile?.role}" | Expected = "admin"
-          </p>
-          <Button onClick={() => setLocation("/")} data-testid="button-go-home">
-            Go to Homepage
-          </Button>
-        </Card>
-      </div>
-    );
-  }
-
-  // Fetch admin stats
+  // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS (React rules of hooks)
+  
+  // Fetch admin stats - only when user is admin
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<AdminStats>({
     queryKey: ["/api/admin/stats"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/stats", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch admin stats");
+      return res.json();
+    },
     retry: false,
+    enabled: isAdmin,
   });
 
-  // Fetch users for moderation
+  // Fetch users for moderation - only when admin and on users section
   const { data: users, isLoading: usersLoading } = useQuery<UserProfile[]>({
     queryKey: ["/api/admin/users", searchQuery],
     queryFn: async () => {
@@ -195,13 +124,18 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error("Failed to fetch users");
       return res.json();
     },
-    enabled: activeSection === "users",
+    enabled: isAdmin && activeSection === "users",
   });
 
-  // Fetch prediction markets
+  // Fetch prediction markets - only when admin and on relevant sections
   const { data: markets, isLoading: marketsLoading } = useQuery<PredictionMarket[]>({
     queryKey: ["/api/admin/markets"],
-    enabled: activeSection === "cms" || activeSection === "settlement",
+    queryFn: async () => {
+      const res = await fetch("/api/admin/markets", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch markets");
+      return res.json();
+    },
+    enabled: isAdmin && (activeSection === "cms" || activeSection === "settlement"),
   });
 
   // System tool mutations
@@ -314,6 +248,73 @@ export default function AdminDashboard() {
       });
     },
   });
+
+  // ============ CONDITIONAL RENDERING (after all hooks) ============
+  
+  // Show loading while auth is initializing
+  if (profileLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground">Checking admin access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If user is not logged in, prompt them to sign in
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="p-8 text-center max-w-md">
+          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <h2 className="text-xl font-semibold mb-2">Sign In Required</h2>
+          <p className="text-muted-foreground mb-4">
+            Please sign in to access the admin panel.
+          </p>
+          <Button onClick={() => setLocation("/")} data-testid="button-go-home">
+            Go to Homepage
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  // User is logged in but profile hasn't loaded yet
+  if (profile === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if user is admin
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="p-8 text-center max-w-md">
+          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
+          <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+          <p className="text-muted-foreground mb-4">
+            You do not have permission to access the admin panel.
+          </p>
+          <p className="text-xs text-muted-foreground mb-4">
+            Debug: Role = "{profile?.role}" | Expected = "admin"
+          </p>
+          <Button onClick={() => setLocation("/")} data-testid="button-go-home">
+            Go to Homepage
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  // ============ ADMIN DASHBOARD UI ============
 
   const sidebarItems = [
     { id: "overview" as const, label: "Overview", icon: LayoutDashboard },
