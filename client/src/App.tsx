@@ -22,9 +22,16 @@ import AdminTestPage from "@/pages/AdminTestPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
-  console.log("--- ROUTER VERSION CHECK: UPDATED ---");
+  console.log("--- ROUTER VERSION CHECK: v2 FIRST ROUTE TEST ---");
   return (
     <Switch>
+      <Route path="/admin-test">
+        {() => (
+          <div style={{ background: 'lime', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <h1 style={{ fontSize: '48px', color: 'black' }}>FIRST ROUTE TEST - SUCCESS!</h1>
+          </div>
+        )}
+      </Route>
       <Route path="/" component={HomePage} />
       <Route path="/person/:id" component={PersonDetailPage} />
       <Route path="/login" component={LoginPage} />
@@ -37,13 +44,6 @@ function Router() {
       <Route path="/me/favorites" component={FavoritesPage} />
       <Route path="/me/settings" component={SettingsPage} />
       <Route path="/u/:username" component={PublicProfilePage} />
-      <Route path="/admin-test">
-        {() => (
-          <div className="min-h-screen flex items-center justify-center bg-green-100">
-            <h1 className="text-4xl font-bold text-green-600">INLINE TEST SUCCESS</h1>
-          </div>
-        )}
-      </Route>
       <Route path="/admin" component={AdminDashboard} />
       <Route component={NotFound} />
     </Switch>
