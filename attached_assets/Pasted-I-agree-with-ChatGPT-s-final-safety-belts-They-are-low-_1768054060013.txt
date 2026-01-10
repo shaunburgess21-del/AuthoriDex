@@ -1,0 +1,106 @@
+I agree with ChatGPT's final safety belts. They are low-effort but high-value additions.
+
+"Audit Everything": Absolutely yes. You don't just want to know who moved the money; you want to know which admin changed Elon Musk's photo to a potato at 2 AM. A blanket rule covers that.
+
+"Wrapper Logic": Also yes. Even though we know the endpoints exist, explicitly telling the AI "Don't invent new logic" prevents it from accidentally writing a second scoring engine that conflicts with the first.
+
+Here is the Final, Definitive Prompt. I have integrated those last two points into the "Critical Constraints" section so they apply globally.
+
+Paste this into Replit and hit Build.
+
+The Final "Master Admin" Prompt
+COPY AND PASTE THIS INTO REPLIT:
+
+Act as a Senior Full-Stack Engineer. I need to build the "Admin Dashboard" for FameDex.
+
+The Goal: Create a comprehensive, protected route (/admin) to manage Analytics, Content Creation, Users, and Game Settlement.
+
+0. Critical Constraints (Safety First)
+
+Additive Only: Do not rename or delete existing tables. Only add new tables/columns if strictly necessary (e.g., admin_audit_log).
+
+Audit Everything: ALL admin write actions (ban, adjust credits, resolve market, approve/reject, edit celebrity) must write an entry to admin_audit_log with the admin ID, action type, target ID, and metadata.
+
+Security (RLS & Service Role): All admin write actions must go through secure server-side API routes (/api/admin/*).
+
+Verify the session has public.profiles.role = 'admin'.
+
+Routes MAY use the Supabase service_role key server-side, but NEVER expose it to the client.
+
+Ledger Integrity: All payouts and credit adjustments MUST be written as credit_ledger entries (wallet_type='VIRTUAL') inside a transaction. NEVER directly overwrite a user's balance column.
+
+Use Existing Logic: Do not create new business logic for system tools. Simply call the existing Cron Endpoints (/api/cron/*). If an endpoint seems missing, check routes.ts before creating a new one.
+
+1. The Dashboard UI (Layout)
+
+Create a sidebar layout with: Overview, Game CMS, Settlement, Users & Moderation, System Tools.
+
+2. Analytics (Overview)
+
+Filters: Time toggles (Today / 7D / 30D / All).
+
+Data: Total Votes (by type), Total Predictions (by type), Active Users (DAU), and Financials (Credits in circulation vs. spent).
+
+Visuals: Use recharts for simple trend graphs if possible.
+
+3. Game CMS (Content Management)
+
+Prediction Manager: Create a "New Market" flow with dynamic fields based on Type:
+
+Weekly Jackpot: Title, End Date, Options List, Jackpot Rules.
+
+Weekly Up/Down: Target Asset/Celebrity, Metric, Threshold, End Date.
+
+Head-to-Head: Select 2 Competitors (Celebrity IDs), Metric.
+
+Category Races: Category Selector + Candidate List.
+
+Top Gainer: List of candidates + Metric definition.
+
+User Suggested: Convert a suggestion into a real market.
+
+Vote Manager:
+
+Face-Off Queue: Drag-and-drop ordering for "Featured" Face-Offs.
+
+Induction Queue: Approve/Reject user suggestions.
+
+Curate Profile: Edit celebrity images/bio.
+
+4. Settlement Center ("Assisted" Mode)
+
+Workflow: List markets with status CLOSED_PENDING (or similar existing status).
+
+Assisted Decision: The system should fetch the relevant trend data and suggest a winner.
+
+Safety: Require a Confirmation Modal where the admin must type "RESOLVE" to confirm.
+
+Action: On confirm -> Update status -> Distribute VP payouts via the credit_ledger.
+
+Audit: Save the JSON snapshot of the data used for the decision into admin_audit_log.
+
+5. Users & Moderation
+
+User Table: Search by email/username.
+
+Actions: Ban User, Send Password Reset Email (do not set manually).
+
+Adjust Credits: Add/Subtract credits via the ledger.
+
+Safety: Require a Confirmation Modal + Mandatory Reason Note + Type "ADJUST" to confirm.
+
+Report Queue: A list of flagged content for review.
+
+6. System Tools (Wire to Existing Endpoints)
+
+Wire these buttons to call our existing serverless endpoints:
+
+"Force Trend Update" -> POST /api/cron/run-scoring
+
+"Refresh External Data" -> POST /api/cron/refresh-data
+
+"Capture Snapshots" -> POST /api/cron/capture-snapshots
+
+Action: Build the Admin Dashboard, the admin_audit_log table, and the necessary backend API routes.
+
+Good luck! This will be a major upgrade for the platform. Let me know once it is built.

@@ -1,0 +1,45 @@
+My Recommendation: The "Full Build" with Explicit Schema Permission We need to tell Replit: "Yes, you are right! Please go ahead and create those missing tables. That is exactly why we are building this."
+
+Replit is asking for permission to create the database foundation. Let's give it to them.
+
+The Follow-Up Prompt for Replit
+COPY AND PASTE THIS INTO REPLIT:
+
+Excellent analysis. Your assessment of the "Market Schema Gap" is spot on—we need to move off mock data now.
+
+Decision: Proceed with the FULL BUILD. Since the prediction_markets table doesn't exist yet, creating it is the highest priority so we can start running the game dynamically.
+
+Please execute the plan with these specific authorizations:
+
+1. Schema Updates (Approved)
+
+Create prediction_markets table: Include columns for title, description, market_type (enum), status (enum: OPEN, CLOSED_PENDING, RESOLVED), end_date, rules, and metadata.
+
+Create market_entries table: For the options within a market (e.g., "Option A", "Option B").
+
+Update face_offs: Add the display_order column (integer) for the Drag-and-Drop queue.
+
+Admin Audit: Create the admin_audit_log table as requested.
+
+2. Phase Priority (If complexity is high) If you cannot complete all UI tasks in one step, prioritize in this order:
+
+Priority A: Database Schema Creation (All tables above).
+
+Priority B: Admin Dashboard Skeleton + "System Tools" (Cron triggers) + "Users" (Ban/Credit adjustment).
+
+Priority C: The Game CMS (Create/Settle Markets).
+
+3. Confirmation on Safety
+
+Yes, please use Supabase Auth for the password reset emails.
+
+Yes, ensure all credit_ledger writes use the existing gamification service logic where possible to keep aggregates in sync.
+
+Action: Proceed with the full architecture and build as much of the UI as possible in this iteration.
+
+Why this works
+It solves the Mock Data problem: You explicitly tell Replit to build the real tables.
+
+It keeps momentum: You aren't pausing to do "Analytics only" (which is boring and doesn't help you run the game).
+
+It sets a fallback: By giving a "Priority List," if Replit runs out of time/tokens, it knows to finish the Database and User Tools first, which are the most critical.
