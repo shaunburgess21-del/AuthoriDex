@@ -1,0 +1,65 @@
+Based on the screenshots provided, you are encountering a transition from a clean state (Image 1) to a state flooded with API errors (Image 2) on your "FameDex" application.
+
+Here is a breakdown of the issue and a troubleshooting guide to fix it.
+
+The Diagnosis
+1. The Root Cause (Likely): Authentication State Conflict The yellow warning in the first image is the biggest clue:
+
+Multiple GoTrueClient instances detected in the same browser context...
+
+GoTrue is the authentication client used by Supabase (and Netlify). This warning means your code is initializing the Authentication client more than once (e.g., once in a main App.js and again in a component, or inside a render loop).
+
+When multiple instances exist, they fight over the localStorage keys used to store the User Session Token. One instance might refresh the token, invalidating the token held by the other instance.
+
+2. The Symptom: 400 Bad Request In the second image, the API calls fail:
+
+Endpoint: /api/profile/sync
+
+Status: 400 (Bad Request)
+
+Response: {"error": "Could not fetch user details"}
+
+Because of the multiple client instances (Issue #1), the frontend is likely sending a request to the backend with either no token or an expired/invalid token. The backend tries to look up the user associated with the request, fails to find a valid session, and returns "Could not fetch user details."
+
+How to Fix It
+Step 1: Fix the GoTrue/Supabase Initialization (Priority)
+You must ensure the authentication client is a Singleton (initialized exactly once).
+
+If you are using React: Make sure you create the client outside of your component function, or in a dedicated supabaseClient.js file that you export and import elsewhere. Do not run createClient() inside a useEffect or component body unless it's wrapped in a useMemo (but a separate file is best).
+
+Correct pattern (example):
+
+JavaScript
+
+// supabaseClient.js
+import { createClient } from '@supabase/supabase-js'
+
+// Initialize ONCE here
+export const supabase = createClient(YOUR_URL, YOUR_KEY);
+Incorrect pattern:
+
+JavaScript
+
+// Inside a component
+const MyComponent = () => {
+  // This runs every render -> causing the warning and bugs
+  const supabase = createClient(YOUR_URL, YOUR_KEY); 
+  ...
+}
+Step 2: Check the /sync Logic
+The error appears to be looping (occurring multiple times).
+
+Check the component that triggers /api/profile/sync.
+
+Ensure it is inside a useEffect with proper dependency arrays. If it depends on user state, ensure it only runs after the user is confirmed logged in.
+
+Race Condition: You are likely firing the sync request before the Auth Client has finished retrieving the session from LocalStorage. Add a check: if (!session) return;
+
+Step 3: Verify the Backend Headers
+In the Network tab of your developer tools (next to Console), click one of the red sync requests.
+
+Look at the Request Headers.
+
+Do you see an Authorization: Bearer <token> header?
+
+If that header is missing or undefined, the issue is definitely on the frontend not waiting for the auth to load.
