@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile } from "@shared/schema";
 import { eq, desc, and, sql, count } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -1511,6 +1511,164 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
     } catch (error: any) {
       console.error("Error running scoring:", error.message);
       res.status(500).json({ error: "Failed to run scoring" });
+    }
+  });
+
+  // Capture snapshots (admin version - uses session auth)
+  app.post("/api/admin/capture-snapshots", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { captureHourlySnapshots } = await import("./jobs/snapshot-scheduler");
+      const result = await captureHourlySnapshots();
+      res.json({ 
+        success: true, 
+        message: "Snapshots captured",
+        captured: result.captured,
+        errors: result.errors,
+      });
+    } catch (error: any) {
+      console.error("Error capturing snapshots:", error.message);
+      res.status(500).json({ error: "Failed to capture snapshots" });
+    }
+  });
+
+  // Get all users (for admin moderation)
+  app.get("/api/admin/users", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const search = (req.query.search as string) || "";
+      
+      let users;
+      if (search) {
+        users = await db.select().from(profiles)
+          .where(sql`${profiles.username} ILIKE ${'%' + search + '%'} OR ${profiles.fullName} ILIKE ${'%' + search + '%'}`)
+          .limit(100);
+      } else {
+        users = await db.select().from(profiles).limit(100);
+      }
+      
+      res.json(users.map(u => ({
+        id: u.id,
+        username: u.username,
+        fullName: u.fullName,
+        role: u.role,
+        rank: u.rank,
+        xpPoints: u.xpPoints,
+        predictCredits: u.predictCredits,
+        totalVotes: u.totalVotes,
+        totalPredictions: u.totalPredictions,
+        createdAt: u.createdAt,
+        isBanned: u.role === 'banned',
+      })));
+    } catch (error: any) {
+      console.error("Error fetching users:", error.message);
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  // Adjust user credits (with audit logging) - uses transaction for consistency
+  app.post("/api/admin/adjust-credits", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const adminId = req.userId!;
+      const { userId, amount, reason } = req.body;
+      
+      if (!userId || amount === undefined || !reason) {
+        return res.status(400).json({ error: "userId, amount, and reason are required" });
+      }
+      
+      // Get current user balance
+      const [user] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      const newBalance = Math.max(0, user.predictCredits + amount);
+      const idempotencyKey = `admin_adjust_${adminId}_${userId}_${Date.now()}`;
+      
+      // Use transaction to ensure ledger and profile stay in sync
+      await db.transaction(async (tx) => {
+        // Create credit ledger entry
+        await tx.insert(creditLedger).values({
+          userId,
+          txnType: 'admin_adjustment',
+          amount,
+          walletType: 'VIRTUAL',
+          balanceAfter: newBalance,
+          source: 'admin',
+          idempotencyKey,
+          metadata: { reason, adjustedBy: adminId },
+        });
+        
+        // Update user balance
+        await tx.update(profiles).set({ predictCredits: newBalance }).where(eq(profiles.id, userId));
+        
+        // Audit log
+        await tx.insert(adminAuditLog).values({
+          adminId,
+          actionType: 'adjust_credits',
+          targetTable: 'profiles',
+          targetId: userId,
+          previousData: { predictCredits: user.predictCredits },
+          newData: { predictCredits: newBalance },
+          metadata: { amount, reason },
+        });
+      });
+      
+      res.json({ success: true, newBalance });
+    } catch (error: any) {
+      console.error("Error adjusting credits:", error.message);
+      res.status(500).json({ error: "Failed to adjust credits" });
+    }
+  });
+
+  // Ban user (with audit logging)
+  app.post("/api/admin/ban-user", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const adminId = req.userId!;
+      const { userId, reason } = req.body;
+      
+      if (!userId || !reason) {
+        return res.status(400).json({ error: "userId and reason are required" });
+      }
+      
+      // Get user
+      const [user] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Can't ban admins
+      if (user.role === 'admin') {
+        return res.status(403).json({ error: "Cannot ban admin users" });
+      }
+      
+      // Update role to banned
+      await db.update(profiles).set({ role: 'banned' }).where(eq(profiles.id, userId));
+      
+      // Audit log
+      await db.insert(adminAuditLog).values({
+        adminId,
+        actionType: 'ban_user',
+        targetTable: 'profiles',
+        targetId: userId,
+        previousData: { role: user.role },
+        newData: { role: 'banned' },
+        metadata: { reason },
+      });
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error banning user:", error.message);
+      res.status(500).json({ error: "Failed to ban user" });
+    }
+  });
+
+  // Get prediction markets (for admin CMS)
+  app.get("/api/admin/markets", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const markets = await db.select().from(predictionMarkets).orderBy(desc(predictionMarkets.createdAt)).limit(100);
+      res.json(markets);
+    } catch (error: any) {
+      console.error("Error fetching markets:", error.message);
+      res.status(500).json({ error: "Failed to fetch markets" });
     }
   });
 

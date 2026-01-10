@@ -39,10 +39,15 @@ Preferred communication style: Simple, everyday language.
         - Settings page for profile updates (username, display name, privacy toggle)
     - **Public Profiles**: `/u/:username` route shows public user profiles with XP progress, voting stats
         - Privacy toggle (isPublic) controls visibility - private profiles show "Private Profile" message
-    - **Admin Panel**: `/admin` route for site management (admin-only access)
-        - Protected by requireAdmin middleware
-        - Stats dashboard: users, celebrities, votes, predictions counts
-        - Data refresh and scoring engine controls
+    - **Admin Panel**: `/admin` route for comprehensive site management (admin-only access)
+        - Protected by requireAuth + requireAdmin middleware
+        - **Sidebar Navigation**: Overview, Game CMS, Settlement, Users, System Tools
+        - **Overview**: Stats dashboard (users, celebrities, votes, predictions), quick actions, recent admin activity
+        - **Game CMS**: Prediction market manager (create/edit markets), Face-Off queue ordering, Induction queue approvals
+        - **Settlement Center**: Resolve closed markets, distribute payouts, view settlement history
+        - **Users & Moderation**: Search users, adjust credits (with confirmation modal + "ADJUST" safety), ban users, view user details
+        - **System Tools**: Manual triggers for data refresh, scoring engine, snapshot capture
+        - All admin write actions logged to `admin_audit_log` table for audit trail
 
 ### Backend
 - **Technology Stack**: Node.js with Express.js, TypeScript, Drizzle ORM.
@@ -90,8 +95,14 @@ Preferred communication style: Simple, everyday language.
         - `votes` (unified polymorphic voting with JSONB metadata for prediction price tracking)
         - `induction_candidates` (potential new celebrities for community voting)
         - `celebrity_images` (multiple photos per celebrity for profile curation)
-        - `face_offs` (A vs B binary choice voting questions with category, title, optionA/optionB text/image)
+        - `face_offs` (A vs B binary choice voting questions with category, title, optionA/optionB text/image, displayOrder for admin ordering)
         - `profiles` (user profiles keyed by Supabase Auth ID, with username, fullName, avatarUrl, isPublic, role, rank, XP/votes/predictions stats)
+    - **Prediction Markets Schema**:
+        - `prediction_markets` (marketType, status: OPEN|CLOSED_PENDING|RESOLVED|VOID, title, slug, rules, metadata, startAt, endAt, createdBy, settledBy)
+        - `market_entries` (options/candidates within a market, linked to prediction_markets, entryType: person|custom, displayOrder, totalStake, resolutionStatus)
+        - `market_bets` (user stakes on market entries, stakeAmount, status: active|won|lost|void|refunded, payoutAmount)
+    - **Admin Schema**:
+        - `admin_audit_log` (immutable record of admin actions: adminId, actionType, targetTable, targetId, previousData, newData, metadata)
     - **Gamification Service** (`server/services/gamification.ts`):
         - `awardXp()` - Awards XP with daily cap enforcement, idempotency, auto-rank recalculation
         - `adjustCredits()` - Credit transactions with audit trail (balanceAfter snapshots)

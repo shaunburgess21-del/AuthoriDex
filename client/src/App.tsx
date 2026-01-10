@@ -17,7 +17,7 @@ import PredictionsPage from "@/pages/me/PredictionsPage";
 import FavoritesPage from "@/pages/me/FavoritesPage";
 import SettingsPage from "@/pages/me/SettingsPage";
 import PublicProfilePage from "@/pages/PublicProfilePage";
-import AdminPage from "@/pages/AdminPage";
+import AdminDashboard from "@/pages/AdminDashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -35,7 +35,7 @@ function Router() {
       <Route path="/me/favorites" component={FavoritesPage} />
       <Route path="/me/settings" component={SettingsPage} />
       <Route path="/u/:username" component={PublicProfilePage} />
-      <Route path="/admin" component={AdminPage} />
+      <Route path="/admin" component={AdminDashboard} />
       <Route component={NotFound} />
     </Switch>
   );
