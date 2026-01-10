@@ -1206,8 +1206,22 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         if (fullName && !existing[0].fullName) updateData.fullName = fullName;
         if (avatarUrl && !existing[0].avatarUrl) updateData.avatarUrl = avatarUrl;
         
+        // Check if this is an admin email but profile doesn't have admin role yet
+        // This handles the case where admin was manually set in DB or backdoor wasn't applied
+        const shouldBeAdmin = email && ADMIN_EMAILS.includes(email.toLowerCase());
+        if (shouldBeAdmin && existing[0].role !== "admin") {
+          updateData.role = "admin";
+          updateData.rank = "Hall of Famer";
+          updateData.xpPoints = Math.max(existing[0].xpPoints, 100000);
+          console.log(`[Profile] Upgrading ${email} to admin role via sync backdoor`);
+        }
+        
         await db.update(profiles).set(updateData).where(eq(profiles.id, userId));
         const updated = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+        
+        // Debug logging for sync
+        console.log(`[Profile] /api/profile/sync - User: ${userId}, Email: ${email}, Role: ${updated[0].role}`);
+        
         return res.json(updated[0]);
       }
       
@@ -1252,6 +1266,9 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       if (profile.length === 0) {
         return res.status(404).json({ error: "Profile not found. Please sync your profile first." });
       }
+      
+      // Debug logging for admin access issues
+      console.log(`[Profile] /api/profile/me - User: ${userId}, Role: ${profile[0].role}, Username: ${profile[0].username}`);
       
       res.json(profile[0]);
     } catch (error: any) {
