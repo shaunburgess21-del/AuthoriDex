@@ -696,3 +696,26 @@ export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLog).omit(
 
 export type AdminAuditLog = typeof adminAuditLog.$inferSelect;
 export type InsertAdminAuditLog = z.infer<typeof insertAdminAuditLogSchema>;
+
+// ============================================================================
+// PAGE VIEWS - Traffic Analytics
+// ============================================================================
+
+// Page Views - Tracks website traffic for analytics
+export const pageViews = pgTable("page_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  path: text("path").notNull(), // The URL path visited
+  userAgent: text("user_agent"), // Browser/device info
+  referrer: text("referrer"), // Where they came from
+  sessionId: text("session_id"), // Anonymous session tracking
+  userId: varchar("user_id"), // Optional: logged-in user
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPageViewSchema = createInsertSchema(pageViews).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type PageView = typeof pageViews.$inferSelect;
+export type InsertPageView = z.infer<typeof insertPageViewSchema>;
