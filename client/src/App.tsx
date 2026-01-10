@@ -18,20 +18,11 @@ import FavoritesPage from "@/pages/me/FavoritesPage";
 import SettingsPage from "@/pages/me/SettingsPage";
 import PublicProfilePage from "@/pages/PublicProfilePage";
 import AdminDashboard from "@/pages/AdminDashboard";
-import AdminTestPage from "@/pages/AdminTestPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
-  console.log("--- ROUTER VERSION CHECK: v2 FIRST ROUTE TEST ---");
   return (
     <Switch>
-      <Route path="/admin-test">
-        {() => (
-          <div style={{ background: 'lime', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <h1 style={{ fontSize: '48px', color: 'black' }}>FIRST ROUTE TEST - SUCCESS!</h1>
-          </div>
-        )}
-      </Route>
       <Route path="/" component={HomePage} />
       <Route path="/person/:id" component={PersonDetailPage} />
       <Route path="/login" component={LoginPage} />
