@@ -63,6 +63,14 @@ interface AdminStats {
   lastDataRefresh: string | null;
 }
 
+interface TrafficStats {
+  total: number;
+  today: number;
+  last7Days: number;
+  last30Days: number;
+  topPages: { path: string; views: number }[];
+}
+
 interface UserProfile {
   id: string;
   username: string | null;
@@ -136,6 +144,17 @@ export default function AdminDashboard() {
       return res.json();
     },
     enabled: isAdmin && (activeSection === "cms" || activeSection === "settlement"),
+  });
+
+  // Fetch traffic stats - only when admin and on overview section
+  const { data: trafficStats, isLoading: trafficLoading, refetch: refetchTraffic } = useQuery<TrafficStats>({
+    queryKey: ["/api/admin/traffic"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/traffic", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch traffic stats");
+      return res.json();
+    },
+    enabled: isAdmin && activeSection === "overview",
   });
 
   // System tool mutations
@@ -407,7 +426,7 @@ export default function AdminDashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => refetchStats()}
+                onClick={() => { refetchStats(); refetchTraffic(); }}
                 data-testid="button-refresh-stats"
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
@@ -469,6 +488,61 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Traffic Stats */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Eye className="h-5 w-5" />
+                  Website Traffic
+                </CardTitle>
+                <CardDescription>Page views and visitor analytics</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="text-center p-4 bg-muted/50 rounded-lg">
+                    <div className="text-2xl font-bold text-cyan-400" data-testid="stat-traffic-today">
+                      {trafficLoading ? "..." : trafficStats?.today || 0}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Today</p>
+                  </div>
+                  <div className="text-center p-4 bg-muted/50 rounded-lg">
+                    <div className="text-2xl font-bold text-violet-400" data-testid="stat-traffic-week">
+                      {trafficLoading ? "..." : trafficStats?.last7Days || 0}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Last 7 Days</p>
+                  </div>
+                  <div className="text-center p-4 bg-muted/50 rounded-lg">
+                    <div className="text-2xl font-bold text-emerald-400" data-testid="stat-traffic-month">
+                      {trafficLoading ? "..." : trafficStats?.last30Days || 0}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Last 30 Days</p>
+                  </div>
+                  <div className="text-center p-4 bg-muted/50 rounded-lg">
+                    <div className="text-2xl font-bold text-amber-400" data-testid="stat-traffic-total">
+                      {trafficLoading ? "..." : trafficStats?.total || 0}
+                    </div>
+                    <p className="text-xs text-muted-foreground">All Time</p>
+                  </div>
+                </div>
+                
+                {trafficStats?.topPages && trafficStats.topPages.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <h4 className="text-sm font-medium mb-2">Top Pages (7 days)</h4>
+                    <div className="space-y-2">
+                      {trafficStats.topPages.map((page, i) => (
+                        <div key={page.path} className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground truncate max-w-[200px]">
+                            {page.path === "/" ? "Homepage" : page.path}
+                          </span>
+                          <Badge variant="secondary">{page.views} views</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Quick Actions */}
             <Card>

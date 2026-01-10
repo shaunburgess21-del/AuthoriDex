@@ -19,25 +19,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // });
 
   // ============ PAGE VIEW TRACKING MIDDLEWARE ============
-  // Log page views for analytics (only frontend routes, not API calls)
-  app.use(async (req, res, next) => {
-    // Skip API calls, static assets, and health checks
+  // Log page views for analytics (only public frontend routes)
+  app.use((req, res, next) => {
+    // Skip API calls, static assets, admin routes, and health checks
     if (req.path.startsWith('/api/') || 
         req.path.startsWith('/assets/') ||
+        req.path.startsWith('/admin') ||
         req.path.includes('.') ||
         req.path === '/favicon.ico') {
       return next();
     }
     
+    // Copy request data before scheduling async task (req may be recycled)
+    const pageData = {
+      path: req.path,
+      userAgent: req.headers['user-agent'] || null,
+      referrer: req.headers['referer'] || null,
+      sessionId: (req as any).sessionID || null,
+    };
+    
     // Log the page view asynchronously (don't block the response)
     setImmediate(async () => {
       try {
-        await db.insert(pageViews).values({
-          path: req.path,
-          userAgent: req.headers['user-agent'] || null,
-          referrer: req.headers['referer'] || null,
-          sessionId: req.sessionID || null,
-        });
+        await db.insert(pageViews).values(pageData);
       } catch (err) {
         // Silently fail - don't break the app if analytics fails
         console.error('[PageView] Failed to log:', err);
@@ -1573,25 +1577,15 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
       const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
       
-      // Total page views (all time)
-      const [totalViews] = await db.select({ count: sql<number>`count(*)` }).from(pageViews);
+      // Single aggregated query for all counts (more efficient than multiple queries)
+      const [stats] = await db.select({
+        total: sql<number>`count(*)`,
+        today: sql<number>`count(*) FILTER (WHERE ${pageViews.createdAt} >= ${today})`,
+        last7Days: sql<number>`count(*) FILTER (WHERE ${pageViews.createdAt} >= ${sevenDaysAgo})`,
+        last30Days: sql<number>`count(*) FILTER (WHERE ${pageViews.createdAt} >= ${thirtyDaysAgo})`,
+      }).from(pageViews);
       
-      // Today's page views
-      const [todayViews] = await db.select({ count: sql<number>`count(*)` })
-        .from(pageViews)
-        .where(gte(pageViews.createdAt, today));
-      
-      // Last 7 days
-      const [weekViews] = await db.select({ count: sql<number>`count(*)` })
-        .from(pageViews)
-        .where(gte(pageViews.createdAt, sevenDaysAgo));
-      
-      // Last 30 days
-      const [monthViews] = await db.select({ count: sql<number>`count(*)` })
-        .from(pageViews)
-        .where(gte(pageViews.createdAt, thirtyDaysAgo));
-      
-      // Top pages (last 7 days)
+      // Top pages (last 7 days) - separate query with limit
       const topPages = await db.select({
         path: pageViews.path,
         views: sql<number>`count(*)`,
@@ -1603,10 +1597,10 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         .limit(5);
       
       res.json({
-        total: Number(totalViews?.count || 0),
-        today: Number(todayViews?.count || 0),
-        last7Days: Number(weekViews?.count || 0),
-        last30Days: Number(monthViews?.count || 0),
+        total: Number(stats?.total || 0),
+        today: Number(stats?.today || 0),
+        last7Days: Number(stats?.last7Days || 0),
+        last30Days: Number(stats?.last30Days || 0),
         topPages: topPages.map(p => ({ path: p.path, views: Number(p.views) })),
       });
     } catch (error: any) {

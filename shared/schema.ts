@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, real, timestamp, unique, jsonb, serial, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, real, timestamp, unique, jsonb, serial, boolean, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -710,7 +710,10 @@ export const pageViews = pgTable("page_views", {
   sessionId: text("session_id"), // Anonymous session tracking
   userId: varchar("user_id"), // Optional: logged-in user
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  createdAtIdx: index("page_views_created_at_idx").on(table.createdAt),
+  pathIdx: index("page_views_path_idx").on(table.path),
+}));
 
 export const insertPageViewSchema = createInsertSchema(pageViews).omit({
   id: true,
