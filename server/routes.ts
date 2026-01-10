@@ -1439,19 +1439,30 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
   // ==================
   
   // Helper middleware to check admin status
+  // Helper middleware to check admin status
   const requireAdmin = async (req: AuthRequest, res: any, next: any) => {
     try {
       const userId = req.userId;
       if (!userId) {
         return res.status(401).json({ error: "Authentication required" });
       }
-      
+
+      // Check 1: Look at the Profiles table (Database)
       const profile = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-      if (profile.length === 0 || profile[0].role !== "admin") {
-        return res.status(403).json({ error: "Admin access required" });
+      const isDbAdmin = profile.length > 0 && profile[0].role === "admin";
+
+      // Check 2: Look at Supabase Auth Metadata (The fix we applied earlier)
+      const { data: { user } } = await supabaseServer.auth.admin.getUserById(userId);
+      const isAuthAdmin = user?.user_metadata?.role === 'admin';
+
+      console.log(`Admin Access Request: ${userId} | DB Role: ${isDbAdmin} | Auth Role: ${isAuthAdmin}`);
+
+      // If EITHER is true, let them in
+      if (isDbAdmin || isAuthAdmin) {
+        return next();
       }
-      
-      next();
+
+      return res.status(403).json({ error: "Admin access required" });
     } catch (error: any) {
       console.error("Error checking admin status:", error.message);
       res.status(500).json({ error: "Failed to verify admin status" });
