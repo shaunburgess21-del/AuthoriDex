@@ -523,7 +523,7 @@ function SectionHeader({
   rulesTitle?: string;
 }) {
   return (
-    <div className="flex items-center justify-between mb-2 px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm">
+    <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mt-[8px] mb-[8px]">
       <div className="flex-1 min-w-0">
         <h2 className="text-lg sm:text-xl font-serif font-bold truncate">{title}</h2>
         <p className="text-xs sm:text-sm text-muted-foreground truncate">{subtitle}</p>
