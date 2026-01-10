@@ -18,7 +18,6 @@ import {
   ChevronRight, 
   Users, 
   UserPlus, 
-  Flag, 
   BarChart3,
   Swords,
   X,
@@ -62,16 +61,6 @@ interface HeadToHeadMarket {
   endTime: string;
   totalPool: number;
   person1Percent: number;
-}
-
-interface CategoryRaceMarket {
-  id: string;
-  title: string;
-  category: CategoryFilter;
-  runners: { name: string; avatar: string; marketShare: number; pointsAdded: number }[];
-  endTime: string;
-  totalPool: number;
-  timeRemaining: string;
 }
 
 interface TopGainerMarket {
@@ -277,65 +266,6 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
     endTime: "Sun 23:59 UTC",
     totalPool: 21800,
     person1Percent: 35,
-  },
-];
-
-const categoryRaceMarkets: CategoryRaceMarket[] = [
-  {
-    id: "race-1",
-    title: "Top Music Gainer",
-    category: "music",
-    runners: [
-      { name: "Taylor Swift", avatar: "", marketShare: 42, pointsAdded: 12450 },
-      { name: "Drake", avatar: "", marketShare: 28, pointsAdded: 8920 },
-      { name: "The Weeknd", avatar: "", marketShare: 18, pointsAdded: 7340 },
-      { name: "Bad Bunny", avatar: "", marketShare: 12, pointsAdded: 5200 },
-    ],
-    endTime: "Sun 23:59 UTC",
-    totalPool: 18900,
-    timeRemaining: "2d 14h",
-  },
-  {
-    id: "race-2",
-    title: "Tech Leader Race",
-    category: "tech",
-    runners: [
-      { name: "Jensen Huang", avatar: "", marketShare: 45, pointsAdded: 15780 },
-      { name: "Elon Musk", avatar: "", marketShare: 30, pointsAdded: 11200 },
-      { name: "Sam Altman", avatar: "", marketShare: 15, pointsAdded: 9850 },
-      { name: "Satya Nadella", avatar: "", marketShare: 10, pointsAdded: 6200 },
-    ],
-    endTime: "Sun 23:59 UTC",
-    totalPool: 22400,
-    timeRemaining: "2d 14h",
-  },
-  {
-    id: "race-3",
-    title: "Sports Star Showdown",
-    category: "sports",
-    runners: [
-      { name: "Cristiano Ronaldo", avatar: "", marketShare: 38, pointsAdded: 9800 },
-      { name: "LeBron James", avatar: "", marketShare: 32, pointsAdded: 8900 },
-      { name: "Lionel Messi", avatar: "", marketShare: 20, pointsAdded: 7200 },
-      { name: "Patrick Mahomes", avatar: "", marketShare: 10, pointsAdded: 5100 },
-    ],
-    endTime: "Sun 23:59 UTC",
-    totalPool: 16500,
-    timeRemaining: "2d 14h",
-  },
-  {
-    id: "race-4",
-    title: "Creator Showdown",
-    category: "creator",
-    runners: [
-      { name: "MrBeast", avatar: "", marketShare: 52, pointsAdded: 18900 },
-      { name: "Logan Paul", avatar: "", marketShare: 25, pointsAdded: 12100 },
-      { name: "KSI", avatar: "", marketShare: 15, pointsAdded: 8750 },
-      { name: "Kai Cenat", avatar: "", marketShare: 8, pointsAdded: 6200 },
-    ],
-    endTime: "Sun 23:59 UTC",
-    totalPool: 14200,
-    timeRemaining: "2d 14h",
   },
 ];
 
@@ -695,96 +625,6 @@ function HeadToHeadCard({
   );
 }
 
-function CategoryRaceCard({ 
-  market, 
-  isMarketClosed = false,
-  personName,
-  onClick
-}: { 
-  market: CategoryRaceMarket; 
-  isMarketClosed?: boolean;
-  personName: string;
-  onClick?: () => void;
-}) {
-  const personRunner = market.runners.find(r => r.name === personName);
-  const personRank = market.runners.findIndex(r => r.name === personName) + 1;
-  
-  return (
-    <PredictCard testId={`card-race-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''}`} onClick={onClick}>
-      <div className="flex items-center justify-between mb-3">
-        <CategoryPill category={market.category} />
-        <Badge variant="outline" className="text-xs">
-          <Clock className="h-3 w-3 mr-1" />
-          {market.timeRemaining}
-        </Badge>
-      </div>
-      
-      <h3 className="font-semibold mb-3">{market.title}</h3>
-      
-      {personRunner && (
-        <div className="flex items-center gap-2 p-2 rounded-lg bg-violet-500/10 border border-violet-500/20 mb-3">
-          <div className="h-6 w-6 rounded-full bg-violet-500 text-white text-xs flex items-center justify-center font-bold">
-            #{personRank}
-          </div>
-          <PersonAvatar name={personName} avatar="" size="sm" />
-          <span className="text-sm flex-1 truncate font-medium">{personName}</span>
-          <span className="text-xs font-mono text-violet-400">{personRunner.marketShare}%</span>
-        </div>
-      )}
-      
-      <div className="space-y-2 mb-3">
-        {market.runners.slice(0, 3).map((runner, i) => (
-          <div key={runner.name} className={`flex items-center gap-2 ${runner.name === personName ? 'opacity-50' : ''}`}>
-            <div className="relative">
-              <PersonAvatar name={runner.name} avatar={runner.avatar} size="sm" />
-              {i === 0 ? (
-                <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-background/80 backdrop-blur-sm border border-amber-500/50 flex items-center justify-center">
-                  <Crown className="h-3 w-3 text-amber-500" />
-                </div>
-              ) : (
-                <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-violet-500 text-white text-[10px] flex items-center justify-center font-bold">
-                  {i + 1}
-                </div>
-              )}
-            </div>
-            <span className="text-sm flex-1 truncate">{runner.name}</span>
-            <span className="text-xs font-mono text-muted-foreground">{runner.marketShare}%</span>
-          </div>
-        ))}
-      </div>
-      
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold text-violet-500">
-          Pool: {market.totalPool.toLocaleString()}
-        </span>
-        {market.runners.length > 3 && (
-          <span className="text-xs text-muted-foreground">+{market.runners.length - 3} more</span>
-        )}
-      </div>
-      
-      {isMarketClosed ? (
-        <Button 
-          size="sm" 
-          className="w-full bg-muted text-muted-foreground cursor-not-allowed"
-          disabled
-        >
-          <Lock className="h-4 w-4 mr-2" />
-          Awaiting Results
-        </Button>
-      ) : (
-        <Button 
-          size="sm" 
-          className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-          data-testid={`button-enter-race-${market.id}`}
-        >
-          Enter Race
-          <ChevronRight className="h-4 w-4 ml-1" />
-        </Button>
-      )}
-    </PredictCard>
-  );
-}
-
 function TopGainerCard({ 
   market, 
   isMarketClosed = false,
@@ -1072,10 +912,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
     h => h.person1.name === personName || h.person2.name === personName
   );
   
-  const categoryRaces = categoryRaceMarkets.filter(
-    r => r.runners.some(runner => runner.name === personName)
-  );
-  
   const gainerMarkets = topGainerMarkets.filter(
     g => g.leaders.some(leader => leader.name === personName)
   );
@@ -1084,7 +920,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
     c => c.personName === personName
   );
 
-  const hasAnyMarkets = weeklyMarket || h2hBattles.length > 0 || categoryRaces.length > 0 || gainerMarkets.length > 0 || communityPredictions.length > 0;
+  const hasAnyMarkets = weeklyMarket || h2hBattles.length > 0 || gainerMarkets.length > 0 || communityPredictions.length > 0;
 
   return (
     <div className="space-y-6">
@@ -1274,23 +1110,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
           <div className={`grid gap-4 ${h2hBattles.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
             {h2hBattles.map(battle => (
               <HeadToHeadCard key={battle.id} market={battle} isMarketClosed={isMarketClosed} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {categoryRaces.length > 0 && (
-        <section>
-          <SectionHeader
-            icon={<Flag className="h-4 w-4 text-violet-400" />}
-            title="Category Races"
-            subtitle="Compete for top gainer in category"
-            count={categoryRaces.length}
-            infoTooltip="Pick who you think will be the top gainer in their category by week's end"
-          />
-          <div className={`grid gap-4 ${categoryRaces.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
-            {categoryRaces.map(race => (
-              <CategoryRaceCard key={race.id} market={race} personName={personName} isMarketClosed={isMarketClosed} />
             ))}
           </div>
         </section>

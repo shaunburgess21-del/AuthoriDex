@@ -148,61 +148,6 @@ export const HEAD_TO_HEAD_MARKETS: HeadToHeadMarket[] = [
   },
 ];
 
-export interface CategoryRaceMarket {
-  id: string;
-  title: string;
-  category: CategoryFilter;
-  runners: { name: string; avatar: string; marketShare: number; pointsAdded: number }[];
-  endTime: string;
-  totalPool: number;
-  timeRemaining: string;
-}
-
-export const CATEGORY_RACE_MARKETS: CategoryRaceMarket[] = [
-  {
-    id: "race-1",
-    title: "Top Music Gainer",
-    category: "music",
-    runners: [
-      { name: "Taylor Swift", avatar: "", marketShare: 42, pointsAdded: 12450 },
-      { name: "Drake", avatar: "", marketShare: 28, pointsAdded: 8920 },
-      { name: "The Weeknd", avatar: "", marketShare: 18, pointsAdded: 7340 },
-      { name: "Bad Bunny", avatar: "", marketShare: 12, pointsAdded: 5200 },
-    ],
-    endTime: "Sun 23:59 UTC",
-    totalPool: 18900,
-    timeRemaining: "2d 14h",
-  },
-  {
-    id: "race-2",
-    title: "Tech Leader Race",
-    category: "tech",
-    runners: [
-      { name: "Jensen Huang", avatar: "", marketShare: 45, pointsAdded: 15780 },
-      { name: "Elon Musk", avatar: "", marketShare: 30, pointsAdded: 11200 },
-      { name: "Sam Altman", avatar: "", marketShare: 15, pointsAdded: 9850 },
-      { name: "Satya Nadella", avatar: "", marketShare: 10, pointsAdded: 6200 },
-    ],
-    endTime: "Sun 23:59 UTC",
-    totalPool: 22400,
-    timeRemaining: "2d 14h",
-  },
-  {
-    id: "race-3",
-    title: "Sports Star Showdown",
-    category: "sports",
-    runners: [
-      { name: "Cristiano Ronaldo", avatar: "", marketShare: 38, pointsAdded: 9800 },
-      { name: "LeBron James", avatar: "", marketShare: 32, pointsAdded: 8900 },
-      { name: "Lionel Messi", avatar: "", marketShare: 20, pointsAdded: 7200 },
-      { name: "Patrick Mahomes", avatar: "", marketShare: 10, pointsAdded: 5100 },
-    ],
-    endTime: "Sun 23:59 UTC",
-    totalPool: 16500,
-    timeRemaining: "2d 14h",
-  },
-];
-
 export interface TopGainerMarket {
   id: string;
   category: CategoryFilter;

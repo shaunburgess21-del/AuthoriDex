@@ -35,8 +35,7 @@ import {
   ChevronDown,
   Plus,
   BarChart3,
-  Swords,
-  Flag
+  Swords
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -46,7 +45,7 @@ import { useLocation, Link } from "wouter";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Prediction Type definitions
-type PredictionType = "all" | "jackpot" | "updown" | "h2h" | "races" | "gainer" | "community";
+type PredictionType = "all" | "jackpot" | "updown" | "h2h" | "gainer" | "community";
 type CategoryFilter = "all" | "tech" | "politics" | "business" | "music" | "sports" | "creator";
 
 interface PredictionMarket {
@@ -262,75 +261,6 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
   },
 ];
 
-interface CategoryRaceMarket {
-  id: string;
-  title: string;
-  category: CategoryFilter;
-  runners: { name: string; avatar: string; marketShare: number; pointsAdded: number }[];
-  endTime: string;
-  totalPool: number;
-  timeRemaining: string;
-}
-
-const categoryRaceMarkets: CategoryRaceMarket[] = [
-  {
-    id: "race-1",
-    title: "Top Music Gainer",
-    category: "music",
-    runners: [
-      { name: "Taylor Swift", avatar: "", marketShare: 42, pointsAdded: 12450 },
-      { name: "Drake", avatar: "", marketShare: 28, pointsAdded: 8920 },
-      { name: "The Weeknd", avatar: "", marketShare: 18, pointsAdded: 7340 },
-      { name: "Bad Bunny", avatar: "", marketShare: 12, pointsAdded: 5200 },
-    ],
-    endTime: "Sun 23:59 UTC",
-    totalPool: 18900,
-    timeRemaining: "2d 14h",
-  },
-  {
-    id: "race-2",
-    title: "Tech Leader Race",
-    category: "tech",
-    runners: [
-      { name: "Jensen Huang", avatar: "", marketShare: 45, pointsAdded: 15780 },
-      { name: "Elon Musk", avatar: "", marketShare: 30, pointsAdded: 11200 },
-      { name: "Sam Altman", avatar: "", marketShare: 15, pointsAdded: 9850 },
-      { name: "Satya Nadella", avatar: "", marketShare: 10, pointsAdded: 6200 },
-    ],
-    endTime: "Sun 23:59 UTC",
-    totalPool: 22400,
-    timeRemaining: "2d 14h",
-  },
-  {
-    id: "race-3",
-    title: "Sports Star Showdown",
-    category: "sports",
-    runners: [
-      { name: "Cristiano Ronaldo", avatar: "", marketShare: 38, pointsAdded: 9800 },
-      { name: "LeBron James", avatar: "", marketShare: 32, pointsAdded: 8900 },
-      { name: "Lionel Messi", avatar: "", marketShare: 20, pointsAdded: 7200 },
-      { name: "Patrick Mahomes", avatar: "", marketShare: 10, pointsAdded: 5100 },
-    ],
-    endTime: "Sun 23:59 UTC",
-    totalPool: 16500,
-    timeRemaining: "2d 14h",
-  },
-  {
-    id: "race-4",
-    title: "Creator Showdown",
-    category: "creator",
-    runners: [
-      { name: "MrBeast", avatar: "", marketShare: 52, pointsAdded: 18900 },
-      { name: "Logan Paul", avatar: "", marketShare: 25, pointsAdded: 12100 },
-      { name: "KSI", avatar: "", marketShare: 15, pointsAdded: 8750 },
-      { name: "Kai Cenat", avatar: "", marketShare: 8, pointsAdded: 6200 },
-    ],
-    endTime: "Sun 23:59 UTC",
-    totalPool: 14200,
-    timeRemaining: "2d 14h",
-  },
-];
-
 interface TopGainerMarket {
   id: string;
   category: CategoryFilter;
@@ -456,7 +386,7 @@ const communityMarkets: CommunityMarket[] = [
   },
 ];
 
-type MarketType = "JACKPOT_EXACT" | "BINARY_TREND" | "VERSUS" | "COMMUNITY" | "RACE" | "GAINER";
+type MarketType = "JACKPOT_EXACT" | "BINARY_TREND" | "VERSUS" | "COMMUNITY" | "GAINER";
 
 const FIRST_VISIT_KEY = "famedex_predict_first_visit";
 
@@ -465,7 +395,6 @@ const PREDICTION_TYPES: { id: PredictionType; label: string; mobileLabel: string
   { id: "jackpot", label: "Weekly Jackpot", mobileLabel: "Jackpot", icon: <Crown className="h-4 w-4" /> },
   { id: "updown", label: "Up/Down", mobileLabel: "Up/Down", icon: <TrendingUp className="h-4 w-4" /> },
   { id: "h2h", label: "Head-to-Head", mobileLabel: "H2H", icon: <Swords className="h-4 w-4" /> },
-  { id: "races", label: "Category Races", mobileLabel: "Races", icon: <Flag className="h-4 w-4" /> },
   { id: "gainer", label: "Top Gainer", mobileLabel: "Gainer", icon: <BarChart3 className="h-4 w-4" /> },
   { id: "community", label: "User Suggested", mobileLabel: "Community", icon: <Users className="h-4 w-4" /> },
 ];
@@ -948,85 +877,6 @@ function HeadToHeadCard({
   );
 }
 
-function CategoryRaceCard({ 
-  market, 
-  isMarketClosed = false,
-  onClick
-}: { 
-  market: CategoryRaceMarket; 
-  isMarketClosed?: boolean;
-  onClick?: () => void;
-}) {
-  return (
-    <PredictCard testId={`card-race-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''}`} onClick={onClick}>
-      <div className="flex items-center justify-between mb-3">
-        <Badge variant="outline" className="text-xs">
-          <Clock className="h-3 w-3 mr-1" />
-          {market.timeRemaining}
-        </Badge>
-        <CategoryPill category={market.category} />
-      </div>
-      
-      <h3 className="font-semibold mb-3">{market.title}</h3>
-      
-      <div className="space-y-2 mb-3">
-        {market.runners.slice(0, 3).map((runner, i) => (
-          <div key={runner.name} className="flex items-center gap-2">
-            <div className="relative">
-              <PersonAvatar name={runner.name} avatar={runner.avatar} size="sm" />
-              {i === 0 ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-background/80 backdrop-blur-sm border border-amber-500/50 flex items-center justify-center cursor-help">
-                      <Crown className="h-3 w-3 text-amber-500" />
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="text-xs">Rank is determined by market share at close time</p>
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-violet-500 text-white text-[10px] flex items-center justify-center font-bold">
-                  {i + 1}
-                </div>
-              )}
-            </div>
-            <span className="text-sm flex-1 truncate">{runner.name}</span>
-            <span className="text-xs font-mono text-muted-foreground">{runner.marketShare}%</span>
-          </div>
-        ))}
-      </div>
-      
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold text-violet-500">
-          Pool: {market.totalPool.toLocaleString()}
-        </span>
-        <span className="text-xs text-muted-foreground">+{market.runners.length - 3} more</span>
-      </div>
-      
-      {isMarketClosed ? (
-        <Button 
-          size="sm" 
-          className="w-full bg-muted text-muted-foreground cursor-not-allowed"
-          disabled
-        >
-          <Lock className="h-4 w-4 mr-2" />
-          Awaiting Results
-        </Button>
-      ) : (
-        <Button 
-          size="sm" 
-          className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-          data-testid={`button-enter-race-${market.id}`}
-        >
-          Enter Race
-          <ChevronRight className="h-4 w-4 ml-1" />
-        </Button>
-      )}
-    </PredictCard>
-  );
-}
-
 function TopGainerCard({ 
   market, 
   isMarketClosed = false,
@@ -1240,125 +1090,6 @@ function SuggestMarketCard({ onClick }: { onClick: () => void }) {
       </div>
       <p className="text-sm font-medium text-violet-500">Suggest a Market</p>
       <p className="text-xs text-muted-foreground text-center">Create your own prediction for the community</p>
-    </div>
-  );
-}
-
-function RaceDetailOverlay({
-  market,
-  onClose,
-  onBack,
-  isMarketClosed,
-  onSelectRunner
-}: {
-  market: CategoryRaceMarket | null;
-  onClose: () => void;
-  onBack: () => void;
-  isMarketClosed: boolean;
-  onSelectRunner: (name: string) => void;
-}) {
-  const [activeTab, setActiveTab] = useState<"runners" | "chart">("runners");
-  
-  if (!market) return null;
-  
-  return (
-    <div className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-sm overflow-y-auto premium-scrollbar" data-testid="overlay-race-detail">
-      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={onBack} data-testid="button-back-race">
-              <ChevronLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h2 className="font-serif font-bold text-lg">{market.title}</h2>
-              <p className="text-xs text-muted-foreground">Category Race • {market.timeRemaining} remaining</p>
-            </div>
-          </div>
-          <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-race-detail">
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
-        
-        <div className="container mx-auto px-4 pb-3">
-          <div className="flex gap-2">
-            <Button
-              variant={activeTab === "runners" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setActiveTab("runners")}
-              className={activeTab === "runners" ? "bg-violet-500 text-white" : ""}
-            >
-              Runners
-            </Button>
-            <Button
-              variant={activeTab === "chart" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setActiveTab("chart")}
-              className={activeTab === "chart" ? "bg-violet-500 text-white" : ""}
-            >
-              Chart
-            </Button>
-          </div>
-        </div>
-      </div>
-      
-      <div className="container mx-auto px-4 py-6 max-w-2xl">
-        {activeTab === "runners" ? (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground mb-4">Tap a runner to place your prediction</p>
-            {market.runners.map((runner, i) => (
-              <Card 
-                key={runner.name}
-                className={`p-4 cursor-pointer transition-all hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] ${i === 0 ? 'border-amber-500/30' : 'hover:border-violet-500/30'}`}
-                onClick={() => onSelectRunner(runner.name)}
-                data-testid={`button-select-runner-${i}`}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="relative">
-                    <PersonAvatar name={runner.name} avatar={runner.avatar} size="lg" />
-                    {i === 0 ? (
-                      <div className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-background/80 backdrop-blur-sm border border-amber-500/50 flex items-center justify-center">
-                        <Crown className="h-4 w-4 text-amber-500" />
-                      </div>
-                    ) : (
-                      <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-violet-500 text-white text-xs flex items-center justify-center font-bold">
-                        {i + 1}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-semibold">{runner.name}</p>
-                    <p className="text-xs text-muted-foreground">+{runner.pointsAdded.toLocaleString()} pts this week</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-mono text-lg font-bold text-violet-500">{runner.marketShare}%</p>
-                    <p className="text-xs text-muted-foreground">market share</p>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                </div>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <Card className="p-6">
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <BarChart3 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p className="text-sm">Market share chart coming soon</p>
-              </div>
-            </div>
-          </Card>
-        )}
-        
-        <div className="mt-6 flex items-center justify-between">
-          <span className="text-sm font-semibold text-violet-500">
-            Total Pool: {market.totalPool.toLocaleString()} credits
-          </span>
-          <Badge variant="outline">
-            <Clock className="h-3 w-3 mr-1" />
-            Closes {market.endTime}
-          </Badge>
-        </div>
-      </div>
     </div>
   );
 }
@@ -1963,8 +1694,6 @@ export default function PredictPage() {
   const [updownSearch, setUpdownSearch] = useState("");
   const [h2hCategory, setH2hCategory] = useState<CategoryFilter>("all");
   const [h2hSearch, setH2hSearch] = useState("");
-  const [racesCategory, setRacesCategory] = useState<CategoryFilter>("all");
-  const [racesSearch, setRacesSearch] = useState("");
   const [gainerCategory, setGainerCategory] = useState<CategoryFilter>("all");
   const [gainerSearch, setGainerSearch] = useState("");
   const [communityCategory, setCommunityCategory] = useState<CategoryFilter>("all");
@@ -1972,7 +1701,6 @@ export default function PredictPage() {
   const [walletCredits, setWalletCredits] = useState(10000);
   const [activePredictions, setActivePredictions] = useState(0);
   const [viewAllCategory, setViewAllCategory] = useState<string | null>(null);
-  const [selectedRace, setSelectedRace] = useState<CategoryRaceMarket | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   
@@ -2007,15 +1735,6 @@ export default function PredictPage() {
         { icon: <Swords className="h-4 w-4 text-violet-500" />, title: "Pick Your Winner", description: "Choose which person you think will gain more trend points by the end of the week." },
         { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Stake Your Credits", description: "Your potential multiplier depends on how many others picked the same side." },
         { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Winner Takes the Pool", description: "If your pick gains more points, you split the total pool with other winners." },
-      ]
-    },
-    races: {
-      title: "How Category Races Work",
-      description: "Predict the top gainer in a specific category",
-      steps: [
-        { icon: <Flag className="h-4 w-4 text-violet-500" />, title: "Pick Your Runner", description: "Choose who you think will be the top gainer in the category by week's end." },
-        { icon: <Crown className="h-4 w-4 text-violet-500" />, title: "Market Share Matters", description: "The #1 spot is determined by who gets the most prediction backing (market share)." },
-        { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Big Wins for Underdogs", description: "Picking lower-ranked runners can yield higher returns if they surge ahead." },
       ]
     },
     gainer: {
@@ -2074,17 +1793,6 @@ export default function PredictPage() {
       ...market,
       person1: { ...market.person1, avatar: getAvatar(market.person1.name) },
       person2: { ...market.person2, avatar: getAvatar(market.person2.name) },
-    }));
-  }, [getAvatar]);
-  
-  // Hydrate category races with real avatar URLs
-  const hydratedRaces = useMemo(() => {
-    return categoryRaceMarkets.map(race => ({
-      ...race,
-      runners: race.runners.map(runner => ({
-        ...runner,
-        avatar: getAvatar(runner.name),
-      })),
     }));
   }, [getAvatar]);
   
@@ -2175,22 +1883,6 @@ export default function PredictPage() {
     setStakeModalOpen(true);
   };
 
-  const handleRaceSelect = (market: CategoryRaceMarket, runnerName: string) => {
-    const runner = market.runners.find(r => r.name === runnerName);
-    const crowdSentiment = runner?.marketShare || 25;
-    const estimatedPayout = runner ? Math.round((100 / runner.marketShare) * 10) / 10 : 2.0;
-    setPendingSelection({
-      type: "race",
-      choice: runnerName,
-      marketName: market.title,
-      marketId: market.id,
-      currentScore: runner?.pointsAdded,
-      crowdSentiment,
-      estimatedPayout
-    });
-    setStakeModalOpen(true);
-  };
-
   const handleGainerSelect = (market: TopGainerMarket, name: string) => {
     const leader = market.leaders.find(l => l.name === name);
     const leaderIndex = market.leaders.findIndex(l => l.name === name);
@@ -2260,12 +1952,6 @@ export default function PredictPage() {
     (!h2hSearch || m.title.toLowerCase().includes(h2hSearch.toLowerCase()) || 
      m.person1.name.toLowerCase().includes(h2hSearch.toLowerCase()) ||
      m.person2.name.toLowerCase().includes(h2hSearch.toLowerCase()))
-  );
-
-  const filteredRaces = hydratedRaces.filter(m => 
-    (racesCategory === "all" || m.category === racesCategory) &&
-    (!racesSearch || m.title.toLowerCase().includes(racesSearch.toLowerCase()) ||
-     m.runners.some(r => r.name.toLowerCase().includes(racesSearch.toLowerCase())))
   );
 
   const filteredGainers = hydratedGainers.filter(m => 
@@ -2478,41 +2164,6 @@ export default function PredictPage() {
           </section>
         )}
 
-        {showSection("races") && (
-          <section className="mb-10">
-            <SectionHeader
-              title="Category Races"
-              subtitle="Competition within sectors - pick the winner"
-              onViewAll={() => setViewAllCategory("races")}
-              onRulesClick={() => setRulesModalOpen("races")}
-            />
-            <SectionFilterBar
-              categoryFilter={racesCategory}
-              onCategoryChange={setRacesCategory}
-              searchQuery={racesSearch}
-              onSearchChange={setRacesSearch}
-              searchPlaceholder="Search races..."
-              testIdPrefix="races"
-            />
-            {filteredRaces.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredRaces.slice(0, 3).map((market) => (
-                  <CategoryRaceCard 
-                    key={market.id} 
-                    market={market} 
-                    isMarketClosed={isMarketClosed}
-                    onClick={() => setSelectedRace(market)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                No races match your filters
-              </div>
-            )}
-          </section>
-        )}
-
         {showSection("gainer") && (
           <section className="mb-10">
             <SectionHeader
@@ -2673,32 +2324,6 @@ export default function PredictPage() {
           ))}
       </FullScreenOverlay>
       <FullScreenOverlay
-        open={viewAllCategory === "races"}
-        onClose={() => setViewAllCategory(null)}
-        title="All Category Races"
-        categoryFilter={overlayCategoryFilter}
-        onCategoryChange={setOverlayCategoryFilter}
-        searchQuery={overlaySearchQuery}
-        onSearchChange={setOverlaySearchQuery}
-      >
-        {hydratedRaces
-          .filter(m => 
-            (overlayCategoryFilter === "all" || m.category === overlayCategoryFilter) &&
-            (!overlaySearchQuery || m.title.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
-          )
-          .map((market) => (
-            <CategoryRaceCard 
-              key={market.id} 
-              market={market} 
-              isMarketClosed={isMarketClosed}
-              onClick={() => {
-                setViewAllCategory(null);
-                setSelectedRace(market);
-              }}
-            />
-          ))}
-      </FullScreenOverlay>
-      <FullScreenOverlay
         open={viewAllCategory === "gainers"}
         onClose={() => setViewAllCategory(null)}
         title="All Top Gainer Predictions"
@@ -2723,20 +2348,6 @@ export default function PredictPage() {
             />
           ))}
       </FullScreenOverlay>
-      <RaceDetailOverlay
-        market={selectedRace}
-        onClose={() => setSelectedRace(null)}
-        onBack={() => {
-          setSelectedRace(null);
-          setViewAllCategory("races");
-        }}
-        isMarketClosed={isMarketClosed}
-        onSelectRunner={(name) => {
-          if (selectedRace) {
-            handleRaceSelect(selectedRace, name);
-          }
-        }}
-      />
       <StakeModal
         open={stakeModalOpen}
         onClose={() => {

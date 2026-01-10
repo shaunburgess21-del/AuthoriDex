@@ -28,18 +28,16 @@ import {
 import {
   MOCK_MARKETS,
   HEAD_TO_HEAD_MARKETS,
-  CATEGORY_RACE_MARKETS,
   COMMUNITY_MARKETS,
   CATEGORY_FILTERS,
   type PredictionMarket,
   type HeadToHeadMarket,
-  type CategoryRaceMarket,
   type CommunityMarket,
   type CategoryFilter,
 } from "@/data/predict";
 
-type PredictSection = "All" | "Weekly Jackpot" | "Up/Down" | "Head-to-Head" | "Category Races" | "Community";
-const SECTION_TOGGLES: PredictSection[] = ["All", "Weekly Jackpot", "Up/Down", "Head-to-Head", "Category Races", "Community"];
+type PredictSection = "All" | "Weekly Jackpot" | "Up/Down" | "Head-to-Head" | "Community";
+const SECTION_TOGGLES: PredictSection[] = ["All", "Weekly Jackpot", "Up/Down", "Head-to-Head", "Community"];
 
 interface PredictDeckViewProps {
   trendingPeople: TrendingPerson[];
@@ -49,7 +47,7 @@ interface PredictDeckViewProps {
 
 interface StakeModalState {
   isOpen: boolean;
-  type: 'updown' | 'h2h' | 'race' | 'community';
+  type: 'updown' | 'h2h' | 'community';
   marketId: string;
   selection: string;
   personName: string;
@@ -190,58 +188,6 @@ function H2HCard({
   );
 }
 
-function RaceCard({
-  race,
-  onPredict,
-}: {
-  race: CategoryRaceMarket;
-  onPredict: (raceId: string, runnerName: string) => void;
-}) {
-  return (
-    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20">
-      <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-amber-500/5 rounded-lg" />
-      
-      <div className="relative p-4">
-        <div className="flex items-center justify-between mb-3 gap-2">
-          <div className="flex items-center gap-2">
-            <Trophy className="h-4 w-4 text-amber-400" />
-            <span className="text-sm font-semibold">{race.title}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs">
-              {race.timeRemaining}
-            </Badge>
-            <CategoryPill category={race.category} />
-          </div>
-        </div>
-        
-        <div className="space-y-2">
-          {race.runners.slice(0, 4).map((runner, idx) => (
-            <button
-              key={runner.name}
-              onClick={() => onPredict(race.id, runner.name)}
-              className="w-full flex items-center gap-2 p-2 rounded-lg bg-slate-800/50 border border-slate-700/30 hover:border-violet-500/40 transition-all cursor-pointer"
-              data-testid={`button-race-${race.id}-${idx}`}
-            >
-              <span className="text-xs font-mono text-muted-foreground w-4">{idx + 1}</span>
-              <PersonAvatar name={runner.name} avatar={runner.avatar} size="sm" />
-              <span className="flex-1 text-left text-sm font-medium truncate">{runner.name}</span>
-              <Badge variant="outline" className="text-xs bg-slate-700/30">
-                {runner.marketShare}%
-              </Badge>
-            </button>
-          ))}
-        </div>
-        
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-3 justify-center">
-          <Users className="h-3 w-3" />
-          <span>{race.totalPool.toLocaleString()} credits staked</span>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
 function CommunityCard({
   market,
   onPredict,
@@ -320,7 +266,6 @@ function StakeModal({
           <DialogDescription>
             {state.type === 'updown' && `Predicting ${state.selection} for ${state.personName}`}
             {state.type === 'h2h' && `Backing ${state.personName} to win`}
-            {state.type === 'race' && `Backing ${state.personName} to top the race`}
             {state.type === 'community' && `Selecting "${state.selection}"`}
           </DialogDescription>
         </DialogHeader>
@@ -388,7 +333,6 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
   
   const [upDownInteracted, setUpDownInteracted] = useState(false);
   const [h2hInteracted, setH2hInteracted] = useState(false);
-  const [raceInteracted, setRaceInteracted] = useState(false);
   const [communityInteracted, setCommunityInteracted] = useState(false);
   const [pendingPrediction, setPendingPrediction] = useState<string | null>(null);
 
@@ -410,16 +354,6 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
         m.person1.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         m.person2.name.toLowerCase().includes(searchQuery.toLowerCase());
       const notPredicted = !predictions.has(m.id);
-      return matchesCategory && matchesSearch && notPredicted;
-    }),
-    [categoryFilter, searchQuery, predictions]
-  );
-
-  const filteredRaces = useMemo(() =>
-    CATEGORY_RACE_MARKETS.filter(r => {
-      const matchesCategory = categoryFilter === "all" || r.category === categoryFilter;
-      const matchesSearch = !searchQuery || r.title.toLowerCase().includes(searchQuery.toLowerCase());
-      const notPredicted = !predictions.has(r.id);
       return matchesCategory && matchesSearch && notPredicted;
     }),
     [categoryFilter, searchQuery, predictions]
@@ -464,20 +398,6 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
     });
   }, []);
 
-  const handleRacePredict = useCallback((raceId: string, runnerName: string) => {
-    setStakeModal({
-      isOpen: true,
-      type: 'race',
-      marketId: raceId,
-      selection: runnerName,
-      personName: runnerName,
-      onConfirm: () => {
-        setPendingPrediction(raceId);
-        setRaceInteracted(true);
-      },
-    });
-  }, []);
-
   const handleCommunityPredict = useCallback((marketId: string, optionId: string, optionText: string) => {
     setStakeModal({
       isOpen: true,
@@ -500,7 +420,6 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
   const showJackpot = activeSection === "All" || activeSection === "Weekly Jackpot";
   const showUpDown = activeSection === "All" || activeSection === "Up/Down";
   const showH2H = activeSection === "All" || activeSection === "Head-to-Head";
-  const showRaces = activeSection === "All" || activeSection === "Category Races";
   const showCommunity = activeSection === "All" || activeSection === "Community";
 
   return (
@@ -527,7 +446,6 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             {section === "Weekly Jackpot" && <Trophy className="h-3 w-3" />}
             {section === "Up/Down" && <TrendingUp className="h-3 w-3" />}
             {section === "Head-to-Head" && <Swords className="h-3 w-3" />}
-            {section === "Category Races" && <Trophy className="h-3 w-3" />}
             {section === "Community" && <MessageSquare className="h-3 w-3" />}
             {section}
           </button>
@@ -634,34 +552,6 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
               />
             )}
             emptyMessage="No head-to-head markets match your filters"
-          />
-        </div>
-      )}
-
-      {showRaces && filteredRaces.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Trophy className="h-4 w-4 text-amber-400" />
-            <h3 className="text-sm font-semibold">Category Races</h3>
-          </div>
-          <CardDeckContainer
-            items={filteredRaces}
-            viewType="predict"
-            hasInteracted={raceInteracted}
-            onAdvance={() => {
-              if (pendingPrediction) {
-                setPredictions(prev => new Set(prev).add(pendingPrediction));
-                setPendingPrediction(null);
-              }
-              setRaceInteracted(false);
-            }}
-            renderCard={(race) => (
-              <RaceCard
-                race={race}
-                onPredict={(id, name) => handleRacePredict(id, name)}
-              />
-            )}
-            emptyMessage="No category races match your filters"
           />
         </div>
       )}
