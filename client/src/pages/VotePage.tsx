@@ -31,7 +31,9 @@ import {
   Calendar,
   Swords,
   UserPlus,
-  ImageIcon
+  ImageIcon,
+  Globe,
+  BarChart3
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -2214,6 +2216,7 @@ export default function VotePage() {
               {rulesModalOpen === "induction" && "Induction Queue Rules"}
               {rulesModalOpen === "curate" && "Curate the Profile Rules"}
               {rulesModalOpen === "voice" && "The People's Voice Rules"}
+              {rulesModalOpen === "faceoffs" && "Face-Offs Rules"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4 text-sm">
@@ -2282,6 +2285,29 @@ export default function VotePage() {
                   <div className="flex items-start gap-2">
                     <Plus className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
                     <span>Submit your own poll topics for community voting</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {rulesModalOpen === "faceoffs" && (
+              <div className="space-y-3">
+                <p className="text-muted-foreground">Pick a side in head-to-head matchups across anything and everything.</p>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <Swords className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Vote A vs B: Choose the winner in quick 1v1 battles.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Globe className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Anything Goes: People, brands, sports, ideas — even random preferences.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Zap className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Earn <span className="text-cyan-400 font-medium">+20 XP</span>: Get rewarded for every Face-Off vote you cast.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <BarChart3 className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Instant Results: See how your pick compares to the community.</span>
                   </div>
                 </div>
               </div>
