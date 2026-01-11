@@ -32,12 +32,18 @@ import {
   MOCK_MARKETS,
   HEAD_TO_HEAD_MARKETS,
   COMMUNITY_MARKETS,
-  CATEGORY_FILTERS,
   type PredictionMarket,
   type HeadToHeadMarket,
   type CommunityMarket,
-  type CategoryFilter,
 } from "@/data/predict";
+import { getFilterCategories } from "@shared/constants";
+
+type CategoryFilter = "all" | "favorites" | "tech" | "politics" | "business" | "music" | "sports" | "creator";
+
+const PREDICT_CATEGORY_FILTERS = getFilterCategories(false).map(cat => ({
+  id: cat.toLowerCase() as CategoryFilter,
+  label: cat
+}));
 
 type PredictSection = "All" | "Weekly Jackpot" | "Up/Down" | "Head-to-Head" | "Community";
 const SECTION_TOGGLES: PredictSection[] = ["All", "Weekly Jackpot", "Up/Down", "Head-to-Head", "Community"];
@@ -470,7 +476,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
       </div>
 
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
-        {CATEGORY_FILTERS.map((cat) => (
+        {PREDICT_CATEGORY_FILTERS.map((cat) => (
           <button
             key={cat.id}
             onClick={() => {

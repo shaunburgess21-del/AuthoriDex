@@ -28,13 +28,12 @@ import {
   DISCOURSE_TOPICS,
   INDUCTION_CANDIDATES,
   CURATE_PROFILE_POLLS,
-  FILTER_CATEGORIES,
   type FaceOffData,
   type DiscourseTopicData,
   type InductionCandidate,
   type CurateProfilePoll,
-  type FilterCategory,
 } from "@/data/vote";
+import { getFilterCategories, type FilterCategory } from "@shared/constants";
 
 type VoteSection = "All" | "Face-Offs" | "People's Voice" | "Induction Queue" | "Curate Profile";
 const SECTION_TOGGLES: VoteSection[] = ["All", "Face-Offs", "People's Voice", "Induction Queue", "Curate Profile"];
@@ -469,7 +468,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
       </div>
 
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
-        {FILTER_CATEGORIES.map((cat) => (
+        {getFilterCategories(false).map((cat) => (
           <button
             key={cat}
             onClick={() => {
@@ -477,7 +476,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
                 setLocation("/login");
                 return;
               }
-              setCategoryFilter(cat);
+              setCategoryFilter(cat as FilterCategory);
             }}
             className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
               categoryFilter === cat

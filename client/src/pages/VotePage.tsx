@@ -1554,6 +1554,22 @@ export default function VotePage() {
                     How it works
                   </TooltipContent>
                 </Tooltip>
+                <Button
+                  onClick={() => setSuggestModalOpen(true)}
+                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
+                  data-testid="button-suggest-faceoff"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Suggest
+                </Button>
+                <Button
+                  size="icon"
+                  onClick={() => setSuggestModalOpen(true)}
+                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
+                  data-testid="button-suggest-faceoff-mobile"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           </div>
@@ -1655,18 +1671,18 @@ export default function VotePage() {
                   </TooltipContent>
                 </Tooltip>
                 <Button
-                  onClick={() => setStartPollModalOpen(true)}
+                  onClick={() => setSuggestModalOpen(true)}
                   className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
-                  data-testid="button-start-poll-header"
+                  data-testid="button-suggest-poll"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Start poll
+                  Suggest
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => setStartPollModalOpen(true)}
+                  onClick={() => setSuggestModalOpen(true)}
                   className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
-                  data-testid="button-start-poll-header-mobile"
+                  data-testid="button-suggest-poll-mobile"
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
