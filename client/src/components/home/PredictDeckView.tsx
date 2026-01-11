@@ -12,6 +12,8 @@ import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { WeeklyJackpotCard } from "@/components/predict/WeeklyJackpotCard";
 import { TrendingPerson } from "@shared/schema";
 import { motion } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
+import { useLocation } from "wouter";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -23,7 +25,8 @@ import {
   Clock,
   Zap,
   Target,
-  MessageSquare
+  MessageSquare,
+  Star
 } from "lucide-react";
 import {
   MOCK_MARKETS,
@@ -321,6 +324,8 @@ function StakeModal({
 
 export function PredictDeckView({ trendingPeople, isLoading, onExplore }: PredictDeckViewProps) {
   const marketState = useMarketCycle();
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [activeSection, setActiveSection] = useState<PredictSection>("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
@@ -468,15 +473,23 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
         {CATEGORY_FILTERS.map((cat) => (
           <button
             key={cat.id}
-            onClick={() => setCategoryFilter(cat.id)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+            onClick={() => {
+              if (cat.id === "favorites" && !user) {
+                setLocation("/login");
+                return;
+              }
+              setCategoryFilter(cat.id);
+            }}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
               categoryFilter === cat.id
                 ? 'bg-violet-500/20 text-violet-300 border border-violet-400/40'
                 : 'bg-muted/30 border border-border/50 text-muted-foreground hover:bg-muted/50'
             }`}
             data-testid={`chip-predict-category-${cat.id}`}
+            aria-label={cat.id === "favorites" ? "Favorites" : undefined}
           >
-            {cat.label}
+            {cat.id === "favorites" && <Star className="h-3.5 w-3.5" />}
+            {cat.id === "favorites" ? <span className="hidden md:inline">{cat.label}</span> : cat.label}
           </button>
         ))}
       </div>

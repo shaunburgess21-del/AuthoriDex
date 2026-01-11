@@ -16,6 +16,11 @@ Preferred communication style: Simple, everyday language.
 - **Styling**: Design tokens via CSS variables, custom utility classes, glassy neon aesthetic for category pills with specific color mapping for different categories (e.g., Tech: Cyan, Music: Purple).
 - **Interactive Elements**: Expandable leaderboard rows with animations, a centralized VotingModal supporting "Vote Next" functionality, and square avatars with rounded corners.
 - **Celebrity Profile Vote Tab**: Features "Curate the Profile" section for photo voting on the current celebrity, "Featured Polls" section showing top 3 polls filtered by subject entity with a "View all" modal overlay, positioned between the sentiment voting widget and Community Insights.
+- **Global Favorites Filter**: Universal filter appearing after "All" in every category filter row across the app
+    - **Star Icon**: Displays Star icon + "Favorites" text on desktop, icon-only on mobile for space efficiency
+    - **Auth-Gated**: Clicking when logged out redirects to /login; when logged in, filters data by user's favorited celebrities
+    - **Locations**: VotePage (8 filter instances), PredictPage (global + section filters + overlays), VoteDeckView, PredictDeckView
+    - **Data Sources**: `client/src/data/vote.ts` (FILTER_CATEGORIES), `client/src/data/predict.ts` (CATEGORY_FILTERS)
 - **Compare Momentum Graph**: Bloomberg-style momentum comparison chart with:
     - **Time Range Toggles**: 7D (default), 30D, 90D, ALL - config-driven via `TIME_RANGE_OPTIONS` constant
     - **High-Contrast Color Palette**: Cyan (#22D3EE), Violet (#A855F7), Emerald (#10B981), Amber (#F59E0B), Rose (#F43F5E)

@@ -7,6 +7,8 @@ import { CardDeckContainer } from "@/components/CardDeckContainer";
 import { CategoryPill } from "@/components/CategoryPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
+import { useLocation } from "wouter";
 import { 
   Swords, 
   MessageSquare, 
@@ -18,7 +20,8 @@ import {
   ThumbsUp, 
   ThumbsDown, 
   Minus,
-  Check
+  Check,
+  Star
 } from "lucide-react";
 import {
   FACE_OFF_DATA,
@@ -342,6 +345,8 @@ function CurateCard({
 }
 
 export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [activeSection, setActiveSection] = useState<VoteSection>("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("All");
@@ -467,15 +472,23 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
         {FILTER_CATEGORIES.map((cat) => (
           <button
             key={cat}
-            onClick={() => setCategoryFilter(cat)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+            onClick={() => {
+              if (cat === "Favorites" && !user) {
+                setLocation("/login");
+                return;
+              }
+              setCategoryFilter(cat);
+            }}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
               categoryFilter === cat
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/40'
                 : 'bg-muted/30 border border-border/50 text-muted-foreground hover:bg-muted/50'
             }`}
             data-testid={`chip-vote-category-${cat.toLowerCase()}`}
+            aria-label={cat === "Favorites" ? "Favorites" : undefined}
           >
-            {cat}
+            {cat === "Favorites" && <Star className="h-3.5 w-3.5" />}
+            {cat === "Favorites" ? <span className="hidden md:inline">{cat}</span> : cat}
           </button>
         ))}
       </div>

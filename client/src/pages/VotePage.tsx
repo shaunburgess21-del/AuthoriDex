@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { CategoryPill } from "@/components/CategoryPill";
 import { UserMenu } from "@/components/UserMenu";
 import { PersonAvatar } from "@/components/PersonAvatar";
+import { useAuth } from "@/contexts/AuthContext";
+import { useFavorites } from "@/hooks/useFavorites";
 import { 
   ArrowLeft, 
   Plus, 
@@ -177,7 +179,7 @@ const DISCOURSE_TOPICS: DiscourseTopicData[] = [
   { id: "d20", headline: "Climate activism tactics", description: "Is disruption effective or counterproductive?", category: "Politics", approvePercent: 35, neutralPercent: 25, disapprovePercent: 40, totalVotes: 167890 },
 ];
 
-const FILTER_CATEGORIES = ["All", "Tech", "Music", "Sports", "Creator", "Business", "Politics"] as const;
+const FILTER_CATEGORIES = ["All", "Favorites", "Tech", "Music", "Sports", "Creator", "Business", "Politics"] as const;
 type FilterCategory = typeof FILTER_CATEGORIES[number];
 
 const SECTION_TOGGLES = ["All", "Face-Offs", "People's Voice", "Induction Queue", "Curate Profile"] as const;
@@ -1072,9 +1074,57 @@ function CelebrityAutocomplete({
   );
 }
 
+function FilterChip({ 
+  category, 
+  isActive, 
+  onClick, 
+  testIdPrefix,
+  user,
+  onAuthRequired
+}: { 
+  category: string; 
+  isActive: boolean; 
+  onClick: () => void; 
+  testIdPrefix: string;
+  user: any;
+  onAuthRequired: () => void;
+}) {
+  const isFavorites = category === "Favorites";
+  
+  const handleClick = () => {
+    if (isFavorites && !user) {
+      onAuthRequired();
+      return;
+    }
+    onClick();
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 ${
+        isActive
+          ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
+          : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+      }`}
+      data-testid={`${testIdPrefix}-${category.toLowerCase()}`}
+      aria-label={isFavorites ? "Favorites" : undefined}
+    >
+      {isFavorites && <Star className="h-3.5 w-3.5" />}
+      {isFavorites ? <span className="hidden md:inline">Favorites</span> : category}
+    </button>
+  );
+}
+
 export default function VotePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const { favorites, favoriteIds, isAuthenticated } = useFavorites();
+  
+  const handleAuthRequired = () => {
+    setLocation("/login");
+  };
   const [suggestModalOpen, setSuggestModalOpen] = useState(false);
   const [suggestName, setSuggestName] = useState("");
   const [suggestCategory, setSuggestCategory] = useState("");
@@ -1417,18 +1467,15 @@ export default function VotePage() {
           
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
             {FILTER_CATEGORIES.map((cat) => (
-              <button
+              <FilterChip
                 key={cat}
+                category={cat}
+                isActive={globalCategoryFilter === cat}
                 onClick={() => setGlobalCategoryFilter(cat)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all backdrop-blur-sm ${
-                  globalCategoryFilter === cat
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 shadow-sm shadow-cyan-500/20'
-                    : 'bg-background/50 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-cyan-400/20'
-                }`}
-                data-testid={`chip-category-${cat.toLowerCase()}`}
-              >
-                {cat}
-              </button>
+                testIdPrefix="chip-category"
+                user={user}
+                onAuthRequired={handleAuthRequired}
+              />
             ))}
           </div>
         </div>
@@ -1472,18 +1519,15 @@ export default function VotePage() {
 
           <div className="flex flex-wrap items-center gap-2 mb-4">
             {FILTER_CATEGORIES.map((cat) => (
-              <button
+              <FilterChip
                 key={cat}
+                category={cat}
+                isActive={faceOffsCategoryFilter === cat}
                 onClick={() => setFaceOffsCategoryFilter(cat)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
-                  faceOffsCategoryFilter === cat
-                    ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
-                    : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
-                }`}
-                data-testid={`filter-faceoffs-${cat.toLowerCase()}`}
-              >
-                {cat}
-              </button>
+                testIdPrefix="filter-faceoffs"
+                user={user}
+                onAuthRequired={handleAuthRequired}
+              />
             ))}
             <div className="hidden md:block ml-auto">
               <div className="relative">
@@ -1591,18 +1635,15 @@ export default function VotePage() {
 
           <div className="flex flex-wrap items-center gap-2 mb-4">
             {FILTER_CATEGORIES.map((cat) => (
-              <button
+              <FilterChip
                 key={cat}
+                category={cat}
+                isActive={topicsCategoryFilter === cat}
                 onClick={() => setTopicsCategoryFilter(cat)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
-                  topicsCategoryFilter === cat
-                    ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
-                    : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
-                }`}
-                data-testid={`filter-topics-${cat.toLowerCase()}`}
-              >
-                {cat}
-              </button>
+                testIdPrefix="filter-topics"
+                user={user}
+                onAuthRequired={handleAuthRequired}
+              />
             ))}
             <div className="hidden md:block ml-auto">
               <div className="relative">
@@ -1756,18 +1797,15 @@ export default function VotePage() {
 
           <div className="flex flex-wrap items-center gap-2 mb-4">
             {FILTER_CATEGORIES.map((cat) => (
-              <button
+              <FilterChip
                 key={cat}
+                category={cat}
+                isActive={inductionCategoryFilter === cat}
                 onClick={() => setInductionCategoryFilter(cat)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
-                  inductionCategoryFilter === cat
-                    ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
-                    : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
-                }`}
-                data-testid={`filter-induction-${cat.toLowerCase()}`}
-              >
-                {cat}
-              </button>
+                testIdPrefix="filter-induction"
+                user={user}
+                onAuthRequired={handleAuthRequired}
+              />
             ))}
             <div className="hidden md:block ml-auto">
               <div className="relative">
@@ -1910,18 +1948,15 @@ export default function VotePage() {
             <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-background to-transparent pointer-events-none z-10" />
             <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-background to-transparent pointer-events-none z-10" />
             {FILTER_CATEGORIES.map((cat) => (
-              <button
+              <FilterChip
                 key={cat}
+                category={cat}
+                isActive={curateCategoryFilter === cat}
                 onClick={() => setCurateCategoryFilter(cat)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
-                  curateCategoryFilter === cat
-                    ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
-                    : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
-                }`}
-                data-testid={`filter-curate-${cat.toLowerCase()}`}
-              >
-                {cat}
-              </button>
+                testIdPrefix="filter-curate"
+                user={user}
+                onAuthRequired={handleAuthRequired}
+              />
             ))}
           </div>
 
@@ -2481,18 +2516,15 @@ export default function VotePage() {
             <div className="sticky top-0 z-10 p-4 border-b bg-background/95 backdrop-blur-sm">
               <div className="flex flex-wrap items-center gap-2">
                 {FILTER_CATEGORIES.map((cat) => (
-                  <button
+                  <FilterChip
                     key={cat}
+                    category={cat}
+                    isActive={inductionCategoryFilter === cat}
                     onClick={() => setInductionCategoryFilter(cat)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
-                      inductionCategoryFilter === cat
-                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
-                        : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
-                    }`}
-                    data-testid={`filter-overlay-induction-${cat.toLowerCase()}`}
-                  >
-                    {cat}
-                  </button>
+                    testIdPrefix="filter-overlay-induction"
+                    user={user}
+                    onAuthRequired={handleAuthRequired}
+                  />
                 ))}
                 <div className="ml-auto">
                   <div className="relative">
@@ -2556,18 +2588,15 @@ export default function VotePage() {
             <div className="sticky top-0 z-10 p-4 border-b bg-background/95 backdrop-blur-sm">
               <div className="flex flex-wrap items-center gap-2">
                 {FILTER_CATEGORIES.map((cat) => (
-                  <button
+                  <FilterChip
                     key={cat}
+                    category={cat}
+                    isActive={topicsCategoryFilter === cat}
                     onClick={() => setTopicsCategoryFilter(cat)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
-                      topicsCategoryFilter === cat
-                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
-                        : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
-                    }`}
-                    data-testid={`filter-overlay-topics-${cat.toLowerCase()}`}
-                  >
-                    {cat}
-                  </button>
+                    testIdPrefix="filter-overlay-topics"
+                    user={user}
+                    onAuthRequired={handleAuthRequired}
+                  />
                 ))}
                 <div className="ml-auto">
                   <div className="relative">
@@ -2632,18 +2661,15 @@ export default function VotePage() {
             <div className="sticky top-0 z-10 p-4 border-b border-cyan-500/10 bg-background/95 backdrop-blur-sm">
               <div className="flex flex-wrap items-center gap-2">
                 {FILTER_CATEGORIES.map((cat) => (
-                  <button
+                  <FilterChip
                     key={cat}
+                    category={cat}
+                    isActive={faceOffsCategoryFilter === cat}
                     onClick={() => setFaceOffsCategoryFilter(cat)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
-                      faceOffsCategoryFilter === cat
-                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
-                        : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
-                    }`}
-                    data-testid={`filter-overlay-faceoffs-${cat.toLowerCase()}`}
-                  >
-                    {cat}
-                  </button>
+                    testIdPrefix="filter-overlay-faceoffs"
+                    user={user}
+                    onAuthRequired={handleAuthRequired}
+                  />
                 ))}
                 <div className="ml-auto">
                   <div className="relative">
