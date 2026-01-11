@@ -1173,6 +1173,7 @@ export default function VotePage() {
   
   const [activeSection, setActiveSection] = useState<SectionToggle>("All");
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
+  const [infoModalOpen, setInfoModalOpen] = useState<"voxpopuli" | "governance" | null>(null);
   const [curateCategoryFilter, setCurateCategoryFilter] = useState<FilterCategory>("All");
   const [globalVoteSearchQuery, setGlobalVoteSearchQuery] = useState("");
   const [globalCategoryFilter, setGlobalCategoryFilter] = useState<FilterCategory>("All");
@@ -1484,6 +1485,31 @@ export default function VotePage() {
         </div>
       </div>
       <div className="container mx-auto px-4 py-8 max-w-5xl">
+        {/* VOX POPULI HEADER - Above Face-Offs + People's Voice */}
+        {(activeSection === "All" || isPublicOpinionSection(activeSection)) && (
+        <div className="relative overflow-hidden mb-6">
+          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
+          <div className="relative py-4">
+            <div className="text-center">
+              <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-voxpopuli-title">
+                The Voice of the People
+              </h2>
+              <p className="text-muted-foreground max-w-2xl mx-auto mb-3">
+                Your votes capture what the world thinks — across rumors, ideas, and events.
+              </p>
+              <button
+                onClick={() => setInfoModalOpen("voxpopuli")}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/30 transition-all cursor-pointer"
+                data-testid="button-voxpopuli-info"
+              >
+                <Sparkles className="h-4 w-4 text-cyan-400" />
+                <span className="text-sm text-cyan-400 font-medium">Vox Populi</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        )}
+
         {/* ZONE 1: Public Opinion - Face-Offs Section (First) */}
         {(activeSection === "All" || activeSection === "Face-Offs") && (
         <section className="mb-10">
@@ -1695,20 +1721,24 @@ export default function VotePage() {
         {/* Show when: All, Induction Queue, or Curate Profile is selected */}
         {/* Hide when: Face-Offs or People's Voice is selected */}
         {(activeSection === "All" || isGovernanceSection(activeSection)) && (
-        <div className="relative overflow-hidden mb-10">
+        <div className="relative overflow-hidden mb-6">
           <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
-          <div className="relative py-8 pt-[5px] pb-[5px]">
-            <div className="text-center mt-[22px] mb-[22px]">
-              <h2 className="text-3xl md:text-4xl font-serif font-bold mb-3" data-testid="text-governance-title">
+          <div className="relative py-4">
+            <div className="text-center">
+              <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-governance-title">
                 Shape the FameDex
               </h2>
-              <p className="text-muted-foreground max-w-2xl mx-auto">
+              <p className="text-muted-foreground max-w-2xl mx-auto mb-3">
                 Vote on new inductees and curate profile images. Your opinion powers the index.
               </p>
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 mt-4">
+              <button
+                onClick={() => setInfoModalOpen("governance")}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/30 transition-all cursor-pointer"
+                data-testid="button-governance-info"
+              >
                 <Sparkles className="h-4 w-4 text-cyan-400" />
                 <span className="text-sm text-cyan-400 font-medium">Community Governance</span>
-              </div>
+              </button>
             </div>
           </div>
         </div>
@@ -2259,6 +2289,93 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Vox Populi Info Modal */}
+      <Dialog open={infoModalOpen === "voxpopuli"} onOpenChange={() => setInfoModalOpen(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-cyan-400" />
+              The World's Sentiment Engine
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4 text-sm">
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="h-6 w-6 rounded-full bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-cyan-400 text-xs font-bold">1</span>
+                </div>
+                <div>
+                  <span className="font-medium text-cyan-400">Cut Through the Noise:</span>
+                  <span className="text-muted-foreground"> Headlines only tell half the story. Use The People's Voice to capture what the world actually thinks about today's news.</span>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="h-6 w-6 rounded-full bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-cyan-400 text-xs font-bold">2</span>
+                </div>
+                <div>
+                  <span className="font-medium text-cyan-400">Pick Your Side:</span>
+                  <span className="text-muted-foreground"> From massive beefs to serious debates, align yourself with the winners or defend the underdogs.</span>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="h-6 w-6 rounded-full bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-cyan-400 text-xs font-bold">3</span>
+                </div>
+                <div>
+                  <span className="font-medium text-cyan-400">Drive the Data:</span>
+                  <span className="text-muted-foreground"> Watch the percentages shift live as thousands of users around the world weigh in on the exact same moment.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Community Governance Info Modal */}
+      <Dialog open={infoModalOpen === "governance"} onOpenChange={() => setInfoModalOpen(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-cyan-400" />
+              You Run the Show
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4 text-sm">
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="h-6 w-6 rounded-full bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-cyan-400 text-xs font-bold">1</span>
+                </div>
+                <div>
+                  <span className="font-medium text-cyan-400">Expand the Roster:</span>
+                  <span className="text-muted-foreground"> The leaderboard isn't static. Vote in the Induction Queue to decide exactly who deserves to be added next.</span>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="h-6 w-6 rounded-full bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-cyan-400 text-xs font-bold">2</span>
+                </div>
+                <div>
+                  <span className="font-medium text-cyan-400">Define the Aesthetic:</span>
+                  <span className="text-muted-foreground"> You are the Art Director. Use Curate Profile to swap out bad press photos and choose the definitive image for every star.</span>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="h-6 w-6 rounded-full bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-cyan-400 text-xs font-bold">3</span>
+                </div>
+                <div>
+                  <span className="font-medium text-cyan-400">Remove the Gatekeepers:</span>
+                  <span className="text-muted-foreground"> No editors, no bias. This is the first global index that is 100% shaped, ranked, and managed by you.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <AnimatePresence>
         {curateLeaderboardOpen && (
           <motion.div
