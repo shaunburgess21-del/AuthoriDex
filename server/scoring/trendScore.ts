@@ -67,42 +67,46 @@ export function computeTrendScore(
   // =========================================================================
   
   // Wiki mass contribution - only if wiki is active
+  // When we don't have follower data, wiki is our primary mass signal
   let wikiMassScore = inputs.activePlatforms.wiki 
     ? normalizeMass(inputs.wikiPageviews * 365) 
     : 0;
-  if (inputs.activePlatforms.wiki) {
-    wikiMassScore = Math.min(wikiMassScore, wikiMassScore * WIKI_DOMINANCE_CAP + 50);
-  }
   
-  // Follower-based mass - only apply to active platforms
+  // Follower-based mass - only apply if we actually have follower data
   const followerScore = inputs.totalFollowers 
     ? normalizeMass(inputs.totalFollowers) 
     : 0;
   
-  // Zero out contributions for inactive platforms - fixed weights with NO redistribution
-  const xMassContrib = inputs.activePlatforms.x ? followerScore * PLATFORM_WEIGHTS.mass.x : 0;
-  const instagramMassContrib = inputs.activePlatforms.instagram ? followerScore * PLATFORM_WEIGHTS.mass.instagram : 0;
-  const youtubeMassContrib = inputs.activePlatforms.youtube ? followerScore * PLATFORM_WEIGHTS.mass.youtube : 0;
+  // If we have follower data, use the standard weighted approach
+  // If not, wiki becomes the primary mass signal (scaled up to compensate)
+  let massScore: number;
   
-  // Total mass score with fixed weights (no redistribution for missing platforms)
-  const massScore = (
-    (wikiMassScore * PLATFORM_WEIGHTS.mass.wiki) +
-    xMassContrib +
-    instagramMassContrib +
-    youtubeMassContrib
-  );
+  if (inputs.totalFollowers && inputs.totalFollowers > 0) {
+    // Standard weighted approach when we have follower data
+    const xMassContrib = inputs.activePlatforms.x ? followerScore * PLATFORM_WEIGHTS.mass.x : 0;
+    const instagramMassContrib = inputs.activePlatforms.instagram ? followerScore * PLATFORM_WEIGHTS.mass.instagram : 0;
+    const youtubeMassContrib = inputs.activePlatforms.youtube ? followerScore * PLATFORM_WEIGHTS.mass.youtube : 0;
+    
+    massScore = (
+      (wikiMassScore * PLATFORM_WEIGHTS.mass.wiki) +
+      xMassContrib +
+      instagramMassContrib +
+      youtubeMassContrib
+    );
+  } else {
+    // Wiki-only mode: wiki becomes the full mass signal
+    // Scale appropriately since wiki normally only gets 30% weight
+    massScore = wikiMassScore;
+  }
   
   // =========================================================================
   // 2. CALCULATE VELOCITY SCORE (0-100)
   // =========================================================================
   
   // Wiki velocity - only if wiki is active
-  let wikiVelocityScore = inputs.activePlatforms.wiki 
+  const wikiVelocityScore = inputs.activePlatforms.wiki 
     ? normalizeVelocity(inputs.wikiDelta) 
     : 0;
-  if (inputs.activePlatforms.wiki && wikiVelocityScore > 0) {
-    wikiVelocityScore = Math.min(wikiVelocityScore, wikiVelocityScore * WIKI_DOMINANCE_CAP + 30);
-  }
   
   // News and search velocities (always available as data sources)
   const newsVelocityScore = normalizeVelocity(inputs.newsDelta);
@@ -139,13 +143,15 @@ export function computeTrendScore(
   // =========================================================================
   
   // Build platform statuses from inputs if not provided
+  // NOTE: Instagram and YouTube are marked as NOT_APPLICABLE until we implement data fetching for them
+  // This prevents unfair penalization for platforms we don't yet track
   const platformStatuses: PlatformStatuses = inputs.platformStatuses || {
     wiki: inputs.activePlatforms.wiki ? "ACTIVE" : "NOT_PRESENT",
     x: inputs.activePlatforms.x ? "ACTIVE" : "NOT_PRESENT",
-    instagram: inputs.activePlatforms.instagram ? "ACTIVE" : "NOT_PRESENT",
-    youtube: inputs.activePlatforms.youtube ? "ACTIVE" : "NOT_PRESENT",
-    news: inputs.newsDelta !== 0 ? "ACTIVE" : "NOT_APPLICABLE", // News is always applicable
-    search: inputs.searchDelta !== 0 ? "ACTIVE" : "NOT_APPLICABLE", // Search is always applicable
+    instagram: "NOT_APPLICABLE", // Not tracking yet - don't penalize
+    youtube: "NOT_APPLICABLE",   // Not tracking yet - don't penalize
+    news: "ACTIVE",              // News is always a data source (even if 0)
+    search: "ACTIVE",            // Search is always a data source (even if 0)
   };
   
   const diversityMultiplier = calculateDiversityMultiplier(platformStatuses);
