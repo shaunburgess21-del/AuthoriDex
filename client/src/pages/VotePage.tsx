@@ -1218,10 +1218,16 @@ export default function VotePage() {
     setLocation("/login");
   };
   const [suggestModalOpen, setSuggestModalOpen] = useState(false);
+  const [inductionSuggestOpen, setInductionSuggestOpen] = useState(false);
+  const [faceOffSuggestOpen, setFaceOffSuggestOpen] = useState(false);
   const [suggestName, setSuggestName] = useState("");
   const [suggestCategory, setSuggestCategory] = useState("");
   const [suggestReason, setSuggestReason] = useState("");
   const [suggestUrl, setSuggestUrl] = useState("");
+  const [faceOffHeadline, setFaceOffHeadline] = useState("");
+  const [faceOffContenderA, setFaceOffContenderA] = useState("");
+  const [faceOffContenderB, setFaceOffContenderB] = useState("");
+  const [faceOffCategory, setFaceOffCategory] = useState("");
   const [totalVotes] = useState(127843);
   const [countdown, setCountdown] = useState("2d 14h 32m");
   
@@ -1353,13 +1359,13 @@ export default function VotePage() {
   });
 
   useEffect(() => {
-    if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen || faceOffsOverlayOpen) {
+    if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen || faceOffsOverlayOpen || inductionSuggestOpen || faceOffSuggestOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen, faceOffsOverlayOpen]);
+  }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen, faceOffsOverlayOpen, inductionSuggestOpen, faceOffSuggestOpen]);
 
   const addXP = (amount: number, event?: React.MouseEvent) => {
     setXp(prev => prev + amount);
@@ -1633,7 +1639,7 @@ export default function VotePage() {
                   </TooltipContent>
                 </Tooltip>
                 <Button
-                  onClick={() => setSuggestModalOpen(true)}
+                  onClick={() => setFaceOffSuggestOpen(true)}
                   className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
                   data-testid="button-suggest-faceoff"
                 >
@@ -1642,7 +1648,7 @@ export default function VotePage() {
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => setSuggestModalOpen(true)}
+                  onClick={() => setFaceOffSuggestOpen(true)}
                   className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
                   data-testid="button-suggest-faceoff-mobile"
                 >
@@ -1749,7 +1755,7 @@ export default function VotePage() {
                   </TooltipContent>
                 </Tooltip>
                 <Button
-                  onClick={() => setSuggestModalOpen(true)}
+                  onClick={() => setStartPollModalOpen(true)}
                   className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
                   data-testid="button-suggest-poll"
                 >
@@ -1758,7 +1764,7 @@ export default function VotePage() {
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => setSuggestModalOpen(true)}
+                  onClick={() => setStartPollModalOpen(true)}
                   className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
                   data-testid="button-suggest-poll-mobile"
                 >
@@ -1883,7 +1889,7 @@ export default function VotePage() {
                   </TooltipContent>
                 </Tooltip>
                 <Button
-                  onClick={() => setSuggestModalOpen(true)}
+                  onClick={() => setInductionSuggestOpen(true)}
                   className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
                   data-testid="button-suggest-candidate-header"
                 >
@@ -1892,7 +1898,7 @@ export default function VotePage() {
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => setSuggestModalOpen(true)}
+                  onClick={() => setInductionSuggestOpen(true)}
                   className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
                   data-testid="button-suggest-candidate-header-mobile"
                 >
@@ -2117,86 +2123,18 @@ export default function VotePage() {
         )}
       </div>
       <button
-        onClick={() => setSuggestModalOpen(true)}
+        onClick={() => setInductionSuggestOpen(true)}
         className="fixed bottom-24 md:bottom-8 right-6 h-14 w-14 rounded-full bg-cyan-500 text-white shadow-lg flex items-center justify-center hover:bg-cyan-600 transition-colors z-40"
         data-testid="fab-suggest-candidate"
       >
         <Plus className="h-6 w-6" />
       </button>
-      <Dialog open={suggestModalOpen} onOpenChange={setSuggestModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Plus className="h-5 w-5 text-cyan-400" />
-              Suggest a Candidate
-            </DialogTitle>
-            <DialogDescription>
-              Who are we missing? Suggest someone to be added to FameDex.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm font-medium mb-1 block">Candidate name *</label>
-              <CelebrityAutocomplete 
-                value={suggestName}
-                onChange={setSuggestName}
-                onSelect={setSuggestName}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Category *</label>
-              <Select value={suggestCategory} onValueChange={setSuggestCategory}>
-                <SelectTrigger data-testid="select-suggest-category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Music">Music</SelectItem>
-                  <SelectItem value="Tech">Tech</SelectItem>
-                  <SelectItem value="Creator">Creator</SelectItem>
-                  <SelectItem value="Sports">Sports</SelectItem>
-                  <SelectItem value="Politics">Politics</SelectItem>
-                  <SelectItem value="Business">Business</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Why should they be on FameDex? (optional)</label>
-              <Input
-                value={suggestReason}
-                onChange={(e) => setSuggestReason(e.target.value)}
-                placeholder="Brief reason..."
-                data-testid="input-suggest-reason"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Social/profile URL (optional)</label>
-              <Input
-                value={suggestUrl}
-                onChange={(e) => setSuggestUrl(e.target.value)}
-                placeholder="https://..."
-                data-testid="input-suggest-url"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setSuggestModalOpen(false)} data-testid="button-cancel-suggestion">Cancel</Button>
-            <Button 
-              onClick={handleSuggestSubmit}
-              disabled={!suggestName || !suggestCategory}
-              className="bg-cyan-500 text-white"
-              data-testid="button-submit-suggestion"
-            >
-              Submit Suggestion
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
       <Dialog open={startPollModalOpen} onOpenChange={setStartPollModalOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <MessageSquare className="h-5 w-5 text-cyan-400" />
-              Start a Poll
+              Suggest a Poll
             </DialogTitle>
             <DialogDescription>
               Suggest a topic for the community to vote on.
@@ -2296,6 +2234,171 @@ export default function VotePage() {
               data-testid="button-submit-poll"
             >
               Submit Poll
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={faceOffSuggestOpen} onOpenChange={setFaceOffSuggestOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Swords className="h-5 w-5 text-cyan-400" />
+              Suggest a Face-Off
+            </DialogTitle>
+            <DialogDescription>
+              Create an A vs B matchup for the community to vote on.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm font-medium">Headline *</label>
+                <span className={`text-xs ${faceOffHeadline.length > 60 ? 'text-red-400' : 'text-muted-foreground'}`}>
+                  {faceOffHeadline.length}/60
+                </span>
+              </div>
+              <Input
+                value={faceOffHeadline}
+                onChange={(e) => setFaceOffHeadline(e.target.value.slice(0, 60))}
+                placeholder="e.g. Battle of the Brands"
+                data-testid="input-faceoff-headline"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Contender A *</label>
+              <Input
+                value={faceOffContenderA}
+                onChange={(e) => setFaceOffContenderA(e.target.value)}
+                placeholder="e.g. Nike"
+                data-testid="input-faceoff-contender-a"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Contender B *</label>
+              <Input
+                value={faceOffContenderB}
+                onChange={(e) => setFaceOffContenderB(e.target.value)}
+                placeholder="e.g. Adidas"
+                data-testid="input-faceoff-contender-b"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Category *</label>
+              <Select value={faceOffCategory} onValueChange={setFaceOffCategory}>
+                <SelectTrigger data-testid="select-faceoff-category">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Music">Music</SelectItem>
+                  <SelectItem value="Tech">Tech</SelectItem>
+                  <SelectItem value="Creator">Creator</SelectItem>
+                  <SelectItem value="Sports">Sports</SelectItem>
+                  <SelectItem value="Politics">Politics</SelectItem>
+                  <SelectItem value="Business">Business</SelectItem>
+                  <SelectItem value="misc">Custom Topic</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setFaceOffSuggestOpen(false)} data-testid="button-cancel-faceoff">Cancel</Button>
+            <Button 
+              onClick={() => {
+                toast({
+                  title: "Face-Off Suggested!",
+                  description: `Your matchup "${faceOffContenderA} vs ${faceOffContenderB}" has been submitted for review.`,
+                });
+                setFaceOffHeadline("");
+                setFaceOffContenderA("");
+                setFaceOffContenderB("");
+                setFaceOffCategory("");
+                setFaceOffSuggestOpen(false);
+              }}
+              disabled={!faceOffHeadline || !faceOffContenderA || !faceOffContenderB || !faceOffCategory}
+              className="bg-cyan-500 text-white"
+              data-testid="button-submit-faceoff"
+            >
+              Submit Face-Off
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={inductionSuggestOpen} onOpenChange={setInductionSuggestOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-cyan-400" />
+              Suggest a Candidate
+            </DialogTitle>
+            <DialogDescription>
+              Who are we missing? Suggest someone NEW to be added to FameDex.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-1 block">Candidate Name *</label>
+              <Input
+                value={suggestName}
+                onChange={(e) => setSuggestName(e.target.value)}
+                placeholder="Enter the person's name"
+                data-testid="input-induction-name"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Social/Profile URL *</label>
+              <Input
+                value={suggestUrl}
+                onChange={(e) => setSuggestUrl(e.target.value)}
+                placeholder="https://twitter.com/... or https://instagram.com/..."
+                data-testid="input-induction-url"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Required for verification</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Category (optional)</label>
+              <Select value={suggestCategory} onValueChange={setSuggestCategory}>
+                <SelectTrigger data-testid="select-induction-category">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Music">Music</SelectItem>
+                  <SelectItem value="Tech">Tech</SelectItem>
+                  <SelectItem value="Creator">Creator</SelectItem>
+                  <SelectItem value="Sports">Sports</SelectItem>
+                  <SelectItem value="Politics">Politics</SelectItem>
+                  <SelectItem value="Business">Business</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Why should they be on FameDex? (optional)</label>
+              <Input
+                value={suggestReason}
+                onChange={(e) => setSuggestReason(e.target.value)}
+                placeholder="Brief reason..."
+                data-testid="input-induction-reason"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setInductionSuggestOpen(false)} data-testid="button-cancel-induction">Cancel</Button>
+            <Button 
+              onClick={() => {
+                toast({
+                  title: "Candidate Suggested!",
+                  description: `Your suggestion for "${suggestName}" has been submitted for review.`,
+                });
+                setSuggestName("");
+                setSuggestUrl("");
+                setSuggestCategory("");
+                setSuggestReason("");
+                setInductionSuggestOpen(false);
+              }}
+              disabled={!suggestName || !suggestUrl}
+              className="bg-cyan-500 text-white"
+              data-testid="button-submit-induction"
+            >
+              Submit Suggestion
             </Button>
           </div>
         </DialogContent>
