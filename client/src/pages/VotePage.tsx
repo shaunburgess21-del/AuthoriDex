@@ -1698,7 +1698,7 @@ export default function VotePage() {
         <div className="relative overflow-hidden mb-10">
           <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
           <div className="relative py-8 pt-[5px] pb-[5px]">
-            <div className="text-center mb-6">
+            <div className="text-center mt-[22px] mb-[22px]">
               <h2 className="text-3xl md:text-4xl font-serif font-bold mb-3" data-testid="text-governance-title">
                 Shape the FameDex
               </h2>
