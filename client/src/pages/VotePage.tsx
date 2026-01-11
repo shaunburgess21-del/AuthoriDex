@@ -2277,7 +2277,7 @@ export default function VotePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <Sparkles className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-400 font-medium">+2 XP</span> for each vote</span>
+                    <span>Earn <span className="text-cyan-400 font-medium">+20 XP</span> for each vote</span>
                   </div>
                   <div className="flex items-start gap-2">
                     <Plus className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
