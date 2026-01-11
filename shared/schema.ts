@@ -61,7 +61,7 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   spotifyFollowers: real("spotify_followers").notNull().default(0),
   searchVolume: real("search_volume").notNull().default(0),
   trendScore: real("trend_score").notNull(),
-  fameIndex: integer("fame_index").default(0), // 0-100 normalized score
+  fameIndex: integer("fame_index").default(0), // 0-10,000 normalized score
   wikiPageviews: real("wiki_pageviews").default(0),
   wikiDelta: real("wiki_delta").default(0),
   newsDelta: real("news_delta").default(0),
@@ -126,7 +126,7 @@ export const trendingPeople = pgTable("trending_people", {
   bio: text("bio"),
   rank: integer("rank").notNull(),
   trendScore: real("trend_score").notNull(),
-  fameIndex: integer("fame_index").default(0), // 0-100 normalized score (primary UI number)
+  fameIndex: integer("fame_index").default(0), // 0-10,000 normalized score (primary UI number)
   change24h: real("change_24h"),
   change7d: real("change_7d"),
   category: text("category"),

@@ -37,6 +37,7 @@ export async function seedHistoricalSnapshots(daysBack: number = 7): Promise<{ c
             personId: person.id,
             timestamp,
             trendScore,
+            fameIndex: Math.round(trendScore / 100), // 0-10,000 scale
             newsCount: Math.round(Math.random() * 100 + 10),
             searchVolume: Math.round(Math.random() * 500 + 50),
             youtubeViews: 0,
@@ -49,8 +50,10 @@ export async function seedHistoricalSnapshots(daysBack: number = 7): Promise<{ c
             xReplyVelocity: Math.random() * 15,
             massScore,
             velocityScore,
+            velocityAdjusted: velocityScore * (0.35 + 0.65 * (massScore / 100)),
+            diversityMultiplier: 1.0,
             confidence: 0.7 + Math.random() * 0.2,
-            momentum: Math.random() > 0.5 ? "up" : "down",
+            momentum: Math.random() > 0.5 ? "Breakout" : "Stable",
             drivers: ["wiki", "search", "x"],
           });
           

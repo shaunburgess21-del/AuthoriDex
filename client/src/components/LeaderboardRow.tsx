@@ -89,7 +89,7 @@ export function LeaderboardRow({ person, onVisitProfile, onVoteClick }: Leaderbo
         </div>
         <div className="text-right hidden sm:block">
           <p className="font-mono font-bold text-2xl" data-testid={`text-score-${person.id}`}>
-            {person.fameIndex ?? Math.round(person.trendScore / 10000)}
+            {(person.fameIndex ?? Math.round(person.trendScore / 100)).toLocaleString()}
           </p>
           <p className="text-xs text-muted-foreground uppercase tracking-wide">
             Fame Index

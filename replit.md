@@ -27,10 +27,11 @@ Preferred communication style: Simple, everyday language.
 - **API Design**: RESTful endpoints with query parameters.
 - **Data Providers**: Integrates with Wikipedia, GDELT, Serper.dev, and X/Twitter APIs for celebrity data.
 - **Scoring Engine** (Refactored Jan 2026):
-  - **Fame Index (0-100)**: Primary UI score displayed everywhere, computed from normalized trend score.
+  - **Fame Index (0-10,000)**: Primary UI score displayed everywhere, computed from normalized trend score. Scale expanded from 0-100 to 0-10,000 for greater variance and prediction difficulty.
   - **Fixed Weights**: Mass (40%) + Velocity (60%), no dynamic redistribution to prevent scoring discontinuities.
   - **Anti-Spam Damping**: `VelocityAdjusted = VelocityScore × (0.35 + 0.65 × MassScore)` ensures high-velocity/low-mass accounts are penalized.
-  - **Diversity Multiplier**: Silent penalty based on active platforms (5/5 = 1.00x, 4/5 = 0.90x, 3/5 = 0.78x, 2/5 = 0.62x, 1/5 = 0.40x).
+  - **Diversity Multiplier**: Silent penalty based on active platforms. Instagram/YouTube marked as NOT_APPLICABLE (not tracked yet). Wiki+X+News+Search = 4/4 active = 1.0x multiplier.
+  - **Wiki-as-Primary-Mass**: When follower data is unavailable, wiki pageviews serve as the primary mass signal to prevent score collapse.
   - **EMA Smoothing**: Alpha = 0.15 applied to final scores for stable, smooth curves instead of "barcode" charts.
   - **Nullable Change Values**: change24h/change7d show "N/A" when data is unavailable (no fake random values).
 - **Data Jobs**: Includes jobs for full data ingestion, quick scoring, and hourly trend snapshot capture.

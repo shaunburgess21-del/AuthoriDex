@@ -691,7 +691,7 @@ export default function PersonDetailPage() {
               Fame Index
             </p>
             <p className="text-3xl font-mono font-bold" data-testid="text-trend-score">
-              {person.fameIndex ?? Math.round(person.trendScore / 10000)}
+              {(person.fameIndex ?? Math.round(person.trendScore / 100)).toLocaleString()}
             </p>
           </Card>
           <Card className="text-center p-4">
@@ -947,7 +947,7 @@ export default function PersonDetailPage() {
             personId={person.id} 
             personName={person.name}
             personAvatar={person.avatar || ""}
-            currentScore={person.fameIndex ?? Math.round(person.trendScore / 10000)}
+            currentScore={person.fameIndex ?? Math.round(person.trendScore / 100)}
           />
         )}
       </div>

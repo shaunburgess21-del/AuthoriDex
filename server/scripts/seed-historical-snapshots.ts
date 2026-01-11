@@ -90,6 +90,7 @@ async function seedHistoricalSnapshots() {
         personId: person.id,
         timestamp,
         trendScore: adjustedScore,
+        fameIndex: Math.round(adjustedScore / 100), // 0-10,000 scale (trendScore / 100)
         newsCount: news?.articleCount24h || 0,
         searchVolume: serper?.searchVolume || 0,
         youtubeViews: 0,
@@ -102,7 +103,9 @@ async function seedHistoricalSnapshots() {
         xReplyVelocity: xMetrics?.replyVelocity || 0,
         massScore: baseScore.massScore,
         velocityScore: baseScore.velocityScore,
+        velocityAdjusted: baseScore.velocityAdjusted,
         confidence: baseScore.confidence,
+        diversityMultiplier: baseScore.diversityMultiplier,
         momentum: baseScore.momentum,
         drivers: baseScore.drivers,
       });
