@@ -270,12 +270,13 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
   
   const results: CelebrityMetrics[] = [];
 
-  // Generate mock metrics for each celebrity (using displayOrder - 1 as index for consistent scoring)
+  // Generate mock metrics for each celebrity (using displayOrder as index for consistent scoring)
   for (let i = 0; i < celebrities.length; i++) {
     const celeb = celebrities[i];
     
-    // Use displayOrder - 1 as the index so rank 1 gets the highest score
-    const mockMetrics = generateMockMetrics(celeb.name, celeb.displayOrder ? celeb.displayOrder - 1 : i);
+    // Use displayOrder as the index (0 = first place, highest score). Fallback to i if displayOrder is null/undefined
+    const orderIndex = celeb.displayOrder ?? i;
+    const mockMetrics = generateMockMetrics(celeb.name, orderIndex);
     
     results.push({
       name: celeb.name,
@@ -313,8 +314,19 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
     // }
   }
 
-  // DO NOT sort - maintain displayOrder ranking
-  // results.sort((a, b) => b.trendScore - a.trendScore);
+  // Check if displayOrder values are unique/differentiated - if not, sort by trendScore for consistent ranking
+  const uniqueOrders = new Set(celebrities.map(c => c.displayOrder));
+  if (uniqueOrders.size <= 1) {
+    // All displayOrder values are the same (or all null), sort by trendScore descending
+    console.log('[Aggregate] displayOrder not differentiated, sorting by trendScore');
+    results.sort((a, b) => b.trendScore - a.trendScore);
+    // Re-sort celebrities to match results order for proper rank assignment
+    celebrities.sort((a, b) => {
+      const scoreA = results.find(r => r.name === a.name)?.trendScore ?? 0;
+      const scoreB = results.find(r => r.name === b.name)?.trendScore ?? 0;
+      return scoreB - scoreA;
+    });
+  }
   
   // Fetch historical snapshots for change calculations
   const now = new Date();
