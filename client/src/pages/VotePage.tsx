@@ -12,6 +12,7 @@ import {
   Plus, 
   Vote,
   Users,
+  User,
   Clock,
   Sparkles,
   Camera,
@@ -986,14 +987,23 @@ function XPFloaterAnimation({ floater, onComplete }: { floater: XPFloater; onCom
   );
 }
 
-function CelebrityAutocomplete({ 
+type SubjectSelection = {
+  type: 'celebrity' | 'custom';
+  value: string;
+};
+
+function HybridSubjectCombobox({ 
   value, 
   onChange,
-  onSelect 
+  onSelect,
+  placeholder = "Search celebrity or create custom topic...",
+  showCustomTopicOption = true
 }: { 
   value: string; 
   onChange: (value: string) => void;
-  onSelect: (name: string) => void;
+  onSelect: (selection: SubjectSelection) => void;
+  placeholder?: string;
+  showCustomTopicOption?: boolean;
 }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
@@ -1001,16 +1011,10 @@ function CelebrityAutocomplete({
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (value.length >= 1) {
-      const filtered = mockCelebrityList.filter(name => 
-        name.toLowerCase().includes(value.toLowerCase())
-      ).slice(0, 8);
-      setFilteredSuggestions(filtered);
-      setShowSuggestions(filtered.length > 0);
-    } else {
-      setFilteredSuggestions([]);
-      setShowSuggestions(false);
-    }
+    const filtered = mockCelebrityList.filter(name => 
+      name.toLowerCase().includes(value.toLowerCase())
+    ).slice(0, 6);
+    setFilteredSuggestions(filtered);
   }, [value]);
 
   useEffect(() => {
@@ -1028,10 +1032,18 @@ function CelebrityAutocomplete({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSelect = (name: string) => {
-    onSelect(name);
+  const handleSelectCelebrity = (name: string) => {
+    onSelect({ type: 'celebrity', value: name });
     setShowSuggestions(false);
   };
+
+  const handleSelectCustomTopic = (topic: string) => {
+    onSelect({ type: 'custom', value: topic });
+    setShowSuggestions(false);
+  };
+
+  const hasMatchingCelebrities = filteredSuggestions.length > 0;
+  const showFallbackCustom = value.length >= 2 && !hasMatchingCelebrities;
 
   return (
     <div className="relative">
@@ -1039,12 +1051,12 @@ function CelebrityAutocomplete({
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input 
           ref={inputRef}
-          placeholder="Search celebrity name..."
+          placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onFocus={() => value.length >= 1 && filteredSuggestions.length > 0 && setShowSuggestions(true)}
+          onFocus={() => setShowSuggestions(true)}
           className="pl-10"
-          data-testid="input-suggest-name"
+          data-testid="input-subject-search"
         />
       </div>
       
@@ -1052,27 +1064,92 @@ function CelebrityAutocomplete({
         {showSuggestions && (
           <motion.div 
             ref={suggestionsRef}
-            className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg overflow-hidden"
+            className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg overflow-hidden max-h-72 overflow-y-auto"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.15 }}
           >
-            {filteredSuggestions.map((name, index) => (
+            {showCustomTopicOption && (
               <button
-                key={name}
-                onClick={() => handleSelect(name)}
-                className="w-full px-4 py-2.5 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
-                data-testid={`suggestion-item-${index}`}
+                onClick={() => handleSelectCustomTopic(value || "Custom Topic")}
+                className="w-full px-4 py-2.5 text-left text-sm hover:bg-cyan-500/10 transition-colors flex items-center gap-2 border-b border-border bg-gradient-to-r from-cyan-500/5 to-transparent"
+                data-testid="option-create-custom-topic"
               >
-                <PersonAvatar name={name} avatar="" size="sm" />
-                <span>{name}</span>
+                <div className="h-7 w-7 rounded-md bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center">
+                  <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-medium text-cyan-400">Create Custom Topic</span>
+                  <span className="text-xs text-muted-foreground">Not about a specific celebrity</span>
+                </div>
               </button>
-            ))}
+            )}
+
+            {hasMatchingCelebrities ? (
+              <>
+                <div className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/30 border-b border-border">
+                  Celebrities
+                </div>
+                {filteredSuggestions.map((name, index) => (
+                  <button
+                    key={name}
+                    onClick={() => handleSelectCelebrity(name)}
+                    className="w-full px-4 py-2.5 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
+                    data-testid={`suggestion-celebrity-${index}`}
+                  >
+                    <PersonAvatar name={name} avatar="" size="sm" />
+                    <span>{name}</span>
+                  </button>
+                ))}
+              </>
+            ) : showFallbackCustom ? (
+              <button
+                onClick={() => handleSelectCustomTopic(value)}
+                className="w-full px-4 py-2.5 text-left text-sm hover:bg-muted transition-colors flex items-center gap-2"
+                data-testid="option-use-as-custom"
+              >
+                <div className="h-7 w-7 rounded-md bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
+                  <Plus className="h-3.5 w-3.5 text-violet-400" />
+                </div>
+                <div className="flex flex-col">
+                  <span>Use "<span className="font-medium text-violet-400">{value}</span>" as Custom Topic</span>
+                  <span className="text-xs text-muted-foreground">No matching celebrities found</span>
+                </div>
+              </button>
+            ) : value.length === 0 ? (
+              <div className="px-4 py-3 text-sm text-muted-foreground text-center">
+                Type to search celebrities or create a custom topic
+              </div>
+            ) : null}
           </motion.div>
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function CelebrityAutocomplete({ 
+  value, 
+  onChange,
+  onSelect 
+}: { 
+  value: string; 
+  onChange: (value: string) => void;
+  onSelect: (name: string) => void;
+}) {
+  const handleSelect = (selection: SubjectSelection) => {
+    onSelect(selection.value);
+  };
+
+  return (
+    <HybridSubjectCombobox
+      value={value}
+      onChange={onChange}
+      onSelect={handleSelect}
+      placeholder="Search celebrity name..."
+      showCustomTopicOption={false}
+    />
   );
 }
 
@@ -1179,6 +1256,7 @@ export default function VotePage() {
   const [pollCategory, setPollCategory] = useState("");
   const [pollDescription, setPollDescription] = useState("");
   const [pollEntitySearch, setPollEntitySearch] = useState("");
+  const [pollSubjectType, setPollSubjectType] = useState<'celebrity' | 'custom' | null>(null);
   const [curateLeaderboardOpen, setCurateLeaderboardOpen] = useState(false);
   const [selectedCuratePerson, setSelectedCuratePerson] = useState<CurateProfilePoll | null>(null);
   const [pollDuration, setPollDuration] = useState<string>("none");
@@ -2141,44 +2219,31 @@ export default function VotePage() {
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Subject (Entity) *</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={pollEntitySearch}
-                  onChange={(e) => setPollEntitySearch(e.target.value)}
-                  placeholder="Search for a celebrity..."
-                  className="pl-10"
-                  data-testid="input-poll-entity-search"
-                />
-              </div>
-              {pollEntitySearch && (
-                <div className="mt-2 max-h-32 overflow-y-auto rounded-lg border border-border bg-background/95">
-                  {mockCelebrityList
-                    .filter(name => name.toLowerCase().includes(pollEntitySearch.toLowerCase()))
-                    .slice(0, 5)
-                    .map((name, idx) => (
-                      <button
-                        key={name}
-                        onClick={() => {
-                          setPollCategory(name);
-                          setPollEntitySearch(name);
-                        }}
-                        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-muted/50 text-left"
-                        data-testid={`poll-entity-option-${idx}`}
-                      >
-                        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 flex items-center justify-center text-xs font-bold text-cyan-400 border border-cyan-500/30">
-                          {name.split(' ').map(n => n[0]).join('')}
-                        </div>
-                        <div className="flex-1">
-                          <span className="text-sm font-medium">{name}</span>
-                        </div>
-                        <Badge variant="outline" className="text-xs">
-                          Leaderboard
-                        </Badge>
-                      </button>
-                    ))}
-                  {mockCelebrityList.filter(name => name.toLowerCase().includes(pollEntitySearch.toLowerCase())).length === 0 && (
-                    <div className="px-3 py-2 text-sm text-muted-foreground">No results found</div>
+              <HybridSubjectCombobox
+                value={pollEntitySearch}
+                onChange={setPollEntitySearch}
+                onSelect={(selection) => {
+                  setPollEntitySearch(selection.value);
+                  setPollSubjectType(selection.type);
+                  if (selection.type === 'custom') {
+                    setPollCategory('misc');
+                  }
+                }}
+                placeholder="Search celebrity or create custom topic..."
+                showCustomTopicOption={true}
+              />
+              {pollSubjectType && (
+                <div className={`mt-2 text-xs flex items-center gap-1.5 ${pollSubjectType === 'custom' ? 'text-violet-400' : 'text-cyan-400'}`}>
+                  {pollSubjectType === 'custom' ? (
+                    <>
+                      <Sparkles className="h-3 w-3" />
+                      Custom Topic
+                    </>
+                  ) : (
+                    <>
+                      <User className="h-3 w-3" />
+                      Celebrity
+                    </>
                   )}
                 </div>
               )}
