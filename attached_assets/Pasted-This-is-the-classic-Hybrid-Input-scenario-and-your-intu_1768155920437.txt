@@ -1,0 +1,92 @@
+This is the classic "Hybrid Input" scenario, and your intuition is spot on. We want to maximize convenience (auto-filling images for known celebs) while maintaining flexibility (allowing uploads for "Nike").
+
+The Solution: "Smart Search with Conditional Upload"
+We will upgrade the Contender A and Contender B fields from simple text boxes to Smart Comboboxes (similar to what we did for the People's Voice "Subject" field).
+
+Here is the Logic Flow for each field:
+
+User Types: The system searches the FameDex Database (Leaderboard + Induction Queue).
+
+Scenario A (Celebrity Found):
+
+User selects "Elon Musk".
+
+Result: The system locks in his celebrity_id and automatically displays his profile photo next to the name.
+
+No upload button is shown.
+
+Scenario B (Custom/Brand):
+
+User types "Nike" and clicks "Use 'Nike' as Custom Contender".
+
+Result: The system reveals a "📷 Upload Image" button next to the name.
+
+User MUST upload an image to proceed.
+
+This keeps the UI clean (hiding upload buttons when they aren't needed) and ensures your database uses the high-quality photos you already have.
+
+The Developer Prompt
+This prompt instructs Replit to upgrade the fields, implement the "Conditional Upload" logic, and ensure the backend can store these new custom images.
+
+Copy and paste this to the Replit Plan Agent:
+
+Act as a Senior Full-Stack Engineer.
+
+Task: Upgrade Face-Off Modal with Smart Search & Image Uploads We need to enhance the "Suggest a Face-Off" modal to handle images intelligently. Currently, Contender A and Contender B are simple text fields. We need to upgrade them to support Auto-Images for Celebrities and Manual Uploads for Custom Contenders.
+
+1. UI/UX Logic: The "Smart" Contender Fields Upgrade both "Contender A" and "Contender B" inputs to be Searchable Comboboxes with the following logic:
+
+Search Behavior:
+
+As the user types, search the Leaderboard (and Induction Queue if available) for matching names.
+
+Selection Logic:
+
+If User Selects a Celebrity:
+
+Store the celebrity_id.
+
+Auto-Display: Immediately show a small thumbnail of the celebrity's existing profile photo next to the input.
+
+Action: Do NOT show an upload button (we use the existing DB image).
+
+If User Selects "Create Custom Contender" (e.g., "Nike"):
+
+Store the name as text.
+
+Action: Reveal a "📷 Upload Image" button (or file input) specifically for this contender.
+
+Validation: Image upload is REQUIRED for custom contenders.
+
+2. Backend & Schema Updates
+
+Storage: You will need to handle the file uploads. Use the existing file storage pattern (if one exists) or standard local storage/blob handling compatible with Replit.
+
+Schema (faceoff_suggestions table):
+
+Ensure the table can handle this hybrid data.
+
+Columns needed (Additive):
+
+contender_a_id (Nullable, FK to celebrities)
+
+contender_a_custom_name (Nullable String)
+
+contender_a_custom_image_url (Nullable String - stores the uploaded file path)
+
+(Repeat the above 3 columns for Contender B)
+
+3. Visual Polish
+
+Ensure the "Celebrity Thumbnail" and the "Upload Button" fit neatly within the modal layout without breaking alignment.
+
+If a user uploads a custom image, show a small preview thumbnail so they know it worked.
+
+Deliverables:
+
+A fully functional "Face-Off" suggestion modal where users can pit "Elon Musk" (Auto-Image) against "Tony Stark" (Custom Upload).
+
+Verification that both types of suggestions save correctly to the database.
+
+A Note on File Storage
+If your Replit project doesn't have a dedicated image hosting service (like AWS S3) set up yet, Replit might default to storing these images locally in the project folder or using a basic blob store. This is fine for now, but if you scale up, you will eventually want to connect a real storage bucket. This prompt asks Replit to use whatever is currently available/standard for the environment.
