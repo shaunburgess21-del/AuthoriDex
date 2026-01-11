@@ -61,6 +61,7 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   spotifyFollowers: real("spotify_followers").notNull().default(0),
   searchVolume: real("search_volume").notNull().default(0),
   trendScore: real("trend_score").notNull(),
+  fameIndex: integer("fame_index").default(0), // 0-100 normalized score
   wikiPageviews: real("wiki_pageviews").default(0),
   wikiDelta: real("wiki_delta").default(0),
   newsDelta: real("news_delta").default(0),
@@ -69,7 +70,9 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   xReplyVelocity: real("x_reply_velocity").default(0),
   massScore: real("mass_score").default(0),
   velocityScore: real("velocity_score").default(0),
+  velocityAdjusted: real("velocity_adjusted").default(0), // After anti-spam damping
   confidence: real("confidence").default(1.0),
+  diversityMultiplier: real("diversity_multiplier").default(1.0),
   momentum: text("momentum").default("Stable"),
   drivers: text("drivers").array(),
 }, (table) => ({
@@ -123,8 +126,9 @@ export const trendingPeople = pgTable("trending_people", {
   bio: text("bio"),
   rank: integer("rank").notNull(),
   trendScore: real("trend_score").notNull(),
-  change24h: real("change_24h").notNull(),
-  change7d: real("change_7d").notNull(),
+  fameIndex: integer("fame_index").default(0), // 0-100 normalized score (primary UI number)
+  change24h: real("change_24h"),
+  change7d: real("change_7d"),
   category: text("category"),
 });
 
@@ -722,3 +726,60 @@ export const insertPageViewSchema = createInsertSchema(pageViews).omit({
 
 export type PageView = typeof pageViews.$inferSelect;
 export type InsertPageView = z.infer<typeof insertPageViewSchema>;
+
+// ============================================================================
+// PLATFORM STATUS - Tracks data source availability per celebrity
+// ============================================================================
+
+// Platform status values:
+// - ACTIVE: Platform exists and we're tracking it
+// - NOT_PRESENT: Celebrity doesn't have this platform (penalize)
+// - NOT_APPLICABLE: Platform doesn't apply (e.g., Spotify for politicians - no penalty)
+// - TEMP_FAIL: API failure - fill-forward, don't penalize
+export type PlatformStatusValue = "ACTIVE" | "NOT_PRESENT" | "NOT_APPLICABLE" | "TEMP_FAIL";
+
+export const platformStatus = pgTable("platform_status", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  personId: varchar("person_id").notNull().references(() => trackedPeople.id, { onDelete: "cascade" }),
+  platform: text("platform").notNull(), // wiki, x, instagram, youtube, tiktok, spotify, news, search
+  status: text("status").notNull().default("ACTIVE"), // ACTIVE, NOT_PRESENT, NOT_APPLICABLE, TEMP_FAIL
+  lastValue: real("last_value"), // Last known good value for fill-forward
+  lastUpdatedAt: timestamp("last_updated_at").defaultNow(),
+  stalenessHours: integer("staleness_hours").default(0),
+}, (table) => ({
+  uniquePersonPlatform: unique().on(table.personId, table.platform),
+}));
+
+export const insertPlatformStatusSchema = createInsertSchema(platformStatus).omit({
+  id: true,
+});
+
+export type PlatformStatus = typeof platformStatus.$inferSelect;
+export type InsertPlatformStatus = z.infer<typeof insertPlatformStatusSchema>;
+
+// ============================================================================
+// TIER-1 OVERRIDES - Manual corrections for top celebrities
+// ============================================================================
+
+// Tier-1 Overrides - Manual follower/metric overrides for top celebrities
+export const tier1Overrides = pgTable("tier1_overrides", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  personId: varchar("person_id").notNull().references(() => trackedPeople.id, { onDelete: "cascade" }).unique(),
+  xFollowers: real("x_followers"), // Override X/Twitter follower count
+  instagramFollowers: real("instagram_followers"),
+  youtubeSubscribers: real("youtube_subscribers"),
+  tiktokFollowers: real("tiktok_followers"),
+  spotifyMonthlyListeners: real("spotify_monthly_listeners"),
+  notes: text("notes"), // Admin notes about why override is needed
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertTier1OverrideSchema = createInsertSchema(tier1Overrides).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type Tier1Override = typeof tier1Overrides.$inferSelect;
+export type InsertTier1Override = z.infer<typeof insertTier1OverrideSchema>;

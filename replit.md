@@ -26,7 +26,13 @@ Preferred communication style: Simple, everyday language.
 - **Technology Stack**: Node.js with Express.js, TypeScript, Drizzle ORM.
 - **API Design**: RESTful endpoints with query parameters.
 - **Data Providers**: Integrates with Wikipedia, GDELT, Serper.dev, and X/Twitter APIs for celebrity data.
-- **Scoring Engine**: Implements fairness algorithms, computes final trend scores (70% velocity, 30% mass), and uses log-normalization for data scaling.
+- **Scoring Engine** (Refactored Jan 2026):
+  - **Fame Index (0-100)**: Primary UI score displayed everywhere, computed from normalized trend score.
+  - **Fixed Weights**: Mass (40%) + Velocity (60%), no dynamic redistribution to prevent scoring discontinuities.
+  - **Anti-Spam Damping**: `VelocityAdjusted = VelocityScore × (0.35 + 0.65 × MassScore)` ensures high-velocity/low-mass accounts are penalized.
+  - **Diversity Multiplier**: Silent penalty based on active platforms (5/5 = 1.00x, 4/5 = 0.90x, 3/5 = 0.78x, 2/5 = 0.62x, 1/5 = 0.40x).
+  - **EMA Smoothing**: Alpha = 0.15 applied to final scores for stable, smooth curves instead of "barcode" charts.
+  - **Nullable Change Values**: change24h/change7d show "N/A" when data is unavailable (no fake random values).
 - **Data Jobs**: Includes jobs for full data ingestion, quick scoring, and hourly trend snapshot capture.
 
 ### Serverless Architecture

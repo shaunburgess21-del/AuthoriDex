@@ -688,10 +688,10 @@ export default function PersonDetailPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card className="text-center p-4">
             <p className="text-sm text-muted-foreground uppercase tracking-wide mb-1">
-              Trend Score
+              Fame Index
             </p>
             <p className="text-3xl font-mono font-bold" data-testid="text-trend-score">
-              {formatNumber(person.trendScore)}
+              {person.fameIndex ?? Math.round(person.trendScore / 10000)}
             </p>
           </Card>
           <Card className="text-center p-4">
@@ -947,7 +947,7 @@ export default function PersonDetailPage() {
             personId={person.id} 
             personName={person.name}
             personAvatar={person.avatar || ""}
-            currentScore={Math.round(person.trendScore)}
+            currentScore={person.fameIndex ?? Math.round(person.trendScore / 10000)}
           />
         )}
       </div>

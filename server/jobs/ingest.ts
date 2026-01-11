@@ -85,6 +85,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
         await db.insert(trendSnapshots).values({
           personId: person.id,
           trendScore: scoreResult.trendScore,
+          fameIndex: scoreResult.fameIndex,
           newsCount: news?.articleCount24h || 0,
           searchVolume: serper?.searchVolume || 0,
           youtubeViews: 0,
@@ -97,7 +98,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
           xReplyVelocity: xMetrics?.replyVelocity || 0,
           massScore: scoreResult.massScore,
           velocityScore: scoreResult.velocityScore,
+          velocityAdjusted: scoreResult.velocityAdjusted,
           confidence: scoreResult.confidence,
+          diversityMultiplier: scoreResult.diversityMultiplier,
           momentum: scoreResult.momentum,
           drivers: scoreResult.drivers,
         });
@@ -149,6 +152,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
         bio: person.bio,
         rank: i + 1,
         trendScore: score.trendScore,
+        fameIndex: score.fameIndex,
         change24h: score.change24h,
         change7d: score.change7d,
         category: person.category,
@@ -160,6 +164,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
           bio: person.bio,
           rank: i + 1,
           trendScore: score.trendScore,
+          fameIndex: score.fameIndex,
           change24h: score.change24h,
           change7d: score.change7d,
           category: person.category,

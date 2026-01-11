@@ -5,8 +5,10 @@ export default function LeaderboardRowExample() {
     id: "1",
     name: "Taylor Swift",
     avatar: null,
+    bio: null,
     rank: 1,
     trendScore: 9850,
+    fameIndex: 98,
     change24h: 12.5,
     change7d: 23.8,
     category: "Music",
@@ -16,7 +18,8 @@ export default function LeaderboardRowExample() {
     <div className="max-w-4xl">
       <LeaderboardRow 
         person={mockPerson} 
-        onClick={() => console.log('Person clicked')} 
+        onVisitProfile={() => console.log('Visit profile clicked')} 
+        onVoteClick={() => console.log('Vote clicked')}
       />
     </div>
   );

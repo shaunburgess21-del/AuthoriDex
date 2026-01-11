@@ -81,6 +81,7 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
           personId: person.id,
           timestamp: hourTimestamp, // Truncated to hour for idempotency
           trendScore: scoreResult.trendScore,
+          fameIndex: scoreResult.fameIndex,
           newsCount: news?.articleCount24h || 0,
           searchVolume: 0,
           youtubeViews: 0,
@@ -93,7 +94,9 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
           xReplyVelocity: inputs.xReplyVelocity,
           massScore: scoreResult.massScore,
           velocityScore: scoreResult.velocityScore,
+          velocityAdjusted: scoreResult.velocityAdjusted,
           confidence: scoreResult.confidence,
+          diversityMultiplier: scoreResult.diversityMultiplier,
           momentum: scoreResult.momentum,
           drivers: scoreResult.drivers,
         }).onConflictDoNothing();
@@ -121,6 +124,7 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
         bio: person.bio,
         rank: i + 1,
         trendScore: score.trendScore,
+        fameIndex: score.fameIndex,
         change24h: score.change24h,
         change7d: score.change7d,
         category: person.category,

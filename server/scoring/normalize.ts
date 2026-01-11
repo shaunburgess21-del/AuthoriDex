@@ -1,3 +1,124 @@
+// ============================================================================
+// SCORING ENGINE - Stable Normalization & Weights
+// ============================================================================
+
+// Platform weights - FIXED, never redistributed dynamically
+export const PLATFORM_WEIGHTS = {
+  mass: {
+    wiki: 0.30,
+    x: 0.35,
+    instagram: 0.20,
+    youtube: 0.15,
+  },
+  velocity: {
+    wiki: 0.15,
+    news: 0.20,
+    search: 0.25,
+    x: 0.40,
+  },
+};
+
+// Score composition: 40% mass, 60% velocity (velocity-heavy for "trending" feel)
+export const MASS_ALLOCATION = 0.40;
+export const VELOCITY_ALLOCATION = 0.60;
+
+// Diversity multiplier thresholds (silent penalty for missing platforms)
+// 5/5 sources = 1.00x, 4/5 = 0.90x, 3/5 = 0.78x, 2/5 = 0.62x, 1/5 = 0.40x
+export const DIVERSITY_MULTIPLIERS: Record<number, number> = {
+  5: 1.00,
+  4: 0.90,
+  3: 0.78,
+  2: 0.62,
+  1: 0.40,
+  0: 0.20,
+};
+
+// Anti-spam damping - prevents nobodies from spamming to top
+// VelocityAdjusted = VelocityScore × (0.35 + 0.65 × MassScore)
+export const ANTI_SPAM_BASE = 0.35;
+export const ANTI_SPAM_MASS_FACTOR = 0.65;
+
+// EMA smoothing alpha (0.15 recommended)
+export const EMA_ALPHA = 0.15;
+
+// Sanity check thresholds
+export const FOLLOWER_DROP_THRESHOLD = 0.50; // Reject if drops >50%
+
+// ============================================================================
+// PLATFORM STATUS TYPES
+// ============================================================================
+
+export type PlatformStatusValue = "ACTIVE" | "NOT_PRESENT" | "NOT_APPLICABLE" | "TEMP_FAIL";
+
+export interface PlatformStatuses {
+  wiki: PlatformStatusValue;
+  x: PlatformStatusValue;
+  instagram: PlatformStatusValue;
+  youtube: PlatformStatusValue;
+  news: PlatformStatusValue;
+  search: PlatformStatusValue;
+}
+
+// For backwards compatibility
+export interface ActivePlatforms {
+  wiki: boolean;
+  x: boolean;
+  instagram: boolean;
+  youtube: boolean;
+}
+
+// ============================================================================
+// DIVERSITY MULTIPLIER
+// ============================================================================
+
+/**
+ * Calculates the diversity multiplier based on active platform count.
+ * This silently penalizes celebrities with fewer data sources without showing badges.
+ */
+export function calculateDiversityMultiplier(platformStatuses: PlatformStatuses): number {
+  let activeCount = 0;
+  let applicableCount = 0;
+  
+  for (const [, status] of Object.entries(platformStatuses)) {
+    if (status !== "NOT_APPLICABLE") {
+      applicableCount++;
+      if (status === "ACTIVE" || status === "TEMP_FAIL") {
+        // TEMP_FAIL counts as active because we fill-forward
+        activeCount++;
+      }
+    }
+  }
+  
+  if (applicableCount === 0) return DIVERSITY_MULTIPLIERS[0];
+  
+  // Normalize to 5-point scale
+  const normalizedRatio = Math.round((activeCount / applicableCount) * 5);
+  return DIVERSITY_MULTIPLIERS[normalizedRatio] ?? DIVERSITY_MULTIPLIERS[0];
+}
+
+/**
+ * Apply anti-spam damping to velocity score.
+ * This prevents low-mass celebrities from gaming their way to the top.
+ */
+export function applyAntiSpamDamping(velocityScore: number, massScore: number): number {
+  // Normalize massScore to 0-1 range (assuming 0-100 input)
+  const normalizedMass = Math.min(1, Math.max(0, massScore / 100));
+  const dampingFactor = ANTI_SPAM_BASE + (ANTI_SPAM_MASS_FACTOR * normalizedMass);
+  return velocityScore * dampingFactor;
+}
+
+/**
+ * Apply EMA smoothing to a new score.
+ */
+export function applyEmaSmoothing(newScore: number, previousScore: number | null): number {
+  if (previousScore === null) return newScore;
+  return (EMA_ALPHA * newScore) + ((1 - EMA_ALPHA) * previousScore);
+}
+
+// ============================================================================
+// BACKWARDS COMPATIBILITY - Legacy functions
+// ============================================================================
+
 export interface StandardWeights {
   mass: {
     wiki: number;
@@ -14,32 +135,18 @@ export interface StandardWeights {
 }
 
 export const STANDARD_WEIGHTS: StandardWeights = {
-  mass: {
-    wiki: 0.3,
-    x: 0.35,
-    instagram: 0.2,
-    youtube: 0.15,
-  },
+  mass: PLATFORM_WEIGHTS.mass,
   velocity: {
-    wikiDelta: 0.15,
-    newsDelta: 0.20,
-    searchDelta: 0.25,
-    xVelocity: 0.40,
+    wikiDelta: PLATFORM_WEIGHTS.velocity.wiki,
+    newsDelta: PLATFORM_WEIGHTS.velocity.news,
+    searchDelta: PLATFORM_WEIGHTS.velocity.search,
+    xVelocity: PLATFORM_WEIGHTS.velocity.x,
   },
 };
 
-export const MASS_ALLOCATION = 0.25;
-export const VELOCITY_ALLOCATION = 0.75;
-
+// Legacy constants
 export const MISSING_X_PENALTY = 0.6;
 export const WIKI_DOMINANCE_CAP = 0.4;
-
-export interface ActivePlatforms {
-  wiki: boolean;
-  x: boolean;
-  instagram: boolean;
-  youtube: boolean;
-}
 
 export interface AdjustedMassWeights {
   wiki: number;
@@ -55,55 +162,37 @@ export interface AdjustedVelocityWeights {
   xVelocity: number;
 }
 
+/**
+ * @deprecated Use fixed weights with diversity multiplier instead.
+ * Kept for backwards compatibility during migration.
+ */
 export function calculateDynamicMassWeights(
   activePlatforms: ActivePlatforms
 ): AdjustedMassWeights {
-  const weights = STANDARD_WEIGHTS.mass;
-  
-  let activeSum = 0;
-  if (activePlatforms.wiki) activeSum += weights.wiki;
-  if (activePlatforms.x) activeSum += weights.x;
-  if (activePlatforms.instagram) activeSum += weights.instagram;
-  if (activePlatforms.youtube) activeSum += weights.youtube;
-  
-  if (activeSum === 0) {
-    activeSum = weights.wiki;
-  }
-  
-  const multiplier = 1.0 / activeSum;
-  
+  // Now returns fixed weights - no more redistribution
   return {
-    wiki: activePlatforms.wiki ? weights.wiki * multiplier : 0,
-    x: activePlatforms.x ? weights.x * multiplier : 0,
-    instagram: activePlatforms.instagram ? weights.instagram * multiplier : 0,
-    youtube: activePlatforms.youtube ? weights.youtube * multiplier : 0,
+    wiki: PLATFORM_WEIGHTS.mass.wiki,
+    x: activePlatforms.x ? PLATFORM_WEIGHTS.mass.x : 0,
+    instagram: activePlatforms.instagram ? PLATFORM_WEIGHTS.mass.instagram : 0,
+    youtube: activePlatforms.youtube ? PLATFORM_WEIGHTS.mass.youtube : 0,
   };
 }
 
+/**
+ * @deprecated Use fixed weights with diversity multiplier instead.
+ * Kept for backwards compatibility during migration.
+ */
 export function calculateDynamicVelocityWeights(
   hasWiki: boolean,
   hasNews: boolean,
   hasSearch: boolean,
   hasX: boolean
 ): AdjustedVelocityWeights {
-  const weights = STANDARD_WEIGHTS.velocity;
-  
-  let activeSum = 0;
-  if (hasWiki) activeSum += weights.wikiDelta;
-  if (hasNews) activeSum += weights.newsDelta;
-  if (hasSearch) activeSum += weights.searchDelta;
-  if (hasX) activeSum += weights.xVelocity;
-  
-  if (activeSum === 0) {
-    activeSum = weights.wikiDelta + weights.newsDelta;
-  }
-  
-  const multiplier = 1.0 / activeSum;
-  
+  // Now returns fixed weights - no more redistribution
   return {
-    wikiDelta: hasWiki ? weights.wikiDelta * multiplier : 0,
-    newsDelta: hasNews ? weights.newsDelta * multiplier : 0,
-    searchDelta: hasSearch ? weights.searchDelta * multiplier : 0,
-    xVelocity: hasX ? weights.xVelocity * multiplier : 0,
+    wikiDelta: PLATFORM_WEIGHTS.velocity.wiki,
+    newsDelta: PLATFORM_WEIGHTS.velocity.news,
+    searchDelta: PLATFORM_WEIGHTS.velocity.search,
+    xVelocity: PLATFORM_WEIGHTS.velocity.x,
   };
 }

@@ -89,10 +89,10 @@ export function LeaderboardRow({ person, onVisitProfile, onVoteClick }: Leaderbo
         </div>
         <div className="text-right hidden sm:block">
           <p className="font-mono font-bold text-2xl" data-testid={`text-score-${person.id}`}>
-            {person.trendScore.toFixed(0)}
+            {person.fameIndex ?? Math.round(person.trendScore / 10000)}
           </p>
           <p className="text-xs text-muted-foreground uppercase tracking-wide">
-            Trend Score
+            Fame Index
           </p>
         </div>
         {/* Sentiment Score replacing 24h/7d badges */}

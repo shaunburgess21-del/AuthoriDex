@@ -1,11 +1,14 @@
 import { 
-  calculateDynamicMassWeights, 
-  calculateDynamicVelocityWeights,
+  PLATFORM_WEIGHTS,
   MASS_ALLOCATION,
   VELOCITY_ALLOCATION,
+  calculateDiversityMultiplier,
+  applyAntiSpamDamping,
+  applyEmaSmoothing,
+  PlatformStatuses,
+  ActivePlatforms,
   MISSING_X_PENALTY,
   WIKI_DOMINANCE_CAP,
-  ActivePlatforms
 } from "./normalize";
 import { 
   normalizeMass, 
@@ -26,70 +29,152 @@ export interface TrendInputs {
   totalFollowers?: number;
   
   activePlatforms: ActivePlatforms;
+  
+  // New: platform statuses for diversity multiplier
+  platformStatuses?: PlatformStatuses;
 }
 
 export interface TrendScoreResult {
   trendScore: number;
+  fameIndex: number; // 0-100 normalized score for UI
   massScore: number;
   velocityScore: number;
+  velocityAdjusted: number; // After anti-spam damping
   confidence: number;
+  diversityMultiplier: number;
   momentum: "Breakout" | "Sustained" | "Cooling" | "Stable";
   drivers: string[];
   
-  change24h: number;
-  change7d: number;
+  change24h: number | null;
+  change7d: number | null;
 }
 
+/**
+ * Computes the trend score using the stable algorithm:
+ * - Fixed weights (no redistribution)
+ * - Diversity multiplier penalty for missing platforms
+ * - Anti-spam damping for velocity
+ * - EMA smoothing option
+ */
 export function computeTrendScore(
   inputs: TrendInputs,
   previousScore?: number,
-  previousScore7d?: number
+  previousScore7d?: number,
+  previousFameIndex?: number,
 ): TrendScoreResult {
-  const massWeights = calculateDynamicMassWeights(inputs.activePlatforms);
+  // =========================================================================
+  // 1. CALCULATE MASS SCORE (0-100)
+  // =========================================================================
+  
+  // Wiki mass contribution - only if wiki is active
+  let wikiMassScore = inputs.activePlatforms.wiki 
+    ? normalizeMass(inputs.wikiPageviews * 365) 
+    : 0;
+  if (inputs.activePlatforms.wiki) {
+    wikiMassScore = Math.min(wikiMassScore, wikiMassScore * WIKI_DOMINANCE_CAP + 50);
+  }
+  
+  // Follower-based mass - only apply to active platforms
+  const followerScore = inputs.totalFollowers 
+    ? normalizeMass(inputs.totalFollowers) 
+    : 0;
+  
+  // Zero out contributions for inactive platforms - fixed weights with NO redistribution
+  const xMassContrib = inputs.activePlatforms.x ? followerScore * PLATFORM_WEIGHTS.mass.x : 0;
+  const instagramMassContrib = inputs.activePlatforms.instagram ? followerScore * PLATFORM_WEIGHTS.mass.instagram : 0;
+  const youtubeMassContrib = inputs.activePlatforms.youtube ? followerScore * PLATFORM_WEIGHTS.mass.youtube : 0;
+  
+  // Total mass score with fixed weights (no redistribution for missing platforms)
+  const massScore = (
+    (wikiMassScore * PLATFORM_WEIGHTS.mass.wiki) +
+    xMassContrib +
+    instagramMassContrib +
+    youtubeMassContrib
+  );
+  
+  // =========================================================================
+  // 2. CALCULATE VELOCITY SCORE (0-100)
+  // =========================================================================
+  
+  // Wiki velocity - only if wiki is active
+  let wikiVelocityScore = inputs.activePlatforms.wiki 
+    ? normalizeVelocity(inputs.wikiDelta) 
+    : 0;
+  if (inputs.activePlatforms.wiki && wikiVelocityScore > 0) {
+    wikiVelocityScore = Math.min(wikiVelocityScore, wikiVelocityScore * WIKI_DOMINANCE_CAP + 30);
+  }
+  
+  // News and search velocities (always available as data sources)
+  const newsVelocityScore = normalizeVelocity(inputs.newsDelta);
+  const searchVelocityScore = normalizeVelocity(inputs.searchDelta);
+  
+  // X velocity - only if X handle is present
+  const xTotalVelocity = inputs.xQuoteVelocity + inputs.xReplyVelocity;
+  const xVelocityScore = inputs.activePlatforms.x 
+    ? Math.min(100, xTotalVelocity * 2) 
+    : 0;
+  
+  // Total velocity score with fixed weights (no redistribution for missing platforms)
+  const velocityScore = (
+    (wikiVelocityScore * PLATFORM_WEIGHTS.velocity.wiki) +
+    (newsVelocityScore * PLATFORM_WEIGHTS.velocity.news) +
+    (searchVelocityScore * PLATFORM_WEIGHTS.velocity.search) +
+    (xVelocityScore * PLATFORM_WEIGHTS.velocity.x)
+  );
+  
+  // =========================================================================
+  // 3. APPLY ANTI-SPAM DAMPING TO VELOCITY
+  // =========================================================================
+  
+  const velocityAdjusted = applyAntiSpamDamping(velocityScore, massScore);
+  
+  // =========================================================================
+  // 4. CALCULATE BASE SCORE
+  // =========================================================================
+  
+  const baseScore = (massScore * MASS_ALLOCATION) + (velocityAdjusted * VELOCITY_ALLOCATION);
+  
+  // =========================================================================
+  // 5. CALCULATE DIVERSITY MULTIPLIER (silent penalty)
+  // =========================================================================
+  
+  // Build platform statuses from inputs if not provided
+  const platformStatuses: PlatformStatuses = inputs.platformStatuses || {
+    wiki: inputs.activePlatforms.wiki ? "ACTIVE" : "NOT_PRESENT",
+    x: inputs.activePlatforms.x ? "ACTIVE" : "NOT_PRESENT",
+    instagram: inputs.activePlatforms.instagram ? "ACTIVE" : "NOT_PRESENT",
+    youtube: inputs.activePlatforms.youtube ? "ACTIVE" : "NOT_PRESENT",
+    news: inputs.newsDelta !== 0 ? "ACTIVE" : "NOT_APPLICABLE", // News is always applicable
+    search: inputs.searchDelta !== 0 ? "ACTIVE" : "NOT_APPLICABLE", // Search is always applicable
+  };
+  
+  const diversityMultiplier = calculateDiversityMultiplier(platformStatuses);
+  
+  // =========================================================================
+  // 6. CALCULATE FINAL SCORES
+  // =========================================================================
+  
+  const finalScoreRaw = baseScore * diversityMultiplier;
+  
+  // Fame Index (0-100) - the primary UI number
+  let fameIndex = clamp(Math.round(finalScoreRaw), 0, 100);
+  
+  // Apply EMA smoothing if we have previous data
+  if (previousFameIndex !== undefined) {
+    fameIndex = Math.round(applyEmaSmoothing(fameIndex, previousFameIndex));
+  }
+  
+  // Legacy trend score (large number for backwards compatibility)
+  const trendScore = clamp(finalScoreRaw * 10000, 0, 1000000);
+  
+  // =========================================================================
+  // 7. CALCULATE CONFIDENCE (legacy, for backwards compatibility)
+  // =========================================================================
   
   const hasWiki = inputs.wikiDelta !== 0 || inputs.wikiPageviews > 0;
   const hasNews = inputs.newsDelta !== 0;
   const hasSearch = inputs.searchDelta !== 0;
   const hasX = inputs.xQuoteVelocity > 0 || inputs.xReplyVelocity > 0;
-  
-  const velocityWeights = calculateDynamicVelocityWeights(
-    hasWiki || inputs.activePlatforms.wiki,
-    hasNews,
-    hasSearch,
-    hasX || inputs.activePlatforms.x
-  );
-  
-  let wikiMassScore = normalizeMass(inputs.wikiPageviews * 365);
-  wikiMassScore = Math.min(wikiMassScore, wikiMassScore * WIKI_DOMINANCE_CAP + 50);
-  
-  const followerScore = inputs.totalFollowers 
-    ? normalizeMass(inputs.totalFollowers) 
-    : 0;
-  
-  const massScore = (
-    (wikiMassScore * massWeights.wiki) +
-    (followerScore * massWeights.x) +
-    (followerScore * massWeights.instagram) +
-    (followerScore * massWeights.youtube)
-  );
-  
-  let wikiVelocityScore = normalizeVelocity(inputs.wikiDelta);
-  wikiVelocityScore = Math.min(wikiVelocityScore, wikiVelocityScore * WIKI_DOMINANCE_CAP + 30);
-  
-  const newsVelocityScore = normalizeVelocity(inputs.newsDelta);
-  const searchVelocityScore = normalizeVelocity(inputs.searchDelta);
-  
-  const xTotalVelocity = inputs.xQuoteVelocity + inputs.xReplyVelocity;
-  const xVelocityScore = Math.min(100, xTotalVelocity * 2);
-  
-  const velocityScore = (
-    (wikiVelocityScore * velocityWeights.wikiDelta) +
-    (newsVelocityScore * velocityWeights.newsDelta) +
-    (searchVelocityScore * velocityWeights.searchDelta) +
-    (xVelocityScore * velocityWeights.xVelocity)
-  );
-  
-  const rawScore = (massScore * MASS_ALLOCATION) + (velocityScore * VELOCITY_ALLOCATION);
   
   let dataSourceCount = 0;
   if (hasWiki) dataSourceCount++;
@@ -103,10 +188,11 @@ export function computeTrendScore(
   let confidence = dataSourceCount >= 3 ? 1.3 : 
                    dataSourceCount >= 2 ? 1.0 : 
                    dataSourceCount >= 1 ? 0.8 : 0.6;
-  
   confidence = confidence * xPenalty;
   
-  const trendScore = clamp(rawScore * confidence * 10000, 0, 1000000);
+  // =========================================================================
+  // 8. CALCULATE MOMENTUM & DRIVERS
+  // =========================================================================
   
   const avgDelta = (inputs.wikiDelta + inputs.newsDelta + inputs.searchDelta) / 3;
   const momentum = calculateMomentum(velocityScore, avgDelta);
@@ -118,22 +204,33 @@ export function computeTrendScore(
     xTotalVelocity
   );
   
+  // =========================================================================
+  // 9. CALCULATE CHANGES (no random fallback!)
+  // =========================================================================
+  
   const change24h = previousScore 
     ? ((trendScore - previousScore) / previousScore) * 100
-    : (Math.random() * 20 - 10);
+    : null;
   
   const change7d = previousScore7d
     ? ((trendScore - previousScore7d) / previousScore7d) * 100
-    : (Math.random() * 40 - 20);
+    : null;
+  
+  // =========================================================================
+  // 10. RETURN RESULT
+  // =========================================================================
   
   return {
     trendScore: Math.round(trendScore),
+    fameIndex,
     massScore: Math.round(massScore * 100) / 100,
     velocityScore: Math.round(velocityScore * 100) / 100,
+    velocityAdjusted: Math.round(velocityAdjusted * 100) / 100,
     confidence: Math.round(confidence * 100) / 100,
+    diversityMultiplier: Math.round(diversityMultiplier * 100) / 100,
     momentum,
     drivers,
-    change24h: Math.round(change24h * 10) / 10,
-    change7d: Math.round(change7d * 10) / 10,
+    change24h: change24h !== null ? Math.round(change24h * 10) / 10 : null,
+    change7d: change7d !== null ? Math.round(change7d * 10) / 10 : null,
   };
 }

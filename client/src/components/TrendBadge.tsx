@@ -3,12 +3,31 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 interface TrendBadgeProps {
-  value: number;
+  value: number | null | undefined;
   size?: "sm" | "default" | "lg";
   showIcon?: boolean;
 }
 
 export function TrendBadge({ value, size = "default", showIcon = true }: TrendBadgeProps) {
+  const sizeClass = size === "sm" ? "text-xs h-5" : size === "lg" ? "text-base h-7" : "text-sm h-6";
+  
+  // Handle null/undefined values - display N/A
+  if (value === null || value === undefined) {
+    return (
+      <Badge
+        className={cn(
+          "font-mono font-semibold px-2 gap-1 flex items-center",
+          "bg-muted text-muted-foreground",
+          sizeClass
+        )}
+        data-testid="badge-trend-na"
+      >
+        {showIcon && <Minus className="h-3 w-3" />}
+        N/A
+      </Badge>
+    );
+  }
+  
   const isPositive = value > 0;
   const isNeutral = value === 0;
   
@@ -17,8 +36,6 @@ export function TrendBadge({ value, size = "default", showIcon = true }: TrendBa
     : isPositive 
     ? "bg-trend-up text-trend-up-foreground" 
     : "bg-trend-down text-trend-down-foreground";
-
-  const sizeClass = size === "sm" ? "text-xs h-5" : size === "lg" ? "text-base h-7" : "text-sm h-6";
 
   return (
     <Badge
