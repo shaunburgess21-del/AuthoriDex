@@ -1715,22 +1715,7 @@ export default function VotePage() {
               </p>
             </div>
             
-            <div className="flex flex-col sm:flex-row justify-center gap-6">
-              <div className="flex items-center gap-3 px-6 py-3 rounded-lg bg-muted/50 border border-border">
-                <Users className="h-5 w-5 text-cyan-400" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Total Votes Cast</p>
-                  <p className="text-lg font-bold font-mono text-cyan-400" data-testid="text-total-votes">{totalVotes.toLocaleString()}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 px-6 py-3 rounded-lg bg-muted/50 border border-border">
-                <Clock className="h-5 w-5 text-cyan-400" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Next Governance Update</p>
-                  <p className="text-lg font-bold font-mono text-cyan-400" data-testid="text-countdown">{countdown}</p>
-                </div>
-              </div>
-            </div>
+            
           </div>
         </div>
         )}
