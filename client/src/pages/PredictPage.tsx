@@ -49,7 +49,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 // Prediction Type definitions
 type PredictionType = "all" | "jackpot" | "updown" | "h2h" | "gainer" | "community";
-type CategoryFilter = "all" | "favorites" | "tech" | "politics" | "business" | "music" | "sports" | "creator";
+type CategoryFilter = "all" | "favorites" | "tech" | "politics" | "business" | "music" | "sports" | "creator" | "misc";
 
 interface PredictionMarket {
   id: string;
@@ -501,7 +501,8 @@ function SectionFilterBar({
   searchPlaceholder = "Search...",
   testIdPrefix,
   user,
-  onAuthRequired
+  onAuthRequired,
+  includeCustomTopic = false
 }: {
   categoryFilter: CategoryFilter;
   onCategoryChange: (cat: CategoryFilter) => void;
@@ -511,6 +512,7 @@ function SectionFilterBar({
   testIdPrefix: string;
   user?: any;
   onAuthRequired?: () => void;
+  includeCustomTopic?: boolean;
 }) {
   const handleCategoryClick = (catId: CategoryFilter) => {
     if (catId === "favorites" && !user) {
@@ -520,10 +522,12 @@ function SectionFilterBar({
     onCategoryChange(catId);
   };
 
+  const filters = getPredictCategoryFilters(includeCustomTopic);
+
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
-        {CATEGORY_FILTERS.map((cat) => (
+        {filters.map((cat) => (
           <button
             key={cat.id}
             onClick={() => handleCategoryClick(cat.id)}
@@ -532,11 +536,13 @@ function SectionFilterBar({
                 ? 'bg-violet-500/20 text-violet-300 border border-violet-400/40 shadow-sm shadow-violet-500/20'
                 : 'bg-slate-800/30 border border-slate-700/40 text-slate-400 hover:border-violet-400/20'
             }`}
-            data-testid={`${testIdPrefix}-category-${cat.id}`}
-            aria-label={cat.id === "favorites" ? "Favorites" : undefined}
+            data-testid={cat.id === "misc" ? `${testIdPrefix}-category-custom-topic` : `${testIdPrefix}-category-${cat.id}`}
+            aria-label={cat.id === "favorites" ? "Favorites" : cat.id === "misc" ? "Custom Topic" : undefined}
           >
             {cat.id === "favorites" && <Star className="h-3.5 w-3.5" />}
-            {cat.id === "favorites" ? <span className="hidden md:inline">{cat.label}</span> : cat.label}
+            {cat.id === "misc" && <Sparkles className="h-3.5 w-3.5" />}
+            {cat.id === "favorites" ? <span className="hidden md:inline">{cat.label}</span> : 
+             cat.id === "misc" ? <span className="hidden md:inline">{cat.label}</span> : cat.label}
           </button>
         ))}
       </div>
@@ -600,7 +606,7 @@ function RulesModal({
   );
 }
 
-const CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
+const BASE_CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "favorites", label: "Favorites" },
   { id: "tech", label: "Tech" },
@@ -610,6 +616,16 @@ const CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: "sports", label: "Sports" },
   { id: "creator", label: "Creator" },
 ];
+
+const CATEGORY_FILTERS_WITH_CUSTOM: { id: CategoryFilter; label: string }[] = [
+  ...BASE_CATEGORY_FILTERS,
+  { id: "misc", label: "Custom Topic" },
+];
+
+const getPredictCategoryFilters = (includeCustomTopic: boolean) => 
+  includeCustomTopic ? CATEGORY_FILTERS_WITH_CUSTOM : BASE_CATEGORY_FILTERS;
+
+const CATEGORY_FILTERS = BASE_CATEGORY_FILTERS;
 
 function FirstTimeModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
@@ -2290,6 +2306,7 @@ export default function PredictPage() {
               testIdPrefix="community"
               user={user}
               onAuthRequired={() => setLocation("/login")}
+              includeCustomTopic={true}
             />
             {filteredCommunity.length > 0 ? (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

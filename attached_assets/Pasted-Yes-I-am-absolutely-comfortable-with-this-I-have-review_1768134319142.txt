@@ -1,0 +1,68 @@
+Yes, I am absolutely comfortable with this. I have reviewed every step of your thought process—from the initial "Misc" idea to the "Hybrid" modal and the specific constraints on where buttons/filters should appear.
+
+The risk here isn't the idea (which is solid); the risk is Replit's attention span. If we give it one massive "Super Prompt," it will likely nail the visuals but forget the complex backend logic (like the celebrity_id issue) or vice versa.
+
+The "2-Phase" strategy is the only way to guarantee Replit "Gets It" without breaking your site.
+
+Here is my final verification of the logic before you copy-paste:
+
+The "Grep" Audit: We are forcing Replit to prove it found every hardcoded filter before it touches code. This prevents the "missed spots" issue.
+
+The "Prop" Logic: We are using a simple switch (includeCustomTopic) rather than complex logic. This is hard for the AI to mess up.
+
+The "Hybrid" Modal: We are being explicit about the "No Results" state so users don't get stuck.
+
+Schema Safety: We are explicitly telling Replit to make the new column nullable and additive, preventing database crashes.
+
+Here are the Final, Gold-Standard Prompts. They include the "Community Predictions" button constraint and the "ChatGPT" safeguards.
+
+PHASE 1: The Structure (Filters & Component Refactor)
+Copy and paste this to Replit (Plan Agent) first.
+
+Act as a Senior Frontend Engineer.
+
+Task: Standardize Category Filters & Add 'Custom Topic' Support We need to standardize the category filter rows across the application to ensure they are powered by a single shared component, and introduce a toggle for "Custom Topic" visibility.
+
+1. Audit & Refactor (Critical Step)
+
+Audit: Search the entire repository for all usages of category pill rows. Look for hardcoded lists containing strings like "Tech", "Politics", "Business", "Music", "Sports", "Creator", or "Favorites". List every file where these appear.
+
+Refactor/Enforce:
+
+If a shared component exists (e.g., CategoryFilters.tsx): You must modify it to accept a new prop (logic below).
+
+If not: You must refactor all found instances into ONE single shared component (e.g., <CategoryFilterPills />) and reuse it everywhere.
+
+Proof of Completion: After refactoring, run a repo-wide search again for the literal category labels. Confirm they only exist inside the shared component (or a single constants file). No other hardcoded arrays must remain.
+
+2. Component Logic Update Update the shared component to accept a prop: includeCustomTopic (boolean).
+
+If true: Render: [All, Favorites, Tech, Politics, Business, Music, Sports, Creator, Custom Topic]
+
+If false: Render: [All, Favorites, Tech, Politics, Business, Music, Sports, Creator]
+
+UI Rule: Do not show the word "misc" anywhere in the user interface. The UI label must always display "Custom Topic", but the value passed to the backend/URL filter must be "misc".
+
+3. Implementation (No Missed Spots) Apply the shared component with the correct prop settings in these specific views:
+
+Leaderboard View: includeCustomTopic = false
+
+Induction Queue: includeCustomTopic = false
+
+Curate Profile: includeCustomTopic = false
+
+Vote Page (Face-Offs & People's Voice): includeCustomTopic = true
+
+Predict Page (Community Predictions): includeCustomTopic = true
+
+Home Page:
+
+If Toggle is Leaderboard: includeCustomTopic = false
+
+If Toggle is Vote or Predict: includeCustomTopic = true
+
+4. Empty State Handling
+
+If a user selects the "Custom Topic" filter and there are no items to display, show a friendly empty state message (e.g., "No custom topics yet — be the first to suggest one!") instead of a blank screen.
+
+Deliverable: Confirm the file name of the shared component and list all files updated.

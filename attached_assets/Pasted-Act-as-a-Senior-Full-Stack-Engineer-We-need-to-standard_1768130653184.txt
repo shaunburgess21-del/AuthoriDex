@@ -1,0 +1,87 @@
+Act as a Senior Full-Stack Engineer.
+
+We need to standardize our Category Filters and Suggestion Buttons across the entire application and introduce "Custom Topics" (non-celebrity content) to specific sections only.
+
+1. Component Audit & Enforce Shared Component
+
+Audit: First, search the repository for all current usages of category pill rows. Look for strings like "Tech", "Politics", "Business", "Music", "Sports", "Creator", "Favorites" to find every location where these filters appear.
+
+Identify: Check if a shared component (e.g., CategoryFilters.tsx, FilterRow.tsx) already exists.
+
+Refactor/Enforce:
+
+If a shared component exists: Modify it to accept a new prop (e.g., includeCustomTopic or showMisc) to toggle the visibility of the "Custom Topic" filter.
+
+If not: You must refactor all found instances into ONE single shared component and use it everywhere.
+
+Prop Logic:
+
+includeCustomTopic=true: Shows [All, Favorites, Tech, Politics, Business, Music, Sports, Creator, Custom Topic]
+
+includeCustomTopic=false: Shows [All, Favorites, Tech, Politics, Business, Music, Sports, Creator]
+
+Note: The UI label must be "Custom Topic", but the backend filter value must be "misc".
+
+2. Implementation Locations (No Missed Spots) Apply the shared component with the correct prop settings in these specific views:
+
+Leaderboard View: includeCustomTopic = false
+
+Induction Queue: includeCustomTopic = false
+
+Curate Profile: includeCustomTopic = false
+
+Vote Page (Face-Offs & People's Voice): includeCustomTopic = true
+
+Predict Page (Community Predictions): includeCustomTopic = true
+
+Home Page:
+
+If Toggle is Leaderboard: includeCustomTopic = false
+
+If Toggle is Vote or Predict: includeCustomTopic = true
+
+3. Empty State Handling
+
+If a user selects the "Custom Topic" filter and there are no items to display, show a friendly empty state message (e.g., "No custom topics yet — be the first to suggest one!") instead of a blank screen.
+
+4. UI Updates: Action Buttons Standardize the "Add" buttons in the section headers to read + Suggest:
+
+Face-Offs: Add button (Top Right).
+
+People's Voice: Rename existing + Start Poll button to + Suggest.
+
+Predictions: Add button (Top Right).
+
+Requirement: Ensure consistent styling and mobile responsiveness for all three buttons.
+
+5. Suggest Modal: "Hybrid" Searchable Combobox Update the "Subject (Entity)" input in the "Suggest" modal to a Searchable Combobox to handle both Celebrities and Custom Topics.
+
+State A: On Focus (Input Empty)
+
+Show dropdown immediately.
+
+Row 1 (Pinned): ➕ Create Custom Topic (Action: Selects category "misc" and switches input to free-text).
+
+Rows 2+: List top trending celebrities to guide the user.
+
+State B: On Typing (Search)
+
+Filter celebrity results as standard.
+
+Scenario: No Results: If no celebrity matches, show a fallback option: Use "[User Input]" as Custom Topic.
+
+Action: If selected, accept the text as the subject and auto-assign category "misc".
+
+State C: Selection Logic
+
+Celebrity Selected: Auto-fill Industry Category from their profile (Tech, Music, etc.).
+
+Custom Topic Selected: Allow free text for the name and auto-set Industry Category to "misc".
+
+Deliverables for Plan:
+
+Confirm the filename of the shared component (existing or new).
+
+List every file/view you will update to ensure no filter row is missed.
+
+Confirm the exact logic for the includeCustomTopic prop.

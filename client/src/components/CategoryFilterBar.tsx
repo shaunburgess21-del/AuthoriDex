@@ -1,7 +1,7 @@
-import { Star } from "lucide-react";
+import { Star, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
-import type { FilterCategory } from "@shared/constants";
+import { getFilterCategories, type FilterCategory } from "@shared/constants";
 
 interface CategoryFilterBarProps {
   categories?: readonly string[];
@@ -13,12 +13,11 @@ interface CategoryFilterBarProps {
   variant?: "cyan" | "violet" | "default";
   className?: string;
   showEmptyFavoritesMessage?: boolean;
+  includeCustomTopic?: boolean;
 }
 
-const DEFAULT_CATEGORIES = ["All", "Tech", "Politics", "Business", "Music", "Sports", "Creator"] as const;
-
 export function CategoryFilterBar({
-  categories = DEFAULT_CATEGORIES,
+  categories,
   activeFilter,
   onFilterChange,
   onAuthRequired,
@@ -27,7 +26,9 @@ export function CategoryFilterBar({
   variant = "cyan",
   className = "",
   showEmptyFavoritesMessage = false,
+  includeCustomTopic = false,
 }: CategoryFilterBarProps) {
+  const effectiveCategories = categories ?? getFilterCategories(includeCustomTopic);
   const { user } = useAuth();
   const { favorites, isLoading } = useFavorites();
 
@@ -67,10 +68,15 @@ export function CategoryFilterBar({
   const isFavoritesEmpty = !isLoading && favorites.length === 0;
   const showEmptyState = activeFilter === "Favorites" && isFavoritesEmpty && showEmptyFavoritesMessage;
 
+  const getDisplayLabel = (cat: string) => {
+    if (cat === "misc") return "Custom Topic";
+    return cat;
+  };
+
   return (
     <div className={className}>
       <div className="flex flex-wrap items-center gap-2">
-        {categories.map((cat, index) => {
+        {effectiveCategories.map((cat, index) => {
           if (showFavorites && index === 1 && cat !== "Favorites") {
             return (
               <div key="favorites-insert" className="contents">
@@ -93,7 +99,7 @@ export function CategoryFilterBar({
                   }`}
                   data-testid={`${testIdPrefix}-${cat.toLowerCase()}`}
                 >
-                  {cat}
+                  {getDisplayLabel(cat)}
                 </button>
               </div>
             );
@@ -116,6 +122,23 @@ export function CategoryFilterBar({
             );
           }
 
+          if (cat === "misc") {
+            return (
+              <button
+                key={cat}
+                onClick={() => handleCategoryClick(cat)}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 ${
+                  activeFilter === "misc" ? styles.active : styles.inactive
+                }`}
+                data-testid={`${testIdPrefix}-custom-topic`}
+                aria-label="Custom Topic"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span className="hidden md:inline">Custom Topic</span>
+              </button>
+            );
+          }
+
           return (
             <button
               key={cat}
@@ -125,7 +148,7 @@ export function CategoryFilterBar({
               }`}
               data-testid={`${testIdPrefix}-${cat.toLowerCase()}`}
             >
-              {cat}
+              {getDisplayLabel(cat)}
             </button>
           );
         })}

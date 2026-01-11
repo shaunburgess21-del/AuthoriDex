@@ -47,6 +47,7 @@ import Slider from "react-slick";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
 import { motion, AnimatePresence } from "framer-motion";
+import { getFilterCategories, type FilterCategory } from "@shared/constants";
 
 const mockCelebrityList = [
   "Taylor Swift", "Elon Musk", "Keanu Reeves", "Beyoncé", "Dwayne Johnson",
@@ -182,9 +183,6 @@ const DISCOURSE_TOPICS: DiscourseTopicData[] = [
   { id: "d19", headline: "Twitch streamer earnings", description: "Are top streamers overpaid?", category: "Creator", approvePercent: 25, neutralPercent: 35, disapprovePercent: 40, totalVotes: 78965 },
   { id: "d20", headline: "Climate activism tactics", description: "Is disruption effective or counterproductive?", category: "Politics", approvePercent: 35, neutralPercent: 25, disapprovePercent: 40, totalVotes: 167890 },
 ];
-
-const FILTER_CATEGORIES = ["All", "Favorites", "Tech", "Music", "Sports", "Creator", "Business", "Politics"] as const;
-type FilterCategory = typeof FILTER_CATEGORIES[number];
 
 const SECTION_TOGGLES = ["All", "Face-Offs", "People's Voice", "Induction Queue", "Curate Profile"] as const;
 type SectionToggle = typeof SECTION_TOGGLES[number];
@@ -1094,6 +1092,7 @@ function FilterChip({
   onAuthRequired: () => void;
 }) {
   const isFavorites = category === "Favorites";
+  const isCustomTopic = category === "misc";
   
   const handleClick = () => {
     if (isFavorites && !user) {
@@ -1101,6 +1100,17 @@ function FilterChip({
       return;
     }
     onClick();
+  };
+
+  const getDisplayLabel = () => {
+    if (isFavorites) return <span className="hidden md:inline">Favorites</span>;
+    if (isCustomTopic) return <span className="hidden md:inline">Custom Topic</span>;
+    return category;
+  };
+
+  const getTestId = () => {
+    if (isCustomTopic) return `${testIdPrefix}-custom-topic`;
+    return `${testIdPrefix}-${category.toLowerCase()}`;
   };
 
   return (
@@ -1111,11 +1121,12 @@ function FilterChip({
           ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
           : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
       }`}
-      data-testid={`${testIdPrefix}-${category.toLowerCase()}`}
-      aria-label={isFavorites ? "Favorites" : undefined}
+      data-testid={getTestId()}
+      aria-label={isFavorites ? "Favorites" : isCustomTopic ? "Custom Topic" : undefined}
     >
       {isFavorites && <Star className="h-3.5 w-3.5" />}
-      {isFavorites ? <span className="hidden md:inline">Favorites</span> : category}
+      {isCustomTopic && <Sparkles className="h-3.5 w-3.5" />}
+      {getDisplayLabel()}
     </button>
   );
 }
@@ -1472,12 +1483,12 @@ export default function VotePage() {
           </div>
           
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
-            {FILTER_CATEGORIES.map((cat) => (
+            {getFilterCategories(false).map((cat) => (
               <FilterChip
                 key={cat}
                 category={cat}
                 isActive={globalCategoryFilter === cat}
-                onClick={() => setGlobalCategoryFilter(cat)}
+                onClick={() => setGlobalCategoryFilter(cat as FilterCategory)}
                 testIdPrefix="chip-category"
                 user={user}
                 onAuthRequired={handleAuthRequired}
@@ -1548,12 +1559,12 @@ export default function VotePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 mb-4">
-            {FILTER_CATEGORIES.map((cat) => (
+            {getFilterCategories(true).map((cat) => (
               <FilterChip
                 key={cat}
                 category={cat}
                 isActive={faceOffsCategoryFilter === cat}
-                onClick={() => setFaceOffsCategoryFilter(cat)}
+                onClick={() => setFaceOffsCategoryFilter(cat as FilterCategory)}
                 testIdPrefix="filter-faceoffs"
                 user={user}
                 onAuthRequired={handleAuthRequired}
@@ -1664,12 +1675,12 @@ export default function VotePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 mb-4">
-            {FILTER_CATEGORIES.map((cat) => (
+            {getFilterCategories(true).map((cat) => (
               <FilterChip
                 key={cat}
                 category={cat}
                 isActive={topicsCategoryFilter === cat}
-                onClick={() => setTopicsCategoryFilter(cat)}
+                onClick={() => setTopicsCategoryFilter(cat as FilterCategory)}
                 testIdPrefix="filter-topics"
                 user={user}
                 onAuthRequired={handleAuthRequired}
@@ -1813,12 +1824,12 @@ export default function VotePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 mb-4">
-            {FILTER_CATEGORIES.map((cat) => (
+            {getFilterCategories(false).map((cat) => (
               <FilterChip
                 key={cat}
                 category={cat}
                 isActive={inductionCategoryFilter === cat}
-                onClick={() => setInductionCategoryFilter(cat)}
+                onClick={() => setInductionCategoryFilter(cat as FilterCategory)}
                 testIdPrefix="filter-induction"
                 user={user}
                 onAuthRequired={handleAuthRequired}
@@ -1964,12 +1975,12 @@ export default function VotePage() {
           <div className="flex flex-wrap items-center justify-center gap-2 mb-4 relative">
             <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-background to-transparent pointer-events-none z-10" />
             <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-background to-transparent pointer-events-none z-10" />
-            {FILTER_CATEGORIES.map((cat) => (
+            {getFilterCategories(false).map((cat) => (
               <FilterChip
                 key={cat}
                 category={cat}
                 isActive={curateCategoryFilter === cat}
-                onClick={() => setCurateCategoryFilter(cat)}
+                onClick={() => setCurateCategoryFilter(cat as FilterCategory)}
                 testIdPrefix="filter-curate"
                 user={user}
                 onAuthRequired={handleAuthRequired}
@@ -2634,12 +2645,12 @@ export default function VotePage() {
             
             <div className="sticky top-0 z-10 p-4 border-b bg-background/95 backdrop-blur-sm">
               <div className="flex flex-wrap items-center gap-2">
-                {FILTER_CATEGORIES.map((cat) => (
+                {getFilterCategories(false).map((cat) => (
                   <FilterChip
                     key={cat}
                     category={cat}
                     isActive={inductionCategoryFilter === cat}
-                    onClick={() => setInductionCategoryFilter(cat)}
+                    onClick={() => setInductionCategoryFilter(cat as FilterCategory)}
                     testIdPrefix="filter-overlay-induction"
                     user={user}
                     onAuthRequired={handleAuthRequired}
@@ -2705,12 +2716,12 @@ export default function VotePage() {
             
             <div className="sticky top-0 z-10 p-4 border-b bg-background/95 backdrop-blur-sm">
               <div className="flex flex-wrap items-center gap-2">
-                {FILTER_CATEGORIES.map((cat) => (
+                {getFilterCategories(true).map((cat) => (
                   <FilterChip
                     key={cat}
                     category={cat}
                     isActive={topicsCategoryFilter === cat}
-                    onClick={() => setTopicsCategoryFilter(cat)}
+                    onClick={() => setTopicsCategoryFilter(cat as FilterCategory)}
                     testIdPrefix="filter-overlay-topics"
                     user={user}
                     onAuthRequired={handleAuthRequired}
@@ -2777,12 +2788,12 @@ export default function VotePage() {
             
             <div className="sticky top-0 z-10 p-4 border-b border-cyan-500/10 bg-background/95 backdrop-blur-sm">
               <div className="flex flex-wrap items-center gap-2">
-                {FILTER_CATEGORIES.map((cat) => (
+                {getFilterCategories(true).map((cat) => (
                   <FilterChip
                     key={cat}
                     category={cat}
                     isActive={faceOffsCategoryFilter === cat}
-                    onClick={() => setFaceOffsCategoryFilter(cat)}
+                    onClick={() => setFaceOffsCategoryFilter(cat as FilterCategory)}
                     testIdPrefix="filter-overlay-faceoffs"
                     user={user}
                     onAuthRequired={handleAuthRequired}
