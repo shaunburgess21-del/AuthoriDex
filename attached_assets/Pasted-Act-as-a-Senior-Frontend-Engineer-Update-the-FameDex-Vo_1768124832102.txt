@@ -1,0 +1,63 @@
+Act as a Senior Frontend Engineer. Update the FameDex Vote page to add a second hero-style header section above “Face-Offs” + “The People’s Voice”, and refactor BOTH header sections to be consistent in styling + height, with clickable pills that open informational modals.
+
+CRITICAL CONSTRAINTS
+- DO NOT change the overall design language (colors, typography scale, card styling, etc.). This is a layout + component reuse task only.
+- Keep the new top header block the SAME style and SAME visual height as the existing “Shape the FameDex / Community Governance” header block.
+- Reduce excess vertical whitespace: currently the space between the “Community Governance” pill and the “The Induction Queue” section is too large. Tighten it, and ensure spacing between each header block and its first section is consistent across both headers.
+- Less is more: header blocks must NOT be tall. Use compact vertical padding and keep copy to one heading line + one sub line.
+- The pill placement must be consistent between BOTH header blocks (choose pill above OR below heading/subheading, but keep the same for both).
+- The pills are currently static. Make BOTH pills clickable and open a modal. No other UI changes.
+
+SCOPE
+A) Add a new header block ABOVE the “Face-Offs” section that introduces Vox Populi content.
+B) Keep the existing “Shape the FameDex / Community Governance” block where it currently lives (above Induction Queue / Curate Profile), but refactor its spacing to match the new one.
+C) Implement two different modals (content differs per pill), but reuse the same modal component.
+
+NEW HEADER BLOCK (ABOVE FACE-OFFS + PEOPLE’S VOICE)
+- Pill text: “Vox Populi”
+- Heading: “The Voice of the People”
+- Subheading: “Your votes capture what the world thinks — across rumors, ideas, and events.”
+
+EXISTING HEADER BLOCK (ABOVE INDUCTION QUEUE + CURATE PROFILE)
+- Keep the existing heading/subheading content and styling.
+- Ensure its spacing/height matches the Vox Populi header block.
+
+CLICKABLE PILL → MODAL REQUIREMENTS (APPLY TO BOTH PILLS)
+- Make the pill act like a button (cursor pointer, subtle hover state consistent with your UI).
+- On click, open a modal (same modal styling for both).
+- Modal should have: Title + 3 bullet points (exact copy below).
+- Modal must be concise: no extra paragraphs, no additional sections, no long scroll.
+- Provide close controls: X in corner + click outside closes + ESC closes.
+- Ensure modals are accessible (focus trap if you already use one; otherwise basic focus on open and return focus to pill on close).
+
+MODAL CONTENT (Vox Populi pill)
+- Modal Title: “The World’s Sentiment Engine”
+- Bullets (exact text):
+  1) “Cut Through the Noise: Headlines only tell half the story. Use The People’s Voice to capture what the world actually thinks about today's news.”
+  2) “Pick Your Side: From massive beefs to serious debates, align yourself with the winners or defend the underdogs.”
+  3) “Drive the Data: Watch the percentages shift live as thousands of users around the world weigh in on the exact same moment.”
+
+MODAL CONTENT (Community Governance pill)
+- Modal Title: “You Run the Show”
+- Bullets (exact text):
+  1) “Expand the Roster: The leaderboard isn't static. Vote in the Induction Queue to decide exactly who deserves to be added next.”
+  2) “Define the Aesthetic: You are the Art Director. Use Curate Profile to swap out bad press photos and choose the definitive image for every star.”
+  3) “Remove the Gatekeepers: No editors, no bias. This is the first global index that is 100% shaped, ranked, and managed by you.”
+
+IMPLEMENTATION GUIDANCE (TO AVOID MISSING SPOTS / KEEP CLEAN)
+1) Extract a reusable component (e.g., VoteSectionHeaderBlock) used for BOTH headers:
+   - Props: pillLabel, heading, subheading, onPillClick
+   - Keep fixed compact height via consistent padding and max-width.
+2) Extract a reusable modal component (e.g., InfoModal) with props: title, bullets[], isOpen, onClose.
+3) Replace the existing Community Governance header markup with the shared component so both headers match exactly.
+4) Adjust vertical spacing between:
+   - Vox Populi header → Face-Offs section
+   - Community Governance header → Induction Queue section
+   These gaps must be equal and smaller than currently.
+
+DELIVERABLES
+- New Vox Populi header block appears above Face-Offs.
+- Both header blocks are visually consistent in style + height and not “tall”.
+- Excess whitespace above “The Induction Queue” is reduced to match the new block spacing.
+- Both pills are clickable and open the correct modal with the exact copy above.
+- No regressions to existing filters, section order, or card layouts.
