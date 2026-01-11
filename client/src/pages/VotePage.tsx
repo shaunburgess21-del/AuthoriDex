@@ -1382,7 +1382,6 @@ export default function VotePage() {
           />
         ))}
       </AnimatePresence>
-
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -1426,7 +1425,6 @@ export default function VotePage() {
           </div>
         </div>
       </header>
-
       <div 
         className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b"
         data-testid="section-toggles-container"
@@ -1456,7 +1454,6 @@ export default function VotePage() {
           </div>
         </div>
       </div>
-
       <div className="container mx-auto px-4 py-4 max-w-5xl">
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1 max-w-[420px]">
@@ -1486,7 +1483,6 @@ export default function VotePage() {
           </div>
         </div>
       </div>
-
       <div className="container mx-auto px-4 py-8 max-w-5xl">
         {/* ZONE 1: Public Opinion - Face-Offs Section (First) */}
         {(activeSection === "All" || activeSection === "Face-Offs") && (
@@ -1701,7 +1697,7 @@ export default function VotePage() {
         {(activeSection === "All" || isGovernanceSection(activeSection)) && (
         <div className="relative overflow-hidden mb-10">
           <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
-          <div className="relative py-8">
+          <div className="relative py-8 pt-[5px] pb-[5px]">
             <div className="text-center mb-6">
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 mb-4">
                 <Sparkles className="h-4 w-4 text-cyan-400" />
@@ -1985,7 +1981,6 @@ export default function VotePage() {
         </section>
         )}
       </div>
-
       <button
         onClick={() => setSuggestModalOpen(true)}
         className="fixed bottom-24 md:bottom-8 right-6 h-14 w-14 rounded-full bg-cyan-500 text-white shadow-lg flex items-center justify-center hover:bg-cyan-600 transition-colors z-40"
@@ -1993,7 +1988,6 @@ export default function VotePage() {
       >
         <Plus className="h-6 w-6" />
       </button>
-
       <Dialog open={suggestModalOpen} onOpenChange={setSuggestModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -2062,7 +2056,6 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
-
       <Dialog open={startPollModalOpen} onOpenChange={setStartPollModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -2185,7 +2178,6 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
-
       <Dialog open={!!rulesModalOpen} onOpenChange={() => setRulesModalOpen(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -2269,7 +2261,6 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
-
       <AnimatePresence>
         {curateLeaderboardOpen && (
           <motion.div
@@ -2483,7 +2474,6 @@ export default function VotePage() {
           </motion.div>
         )}
       </AnimatePresence>
-
       <AnimatePresence>
         {inductionOverlayOpen && (
           <motion.div
@@ -2555,7 +2545,6 @@ export default function VotePage() {
           </motion.div>
         )}
       </AnimatePresence>
-
       <AnimatePresence>
         {topicsOverlayOpen && (
           <motion.div
@@ -2623,7 +2612,6 @@ export default function VotePage() {
           </motion.div>
         )}
       </AnimatePresence>
-
       <AnimatePresence>
         {faceOffsOverlayOpen && (
           <motion.div
