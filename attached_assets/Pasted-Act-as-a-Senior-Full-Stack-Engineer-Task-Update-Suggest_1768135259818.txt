@@ -1,0 +1,55 @@
+Act as a Senior Full-Stack Engineer.
+
+Task: Update Suggestion Buttons, "Hybrid" Modal Logic & Data Persistence We have standardized the filter components, but we need to perform one final cleanup on the Deck views before building the "Suggest" logic.
+
+0. Immediate Cleanup (Deck Views)
+
+You noted that VoteDeckView and PredictDeckView are still using local data file constants.
+
+Action: Refactor these two components immediately to use the shared getFilterCategories helper (or shared constant) you created in Phase 1. Ensure they respect the includeCustomTopic logic. Do not leave any hardcoded category lists in the Deck views.
+
+1. UI Updates: Action Buttons (Specific Sections Only) Standardize the "Add" buttons. They must all read + Suggest and appear only in the specific sub-section headers listed below.
+
+Face-Offs Section: Add button to the section header (Top Right).
+
+People's Voice Section: Rename the existing + Start Poll button to + Suggest.
+
+Community Predictions Section: Add button to the section header (Top Right).
+
+Constraint: Do NOT add this button to the main "Predict" page header or other prediction markets (e.g., Weekly Jackpot, Up/Down). It applies only to the Community Predictions section.
+
+Requirement: Ensure consistent styling and mobile responsiveness for all three.
+
+2. Modal Logic: "Hybrid" Searchable Combobox Update the "Subject (Entity)" input in the "Suggest" modal to a Searchable Combobox (Autocomplete).
+
+State A: On Focus (Input Empty)
+
+When the user clicks the empty input, show a dropdown list immediately.
+
+Row 1 (Pinned): ➕ Create Custom Topic
+
+Action: If clicked, clear the search, switch input to "Free Text" mode, and set internal category to "misc".
+
+Rows 2+: List top trending celebrities (existing logic).
+
+State B: On Typing (Search)
+
+Filter the celebrity list as the user types.
+
+Scenario: No Results Found: If the input does not match any celebrity, display a fallback option:
+
+Option Text: Use "[User Input]" as Custom Topic
+
+Action: If clicked, accept the text as the subject and auto-assign internal category "misc".
+
+3. Data Persistence & Schema Safety (Critical) You must ensure the backend accepts these custom topics without breaking existing logic that expects a Celebrity ID.
+
+Schema Check: If the current database table requires a celebrity_id, you must add a new nullable column (e.g., custom_subject type: Text) to store the name of the custom topic. Do not modify or delete existing columns. (Additive changes only).
+
+Save Logic:
+
+If Celebrity: Save celebrity_id as normal.
+
+If Custom Topic: Save category = 'misc' and custom_subject = [User Input]. Ensure celebrity_id is nullable or handled safely.
+
+Deliverable: Verify that users can successfully submit both a Celebrity suggestion and a "Custom Topic" suggestion, and that both persist correctly in the database.
