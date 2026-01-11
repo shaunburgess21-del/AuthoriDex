@@ -1891,16 +1891,16 @@ export default function VotePage() {
                 <Button
                   onClick={() => setInductionSuggestOpen(true)}
                   className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
-                  data-testid="button-suggest-candidate-header"
+                  data-testid="button-suggest-induction"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Suggest candidate
+                  + Suggest
                 </Button>
                 <Button
                   size="icon"
                   onClick={() => setInductionSuggestOpen(true)}
                   className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
-                  data-testid="button-suggest-candidate-header-mobile"
+                  data-testid="button-suggest-induction-mobile"
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
@@ -2351,8 +2351,13 @@ export default function VotePage() {
                 onChange={(e) => setSuggestUrl(e.target.value)}
                 placeholder="https://twitter.com/... or https://instagram.com/..."
                 data-testid="input-induction-url"
+                className={suggestUrl && !suggestUrl.startsWith('http') ? 'border-red-500' : ''}
               />
-              <p className="text-xs text-muted-foreground mt-1">Required for verification</p>
+              {suggestUrl && !suggestUrl.startsWith('http') ? (
+                <p className="text-xs text-red-400 mt-1">Please enter a valid URL starting with http:// or https://</p>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-1">Required for verification</p>
+              )}
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Category (optional)</label>
@@ -2394,7 +2399,7 @@ export default function VotePage() {
                 setSuggestReason("");
                 setInductionSuggestOpen(false);
               }}
-              disabled={!suggestName || !suggestUrl}
+              disabled={!suggestName || !suggestUrl || !suggestUrl.startsWith('http')}
               className="bg-cyan-500 text-white"
               data-testid="button-submit-induction"
             >
