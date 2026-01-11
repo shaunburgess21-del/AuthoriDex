@@ -67,10 +67,43 @@ export class MemStorage implements IStorage {
   }
 
   async updateTrendingPeople(people: TrendingPerson[]): Promise<void> {
+    // Update in-memory cache
     this.trendingPeople.clear();
     people.forEach((person) => {
       this.trendingPeople.set(person.id, person);
     });
+    
+    // Upsert to database for persistent storage
+    for (const person of people) {
+      try {
+        await db
+          .insert(trendingPeople)
+          .values({
+            id: person.id,
+            name: person.name,
+            category: person.category,
+            avatar: person.avatar,
+            bio: person.bio,
+            trendScore: person.trendScore,
+            fameIndex: person.fameIndex,
+            rank: person.rank,
+            change24h: person.change24h,
+            change7d: person.change7d,
+          })
+          .onConflictDoUpdate({
+            target: trendingPeople.id,
+            set: {
+              trendScore: person.trendScore,
+              fameIndex: person.fameIndex,
+              rank: person.rank,
+              change24h: person.change24h,
+              change7d: person.change7d,
+            },
+          });
+      } catch (error) {
+        console.error(`[Storage] Error upserting trending person ${person.name}:`, error);
+      }
+    }
   }
 
   async getCelebrityProfile(personId: string): Promise<CelebrityProfile | undefined> {

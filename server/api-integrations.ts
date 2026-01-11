@@ -1,6 +1,6 @@
 import { TrendingPerson, TrackedPerson, trendSnapshots, trackedPeople } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, gte } from "drizzle-orm";
 
 interface CelebrityMetrics {
   name: string;
@@ -316,6 +316,51 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
   // DO NOT sort - maintain displayOrder ranking
   // results.sort((a, b) => b.trendScore - a.trendScore);
   
+  // Fetch historical snapshots for change calculations
+  const now = new Date();
+  const time24hAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const time7dAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  
+  // Build lookup maps for historical scores
+  const historicalSnapshots = await db.select({
+    personId: trendSnapshots.personId,
+    timestamp: trendSnapshots.timestamp,
+    trendScore: trendSnapshots.trendScore,
+  }).from(trendSnapshots).where(
+    gte(trendSnapshots.timestamp, time7dAgo)
+  );
+  
+  // Create maps for 24h and 7d lookups (find closest snapshot to target time)
+  const snapshot24hMap = new Map<string, { score: number; diff: number }>();
+  const snapshot7dMap = new Map<string, { score: number; diff: number }>();
+  
+  const MAX_24H_WINDOW = 6 * 60 * 60 * 1000; // 6 hours window for 24h lookup
+  const MAX_7D_WINDOW = 24 * 60 * 60 * 1000; // 24 hours window for 7d lookup
+  
+  for (const snap of historicalSnapshots) {
+    const snapTime = new Date(snap.timestamp).getTime();
+    const diff24h = Math.abs(snapTime - time24hAgo.getTime());
+    const diff7d = Math.abs(snapTime - time7dAgo.getTime());
+    
+    // Keep closest snapshot to 24h ago
+    if (diff24h < MAX_24H_WINDOW) {
+      const existing = snapshot24hMap.get(snap.personId);
+      if (!existing || diff24h < existing.diff) {
+        snapshot24hMap.set(snap.personId, { score: snap.trendScore, diff: diff24h });
+      }
+    }
+    
+    // Keep closest snapshot to 7d ago
+    if (diff7d < MAX_7D_WINDOW) {
+      const existing = snapshot7dMap.get(snap.personId);
+      if (!existing || diff7d < existing.diff) {
+        snapshot7dMap.set(snap.personId, { score: snap.trendScore, diff: diff7d });
+      }
+    }
+  }
+  
+  console.log(`[Aggregate] Found ${snapshot24hMap.size} 24h snapshots, ${snapshot7dMap.size} 7d snapshots for change calculations`);
+  
   // Convert to TrendingPerson format with historical changes (in displayOrder sequence)
   const trendingPeople: TrendingPerson[] = [];
   
@@ -323,20 +368,29 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
     const dbPerson = celebrities[index];
     const celeb = results.find(c => c.name === dbPerson.name);
     
-    if (!dbPerson) continue;
+    if (!dbPerson || !celeb) continue;
     
-    // Use mock percentage changes for faster initial load (skip historical queries)
-    const change24h = (Math.random() - 0.5) * 10; // ±5% change
-    const change7d = (Math.random() - 0.5) * 20; // ±10% change
+    // Calculate actual percentage changes from historical snapshots
+    const prev24h = snapshot24hMap.get(dbPerson.id);
+    const prev7d = snapshot7dMap.get(dbPerson.id);
+    
+    const change24h = prev24h 
+      ? ((celeb.trendScore - prev24h.score) / prev24h.score) * 100 
+      : null;
+    const change7d = prev7d 
+      ? ((celeb.trendScore - prev7d.score) / prev7d.score) * 100 
+      : null;
     
     trendingPeople.push({
       id: dbPerson.id,
       name: celeb.name,
       avatar: dbPerson.avatar,
+      bio: dbPerson.bio,
       rank: index + 1,
       trendScore: celeb.trendScore,
-      change24h,
-      change7d,
+      fameIndex: Math.round(celeb.trendScore / 100), // 0-10,000 scale
+      change24h: change24h !== null ? Math.round(change24h * 10) / 10 : null,
+      change7d: change7d !== null ? Math.round(change7d * 10) / 10 : null,
       category: celeb.category,
     });
   }

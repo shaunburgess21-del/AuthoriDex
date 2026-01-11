@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trackedPeople, trendSnapshots, trendingPeople, apiCache } from "@shared/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, gte, lte } from "drizzle-orm";
 import { computeTrendScore } from "../scoring/trendScore";
 
 export async function runQuickScoring(): Promise<{ processed: number; errors: number }> {
@@ -46,6 +46,49 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
     
     console.log(`[QuickScore] Loaded ${wikiCache.size} wiki, ${gdeltCache.size} gdelt, ${serperCache.size} serper, ${xCache.size} x entries`);
 
+    // Fetch historical snapshots for change calculations
+    const now = new Date();
+    const time24hAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const time7dAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
+    // Build lookup maps for historical scores
+    const historicalSnapshots = await db.select({
+      personId: trendSnapshots.personId,
+      timestamp: trendSnapshots.timestamp,
+      trendScore: trendSnapshots.trendScore,
+      fameIndex: trendSnapshots.fameIndex,
+    }).from(trendSnapshots).where(
+      gte(trendSnapshots.timestamp, time7dAgo)
+    );
+    
+    // Create maps for 24h and 7d lookups (closest snapshot to target time)
+    const snapshot24hMap = new Map<string, { trendScore: number; fameIndex: number | null }>();
+    const snapshot7dMap = new Map<string, { trendScore: number; fameIndex: number | null }>();
+    
+    for (const snap of historicalSnapshots) {
+      const snapTime = new Date(snap.timestamp).getTime();
+      const diff24h = Math.abs(snapTime - time24hAgo.getTime());
+      const diff7d = Math.abs(snapTime - time7dAgo.getTime());
+      
+      // Keep closest snapshot to 24h ago (within 2 hour window)
+      if (diff24h < 2 * 60 * 60 * 1000) {
+        const existing = snapshot24hMap.get(snap.personId);
+        if (!existing) {
+          snapshot24hMap.set(snap.personId, { trendScore: snap.trendScore, fameIndex: snap.fameIndex });
+        }
+      }
+      
+      // Keep closest snapshot to 7d ago (within 12 hour window)
+      if (diff7d < 12 * 60 * 60 * 1000) {
+        const existing = snapshot7dMap.get(snap.personId);
+        if (!existing) {
+          snapshot7dMap.set(snap.personId, { trendScore: snap.trendScore, fameIndex: snap.fameIndex });
+        }
+      }
+    }
+    
+    console.log(`[QuickScore] Found ${snapshot24hMap.size} 24h snapshots, ${snapshot7dMap.size} 7d snapshots for change calculations`);
+
     const scoreResults: Array<{
       person: typeof people[0];
       score: ReturnType<typeof computeTrendScore>;
@@ -75,7 +118,16 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
           },
         };
 
-        const scoreResult = computeTrendScore(inputs);
+        // Get previous scores for change calculations
+        const prev24h = snapshot24hMap.get(person.id);
+        const prev7d = snapshot7dMap.get(person.id);
+        
+        const scoreResult = computeTrendScore(
+          inputs,
+          prev24h?.trendScore,  // previousScore for change24h calculation
+          prev7d?.trendScore,   // previousScore7d for change7d calculation
+          prev24h?.fameIndex ?? undefined  // previousFameIndex for EMA smoothing
+        );
 
         await db.insert(trendSnapshots).values({
           personId: person.id,

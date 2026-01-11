@@ -1,0 +1,100 @@
+Act as a Senior Full-Stack Engineer.
+
+CRITICAL FIX: Separate Suggestion Modals (Vote Page) The Vote page currently uses a single generic "Suggest a Candidate" modal for three completely different sections. This is incorrect.
+
+Current State: Face-Offs, People’s Voice, and Induction Queue all open the exact same modal.
+
+Required State: Each section must have its OWN modal with unique fields and its OWN submit handler.
+
+HARD CONSTRAINTS (Safety First)
+
+NO UI Redesign: Do not change styling, spacing, or layout outside of the specific modal bodies we are fixing.
+
+Additive Only: Do not rename or delete existing tables or columns.
+
+Schema Safety: If you need to store suggestions, first check if a table exists. If not, create a minimal "suggestion" table (e.g., poll_suggestions). DO NOT write suggestions directly into the live polls or votes tables. Suggestions must be separate records pending admin approval.
+
+Restore, Don't Reinvent: For "People's Voice", you must recover the specific fields we previously had.
+
+STEP 1: AUDIT (Do this before coding)
+Locate the Handlers: Find the current onClick handlers for the "+ Suggest" buttons in Face-Offs, People's Voice, and Induction Queue.
+
+Locate the "Lost" Blueprint: Search the repository history or existing files for the "People's Voice" modal code that contained these specific labels:
+
+"Headline"
+
+"Subject (Entity)"
+
+"Short description (max 140 characters)"
+
+"Timeline"
+
+Note: We need to restore this exact structure.
+
+STEP 2: RESTORE "People’s Voice" Modal
+Goal: Bring back the specific Poll Suggestion modal.
+
+Fields:
+
+Headline: Text Input.
+
+Timeline: Segmented Control (No Deadline, 1 Week, 1 Month, Custom).
+
+Short Description: Text Area (Max 140 chars).
+
+Subject (Entity) - Updated Logic:
+
+Type: Hybrid Searchable Combobox.
+
+Logic: User searches for celebrity.
+
+If Found: Select Celebrity -> Auto-set category (e.g., Tech).
+
+If Not Found: Show option Create Custom Topic: [User Input].
+
+If Custom: Auto-set category to "misc".
+
+STEP 3: FIX "Induction Queue" Modal
+Goal: A modal specifically for suggesting NEW people (not existing ones).
+
+Fields:
+
+Candidate Name: Free Text Input (Do NOT use a dropdown of existing users; we are suggesting new ones).
+
+Social/Profile URL: Input (Required for verification).
+
+Reason (Optional): Text Area ("Why should they be on FameDex?").
+
+Category: Optional Dropdown (Standard Categories only: Tech, Sports, etc. NO Misc).
+
+STEP 4: FIX "Face-Offs" Modal
+Goal: A modal specifically for A vs B battles.
+
+Fields:
+
+Headline: Text Input (e.g., "Battle of the Brands").
+
+Contender A: Text Input.
+
+Contender B: Text Input.
+
+Category (Required): Dropdown (Standard Categories + Misc).
+
+Logic: If "Misc" (UI: "Custom Topic") is selected, tag the suggestion as misc.
+
+STEP 5: INTEGRATION & VERIFICATION
+Wire the Buttons: Ensure each "+ Suggest" button opens only its specific modal.
+
+Collateral Check: Verify that:
+
+Live voting on existing Face-Offs still works.
+
+Live voting on existing People's Voice polls still works.
+
+(We are only changing the Suggestion flow, not the Voting flow).
+
+Deliverables:
+
+List of files modified.
+
+Confirmation of the database tables used for storage (e.g., induction_suggestions, faceoff_suggestions).
