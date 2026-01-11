@@ -1699,19 +1699,34 @@ export default function VotePage() {
           <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
           <div className="relative py-8 pt-[5px] pb-[5px]">
             <div className="text-center mb-6">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 mb-4">
-                <Sparkles className="h-4 w-4 text-cyan-400" />
-                <span className="text-sm text-cyan-400 font-medium">Community Governance</span>
-              </div>
               <h2 className="text-3xl md:text-4xl font-serif font-bold mb-3" data-testid="text-governance-title">
                 Shape the FameDex
               </h2>
               <p className="text-muted-foreground max-w-2xl mx-auto">
                 Vote on new inductees and curate profile images. Your opinion powers the index.
               </p>
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 mt-4">
+                <Sparkles className="h-4 w-4 text-cyan-400" />
+                <span className="text-sm text-cyan-400 font-medium">Community Governance</span>
+              </div>
             </div>
             
-            
+            <div className="flex flex-col sm:flex-row justify-center gap-6">
+              <div className="flex items-center gap-3 px-6 py-3 rounded-lg bg-muted/50 border border-border">
+                <Users className="h-5 w-5 text-cyan-400" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Total Votes Cast</p>
+                  <p className="text-lg font-bold font-mono text-cyan-400" data-testid="text-total-votes">{totalVotes.toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 px-6 py-3 rounded-lg bg-muted/50 border border-border">
+                <Clock className="h-5 w-5 text-cyan-400" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Next Governance Update</p>
+                  <p className="text-lg font-bold font-mono text-cyan-400" data-testid="text-countdown">{countdown}</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         )}
