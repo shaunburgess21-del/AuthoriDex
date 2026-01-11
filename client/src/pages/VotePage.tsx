@@ -1484,7 +1484,7 @@ export default function VotePage() {
           </div>
         </div>
       </div>
-      <div className="container mx-auto px-4 py-8 max-w-5xl">
+      <div className="container mx-auto px-4 py-8 max-w-5xl pt-[5px] pb-[5px]">
         {/* VOX POPULI HEADER - Above Face-Offs + People's Voice */}
         {(activeSection === "All" || isPublicOpinionSection(activeSection)) && (
         <div className="relative overflow-hidden mb-6">
@@ -2289,7 +2289,6 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
-
       {/* Vox Populi Info Modal */}
       <Dialog open={infoModalOpen === "voxpopuli"} onOpenChange={() => setInfoModalOpen(null)}>
         <DialogContent className="max-w-lg">
@@ -2332,7 +2331,6 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
-
       {/* Community Governance Info Modal */}
       <Dialog open={infoModalOpen === "governance"} onOpenChange={() => setInfoModalOpen(null)}>
         <DialogContent className="max-w-lg">
@@ -2375,7 +2373,6 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
-
       <AnimatePresence>
         {curateLeaderboardOpen && (
           <motion.div
