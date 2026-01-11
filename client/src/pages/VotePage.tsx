@@ -29,7 +29,9 @@ import {
   ChevronRight,
   HelpCircle,
   Calendar,
-  Swords
+  Swords,
+  UserPlus,
+  ImageIcon
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -1443,6 +1445,10 @@ export default function VotePage() {
                 }`}
                 data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
               >
+                {section === "Face-Offs" && <Swords className="h-4 w-4" />}
+                {section === "People's Voice" && <MessageSquare className="h-4 w-4" />}
+                {section === "Induction Queue" && <UserPlus className="h-4 w-4" />}
+                {section === "Curate Profile" && <ImageIcon className="h-4 w-4" />}
                 {section}
               </button>
             ))}
