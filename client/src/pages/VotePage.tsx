@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +34,8 @@ import {
   UserPlus,
   ImageIcon,
   Globe,
-  BarChart3
+  BarChart3,
+  Upload
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -49,6 +50,7 @@ import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
 import { motion, AnimatePresence } from "framer-motion";
 import { getFilterCategories, type FilterCategory } from "@shared/constants";
+import type { TrendingPerson } from "@shared/schema";
 
 const mockCelebrityList = [
   "Taylor Swift", "Elon Musk", "Keanu Reeves", "Beyoncé", "Dwayne Johnson",
@@ -1153,6 +1155,286 @@ function CelebrityAutocomplete({
   );
 }
 
+// Contender Selection for Face-Off modal - supports celebrities with auto-images and custom entries with uploads
+type ContenderSelection = {
+  type: 'celebrity' | 'custom' | null;
+  name: string;
+  celebrityId?: string;
+  imageUrl?: string;
+  uploadedFile?: File;
+  uploadedPreview?: string;
+};
+
+function ContenderSelector({ 
+  value, 
+  onChange,
+  label,
+  placeholder = "Search celebrity or enter custom...",
+  testIdPrefix
+}: { 
+  value: ContenderSelection;
+  onChange: (selection: ContenderSelection) => void;
+  label: string;
+  placeholder?: string;
+  testIdPrefix: string;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch trending people for suggestions
+  const { data: trendingResponse } = useQuery<{ data: TrendingPerson[], totalCount: number, hasMore: boolean }>({
+    queryKey: ['/api/trending?sort=rank&limit=100'],
+  });
+  const celebrities = trendingResponse?.data || [];
+
+  // Filter celebrities based on search query
+  const filteredCelebrities = useMemo(() => {
+    if (!searchQuery) return celebrities.slice(0, 6);
+    return celebrities
+      .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      .slice(0, 6);
+  }, [celebrities, searchQuery]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        suggestionsRef.current && 
+        !suggestionsRef.current.contains(e.target as Node) &&
+        inputRef.current &&
+        !inputRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelectCelebrity = (celebrity: TrendingPerson) => {
+    onChange({
+      type: 'celebrity',
+      name: celebrity.name,
+      celebrityId: celebrity.id,
+      imageUrl: celebrity.avatar || undefined,
+      uploadedFile: undefined,
+      uploadedPreview: undefined
+    });
+    setSearchQuery("");
+    setShowSuggestions(false);
+  };
+
+  const handleSelectCustom = () => {
+    if (searchQuery.length >= 2) {
+      onChange({
+        type: 'custom',
+        name: searchQuery,
+        celebrityId: undefined,
+        imageUrl: undefined,
+        uploadedFile: undefined,
+        uploadedPreview: undefined
+      });
+      setShowSuggestions(false);
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        onChange({
+          ...value,
+          uploadedFile: file,
+          uploadedPreview: event.target?.result as string
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleClear = () => {
+    onChange({
+      type: null,
+      name: '',
+      celebrityId: undefined,
+      imageUrl: undefined,
+      uploadedFile: undefined,
+      uploadedPreview: undefined
+    });
+    setSearchQuery("");
+  };
+
+  const hasMatchingCelebrities = filteredCelebrities.length > 0;
+  const showCustomOption = searchQuery.length >= 2 && !filteredCelebrities.some(c => c.name.toLowerCase() === searchQuery.toLowerCase());
+
+  // If a selection is made, show the selected state
+  if (value.type) {
+    const displayImage = value.type === 'celebrity' ? value.imageUrl : value.uploadedPreview;
+    const needsUpload = value.type === 'custom' && !value.uploadedPreview;
+
+    return (
+      <div className="space-y-2">
+        <label className="text-sm font-medium mb-1 block">{label}</label>
+        <div className="flex items-center gap-2 p-2 rounded-lg border bg-muted/30">
+          {displayImage ? (
+            <div className="h-10 w-10 rounded-md overflow-hidden shrink-0 border border-border">
+              <img src={displayImage} alt={value.name} className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <div className="h-10 w-10 rounded-md bg-slate-700/50 flex items-center justify-center shrink-0 border border-border">
+              <User className="h-5 w-5 text-muted-foreground" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="font-medium truncate">{value.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {value.type === 'celebrity' ? (
+                <span className="text-cyan-400">FameDex Celebrity</span>
+              ) : (
+                <span className="text-violet-400">Custom Contender</span>
+              )}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={handleClear}
+            className="shrink-0 h-8 w-8"
+            data-testid={`${testIdPrefix}-clear`}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Upload button for custom contenders */}
+        {needsUpload && (
+          <div className="flex items-center gap-2 p-3 rounded-lg border border-dashed border-amber-500/50 bg-amber-500/5">
+            <Upload className="h-4 w-4 text-amber-400" />
+            <span className="text-sm text-amber-400">Image required for custom contenders</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              className="ml-auto border-amber-500/50 text-amber-400 hover:bg-amber-500/10"
+              data-testid={`${testIdPrefix}-upload-btn`}
+            >
+              Upload Image
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleFileUpload}
+              className="hidden"
+              data-testid={`${testIdPrefix}-file-input`}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Show search input
+  return (
+    <div className="space-y-2">
+      <label className="text-sm font-medium mb-1 block">{label}</label>
+      <div className="relative">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input 
+            ref={inputRef}
+            placeholder={placeholder}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => setShowSuggestions(true)}
+            className="pl-10"
+            data-testid={`${testIdPrefix}-search`}
+          />
+        </div>
+        
+        <AnimatePresence>
+          {showSuggestions && (
+            <motion.div 
+              ref={suggestionsRef}
+              className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg overflow-hidden max-h-72 overflow-y-auto"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.15 }}
+            >
+              {/* Custom contender option */}
+              {showCustomOption && (
+                <button
+                  onClick={handleSelectCustom}
+                  className="w-full px-4 py-2.5 text-left text-sm hover:bg-violet-500/10 transition-colors flex items-center gap-2 border-b border-border bg-gradient-to-r from-violet-500/5 to-transparent"
+                  data-testid={`${testIdPrefix}-custom-option`}
+                >
+                  <div className="h-8 w-8 rounded-md bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
+                    <Plus className="h-4 w-4 text-violet-400" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span>Use "<span className="font-medium text-violet-400">{searchQuery}</span>" as Custom Contender</span>
+                    <span className="text-xs text-muted-foreground">Image upload required</span>
+                  </div>
+                </button>
+              )}
+
+              {/* Celebrity suggestions */}
+              {hasMatchingCelebrities ? (
+                <>
+                  <div className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/30 border-b border-border">
+                    FameDex Celebrities
+                  </div>
+                  {filteredCelebrities.map((celebrity, index) => (
+                    <button
+                      key={celebrity.id}
+                      onClick={() => handleSelectCelebrity(celebrity)}
+                      className="w-full px-4 py-2.5 text-left text-sm hover:bg-muted transition-colors flex items-center gap-3"
+                      data-testid={`${testIdPrefix}-celebrity-${index}`}
+                    >
+                      {celebrity.avatar ? (
+                        <div className="h-8 w-8 rounded-md overflow-hidden shrink-0 border border-border">
+                          <img src={celebrity.avatar} alt={celebrity.name} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <PersonAvatar name={celebrity.name} avatar="" size="sm" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{celebrity.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {celebrity.category} • Auto-image
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-xs bg-cyan-500/10 text-cyan-300 border-cyan-400/30">
+                        <Check className="h-3 w-3 mr-1" />
+                        Auto
+                      </Badge>
+                    </button>
+                  ))}
+                </>
+              ) : searchQuery.length === 0 ? (
+                <div className="px-4 py-3 text-sm text-muted-foreground text-center">
+                  Type to search FameDex celebrities or enter a custom name
+                </div>
+              ) : searchQuery.length < 2 ? (
+                <div className="px-4 py-3 text-sm text-muted-foreground text-center">
+                  Keep typing to search...
+                </div>
+              ) : null}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
 function FilterChip({ 
   category, 
   isActive, 
@@ -1225,8 +1507,8 @@ export default function VotePage() {
   const [suggestReason, setSuggestReason] = useState("");
   const [suggestUrl, setSuggestUrl] = useState("");
   const [faceOffHeadline, setFaceOffHeadline] = useState("");
-  const [faceOffContenderA, setFaceOffContenderA] = useState("");
-  const [faceOffContenderB, setFaceOffContenderB] = useState("");
+  const [faceOffContenderA, setFaceOffContenderA] = useState<ContenderSelection>({ type: null, name: '' });
+  const [faceOffContenderB, setFaceOffContenderB] = useState<ContenderSelection>({ type: null, name: '' });
   const [faceOffCategory, setFaceOffCategory] = useState("");
   const [totalVotes] = useState(127843);
   const [countdown, setCountdown] = useState("2d 14h 32m");
@@ -2264,24 +2546,20 @@ export default function VotePage() {
                 data-testid="input-faceoff-headline"
               />
             </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Contender A *</label>
-              <Input
-                value={faceOffContenderA}
-                onChange={(e) => setFaceOffContenderA(e.target.value)}
-                placeholder="e.g. Nike"
-                data-testid="input-faceoff-contender-a"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Contender B *</label>
-              <Input
-                value={faceOffContenderB}
-                onChange={(e) => setFaceOffContenderB(e.target.value)}
-                placeholder="e.g. Adidas"
-                data-testid="input-faceoff-contender-b"
-              />
-            </div>
+            <ContenderSelector
+              value={faceOffContenderA}
+              onChange={setFaceOffContenderA}
+              label="Contender A *"
+              placeholder="Search celebrity or enter name..."
+              testIdPrefix="faceoff-contender-a"
+            />
+            <ContenderSelector
+              value={faceOffContenderB}
+              onChange={setFaceOffContenderB}
+              label="Contender B *"
+              placeholder="Search celebrity or enter name..."
+              testIdPrefix="faceoff-contender-b"
+            />
             <div>
               <label className="text-sm font-medium mb-1 block">Category *</label>
               <Select value={faceOffCategory} onValueChange={setFaceOffCategory}>
@@ -2306,15 +2584,22 @@ export default function VotePage() {
               onClick={() => {
                 toast({
                   title: "Face-Off Suggested!",
-                  description: `Your matchup "${faceOffContenderA} vs ${faceOffContenderB}" has been submitted for review.`,
+                  description: `Your matchup "${faceOffContenderA.name} vs ${faceOffContenderB.name}" has been submitted for review.`,
                 });
                 setFaceOffHeadline("");
-                setFaceOffContenderA("");
-                setFaceOffContenderB("");
+                setFaceOffContenderA({ type: null, name: '' });
+                setFaceOffContenderB({ type: null, name: '' });
                 setFaceOffCategory("");
                 setFaceOffSuggestOpen(false);
               }}
-              disabled={!faceOffHeadline || !faceOffContenderA || !faceOffContenderB || !faceOffCategory}
+              disabled={
+                !faceOffHeadline || 
+                !faceOffCategory ||
+                !faceOffContenderA.type ||
+                !faceOffContenderB.type ||
+                (faceOffContenderA.type === 'custom' && !faceOffContenderA.uploadedPreview) ||
+                (faceOffContenderB.type === 'custom' && !faceOffContenderB.uploadedPreview)
+              }
               className="bg-cyan-500 text-white"
               data-testid="button-submit-faceoff"
             >
