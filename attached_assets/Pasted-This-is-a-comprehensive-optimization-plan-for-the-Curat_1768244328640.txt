@@ -1,0 +1,83 @@
+This is a comprehensive optimization plan for the **Curate Profile** feature. You are combining the best UI elements from the Home page (4-grid layout) with the robust functionality of the Vote page (filters, transitions), while fixing the broken "View Results" page and adding a new "View All" overlay.
+
+Here is the structured breakdown for the Replit Plan Agent.
+
+### **The Strategy**
+
+1. **Consolidate the Component:** Create a single, shared `CurateProfileCard` component that powers both the Home Page and Vote Page to ensure consistency.
+2. **Fix the Grid & Layout:** Enforce the 4-grid layout everywhere for the main view, but fix the "layout shift" (height collapse) issue.
+3. **Implement the Overlays:**
+* **"View All" (Header Button):** A new overlay showing *all* celebrities (2-grid cards) with filters.
+* **"View Results" (Card Button):** Fix the existing (broken) page/overlay that shows *all photos* for a single celebrity ranked by votes.
+
+
+4. **Logic Upgrades:** Fix the category filters, ensure all 100 celebs are included (not just 8), and implement the "smart rollover" (showing different photos on the second pass).
+
+Here is the prompt to get this built correctly.
+
+---
+
+**Act as a Senior Frontend Engineer.**
+
+**Task: Optimize & Unify the 'Curate Profile' Section**
+We need to unify the "Curate Profile Image" section (found on both the Home Page and Vote Page) into a single, optimized component with enhanced functionality. Currently, the two versions are inconsistent.
+
+**1. UI Standardization (The Hybrid Card)**
+Create/Update a shared `CurateProfileCard` component that is used on **both** pages.
+
+* **Layout:** Use the **4-Grid Photo Layout** (currently on Home Page) as the standard for the main card view.
+* **Styling:**
+* **Category Pill:** Position at the **Top Right** of the card (like Vote Page).
+* **Labels:** Remove the AI-generated text labels under photos (display images only).
+* **Height Stability:** Fix the "layout shift" bug where the card collapses in height while loading the next celebrity. Enforce a **fixed minimum height** for the card container so it stays stable during transitions.
+
+
+* **Controls:**
+* **"Skip" Button:** Ensure this button (currently on Home) is present on both versions.
+* **"View Results" Button:** Add a button/link **on the card itself** (e.g., bottom right or near header) labeled "View Results" (logic below).
+
+
+
+**2. Header & Overlay Logic**
+Update the Section Header for the Curate Profile section:
+
+* **Button:** Replace the existing "View Results" button in the *Header* with a **"View All"** button.
+* **"View All" Overlay:**
+* **Action:** Opens a full-screen overlay (consistent with "People's Voice" overlay).
+* **Content:** Displays cards for **all 100 celebrities** (or filtered subset).
+* **Card Design:** Inside this overlay, use a **2-Grid Photo Layout** (instead of 4) to save space.
+* **Filters:** Ensure the standard category filters (Tech, Music, etc.) and Search Bar in the overlay header function correctly to filter the list.
+
+
+
+**3. "View Results" (Single Celebrity Logic)**
+
+* **Bug Fix:** The current "View Results" page/overlay is crashing (`Cannot read properties of undefined`).
+* **Functionality:** When a user clicks "View Results" on a specific celebrity's card:
+* Open an overlay/view displaying **all** available photos for that celebrity.
+* **Sorting:** Rank photos by total votes (highest to lowest).
+* **Interaction:**
+* Clicking a "Vote" button next to a photo casts a vote.
+* **Expand:** Clicking the photo itself should expand it (Lightbox/Modal) for a better look on mobile.
+
+
+
+
+
+**4. Data & Filtering Logic (Critical)**
+
+* **Category Filters:** Ensure the main card respects the global category selection (e.g., if "Tech" is selected, only show Tech celebrities).
+* **Pagination/Rotation:**
+* Currently, it only shows 8 cards. Ensure it rotates through **all available celebrities** (e.g., all 100 from the leaderboard).
+* **Smart Loop:** If a user cycles through all celebrities and starts over, the system should attempt to display **different photos** in the 4-grid preview (if available) than what was shown in the first pass.
+
+
+
+**Deliverables:**
+
+* A unified, bug-free `CurateProfileCard` used on both pages.
+* A working "View All" overlay with filters.
+* A fixed "View Results" view for specific celebrities.
+* Smooth transitions without height jumping.
+
+---
