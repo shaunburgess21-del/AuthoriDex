@@ -12,11 +12,27 @@ export interface FavoriteItem {
 }
 
 export function useFavorites() {
-  const { user } = useAuth();
+  const { session, loading } = useAuth();
 
   const { data: favorites = [], isLoading, error } = useQuery<FavoriteItem[]>({
-    queryKey: ["/api/me/favorites"],
-    enabled: !!user,
+    queryKey: ["/api/me/favorites", session?.access_token],
+    queryFn: async () => {
+      if (!session?.access_token) return [];
+      
+      const res = await fetch("/api/me/favorites", {
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
+      
+      if (!res.ok) {
+        if (res.status === 401) return [];
+        throw new Error(`Failed to fetch favorites: ${res.status}`);
+      }
+      
+      return res.json();
+    },
+    enabled: !!session?.access_token && !loading,
   });
 
   const favoriteIds = new Set(favorites.map((f) => f.celebrityId));
@@ -29,6 +45,6 @@ export function useFavorites() {
     isFavorite,
     isLoading,
     error,
-    isAuthenticated: !!user,
+    isAuthenticated: !!session,
   };
 }

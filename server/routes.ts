@@ -1217,11 +1217,26 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
     try {
       const userId = req.userId!;
       
-      // Get user details from Supabase
-      const { data: { user }, error: userError } = await supabaseServer.auth.admin.getUserById(userId);
+      // Get user details from Supabase with retry logic
+      let user = null;
+      let userError = null;
+      
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const result = await supabaseServer.auth.admin.getUserById(userId);
+        user = result.data?.user;
+        userError = result.error;
+        
+        if (user) break;
+        
+        // Wait before retry (100ms, 200ms, 400ms)
+        if (attempt < 2) {
+          await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, attempt)));
+        }
+      }
       
       if (userError || !user) {
-        return res.status(400).json({ error: "Could not fetch user details" });
+        console.error(`[Profile] Failed to fetch user ${userId}:`, userError?.message || "User not found");
+        return res.status(400).json({ error: "Could not fetch user details", details: userError?.message });
       }
       
       const email = user.email;

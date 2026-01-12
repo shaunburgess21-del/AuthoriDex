@@ -42,28 +42,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profileLoading, setProfileLoading] = useState(false);
 
   // Sync profile with backend - creates profile if doesn't exist
-  const syncProfile = useCallback(async (accessToken: string) => {
+  const syncProfile = useCallback(async (accessToken: string, retries = 3) => {
     try {
       setProfileLoading(true);
       
-      // First, sync the profile (creates it if needed)
-      const syncResponse = await fetch("/api/profile/sync", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      });
+      let lastError: string | null = null;
       
-      if (!syncResponse.ok) {
-        console.error("Failed to sync profile:", await syncResponse.text());
-        return;
+      for (let attempt = 0; attempt < retries; attempt++) {
+        const syncResponse = await fetch("/api/profile/sync", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        });
+        
+        if (syncResponse.ok) {
+          const profileData = await syncResponse.json();
+          console.log("[AuthContext] Profile Synced from /api/profile/sync:", profileData);
+          console.log("[AuthContext] Role received:", profileData?.role, "| isAdmin will be:", profileData?.role === "admin");
+          setProfile(profileData);
+          return;
+        }
+        
+        lastError = await syncResponse.text();
+        
+        // Wait before retry (200ms, 400ms)
+        if (attempt < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)));
+        }
       }
       
-      const profileData = await syncResponse.json();
-      console.log("[AuthContext] Profile Synced from /api/profile/sync:", profileData);
-      console.log("[AuthContext] Role received:", profileData?.role, "| isAdmin will be:", profileData?.role === "admin");
-      setProfile(profileData);
+      console.warn("[AuthContext] Profile sync failed after retries:", lastError);
     } catch (error) {
       console.error("Error syncing profile:", error);
     } finally {
