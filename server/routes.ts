@@ -2398,7 +2398,7 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
   });
   
   // Run full data ingestion from external APIs
-  // Call this every 8 hours via external scheduler
+  // Call this every 2 hours via external scheduler (Basic tier X API)
   app.post("/api/cron/refresh-data", verifyCronSecret, async (req, res) => {
     const startTime = Date.now();
     try {

@@ -56,7 +56,7 @@ export async function fetchXData(handle: string): Promise<XMetrics | null> {
 
   const cleanHandle = handle.replace("@", "");
   const cacheKey = `x:metrics:${cleanHandle.toLowerCase()}`;
-  const CACHE_TTL_HOURS = 8; // 8 hours = 3 fetches per day (within 10K/month limit)
+  const CACHE_TTL_HOURS = 2; // 2 hours = 12 fetches per day (Basic tier: 100K+ tweets/month)
 
   try {
     const [cached] = await db
@@ -154,7 +154,7 @@ export async function fetchXData(handle: string): Promise<XMetrics | null> {
 
 export async function fetchXBatch(
   handles: string[],
-  maxRequests: number = 50
+  maxRequests: number = 100
 ): Promise<Map<string, XMetrics>> {
   const results = new Map<string, XMetrics>();
   const limit = pLimit(1);
