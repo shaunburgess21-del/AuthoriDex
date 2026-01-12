@@ -51,6 +51,7 @@ import "slick-carousel/slick/slick-theme.css";
 import { motion, AnimatePresence } from "framer-motion";
 import { getFilterCategories, type FilterCategory } from "@shared/constants";
 import type { TrendingPerson } from "@shared/schema";
+import { CurateSection } from "@/components/curate";
 
 const mockCelebrityList = [
   "Taylor Swift", "Elon Musk", "Keanu Reeves", "Beyoncé", "Dwayne Johnson",
@@ -2313,43 +2314,13 @@ export default function VotePage() {
         {(activeSection === "All" || activeSection === "Curate Profile") && (
         <section className="mb-10">
           <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-                  <Camera className="h-5 w-5 text-cyan-400" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-serif font-bold">Curate the Profile</h2>
-                  <p className="text-sm text-muted-foreground">Winner becomes the default profile photo across the FameDex index.</p>
-                </div>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                <Camera className="h-5 w-5 text-cyan-400" />
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setCurateLeaderboardOpen(true)}
-                  className="text-cyan-400 hover:text-cyan-300 hidden md:flex"
-                  data-testid="button-view-curate-results"
-                >
-                  View Results
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setRulesModalOpen("curate")}
-                      className="text-cyan-400 hover:text-cyan-300"
-                      data-testid="button-rules-curate"
-                    >
-                      <HelpCircle className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
-                    How it works
-                  </TooltipContent>
-                </Tooltip>
+              <div>
+                <h2 className="text-xl font-serif font-bold">Curate the Profile</h2>
+                <p className="text-sm text-muted-foreground">Winner becomes the default profile photo across the FameDex index.</p>
               </div>
             </div>
           </div>
@@ -2371,35 +2342,7 @@ export default function VotePage() {
           </div>
 
           <div className="max-w-md mx-auto">
-            <div className="text-center mb-2 text-sm text-muted-foreground">
-              {currentCurateIndex + 1} of {curateProfilePolls.length}
-            </div>
-            <AnimatePresence mode="wait">
-              {currentCuratePoll && (
-                <CurateProfileCard 
-                  key={currentCuratePoll.id}
-                  poll={currentCuratePoll} 
-                  onVote={handleCurateVote}
-                  onComplete={handleCurateComplete}
-                  onViewResults={(poll) => {
-                    setSelectedCuratePerson(poll);
-                    setCurateLeaderboardOpen(true);
-                  }}
-                />
-              )}
-            </AnimatePresence>
-            {currentCurateIndex >= curateProfilePolls.length - 1 && (
-              <div className="text-center mt-4">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setCurrentCurateIndex(0)}
-                  className="border-cyan-500/50 text-cyan-400"
-                  data-testid="button-curate-start-over"
-                >
-                  Start Over
-                </Button>
-              </div>
-            )}
+            <CurateSection categoryFilter={curateCategoryFilter} />
           </div>
         </section>
         )}
@@ -2884,219 +2827,6 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
-      <AnimatePresence>
-        {curateLeaderboardOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
-          >
-            {selectedCuratePerson ? (
-              <>
-                <div className="flex items-center justify-between p-4 border-b">
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setSelectedCuratePerson(null)}
-                      data-testid="button-back-curate-results"
-                    >
-                      <ArrowLeft className="h-5 w-5" />
-                    </Button>
-                    <div>
-                      <h2 className="text-xl font-serif font-bold">{selectedCuratePerson.personName}</h2>
-                      <p className="text-sm text-muted-foreground">Choose the best profile photo</p>
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      setSelectedCuratePerson(null);
-                      setCurateLeaderboardOpen(false);
-                    }}
-                    data-testid="button-close-curate-detail"
-                  >
-                    <X className="h-5 w-5" />
-                  </Button>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto p-4">
-                  <div className="max-w-lg mx-auto space-y-4">
-                    <div className="text-center mb-6">
-                      <div className="h-20 w-20 rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 flex items-center justify-center text-2xl font-bold text-cyan-400 border border-cyan-500/30 mx-auto mb-3">
-                        {selectedCuratePerson.personName.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                      </div>
-                      <Badge variant="outline" className="bg-cyan-500/10 text-cyan-300 border-cyan-400/30">
-                        {selectedCuratePerson.category}
-                      </Badge>
-                      <p className="text-sm text-muted-foreground mt-2">
-                        {detailTotalVotes.toLocaleString()} total votes
-                      </p>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      {detailImages
-                        .sort((a, b) => (b.votesUp - b.votesDown) - (a.votesUp - a.votesDown))
-                        .map((photo, idx) => {
-                          const votes = photo.votesUp + photo.votesDown;
-                          const percentage = detailTotalVotes > 0 ? Math.round((votes / detailTotalVotes) * 100) : 0;
-                          const isLeading = idx === 0 && votes > 0;
-                          
-                          return (
-                            <motion.div
-                              key={photo.id}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: idx * 0.1 }}
-                              className={`relative p-4 rounded-lg border transition-all cursor-pointer hover-elevate ${
-                                isLeading 
-                                  ? 'bg-cyan-500/10 border-cyan-500/40' 
-                                  : 'bg-muted/30 border-border hover:border-cyan-500/30'
-                              }`}
-                              onClick={() => {
-                                // Handled via button
-                              }}
-                              data-testid={`photo-option-${photo.id}`}
-                            >
-                              <div className="flex items-center gap-4">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                                  idx === 0 ? 'bg-yellow-500/20 text-yellow-300' :
-                                  idx === 1 ? 'bg-slate-400/20 text-slate-300' :
-                                  idx === 2 ? 'bg-orange-500/20 text-orange-300' :
-                                  'bg-slate-700/30 text-slate-400'
-                                }`}>
-                                  {idx + 1}
-                                </div>
-                                <div className="h-16 w-16 rounded-lg overflow-hidden border border-slate-600 shrink-0">
-                                  <img 
-                                    src={photo.imageUrl} 
-                                    alt={`${selectedCuratePerson.personName} look ${idx + 1}`}
-                                    className="w-full h-full object-cover"
-                                  />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <p className="font-medium truncate">Look {idx + 1}</p>
-                                    {isLeading && (
-                                      <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-400/30 text-xs shrink-0">
-                                        <Crown className="h-3 w-3 mr-1" />
-                                        Leading
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex-1 h-2 bg-slate-700/50 rounded-full overflow-hidden">
-                                      <motion.div 
-                                        className={`h-full rounded-full ${isLeading ? 'bg-cyan-500' : 'bg-slate-500'}`}
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${percentage}%` }}
-                                        transition={{ duration: 0.5, delay: idx * 0.1 }}
-                                      />
-                                    </div>
-                                    <span className="text-sm font-mono text-muted-foreground w-12 text-right">{percentage}%</span>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    {votes.toLocaleString()} votes
-                                  </p>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant={isLeading ? "outline" : "default"}
-                                  className={isLeading 
-                                    ? "border-cyan-500/50 text-cyan-400" 
-                                    : "bg-cyan-500 hover:bg-cyan-600 text-white"
-                                  }
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                  }}
-                                  data-testid={`button-vote-photo-${photo.id}`}
-                                >
-                                  <ThumbsUp className="h-4 w-4 mr-1" />
-                                  Vote
-                                </Button>
-                              </div>
-                            </motion.div>
-                          );
-                        })}
-                    </div>
-                    
-                    <p className="text-center text-xs text-muted-foreground mt-6">
-                      The photo with the most votes becomes the official profile image for {selectedCuratePerson.personName} across FameDex.
-                    </p>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-between p-4 border-b">
-                  <div>
-                    <h2 className="text-xl font-serif font-bold">Profile Photo Results</h2>
-                    <p className="text-sm text-muted-foreground">Current winning photos for each celebrity</p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setCurateLeaderboardOpen(false)}
-                    data-testid="button-close-curate-results"
-                  >
-                    <X className="h-5 w-5" />
-                  </Button>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto p-4">
-                  <div className="space-y-3 max-w-xl mx-auto">
-                    {curateProfilePolls
-                      .sort((a, b) => b.totalVotes - a.totalVotes)
-                      .map((poll, idx) => {
-                        const leadingPhoto = poll.photoOptions.find(p => p.isLeading);
-                        return (
-                          <motion.div 
-                            key={poll.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: idx * 0.05 }}
-                            className="flex items-center gap-4 p-4 rounded-lg bg-muted/30 border border-border hover:border-cyan-500/30 cursor-pointer transition-all hover-elevate"
-                            onClick={() => setSelectedCuratePerson(poll)}
-                            data-testid={`curate-results-item-${poll.id}`}
-                          >
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
-                              idx === 0 ? 'bg-yellow-500/20 text-yellow-300' :
-                              idx === 1 ? 'bg-slate-400/20 text-slate-300' :
-                              idx === 2 ? 'bg-orange-500/20 text-orange-300' :
-                              'bg-slate-700/30 text-slate-400'
-                            }`}>
-                              {idx + 1}
-                            </div>
-                            <div className="h-14 w-14 rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 flex items-center justify-center text-lg font-bold text-cyan-400 border border-cyan-500/30 shrink-0">
-                              {poll.personName.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium truncate">{poll.personName}</p>
-                              <p className="text-xs text-muted-foreground">{poll.category}</p>
-                              {leadingPhoto && (
-                                <p className="text-xs text-cyan-400 truncate mt-0.5">
-                                  <Crown className="h-3 w-3 inline mr-1" />
-                                  {leadingPhoto.description}
-                                </p>
-                              )}
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className="font-bold font-mono text-cyan-400">{poll.totalVotes.toLocaleString()}</p>
-                              <p className="text-xs text-muted-foreground">total votes</p>
-                            </div>
-                            <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
-                          </motion.div>
-                        );
-                      })}
-                  </div>
-                </div>
-              </>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
       <AnimatePresence>
         {inductionOverlayOpen && (
           <motion.div

@@ -27,12 +27,11 @@ import {
   FACE_OFF_DATA,
   DISCOURSE_TOPICS,
   INDUCTION_CANDIDATES,
-  CURATE_PROFILE_POLLS,
   type FaceOffData,
   type DiscourseTopicData,
   type InductionCandidate,
-  type CurateProfilePoll,
 } from "@/data/vote";
+import { CurateSection } from "@/components/curate";
 import { getFilterCategories, type FilterCategory } from "@shared/constants";
 
 type VoteSection = "All" | "Face-Offs" | "People's Voice" | "Induction Queue" | "Curate Profile";
@@ -279,70 +278,6 @@ function InductionCard({
   );
 }
 
-function CurateCard({
-  poll,
-  selectedPhoto,
-  onVote,
-}: {
-  poll: CurateProfilePoll;
-  selectedPhoto: string | null;
-  onVote: (pollId: string, photoId: string) => void;
-}) {
-  const hasVoted = selectedPhoto !== null;
-  
-  return (
-    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50">
-      <div className="relative p-4">
-        <div className="flex items-center gap-3 mb-3">
-          <PersonAvatar name={poll.personName} avatar="" size="md" />
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-base truncate">{poll.personName}</h3>
-            <div className="flex items-center gap-2">
-              <CategoryPill category={poll.category} />
-              <span className="text-xs text-muted-foreground">
-                {poll.totalVotes.toLocaleString()} votes
-              </span>
-            </div>
-          </div>
-        </div>
-        
-        <p className="text-sm text-muted-foreground mb-3">Which look best represents them?</p>
-        
-        <div className="grid grid-cols-2 gap-2">
-          {poll.photoOptions.slice(0, 4).map((photo) => {
-            const isSelected = selectedPhoto === photo.id;
-            return (
-              <button
-                key={photo.id}
-                onClick={() => !hasVoted && onVote(poll.id, photo.id)}
-                disabled={hasVoted}
-                className={`p-2 rounded-lg border text-left transition-all ${
-                  hasVoted
-                    ? isSelected
-                      ? 'border-cyan-500/50 bg-cyan-500/10'
-                      : 'border-slate-700/30 opacity-50'
-                    : 'border-slate-700/50 hover:border-cyan-500/50 cursor-pointer'
-                }`}
-                data-testid={`button-curate-${poll.id}-${photo.id}`}
-              >
-                <div className="aspect-square bg-slate-700/30 rounded-md mb-2 flex items-center justify-center">
-                  <ImageIcon className="h-6 w-6 text-slate-500" />
-                </div>
-                <p className="text-xs text-slate-300 truncate">{photo.description}</p>
-                {hasVoted && (
-                  <p className={`text-xs mt-1 ${isSelected ? 'text-cyan-400' : 'text-slate-500'}`}>
-                    {Math.round((photo.votes / poll.totalVotes) * 100)}%
-                  </p>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </Card>
-  );
-}
-
 export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -353,12 +288,10 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   const [faceOffVotes, setFaceOffVotes] = useState<Record<string, string>>({});
   const [pollVotes, setPollVotes] = useState<Record<string, string>>({});
   const [inductionVotes, setInductionVotes] = useState<Set<string>>(new Set());
-  const [curateVotes, setCurateVotes] = useState<Record<string, string>>({});
   
   const [faceOffInteracted, setFaceOffInteracted] = useState(false);
   const [pollInteracted, setPollInteracted] = useState(false);
   const [inductionInteracted, setInductionInteracted] = useState(false);
-  const [curateInteracted, setCurateInteracted] = useState(false);
 
   const filteredFaceOffs = useMemo(() => 
     FACE_OFF_DATA.filter(fo => {
@@ -392,15 +325,6 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
     [categoryFilter, searchQuery]
   );
 
-  const filteredCurate = useMemo(() =>
-    CURATE_PROFILE_POLLS.filter(p => {
-      const matchesCategory = categoryFilter === "All" || p.category === categoryFilter;
-      const matchesSearch = !searchQuery || p.personName.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
-    }),
-    [categoryFilter, searchQuery]
-  );
-
   const handleFaceOffVote = (id: string, option: 'option_a' | 'option_b') => {
     setFaceOffVotes(prev => ({ ...prev, [id]: option }));
   };
@@ -416,10 +340,6 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
       else next.add(id);
       return next;
     });
-  };
-
-  const handleCurateVote = (pollId: string, photoId: string) => {
-    setCurateVotes(prev => ({ ...prev, [pollId]: photoId }));
   };
 
   const showFaceOffs = activeSection === "All" || activeSection === "Face-Offs";
@@ -570,30 +490,8 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
         </div>
       )}
 
-      {showCurate && filteredCurate.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <ImageIcon className="h-4 w-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold">Curate Profile</h3>
-          </div>
-          <CardDeckContainer
-            items={filteredCurate}
-            viewType="vote"
-            hasInteracted={curateInteracted}
-            onAdvance={() => setCurateInteracted(false)}
-            renderCard={(poll) => (
-              <CurateCard
-                poll={poll}
-                selectedPhoto={curateVotes[poll.id] || null}
-                onVote={(pollId, photoId) => {
-                  handleCurateVote(pollId, photoId);
-                  setCurateInteracted(true);
-                }}
-              />
-            )}
-            emptyMessage="No profiles match your filters"
-          />
-        </div>
+      {showCurate && (
+        <CurateSection categoryFilter={categoryFilter} compact />
       )}
 
       <div className="flex flex-col items-center gap-3 pt-4">
