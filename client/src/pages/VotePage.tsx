@@ -506,7 +506,7 @@ function InductionCandidateCard({
         ) : (
           <>
             <Vote className="h-4 w-4 mr-2" />
-            Vote to Induct (+1)
+            Vote to Induct
           </>
         )}
       </Button>
