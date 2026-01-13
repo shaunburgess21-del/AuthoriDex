@@ -43,11 +43,15 @@ const DEFAULT_CATEGORY_STYLE = {
 };
 
 export function getCategoryStyle(category: string) {
-  return CATEGORY_STYLES[category] || DEFAULT_CATEGORY_STYLE;
+  // Normalize: capitalize first letter for lookup (e.g., "tech" -> "Tech")
+  const normalized = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+  return CATEGORY_STYLES[normalized] || DEFAULT_CATEGORY_STYLE;
 }
 
 export function getCategoryTextColor(category: string) {
-  const style = CATEGORY_STYLES[category] || DEFAULT_CATEGORY_STYLE;
+  // Normalize: capitalize first letter for lookup (e.g., "tech" -> "Tech")
+  const normalized = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+  const style = CATEGORY_STYLES[normalized] || DEFAULT_CATEGORY_STYLE;
   return style.text;
 }
 
