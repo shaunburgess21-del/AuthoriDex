@@ -1878,6 +1878,14 @@ export default function PredictPage() {
     }
   }, []);
 
+  // Sync global category filter to all section filters
+  useEffect(() => {
+    setUpdownCategory(categoryFilter);
+    setH2hCategory(categoryFilter);
+    setGainerCategory(categoryFilter);
+    setCommunityCategory(categoryFilter);
+  }, [categoryFilter]);
+
   const handleCloseFirstTimeModal = () => {
     localStorage.setItem(FIRST_VISIT_KEY, "true");
     setShowFirstTimeModal(false);
