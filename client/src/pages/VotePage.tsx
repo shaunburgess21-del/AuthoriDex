@@ -163,22 +163,25 @@ interface DiscourseTopicData {
   neutralPercent: number;
   disapprovePercent: number;
   totalVotes: number;
+  personId?: string;
+  personName?: string;
+  imageUrl?: string;
 }
 
 const DISCOURSE_TOPICS: DiscourseTopicData[] = [
-  { id: "d1", headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", category: "Tech", approvePercent: 35, neutralPercent: 20, disapprovePercent: 45, totalVotes: 89432 },
+  { id: "d1", headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", category: "Tech", approvePercent: 35, neutralPercent: 20, disapprovePercent: 45, totalVotes: 89432, personName: "Elon Musk", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Elon_Musk_Royal_Society_%28crop2%29.jpg/220px-Elon_Musk_Royal_Society_%28crop2%29.jpg" },
   { id: "d2", headline: "AI replacing jobs", description: "Should we embrace or regulate AI in the workplace?", category: "Tech", approvePercent: 28, neutralPercent: 32, disapprovePercent: 40, totalVotes: 156789 },
-  { id: "d3", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Music", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567 },
+  { id: "d3", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Music", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567, personName: "Taylor Swift", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/191125_Taylor_Swift_at_the_2019_American_Music_Awards_%28cropped%29.png/220px-191125_Taylor_Swift_at_the_2019_American_Music_Awards_%28cropped%29.png" },
   { id: "d4", headline: "Spotify's royalty model", description: "Are artists fairly compensated by streaming?", category: "Music", approvePercent: 22, neutralPercent: 28, disapprovePercent: 50, totalVotes: 145678 },
-  { id: "d5", headline: "MrBeast's philanthropy", description: "Is it genuine or just content?", category: "Creator", approvePercent: 68, neutralPercent: 20, disapprovePercent: 12, totalVotes: 98765 },
+  { id: "d5", headline: "MrBeast's philanthropy", description: "Is it genuine or just content?", category: "Creator", approvePercent: 68, neutralPercent: 20, disapprovePercent: 12, totalVotes: 98765, personName: "MrBeast", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/MrBeast_2023_%28cropped%29.jpg/220px-MrBeast_2023_%28cropped%29.jpg" },
   { id: "d6", headline: "NFL Sunday Ticket pricing", description: "Is streaming football too expensive?", category: "Sports", approvePercent: 18, neutralPercent: 22, disapprovePercent: 60, totalVotes: 76543 },
-  { id: "d7", headline: "Meta's rebrand to AI company", description: "Is the pivot from social media working?", category: "Tech", approvePercent: 25, neutralPercent: 35, disapprovePercent: 40, totalVotes: 112345 },
-  { id: "d8", headline: "Drake vs Kendrick beef", description: "Who won the rap battle?", category: "Music", approvePercent: 45, neutralPercent: 15, disapprovePercent: 40, totalVotes: 287654 },
-  { id: "d9", headline: "LeBron's longevity", description: "Greatest athlete of all time?", category: "Sports", approvePercent: 55, neutralPercent: 25, disapprovePercent: 20, totalVotes: 198765 },
+  { id: "d7", headline: "Meta's rebrand to AI company", description: "Is the pivot from social media working?", category: "Tech", approvePercent: 25, neutralPercent: 35, disapprovePercent: 40, totalVotes: 112345, personName: "Mark Zuckerberg", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Mark_Zuckerberg_F8_2019_Keynote_%2832830578717%29_%28cropped%29.jpg/220px-Mark_Zuckerberg_F8_2019_Keynote_%2832830578717%29_%28cropped%29.jpg" },
+  { id: "d8", headline: "Drake vs Kendrick beef", description: "Who won the rap battle?", category: "Music", approvePercent: 45, neutralPercent: 15, disapprovePercent: 40, totalVotes: 287654, personName: "Drake", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Drake_July_2016.jpg/220px-Drake_July_2016.jpg" },
+  { id: "d9", headline: "LeBron's longevity", description: "Greatest athlete of all time?", category: "Sports", approvePercent: 55, neutralPercent: 25, disapprovePercent: 20, totalVotes: 198765, personName: "LeBron James", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/LeBron_James_crop.jpg/220px-LeBron_James_crop.jpg" },
   { id: "d10", headline: "Crypto regulation", description: "Should governments control digital currencies?", category: "Business", approvePercent: 40, neutralPercent: 20, disapprovePercent: 40, totalVotes: 134567 },
   { id: "d11", headline: "TikTok ban debate", description: "National security vs free speech?", category: "Politics", approvePercent: 35, neutralPercent: 30, disapprovePercent: 35, totalVotes: 256789 },
-  { id: "d12", headline: "OpenAI board drama", description: "Was firing Sam Altman justified?", category: "Tech", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 189432 },
-  { id: "d13", headline: "Beyonce's country album", description: "Authentic exploration or cultural appropriation?", category: "Music", approvePercent: 65, neutralPercent: 20, disapprovePercent: 15, totalVotes: 176543 },
+  { id: "d12", headline: "OpenAI board drama", description: "Was firing Sam Altman justified?", category: "Tech", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 189432, personName: "Sam Altman", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Sam_Altman_Collision_2019_%28cropped%29.jpg/220px-Sam_Altman_Collision_2019_%28cropped%29.jpg" },
+  { id: "d13", headline: "Beyonce's country album", description: "Authentic exploration or cultural appropriation?", category: "Music", approvePercent: 65, neutralPercent: 20, disapprovePercent: 15, totalVotes: 176543, personName: "Beyonce", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/Beyonc%C3%A9_at_The_Lion_King_European_Premiere_2019.png/220px-Beyonc%C3%A9_at_The_Lion_King_European_Premiere_2019.png" },
   { id: "d14", headline: "YouTube Premium worth it?", description: "Is ad-free viewing worth the subscription?", category: "Creator", approvePercent: 48, neutralPercent: 22, disapprovePercent: 30, totalVotes: 87654 },
   { id: "d15", headline: "F1's US expansion", description: "Is Formula 1 becoming too commercial?", category: "Sports", approvePercent: 40, neutralPercent: 35, disapprovePercent: 25, totalVotes: 65432 },
   { id: "d16", headline: "Billionaire space race", description: "Vanity project or advancing humanity?", category: "Tech", approvePercent: 30, neutralPercent: 25, disapprovePercent: 45, totalVotes: 145678 },
@@ -812,7 +815,27 @@ function DiscourseCard({
         <Users className="h-3.5 w-3.5 text-cyan-400" />
         <span>{topic.totalVotes.toLocaleString()} votes</span>
       </div>
-      <h3 className="font-serif font-bold text-lg mb-1">{topic.headline}</h3>
+      <div className="flex items-start gap-3 mb-3">
+        {topic.imageUrl ? (
+          <div className="h-12 w-12 rounded-md overflow-hidden shrink-0 border border-cyan-500/30 bg-slate-800">
+            <img 
+              src={topic.imageUrl} 
+              alt={topic.personName || topic.headline}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        ) : (
+          <div className="h-12 w-12 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0 border border-slate-600/30">
+            <MessageSquare className="h-5 w-5 text-slate-400" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <h3 className="font-serif font-bold text-lg leading-tight">{topic.headline}</h3>
+          {topic.personName && (
+            <span className="text-xs text-cyan-400">{topic.personName}</span>
+          )}
+        </div>
+      </div>
       <p className="text-sm text-muted-foreground mb-5 flex-grow">{topic.description}</p>
       
       {!voted ? (
@@ -1550,6 +1573,9 @@ export default function VotePage() {
   const [pollDescription, setPollDescription] = useState("");
   const [pollEntitySearch, setPollEntitySearch] = useState("");
   const [pollSubjectType, setPollSubjectType] = useState<'celebrity' | 'custom' | null>(null);
+  const [pollSubjectImage, setPollSubjectImage] = useState<File | null>(null);
+  const [pollSubjectImagePreview, setPollSubjectImagePreview] = useState<string | null>(null);
+  const pollFileInputRef = useRef<HTMLInputElement>(null);
   const [curateLeaderboardOpen, setCurateLeaderboardOpen] = useState(false);
   const [selectedCuratePerson, setSelectedCuratePerson] = useState<CurateProfilePoll | null>(null);
   const [pollDuration, setPollDuration] = useState<string>("none");
@@ -1754,10 +1780,26 @@ export default function VotePage() {
       setPollHeadline("");
       setPollCategory("");
       setPollDescription("");
+      setPollEntitySearch("");
+      setPollSubjectType(null);
+      setPollSubjectImage(null);
+      setPollSubjectImagePreview(null);
       toast({
         title: "Poll submitted",
         description: "Thanks - your poll was submitted for review.",
       });
+    }
+  };
+
+  const handlePollImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setPollSubjectImage(file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setPollSubjectImagePreview(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -2432,6 +2474,56 @@ export default function VotePage() {
                       <User className="h-3 w-3" />
                       Celebrity
                     </>
+                  )}
+                </div>
+              )}
+              {pollSubjectType === 'custom' && (
+                <div className="mt-3 p-3 rounded-lg border border-dashed border-amber-500/30 bg-amber-500/5">
+                  <label className="text-sm font-medium mb-2 block text-amber-400">Topic Image (Optional)</label>
+                  {pollSubjectImagePreview ? (
+                    <div className="flex items-center gap-3">
+                      <div className="h-16 w-16 rounded-md overflow-hidden border border-amber-500/30 bg-slate-800">
+                        <img 
+                          src={pollSubjectImagePreview} 
+                          alt="Topic preview"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm text-muted-foreground truncate">{pollSubjectImage?.name}</p>
+                        <button
+                          onClick={() => {
+                            setPollSubjectImage(null);
+                            setPollSubjectImagePreview(null);
+                          }}
+                          className="text-xs text-red-400 hover:underline mt-1"
+                          data-testid="button-remove-poll-image"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <div 
+                        onClick={() => pollFileInputRef.current?.click()}
+                        className="flex items-center justify-center w-full h-20 rounded-md border border-dashed border-slate-600 bg-slate-800/30 cursor-pointer hover:border-amber-500/50 hover:bg-amber-500/5 transition-all"
+                        data-testid="button-upload-poll-image"
+                      >
+                        <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                          <ImageIcon className="h-6 w-6" />
+                          <span className="text-xs">Click to upload image</span>
+                        </div>
+                      </div>
+                      <input
+                        ref={pollFileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={handlePollImageUpload}
+                        className="hidden"
+                        data-testid="input-poll-image"
+                      />
+                    </div>
                   )}
                 </div>
               )}
