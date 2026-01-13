@@ -184,6 +184,7 @@ export function CurateSection({
             </div>
             
             <CurateProfileCard
+              key={`${currentPerson.id}-${cycleNumber}`}
               person={currentPerson}
               onVote={handleVote}
               onComplete={handleComplete}
