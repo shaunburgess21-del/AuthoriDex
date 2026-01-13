@@ -2339,13 +2339,6 @@ export default function VotePage() {
         </section>
         )}
       </div>
-      <button
-        onClick={() => setInductionSuggestOpen(true)}
-        className="fixed bottom-24 md:bottom-8 right-6 h-14 w-14 rounded-full bg-cyan-500 text-white shadow-lg flex items-center justify-center hover:bg-cyan-600 transition-colors z-40"
-        data-testid="fab-suggest-candidate"
-      >
-        <Plus className="h-6 w-6" />
-      </button>
       <Dialog open={startPollModalOpen} onOpenChange={setStartPollModalOpen}>
         <DialogContent>
           <DialogHeader>
