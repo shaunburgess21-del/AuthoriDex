@@ -1690,6 +1690,13 @@ export default function VotePage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Sync global category filter to all section filters
+  useEffect(() => {
+    setFaceOffsCategoryFilter(globalCategoryFilter);
+    setTopicsCategoryFilter(globalCategoryFilter);
+    setInductionCategoryFilter(globalCategoryFilter);
+    setCurateCategoryFilter(globalCategoryFilter);
+  }, [globalCategoryFilter]);
 
   const handleToggleVote = (candidateId: string) => {
     setVotedIds(prev => {

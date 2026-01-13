@@ -1,0 +1,47 @@
+Yes, I completely understand. You want to ensure that the synchronization is visual as well as functional.
+
+When you click "Tech" at the top, you don't just want the cards to change; you want the actual "Tech" pill button inside the "Face-Offs" section (and every other section) to light up as "Active" automatically.
+
+My previous strategy (updating the internal state) handles this naturally, but I will make it explicit in the prompt so the developer doesn't miss it.
+
+Here is the Final, "Crystal Clear" Prompt for Replit.
+
+Act as a Senior Frontend Engineer.
+
+Task: Wire Up Global Category Filters (Data & Visual Sync) The "Global" Category Filter rows at the top of the VotePage and PredictPage need to act as a "Master Switch" for the entire page.
+
+1. The Requirement (Master Switch) When a user selects a category (e.g., "Tech" or "Favorites") from the Global Filter Bar at the top:
+
+Action: Every section below (Face-Offs, Up/Down, etc.) must immediately update to reflect this selection.
+
+Visual Sync (Crucial): The local filter pill inside each section header must automatically switch to "Selected" status.
+
+Example: If I click "Tech" at the very top, the "Tech" button inside the "Face-Offs" header must turn blue (active), and the "Tech" button inside the "People's Voice" header must also turn blue (active).
+
+2. Implementation Strategy (Parent-Child Sync)
+
+Parent State: Manage globalCategory state in VotePage.tsx and PredictPage.tsx.
+
+Pass Prop: Pass this state down to all child sections (e.g., <FaceOffSection globalCategory={globalCategory} />).
+
+Child Logic:
+
+Use a useEffect inside each section component.
+
+Trigger: When the globalCategory prop changes.
+
+Action: Update the section's internal selectedCategory state to match the new global value.
+
+Result: This ensures both the data (cards) AND the UI (active filter pill) update simultaneously.
+
+3. Scope of Sections
+
+Vote Page: Face-Offs, People's Voice, Induction Queue, Curate Profile.
+
+Predict Page: Weekly Jackpot, Up/Down Markets, Head-to-Head, Community Markets.
+
+4. "Favorites" Logic
+
+If the Global Filter is "Favorites," all sections must switch to their internal "Favorites" view.
+
+Deliverable: Verify that clicking a global filter visually updates the active filter buttons in every sub-section on the page.

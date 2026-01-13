@@ -1,0 +1,54 @@
+This is a standard state management issue. Currently, your Global Filter Bar (at the top) is likely updating a piece of state that goes nowhere, while your Section Components (Face-Offs, Up/Down, etc.) are managing their own independent internal state.
+
+We need to "wire them up" so that the Global Filter acts as a "Master Switch."
+
+The Logic We Will Implement
+The Master State: The Parent Page (VotePage / PredictPage) will hold the selectedGlobalCategory.
+
+The "Push" Effect: When you click a global filter (e.g., "Music"), the Parent passes this value down to every Section Component.
+
+The Child Reaction: The Section Components (Face-Offs, etc.) will listen for this change. When they receive a new global category, they will update their own local filter to match it.
+
+Local Independence: After the global switch, if a user manually clicks a local filter (the one right above the cards), it will still work for that specific section (because you said those are working perfectly and we shouldn't break them).
+
+Here is the prompt to fix this connectivity.
+
+Act as a Senior Frontend Engineer.
+
+Task: Wire Up Global Category Filters on Vote & Predict Pages The "Global" Category Filter rows at the very top of the VotePage and PredictPage are visually present but currently non-functional. They need to drive the filtering for all sections on the page simultaneously.
+
+1. The Requirement (The "Master Switch") When a user selects a category (e.g., "Music" or "Favorites") from the Global Filter Bar at the top of the page:
+
+Action: Every content section below it must immediately switch its active filter to that selected category.
+
+Scope (Vote Page): Face-Offs, People's Voice, Induction Queue, Curate Profile.
+
+Scope (Predict Page): Weekly Jackpot, Up/Down, Head-to-Head, Community Markets.
+
+2. Implementation Strategy (Parent-Child Sync)
+
+Parent State: Define a globalCategory state in VotePage.tsx and PredictPage.tsx.
+
+Pass Prop: Pass this globalCategory down to all section components (e.g., <FaceOffSection globalCategory={globalCategory} />).
+
+Child Logic (Critical):
+
+Inside each section component, use a useEffect (or equivalent reactive logic).
+
+Rule: When the incoming globalCategory prop changes, update the section's internal selectedCategory state to match it.
+
+Note: This preserves the "Local Filter" functionality. The user can still change a specific section's filter manually after a global switch, but the Global Switch acts as a "Reset All" trigger.
+
+3. "Favorites" Logic
+
+If the Global Filter is set to "Favorites", all sections must filter to show only items favorited by the current user.
+
+If the user has no favorites in a specific section, that section should show its "No Results" or empty state.
+
+4. Deliverable
+
+Modify VotePage.tsx and PredictPage.tsx to manage the global state.
+
+Update all sub-section components to accept and react to the new globalCategory prop.
+
+Verify that clicking "Tech" at the top of the page updates every single section on that page to "Tech".
