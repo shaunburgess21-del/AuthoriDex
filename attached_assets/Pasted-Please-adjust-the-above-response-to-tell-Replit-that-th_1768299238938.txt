@@ -1,0 +1,49 @@
+Please adjust the above response to tell Replit that the colors also need to be applied to the Crads on the Home Page when the "Predict" toggle is selected. So it is regarding the "Predict" page itself as well as the Home page section when the "Predict" toggle is selected. I have now attached the home page section for your reference as well
+
+This is a perfect catch. You are absolutely right—consistency is key, and if we fix it on the Predict Page but leave it broken on the Home Page, the site will feel unpolished.
+
+Based on your new screenshot (image_2f1faa.png), the Home Page "Predict" view is indeed suffering from the same "Grey Pill" syndrome.
+
+Here is the Updated & Expanded Prompt that covers BOTH locations.
+
+Act as a Senior Frontend Engineer.
+
+Task: Fix Category Label Coloring on Predict Page & Home Page The Industry Category labels (pills) on the prediction cards are currently displaying as default grey. They need to match the dynamic color styling used on the Vote Page and the rest of the application.
+
+1. Scope of Fix (Two Locations) You must apply the color fix to both of the following views:
+
+The Dedicated Predict Page: All cards (Weekly Jackpot, Up/Down, Head-to-Head, Community).
+
+The Home Page (Predict Toggle): The section that renders these same prediction cards when the user selects the "Predict" toggle on the Home screen.
+
+2. Visual Requirement
+
+Current State: Category pills (e.g., "Tech", "Music") are grey in these sections.
+
+Target State: They must use the exact same color scheme as the Vote Page:
+
+Tech: Blue/Teal
+
+Music: Pink/Purple
+
+Sports: Orange
+
+Business: Green
+
+Politics: Red
+
+(etc. - whatever the global theme dictates)
+
+3. Implementation Strategy
+
+Don't Duplicate Code: Identify the component or helper function that currently powers the correct colors on the VotePage (e.g., getCategoryColor() or a specific prop on a <Badge> component).
+
+Apply Everywhere: Import and apply this same logic to the card components used in the PredictPage and HomePredictSection.
+
+Constraint: The user explicitly stated that the Hover Effect is already correct and should remain unchanged. Only the base state color needs to be fixed.
+
+Deliverable: Verify that the category pills are vibrantly colored on both the main Predict Page and the Home Page (Predict view).
+
+
+
+
