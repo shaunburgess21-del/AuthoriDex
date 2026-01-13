@@ -27,7 +27,7 @@ Preferred communication style: Simple, everyday language.
 - **API Design**: RESTful endpoints with query parameters.
 - **Data Providers**: Integrates with Wikipedia, GDELT, Serper.dev, and X/Twitter APIs for celebrity data.
 - **Scoring Engine** (Refactored Jan 2026):
-  - **Fame Index (0-10,000)**: Primary UI score displayed everywhere, computed from normalized trend score. Scale expanded from 0-100 to 0-10,000 for greater variance and prediction difficulty.
+  - **Fame Index (0-1,000,000)**: Primary UI score displayed everywhere, computed from normalized trend score. Scale expanded to 0-1,000,000 for greater variance, larger numbers, and prediction difficulty.
   - **Fixed Weights**: Mass (40%) + Velocity (60%), no dynamic redistribution to prevent scoring discontinuities.
   - **Anti-Spam Damping**: `VelocityAdjusted = VelocityScore × (0.35 + 0.65 × MassScore)` ensures high-velocity/low-mass accounts are penalized.
   - **Diversity Multiplier**: Silent penalty based on active platforms. Instagram/YouTube marked as NOT_APPLICABLE (not tracked yet). Wiki+X+News+Search = 4/4 active = 1.0x multiplier.

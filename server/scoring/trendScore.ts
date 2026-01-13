@@ -36,7 +36,7 @@ export interface TrendInputs {
 
 export interface TrendScoreResult {
   trendScore: number;
-  fameIndex: number; // 0-10,000 normalized score for UI (higher variance for prediction difficulty)
+  fameIndex: number; // 0-1,000,000 normalized score for UI (higher variance for prediction difficulty)
   massScore: number;
   velocityScore: number;
   velocityAdjusted: number; // After anti-spam damping
@@ -162,9 +162,9 @@ export function computeTrendScore(
   
   const finalScoreRaw = baseScore * diversityMultiplier;
   
-  // Fame Index (0-10,000) - the primary UI number
-  // Multiplied by 100 for greater variance and prediction difficulty
-  let fameIndex = clamp(Math.round(finalScoreRaw * 100), 0, 10000);
+  // Fame Index (0-1,000,000) - the primary UI number
+  // Multiplied by 10000 for greater variance and prediction difficulty
+  let fameIndex = clamp(Math.round(finalScoreRaw * 10000), 0, 1000000);
   
   // Apply EMA smoothing if we have previous data
   if (previousFameIndex !== undefined) {
