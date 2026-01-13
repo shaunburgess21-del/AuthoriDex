@@ -2299,21 +2299,6 @@ export default function VotePage() {
               <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="rounded-lg bg-slate-900/60 border border-slate-700/40 p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1">Active Voters</p>
-              <p className="text-lg font-mono font-semibold text-slate-300">2,847</p>
-            </div>
-            <div className="rounded-lg bg-slate-900/60 border border-slate-700/40 p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1">Votes Today</p>
-              <p className="text-lg font-mono font-semibold text-slate-300">1,234</p>
-            </div>
-            <div className="rounded-lg bg-slate-900/60 border border-slate-700/40 p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1">Your Impact</p>
-              <p className="text-lg font-mono font-semibold text-cyan-400">{votedIds.size} candidates</p>
-            </div>
-          </div>
         </section>
         )}
 
