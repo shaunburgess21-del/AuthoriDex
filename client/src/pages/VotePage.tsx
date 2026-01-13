@@ -1912,7 +1912,7 @@ export default function VotePage() {
                 </div>
                 <div>
                   <h2 className="text-xl font-serif font-bold">Face-Offs</h2>
-                  <p className="text-sm text-muted-foreground">Vote on A vs B matchups. Who wins?</p>
+                  <p className="text-sm text-muted-foreground">Vote on A vs B matchups. Which do your prefer?</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
