@@ -91,18 +91,18 @@ function CelebCard({
       data-testid={`view-all-card-${person.id}`}
     >
       <div className="p-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <PersonAvatar name={person.name} avatar={person.imageUrl || ""} size="sm" />
-            <div className="min-w-0">
+        <div className="flex items-center gap-2 mb-2">
+          <PersonAvatar name={person.name} avatar={person.imageUrl || ""} size="sm" />
+          <div className="min-w-0 flex flex-col justify-center">
+            <div className="flex items-center gap-1.5">
               <p className="font-medium text-sm truncate">{person.name}</p>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Users className="h-3 w-3" />
-                <span>{totalVotes.toLocaleString()} votes</span>
-              </div>
+              <CategoryPill category={person.category} />
+            </div>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Users className="h-3 w-3" />
+              <span>{totalVotes.toLocaleString()} votes</span>
             </div>
           </div>
-          <CategoryPill category={person.category} />
         </div>
         
         <div className="grid grid-cols-2 gap-1.5">

@@ -156,17 +156,17 @@ export function CurateProfileCard({
         </AnimatePresence>
 
         <div className="relative p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <PersonAvatar name={person.name} avatar={person.imageUrl || ""} size="md" />
-              <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-3">
+            <PersonAvatar name={person.name} avatar={person.imageUrl || ""} size="md" />
+            <div className="flex-1 min-w-0 flex flex-col justify-center">
+              <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-base truncate">{person.name}</h3>
-                <span className="text-xs text-muted-foreground">
-                  {totalVotes.toLocaleString()} votes
-                </span>
+                <CategoryPill category={person.category} />
               </div>
+              <span className="text-xs text-muted-foreground">
+                {totalVotes.toLocaleString()} votes
+              </span>
             </div>
-            <CategoryPill category={person.category} />
           </div>
           
           {isLoading ? (

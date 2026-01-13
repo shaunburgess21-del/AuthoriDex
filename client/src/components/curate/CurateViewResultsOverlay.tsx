@@ -88,14 +88,14 @@ export function CurateViewResultsOverlay({
               </Button>
             )}
             <PersonAvatar name={person.name} avatar={person.imageUrl || ""} size="md" />
-            <div>
-              <h2 className="text-xl font-serif font-bold">{person.name}</h2>
+            <div className="flex flex-col justify-center">
               <div className="flex items-center gap-2">
+                <h2 className="text-xl font-serif font-bold">{person.name}</h2>
                 <CategoryPill category={person.category} />
-                <span className="text-sm text-muted-foreground">
-                  {totalVotes.toLocaleString()} total votes
-                </span>
               </div>
+              <span className="text-sm text-muted-foreground">
+                {totalVotes.toLocaleString()} total votes
+              </span>
             </div>
           </div>
           <Button
