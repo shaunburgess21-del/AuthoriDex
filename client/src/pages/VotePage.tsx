@@ -1503,6 +1503,10 @@ export default function VotePage() {
   const [suggestModalOpen, setSuggestModalOpen] = useState(false);
   const [inductionSuggestOpen, setInductionSuggestOpen] = useState(false);
   const [faceOffSuggestOpen, setFaceOffSuggestOpen] = useState(false);
+  const [curateSuggestOpen, setCurateSuggestOpen] = useState(false);
+  const [curateCelebrity, setCurateCelebrity] = useState("");
+  const [curateImageFile, setCurateImageFile] = useState<File | null>(null);
+  const [curateImageSource, setCurateImageSource] = useState("");
   const [suggestName, setSuggestName] = useState("");
   const [suggestCategory, setSuggestCategory] = useState("");
   const [suggestReason, setSuggestReason] = useState("");
@@ -2306,13 +2310,49 @@ export default function VotePage() {
         {(activeSection === "All" || activeSection === "Curate Profile") && (
         <section className="mb-10">
           <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-                <Camera className="h-5 w-5 text-cyan-400" />
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                  <Camera className="h-5 w-5 text-cyan-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-serif font-bold">Curate the Profile</h2>
+                  <p className="text-sm text-muted-foreground">Winner becomes the default profile photo across the FameDex index.</p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-xl font-serif font-bold">Curate the Profile</h2>
-                <p className="text-sm text-muted-foreground">Winner becomes the default profile photo across the FameDex index.</p>
+              <div className="flex items-center gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRulesModalOpen("curate")}
+                      className="text-cyan-400 hover:text-cyan-300"
+                      data-testid="button-rules-curate"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                    How it works
+                  </TooltipContent>
+                </Tooltip>
+                <Button
+                  onClick={() => setCurateSuggestOpen(true)}
+                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
+                  data-testid="button-suggest-curate"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  + Suggest
+                </Button>
+                <Button
+                  size="icon"
+                  onClick={() => setCurateSuggestOpen(true)}
+                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
+                  data-testid="button-suggest-curate-mobile"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           </div>
@@ -2621,6 +2661,104 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
+      
+      {/* Curate Profile Suggest Modal */}
+      <Dialog open={curateSuggestOpen} onOpenChange={setCurateSuggestOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5 text-cyan-400" />
+              Suggest a Profile Image
+            </DialogTitle>
+            <DialogDescription>
+              Upload a high-quality photo for a celebrity's profile.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-1 block">Who is this for? *</label>
+              <HybridSubjectCombobox
+                value={curateCelebrity}
+                onChange={setCurateCelebrity}
+                onSelect={(selection) => {
+                  setCurateCelebrity(selection.value);
+                }}
+                placeholder="Search celebrity..."
+                showCustomTopicOption={false}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Upload Image *</label>
+              <div className="border-2 border-dashed border-slate-700 rounded-lg p-4 text-center hover:border-cyan-500/50 transition-colors">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setCurateImageFile(e.target.files?.[0] || null)}
+                  className="hidden"
+                  id="curate-image-upload"
+                  data-testid="input-curate-image-file"
+                />
+                <label htmlFor="curate-image-upload" className="cursor-pointer">
+                  {curateImageFile ? (
+                    <div className="flex items-center justify-center gap-2 text-cyan-400">
+                      <Check className="h-4 w-4" />
+                      <span className="text-sm">{curateImageFile.name}</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Click to upload an image</p>
+                      <p className="text-xs text-muted-foreground">PNG, JPG up to 5MB</p>
+                    </div>
+                  )}
+                </label>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Source/Credit (optional)</label>
+              <Input
+                value={curateImageSource}
+                onChange={(e) => setCurateImageSource(e.target.value)}
+                placeholder="Photographer name or source URL..."
+                data-testid="input-curate-image-source"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Help us give proper attribution</p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setCurateSuggestOpen(false);
+                setCurateCelebrity("");
+                setCurateImageFile(null);
+                setCurateImageSource("");
+              }}
+              data-testid="button-cancel-curate"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                toast({
+                  title: "Image Submitted!",
+                  description: `Your image for "${curateCelebrity}" has been submitted for review.`,
+                });
+                setCurateCelebrity("");
+                setCurateImageFile(null);
+                setCurateImageSource("");
+                setCurateSuggestOpen(false);
+              }}
+              disabled={!curateCelebrity || !curateImageFile}
+              className="bg-cyan-500 text-white"
+              data-testid="button-submit-curate"
+            >
+              Submit Image
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
       <Dialog open={!!rulesModalOpen} onOpenChange={() => setRulesModalOpen(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>

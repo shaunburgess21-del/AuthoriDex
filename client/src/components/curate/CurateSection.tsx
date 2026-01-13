@@ -2,12 +2,10 @@ import { useState, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "framer-motion";
-import { ImageIcon, Eye, HelpCircle, RotateCcw } from "lucide-react";
+import { ImageIcon, RotateCcw, ChevronRight } from "lucide-react";
 import { CurateProfileCard, type CuratePerson } from "./CurateProfileCard";
 import { CurateViewResultsOverlay } from "./CurateViewResultsOverlay";
 import { CurateViewAllOverlay } from "./CurateViewAllOverlay";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { FilterCategory } from "@shared/constants";
 
 interface TrendingPerson {
@@ -33,7 +31,6 @@ export function CurateSection({
   const [votedPersonIds, setVotedPersonIds] = useState<Set<string>>(new Set());
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [viewResultsPerson, setViewResultsPerson] = useState<CuratePerson | null>(null);
-  const [rulesOpen, setRulesOpen] = useState(false);
 
   const { data: allCelebritiesResponse, isLoading } = useQuery<{ data: TrendingPerson[] } | TrendingPerson[]>({
     queryKey: ['/api/trending?sort=rank&limit=100'],
@@ -116,35 +113,15 @@ export function CurateSection({
   return (
     <>
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ImageIcon className="h-4 w-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold">Curate Profile</h3>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button 
-                  onClick={() => setRulesOpen(true)}
-                  className="text-muted-foreground hover:text-foreground"
-                  data-testid="button-curate-help"
-                >
-                  <HelpCircle className="h-3.5 w-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>How it works</TooltipContent>
-            </Tooltip>
+        {/* Counter at top */}
+        {!isLoading && filteredCelebrities.length > 0 && !isComplete && (
+          <div className="text-center text-xs text-muted-foreground">
+            {progress} of {total}
+            {cycleNumber > 0 && (
+              <span className="ml-2 text-cyan-400">(Round {cycleNumber + 1})</span>
+            )}
           </div>
-          
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setViewAllOpen(true)}
-            className="text-cyan-400 hover:text-cyan-300"
-            data-testid="button-view-all-curate"
-          >
-            <Eye className="h-3.5 w-3.5 mr-1" />
-            View All
-          </Button>
-        </div>
+        )}
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
@@ -176,13 +153,6 @@ export function CurateSection({
           </div>
         ) : currentPerson ? (
           <>
-            <div className="text-center text-xs text-muted-foreground mb-2">
-              {progress} of {total}
-              {cycleNumber > 0 && (
-                <span className="ml-2 text-cyan-400">(Round {cycleNumber + 1})</span>
-              )}
-            </div>
-            
             <CurateProfileCard
               key={`${currentPerson.id}-${cycleNumber}`}
               person={currentPerson}
@@ -213,27 +183,22 @@ export function CurateSection({
             </div>
           </>
         ) : null}
-      </div>
-
-      <Dialog open={rulesOpen} onOpenChange={setRulesOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Curate Profile Rules</DialogTitle>
-            <DialogDescription>
-              Which image best represents this celebrity? The winning look becomes the primary 
-              profile image across the entire platform. Only the highest quality looks make it 
-              to the index.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 text-sm text-muted-foreground">
-            <p>• Vote on which photo best represents each celebrity</p>
-            <p>• The photo with the most votes becomes their official profile image</p>
-            <p>• Skip celebrities you don't want to vote on</p>
-            <p>• Use "View All" to browse all celebrities at once</p>
-            <p>• Use "View Results" to see current rankings for any celebrity</p>
+        
+        {/* View full curation list button at bottom */}
+        {!isLoading && filteredCelebrities.length > 0 && (
+          <div className="text-center mt-4">
+            <Button
+              variant="ghost"
+              onClick={() => setViewAllOpen(true)}
+              className="text-cyan-400 hover:text-cyan-300"
+              data-testid="button-view-full-curation-list"
+            >
+              View full curation list
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+        )}
+      </div>
 
       <AnimatePresence>
         {viewAllOpen && (
