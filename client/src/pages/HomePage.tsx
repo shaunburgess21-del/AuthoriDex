@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Flame } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
-import { useQuery, useQueries, useInfiniteQuery } from "@tanstack/react-query";
+import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import { Loader2 } from "lucide-react";
@@ -489,6 +489,7 @@ export default function HomePage() {
     },
     initialPageParam: 0,
     refetchInterval: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   const allPeople = useMemo(() => {
