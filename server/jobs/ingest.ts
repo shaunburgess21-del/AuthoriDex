@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trackedPeople, trendSnapshots, trendingPeople, celebrityImages } from "@shared/schema";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, sql, gte } from "drizzle-orm";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
 import { fetchBatchGdeltNews } from "../providers/gdelt";
 import { fetchSerperBatch } from "../providers/serper";
@@ -51,6 +51,48 @@ export async function runDataIngestion(): Promise<IngestResult> {
     const xHandles = people.filter(p => p.xHandle).map(p => p.xHandle!);
     const xData = await fetchXBatch(xHandles, 100); // Fetch all 100 celebrities (3x/day = 9K calls/month, within 10K limit)
 
+    // Fetch historical snapshots for change calculations (same logic as quick-score.ts)
+    const now = new Date();
+    const time24hAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const time7dAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
+    const historicalSnapshots = await db.select({
+      personId: trendSnapshots.personId,
+      timestamp: trendSnapshots.timestamp,
+      trendScore: trendSnapshots.trendScore,
+      fameIndex: trendSnapshots.fameIndex,
+    }).from(trendSnapshots).where(
+      gte(trendSnapshots.timestamp, time7dAgo)
+    );
+    
+    // Create maps for 24h and 7d lookups (closest snapshot to target time)
+    const snapshot24hMap = new Map<string, { trendScore: number; fameIndex: number | null }>();
+    const snapshot7dMap = new Map<string, { trendScore: number; fameIndex: number | null }>();
+    
+    for (const snap of historicalSnapshots) {
+      const snapTime = new Date(snap.timestamp).getTime();
+      const diff24h = Math.abs(snapTime - time24hAgo.getTime());
+      const diff7d = Math.abs(snapTime - time7dAgo.getTime());
+      
+      // Keep closest snapshot to 24h ago (within 2 hour window)
+      if (diff24h < 2 * 60 * 60 * 1000) {
+        const existing = snapshot24hMap.get(snap.personId);
+        if (!existing) {
+          snapshot24hMap.set(snap.personId, { trendScore: snap.trendScore, fameIndex: snap.fameIndex });
+        }
+      }
+      
+      // Keep closest snapshot to 7d ago (within 12 hour window)
+      if (diff7d < 12 * 60 * 60 * 1000) {
+        const existing = snapshot7dMap.get(snap.personId);
+        if (!existing) {
+          snapshot7dMap.set(snap.personId, { trendScore: snap.trendScore, fameIndex: snap.fameIndex });
+        }
+      }
+    }
+    
+    console.log(`[Ingest] Found ${snapshot24hMap.size} 24h snapshots, ${snapshot7dMap.size} 7d snapshots for change calculations`);
+
     const scoreResults: Array<{
       person: typeof people[0];
       score: ReturnType<typeof computeTrendScore>;
@@ -80,7 +122,16 @@ export async function runDataIngestion(): Promise<IngestResult> {
           },
         };
 
-        const scoreResult = computeTrendScore(inputs);
+        // Get previous scores for change calculations
+        const prev24h = snapshot24hMap.get(person.id);
+        const prev7d = snapshot7dMap.get(person.id);
+        
+        const scoreResult = computeTrendScore(
+          inputs,
+          prev24h?.trendScore,  // previousScore for change24h calculation
+          prev7d?.trendScore,   // previousScore7d for change7d calculation
+          prev24h?.fameIndex ?? undefined  // previousFameIndex for EMA smoothing
+        );
 
         await db.insert(trendSnapshots).values({
           personId: person.id,
