@@ -1,0 +1,69 @@
+This is a great step toward UI consistency. Aligning the headers and footers across "The Induction Queue" and "Curate the Profile" will make the application feel much more cohesive and intuitive.
+
+Here is a breakdown of the recommendations for the Modal and the UI restructuring based on your requirements.
+
+1. The "+ Suggest" Modal (Curate the Profile)
+Since you already have the Celebrity Search/Dropdown and the File Upload, you want to avoid clutter. However, for a profile photo specifically, there are two high-value elements that would improve quality control without overwhelming the user:
+
+Source URL / Attribution (Input Field):
+
+Why: "FameDex" implies a public directory. Profile photos often have copyright considerations. Adding a simple text field for "Image Source" or "Photographer Credit" adds legitimacy to the platform and helps with moderation later.
+
+A "Preview & Crop" Step (Visual Interaction):
+
+Why: Users often upload rectangular images, but profile avatars are usually circular or square.
+
+How: Instead of a new input field, this happens after the file upload. Once the file is selected, show a small preview with a circular overlay. This ensures the user knows exactly how the face will look on the leaderboard before they hit submit.
+
+Summary of Modal Fields:
+
+Who is this for? (Search/Dropdown - Existing)
+
+Upload Image (File Picker - Existing)
+
+Source/Credit (Text Input - New Recommendation)
+
+Submit Button (Triggers the upload)
+
+2. UI Layout & Component Restructuring
+Here is the plan to execute the changes based on your screenshots and description:
+
+A. The Header (Red Box)
+Action: Update the Curate the Profile header component to match the Induction Queue schema.
+
+Add: The ? (Info) icon button.
+
+Add: The + Suggest button (which triggers the modal discussed above).
+
+Result: This standardizes the top-right interaction pattern across the site.
+
+B. The Body / Card Area (Green & Purple Boxes)
+Remove: The "Curate Profile" text and icon (Green box). As you noted, the main header handles this context; repeating it creates visual noise.
+
+Remove: The standalone ? icon (it is moving to the header).
+
+Move: The View All button. It should be removed from the floating position inside the content area.
+
+Remove: The "1 of 100" counter at the bottom of the card. Keep the top counter to maintain the context of "how many are left to vote on," but clearing the bottom creates space for the new footer button.
+
+C. The Footer / Button Placement (Blue Box)
+Action: Place the "View All" link outside the card, centered or right-aligned at the bottom of the section (just like "View full candidate list" in the Induction Queue).
+
+Naming Suggestion: To match the descriptive nature of "View full candidate list," I recommend:
+
+"View full curation list" (Most consistent)
+
+"View all active polls"
+
+"View curation queue"
+
+Visualizing the Hierarchy
+The new flow for the "Curate the Profile" section will look like this:
+
+Header: Title on left | Buttons (?, + Suggest) on right.
+
+Content: The voting card (cleaner, no sub-headers).
+
+Footer: "View full curation list" link/button.
+
+Would you like me to write the React/HTML structure for that Modal, or are you focusing on the layout design first?
