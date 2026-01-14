@@ -38,7 +38,14 @@ import {
   Plus,
   BarChart3,
   Swords,
-  Star
+  Star,
+  Cpu,
+  Landmark,
+  Briefcase,
+  Music,
+  Video,
+  LayoutGrid,
+  type LucideIcon
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -527,24 +534,30 @@ function SectionFilterBar({
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
-        {filters.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => handleCategoryClick(cat.id)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
-              categoryFilter === cat.id
-                ? 'bg-violet-500/20 text-violet-300 border border-violet-400/40 shadow-sm shadow-violet-500/20'
-                : 'bg-slate-800/30 border border-slate-700/40 text-slate-400 hover:border-violet-400/20'
-            }`}
-            data-testid={cat.id === "misc" ? `${testIdPrefix}-category-custom-topic` : `${testIdPrefix}-category-${cat.id}`}
-            aria-label={cat.id === "favorites" ? "Favorites" : cat.id === "misc" ? "Custom Topic" : undefined}
-          >
-            {cat.id === "favorites" && <Star className="h-3.5 w-3.5" />}
-            {cat.id === "misc" && <Sparkles className="h-3.5 w-3.5" />}
-            {cat.id === "favorites" ? <span className="hidden md:inline">{cat.label}</span> : 
-             cat.id === "misc" ? <span className="hidden md:inline">{cat.label}</span> : cat.label}
-          </button>
-        ))}
+        {filters.map((cat) => {
+          const IconComponent = CATEGORY_ICONS[cat.id];
+          const isIconOnly = cat.id === "favorites" || cat.id === "misc";
+          return (
+            <button
+              key={cat.id}
+              onClick={() => handleCategoryClick(cat.id)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                categoryFilter === cat.id
+                  ? 'bg-violet-500/20 text-violet-300 border border-violet-400/40 shadow-sm shadow-violet-500/20'
+                  : 'bg-slate-800/30 border border-slate-700/40 text-slate-400 hover:border-violet-400/20'
+              }`}
+              data-testid={cat.id === "misc" ? `${testIdPrefix}-category-custom-topic` : `${testIdPrefix}-category-${cat.id}`}
+              aria-label={isIconOnly ? cat.label : undefined}
+            >
+              <IconComponent className="h-3.5 w-3.5" />
+              {isIconOnly ? (
+                <span className="hidden md:inline">{cat.label}</span>
+              ) : (
+                cat.label
+              )}
+            </button>
+          );
+        })}
       </div>
       <div className="relative sm:ml-auto">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -616,6 +629,18 @@ const BASE_CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: "sports", label: "Sports" },
   { id: "creator", label: "Creator" },
 ];
+
+const CATEGORY_ICONS: Record<CategoryFilter, LucideIcon> = {
+  all: LayoutGrid,
+  favorites: Star,
+  tech: Cpu,
+  politics: Landmark,
+  business: Briefcase,
+  music: Music,
+  sports: Trophy,
+  creator: Video,
+  misc: Sparkles,
+};
 
 const CATEGORY_FILTERS_WITH_CUSTOM: { id: CategoryFilter; label: string }[] = [
   ...BASE_CATEGORY_FILTERS,

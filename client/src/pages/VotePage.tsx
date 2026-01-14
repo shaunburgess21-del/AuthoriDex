@@ -35,7 +35,15 @@ import {
   ImageIcon,
   Globe,
   BarChart3,
-  Upload
+  Upload,
+  Cpu,
+  Landmark,
+  Briefcase,
+  Music,
+  Trophy,
+  Video,
+  LayoutGrid,
+  type LucideIcon
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -1459,6 +1467,18 @@ function ContenderSelector({
   );
 }
 
+const VOTE_CATEGORY_ICONS: Record<string, LucideIcon> = {
+  All: LayoutGrid,
+  Favorites: Star,
+  Tech: Cpu,
+  Politics: Landmark,
+  Business: Briefcase,
+  Music: Music,
+  Sports: Trophy,
+  Creator: Video,
+  misc: Sparkles,
+};
+
 function FilterChip({ 
   category, 
   isActive, 
@@ -1476,6 +1496,8 @@ function FilterChip({
 }) {
   const isFavorites = category === "Favorites";
   const isCustomTopic = category === "misc";
+  const isIconOnly = isFavorites || isCustomTopic;
+  const IconComponent = VOTE_CATEGORY_ICONS[category] || LayoutGrid;
   
   const handleClick = () => {
     if (isFavorites && !user) {
@@ -1486,8 +1508,8 @@ function FilterChip({
   };
 
   const getDisplayLabel = () => {
-    if (isFavorites) return <span className="hidden md:inline">Favorites</span>;
-    if (isCustomTopic) return <span className="hidden md:inline">Custom Topic</span>;
+    if (isFavorites) return "Favorites";
+    if (isCustomTopic) return "Custom Topic";
     return category;
   };
 
@@ -1505,11 +1527,14 @@ function FilterChip({
           : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
       }`}
       data-testid={getTestId()}
-      aria-label={isFavorites ? "Favorites" : isCustomTopic ? "Custom Topic" : undefined}
+      aria-label={isIconOnly ? getDisplayLabel() : undefined}
     >
-      {isFavorites && <Star className="h-3.5 w-3.5" />}
-      {isCustomTopic && <Sparkles className="h-3.5 w-3.5" />}
-      {getDisplayLabel()}
+      <IconComponent className="h-3.5 w-3.5" />
+      {isIconOnly ? (
+        <span className="hidden md:inline">{getDisplayLabel()}</span>
+      ) : (
+        getDisplayLabel()
+      )}
     </button>
   );
 }
