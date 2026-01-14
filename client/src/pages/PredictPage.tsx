@@ -2291,7 +2291,7 @@ export default function PredictPage() {
                       <HelpCircle className="h-4 w-4 text-muted-foreground" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>How it works</TooltipContent>
+                  <TooltipContent>Custom Predictions</TooltipContent>
                 </Tooltip>
                 <Button 
                   variant="outline"
