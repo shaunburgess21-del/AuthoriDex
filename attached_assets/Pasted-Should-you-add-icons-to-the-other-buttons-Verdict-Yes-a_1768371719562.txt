@@ -1,0 +1,56 @@
+Should you add icons to the other buttons?
+Verdict: Yes, absolutely.
+
+Here is the reasoning why the benefits outweigh the space concerns:
+
+Visual Consistency: Currently, the UI looks "in-between." Having some chips with icons and others without makes the design look unfinished or unintentional. Uniformity establishes a professional polish.
+
+Scannability: Humans process images much faster than text. An icon of a guitar lets a user identify "Music" instantly without actually reading the word.
+
+The Mobile Trade-off: While screen real estate is precious on mobile, horizontal scrolling (carousels) is a very standard pattern (think Instagram Stories or YouTube categories). Users are intuitively trained to swipe left on these bars. As long as the "peek" (the cut-off of the next button) is visible, users will know to scroll. The extra 20px per button for an icon is worth the visual upgrade.
+
+The Plan
+To keep it lightweight, we will use standard icon libraries (like lucide-react, which is likely what you are already using for the Star and Sparkles).
+
+Here are the suggested mappings:
+
+Tech: Cpu or Smartphone
+
+Politics: Landmark (Capitol building) or Speech
+
+Business: Briefcase or TrendingUp
+
+Music: Music or Headphones
+
+Sports: Trophy or Dumbbell
+
+Creator: Video or Camera
+
+Prompt for Replit
+You can copy and paste the prompt below into your Replit chat. It instructs the AI to locate the filter component and apply a consistent icon mapping.
+
+Prompt:
+
+"I want to update the Category Filter component (where we display 'All', 'Favorites', 'Tech', etc.) to be visually consistent. Currently, only 'Favorites' and 'Custom Topic' have icons.
+
+Please update the component to add icons to the remaining categories globally.
+
+Import Icons: Use lucide-react (or the existing icon library we are using).
+
+Create a Mapping: Create a lookup object or switch case to assign icons to these categories:
+
+Tech: Use a CPU, Chip, or Laptop icon.
+
+Politics: Use a Landmark or Gavel icon.
+
+Business: Use a Briefcase or TrendingUp icon.
+
+Music: Use a Music Note icon.
+
+Sports: Use a Trophy or Activity icon.
+
+Creator: Use a Video, Camera, or User icon.
+
+Implementation: Render these icons to the left of the text for every category button. Ensure the spacing and alignment match the existing 'Favorites' button.
+
+Mobile: Keep the container scrollable horizontally so the extra width doesn't break the layout."
