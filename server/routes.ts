@@ -11,6 +11,7 @@ import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
 import { gamificationService } from "./services/gamification";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
+import { fetchWebSearchContext, fetchTrendingNewsContext } from "./providers/serper";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Using local PostgreSQL database instead of Supabase
@@ -999,16 +1000,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get AI-generated celebrity profile with 30-day caching
+  // Get AI-generated celebrity profile with 7-day caching and web search grounding
   app.get("/api/celebrity-profile/:personId", async (req, res) => {
     try {
       const { personId } = req.params;
-      const CACHE_DURATION_DAYS = 30;
+      const forceRefresh = req.query.refresh === 'true';
+      const CACHE_DURATION_DAYS = 7; // Reduced from 30 to 7 days
       
-      // Check cache first
+      // Check cache first (unless force refresh)
       const cached = await storage.getCelebrityProfile(personId);
-      if (cached) {
-        // Check if cache is still fresh (within 30 days)
+      if (cached && !forceRefresh) {
+        // Check if cache is still fresh (within 7 days)
         const cacheAge = Date.now() - new Date(cached.generatedAt).getTime();
         const cacheDuration = CACHE_DURATION_DAYS * 24 * 60 * 60 * 1000;
         
@@ -1024,24 +1026,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Person not found" });
       }
       
+      // Fetch web search context for grounding (current news/info about the person)
+      console.log(`[Profile] Fetching web search context for ${person.name}...`);
+      const webContext = await fetchWebSearchContext(person.name);
+      
       // Initialize OpenAI with Replit AI Integrations
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
       
-      // Generate comprehensive profile using AI
-      // Note: Using gpt-4o for better knowledge of current events (training cutoff: Oct 2023+)
+      // Build context from web search
+      let webContextSection = "";
+      if (webContext && (webContext.headlines.length > 0 || webContext.snippets.length > 0)) {
+        webContextSection = `
+CURRENT WEB SEARCH RESULTS (use this for up-to-date information):
+Recent Headlines:
+${webContext.headlines.slice(0, 5).map(h => `- ${h}`).join('\n')}
+
+Recent Information Snippets:
+${webContext.snippets.slice(0, 5).map(s => `- ${s}`).join('\n')}
+
+`;
+      }
+      
+      // Generate comprehensive profile using AI with web grounding
       const currentYear = new Date().getFullYear();
+      const currentDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
       const prompt = `You are a celebrity data expert. Generate accurate, factual information about ${person.name}.
 
-CRITICAL INSTRUCTIONS:
-1. This person's data will be cached for 30 days, so accuracy is essential.
-2. If this person is a politician, CEO, or public figure, state their CURRENT title/position as of ${currentYear}.
-3. For politicians: If they are currently serving in office (president, prime minister, governor, etc.), this MUST be stated clearly.
-4. For business leaders: State their current company and role.
-5. Use your most recent knowledge - prefer information from 2023-${currentYear} when relevant.
+${webContextSection}CRITICAL INSTRUCTIONS:
+1. Today is ${currentDate}. Use the web search results above for the most current information.
+2. This person's data will be cached for 7 days, so accuracy is essential.
+3. If this person is a politician, CEO, or public figure, state their CURRENT title/position as of ${currentYear}.
+4. For politicians: If they are currently serving in office (president, vice president, prime minister, governor, etc.), this MUST be stated clearly.
+5. For business leaders: State their current company and role.
 6. If someone was recently elected or appointed to a new role, mention this prominently.
+7. Prioritize the web search results over your training data for recent events and current positions.
 
 Return a JSON object with exactly these fields:
 {
@@ -1052,13 +1073,14 @@ Return a JSON object with exactly these fields:
   "fromCountryCode": "ISO 3166-1 alpha-2 code (e.g., 'ZA')",
   "basedIn": "Where they currently live or work (full name, e.g., 'United States')", 
   "basedInCountryCode": "ISO 3166-1 alpha-2 code (e.g., 'US')",
-  "estimatedNetWorth": "Estimated net worth in 2025 (e.g., '$250 billion')"
+  "estimatedNetWorth": "Estimated net worth in ${currentYear} (e.g., '$250 billion')"
 }
 
 Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;
 
+      // Using gpt-4o for accurate and current knowledge with web grounding
       const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-4o",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
         max_tokens: 1000,
@@ -1093,10 +1115,264 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         profile = await storage.setCelebrityProfile(profileData);
       }
       
+      console.log(`[Profile] Generated profile for ${person.name} using gpt-4o with web grounding`);
       res.json(profile);
     } catch (error: any) {
       console.error("Error generating celebrity profile:", error);
       res.status(500).json({ error: "Failed to generate profile", message: error.message });
+    }
+  });
+
+  // Admin endpoint to refresh all celebrity profiles with new model and web grounding
+  app.post("/api/admin/refresh-all-profiles", requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      
+      // Check admin role (set in auth middleware)
+      if (authReq.userRole !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      
+      // Get all tracked people
+      const people = await db.select().from(trackedPeople);
+      console.log(`[Admin] Starting profile refresh for ${people.length} celebrities...`);
+      
+      // Process in batches to avoid rate limits
+      const BATCH_SIZE = 5;
+      const DELAY_MS = 2000;
+      let successCount = 0;
+      let errorCount = 0;
+      
+      for (let i = 0; i < people.length; i += BATCH_SIZE) {
+        const batch = people.slice(i, i + BATCH_SIZE);
+        
+        await Promise.all(batch.map(async (person) => {
+          try {
+            // Fetch web search context
+            const webContext = await fetchWebSearchContext(person.name);
+            
+            // Initialize OpenAI
+            const openai = new OpenAI({
+              apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+              baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+            });
+            
+            // Build context from web search
+            let webContextSection = "";
+            if (webContext && (webContext.headlines.length > 0 || webContext.snippets.length > 0)) {
+              webContextSection = `
+CURRENT WEB SEARCH RESULTS (use this for up-to-date information):
+Recent Headlines:
+${webContext.headlines.slice(0, 5).map(h => `- ${h}`).join('\n')}
+
+Recent Information Snippets:
+${webContext.snippets.slice(0, 5).map(s => `- ${s}`).join('\n')}
+
+`;
+            }
+            
+            const currentYear = new Date().getFullYear();
+            const currentDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+            const prompt = `You are a celebrity data expert. Generate accurate, factual information about ${person.name}.
+
+${webContextSection}CRITICAL INSTRUCTIONS:
+1. Today is ${currentDate}. Use the web search results above for the most current information.
+2. This person's data will be cached for 7 days, so accuracy is essential.
+3. If this person is a politician, CEO, or public figure, state their CURRENT title/position as of ${currentYear}.
+4. For politicians: If they are currently serving in office (president, vice president, prime minister, governor, etc.), this MUST be stated clearly.
+5. For business leaders: State their current company and role.
+6. If someone was recently elected or appointed to a new role, mention this prominently.
+7. Prioritize the web search results over your training data for recent events and current positions.
+
+Return a JSON object with exactly these fields:
+{
+  "shortBio": "A concise 2-3 sentence summary emphasizing their CURRENT primary role and most notable achievements (150-200 characters)",
+  "longBio": "A comprehensive 4-6 sentence biography covering their current position, career highlights, major achievements, and recent notable activities (400-600 characters).",
+  "knownFor": "Their primary areas of expertise or fame, comma-separated",
+  "fromCountry": "Their country of origin (full name)",
+  "fromCountryCode": "ISO 3166-1 alpha-2 code",
+  "basedIn": "Where they currently live or work (full name)", 
+  "basedInCountryCode": "ISO 3166-1 alpha-2 code",
+  "estimatedNetWorth": "Estimated net worth in ${currentYear}"
+}
+
+Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;
+
+            const response = await openai.chat.completions.create({
+              model: "gpt-4o",
+              messages: [{ role: "user", content: prompt }],
+              response_format: { type: "json_object" },
+              max_tokens: 1000,
+            });
+            
+            const content = response.choices[0]?.message?.content;
+            if (!content) throw new Error("No response from AI");
+            
+            const parsed = JSON.parse(content);
+            
+            const profileData: InsertCelebrityProfile = {
+              personId: person.id,
+              personName: person.name,
+              shortBio: parsed.shortBio || "No biography available",
+              longBio: parsed.longBio || null,
+              knownFor: parsed.knownFor || "Various achievements",
+              fromCountry: parsed.fromCountry || "Unknown",
+              fromCountryCode: parsed.fromCountryCode?.toUpperCase() || "XX",
+              basedIn: parsed.basedIn || "Unknown",
+              basedInCountryCode: parsed.basedInCountryCode?.toUpperCase() || "XX",
+              estimatedNetWorth: parsed.estimatedNetWorth || "Not available",
+              generatedAt: new Date(),
+            };
+            
+            // Check if profile exists
+            const existing = await storage.getCelebrityProfile(person.id);
+            if (existing) {
+              await storage.updateCelebrityProfile(person.id, profileData);
+            } else {
+              await storage.setCelebrityProfile(profileData);
+            }
+            
+            successCount++;
+            console.log(`[Admin] Refreshed profile for ${person.name} (${successCount}/${people.length})`);
+          } catch (err: any) {
+            errorCount++;
+            console.error(`[Admin] Failed to refresh profile for ${person.name}:`, err.message);
+          }
+        }));
+        
+        // Wait between batches to avoid rate limits
+        if (i + BATCH_SIZE < people.length) {
+          await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+        }
+      }
+      
+      // Log admin action
+      await db.insert(adminAuditLog).values({
+        adminId: authReq.userId || 'unknown',
+        actionType: 'refresh_all_profiles',
+        targetTable: 'celebrity_profiles',
+        targetId: 'all',
+        metadata: { successCount, errorCount, total: people.length },
+      });
+      
+      res.json({ 
+        success: true, 
+        message: `Refreshed ${successCount} profiles, ${errorCount} errors`,
+        successCount,
+        errorCount,
+        total: people.length
+      });
+    } catch (error: any) {
+      console.error("Error refreshing all profiles:", error);
+      res.status(500).json({ error: "Failed to refresh profiles", message: error.message });
+    }
+  });
+
+  // API endpoint to get "Why Trending" context for a person using web search + AI
+  app.get("/api/why-trending/:personId", async (req, res) => {
+    try {
+      const { personId } = req.params;
+      
+      // Get person from storage
+      const person = await storage.getTrendingPerson(personId);
+      if (!person) {
+        return res.status(404).json({ error: "Person not found" });
+      }
+      
+      // Check cache for trending context
+      const cacheKey = `why_trending:${personId}`;
+      const CACHE_TTL_HOURS = 6;
+      
+      const [cached] = await db
+        .select()
+        .from(apiCache)
+        .where(eq(apiCache.cacheKey, cacheKey))
+        .limit(1);
+      
+      if (cached) {
+        const cacheAge = Date.now() - new Date(cached.fetchedAt).getTime();
+        if (cacheAge < CACHE_TTL_HOURS * 60 * 60 * 1000) {
+          return res.json(JSON.parse(cached.responseData));
+        }
+      }
+      
+      // Fetch recent news via Serper
+      const newsContext = await fetchTrendingNewsContext(person.name);
+      
+      if (!newsContext || newsContext.sources.length === 0) {
+        return res.json({
+          personId,
+          personName: person.name,
+          hasContext: false,
+          message: "No recent trending context available",
+          fetchedAt: new Date(),
+        });
+      }
+      
+      // Use AI to summarize why they're trending
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+      
+      const headlines = newsContext.sources.map(s => s.title).join('\n');
+      const prompt = `Based on these recent news headlines about ${person.name}, write a brief 1-2 sentence summary explaining why they are currently trending or in the news:
+
+Headlines:
+${headlines}
+
+Return a JSON object with:
+{
+  "summary": "1-2 sentence summary of why they're trending",
+  "category": "One of: Politics, Business, Entertainment, Sports, Technology, Legal, Personal Life, Controversy, or General News"
+}
+
+Be concise and factual. Only return the JSON object.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        max_tokens: 200,
+      });
+      
+      const content = response.choices[0]?.message?.content;
+      const parsed = content ? JSON.parse(content) : { summary: newsContext.headline, category: newsContext.category };
+      
+      const result = {
+        personId,
+        personName: person.name,
+        hasContext: true,
+        summary: parsed.summary || newsContext.headline,
+        category: parsed.category || newsContext.category,
+        topHeadline: newsContext.headline,
+        sources: newsContext.sources.slice(0, 3),
+        fetchedAt: new Date(),
+      };
+      
+      // Cache the result
+      if (cached) {
+        await db
+          .update(apiCache)
+          .set({
+            responseData: JSON.stringify(result),
+            fetchedAt: new Date(),
+          })
+          .where(eq(apiCache.cacheKey, cacheKey));
+      } else {
+        await db.insert(apiCache).values({
+          cacheKey,
+          provider: "ai_trending",
+          responseData: JSON.stringify(result),
+          fetchedAt: new Date(),
+          expiresAt: new Date(Date.now() + CACHE_TTL_HOURS * 60 * 60 * 1000),
+        });
+      }
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error fetching why trending:", error);
+      res.status(500).json({ error: "Failed to fetch trending context", message: error.message });
     }
   });
 

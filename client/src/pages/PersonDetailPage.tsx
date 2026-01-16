@@ -27,6 +27,7 @@ import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatNumber";
 import { OverratedUnderratedWidget } from "@/components/OverratedUnderratedWidget";
+import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 
 interface CurateProfilePoll {
   id: string;
@@ -688,6 +689,11 @@ export default function PersonDetailPage() {
         {/* Overrated/Underrated Sentiment Widget */}
         <div className="mb-8">
           <OverratedUnderratedWidget personId={person.id} personName={person.name} />
+        </div>
+
+        {/* Why They're Trending - AI-powered news summary */}
+        <div className="mb-8">
+          <WhyTrendingCard personId={person.id} personName={person.name} />
         </div>
 
         {/* 2. Stats Cards */}

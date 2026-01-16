@@ -137,3 +137,207 @@ export async function fetchSerperBatch(
 
   return results;
 }
+
+// Web search grounding for AI profile generation
+// Returns recent news headlines and context about a person
+export interface WebSearchContext {
+  headlines: string[];
+  snippets: string[];
+  sources: Array<{ title: string; link: string; date?: string }>;
+}
+
+export async function fetchWebSearchContext(name: string): Promise<WebSearchContext | null> {
+  if (!SERPER_API_KEY) {
+    console.log(`[Serper] No API key configured, skipping web search for ${name}`);
+    return null;
+  }
+
+  try {
+    // Search for recent news about the person
+    const newsResponse = await fetch("https://google.serper.dev/news", {
+      method: "POST",
+      headers: {
+        "X-API-KEY": SERPER_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        q: `${name} news`,
+        num: 10,
+        gl: "us",
+        hl: "en",
+        tbs: "qdr:m", // Last month
+      }),
+    });
+
+    // Also search for general info
+    const searchResponse = await fetch(SERPER_BASE_URL, {
+      method: "POST",
+      headers: {
+        "X-API-KEY": SERPER_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        q: `${name} current role position 2025`,
+        num: 5,
+        gl: "us",
+        hl: "en",
+      }),
+    });
+
+    const newsData = newsResponse.ok ? await newsResponse.json() : { news: [] };
+    const searchData = searchResponse.ok ? await searchResponse.json() : { organic: [] };
+
+    const headlines: string[] = [];
+    const snippets: string[] = [];
+    const sources: Array<{ title: string; link: string; date?: string }> = [];
+
+    // Extract news headlines
+    if (newsData.news) {
+      for (const item of newsData.news.slice(0, 5)) {
+        headlines.push(item.title);
+        if (item.snippet) snippets.push(item.snippet);
+        sources.push({ title: item.title, link: item.link, date: item.date });
+      }
+    }
+
+    // Extract search results for context
+    if (searchData.organic) {
+      for (const item of searchData.organic.slice(0, 3)) {
+        if (item.snippet) snippets.push(item.snippet);
+        sources.push({ title: item.title, link: item.link });
+      }
+    }
+
+    console.log(`[Serper] Web search for ${name}: ${headlines.length} headlines, ${snippets.length} snippets`);
+
+    return { headlines, snippets, sources };
+  } catch (error) {
+    console.error(`[Serper] Error fetching web search context for ${name}:`, error);
+    return null;
+  }
+}
+
+// Search for why someone is trending (recent news and context)
+export interface TrendingNewsContext {
+  headline: string;
+  summary: string;
+  category: string;
+  sources: Array<{ title: string; link: string; date?: string }>;
+  fetchedAt: Date;
+}
+
+export async function fetchTrendingNewsContext(name: string): Promise<TrendingNewsContext | null> {
+  if (!SERPER_API_KEY) {
+    console.log(`[Serper] No API key configured, skipping trending news for ${name}`);
+    return null;
+  }
+
+  const cacheKey = `serper:trending:${name.replace(/\s+/g, "_").toLowerCase()}`;
+  const CACHE_TTL_HOURS = 6; // Cache trending context for 6 hours
+
+  try {
+    // Check cache first
+    const [cached] = await db
+      .select()
+      .from(apiCache)
+      .where(eq(apiCache.cacheKey, cacheKey))
+      .limit(1);
+
+    if (cached) {
+      const cacheAge = Date.now() - new Date(cached.fetchedAt).getTime();
+      if (cacheAge < CACHE_TTL_HOURS * 60 * 60 * 1000) {
+        return JSON.parse(cached.responseData);
+      }
+    }
+
+    // Search for recent news about the person (last week)
+    const response = await fetch("https://google.serper.dev/news", {
+      method: "POST",
+      headers: {
+        "X-API-KEY": SERPER_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        q: `${name}`,
+        num: 10,
+        gl: "us",
+        hl: "en",
+        tbs: "qdr:w", // Last week
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[Serper] Trending news API error for ${name}: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const news = data.news || [];
+
+    if (news.length === 0) {
+      return null;
+    }
+
+    const sources = news.slice(0, 5).map((item: any) => ({
+      title: item.title,
+      link: item.link,
+      date: item.date,
+    }));
+
+    const result: TrendingNewsContext = {
+      headline: news[0]?.title || "In the news",
+      summary: news[0]?.snippet || "",
+      category: categorizeNews(news.map((n: any) => n.title + " " + (n.snippet || "")).join(" ")),
+      sources,
+      fetchedAt: new Date(),
+    };
+
+    // Cache the result
+    if (cached) {
+      await db
+        .update(apiCache)
+        .set({
+          responseData: JSON.stringify(result),
+          fetchedAt: new Date(),
+        })
+        .where(eq(apiCache.cacheKey, cacheKey));
+    } else {
+      await db.insert(apiCache).values({
+        cacheKey,
+        provider: "serper",
+        responseData: JSON.stringify(result),
+        fetchedAt: new Date(),
+        expiresAt: new Date(Date.now() + CACHE_TTL_HOURS * 60 * 60 * 1000),
+      });
+    }
+
+    return result;
+  } catch (error) {
+    console.error(`[Serper] Error fetching trending news for ${name}:`, error);
+    return null;
+  }
+}
+
+// Simple categorization based on keywords
+function categorizeNews(text: string): string {
+  const textLower = text.toLowerCase();
+  
+  const categories: Record<string, string[]> = {
+    "Politics": ["president", "senator", "congress", "election", "vote", "policy", "government", "political", "white house", "administration"],
+    "Business": ["ceo", "company", "stock", "earnings", "revenue", "investment", "acquisition", "ipo", "market"],
+    "Entertainment": ["movie", "film", "album", "song", "concert", "award", "grammy", "oscar", "emmy", "performance"],
+    "Sports": ["game", "match", "tournament", "championship", "win", "score", "team", "player", "season"],
+    "Technology": ["tech", "ai", "software", "app", "launch", "innovation", "startup"],
+    "Legal": ["lawsuit", "court", "trial", "charged", "indicted", "settlement", "legal"],
+    "Personal Life": ["married", "divorce", "baby", "relationship", "dating", "family"],
+    "Controversy": ["scandal", "controversy", "backlash", "criticism", "fired", "resigned"],
+  };
+
+  for (const [category, keywords] of Object.entries(categories)) {
+    if (keywords.some(keyword => textLower.includes(keyword))) {
+      return category;
+    }
+  }
+
+  return "In The News";
+}
