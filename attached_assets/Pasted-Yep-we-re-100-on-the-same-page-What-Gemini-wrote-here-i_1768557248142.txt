@@ -1,0 +1,159 @@
+Yep — we’re 100% on the same page. What Gemini wrote here is basically the “final form” of the plan we converged on: Context → Viral → Habit, with debate hooks and trust polish layered in. Nothing in that roadmap conflicts with what I’d do.
+
+I’ll give you two small upgrades (fresh ideas) that will make this even more lethal without adding much work, and then I’ll confirm the final execution order.
+
+✅ What I would keep exactly as-is
+Phase 1 (Days 1–7): Context + Trust
+
+Why Trending tags (primary + optional keyword mapper)
+
+Top headline snippet on profile (“Bloomberg touch”)
+
+Updated X minutes ago
+
+Cached indicator when X rate-limits
+
+This is perfect. It stops bounce + makes the app feel real.
+
+Phase 2 (Week 2): Viral Engine
+
+OpenGraph images first
+
+Share cards second
+
+Exactly correct. Most sharing is link-preview-based.
+
+Phase 3 (Weeks 3–4): Habit
+
+Watchlist + daily digest
+
+Movement tabs (risers/fallers/new entrants)
+
+simple missions
+
+Perfect ordering.
+
+My critique (tiny refinements, not disagreements)
+1) Keyword mapper needs a “confidence threshold”
+
+Keyword scanning works great, but you don’t want it firing incorrectly.
+
+✅ Add a rule like:
+
+only apply keyword tag if headline relevance score is high (or if keyword appears in first ~60 chars)
+
+otherwise fallback to the generic tag (“In the News”)
+
+This prevents silly tags like “Legal Trouble” from random headlines.
+
+2) Debate hook is great — but keep it purely fun
+
+Overrated/Underrated should NOT affect rank initially.
+
+✅ v1: store it as Community Sentiment only
+If you let it affect score early, you risk:
+
+brigading
+
+politicized manipulation
+
+trust issues
+
+Make it a vibe metric first. Influence later (maybe never).
+
+🔥 My two “fresh ideas” (high impact, low effort)
+Fresh Idea #1: “Top Movers” must become the default view
+
+Most people don’t care who is #1 every day (it’s often the same).
+They care about what changed.
+
+✅ Make your leaderboard default to a “Today” view that includes:
+
+Biggest risers (24h)
+
+Biggest fallers (24h)
+
+New entrants (24h)
+
+Still show “Top Overall” as a tab — but movement is the dopamine.
+
+This alone can double session interest.
+
+Fresh Idea #2: “This is why you should care” micro-copy
+
+Under every Why Trending tag, add 1 short line of plain English.
+
+Example:
+
+📰 In the News
+“Coverage spiked in the last 6 hours.”
+
+🔥 Viral
+“Social velocity jumped 3× today.”
+
+🔍 Search Surge
+“Search interest is up sharply.”
+
+It’s tiny, but it makes you feel like a truth machine.
+
+No heavy engineering — just templated phrases based on primary driver.
+
+✅ Final final roadmap (what you show your brother)
+Week 1 — Context + Trust + Debate hooks
+
+Why Trending tags
+
+primary driver from velocity deltas
+
+keyword mapper to convert “news” into “Legal Trouble / Earnings / Album drop / Election”
+
+Top headline snippet on profiles
+
+Updated X mins ago everywhere
+
+System status pulse
+
+“Live” vs “X cached”
+
+Overrated / Underrated (sentiment-only)
+
+Outcome: users instantly understand movement + trust the app.
+
+Week 2 — Viral Engine
+
+Dynamic OpenGraph images
+
+Name + Rank + Fame Index + Why Trending tag
+
+Share button
+
+“rank card”
+
+“I predicted this” card (later)
+
+Outcome: every share becomes an ad.
+
+Weeks 3–4 — Habit Engine
+
+Watchlist
+
+Daily digest
+
+Movement-first leaderboard tabs
+
+Simple missions (v1)
+
+Outcome: daily return loop.
+
+✅ Verdict
+
+You, Gemini, and Replit are aligned.
+I have no major changes. This plan is correct.
+
+If you execute Phase 1 and send me the updated Leaderboard screenshot with:
+
+Why Trending tags
+
+movement tabs
+
+updated timestamps

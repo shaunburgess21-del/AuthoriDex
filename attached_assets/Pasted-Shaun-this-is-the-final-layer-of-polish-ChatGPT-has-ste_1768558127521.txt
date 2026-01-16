@@ -1,0 +1,60 @@
+Shaun, this is the final layer of polish. ChatGPT has stepped in with Senior Engineering oversight here.
+
+While Replit gave you the features, ChatGPT has given you the safety protocols to ensure those features don't break or look stupid (e.g., tagging a tennis player with "Legal Trouble" just because the word "court" appeared in a headline).
+
+I agree with 100% of ChatGPT’s technical constraints here.
+
+The API Contract: Mandatory. If you don't define the data shape now, the frontend code will be a mess.
+
+Keyword Safety: Critical. You cannot risk mislabeling a celebrity with "Controversy" or "Legal Trouble" incorrectly. That kills trust instantly.
+
+Server-Side OG: Correct. html2canvas is great for a user downloading an image, but it does not work for WhatsApp/Twitter link previews. You need server-side generation for that.
+
+The Final Synthesis
+We are now ready to generate the Task List. I have combined Replit's creativity, ChatGPT's engineering safety, and my strategic data requirements (The Elon Fix) into one final instruction.
+
+This is the prompt to send. It is comprehensive.
+
+Copy/Paste this to Replit:
+
+@Replit Plan Mode
+
+We have reviewed the plan with our technical advisors. We are ready for the Phase 1 Build Plan.
+
+Please generate the detailed Step-by-Step Task List, but you must incorporate these Technical Constraints & Requirements into the tasks:
+
+1. The 'Why Trending' API Contract (Strict Schema)
+
+Do not hack this into the frontend. Create a backend helper getTrendContext(celebrity) that returns a consistent object:
+
+primary_driver (Enum: NEWS, SEARCH, SOCIAL, WIKI)
+
+reason_tag (String: e.g., "Earnings", "Viral")
+
+driver_strength (0-100)
+
+headline_snippet (Optional)
+
+last_scored_at (Timestamp)
+
+2. Keyword Mapper Safety Rails
+
+Thresholds: Only apply specific tags (e.g., "Legal Trouble") if the keyword appears in the Title OR appears in >1 source.
+
+Fallbacks: If velocity is high but no specific keyword matches, default to generic tags like "In The News" or "Search Spike."
+
+Heated vs. Controversy: Do not use the label "Controversy" yet (requires sentiment analysis). If high velocity + mixed signals, use the label "⚠️ Heated".
+
+3. Data Integrity (The 'Elon Fix' - Critical)
+
+Tier-1 Overrides: You must include a task to implement seed_overrides.ts. We need to hardcode the BaseMass (Follower Count) for our Top 50 stars immediately so the leaderboard looks credible on Day 1.
+
+4. Engagement Logic
+
+Overrated/Underrated: These votes must be Non-Ranking and Rate-Limited (1 vote per user/IP per day) to prevent spam.
+
+Freshness: Standardize timestamps. Display "Updated Xm ago" based on last_scored_at. Display "Source Cached" badges based on last_ingested_at.
+
+5. Viral Infrastructure
+
+Server-Side OG: For link previews (WhatsApp/Twitter), use Server-Side generation (e.g., @vercel/og or similar). Client-side canvas does not work for link previews.

@@ -1,0 +1,211 @@
+You’re in a very good place. Replit’s summary is aligned and (importantly) it’s grounded in your actual codebase: you already have deltas, movers endpoints, favourites table, etc. That means this next phase is mostly UI wiring + light backend glue, not a huge rebuild.
+
+Before you tell it to generate the build-plan task list, there are only a few critical items I’d add/adjust so you don’t paint yourselves into a corner.
+
+✅ What Replit covered well (no changes needed)
+
+Phase ordering is correct:
+
+Context → Viral → Habit
+Feature readiness is accurate:
+
+“Why Trending” deltas exist ✅
+
+Movers endpoints exist ✅
+
+favourites table exists ✅
+
+Share infrastructure missing ❌ (correct)
+
+Sentiment votes quick add ✅
+
+All good.
+
+⚠️ What’s missing / should be added BEFORE you lock the task list
+1) Define the “Why Trending” contract (API → UI) now
+
+If you don’t define this cleanly, you’ll end up with messy UI hacks later.
+
+✅ Add a small backend response shape like:
+
+primary_driver (enum: NEWS / SEARCH / SOCIAL / WIKI)
+
+secondary_driver (optional)
+
+driver_strength (0–1 or 0–100)
+
+reason_tag (string: “Legal Trouble”, “Earnings”, “Music Drop”, etc.)
+
+headline (optional top headline)
+
+last_updated_at (timestamp)
+
+This keeps your UI simple and consistent across:
+
+leaderboard rows
+
+profile headers
+
+share cards
+
+OG images
+
+Tell Replit: “Create a single helper function that returns these fields for every celebrity.”
+
+2) Keyword mapper needs safety rails (avoid embarrassment)
+
+Replit wants “story mode” and controversy tags. Cool — but you must prevent wrong labels.
+
+✅ Rules to add:
+
+Only apply a specific reason tag if:
+
+keyword appears in first ~60 characters OR
+
+appears in 2+ headlines OR
+
+confidence score > threshold
+
+Otherwise fall back to generic tags:
+
+“In the News”
+
+“Search Spike”
+
+“Viral Moment”
+
+This avoids dumb outputs like “Legal Trouble” because the word “court” appears in some unrelated sports headline.
+
+3) “Controversy detector” — be careful (don’t touch sentiment yet)
+
+This one can backfire.
+
+You currently don’t have sentiment, you have velocity and maybe X volume.
+If you label someone “controversial” without true sentiment, you’ll get:
+
+false positives
+
+reputational risk
+
+user distrust
+
+✅ Safer version for now:
+
+“⚠️ Heated” if News + Search spike together
+
+Only call it “Controversy” when you later have real sentiment scoring
+
+So I’d tell Replit:
+
+“Do NOT ship ‘Controversy’ tags until sentiment is real; use ‘Heated’ as a proxy.”
+
+4) Make “Overrated/Underrated” NOT affect ranking (and anti-spam)
+
+Replit agrees it’s non-ranking. Good.
+
+Add basic abuse protection now:
+
+1 vote per user per celeb per day (or per week)
+
+store in a separate table or with a strict unique constraint
+
+show result as a percentage (“Underrated 62%”)
+
+This keeps it clean and prevents vote stuffing.
+
+5) Share + OG images: decide now how you’ll generate them
+
+This matters because it changes the implementation path.
+
+✅ Recommended:
+
+OG images server-side (best for link previews)
+
+“Download share card” can be html2canvas later
+
+Ask Replit:
+
+“Implement OpenGraph image generation first for profile pages; share download is optional v1.”
+
+6) Data freshness: pick ONE definition and use it everywhere
+
+Don’t have “updated 12m” on profile and “cached 3h” elsewhere inconsistently.
+
+✅ Standardize:
+
+last_ingested_at (per source)
+
+last_scored_at (overall)
+UI uses:
+
+“Updated X mins ago” = based on last_scored_at
+
+“X cached (8h)” = based on x_last_ingested_at
+
+7) Default leaderboard view: make “Movers” the first dopamine hit
+
+Replit already suggests Movement-first tabs. Good.
+
+I’d add one instruction:
+✅ Default to “Risers” tab for returning users (or remember last tab)
+
+This makes the app feel alive instantly.
+
+✅ Optional extras (nice, but not required for Week 1)
+Fame Pulse badge system (Hot / Rising / Stable / Cooling)
+
+This is actually good UX and low effort.
+If it’s fast, add it as a tiny color dot or icon next to name.
+
+But I’d keep it simple:
+
+Hot = 2+ drivers spiking
+
+Rising = 1 driver spiking strongly
+
+Cooling = score trending down 24h
+
+“Story mode”
+
+Great, but don’t do full sentences yet.
+Start with a micro line:
+
+“Driver: Earnings headline + Search surge”
+
+Save full narrative generation for after OG cards.
+
+✅ Final answer: is anything missing before the task list?
+
+Only these 6 must-add items:
+
+Define the “Why Trending” API contract (primary/secondary/reason/headline/timestamps)
+
+Keyword mapper safety rules (fallbacks + confidence threshold)
+
+Replace “Controversy” with “Heated” until real sentiment exists
+
+Overrated/Underrated anti-spam constraints + non-ranking guarantee
+
+Decide OG generation method (server-side first)
+
+Standardize freshness timestamps (scored vs ingested)
+
+If you add those, Replit can safely generate the build plan task list and you won’t have to redo anything later.
+
+Copy/paste message to Replit before it generates the task list
+
+If you want, send this:
+
+Before you generate the build plan, include these requirements:
+
+Create a single “why_trending” helper that returns: primary_driver, secondary_driver, reason_tag, headline(optional), last_scored_at, and per-source last_ingested_at.
+
+Keyword mapper must have confidence/fallback rules (no specific tag unless threshold met).
+
+Do not ship “Controversy” until sentiment exists; use “Heated” as proxy if needed.
+
+Overrated/Underrated must be non-ranking and rate-limited (1 vote/user/day) with unique constraints.
+
+OpenGraph images must be server-generated first; html2canvas download card can be phase 2.
+
+Standardize “Updated X mins ago” based on last_scored_at, and “X cached” based on x_last_ingested_at.
