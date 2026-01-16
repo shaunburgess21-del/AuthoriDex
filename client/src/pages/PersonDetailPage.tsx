@@ -26,6 +26,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatNumber";
+import { useTrendContext } from "@/hooks/useTrendContext";
+import { WhyTrendingBadge } from "@/components/WhyTrendingBadge";
+import { OverratedUnderratedWidget } from "@/components/OverratedUnderratedWidget";
+import { Newspaper, Clock } from "lucide-react";
 
 interface CurateProfilePoll {
   id: string;
@@ -458,6 +462,8 @@ export default function PersonDetailPage() {
     enabled: !!params?.id,
   });
 
+  const { data: trendContext, isLoading: isLoadingContext } = useTrendContext(params?.id || null);
+
   // Check if person is favorited
   useEffect(() => {
     if (!user || !person) return;
@@ -682,6 +688,48 @@ export default function PersonDetailPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Why Trending Section */}
+        {trendContext && (
+          <Card className="mb-8 p-4 border-primary/30 bg-muted/30" data-testid="card-why-trending">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 mt-0.5 p-2 rounded-md bg-primary/10">
+                <Newspaper className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <span className="text-sm font-semibold text-foreground">Why Trending</span>
+                  <WhyTrendingBadge context={trendContext} size="sm" />
+                </div>
+                {trendContext.headlineSnippet && (
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-2" data-testid="text-headline-snippet">
+                    {trendContext.headlineSnippet}
+                  </p>
+                )}
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  <span data-testid="text-last-updated">{trendContext.lastScoredAtFormatted}</span>
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+        {isLoadingContext && (
+          <Card className="mb-8 p-4 animate-pulse bg-muted/30">
+            <div className="flex items-start gap-3">
+              <div className="w-5 h-5 bg-muted rounded" />
+              <div className="flex-1">
+                <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+                <div className="h-3 bg-muted rounded w-2/3" />
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Overrated/Underrated Sentiment Widget */}
+        <div className="mb-8">
+          <OverratedUnderratedWidget personId={person.id} personName={person.name} />
         </div>
 
         {/* 2. Stats Cards */}

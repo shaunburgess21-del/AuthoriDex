@@ -17,6 +17,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
+import { useTrendContextBatch } from "@/hooks/useTrendContext";
 import { Loader2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
@@ -452,6 +453,8 @@ interface TrendingResponse {
   hasMore: boolean;
 }
 
+type LeaderboardMode = "all" | "risers" | "fallers";
+
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [category, setCategory] = useState("all");
@@ -461,6 +464,7 @@ export default function HomePage() {
   const [votingPersonId, setVotingPersonId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
+  const [leaderboardMode, setLeaderboardMode] = useState<LeaderboardMode>("all");
 
   const {
     data,
@@ -521,6 +525,26 @@ export default function HomePage() {
   const { data: dailyMovers = [] } = useQuery<TrendingPerson[]>({
     queryKey: ['/api/trending/movers/daily'],
     refetchInterval: 5 * 60 * 1000,
+  });
+
+  const displayPeople = useMemo(() => {
+    switch (leaderboardMode) {
+      case "risers":
+        return topGainers;
+      case "fallers":
+        return topDroppers;
+      default:
+        return allPeople;
+    }
+  }, [leaderboardMode, allPeople, topGainers, topDroppers]);
+
+  const personIds = useMemo(() => displayPeople.map(p => p.id), [displayPeople]);
+  
+  const { data: trendContexts, isLoading: isLoadingContexts } = useTrendContextBatch(personIds);
+
+  const { data: systemFreshness } = useQuery<{ lastScoredAt: string; lastScoredAtFormatted: string }>({
+    queryKey: ['/api/system/freshness'],
+    refetchInterval: 30 * 1000,
   });
 
   const handleVisitProfile = (personId: string) => {
@@ -687,27 +711,78 @@ export default function HomePage() {
               exit={{ opacity: 0, y: -20 }}
             >
               <Card id="leaderboard">
-                <CardHeader className="flex flex-col sm:flex-row sm:items-center gap-4 space-y-0 pb-4">
-                  <div className="flex-1">
-                    <CardTitle className="text-2xl font-serif">Leaderboard</CardTitle>
-                    <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60">
-                      <RefreshCw className="h-3 w-3" />
-                      <span>Last updated a few seconds ago</span>
+                <CardHeader className="flex flex-col gap-4 space-y-0 pb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div className="flex-1">
+                      <CardTitle className="text-2xl font-serif">Leaderboard</CardTitle>
+                      <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60" data-testid="text-leaderboard-freshness">
+                        <RefreshCw className="h-3 w-3" />
+                        <span>Updated {systemFreshness?.lastScoredAtFormatted || "recently"}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setTrendOverlayOpen(true)}
+                        className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                        data-testid="button-compare-momentum"
+                      >
+                        <LineChart className="h-4 w-4 mr-2" />
+                        Compare Momentum
+                      </Button>
+                      <FilterDropdown value={category} onChange={setCategory} />
+                      <SortDropdown value={sort} onChange={setSort} />
                     </div>
                   </div>
-                  <div className="flex gap-2 flex-wrap">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => setTrendOverlayOpen(true)}
-                      className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
-                      data-testid="button-compare-momentum"
+                  
+                  <div className="flex items-center gap-2 border-b border-border pb-2">
+                    <button
+                      onClick={() => setLeaderboardMode("all")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                        leaderboardMode === "all"
+                          ? "bg-primary/20 text-primary border border-primary/30"
+                          : "text-muted-foreground hover:bg-muted/50"
+                      }`}
+                      data-testid="tab-leaderboard-all"
                     >
-                      <LineChart className="h-4 w-4 mr-2" />
-                      Compare Momentum
-                    </Button>
-                    <FilterDropdown value={category} onChange={setCategory} />
-                    <SortDropdown value={sort} onChange={setSort} />
+                      <Crown className="h-3.5 w-3.5" />
+                      All
+                    </button>
+                    <button
+                      onClick={() => setLeaderboardMode("risers")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                        leaderboardMode === "risers"
+                          ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                          : "text-muted-foreground hover:bg-muted/50"
+                      }`}
+                      data-testid="tab-leaderboard-risers"
+                    >
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      Risers
+                      {topGainers.length > 0 && (
+                        <Badge variant="secondary" className="ml-1 h-5 text-xs bg-green-500/20 text-green-400 border-0">
+                          {topGainers.length}
+                        </Badge>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setLeaderboardMode("fallers")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                        leaderboardMode === "fallers"
+                          ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                          : "text-muted-foreground hover:bg-muted/50"
+                      }`}
+                      data-testid="tab-leaderboard-fallers"
+                    >
+                      <TrendingDown className="h-3.5 w-3.5" />
+                      Fallers
+                      {topDroppers.length > 0 && (
+                        <Badge variant="secondary" className="ml-1 h-5 text-xs bg-red-500/20 text-red-400 border-0">
+                          {topDroppers.length}
+                        </Badge>
+                      )}
+                    </button>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -760,18 +835,27 @@ export default function HomePage() {
                     </div>
                   </div>
                   <div>
-                    {allPeople.map((person) => (
+                    {displayPeople.length === 0 && !isLoading && (
+                      <div className="p-8 text-center text-muted-foreground">
+                        {leaderboardMode === "risers" && "No rising celebrities today"}
+                        {leaderboardMode === "fallers" && "No falling celebrities today"}
+                        {leaderboardMode === "all" && "No results found"}
+                      </div>
+                    )}
+                    {displayPeople.map((person) => (
                       <LeaderboardRow
                         key={person.id}
                         person={person}
                         onVisitProfile={() => handleVisitProfile(person.id)}
                         onVoteClick={() => handleVoteClick(person.id)}
+                        trendContext={trendContexts?.[person.id]}
+                        isLoadingContext={isLoadingContexts}
                       />
                     ))}
                   </div>
                   
-                  {/* Infinite scroll trigger element */}
-                  {hasNextPage && (
+                  {/* Infinite scroll trigger element - only show in "all" mode */}
+                  {leaderboardMode === "all" && hasNextPage && (
                     <div 
                       ref={loadMoreRef}
                       className="p-6 border-t text-center"

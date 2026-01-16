@@ -3,13 +3,14 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, pageViews, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, pageViews, apiCache, sentimentVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile } from "@shared/schema";
 import { eq, desc, and, sql, count, gte } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
 import { gamificationService } from "./services/gamification";
+import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Using local PostgreSQL database instead of Supabase
@@ -255,6 +256,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error refreshing trending data:", error);
       res.status(500).json({ error: "Failed to refresh data" });
+    }
+  });
+
+  // ============ TREND CONTEXT API (Why Trending) ============
+  
+  // Get trend context for a single person
+  app.get("/api/trending/:id/context", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const context = await getTrendContext(id);
+      
+      res.json({
+        ...context,
+        lastScoredAtFormatted: formatRelativeTime(context.lastScoredAt),
+        sourceTimestampsFormatted: {
+          wiki: formatRelativeTime(context.sourceTimestamps.wiki),
+          news: formatRelativeTime(context.sourceTimestamps.news),
+          search: formatRelativeTime(context.sourceTimestamps.search),
+          x: formatRelativeTime(context.sourceTimestamps.x),
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching trend context:", error);
+      res.status(500).json({ error: "Failed to fetch trend context" });
+    }
+  });
+  
+  // Get trend context for multiple people (batch endpoint for leaderboard)
+  app.post("/api/trending/context/batch", async (req, res) => {
+    try {
+      const { personIds } = req.body;
+      
+      if (!Array.isArray(personIds) || personIds.length === 0) {
+        return res.status(400).json({ error: "personIds array required" });
+      }
+      
+      if (personIds.length > 100) {
+        return res.status(400).json({ error: "Max 100 person IDs per request" });
+      }
+      
+      const contexts = await getTrendContextBatch(personIds);
+      
+      const result: Record<string, TrendContext & { lastScoredAtFormatted: string; sourceTimestampsFormatted: Record<string, string> }> = {};
+      
+      contexts.forEach((context, id) => {
+        result[id] = {
+          ...context,
+          lastScoredAtFormatted: formatRelativeTime(context.lastScoredAt),
+          sourceTimestampsFormatted: {
+            wiki: formatRelativeTime(context.sourceTimestamps.wiki),
+            news: formatRelativeTime(context.sourceTimestamps.news),
+            search: formatRelativeTime(context.sourceTimestamps.search),
+            x: formatRelativeTime(context.sourceTimestamps.x),
+          },
+        };
+      });
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching batch trend context:", error);
+      res.status(500).json({ error: "Failed to fetch trend contexts" });
+    }
+  });
+  
+  // Get system data freshness status
+  app.get("/api/system/freshness", async (req, res) => {
+    try {
+      const cacheStats = await db
+        .select({
+          provider: apiCache.provider,
+          latestFetch: sql<Date>`MAX(${apiCache.fetchedAt})`,
+          count: sql<number>`COUNT(*)`,
+        })
+        .from(apiCache)
+        .groupBy(apiCache.provider);
+      
+      const freshness: Record<string, { lastUpdated: string; count: number; status: "live" | "stale" | "cached" }> = {};
+      const now = new Date();
+      
+      for (const stat of cacheStats) {
+        const latestDate = stat.latestFetch ? new Date(stat.latestFetch) : null;
+        const hoursSince = latestDate ? (now.getTime() - latestDate.getTime()) / (1000 * 60 * 60) : Infinity;
+        
+        let status: "live" | "stale" | "cached" = "live";
+        if (hoursSince > 24) status = "stale";
+        else if (hoursSince > 2) status = "cached";
+        
+        freshness[stat.provider] = {
+          lastUpdated: formatRelativeTime(latestDate),
+          count: Number(stat.count),
+          status,
+        };
+      }
+      
+      res.json({
+        freshness,
+        systemStatus: Object.values(freshness).every(f => f.status !== "stale") ? "healthy" : "degraded",
+      });
+    } catch (error) {
+      console.error("Error fetching system freshness:", error);
+      res.status(500).json({ error: "Failed to fetch system status" });
     }
   });
 
@@ -576,6 +678,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user votes:", error);
       res.status(500).json({ error: "Failed to fetch user votes" });
+    }
+  });
+
+  // ===== OVERRATED/UNDERRATED SENTIMENT VOTES API =====
+  
+  // Submit an overrated/underrated vote (rate limited to 1/user/person/day)
+  app.post("/api/sentiment-votes", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { personId, personName, voteType } = req.body;
+      const userId = req.userId!;
+      
+      if (!personId || !voteType) {
+        return res.status(400).json({ error: "personId and voteType are required" });
+      }
+      
+      if (!['overrated', 'underrated'].includes(voteType)) {
+        return res.status(400).json({ error: "voteType must be 'overrated' or 'underrated'" });
+      }
+      
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      // Check if user already voted on this person today
+      const existingVote = await db
+        .select()
+        .from(sentimentVotes)
+        .where(and(
+          eq(sentimentVotes.userId, userId),
+          eq(sentimentVotes.personId, personId),
+          eq(sentimentVotes.votedDate, today)
+        ))
+        .limit(1);
+      
+      if (existingVote.length > 0) {
+        // Update existing vote
+        await db
+          .update(sentimentVotes)
+          .set({ voteType })
+          .where(and(
+            eq(sentimentVotes.userId, userId),
+            eq(sentimentVotes.personId, personId),
+            eq(sentimentVotes.votedDate, today)
+          ));
+        
+        return res.json({ success: true, updated: true });
+      }
+      
+      // Create new vote
+      await db.insert(sentimentVotes).values({
+        userId,
+        personId,
+        personName: personName || "Unknown",
+        voteType,
+        votedDate: today,
+      });
+      
+      res.json({ success: true, created: true });
+    } catch (error: any) {
+      console.error("Error submitting sentiment vote:", error);
+      res.status(500).json({ error: error.message || "Failed to submit vote" });
+    }
+  });
+  
+  // Get user's sentiment votes for a specific person
+  app.get("/api/sentiment-votes/:personId", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { personId } = req.params;
+      const userId = req.userId!;
+      const today = new Date().toISOString().split('T')[0];
+      
+      const vote = await db
+        .select()
+        .from(sentimentVotes)
+        .where(and(
+          eq(sentimentVotes.userId, userId),
+          eq(sentimentVotes.personId, personId),
+          eq(sentimentVotes.votedDate, today)
+        ))
+        .limit(1);
+      
+      res.json({
+        hasVotedToday: vote.length > 0,
+        voteType: vote[0]?.voteType || null,
+      });
+    } catch (error) {
+      console.error("Error fetching sentiment vote:", error);
+      res.status(500).json({ error: "Failed to fetch vote" });
+    }
+  });
+  
+  // Get aggregated sentiment vote counts for a person
+  app.get("/api/sentiment-votes/:personId/counts", async (req, res) => {
+    try {
+      const { personId } = req.params;
+      
+      const overratedCount = await db
+        .select({ count: count() })
+        .from(sentimentVotes)
+        .where(and(
+          eq(sentimentVotes.personId, personId),
+          eq(sentimentVotes.voteType, 'overrated')
+        ));
+      
+      const underratedCount = await db
+        .select({ count: count() })
+        .from(sentimentVotes)
+        .where(and(
+          eq(sentimentVotes.personId, personId),
+          eq(sentimentVotes.voteType, 'underrated')
+        ));
+      
+      res.json({
+        overrated: Number(overratedCount[0]?.count || 0),
+        underrated: Number(underratedCount[0]?.count || 0),
+      });
+    } catch (error) {
+      console.error("Error fetching sentiment vote counts:", error);
+      res.status(500).json({ error: "Failed to fetch counts" });
     }
   });
 

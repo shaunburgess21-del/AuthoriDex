@@ -205,6 +205,27 @@ export const insertUserVoteSchema = createInsertSchema(userVotes).omit({
 export type UserVote = typeof userVotes.$inferSelect;
 export type InsertUserVote = z.infer<typeof insertUserVoteSchema>;
 
+// Overrated/Underrated sentiment votes - rate limited to 1/user/day (Supabase)
+export const sentimentVotes = pgTable("sentiment_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  personId: varchar("person_id").notNull(),
+  personName: text("person_name").notNull(),
+  voteType: text("vote_type").notNull(), // 'overrated' or 'underrated'
+  votedAt: timestamp("voted_at").notNull().defaultNow(),
+  votedDate: text("voted_date").notNull(), // YYYY-MM-DD for daily rate limiting
+}, (table) => ({
+  uniqueUserPersonDate: unique().on(table.userId, table.personId, table.votedDate),
+}));
+
+export const insertSentimentVoteSchema = createInsertSchema(sentimentVotes).omit({
+  id: true,
+  votedAt: true,
+});
+
+export type SentimentVote = typeof sentimentVotes.$inferSelect;
+export type InsertSentimentVote = z.infer<typeof insertSentimentVoteSchema>;
+
 // User favourites - stores which people a user has favourited (Supabase)
 export const userFavourites = pgTable("user_favourites", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
