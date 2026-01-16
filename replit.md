@@ -35,6 +35,12 @@ Preferred communication style: Simple, everyday language.
   - **EMA Smoothing**: Alpha = 0.15 applied to final scores for stable, smooth curves instead of "barcode" charts.
   - **Nullable Change Values**: change24h/change7d show "N/A" when data is unavailable (no fake random values).
 - **Data Jobs**: Includes jobs for full data ingestion, quick scoring, and hourly trend snapshot capture.
+- **Trend Context Service** (Jan 2026): Provides "Why Trending" explanations via `getTrendContext()` and `getTrendContextBatch()`.
+  - **Keyword Mapper**: 14 categories (Earnings, Legal News, Music, Politics, Sports, Entertainment, Personal Life, Breaking News, Viral Moment, Heated, Announcement, Public Appearance, Tech News, Business).
+  - **Confidence Thresholds**: Requires >= 2 keyword matches for confident tagging; falls back to "In The News" for low confidence.
+  - **Driver Detection**: Determines primary/secondary trend drivers (NEWS, SEARCH, SOCIAL, WIKI) based on signal strength.
+  - **Data Freshness**: Tracks per-source timestamps (wiki, news, search, x) with stale detection (> 1 hour).
+  - **Sentiment Voting**: `sentimentVotes` table with 1 vote per user per person per day rate limiting.
 
 ### Serverless Architecture
 - **Design**: Stateless, with all state managed in Supabase Database.
