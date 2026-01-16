@@ -74,6 +74,27 @@ ${webContextSection}${netWorthSection}CRITICAL INSTRUCTIONS:
 7. If someone was recently elected or appointed to a new role, mention this prominently.
 8. IMPORTANT: DO NOT mention net worth, wealth, or financial figures in shortBio or longBio. Net worth goes ONLY in the estimatedNetWorth field.
 
+NET WORTH REFERENCE DATA (January 2026 - use these as anchors for estimation):
+- Elon Musk: ~$700 billion (first to cross $700B, owns Tesla, SpaceX at $800B valuation, xAI)
+- Jeff Bezos: ~$240 billion
+- Mark Zuckerberg: ~$230 billion
+- Larry Ellison: ~$220 billion
+- Bernard Arnault: ~$200 billion
+- Bill Gates: ~$160 billion
+- Warren Buffett: ~$145 billion
+- Larry Page: ~$165 billion
+- Sergey Brin: ~$155 billion
+- Jensen Huang: ~$130 billion (NVIDIA CEO)
+- Shayne Coplan: ~$1 billion (Polymarket founder, youngest self-made billionaire Oct 2025)
+- Taylor Swift: ~$1.6 billion
+- Rihanna: ~$1.4 billion
+- Kim Kardashian: ~$1.7 billion
+- Kylie Jenner: ~$700 million
+- Drake: ~$300 million
+- LeBron James: ~$1.2 billion
+- Cristiano Ronaldo: ~$600 million
+Use these as reference points to estimate other individuals' net worth relative to their success/wealth tier.
+
 Return a JSON object with exactly these fields:
 {
   "shortBio": "A concise 2-3 sentence summary emphasizing their CURRENT primary role and achievements. DO NOT mention net worth here. (150-200 characters)",
@@ -83,7 +104,7 @@ Return a JSON object with exactly these fields:
   "fromCountryCode": "ISO 3166-1 alpha-2 code",
   "basedIn": "Where they currently live or work (full name)", 
   "basedInCountryCode": "ISO 3166-1 alpha-2 code",
-  "estimatedNetWorth": "Provide a rough estimate even without search results. Use format like '$2.6 billion' or '$450 million'. For very wealthy (billionaires), estimate to nearest $1B. For millionaires, estimate to nearest $50M. Never say 'not available' or 'unknown' - always give your best informed estimate."
+  "estimatedNetWorth": "Provide a rough estimate in format like '$700 billion' or '$450 million'. For billionaires, estimate to nearest $1-10B depending on wealth tier. For millionaires, estimate to nearest $50M. Use the reference data above as anchors. Never say 'not available' or 'unknown'."
 }
 
 Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;
