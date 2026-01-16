@@ -1072,13 +1072,17 @@ ${netWorthContext.estimate ? `Quick extract found: ${netWorthContext.estimate} (
       const prompt = `You are a celebrity data expert. Generate accurate, factual information about ${person.name}.
 
 ${webContextSection}${netWorthSection}CRITICAL INSTRUCTIONS:
-1. Today is ${currentDate}. Use the web search results above for the most current information.
+1. Today is ${currentDate}. Use your most current knowledge.
 2. This person's data will be cached for 7 days, so accuracy is essential.
 3. If this person is a politician, CEO, or public figure, state their CURRENT title/position as of ${currentYear}.
-4. For politicians: If they are currently serving in office (president, vice president, prime minister, governor, etc.), this MUST be stated clearly.
-5. For business leaders: State their current company and role.
-6. If someone was recently elected or appointed to a new role, mention this prominently.
-7. Prioritize the web search results over your training data for recent events and current positions.
+4. POLITICAL FIGURES - USE CURRENT FACTS:
+   - Donald Trump: Inaugurated as 47th U.S. President on January 20, 2025 (second term)
+   - JD Vance: Current U.S. Vice President (since January 20, 2025)
+   - Joe Biden: Former President (term ended January 20, 2025)
+   - Kamala Harris: Former Vice President (term ended January 20, 2025)
+5. For politicians: If they are currently serving in office, this MUST be stated clearly with their current title.
+6. For business leaders: State their current company and role.
+7. If someone was recently elected or appointed to a new role, mention this prominently.
 8. IMPORTANT: DO NOT mention net worth, wealth, or financial figures in shortBio or longBio. Net worth goes ONLY in the estimatedNetWorth field.
 
 Return a JSON object with exactly these fields:
@@ -1209,13 +1213,17 @@ ${netWorthContext.estimate ? `Quick extract found: ${netWorthContext.estimate} (
             const prompt = `You are a celebrity data expert. Generate accurate, factual information about ${person.name}.
 
 ${webContextSection}${netWorthSection}CRITICAL INSTRUCTIONS:
-1. Today is ${currentDate}. Use the web search results above for the most current information.
+1. Today is ${currentDate}. Use your most current knowledge.
 2. This person's data will be cached for 7 days, so accuracy is essential.
 3. If this person is a politician, CEO, or public figure, state their CURRENT title/position as of ${currentYear}.
-4. For politicians: If they are currently serving in office (president, vice president, prime minister, governor, etc.), this MUST be stated clearly.
-5. For business leaders: State their current company and role.
-6. If someone was recently elected or appointed to a new role, mention this prominently.
-7. Prioritize the web search results over your training data for recent events and current positions.
+4. POLITICAL FIGURES - USE CURRENT FACTS:
+   - Donald Trump: Inaugurated as 47th U.S. President on January 20, 2025 (second term)
+   - JD Vance: Current U.S. Vice President (since January 20, 2025)
+   - Joe Biden: Former President (term ended January 20, 2025)
+   - Kamala Harris: Former Vice President (term ended January 20, 2025)
+5. For politicians: If they are currently serving in office, this MUST be stated clearly with their current title.
+6. For business leaders: State their current company and role.
+7. If someone was recently elected or appointed to a new role, mention this prominently.
 8. IMPORTANT: DO NOT mention net worth, wealth, or financial figures in shortBio or longBio. Net worth goes ONLY in the estimatedNetWorth field.
 
 Return a JSON object with exactly these fields:
