@@ -1079,18 +1079,18 @@ ${webContextSection}${netWorthSection}CRITICAL INSTRUCTIONS:
 5. For business leaders: State their current company and role.
 6. If someone was recently elected or appointed to a new role, mention this prominently.
 7. Prioritize the web search results over your training data for recent events and current positions.
-8. For NET WORTH: Use the net worth search results above. Prefer Forbes, Bloomberg, or Celebrity Net Worth as authoritative sources. Use the MOST RECENT figure available, NOT outdated estimates.
+8. IMPORTANT: DO NOT mention net worth, wealth, or financial figures in shortBio or longBio. Net worth goes ONLY in the estimatedNetWorth field.
 
 Return a JSON object with exactly these fields:
 {
-  "shortBio": "A concise 2-3 sentence summary emphasizing their CURRENT primary role and most notable achievements (150-200 characters)",
-  "longBio": "A comprehensive 4-6 sentence biography covering their current position, career highlights, major achievements, and recent notable activities (400-600 characters). This should provide more depth than the short bio.",
+  "shortBio": "A concise 2-3 sentence summary emphasizing their CURRENT primary role and achievements. DO NOT mention net worth here. (150-200 characters)",
+  "longBio": "A comprehensive 4-6 sentence biography covering their current position, career highlights, and achievements. DO NOT mention net worth or wealth here. (400-600 characters)",
   "knownFor": "Their primary areas of expertise or fame, comma-separated (e.g., 'Tech entrepreneurship, SpaceX, Tesla, X/Twitter')",
   "fromCountry": "Their country of origin (full name, e.g., 'South Africa')",
   "fromCountryCode": "ISO 3166-1 alpha-2 code (e.g., 'ZA')",
   "basedIn": "Where they currently live or work (full name, e.g., 'United States')", 
   "basedInCountryCode": "ISO 3166-1 alpha-2 code (e.g., 'US')",
-  "estimatedNetWorth": "Estimated net worth in ${currentYear} from authoritative sources (e.g., '$421 billion'). Use the EXACT figure from the search results if available."
+  "estimatedNetWorth": "Estimated net worth in ${currentYear} from authoritative sources (e.g., '$421 billion'). Use the EXACT figure from the net worth search results."
 }
 
 Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;
@@ -1216,18 +1216,18 @@ ${webContextSection}${netWorthSection}CRITICAL INSTRUCTIONS:
 5. For business leaders: State their current company and role.
 6. If someone was recently elected or appointed to a new role, mention this prominently.
 7. Prioritize the web search results over your training data for recent events and current positions.
-8. For NET WORTH: Use the net worth search results above. Prefer Forbes, Bloomberg, or Celebrity Net Worth as authoritative sources. Use the MOST RECENT figure available.
+8. IMPORTANT: DO NOT mention net worth, wealth, or financial figures in shortBio or longBio. Net worth goes ONLY in the estimatedNetWorth field.
 
 Return a JSON object with exactly these fields:
 {
-  "shortBio": "A concise 2-3 sentence summary emphasizing their CURRENT primary role and most notable achievements (150-200 characters)",
-  "longBio": "A comprehensive 4-6 sentence biography covering their current position, career highlights, major achievements, and recent notable activities (400-600 characters).",
+  "shortBio": "A concise 2-3 sentence summary emphasizing their CURRENT primary role and achievements. DO NOT mention net worth here. (150-200 characters)",
+  "longBio": "A comprehensive 4-6 sentence biography covering their current position, career highlights, and achievements. DO NOT mention net worth or wealth here. (400-600 characters)",
   "knownFor": "Their primary areas of expertise or fame, comma-separated",
   "fromCountry": "Their country of origin (full name)",
   "fromCountryCode": "ISO 3166-1 alpha-2 code",
   "basedIn": "Where they currently live or work (full name)", 
   "basedInCountryCode": "ISO 3166-1 alpha-2 code",
-  "estimatedNetWorth": "Estimated net worth in ${currentYear} from authoritative sources. Use the EXACT figure from search results if available."
+  "estimatedNetWorth": "Estimated net worth in ${currentYear} from authoritative sources. Use the EXACT figure from net worth search results."
 }
 
 Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;
