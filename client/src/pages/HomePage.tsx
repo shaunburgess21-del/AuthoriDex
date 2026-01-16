@@ -17,7 +17,6 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
-import { useTrendContextBatch } from "@/hooks/useTrendContext";
 import { Loader2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
@@ -538,10 +537,6 @@ export default function HomePage() {
     }
   }, [leaderboardMode, allPeople, topGainers, topDroppers]);
 
-  const personIds = useMemo(() => displayPeople.map(p => p.id), [displayPeople]);
-  
-  const { data: trendContexts, isLoading: isLoadingContexts } = useTrendContextBatch(personIds);
-
   const { data: systemFreshness } = useQuery<{ lastScoredAt: string; lastScoredAtFormatted: string }>({
     queryKey: ['/api/system/freshness'],
     refetchInterval: 30 * 1000,
@@ -848,8 +843,6 @@ export default function HomePage() {
                         person={person}
                         onVisitProfile={() => handleVisitProfile(person.id)}
                         onVoteClick={() => handleVoteClick(person.id)}
-                        trendContext={trendContexts?.[person.id]}
-                        isLoadingContext={isLoadingContexts}
                       />
                     ))}
                   </div>

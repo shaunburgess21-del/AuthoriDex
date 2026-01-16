@@ -1,12 +1,10 @@
 import { TrendingPerson } from "@shared/schema";
 import { PersonAvatar } from "./PersonAvatar";
 import { RankBadge } from "./RankBadge";
-import { WhyTrendingBadge } from "./WhyTrendingBadge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useEffect } from "react";
 import { voteToApprovalPercent } from "@/lib/utils";
-import { type TrendContext } from "@/hooks/useTrendContext";
 
 // 1-5 scale colors: vivid gradient from red (1) to green (5)
 const SEGMENT_COLORS_5 = [
@@ -26,11 +24,9 @@ interface LeaderboardRowProps {
   person: TrendingPerson;
   onVisitProfile: () => void;
   onVoteClick?: () => void;
-  trendContext?: TrendContext;
-  isLoadingContext?: boolean;
 }
 
-export function LeaderboardRow({ person, onVisitProfile, onVoteClick, trendContext, isLoadingContext }: LeaderboardRowProps) {
+export function LeaderboardRow({ person, onVisitProfile, onVoteClick }: LeaderboardRowProps) {
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
 
   // Load sentiment score from localStorage
@@ -82,16 +78,9 @@ export function LeaderboardRow({ person, onVisitProfile, onVoteClick, trendConte
         <RankBadge rank={person.rank} />
         <PersonAvatar name={person.name} avatar={person.avatar} size="md" />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-semibold text-base truncate" data-testid={`text-name-${person.id}`}>
-              {person.name}
-            </h3>
-            <WhyTrendingBadge 
-              context={trendContext} 
-              isLoading={isLoadingContext}
-              compact={true}
-            />
-          </div>
+          <h3 className="font-semibold text-base truncate" data-testid={`text-name-${person.id}`}>
+            {person.name}
+          </h3>
           {person.category && (
             <p className="text-sm truncate text-[#94A3B8]">
               {person.category}
