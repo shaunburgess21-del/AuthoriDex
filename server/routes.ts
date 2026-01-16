@@ -1094,7 +1094,7 @@ Return a JSON object with exactly these fields:
   "fromCountryCode": "ISO 3166-1 alpha-2 code (e.g., 'ZA')",
   "basedIn": "Where they currently live or work (full name, e.g., 'United States')", 
   "basedInCountryCode": "ISO 3166-1 alpha-2 code (e.g., 'US')",
-  "estimatedNetWorth": "Estimated net worth in ${currentYear} from authoritative sources (e.g., '$421 billion'). Use the EXACT figure from the net worth search results."
+  "estimatedNetWorth": "Provide a rough estimate in format like '$2.6 billion' or '$450 million'. For billionaires, estimate to nearest $1B. For millionaires, estimate to nearest $50M. Never say 'not available' or 'unknown' - always give your best informed estimate."
 }
 
 Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;
@@ -1235,7 +1235,7 @@ Return a JSON object with exactly these fields:
   "fromCountryCode": "ISO 3166-1 alpha-2 code",
   "basedIn": "Where they currently live or work (full name)", 
   "basedInCountryCode": "ISO 3166-1 alpha-2 code",
-  "estimatedNetWorth": "Estimated net worth in ${currentYear} from authoritative sources. Use the EXACT figure from net worth search results."
+  "estimatedNetWorth": "Provide a rough estimate in format like '$2.6 billion' or '$450 million'. For billionaires, estimate to nearest $1B. For millionaires, estimate to nearest $50M. Never say 'not available' or 'unknown' - always give your best informed estimate."
 }
 
 Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;

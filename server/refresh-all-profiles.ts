@@ -83,7 +83,7 @@ Return a JSON object with exactly these fields:
   "fromCountryCode": "ISO 3166-1 alpha-2 code",
   "basedIn": "Where they currently live or work (full name)", 
   "basedInCountryCode": "ISO 3166-1 alpha-2 code",
-  "estimatedNetWorth": "Estimated net worth in ${currentYear} from authoritative sources. Use the EXACT figure from net worth search results."
+  "estimatedNetWorth": "Provide a rough estimate even without search results. Use format like '$2.6 billion' or '$450 million'. For very wealthy (billionaires), estimate to nearest $1B. For millionaires, estimate to nearest $50M. Never say 'not available' or 'unknown' - always give your best informed estimate."
 }
 
 Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;

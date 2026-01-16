@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Info, MapPin, DollarSign, Sparkles, Loader2, ChevronDown, ChevronUp, Clock } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import * as Flags from "country-flag-icons/react/3x2";
+import { formatNetWorth } from "@/lib/formatNumber";
 
 interface CelebrityProfile {
   personId: string;
@@ -172,7 +173,7 @@ export function CelebrityInfoModal({ personId, personName }: CelebrityInfoModalP
                 <span className="text-xs uppercase tracking-wide font-medium">Estimated Net Worth (2025)</span>
               </div>
               <p className="text-xl font-mono font-bold" data-testid="text-celebrity-net-worth">
-                {profile.estimatedNetWorth}
+                {formatNetWorth(profile.estimatedNetWorth)}
               </p>
             </div>
             
