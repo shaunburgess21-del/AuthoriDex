@@ -318,6 +318,72 @@ export async function fetchTrendingNewsContext(name: string): Promise<TrendingNe
   }
 }
 
+// Fetch dedicated net worth search results for accurate financial data
+export interface NetWorthContext {
+  estimate: string | null;
+  sources: Array<{ title: string; snippet: string; link: string }>;
+}
+
+export async function fetchNetWorthContext(name: string): Promise<NetWorthContext | null> {
+  if (!SERPER_API_KEY) {
+    console.log(`[Serper] No API key configured, skipping net worth search for ${name}`);
+    return null;
+  }
+
+  try {
+    // Search specifically for net worth with current year
+    const currentYear = new Date().getFullYear();
+    const response = await fetch(SERPER_BASE_URL, {
+      method: "POST",
+      headers: {
+        "X-API-KEY": SERPER_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        q: `${name} net worth ${currentYear}`,
+        num: 8,
+        gl: "us",
+        hl: "en",
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[Serper] Net worth search API error for ${name}: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const organic = data.organic || [];
+
+    if (organic.length === 0) {
+      return { estimate: null, sources: [] };
+    }
+
+    const sources = organic.slice(0, 5).map((item: any) => ({
+      title: item.title,
+      snippet: item.snippet || "",
+      link: item.link,
+    }));
+
+    // Try to extract a net worth estimate from snippets
+    let estimate: string | null = null;
+    for (const source of sources) {
+      const match = source.snippet.match(/\$[\d,.]+ (?:billion|million|trillion)/i);
+      if (match) {
+        estimate = match[0];
+        break;
+      }
+    }
+
+    console.log(`[Serper] Net worth search for ${name}: found ${sources.length} sources, estimate: ${estimate || 'none extracted'}`);
+
+    return { estimate, sources };
+  } catch (error) {
+    console.error(`[Serper] Error fetching net worth for ${name}:`, error);
+    return null;
+  }
+}
+
 // Simple categorization based on keywords
 function categorizeNews(text: string): string {
   const textLower = text.toLowerCase();

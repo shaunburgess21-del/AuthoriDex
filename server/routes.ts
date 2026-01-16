@@ -11,7 +11,7 @@ import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
 import { gamificationService } from "./services/gamification";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
-import { fetchWebSearchContext, fetchTrendingNewsContext } from "./providers/serper";
+import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext } from "./providers/serper";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Using local PostgreSQL database instead of Supabase
@@ -1028,7 +1028,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Fetch web search context for grounding (current news/info about the person)
       console.log(`[Profile] Fetching web search context for ${person.name}...`);
-      const webContext = await fetchWebSearchContext(person.name);
+      const [webContext, netWorthContext] = await Promise.all([
+        fetchWebSearchContext(person.name),
+        fetchNetWorthContext(person.name),
+      ]);
       
       // Initialize OpenAI with Replit AI Integrations
       const openai = new OpenAI({
@@ -1050,12 +1053,25 @@ ${webContext.snippets.slice(0, 5).map(s => `- ${s}`).join('\n')}
 `;
       }
       
+      // Build net worth context section
+      let netWorthSection = "";
+      if (netWorthContext && netWorthContext.sources.length > 0) {
+        netWorthSection = `
+NET WORTH SEARCH RESULTS (use the MOST RECENT authoritative source for accurate net worth):
+${netWorthContext.sources.map(s => `- "${s.title}": ${s.snippet}`).join('\n')}
+
+IMPORTANT: Prefer Forbes, Bloomberg, or Celebrity Net Worth sources for net worth estimates. Use the most recent figure available.
+${netWorthContext.estimate ? `Quick extract found: ${netWorthContext.estimate} (verify against sources above)` : ''}
+
+`;
+      }
+      
       // Generate comprehensive profile using AI with web grounding
       const currentYear = new Date().getFullYear();
       const currentDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
       const prompt = `You are a celebrity data expert. Generate accurate, factual information about ${person.name}.
 
-${webContextSection}CRITICAL INSTRUCTIONS:
+${webContextSection}${netWorthSection}CRITICAL INSTRUCTIONS:
 1. Today is ${currentDate}. Use the web search results above for the most current information.
 2. This person's data will be cached for 7 days, so accuracy is essential.
 3. If this person is a politician, CEO, or public figure, state their CURRENT title/position as of ${currentYear}.
@@ -1063,6 +1079,7 @@ ${webContextSection}CRITICAL INSTRUCTIONS:
 5. For business leaders: State their current company and role.
 6. If someone was recently elected or appointed to a new role, mention this prominently.
 7. Prioritize the web search results over your training data for recent events and current positions.
+8. For NET WORTH: Use the net worth search results above. Prefer Forbes, Bloomberg, or Celebrity Net Worth as authoritative sources. Use the MOST RECENT figure available, NOT outdated estimates.
 
 Return a JSON object with exactly these fields:
 {
@@ -1073,7 +1090,7 @@ Return a JSON object with exactly these fields:
   "fromCountryCode": "ISO 3166-1 alpha-2 code (e.g., 'ZA')",
   "basedIn": "Where they currently live or work (full name, e.g., 'United States')", 
   "basedInCountryCode": "ISO 3166-1 alpha-2 code (e.g., 'US')",
-  "estimatedNetWorth": "Estimated net worth in ${currentYear} (e.g., '$250 billion')"
+  "estimatedNetWorth": "Estimated net worth in ${currentYear} from authoritative sources (e.g., '$421 billion'). Use the EXACT figure from the search results if available."
 }
 
 Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;
@@ -1148,8 +1165,11 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         
         await Promise.all(batch.map(async (person) => {
           try {
-            // Fetch web search context
-            const webContext = await fetchWebSearchContext(person.name);
+            // Fetch web search context and net worth in parallel
+            const [webContext, netWorthContext] = await Promise.all([
+              fetchWebSearchContext(person.name),
+              fetchNetWorthContext(person.name),
+            ]);
             
             // Initialize OpenAI
             const openai = new OpenAI({
@@ -1171,11 +1191,24 @@ ${webContext.snippets.slice(0, 5).map(s => `- ${s}`).join('\n')}
 `;
             }
             
+            // Build net worth context section
+            let netWorthSection = "";
+            if (netWorthContext && netWorthContext.sources.length > 0) {
+              netWorthSection = `
+NET WORTH SEARCH RESULTS (use the MOST RECENT authoritative source for accurate net worth):
+${netWorthContext.sources.map(s => `- "${s.title}": ${s.snippet}`).join('\n')}
+
+IMPORTANT: Prefer Forbes, Bloomberg, or Celebrity Net Worth sources. Use the MOST RECENT figure available.
+${netWorthContext.estimate ? `Quick extract found: ${netWorthContext.estimate} (verify against sources above)` : ''}
+
+`;
+            }
+            
             const currentYear = new Date().getFullYear();
             const currentDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
             const prompt = `You are a celebrity data expert. Generate accurate, factual information about ${person.name}.
 
-${webContextSection}CRITICAL INSTRUCTIONS:
+${webContextSection}${netWorthSection}CRITICAL INSTRUCTIONS:
 1. Today is ${currentDate}. Use the web search results above for the most current information.
 2. This person's data will be cached for 7 days, so accuracy is essential.
 3. If this person is a politician, CEO, or public figure, state their CURRENT title/position as of ${currentYear}.
@@ -1183,6 +1216,7 @@ ${webContextSection}CRITICAL INSTRUCTIONS:
 5. For business leaders: State their current company and role.
 6. If someone was recently elected or appointed to a new role, mention this prominently.
 7. Prioritize the web search results over your training data for recent events and current positions.
+8. For NET WORTH: Use the net worth search results above. Prefer Forbes, Bloomberg, or Celebrity Net Worth as authoritative sources. Use the MOST RECENT figure available.
 
 Return a JSON object with exactly these fields:
 {
@@ -1193,7 +1227,7 @@ Return a JSON object with exactly these fields:
   "fromCountryCode": "ISO 3166-1 alpha-2 code",
   "basedIn": "Where they currently live or work (full name)", 
   "basedInCountryCode": "ISO 3166-1 alpha-2 code",
-  "estimatedNetWorth": "Estimated net worth in ${currentYear}"
+  "estimatedNetWorth": "Estimated net worth in ${currentYear} from authoritative sources. Use the EXACT figure from search results if available."
 }
 
 Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;
