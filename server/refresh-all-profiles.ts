@@ -70,6 +70,7 @@ ${webContextSection}${netWorthSection}CRITICAL INSTRUCTIONS:
    - Joe Biden: Former President (term ended January 20, 2025)
    - Kamala Harris: Former Vice President (term ended January 20, 2025)
    - Karoline Leavitt: 36th White House Press Secretary (since January 2025, youngest ever at 27)
+   - David Sacks: White House Special Advisor for AI and Crypto (appointed January 2025, "AI and Crypto Czar")
 5. For politicians: If they are currently serving in office, this MUST be stated clearly with their current title.
 6. For business leaders: State their current company and role.
 7. If someone was recently elected or appointed to a new role, mention this prominently.
