@@ -189,44 +189,56 @@ export interface CommunityMarket {
   totalPool: number;
   endTime: string;
   creatorName: string;
+  personName: string;
+  personAvatar: string;
+  participants: number;
 }
 
 export const COMMUNITY_MARKETS: CommunityMarket[] = [
   {
     id: "comm-1",
-    question: "Will Elon tweet about crypto this week?",
+    question: "Will Elon tweet about Dogecoin this week?",
     category: "tech",
     options: [
       { id: "yes", text: "Yes", percent: 72 },
       { id: "no", text: "No", percent: 28 },
     ],
-    totalPool: 8540,
+    totalPool: 3420,
     endTime: "Sun 23:59 UTC",
-    creatorName: "CryptoWatcher",
+    creatorName: "CryptoKing99",
+    personName: "Elon Musk",
+    personAvatar: "",
+    participants: 47,
   },
   {
     id: "comm-2",
-    question: "Will Taylor Swift announce new tour dates?",
+    question: "Taylor Swift album announcement before month end?",
     category: "music",
     options: [
-      { id: "yes", text: "Yes", percent: 45 },
-      { id: "no", text: "No", percent: 55 },
+      { id: "yes", text: "Yes", percent: 52 },
+      { id: "no", text: "No", percent: 48 },
     ],
-    totalPool: 12300,
+    totalPool: 2890,
     endTime: "Sun 23:59 UTC",
-    creatorName: "SwiftieFan",
+    creatorName: "SwiftieForever",
+    personName: "Taylor Swift",
+    personAvatar: "",
+    participants: 89,
   },
   {
     id: "comm-3",
-    question: "Which creator will hit 200M subs first?",
-    category: "creator",
+    question: "Jensen Huang keynote will break 1M views in 24h?",
+    category: "tech",
     options: [
-      { id: "mrbeast", text: "MrBeast", percent: 78 },
-      { id: "tseries", text: "T-Series", percent: 22 },
+      { id: "yes", text: "Yes", percent: 65 },
+      { id: "no", text: "No", percent: 35 },
     ],
-    totalPool: 15600,
+    totalPool: 1560,
     endTime: "Sun 23:59 UTC",
-    creatorName: "YouTubeStats",
+    creatorName: "TechWatcher",
+    personName: "Jensen Huang",
+    personAvatar: "",
+    participants: 23,
   },
 ];
 

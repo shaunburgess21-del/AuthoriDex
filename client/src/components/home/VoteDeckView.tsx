@@ -9,6 +9,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { 
   Swords, 
   MessageSquare, 
@@ -24,7 +25,6 @@ import {
   Star
 } from "lucide-react";
 import {
-  FACE_OFF_DATA,
   DISCOURSE_TOPICS,
   INDUCTION_CANDIDATES,
   type FaceOffData,
@@ -309,8 +309,14 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   const [pollInteracted, setPollInteracted] = useState(false);
   const [inductionInteracted, setInductionInteracted] = useState(false);
 
+  // Fetch face-offs from API to get real images
+  const { data: faceOffsData = [] } = useQuery<FaceOffData[]>({
+    queryKey: ['/api/face-offs'],
+    staleTime: 60 * 1000,
+  });
+
   const filteredFaceOffs = useMemo(() => 
-    FACE_OFF_DATA.filter(fo => {
+    faceOffsData.filter(fo => {
       const matchesCategory = categoryFilter === "All" || fo.category === categoryFilter;
       const matchesSearch = !searchQuery || 
         fo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||

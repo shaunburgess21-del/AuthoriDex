@@ -78,50 +78,63 @@ function UpDownCard({
       <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-fuchsia-500/5 rounded-lg" />
       
       <div className="relative p-4">
-        <div className="flex items-center justify-between mb-3 gap-2">
-          <div className="flex items-center gap-2">
-            <PersonAvatar name={market.personName} avatar={market.personAvatar} size="md" />
-            <div>
-              <h3 className="font-semibold text-sm">{market.personName}</h3>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Clock className="h-3 w-3" />
-                <span>{market.endTime}</span>
-              </div>
-            </div>
-          </div>
+        <div className="flex items-center justify-between mb-3">
+          <Badge 
+            variant="outline" 
+            className={isUp ? "text-green-500 border-green-500/30" : "text-red-500 border-red-500/30"}
+          >
+            {isUp ? "+" : ""}{market.change7d.toFixed(1)}%
+          </Badge>
           <CategoryPill category={market.category} />
         </div>
         
-        <div className="flex items-center justify-between mb-3 px-2 py-1.5 rounded-lg bg-slate-800/50">
-          <span className="text-xs text-muted-foreground">7d trend</span>
-          <span className={`text-sm font-semibold ${isUp ? 'text-green-400' : 'text-red-400'}`}>
-            {isUp ? '+' : ''}{market.change7d.toFixed(2)}%
-          </span>
+        <div className="flex items-center gap-3 mb-3">
+          <PersonAvatar name={market.personName} avatar={market.personAvatar} size="md" />
+          <div>
+            <p className="font-semibold text-sm">{market.personName}</p>
+            <p className="text-xs text-muted-foreground font-mono">
+              {market.currentScore.toLocaleString()} pts
+            </p>
+          </div>
         </div>
         
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-          <Users className="h-3 w-3" />
-          <span>{market.totalPool.toLocaleString()} credits staked</span>
+        <p className="text-xs text-muted-foreground mb-3">
+          Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span>'s Trend Score be higher than start-of-week by close?
+        </p>
+        
+        <div className="h-2 rounded-full bg-muted mb-3 overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-green-500 to-green-400"
+            style={{ width: `${market.upPoolPercent}%` }}
+          />
+        </div>
+        
+        <div className="flex items-center justify-between text-xs mb-3">
+          <span className="text-green-500">Up {market.upMultiplier}x</span>
+          <span className="text-muted-foreground">Pool: {market.totalPool.toLocaleString()}</span>
+          <span className="text-red-500">Down {market.downMultiplier}x</span>
         </div>
         
         <div className="grid grid-cols-2 gap-2">
           <Button
+            size="sm"
             variant="outline"
-            className="border-green-500/30 text-green-400 hover:bg-green-500/10"
+            className="border-green-500/30 text-green-500 hover:bg-green-500/10"
             onClick={() => onPredict(market.id, 'up', market.personName, market.upMultiplier)}
             data-testid={`button-predict-up-${market.id}`}
           >
-            <TrendingUp className="h-4 w-4 mr-1.5" />
-            Up {market.upMultiplier.toFixed(1)}x
+            <TrendingUp className="h-4 w-4 mr-1" />
+            Up
           </Button>
           <Button
+            size="sm"
             variant="outline"
-            className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+            className="border-red-500/30 text-red-500 hover:bg-red-500/10"
             onClick={() => onPredict(market.id, 'down', market.personName, market.downMultiplier)}
             data-testid={`button-predict-down-${market.id}`}
           >
-            <TrendingDown className="h-4 w-4 mr-1.5" />
-            Down {market.downMultiplier.toFixed(1)}x
+            <TrendingDown className="h-4 w-4 mr-1" />
+            Down
           </Button>
         </div>
       </div>
@@ -137,60 +150,83 @@ function H2HCard({
   onPredict: (marketId: string, selection: 'person1' | 'person2', personName: string) => void;
 }) {
   return (
-    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20">
-      <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-fuchsia-500/5 rounded-lg" />
+    <Card className="relative overflow-hidden bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20">
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute left-0 top-0 w-1/2 h-full bg-gradient-to-r from-blue-600/20 to-transparent" />
+        <div className="absolute right-0 top-0 w-1/2 h-full bg-gradient-to-l from-purple-600/20 to-transparent" />
+      </div>
       
-      <div className="relative p-4">
-        <div className="flex items-center justify-between mb-3 gap-2">
-          <span className="text-sm font-semibold">{market.title}</span>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              <span>{market.endTime}</span>
+      <div className="relative z-10 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <Badge variant="outline" className="text-xs">
+            <Clock className="h-3 w-3 mr-1" />
+            {market.endTime}
+          </Badge>
+          <CategoryPill category={market.category} />
+        </div>
+        
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col items-center flex-1">
+            <div className="relative">
+              <div className="absolute -inset-2 rounded-full bg-blue-500/30 blur-md" />
+              <div className="relative">
+                <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} size="lg" />
+              </div>
             </div>
-            <CategoryPill category={market.category} />
+            <p className="text-sm font-semibold mt-2 text-center">{market.person1.name.split(" ")[0]}</p>
+            <span className="text-xs text-blue-400">{market.person1Percent}%</span>
+          </div>
+          
+          <div className="relative mx-2">
+            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
+              <span className="text-xs font-bold text-slate-200">VS</span>
+            </div>
+          </div>
+          
+          <div className="flex flex-col items-center flex-1">
+            <div className="relative">
+              <div className="absolute -inset-2 rounded-full bg-purple-500/30 blur-md" />
+              <div className="relative">
+                <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} size="lg" />
+              </div>
+            </div>
+            <p className="text-sm font-semibold mt-2 text-center">{market.person2.name.split(" ")[0]}</p>
+            <span className="text-xs text-purple-400">{100 - market.person1Percent}%</span>
           </div>
         </div>
         
-        <div className="flex items-stretch gap-3">
-          <button
+        <div className="h-2 rounded-full bg-muted overflow-hidden mb-3">
+          <div 
+            className="h-full bg-gradient-to-r from-blue-500 to-blue-400"
+            style={{ width: `${market.person1Percent}%` }}
+          />
+        </div>
+        
+        <div className="flex items-center justify-center mb-3">
+          <span className="text-sm font-semibold text-violet-500">
+            Pool: {market.totalPool.toLocaleString()}
+          </span>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-2">
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="border-blue-500/30 text-blue-500 hover:bg-blue-500/10"
             onClick={() => onPredict(market.id, 'person1', market.person1.name)}
-            className="flex-1 rounded-lg border border-violet-500/30 bg-slate-800/50 p-3 hover:border-violet-500/50 transition-all cursor-pointer"
             data-testid={`button-h2h-p1-${market.id}`}
           >
-            <div className="flex flex-col items-center gap-2">
-              <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} size="md" />
-              <span className="font-medium text-sm text-center">{market.person1.name}</span>
-              <Badge variant="outline" className="bg-violet-500/10 text-violet-300 border-violet-400/30 text-xs">
-                {market.person1Percent}%
-              </Badge>
-            </div>
-          </button>
-          
-          <div className="flex items-center justify-center w-10 shrink-0">
-            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center shadow-lg">
-              <Swords className="h-4 w-4 text-white" />
-            </div>
-          </div>
-          
-          <button
+            {market.person1.name.split(" ")[0]}
+          </Button>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="border-purple-500/30 text-purple-500 hover:bg-purple-500/10"
             onClick={() => onPredict(market.id, 'person2', market.person2.name)}
-            className="flex-1 rounded-lg border border-fuchsia-500/30 bg-slate-800/50 p-3 hover:border-fuchsia-500/50 transition-all cursor-pointer"
             data-testid={`button-h2h-p2-${market.id}`}
           >
-            <div className="flex flex-col items-center gap-2">
-              <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} size="md" />
-              <span className="font-medium text-sm text-center">{market.person2.name}</span>
-              <Badge variant="outline" className="bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-400/30 text-xs">
-                {100 - market.person1Percent}%
-              </Badge>
-            </div>
-          </button>
-        </div>
-        
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-3 justify-center">
-          <Users className="h-3 w-3" />
-          <span>{market.totalPool.toLocaleString()} credits staked</span>
+            {market.person2.name.split(" ")[0]}
+          </Button>
         </div>
       </div>
     </Card>
@@ -204,45 +240,82 @@ function CommunityCard({
   market: CommunityMarket;
   onPredict: (marketId: string, optionId: string, optionText: string) => void;
 }) {
+  // Use options data if available, otherwise calculate from seed
+  const yesOption = market.options.find(o => o.id === 'yes' || o.text.toLowerCase() === 'yes');
+  const noOption = market.options.find(o => o.id === 'no' || o.text.toLowerCase() === 'no');
+  const yesPercent = yesOption?.percent ?? 50;
+  const noPercent = noOption?.percent ?? 50;
+  const yesOdds = (100 / yesPercent).toFixed(2);
+  const noOdds = (100 / noPercent).toFixed(2);
+  
   return (
     <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20">
       <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-cyan-500/5 rounded-lg" />
       
       <div className="relative p-4">
-        <div className="flex items-center justify-between mb-2 gap-2">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <MessageSquare className="h-3.5 w-3.5" />
-            <span>by {market.creatorName}</span>
-          </div>
+        <div className="flex items-center justify-between mb-3">
+          <Badge variant="outline" className="text-xs">
+            <Clock className="h-3 w-3 mr-1" />
+            3d left
+          </Badge>
           <CategoryPill category={market.category} />
         </div>
         
-        <h3 className="font-semibold text-base mb-4">{market.question}</h3>
+        <p className="text-sm font-semibold mb-3 line-clamp-2">{market.question}</p>
         
-        <div className="flex gap-2">
-          {market.options.map((option) => (
-            <Button
-              key={option.id}
-              variant="outline"
-              className="flex-1 border-violet-500/30 hover:bg-violet-500/10"
-              onClick={() => onPredict(market.id, option.id, option.text)}
-              data-testid={`button-community-${market.id}-${option.id}`}
-            >
-              {option.text}
-              <Badge variant="outline" className="ml-2 text-xs">{option.percent}%</Badge>
-            </Button>
-          ))}
+        <div className="flex items-center gap-3 mb-4">
+          <PersonAvatar name={market.personName} avatar={market.personAvatar} size="sm" />
+          <div>
+            <span className="text-sm font-medium">{market.personName}</span>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Users className="h-3 w-3" />
+              <span>{market.participants} participants</span>
+            </div>
+          </div>
         </div>
         
-        <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <Users className="h-3 w-3" />
-            <span>{market.totalPool.toLocaleString()} credits</span>
+        <div className="mb-3">
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
+            <span className="text-red-500 font-semibold">No {noPercent}%</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Clock className="h-3 w-3" />
-            <span>{market.endTime}</span>
+          <div className="h-2 rounded-full bg-red-500/20 overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
+              style={{ width: `${yesPercent}%` }}
+            />
           </div>
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-1">
+            <span>{yesOdds}x return</span>
+            <span>{noOdds}x return</span>
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-center mb-3">
+          <span className="text-sm font-semibold text-violet-500">
+            Pool: {market.totalPool.toLocaleString()}
+          </span>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-2">
+          <Button 
+            size="sm" 
+            variant="outline"
+            className="border-green-500/30 text-green-500 hover:bg-green-500/10"
+            onClick={() => onPredict(market.id, 'yes', 'Yes')}
+            data-testid={`button-community-yes-${market.id}`}
+          >
+            Yes
+          </Button>
+          <Button 
+            size="sm" 
+            variant="outline"
+            className="border-red-500/30 text-red-500 hover:bg-red-500/10"
+            onClick={() => onPredict(market.id, 'no', 'No')}
+            data-testid={`button-community-no-${market.id}`}
+          >
+            No
+          </Button>
         </div>
       </div>
     </Card>
