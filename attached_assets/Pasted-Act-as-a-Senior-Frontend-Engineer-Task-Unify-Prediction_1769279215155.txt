@@ -1,0 +1,47 @@
+Act as a Senior Frontend Engineer.
+
+Task: Unify Prediction Card Designs (Home Page vs. Predict Page)
+
+The "Prediction Cards" displayed on the Home Page (Predict Toggle) currently use different layouts than the official cards on the dedicated Predict Page. We need to standardize them so the internal card design is identical across the app, while strictly preserving the Home Page's unique "Single Card / Deck" navigation behavior.
+
+1. "Up/Down Markets" Card
+
+Current State (Home Page): The internal layout, typography, and button styling differ from the Predict Page version.
+
+Target State (Match Predict Page): The card content must visually match the Predict Page version exactly:
+
+Same header layout (Name, Time, Category Pill).
+
+Same "Trend Score" display and "Credits Staked" info.
+
+Same "Up / Down" button styling (colors, sizes, layout).
+
+Action: Update the UpDownDeckCard (or equivalent Home component) to match the internal structure and styling of the UpDownCard (Predict Page).
+
+2. "Head-to-Head Battles" Card
+
+Target State: Match the Predict Page HeadToHeadCard design exactly.
+
+Ensure the "Versus" layout (Contender A vs Contender B with the central "VS" badge) is identical.
+
+Ensure the percentage bars/buttons match the Predict Page style.
+
+Action: Update the HeadToHeadDeckCard (or equivalent) to use the same internal layout as the main HeadToHeadCard.
+
+3. "Community Predictions" Card
+
+Target State: Match the Predict Page CommunityMarketCard design exactly.
+
+Ensure the question text, author attribution, and "Yes/No" (or outcome) percentage bars match the main Predict Page.
+
+Action: Update the CommunityDeckCard (or equivalent) to match the CommunityMarketCard.
+
+4. Behavior Preservation (Crucial)
+
+Do NOT remove the "Next / Skip" functionality on the Home Page.
+
+Do NOT change the "Single Card View" (Deck) layout of the Home Page.
+
+Goal: We only want to update the visual content of the card to match the Predict Page. The container that handles the "Deck" behavior (swiping/skipping) must remain untouched.
+
+Deliverables: Verify that all three card types (Up/Down, Head-to-Head, Community) on the Home Page (Predict Toggle) now look identical to their counterparts on the main Predict Page.
