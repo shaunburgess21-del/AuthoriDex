@@ -1888,7 +1888,7 @@ export default function VotePage() {
         className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b"
         data-testid="section-toggles-container"
       >
-        <div className="container mx-auto px-4 py-3 max-w-5xl">
+        <div className="container mx-auto px-4 py-3 max-w-6xl">
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 relative">
             <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none z-10 md:hidden" />
             {SECTION_TOGGLES.map((section) => (
@@ -1913,7 +1913,7 @@ export default function VotePage() {
           </div>
         </div>
       </div>
-      <div className="container mx-auto px-4 py-4 max-w-5xl">
+      <div className="container mx-auto px-4 py-4 max-w-6xl">
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1 max-w-[420px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1942,7 +1942,7 @@ export default function VotePage() {
           </div>
         </div>
       </div>
-      <div className="container mx-auto px-4 py-8 max-w-5xl pt-[5px] pb-[5px]">
+      <div className="container mx-auto px-4 py-8 max-w-6xl pt-[5px] pb-[5px]">
         {/* VOX POPULI HEADER - Above Face-Offs + People's Voice */}
         {(activeSection === "All" || isPublicOpinionSection(activeSection)) && (
         <div className="relative overflow-hidden mb-6">
@@ -3114,7 +3114,7 @@ export default function VotePage() {
             </div>
             
             <div className="flex-1 overflow-y-auto p-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto">
                 {filteredCandidates.map((candidate, index) => (
                   <InductionCandidateCard
                     key={candidate.id}
@@ -3185,7 +3185,7 @@ export default function VotePage() {
             </div>
             
             <div className="flex-1 overflow-y-auto p-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-5xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-6xl mx-auto">
                 {filteredTopics.map((topic) => (
                   <DiscourseCard 
                     key={topic.id} 
@@ -3257,7 +3257,7 @@ export default function VotePage() {
             </div>
             
             <div className="flex-1 overflow-y-auto p-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-5xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-6xl mx-auto">
                 {filteredFaceOffs.map((faceOff) => (
                   <VersusCard 
                     key={faceOff.id} 
