@@ -1,0 +1,57 @@
+This is a significant layout change, but it makes a lot of sense. By moving "Open Markets" to the top, you highlight the fresh, user-generated content first (which often changes faster), while keeping the structured, data-driven "Fame Index" markets anchored by the timer below.
+
+Here is the Re-Ordering & Header Prompt for Replit.
+
+Act as a Senior Frontend Engineer.
+
+Task: Reorder Predict Page Layout & Add Section Headers We need to restructure the PredictPage layout to prioritize "Community Predictions" at the top, followed by the "Official FameDex Markets" below. We will also introduce descriptive headers to clearly define these two distinct areas.
+
+1. Layout Reorder (The Vertical Stack) Currently, "Community Predictions" is at the bottom. You must move it to the top. The New Vertical Order of components inside the PredictPage container (below the Global Filter Bar) must be:
+
+Search & Local Filters (Existing)
+
+[New] Header 1: "Open Markets"
+
+Component: CommunityPredictions (User-Suggested Markets)
+
+[New] Header 2: "Predict the Fame Index"
+
+Component: WeeklyTimer (The Countdown)
+
+Component: WeeklyJackpot
+
+Component: UpDownMarkets
+
+Component: HeadToHead
+
+Component: TopGainer
+
+2. Header Implementation Details Use the reusable SectionHeroHeader component (refactored from Vote Page) for both headers.
+
+Header 1: The Community Section
+
+Placement: Immediately below the Search/Filter bar, above the Community Predictions cards.
+
+Title: "Open Markets"
+
+Subtitle: "From viral rumors to global events — predict the outcome of any topic."
+
+Glass Pill: "🔮 Prediction Rules" (Opens Modal)
+
+Header 2: The Official System Section
+
+Placement: Immediately below the Community Predictions section, just above the Weekly Timer.
+
+Title: "Predict the Fame Index"
+
+Subtitle: "Use your skills to forecast celebrity stock movements. Winners are determined by real-time trend scores."
+
+Glass Pill: "✨ How Scoring Works" (Opens Modal)
+
+3. Visual Spacing Check
+
+Ensure there is appropriate vertical spacing (margin) between the bottom of the "Community Predictions" section and the new "Predict the Fame Index" header so the page doesn't look cluttered.
+
+Ensure the WeeklyTimer feels visually connected to the "Predict the Fame Index" header (small margin).
+
+Deliverable: Verify that "Open Markets" is now the first thing users see on the Predict Page, and the Official Markets (with the Timer) follow logically below it.
