@@ -1,0 +1,35 @@
+This is a great catch. Consistency in layout width ("container max-width") is crucial for a professional feel. It looks like the Vote Page is using a narrower container (perhaps max-width: 1200px or container-md) while the Predict Page is using a wider one (likely max-width: 1400px or container-xl).
+
+To fix this, we need to tell Replit to:
+
+Match the Container: Update the wrapper on the Vote Page to match the Predict Page's width.
+
+Responsive Grid Check: Ensure the cards inside (Face-Offs, Polls, etc.) stretch or rearrange slightly to fill that new extra space beautifully (likely moving from 2 columns to 3 columns on large screens, or just becoming wider cards).
+
+Here is the precise prompt to align them.
+
+Act as a Senior Frontend Engineer.
+
+Task: Standardize Page Layout Width (Vote Page vs. Predict Page) The content container on the Vote Page is currently narrower than the Predict Page, resulting in inconsistent empty space on the sides. We need to widen the Vote Page layout to match the Predict Page exactly.
+
+1. Container Width Alignment
+
+Audit: Check the max-width or container class used on the PredictPage (e.g., max-w-7xl, container-xl, or 1440px).
+
+Action: Apply this exact same container width configuration to the VotePage wrapper. The content on the Vote Page must expand horizontally to fill this new space.
+
+2. Card Grid Adaptation (Responsive Scaling) Now that the Vote Page is wider, the cards must adapt to fill the gap.
+
+Face-Offs & People's Voice Grids:
+
+Ensure these grids expand to fill the available width.
+
+Check: If they are currently locked to a fixed pixel width (e.g., 350px), switch them to a responsive grid (e.g., grid-cols-1 md:grid-cols-2 lg:grid-cols-3 or minmax(350px, 1fr)).
+
+Goal: The cards should grow slightly larger or add a third column if space permits, matching the visual density of the Predict Page.
+
+Induction Queue & Curate Profile:
+
+Ensure these sections also stretch to the full width of the new container.
+
+Deliverable: Verify that the margins (left/right empty space) on the Vote Page are now identical to the Predict Page on desktop view.
