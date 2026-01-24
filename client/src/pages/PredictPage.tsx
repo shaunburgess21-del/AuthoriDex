@@ -2170,22 +2170,25 @@ export default function PredictPage() {
       <div className="container mx-auto px-4 max-w-6xl">
         {/* SECTION HEADER: Open Markets (Community Predictions) */}
         {showSection("community") && (
-          <div className="relative py-6 mb-6">
-            <div className="text-center">
-              <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-open-markets-title">
-                Open Markets
-              </h2>
-              <p className="text-muted-foreground max-w-2xl mx-auto mb-3">
-                From viral rumors to global events — predict the outcome of any topic.
-              </p>
-              <button
-                onClick={() => setRulesModalOpen("community")}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all cursor-pointer"
-                data-testid="button-prediction-rules"
-              >
-                <Sparkles className="h-4 w-4 text-violet-400" />
-                <span className="text-sm text-violet-400 font-medium">Prediction Rules</span>
-              </button>
+          <div className="relative overflow-hidden mb-6">
+            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 via-transparent to-transparent" />
+            <div className="relative py-4">
+              <div className="text-center">
+                <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-open-markets-title">
+                  Open Markets
+                </h2>
+                <p className="text-muted-foreground max-w-2xl mx-auto mb-3">
+                  From viral rumors to global events — predict the outcome of any topic.
+                </p>
+                <button
+                  onClick={() => setRulesModalOpen("community")}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all cursor-pointer"
+                  data-testid="button-prediction-rules"
+                >
+                  <Sparkles className="h-4 w-4 text-violet-400" />
+                  <span className="text-sm text-violet-400 font-medium">Prediction Rules</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -2245,22 +2248,25 @@ export default function PredictPage() {
 
         {/* SECTION HEADER: Predict the Fame Index (Official Markets) */}
         {(showSection("jackpot") || showSection("updown") || showSection("h2h") || showSection("gainer")) && (
-          <div className="relative py-6 mb-4">
-            <div className="text-center">
-              <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-fame-index-title">
-                Predict the Fame Index
-              </h2>
-              <p className="text-muted-foreground max-w-2xl mx-auto mb-3">
-                Use your skills to forecast celebrity stock movements. Winners are determined by real-time trend scores.
-              </p>
-              <button
-                onClick={() => setShowFirstTimeModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all cursor-pointer"
-                data-testid="button-how-scoring-works"
-              >
-                <Sparkles className="h-4 w-4 text-violet-400" />
-                <span className="text-sm text-violet-400 font-medium">How Scoring Works</span>
-              </button>
+          <div className="relative overflow-hidden mb-6">
+            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 via-transparent to-transparent" />
+            <div className="relative py-4">
+              <div className="text-center">
+                <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-fame-index-title">
+                  Predict the Fame Index
+                </h2>
+                <p className="text-muted-foreground max-w-2xl mx-auto mb-3">
+                  Use your skills to forecast celebrity stock movements. Winners are determined by real-time trend scores.
+                </p>
+                <button
+                  onClick={() => setShowFirstTimeModal(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all cursor-pointer"
+                  data-testid="button-how-scoring-works"
+                >
+                  <Sparkles className="h-4 w-4 text-violet-400" />
+                  <span className="text-sm text-violet-400 font-medium">How Scoring Works</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
