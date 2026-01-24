@@ -402,11 +402,11 @@ const FIRST_VISIT_KEY = "famedex_predict_first_visit";
 
 const PREDICTION_TYPES: { id: PredictionType; label: string; mobileLabel: string; icon: React.ReactNode }[] = [
   { id: "all", label: "All Markets", mobileLabel: "All", icon: <Sparkles className="h-4 w-4" /> },
+  { id: "community", label: "User Suggested", mobileLabel: "Community", icon: <Users className="h-4 w-4" /> },
   { id: "jackpot", label: "Weekly Jackpot", mobileLabel: "Jackpot", icon: <Crown className="h-4 w-4" /> },
   { id: "updown", label: "Up/Down", mobileLabel: "Up/Down", icon: <TrendingUp className="h-4 w-4" /> },
   { id: "h2h", label: "Head-to-Head", mobileLabel: "H2H", icon: <Swords className="h-4 w-4" /> },
   { id: "gainer", label: "Top Gainer", mobileLabel: "Gainer", icon: <BarChart3 className="h-4 w-4" /> },
-  { id: "community", label: "User Suggested", mobileLabel: "Community", icon: <Users className="h-4 w-4" /> },
 ];
 
 function HorizontalScroll({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -2168,6 +2168,103 @@ export default function PredictPage() {
         </div>
       </div>
       <div className="container mx-auto px-4 max-w-6xl">
+        {/* SECTION HEADER: Open Markets (Community Predictions) */}
+        {showSection("community") && (
+          <div className="relative py-6 mb-6">
+            <div className="text-center">
+              <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-open-markets-title">
+                Open Markets
+              </h2>
+              <p className="text-muted-foreground max-w-2xl mx-auto mb-3">
+                From viral rumors to global events — predict the outcome of any topic.
+              </p>
+              <button
+                onClick={() => setRulesModalOpen("community")}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all cursor-pointer"
+                data-testid="button-prediction-rules"
+              >
+                <Sparkles className="h-4 w-4 text-violet-400" />
+                <span className="text-sm text-violet-400 font-medium">Prediction Rules</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Community Predictions Section - Now First */}
+        {showSection("community") && (
+          <section className="mb-12">
+            <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mb-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-serif font-bold truncate">Community Predictions</h2>
+                </div>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">User-suggested markets from the community</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 ml-3">
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCreateModalOpen(true)}
+                  className="border-violet-500/30 text-violet-500"
+                  data-testid="button-start-prediction"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Suggest</span>
+                </Button>
+              </div>
+            </div>
+            <SectionFilterBar
+              categoryFilter={communityCategory}
+              onCategoryChange={setCommunityCategory}
+              searchQuery={communitySearch}
+              onSearchChange={setCommunitySearch}
+              searchPlaceholder="Search predictions..."
+              testIdPrefix="community"
+              user={user}
+              onAuthRequired={() => setLocation("/login")}
+              includeCustomTopic={true}
+            />
+            {filteredCommunity.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredCommunity.slice(0, 3).map((market) => (
+                  <CommunityCard 
+                    key={market.id} 
+                    market={market} 
+                    onClick={() => handleCommunityClick(market)}
+                    isMarketClosed={isMarketClosed}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No predictions match your filters
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* SECTION HEADER: Predict the Fame Index (Official Markets) */}
+        {(showSection("jackpot") || showSection("updown") || showSection("h2h") || showSection("gainer")) && (
+          <div className="relative py-6 mb-4">
+            <div className="text-center">
+              <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-fame-index-title">
+                Predict the Fame Index
+              </h2>
+              <p className="text-muted-foreground max-w-2xl mx-auto mb-3">
+                Use your skills to forecast celebrity stock movements. Winners are determined by real-time trend scores.
+              </p>
+              <button
+                onClick={() => setShowFirstTimeModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all cursor-pointer"
+                data-testid="button-how-scoring-works"
+              >
+                <Sparkles className="h-4 w-4 text-violet-400" />
+                <span className="text-sm text-violet-400 font-medium">How Scoring Works</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         <MarketCycleHero marketState={marketCycle} />
 
         {showSection("jackpot") && (
@@ -2295,70 +2392,6 @@ export default function PredictPage() {
           </section>
         )}
 
-        {showSection("community") && (
-          <section className="mb-10">
-            <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mt-[15px] mb-[15px]">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-serif font-bold truncate">Community Predictions</h2>
-                </div>
-                <p className="text-xs sm:text-sm text-muted-foreground truncate">User-suggested markets from the community</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 ml-3">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-7 w-7"
-                      onClick={() => setRulesModalOpen("community")}
-                    >
-                      <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Custom Predictions</TooltipContent>
-                </Tooltip>
-                <Button 
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCreateModalOpen(true)}
-                  className="border-violet-500/30 text-violet-500"
-                  data-testid="button-start-prediction"
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  <span className="hidden sm:inline">Suggest</span>
-                </Button>
-              </div>
-            </div>
-            <SectionFilterBar
-              categoryFilter={communityCategory}
-              onCategoryChange={setCommunityCategory}
-              searchQuery={communitySearch}
-              onSearchChange={setCommunitySearch}
-              searchPlaceholder="Search predictions..."
-              testIdPrefix="community"
-              user={user}
-              onAuthRequired={() => setLocation("/login")}
-              includeCustomTopic={true}
-            />
-            {filteredCommunity.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredCommunity.slice(0, 3).map((market) => (
-                  <CommunityCard 
-                    key={market.id} 
-                    market={market} 
-                    onClick={() => handleCommunityClick(market)}
-                    isMarketClosed={isMarketClosed}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                No predictions match your filters
-              </div>
-            )}
-          </section>
-        )}
 
         <div className="text-center pb-8">
           <button 
