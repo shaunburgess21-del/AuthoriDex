@@ -264,7 +264,7 @@ function InductionCard({
         </div>
         
         <div className="flex flex-col items-center text-center mb-4">
-          <PersonAvatar name={candidate.name} avatar="" size="lg" />
+          <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="lg" />
           <h3 className="font-semibold text-base mt-3">{candidate.name}</h3>
         </div>
         

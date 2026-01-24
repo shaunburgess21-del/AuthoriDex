@@ -122,17 +122,18 @@ export interface InductionCandidate {
   id: string;
   name: string;
   initials: string;
+  avatar: string;
   category: "Tech" | "Entertainment" | "Creator" | "Sports" | "Business" | "Politics";
   votes: number;
 }
 
 export const INDUCTION_CANDIDATES: InductionCandidate[] = [
-  { id: "i1", name: "Jensen Huang", initials: "JH", category: "Tech", votes: 12406 },
-  { id: "i2", name: "Charli XCX", initials: "CX", category: "Entertainment", votes: 11205 },
-  { id: "i3", name: "Kai Cenat", initials: "KC", category: "Creator", votes: 10892 },
-  { id: "i4", name: "Sabrina Carpenter", initials: "SC", category: "Entertainment", votes: 9847 },
-  { id: "i5", name: "Ice Spice", initials: "IS", category: "Entertainment", votes: 8934 },
-  { id: "i6", name: "Sam Altman", initials: "SA", category: "Tech", votes: 8421 },
+  { id: "i1", name: "Jensen Huang", initials: "JH", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/jensen-huang/1.png", category: "Tech", votes: 12406 },
+  { id: "i2", name: "Charli XCX", initials: "CX", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/charli-xcx/1.png", category: "Entertainment", votes: 11205 },
+  { id: "i3", name: "Kai Cenat", initials: "KC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/kai-cenat/1.png", category: "Creator", votes: 10892 },
+  { id: "i4", name: "Sabrina Carpenter", initials: "SC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sabrina-carpenter/1.png", category: "Entertainment", votes: 9847 },
+  { id: "i5", name: "Ice Spice", initials: "IS", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/ice-spice/1.png", category: "Entertainment", votes: 8934 },
+  { id: "i6", name: "Sam Altman", initials: "SA", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sam-altman/1.png", category: "Tech", votes: 8421 },
 ];
 
 export interface CurateProfilePoll {

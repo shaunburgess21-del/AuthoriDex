@@ -74,23 +74,24 @@ interface InductionCandidate {
   id: string;
   name: string;
   initials: string;
+  avatar: string;
   category: "Tech" | "Entertainment" | "Creator" | "Sports" | "Business" | "Politics";
   votes: number;
 }
 
 const INDUCTION_CANDIDATES: InductionCandidate[] = [
-  { id: "i1", name: "Jensen Huang", initials: "JH", category: "Tech", votes: 12406 },
-  { id: "i2", name: "Charli XCX", initials: "CX", category: "Entertainment", votes: 11205 },
-  { id: "i3", name: "Kai Cenat", initials: "KC", category: "Creator", votes: 10892 },
-  { id: "i4", name: "Sabrina Carpenter", initials: "SC", category: "Entertainment", votes: 9847 },
-  { id: "i5", name: "Ice Spice", initials: "IS", category: "Entertainment", votes: 8934 },
-  { id: "i6", name: "Sam Altman", initials: "SA", category: "Tech", votes: 8421 },
-  { id: "i7", name: "Jenna Ortega", initials: "JO", category: "Creator", votes: 7856 },
-  { id: "i8", name: "Patrick Mahomes", initials: "PM", category: "Sports", votes: 7234 },
-  { id: "i9", name: "Vivek Ramaswamy", initials: "VR", category: "Politics", votes: 6891 },
-  { id: "i10", name: "xQc", initials: "XQ", category: "Creator", votes: 6543 },
-  { id: "i11", name: "Hailey Bieber", initials: "HB", category: "Creator", votes: 5987 },
-  { id: "i12", name: "Mark Cuban", initials: "MC", category: "Business", votes: 5432 },
+  { id: "i1", name: "Jensen Huang", initials: "JH", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/jensen-huang/1.png", category: "Tech", votes: 12406 },
+  { id: "i2", name: "Charli XCX", initials: "CX", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/charli-xcx/1.png", category: "Entertainment", votes: 11205 },
+  { id: "i3", name: "Kai Cenat", initials: "KC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/kai-cenat/1.png", category: "Creator", votes: 10892 },
+  { id: "i4", name: "Sabrina Carpenter", initials: "SC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sabrina-carpenter/1.png", category: "Entertainment", votes: 9847 },
+  { id: "i5", name: "Ice Spice", initials: "IS", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/ice-spice/1.png", category: "Entertainment", votes: 8934 },
+  { id: "i6", name: "Sam Altman", initials: "SA", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sam-altman/1.png", category: "Tech", votes: 8421 },
+  { id: "i7", name: "Jenna Ortega", initials: "JO", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/jenna-ortega/1.png", category: "Creator", votes: 7856 },
+  { id: "i8", name: "Patrick Mahomes", initials: "PM", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/patrick-mahomes/1.png", category: "Sports", votes: 7234 },
+  { id: "i9", name: "Vivek Ramaswamy", initials: "VR", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/vivek-ramaswamy/1.png", category: "Politics", votes: 6891 },
+  { id: "i10", name: "xQc", initials: "XQ", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/xqc/1.png", category: "Creator", votes: 6543 },
+  { id: "i11", name: "Hailey Bieber", initials: "HB", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/hailey-bieber/1.png", category: "Creator", votes: 5987 },
+  { id: "i12", name: "Mark Cuban", initials: "MC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/mark-cuban/1.png", category: "Business", votes: 5432 },
 ];
 
 interface CelebrityImage {
@@ -463,9 +464,7 @@ function InductionCandidateCard({
 
       <div className="flex flex-col items-center text-center mb-4 flex-grow">
         <div className="relative">
-          <div className="h-16 w-16 rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 flex items-center justify-center text-lg font-bold text-cyan-400 border border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.15)]">
-            {candidate.initials}
-          </div>
+          <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="lg" />
           {isVoted && (
             <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center">
               <Check className="h-3 w-3 text-white" />
