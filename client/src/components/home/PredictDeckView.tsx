@@ -38,7 +38,7 @@ import {
 } from "@/data/predict";
 import { getFilterCategories } from "@shared/constants";
 
-type CategoryFilter = "all" | "favorites" | "tech" | "politics" | "business" | "music" | "sports" | "creator";
+type CategoryFilter = "all" | "favorites" | "tech" | "politics" | "business" | "entertainment" | "sports" | "creator";
 
 const PREDICT_CATEGORY_FILTERS = getFilterCategories(false).map(cat => ({
   id: cat.toLowerCase() as CategoryFilter,

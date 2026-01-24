@@ -10,16 +10,16 @@ export interface InductionCandidate {
   id: string;
   name: string;
   initials: string;
-  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics";
+  category: "Tech" | "Entertainment" | "Creator" | "Sports" | "Business" | "Politics";
   votes: number;
 }
 
 export const INDUCTION_CANDIDATES: InductionCandidate[] = [
   { id: "i1", name: "Jensen Huang", initials: "JH", category: "Tech", votes: 12406 },
-  { id: "i2", name: "Charli XCX", initials: "CX", category: "Music", votes: 11205 },
+  { id: "i2", name: "Charli XCX", initials: "CX", category: "Entertainment", votes: 11205 },
   { id: "i3", name: "Kai Cenat", initials: "KC", category: "Creator", votes: 10892 },
-  { id: "i4", name: "Sabrina Carpenter", initials: "SC", category: "Music", votes: 9847 },
-  { id: "i5", name: "Ice Spice", initials: "IS", category: "Music", votes: 8934 },
+  { id: "i4", name: "Sabrina Carpenter", initials: "SC", category: "Entertainment", votes: 9847 },
+  { id: "i5", name: "Ice Spice", initials: "IS", category: "Entertainment", votes: 8934 },
   { id: "i6", name: "Sam Altman", initials: "SA", category: "Tech", votes: 8421 },
 ];
 

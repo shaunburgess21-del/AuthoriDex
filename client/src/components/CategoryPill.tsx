@@ -4,7 +4,7 @@ const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string
     border: 'border-[#1E90FF]/40',
     text: 'text-[#1E90FF]',
   },
-  Music: {
+  Entertainment: {
     bg: 'bg-[#EC4899]/10',
     border: 'border-[#EC4899]/40',
     text: 'text-[#EC4899]',
@@ -28,11 +28,6 @@ const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string
     bg: 'bg-[#FACC15]/10',
     border: 'border-[#FACC15]/40',
     text: 'text-[#FACC15]',
-  },
-  Entertainment: {
-    bg: 'bg-[#8B0000]/10',
-    border: 'border-[#8B0000]/40',
-    text: 'text-[#8B0000]',
   },
 };
 

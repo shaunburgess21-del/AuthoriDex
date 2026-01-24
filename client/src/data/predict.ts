@@ -1,4 +1,4 @@
-export type CategoryFilter = "all" | "favorites" | "tech" | "politics" | "business" | "music" | "sports" | "creator";
+export type CategoryFilter = "all" | "favorites" | "tech" | "politics" | "business" | "entertainment" | "sports" | "creator";
 
 export interface PredictionMarket {
   id: string;
@@ -45,7 +45,7 @@ export const MOCK_MARKETS: PredictionMarket[] = [
     endTime: "Sun 23:59 UTC",
     totalPool: 12350,
     upPoolPercent: 45,
-    category: "music",
+    category: "entertainment",
   },
   {
     id: "market-3",
@@ -111,7 +111,7 @@ export const HEAD_TO_HEAD_MARKETS: HeadToHeadMarket[] = [
     title: "Drake vs Kendrick",
     person1: { name: "Drake", avatar: "", currentScore: 425600 },
     person2: { name: "Kendrick Lamar", avatar: "", currentScore: 398200 },
-    category: "music",
+    category: "entertainment",
     endTime: "Sun 23:59 UTC",
     totalPool: 28450,
     person1Percent: 42,
@@ -131,7 +131,7 @@ export const HEAD_TO_HEAD_MARKETS: HeadToHeadMarket[] = [
     title: "Swift vs Beyoncé",
     person1: { name: "Taylor Swift", avatar: "", currentScore: 489234 },
     person2: { name: "Beyoncé", avatar: "", currentScore: 478200 },
-    category: "music",
+    category: "entertainment",
     endTime: "Sun 23:59 UTC",
     totalPool: 15780,
     person1Percent: 55,
@@ -159,7 +159,7 @@ export interface TopGainerMarket {
 export const TOP_GAINER_MARKETS: TopGainerMarket[] = [
   {
     id: "gainer-1",
-    category: "music",
+    category: "entertainment",
     leaders: [
       { name: "Taylor Swift", avatar: "", currentGain: 12450, percentGain: 4.2 },
       { name: "Drake", avatar: "", currentGain: 8920, percentGain: 3.8 },
@@ -213,7 +213,7 @@ export const COMMUNITY_MARKETS: CommunityMarket[] = [
   {
     id: "comm-2",
     question: "Taylor Swift album announcement before month end?",
-    category: "music",
+    category: "entertainment",
     options: [
       { id: "yes", text: "Yes", percent: 52 },
       { id: "no", text: "No", percent: 48 },
@@ -248,7 +248,7 @@ export const CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: "tech", label: "Tech" },
   { id: "politics", label: "Politics" },
   { id: "business", label: "Business" },
-  { id: "music", label: "Music" },
+  { id: "entertainment", label: "Entertainment" },
   { id: "sports", label: "Sports" },
   { id: "creator", label: "Creator" },
 ];

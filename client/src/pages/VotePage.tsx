@@ -39,7 +39,7 @@ import {
   Cpu,
   Landmark,
   Briefcase,
-  Music,
+  Clapperboard,
   Trophy,
   Video,
   LayoutGrid,
@@ -74,16 +74,16 @@ interface InductionCandidate {
   id: string;
   name: string;
   initials: string;
-  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics";
+  category: "Tech" | "Entertainment" | "Creator" | "Sports" | "Business" | "Politics";
   votes: number;
 }
 
 const INDUCTION_CANDIDATES: InductionCandidate[] = [
   { id: "i1", name: "Jensen Huang", initials: "JH", category: "Tech", votes: 12406 },
-  { id: "i2", name: "Charli XCX", initials: "CX", category: "Music", votes: 11205 },
+  { id: "i2", name: "Charli XCX", initials: "CX", category: "Entertainment", votes: 11205 },
   { id: "i3", name: "Kai Cenat", initials: "KC", category: "Creator", votes: 10892 },
-  { id: "i4", name: "Sabrina Carpenter", initials: "SC", category: "Music", votes: 9847 },
-  { id: "i5", name: "Ice Spice", initials: "IS", category: "Music", votes: 8934 },
+  { id: "i4", name: "Sabrina Carpenter", initials: "SC", category: "Entertainment", votes: 9847 },
+  { id: "i5", name: "Ice Spice", initials: "IS", category: "Entertainment", votes: 8934 },
   { id: "i6", name: "Sam Altman", initials: "SA", category: "Tech", votes: 8421 },
   { id: "i7", name: "Jenna Ortega", initials: "JO", category: "Creator", votes: 7856 },
   { id: "i8", name: "Patrick Mahomes", initials: "PM", category: "Sports", votes: 7234 },
@@ -116,7 +116,7 @@ const curateProfilePolls: CurateProfilePoll[] = [
     id: "pp1", 
     personId: "852662d2-2b12-437f-ada7-1553bd5569b7",
     personName: "Taylor Swift", 
-    category: "Music",
+    category: "Entertainment",
   },
   { 
     id: "pp2", 
@@ -128,7 +128,7 @@ const curateProfilePolls: CurateProfilePoll[] = [
     id: "pp3", 
     personId: "670e5278-f359-4558-abb8-ea0caa371395",
     personName: "Beyoncé", 
-    category: "Music",
+    category: "Entertainment",
   },
   { 
     id: "pp4", 
@@ -140,7 +140,7 @@ const curateProfilePolls: CurateProfilePoll[] = [
     id: "pp5", 
     personId: "3a5bbf27-b9c2-4315-a4dc-7944d9878d0d",
     personName: "Bad Bunny", 
-    category: "Music",
+    category: "Entertainment",
   },
   { 
     id: "pp6", 
@@ -152,13 +152,13 @@ const curateProfilePolls: CurateProfilePoll[] = [
     id: "pp7", 
     personId: "3417182d-d51a-4ff2-ae60-c35781ad9aff",
     personName: "Drake", 
-    category: "Music",
+    category: "Entertainment",
   },
   { 
     id: "pp8", 
     personId: "0b9bd1d6-0f66-4665-8cec-05d87908e3a1",
     personName: "Kendrick Lamar", 
-    category: "Music",
+    category: "Entertainment",
   },
 ];
 
@@ -179,17 +179,17 @@ interface DiscourseTopicData {
 const DISCOURSE_TOPICS: DiscourseTopicData[] = [
   { id: "d1", headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", category: "Tech", approvePercent: 35, neutralPercent: 20, disapprovePercent: 45, totalVotes: 89432, personName: "Elon Musk", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Elon_Musk_Royal_Society_%28crop2%29.jpg/220px-Elon_Musk_Royal_Society_%28crop2%29.jpg" },
   { id: "d2", headline: "AI replacing jobs", description: "Should we embrace or regulate AI in the workplace?", category: "Tech", approvePercent: 28, neutralPercent: 32, disapprovePercent: 40, totalVotes: 156789 },
-  { id: "d3", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Music", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567, personName: "Taylor Swift", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/191125_Taylor_Swift_at_the_2019_American_Music_Awards_%28cropped%29.png/220px-191125_Taylor_Swift_at_the_2019_American_Music_Awards_%28cropped%29.png" },
-  { id: "d4", headline: "Spotify's royalty model", description: "Are artists fairly compensated by streaming?", category: "Music", approvePercent: 22, neutralPercent: 28, disapprovePercent: 50, totalVotes: 145678 },
+  { id: "d3", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Entertainment", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567, personName: "Taylor Swift", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/191125_Taylor_Swift_at_the_2019_American_Music_Awards_%28cropped%29.png/220px-191125_Taylor_Swift_at_the_2019_American_Music_Awards_%28cropped%29.png" },
+  { id: "d4", headline: "Spotify's royalty model", description: "Are artists fairly compensated by streaming?", category: "Entertainment", approvePercent: 22, neutralPercent: 28, disapprovePercent: 50, totalVotes: 145678 },
   { id: "d5", headline: "MrBeast's philanthropy", description: "Is it genuine or just content?", category: "Creator", approvePercent: 68, neutralPercent: 20, disapprovePercent: 12, totalVotes: 98765, personName: "MrBeast", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ce/MrBeast_2023_%28cropped%29.jpg/220px-MrBeast_2023_%28cropped%29.jpg" },
   { id: "d6", headline: "NFL Sunday Ticket pricing", description: "Is streaming football too expensive?", category: "Sports", approvePercent: 18, neutralPercent: 22, disapprovePercent: 60, totalVotes: 76543 },
   { id: "d7", headline: "Meta's rebrand to AI company", description: "Is the pivot from social media working?", category: "Tech", approvePercent: 25, neutralPercent: 35, disapprovePercent: 40, totalVotes: 112345, personName: "Mark Zuckerberg", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Mark_Zuckerberg_F8_2019_Keynote_%2832830578717%29_%28cropped%29.jpg/220px-Mark_Zuckerberg_F8_2019_Keynote_%2832830578717%29_%28cropped%29.jpg" },
-  { id: "d8", headline: "Drake vs Kendrick beef", description: "Who won the rap battle?", category: "Music", approvePercent: 45, neutralPercent: 15, disapprovePercent: 40, totalVotes: 287654, personName: "Drake", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Drake_July_2016.jpg/220px-Drake_July_2016.jpg" },
+  { id: "d8", headline: "Drake vs Kendrick beef", description: "Who won the rap battle?", category: "Entertainment", approvePercent: 45, neutralPercent: 15, disapprovePercent: 40, totalVotes: 287654, personName: "Drake", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Drake_July_2016.jpg/220px-Drake_July_2016.jpg" },
   { id: "d9", headline: "LeBron's longevity", description: "Greatest athlete of all time?", category: "Sports", approvePercent: 55, neutralPercent: 25, disapprovePercent: 20, totalVotes: 198765, personName: "LeBron James", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/LeBron_James_crop.jpg/220px-LeBron_James_crop.jpg" },
   { id: "d10", headline: "Crypto regulation", description: "Should governments control digital currencies?", category: "Business", approvePercent: 40, neutralPercent: 20, disapprovePercent: 40, totalVotes: 134567 },
   { id: "d11", headline: "TikTok ban debate", description: "National security vs free speech?", category: "Politics", approvePercent: 35, neutralPercent: 30, disapprovePercent: 35, totalVotes: 256789 },
   { id: "d12", headline: "OpenAI board drama", description: "Was firing Sam Altman justified?", category: "Tech", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 189432, personName: "Sam Altman", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Sam_Altman_Collision_2019_%28cropped%29.jpg/220px-Sam_Altman_Collision_2019_%28cropped%29.jpg" },
-  { id: "d13", headline: "Beyonce's country album", description: "Authentic exploration or cultural appropriation?", category: "Music", approvePercent: 65, neutralPercent: 20, disapprovePercent: 15, totalVotes: 176543, personName: "Beyonce", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/Beyonc%C3%A9_at_The_Lion_King_European_Premiere_2019.png/220px-Beyonc%C3%A9_at_The_Lion_King_European_Premiere_2019.png" },
+  { id: "d13", headline: "Beyonce's country album", description: "Authentic exploration or cultural appropriation?", category: "Entertainment", approvePercent: 65, neutralPercent: 20, disapprovePercent: 15, totalVotes: 176543, personName: "Beyonce", imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/17/Beyonc%C3%A9_at_The_Lion_King_European_Premiere_2019.png/220px-Beyonc%C3%A9_at_The_Lion_King_European_Premiere_2019.png" },
   { id: "d14", headline: "YouTube Premium worth it?", description: "Is ad-free viewing worth the subscription?", category: "Creator", approvePercent: 48, neutralPercent: 22, disapprovePercent: 30, totalVotes: 87654 },
   { id: "d15", headline: "F1's US expansion", description: "Is Formula 1 becoming too commercial?", category: "Sports", approvePercent: 40, neutralPercent: 35, disapprovePercent: 25, totalVotes: 65432 },
   { id: "d16", headline: "Billionaire space race", description: "Vanity project or advancing humanity?", category: "Tech", approvePercent: 30, neutralPercent: 25, disapprovePercent: 45, totalVotes: 145678 },
@@ -1473,7 +1473,7 @@ const VOTE_CATEGORY_ICONS: Record<string, LucideIcon> = {
   Tech: Cpu,
   Politics: Landmark,
   Business: Briefcase,
-  Music: Music,
+  Entertainment: Clapperboard,
   Sports: Trophy,
   Creator: Video,
   misc: Sparkles,
@@ -2652,7 +2652,7 @@ export default function VotePage() {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Music">Music</SelectItem>
+                  <SelectItem value="Entertainment">Entertainment</SelectItem>
                   <SelectItem value="Tech">Tech</SelectItem>
                   <SelectItem value="Creator">Creator</SelectItem>
                   <SelectItem value="Sports">Sports</SelectItem>
@@ -2736,7 +2736,7 @@ export default function VotePage() {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Music">Music</SelectItem>
+                  <SelectItem value="Entertainment">Entertainment</SelectItem>
                   <SelectItem value="Tech">Tech</SelectItem>
                   <SelectItem value="Creator">Creator</SelectItem>
                   <SelectItem value="Sports">Sports</SelectItem>

@@ -23,7 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 type HomeView = "leaderboard" | "predict" | "vote";
-const CATEGORY_OPTIONS = ["All", "Tech", "Music", "Politics", "Sports", "Creator"] as const;
+const CATEGORY_OPTIONS = ["All", "Tech", "Entertainment", "Politics", "Sports", "Creator"] as const;
 
 function MarketPulseCard({ 
   title, 

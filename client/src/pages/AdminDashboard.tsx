@@ -1871,7 +1871,6 @@ export default function AdminDashboard() {
                   <SelectItem value="Sports">Sports</SelectItem>
                   <SelectItem value="Politics">Politics</SelectItem>
                   <SelectItem value="Business">Business</SelectItem>
-                  <SelectItem value="Music">Music</SelectItem>
                   <SelectItem value="Science">Science</SelectItem>
                 </SelectContent>
               </Select>

@@ -18,7 +18,7 @@ interface FilterDropdownProps {
 export function FilterDropdown({ value, onChange }: FilterDropdownProps) {
   const categories = [
     { value: "all", label: "All Categories" },
-    { value: "Music", label: "Music" },
+    { value: "Entertainment", label: "Entertainment" },
     { value: "Sports", label: "Sports" },
     { value: "Tech", label: "Tech" },
     { value: "Creator", label: "Creator" },

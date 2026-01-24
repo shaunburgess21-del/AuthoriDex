@@ -2,7 +2,7 @@ import { TrendingPerson } from "@shared/schema";
 
 //todo: remove mock functionality - this generates mock trending data
 function generateMockTrendingPeople(): TrendingPerson[] {
-  const categories = ["Music", "Sports", "Tech", "Entertainment", "Politics", "Business"];
+  const categories = ["Entertainment", "Sports", "Tech", "Politics", "Business", "Creator"];
   const firstNames = [
     "Taylor", "Elon", "Cristiano", "Kim", "Lionel", "Beyoncé", "LeBron", "Rihanna",
     "Ariana", "Drake", "Selena", "Justin", "Kanye", "Serena", "Roger", "Tom",

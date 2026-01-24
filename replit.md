@@ -81,3 +81,14 @@ Preferred communication style: Simple, everyday language.
 - **Form Handling**: React Hook Form with Zod validation.
 - **Data Visualization**: Recharts.
 - **Date Utilities**: date-fns.
+
+## Industry Categories
+The platform uses the following industry categories for classifying celebrities:
+- **Tech**: Technology leaders, entrepreneurs, and innovators
+- **Entertainment**: Actors, musicians, performers, and entertainment personalities (consolidated from separate "Music" category in Jan 2026)
+- **Sports**: Athletes and sports figures
+- **Politics**: Politicians and political figures
+- **Business**: Business leaders and executives
+- **Creator**: Content creators, influencers, and digital personalities
+
+Note: The Trend Context Service uses separate content-type tags (like "Music" for album/tour news) to explain why someone is trending, independent of their primary industry category.

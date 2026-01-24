@@ -18,7 +18,7 @@ export interface FaceOffData {
 export const FACE_OFF_DATA: FaceOffData[] = [
   {
     id: "fo-1",
-    category: "Music",
+    category: "Entertainment",
     title: "Pop Icon Showdown",
     optionAText: "Taylor Swift",
     optionAImage: null,
@@ -82,7 +82,7 @@ export const FACE_OFF_DATA: FaceOffData[] = [
   },
   {
     id: "fo-5",
-    category: "Music",
+    category: "Entertainment",
     title: "Rap Legends",
     optionAText: "Drake",
     optionAImage: null,
@@ -112,8 +112,8 @@ export interface DiscourseTopicData {
 export const DISCOURSE_TOPICS: DiscourseTopicData[] = [
   { id: "d1", headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", category: "Tech", approvePercent: 35, neutralPercent: 20, disapprovePercent: 45, totalVotes: 89432 },
   { id: "d2", headline: "AI replacing jobs", description: "Should we embrace or regulate AI in the workplace?", category: "Tech", approvePercent: 28, neutralPercent: 32, disapprovePercent: 40, totalVotes: 156789 },
-  { id: "d3", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Music", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567 },
-  { id: "d4", headline: "Spotify's royalty model", description: "Are artists fairly compensated by streaming?", category: "Music", approvePercent: 22, neutralPercent: 28, disapprovePercent: 50, totalVotes: 145678 },
+  { id: "d3", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Entertainment", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567 },
+  { id: "d4", headline: "Spotify's royalty model", description: "Are artists fairly compensated by streaming?", category: "Entertainment", approvePercent: 22, neutralPercent: 28, disapprovePercent: 50, totalVotes: 145678 },
   { id: "d5", headline: "MrBeast's philanthropy", description: "Is it genuine or just content?", category: "Creator", approvePercent: 68, neutralPercent: 20, disapprovePercent: 12, totalVotes: 98765 },
   { id: "d6", headline: "NFL Sunday Ticket pricing", description: "Is streaming football too expensive?", category: "Sports", approvePercent: 18, neutralPercent: 22, disapprovePercent: 60, totalVotes: 76543 },
 ];
@@ -122,16 +122,16 @@ export interface InductionCandidate {
   id: string;
   name: string;
   initials: string;
-  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics";
+  category: "Tech" | "Entertainment" | "Creator" | "Sports" | "Business" | "Politics";
   votes: number;
 }
 
 export const INDUCTION_CANDIDATES: InductionCandidate[] = [
   { id: "i1", name: "Jensen Huang", initials: "JH", category: "Tech", votes: 12406 },
-  { id: "i2", name: "Charli XCX", initials: "CX", category: "Music", votes: 11205 },
+  { id: "i2", name: "Charli XCX", initials: "CX", category: "Entertainment", votes: 11205 },
   { id: "i3", name: "Kai Cenat", initials: "KC", category: "Creator", votes: 10892 },
-  { id: "i4", name: "Sabrina Carpenter", initials: "SC", category: "Music", votes: 9847 },
-  { id: "i5", name: "Ice Spice", initials: "IS", category: "Music", votes: 8934 },
+  { id: "i4", name: "Sabrina Carpenter", initials: "SC", category: "Entertainment", votes: 9847 },
+  { id: "i5", name: "Ice Spice", initials: "IS", category: "Entertainment", votes: 8934 },
   { id: "i6", name: "Sam Altman", initials: "SA", category: "Tech", votes: 8421 },
 ];
 
@@ -147,7 +147,7 @@ export const CURATE_PROFILE_POLLS: CurateProfilePoll[] = [
   { 
     id: "pp1", 
     personName: "Taylor Swift", 
-    category: "Music",
+    category: "Entertainment",
     totalVotes: 24680,
     photoOptions: [
       { id: "ts1", description: "Eras Tour red outfit", votes: 8934, isLeading: true },
@@ -180,5 +180,5 @@ export const CURATE_PROFILE_POLLS: CurateProfilePoll[] = [
   },
 ];
 
-export const FILTER_CATEGORIES = ["All", "Favorites", "Tech", "Music", "Sports", "Creator", "Business", "Politics"] as const;
+export const FILTER_CATEGORIES = ["All", "Favorites", "Tech", "Entertainment", "Sports", "Creator", "Business", "Politics"] as const;
 export type FilterCategory = typeof FILTER_CATEGORIES[number];
