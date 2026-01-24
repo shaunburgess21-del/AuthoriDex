@@ -1,0 +1,37 @@
+This is a smart design consolidation. You are essentially asking Replit to make the Home Page (Vote Toggle) look like the "Deck View" version of the Vote Page cards.
+
+You are correct that the biggest glaring difference is the People's Voice buttons (Horizontal vs. Stacked). Fixing this will make the app feel 100% consistent.
+
+Here is the precise prompt to align the designs while keeping the unique "Swipe/Next" functionality of the Home Page.
+
+Act as a Senior Frontend Engineer.
+
+Task: Unify Vote Card Designs (Home Page vs. Vote Page) The "Vote Cards" displayed on the Home Page (Vote Toggle) currently use different layouts than the official cards on the Vote Page. We need to standardize them so the internal card design is identical across the app, while preserving the Home Page's unique "Single Card / Deck" navigation behavior.
+
+1. The "People's Voice" Card (Critical Fix)
+
+Current State (Home Page): The "Support / Neutral / Oppose" buttons are laid out horizontally (side-by-side).
+
+Target State (Match Vote Page): The buttons must be stacked vertically (one on top of the other), exactly like they appear on the main Vote Page.
+
+Action: Update the PeopleVoiceDeckCard (or equivalent Home component) to match the layout structure of the PeopleVoiceCard (Vote Page).
+
+2. Face-Offs & Induction Queue Cards
+
+Action: Audit the FaceOffDeckCard and InductionDeckCard components on the Home Page.
+
+Requirement: Ensure their internal padding, typography, button styling, and image aspect ratios match their counterparts on the Vote Page exactly. There should be no visual difference in the content of the card.
+
+3. "Curate Profile" Card (Do Not Touch)
+
+Constraint: The user explicitly stated the "Curate Profile" section on the Home Page is already correct. Do not modify its design.
+
+4. Behavior Preservation (Crucial)
+
+Do NOT remove the "Next / Skip" functionality on the Home Page.
+
+Do NOT change the "Single Card View" (Deck) layout of the Home Page.
+
+Goal: We only want to change the look of the card content, not the behavior of the deck.
+
+Deliverable: Verify that the "People's Voice" card on the Home Page now displays its voting buttons in a vertical stack, mirroring the main Vote Page design.

@@ -1,0 +1,52 @@
+1. How to Check Your Replit Logs
+Replit doesn't always keep old logs forever (unless you wrote them to a file), but you can check the recent history to see what happened.
+
+If you are running the bot in the Editor (Run Button):
+
+Open your FameDex project in Replit.
+
+Look at the Console tab (usually on the right side).
+
+Scroll up as far as you can.
+
+Look for the Error:
+
+The "429" Error: Search (Ctrl+F or Cmd+F) for 429 or Too Many Requests. This confirms you hit the rate limit.
+
+The "Loop" Check: Look for repeated blocks of text that look identical and appear very frequently (e.g., every second instead of every 8 hours).
+
+Example of a loop: If you see [INFO] Fetching trending people... appearing hundreds of times in a row without a long pause between them, your setInterval or sleep function failed, and it ran continuously.
+
+If you are using Replit Deployments (Always On):
+
+Click the Deployments button (rocket ship icon) in the sidebar.
+
+Click on your active deployment.
+
+Click the Logs tab.
+
+This will show you the historical output of your server. This is the best place to find the evidence if the crash happened while you were asleep.
+
+2. How to Get the X API Usage Graph
+This is the "smoking gun" screenshot you need to attach to prove you aren't trying to trick them.
+
+Go to the X Developer Portal.
+
+On the left sidebar, look for Projects & Apps.
+
+Click on your specific App name (e.g., "FameDex App").
+
+Look for a section called Usage or Dashboard.
+
+The Trap: Ensure you are looking at the "Tweets Pulled" (or "Posts retrieved") metric, not just "Requests."
+
+Note: The Basic tier often limits you to 10,000 posts retrieved per month. If your app pulls 100 profiles x 10 tweets each = 1,000 posts per run. If you run that 3 times a day, you hit the 10,000 limit in 3 days.
+
+Take a Screenshot: Capture the graph showing the sudden spike and the flatline (the ceiling).
+
+3. Summary of what to look for
+If the graph is a vertical line straight up: You had a loop bug (code error).
+
+If the graph is a steady staircase that ends too soon: You misunderstood the "Tweets vs. Requests" math (logic error).
+
+Once you have these, reply here with what you found (e.g., "It was a loop" or "It was the tweet math"), and I can quickly tweak the email to match the exact facts.
