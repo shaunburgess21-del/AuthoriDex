@@ -78,7 +78,7 @@ function VersusCard({
                   : 'border-slate-700/30 opacity-60'
                 : 'border-slate-700/50 hover:border-cyan-500/50 cursor-pointer'
             }`}
-            style={{ minHeight: '140px' }}
+            style={{ minHeight: '260px' }}
             data-testid={`button-vote-a-${faceOff.id}`}
           >
             {faceOff.optionAImage ? (
@@ -86,7 +86,7 @@ function VersusCard({
                 <img 
                   src={faceOff.optionAImage} 
                   alt={faceOff.optionAText}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover object-center"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
               </div>
@@ -119,7 +119,7 @@ function VersusCard({
                   : 'border-slate-700/30 opacity-60'
                 : 'border-slate-700/50 hover:border-teal-500/50 cursor-pointer'
             }`}
-            style={{ minHeight: '140px' }}
+            style={{ minHeight: '260px' }}
             data-testid={`button-vote-b-${faceOff.id}`}
           >
             {faceOff.optionBImage ? (
@@ -127,7 +127,7 @@ function VersusCard({
                 <img 
                   src={faceOff.optionBImage} 
                   alt={faceOff.optionBText}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover object-center"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
               </div>
