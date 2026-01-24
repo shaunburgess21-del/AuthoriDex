@@ -59,7 +59,7 @@ function VersusCard({
       <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-teal-500/5 rounded-lg" />
       
       <div className="relative p-4">
-        <div className="flex items-center justify-between mb-3 gap-2">
+        <div className="flex items-center justify-between mb-4 gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5 text-cyan-400" />
             <span>{faceOff.totalVotes.toLocaleString()} votes</span>
@@ -78,12 +78,23 @@ function VersusCard({
                   : 'border-slate-700/30 opacity-60'
                 : 'border-slate-700/50 hover:border-cyan-500/50 cursor-pointer'
             }`}
-            style={{ minHeight: '100px' }}
+            style={{ minHeight: '140px' }}
             data-testid={`button-vote-a-${faceOff.id}`}
           >
-            <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedA ? 'from-cyan-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
-            <div className="relative h-full flex flex-col items-center justify-center p-3">
-              <span className="font-semibold text-sm text-center text-white">{faceOff.optionAText}</span>
+            {faceOff.optionAImage ? (
+              <div className="absolute inset-0">
+                <img 
+                  src={faceOff.optionAImage} 
+                  alt={faceOff.optionAText}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+              </div>
+            ) : (
+              <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedA ? 'from-cyan-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
+            )}
+            <div className="relative h-full flex flex-col items-center justify-end p-3">
+              <span className="font-semibold text-sm text-center text-white drop-shadow-lg">{faceOff.optionAText}</span>
               {hasVoted && (
                 <span className={`text-xl font-bold mt-1 ${votedA ? 'text-cyan-400' : 'text-slate-300'}`}>
                   {faceOff.optionAPercent}%
@@ -92,9 +103,9 @@ function VersusCard({
             </div>
           </button>
           
-          <div className="flex items-center justify-center w-10 shrink-0">
-            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
-              <span className="text-[10px] font-bold text-slate-200">VS</span>
+          <div className="flex items-center justify-center w-12 shrink-0">
+            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
+              <span className="text-xs font-bold text-slate-200">VS</span>
             </div>
           </div>
           
@@ -108,12 +119,23 @@ function VersusCard({
                   : 'border-slate-700/30 opacity-60'
                 : 'border-slate-700/50 hover:border-teal-500/50 cursor-pointer'
             }`}
-            style={{ minHeight: '100px' }}
+            style={{ minHeight: '140px' }}
             data-testid={`button-vote-b-${faceOff.id}`}
           >
-            <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? 'from-teal-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
-            <div className="relative h-full flex flex-col items-center justify-center p-3">
-              <span className="font-semibold text-sm text-center text-white">{faceOff.optionBText}</span>
+            {faceOff.optionBImage ? (
+              <div className="absolute inset-0">
+                <img 
+                  src={faceOff.optionBImage} 
+                  alt={faceOff.optionBText}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+              </div>
+            ) : (
+              <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? 'from-teal-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
+            )}
+            <div className="relative h-full flex flex-col items-center justify-end p-3">
+              <span className="font-semibold text-sm text-center text-white drop-shadow-lg">{faceOff.optionBText}</span>
               {hasVoted && (
                 <span className={`text-xl font-bold mt-1 ${votedB ? 'text-teal-400' : 'text-slate-300'}`}>
                   {faceOff.optionBPercent}%
@@ -168,37 +190,31 @@ function PollCard({
         <p className="text-sm text-muted-foreground mb-4">{topic.description}</p>
         
         {!hasVoted ? (
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 border-green-500/30 text-green-400 hover:bg-green-500/10"
+          <div className="flex flex-col gap-3">
+            <button
               onClick={() => onVote(topic.id, 'support')}
+              className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
               data-testid={`button-support-${topic.id}`}
             >
-              <ThumbsUp className="h-3.5 w-3.5 mr-1.5" />
-              Support
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 border-slate-500/30 text-slate-400 hover:bg-slate-500/10"
+              <ThumbsUp className="h-4 w-4 shrink-0" />
+              <span>Support</span>
+            </button>
+            <button
               onClick={() => onVote(topic.id, 'neutral')}
+              className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15"
               data-testid={`button-neutral-${topic.id}`}
             >
-              <Minus className="h-3.5 w-3.5 mr-1.5" />
-              Neutral
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1 border-red-500/30 text-red-400 hover:bg-red-500/10"
+              <Minus className="h-4 w-4 shrink-0" />
+              <span>Neutral</span>
+            </button>
+            <button
               onClick={() => onVote(topic.id, 'oppose')}
+              className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
               data-testid={`button-oppose-${topic.id}`}
             >
-              <ThumbsDown className="h-3.5 w-3.5 mr-1.5" />
-              Oppose
-            </Button>
+              <ThumbsDown className="h-4 w-4 shrink-0" />
+              <span>Oppose</span>
+            </button>
           </div>
         ) : (
           <div className="space-y-2">
@@ -238,25 +254,25 @@ function InductionCard({
 }) {
   return (
     <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50">
+      <div className="absolute top-3 right-3">
+        <CategoryPill category={candidate.category} />
+      </div>
       <div className="relative p-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+          <Users className="h-3.5 w-3.5 text-cyan-400" />
+          <span>{candidate.votes.toLocaleString()} votes</span>
+        </div>
+        
+        <div className="flex flex-col items-center text-center mb-4">
           <PersonAvatar name={candidate.name} avatar="" size="lg" />
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-base truncate">{candidate.name}</h3>
-            <div className="flex items-center gap-2">
-              <CategoryPill category={candidate.category} />
-              <span className="text-xs text-muted-foreground">
-                {candidate.votes.toLocaleString()} votes
-              </span>
-            </div>
-          </div>
+          <h3 className="font-semibold text-base mt-3">{candidate.name}</h3>
         </div>
         
         <Button
-          className={`w-full mt-4 ${
+          className={`w-full ${
             isVoted
-              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-              : 'bg-gradient-to-r from-cyan-600 to-teal-500 text-white'
+              ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'
+              : 'bg-gradient-to-r from-cyan-600 to-cyan-500 text-white shadow-[0_0_15px_rgba(34,211,238,0.2)]'
           }`}
           onClick={() => onVote(candidate.id)}
           data-testid={`button-induction-vote-${candidate.id}`}
