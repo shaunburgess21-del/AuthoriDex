@@ -1,0 +1,54 @@
+This is a clear and strategic consolidation. By renaming "Music" to "Entertainment", you immediately create the right home for Actors without needing to build a whole new feature.
+
+This task requires changes in three layers:
+
+The Code (Frontend): Updating the hardcoded lists and filter buttons.
+
+The Styles (UI): Ensuring "Entertainment" inherits the Pink/Purple color previously used for Music.
+
+The Data (Backend): A database migration to update every existing "Music" record to "Entertainment" so nothing gets lost.
+
+Here is the "Safe Migration" Prompt for Replit.
+
+Act as a Senior Full-Stack Engineer.
+
+Task: Refactor Industry Category - Rename 'Music' to 'Entertainment' We are consolidating our industry categories. The "Music" category is being broadened to "Entertainment" to accommodate Actors and other performers.
+
+1. Codebase Refactor (Frontend Constants)
+
+Search: Locate all files defining the FILTER_CATEGORIES or industry lists (e.g., in client/src/data, vote.ts, predict.ts, or shared constants).
+
+Replace: Rename "Music" to "Entertainment" in all lists.
+
+Order: The new list order should be: Tech, Favorites, Politics, Business, Entertainment, Sports, Creator (plus Custom Topic where applicable).
+
+"Custom Topic" Constraint: Do not change the logic for "Custom Topic". It must only appear in the specific sections where it is already enabled.
+
+2. UI & Styling Updates
+
+Color Mapping: Locate the helper function or CSS that assigns colors to categories (e.g., getCategoryColor).
+
+Action: Map the new "Entertainment" label to use the exact same Pink/Purple color previously assigned to "Music".
+
+3. Database Migration (Critical) You must update the existing data so we don't lose any records.
+
+Task: Create and run a SQL migration (or a one-time script scripts/migrate-music-to-entertainment.ts) that executes the following logic:
+
+SQL
+
+UPDATE celebrities SET category = 'entertainment' WHERE category = 'music';
+UPDATE faceoffs SET category = 'entertainment' WHERE category = 'music';
+UPDATE polls SET category = 'entertainment' WHERE category = 'music';
+UPDATE predictions SET category = 'entertainment' WHERE category = 'music';
+-- (And any other table where 'category' is stored)
+Enums: If your database uses a strict Postgres ENUM for categories, you must ALTER TYPE to add 'entertainment' and remove 'music' (or just add 'entertainment' for safety).
+
+4. Verification
+
+Check the Global Filter Bar (Vote/Predict pages): It should now read "Entertainment" instead of "Music".
+
+Check the Cards: Any card previously labelled "Music" should now display a Pink/Purple "Entertainment" pill.
+
+Check the Home Page: Ensure the "Entertainment" filter works correctly on the Home toggle.
+
+Deliverable: Confirm that the "Music" label is completely removed from the UI and all relevant database records have been migrated to "Entertainment".
