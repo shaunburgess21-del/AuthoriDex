@@ -465,7 +465,8 @@ interface TrendingResponse {
   hasMore: boolean;
 }
 
-type LeaderboardMode = "all" | "risers" | "fallers";
+type LeaderboardTab = "fame" | "approval" | "value";
+type SortDirection = "desc" | "asc";
 
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -475,7 +476,8 @@ export default function HomePage() {
   const [votingPersonId, setVotingPersonId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
-  const [leaderboardMode, setLeaderboardMode] = useState<LeaderboardMode>("all");
+  const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [moversCollapsed, setMoversCollapsed] = useState(false);
 
   const {
@@ -538,16 +540,20 @@ export default function HomePage() {
     refetchInterval: 5 * 60 * 1000,
   });
 
-  const displayPeople = useMemo(() => {
-    switch (leaderboardMode) {
-      case "risers":
-        return topGainers;
-      case "fallers":
-        return topDroppers;
-      default:
-        return allPeople;
+  // Handler for tab clicks: toggle sort direction if same tab clicked again
+  const handleTabClick = (tab: LeaderboardTab) => {
+    if (tab === leaderboardTab) {
+      setSortDirection(prev => prev === "desc" ? "asc" : "desc");
+    } else {
+      setLeaderboardTab(tab);
+      setSortDirection("desc"); // Reset to desc when switching tabs
     }
-  }, [leaderboardMode, allPeople, topGainers, topDroppers]);
+  };
+
+  // For display, just use allPeople from the API
+  const displayPeople = useMemo(() => {
+    return allPeople;
+  }, [allPeople]);
 
   const { data: systemFreshness } = useQuery<{ lastScoredAt: string; lastScoredAtFormatted: string }>({
     queryKey: ['/api/system/freshness'],
@@ -756,49 +762,51 @@ export default function HomePage() {
                   
                   <div className="flex items-center gap-2 border-b border-border pb-2">
                     <button
-                      onClick={() => setLeaderboardMode("all")}
+                      onClick={() => handleTabClick("fame")}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                        leaderboardMode === "all"
+                        leaderboardTab === "fame"
                           ? "bg-primary/20 text-primary border border-primary/30"
                           : "text-muted-foreground hover:bg-muted/50"
                       }`}
-                      data-testid="tab-leaderboard-all"
+                      data-testid="tab-leaderboard-fame"
+                      title="Sort by Fame Index score"
                     >
                       <Crown className="h-3.5 w-3.5" />
-                      All
-                    </button>
-                    <button
-                      onClick={() => setLeaderboardMode("risers")}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                        leaderboardMode === "risers"
-                          ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                          : "text-muted-foreground hover:bg-muted/50"
-                      }`}
-                      data-testid="tab-leaderboard-risers"
-                    >
-                      <TrendingUp className="h-3.5 w-3.5" />
-                      Risers
-                      {topGainers.length > 0 && (
-                        <Badge variant="secondary" className="ml-1 h-5 text-xs bg-green-500/20 text-green-400 border-0">
-                          {topGainers.length}
-                        </Badge>
+                      Fame Index
+                      {leaderboardTab === "fame" && (
+                        <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                       )}
                     </button>
                     <button
-                      onClick={() => setLeaderboardMode("fallers")}
+                      onClick={() => handleTabClick("approval")}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                        leaderboardMode === "fallers"
-                          ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                        leaderboardTab === "approval"
+                          ? "bg-violet-500/20 text-violet-400 border border-violet-500/30"
                           : "text-muted-foreground hover:bg-muted/50"
                       }`}
-                      data-testid="tab-leaderboard-fallers"
+                      data-testid="tab-leaderboard-approval"
+                      title="Sort by community approval rating"
                     >
-                      <TrendingDown className="h-3.5 w-3.5" />
-                      Fallers
-                      {topDroppers.length > 0 && (
-                        <Badge variant="secondary" className="ml-1 h-5 text-xs bg-red-500/20 text-red-400 border-0">
-                          {topDroppers.length}
-                        </Badge>
+                      <ThumbsUp className="h-3.5 w-3.5" />
+                      Approval
+                      {leaderboardTab === "approval" && (
+                        <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleTabClick("value")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                        leaderboardTab === "value"
+                          ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                          : "text-muted-foreground hover:bg-muted/50"
+                      }`}
+                      data-testid="tab-leaderboard-value"
+                      title="Sort by community value perception (underrated vs overrated)"
+                    >
+                      <Target className="h-3.5 w-3.5" />
+                      Value
+                      {leaderboardTab === "value" && (
+                        <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                       )}
                     </button>
                   </div>
@@ -846,23 +854,22 @@ export default function HomePage() {
                   <div>
                     {displayPeople.length === 0 && !isLoading && (
                       <div className="p-8 text-center text-muted-foreground">
-                        {leaderboardMode === "risers" && "No rising celebrities today"}
-                        {leaderboardMode === "fallers" && "No falling celebrities today"}
-                        {leaderboardMode === "all" && "No results found"}
+                        No results found
                       </div>
                     )}
                     {displayPeople.map((person) => (
                       <LeaderboardRow
                         key={person.id}
                         person={person}
+                        activeTab={leaderboardTab}
                         onVisitProfile={() => handleVisitProfile(person.id)}
                         onVoteClick={() => handleVoteClick(person.id)}
                       />
                     ))}
                   </div>
                   
-                  {/* Infinite scroll trigger element - only show in "all" mode */}
-                  {leaderboardMode === "all" && hasNextPage && (
+                  {/* Infinite scroll trigger element */}
+                  {hasNextPage && (
                     <div 
                       ref={loadMoreRef}
                       className="p-6 border-t text-center"
