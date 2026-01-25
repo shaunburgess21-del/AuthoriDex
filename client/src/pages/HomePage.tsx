@@ -657,38 +657,6 @@ export default function HomePage() {
 
       <HeroSection onCastVoteClick={handleHeroCastVote} />
 
-      <div className="container mx-auto px-4 py-6 max-w-7xl">
-        <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 md:grid md:grid-cols-3 md:overflow-visible" data-testid="market-pulse-row">
-          <MarketPulseCard 
-            title="Daily Movers" 
-            icon={Activity} 
-            people={dailyMovers} 
-            type="daily"
-            onPersonClick={handleVisitProfile}
-            collapsed={moversCollapsed}
-            onToggle={() => setMoversCollapsed(!moversCollapsed)}
-          />
-          <MarketPulseCard 
-            title="Weekly Gainers" 
-            icon={TrendingUp} 
-            people={topGainers} 
-            type="gainer"
-            onPersonClick={handleVisitProfile}
-            collapsed={moversCollapsed}
-            onToggle={() => setMoversCollapsed(!moversCollapsed)}
-          />
-          <MarketPulseCard 
-            title="Weekly Droppers" 
-            icon={TrendingDown} 
-            people={topDroppers} 
-            type="dropper"
-            onPersonClick={handleVisitProfile}
-            collapsed={moversCollapsed}
-            onToggle={() => setMoversCollapsed(!moversCollapsed)}
-          />
-        </div>
-      </div>
-
       <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-blue-500/5 via-background/95 to-blue-500/5 backdrop-blur-xl">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-center gap-2 py-3">
@@ -725,6 +693,36 @@ export default function HomePage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
             >
+              <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 mb-6 md:grid md:grid-cols-3 md:overflow-visible" data-testid="market-pulse-row">
+                <MarketPulseCard 
+                  title="Daily Movers" 
+                  icon={Activity} 
+                  people={dailyMovers} 
+                  type="daily"
+                  onPersonClick={handleVisitProfile}
+                  collapsed={moversCollapsed}
+                  onToggle={() => setMoversCollapsed(!moversCollapsed)}
+                />
+                <MarketPulseCard 
+                  title="Weekly Gainers" 
+                  icon={TrendingUp} 
+                  people={topGainers} 
+                  type="gainer"
+                  onPersonClick={handleVisitProfile}
+                  collapsed={moversCollapsed}
+                  onToggle={() => setMoversCollapsed(!moversCollapsed)}
+                />
+                <MarketPulseCard 
+                  title="Weekly Droppers" 
+                  icon={TrendingDown} 
+                  people={topDroppers} 
+                  type="dropper"
+                  onPersonClick={handleVisitProfile}
+                  collapsed={moversCollapsed}
+                  onToggle={() => setMoversCollapsed(!moversCollapsed)}
+                />
+              </div>
+
               <Card id="leaderboard">
                 <CardHeader className="flex flex-col gap-4 space-y-0 pb-4">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
