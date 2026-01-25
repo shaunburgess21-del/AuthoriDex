@@ -563,7 +563,6 @@ export default function HomePage() {
   const handleClearFilters = () => {
     setSearchQuery("");
     setCategory("all");
-    setSort("rank");
   };
 
   const handleVoteClick = (personId: string) => {
@@ -745,7 +744,6 @@ export default function HomePage() {
                         Compare Momentum
                       </Button>
                       <FilterDropdown value={category} onChange={setCategory} />
-                      <SortDropdown value={sort} onChange={setSort} />
                     </div>
                   </div>
                   
@@ -823,15 +821,6 @@ export default function HomePage() {
                               <X 
                                 className="h-3 w-3 cursor-pointer" 
                                 onClick={() => setCategory("all")}
-                              />
-                            </Badge>
-                          )}
-                          {sort !== "rank" && (
-                            <Badge variant="secondary" className="gap-1">
-                              Sort: {sort}
-                              <X 
-                                className="h-3 w-3 cursor-pointer" 
-                                onClick={() => setSort("rank")}
                               />
                             </Badge>
                           )}
