@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { ThumbsUp, ThumbsDown, Star } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Star, Vote } from "lucide-react";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 
 interface ApprovalLeader {
   personId: string;
@@ -31,9 +30,11 @@ export function ApprovalViralHook({ onRateClick }: ApprovalViralHookProps) {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-4 px-4 py-6">
-        <div className="h-48 rounded-xl pulse-card-green animate-pulse" />
-        <div className="h-48 rounded-xl pulse-card-red animate-pulse" />
+      <div className="container mx-auto px-4 py-6">
+        <div className="grid grid-cols-2 gap-4 max-w-4xl mx-auto">
+          <div className="h-48 rounded-xl pulse-card-green animate-pulse" />
+          <div className="h-48 rounded-xl pulse-card-red animate-pulse" />
+        </div>
       </div>
     );
   }
@@ -43,8 +44,8 @@ export function ApprovalViralHook({ onRateClick }: ApprovalViralHookProps) {
   }
 
   return (
-    <div className="px-4 py-6" data-testid="approval-viral-hook">
-      <div className="grid grid-cols-2 gap-4">
+    <div className="container mx-auto px-4 py-6" data-testid="approval-viral-hook">
+      <div className="grid grid-cols-2 gap-4 max-w-4xl mx-auto">
         {data.highest && (
           <ApprovalCard
             type="highest"
@@ -78,8 +79,13 @@ function ApprovalCard({
   const iconBgClass = isHighest ? "pulse-icon-green" : "pulse-icon-red";
   const iconColor = isHighest ? "text-green-400" : "text-red-400";
   const percentColor = isHighest ? "text-green-400" : "text-red-400";
-  const badgeVariant = isHighest ? "default" : "destructive";
   const Icon = isHighest ? ThumbsUp : ThumbsDown;
+  
+  // Glassy badge styling - green tint for highest, red tint for lowest
+  const badgeClass = isHighest 
+    ? "bg-green-500/10 text-green-400 border border-green-500/30 backdrop-blur-sm"
+    : "bg-red-500/10 text-red-400 border border-red-500/30 backdrop-blur-sm";
+  const badgeTestId = isHighest ? "text-approval-badge-highest" : "text-approval-badge-lowest";
 
   return (
     <div
@@ -91,9 +97,12 @@ function ApprovalCard({
           <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${iconBgClass}`}>
             <Icon className={`h-4 w-4 ${iconColor}`} />
           </div>
-          <Badge variant={badgeVariant} className="text-xs">
+          <span 
+            className={`text-xs font-medium px-2.5 py-1 rounded-full ${badgeClass}`}
+            data-testid={badgeTestId}
+          >
             {isHighest ? "Highest Approval" : "Lowest Approval"}
-          </Badge>
+          </span>
         </div>
         
         <div className="flex flex-col items-center text-center space-y-3">
@@ -127,11 +136,12 @@ function ApprovalCard({
           
           <Button
             size="sm"
-            variant={isHighest ? "default" : "destructive"}
-            className="w-full mt-2"
+            variant="outline"
+            className="w-full mt-2 border-violet-500/50 text-violet-300"
             onClick={() => onRateClick(person.personId)}
             data-testid={`button-rate-${type}`}
           >
+            <Vote className="h-3.5 w-3.5 mr-1.5" />
             Rate Now
           </Button>
         </div>

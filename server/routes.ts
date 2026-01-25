@@ -3075,14 +3075,25 @@ Be concise and factual. Only return the JSON object.`;
 
       if (!voteStats || voteStats.length === 0) {
         // Return fallback celebrities for design preview when no votes exist
+        // Fetch actual avatar images from trending_people table
+        const [elonData] = await db.select({ avatar: trendingPeople.avatar, category: trendingPeople.category })
+          .from(trendingPeople)
+          .where(sql`LOWER(${trendingPeople.name}) LIKE '%elon musk%'`)
+          .limit(1);
+        
+        const [nickData] = await db.select({ avatar: trendingPeople.avatar, category: trendingPeople.category })
+          .from(trendingPeople)
+          .where(sql`LOWER(${trendingPeople.name}) LIKE '%nick fuentes%'`)
+          .limit(1);
+
         const fallbackHighest = {
           personId: "elon-musk",
           personName: "Elon Musk",
           avgRating: 4.7,
           voteCount: 0,
           approvalPercent: 92.5,
-          avatar: null,
-          category: "Tech"
+          avatar: elonData?.avatar || null,
+          category: elonData?.category || "Tech"
         };
         const fallbackLowest = {
           personId: "nick-fuentes",
@@ -3090,8 +3101,8 @@ Be concise and factual. Only return the JSON object.`;
           avgRating: 1.3,
           voteCount: 0,
           approvalPercent: 7.5,
-          avatar: null,
-          category: "Politics"
+          avatar: nickData?.avatar || null,
+          category: nickData?.category || "Politics"
         };
         return res.json({ highest: fallbackHighest, lowest: fallbackLowest, isFallback: true });
       }
