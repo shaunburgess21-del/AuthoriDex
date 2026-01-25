@@ -12,7 +12,7 @@ import { PredictDeckView } from "@/components/home/PredictDeckView";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Flame } from "lucide-react";
+import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Flame } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
@@ -30,13 +30,17 @@ function MarketPulseCard({
   icon: Icon, 
   people, 
   type,
-  onPersonClick 
+  onPersonClick,
+  collapsed,
+  onToggle
 }: { 
   title: string; 
   icon: typeof TrendingUp; 
   people: TrendingPerson[]; 
   type: "daily" | "gainer" | "dropper";
   onPersonClick: (id: string) => void;
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
   const colorConfig = {
     daily: {
@@ -60,51 +64,60 @@ function MarketPulseCard({
   
   return (
     <div 
-      className={`min-w-[280px] md:min-w-0 shrink-0 md:shrink h-full rounded-xl ${cardClass}`}
+      className={`min-w-[280px] md:min-w-0 shrink-0 md:shrink h-full rounded-xl ${cardClass} transition-all duration-200`}
       data-testid={`pulse-card-${type}`}
     >
-      <div className="p-4 pt-5">
-        <div className="flex items-center gap-3 mb-4">
+      <div className={`p-4 ${collapsed ? 'pt-4 pb-4' : 'pt-5'}`}>
+        <div 
+          className="flex items-center gap-3 cursor-pointer select-none group"
+          onClick={onToggle}
+          data-testid={`pulse-header-${type}`}
+        >
           <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${iconBgClass}`}>
             <Icon className={`h-4 w-4 ${iconColor}`} />
           </div>
-          <div>
+          <div className="flex-1">
             <h3 className="text-sm font-semibold text-slate-100">{title}</h3>
             <p className="text-[10px] text-slate-500 uppercase tracking-wider">Top 5</p>
           </div>
+          <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
+            <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
+          </div>
         </div>
         
-        <div className="space-y-1.5">
-          {people.slice(0, 5).map((person, idx) => {
-            const changeValue = type === "daily" ? person.change24h : person.change7d;
-            if (changeValue === undefined || changeValue === null || isNaN(changeValue)) return null;
-            const isPositive = changeValue >= 0;
-            return (
-              <div
-                key={person.id}
-                className="flex items-center gap-2.5 p-2 rounded-lg hover-elevate cursor-pointer bg-slate-800/30 border border-slate-700/30 transition-colors hover:border-slate-600/50"
-                onClick={() => onPersonClick(person.id)}
-                data-testid={`pulse-item-${person.id}`}
-              >
-                <span className="font-mono font-bold text-slate-500 w-4 text-center text-[14px]">{idx + 1}</span>
-                <PersonAvatar name={person.name} avatar={person.avatar} size="sm" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-xs truncate text-slate-200">{person.name}</p>
-                  <p className="text-[10px] text-slate-500">{person.category}</p>
-                </div>
-                <span 
-                  className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
-                    isPositive 
-                      ? "bg-green-500/15 text-green-400" 
-                      : "bg-red-500/15 text-red-400"
-                  }`}
+        {!collapsed && (
+          <div className="space-y-1.5 mt-4">
+            {people.slice(0, 5).map((person, idx) => {
+              const changeValue = type === "daily" ? person.change24h : person.change7d;
+              if (changeValue === undefined || changeValue === null || isNaN(changeValue)) return null;
+              const isPositive = changeValue >= 0;
+              return (
+                <div
+                  key={person.id}
+                  className="flex items-center gap-2.5 p-2 rounded-lg hover-elevate cursor-pointer bg-slate-800/30 border border-slate-700/30 transition-colors hover:border-slate-600/50"
+                  onClick={() => onPersonClick(person.id)}
+                  data-testid={`pulse-item-${person.id}`}
                 >
-                  {isPositive ? "+" : ""}{changeValue.toFixed(1)}%
-                </span>
-              </div>
-            );
-          })}
-        </div>
+                  <span className="font-mono font-bold text-slate-500 w-4 text-center text-[14px]">{idx + 1}</span>
+                  <PersonAvatar name={person.name} avatar={person.avatar} size="sm" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-xs truncate text-slate-200">{person.name}</p>
+                    <p className="text-[10px] text-slate-500">{person.category}</p>
+                  </div>
+                  <span 
+                    className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
+                      isPositive 
+                        ? "bg-green-500/15 text-green-400" 
+                        : "bg-red-500/15 text-red-400"
+                    }`}
+                  >
+                    {isPositive ? "+" : ""}{changeValue.toFixed(1)}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -464,6 +477,7 @@ export default function HomePage() {
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
   const [leaderboardMode, setLeaderboardMode] = useState<LeaderboardMode>("all");
+  const [moversCollapsed, setMoversCollapsed] = useState(false);
 
   const {
     data,
@@ -651,6 +665,8 @@ export default function HomePage() {
             people={dailyMovers} 
             type="daily"
             onPersonClick={handleVisitProfile}
+            collapsed={moversCollapsed}
+            onToggle={() => setMoversCollapsed(!moversCollapsed)}
           />
           <MarketPulseCard 
             title="Weekly Gainers" 
@@ -658,6 +674,8 @@ export default function HomePage() {
             people={topGainers} 
             type="gainer"
             onPersonClick={handleVisitProfile}
+            collapsed={moversCollapsed}
+            onToggle={() => setMoversCollapsed(!moversCollapsed)}
           />
           <MarketPulseCard 
             title="Weekly Droppers" 
@@ -665,6 +683,8 @@ export default function HomePage() {
             people={topDroppers} 
             type="dropper"
             onPersonClick={handleVisitProfile}
+            collapsed={moversCollapsed}
+            onToggle={() => setMoversCollapsed(!moversCollapsed)}
           />
         </div>
       </div>
