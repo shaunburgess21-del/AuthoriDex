@@ -60,6 +60,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { getFilterCategories, type FilterCategory } from "@shared/constants";
 import type { TrendingPerson } from "@shared/schema";
 import { CurateSection } from "@/components/curate";
+import { ApprovalViralHook } from "@/components/ApprovalViralHook";
 
 const mockCelebrityList = [
   "Taylor Swift", "Elon Musk", "Keanu Reeves", "Beyoncé", "Dwayne Johnson",
@@ -1883,6 +1884,13 @@ export default function VotePage() {
           </div>
         </div>
       </header>
+      
+      <ApprovalViralHook 
+        onRateClick={(personId) => {
+          setLocation(`/person/${personId}`);
+        }} 
+      />
+      
       <div 
         className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b"
         data-testid="section-toggles-container"
