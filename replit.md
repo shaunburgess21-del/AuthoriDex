@@ -41,6 +41,11 @@ Preferred communication style: Simple, everyday language.
   - **Driver Detection**: Determines primary/secondary trend drivers (NEWS, SEARCH, SOCIAL, WIKI) based on signal strength.
   - **Data Freshness**: Tracks per-source timestamps (wiki, news, search, x) with stale detection (> 1 hour).
   - **Sentiment Voting**: `sentimentVotes` table with 1 vote per user per person per day rate limiting.
+- **Leaderboard Tabs** (Jan 2026): Three-tab system replacing All/Risers/Fallers:
+  - **Fame Index Tab**: Sorted by fameIndex score (default), standard layout with Vote button
+  - **Approval Tab**: Sorted by approval percentage from community votes, violet styling
+  - **Value Tab**: Sorted by value score (-100 to +100), inline Underrated/Overrated voting buttons, amber styling
+  - **Sort Toggle**: Clicking the same tab again toggles between ascending/descending sort
 
 ### Serverless Architecture
 - **Design**: Stateless, with all state managed in Supabase Database.
@@ -56,6 +61,7 @@ Preferred communication style: Simple, everyday language.
 - **Gamification Service**: Provides functions for `awardXp()`, `adjustCredits()`, `checkPermission()`, `recalculateUserRank()`, and `getVoteMultiplier()`.
 - **Security**: XP/credit endpoints restricted to whitelisted actions; high-value awards are server-side only.
 - **Community Schema**: `community_insights`, `insight_votes`, `insight_comments`, `comment_votes`, `platform_insights`, `insight_items`, `user_votes`, `user_favourites`.
+- **Value Voting Schema** (Jan 2026): `celebrity_value_votes` (underrated/overrated votes, 1 per user per celebrity), `celebrity_metrics` (aggregated approval/value metrics for fast leaderboard sorting).
 
 ### AI-Generated Celebrity Profiles
 - **Feature**: Provides AI-generated biographical data for celebrities, including short/long bios, known for, origin, location, and net worth.
