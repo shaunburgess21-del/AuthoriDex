@@ -31,9 +31,11 @@ import {
 import {
   MOCK_MARKETS,
   HEAD_TO_HEAD_MARKETS,
+  TOP_GAINER_MARKETS,
   COMMUNITY_MARKETS,
   type PredictionMarket,
   type HeadToHeadMarket,
+  type TopGainerMarket,
   type CommunityMarket,
 } from "@/data/predict";
 import { getFilterCategories } from "@shared/constants";
@@ -45,8 +47,8 @@ const PREDICT_CATEGORY_FILTERS = getFilterCategories(false).map(cat => ({
   label: cat
 }));
 
-type PredictSection = "All" | "Weekly Jackpot" | "Up/Down" | "Head-to-Head" | "Community";
-const SECTION_TOGGLES: PredictSection[] = ["All", "Weekly Jackpot", "Up/Down", "Head-to-Head", "Community"];
+type PredictSection = "All" | "Weekly Jackpot" | "Up/Down" | "Head-to-Head" | "Gainer" | "Community";
+const SECTION_TOGGLES: PredictSection[] = ["All", "Weekly Jackpot", "Up/Down", "Head-to-Head", "Gainer", "Community"];
 
 interface PredictDeckViewProps {
   trendingPeople: TrendingPerson[];
@@ -322,6 +324,79 @@ function CommunityCard({
   );
 }
 
+function GainerCard({
+  market,
+  onPredict,
+}: {
+  market: TopGainerMarket;
+  onPredict: (marketId: string, leaderName: string) => void;
+}) {
+  const categoryLabel = market.category.charAt(0).toUpperCase() + market.category.slice(1);
+  
+  return (
+    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-green-500/20">
+      <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-transparent to-emerald-500/5 rounded-lg" />
+      
+      <div className="relative p-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs text-muted-foreground">7-day gain</span>
+          <CategoryPill category={market.category} />
+        </div>
+        
+        <h3 className="text-sm font-semibold mb-3">Top Gainer: {categoryLabel}</h3>
+        
+        <div className="space-y-2 mb-4">
+          {market.leaders.map((leader, idx) => (
+            <div 
+              key={leader.name}
+              className="flex items-center gap-3 p-2 rounded-lg bg-slate-800/50 border border-slate-700/30"
+            >
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                {idx === 0 && (
+                  <div className="w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center">
+                    <Trophy className="h-3 w-3 text-amber-400" />
+                  </div>
+                )}
+                {idx !== 0 && (
+                  <span className="w-5 h-5 flex items-center justify-center text-xs text-muted-foreground">
+                    #{idx + 1}
+                  </span>
+                )}
+                <PersonAvatar name={leader.name} avatar={leader.avatar} size="sm" />
+                <span className="text-sm font-medium truncate">{leader.name}</span>
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-semibold text-green-400">
+                  +{leader.currentGain.toLocaleString()} pts
+                </div>
+                <div className="text-xs text-green-500/70">
+                  +{leader.percentGain}%
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        <div className="flex items-center justify-center mb-3">
+          <span className="text-sm font-semibold text-green-500">
+            Pool: {market.totalPool.toLocaleString()}
+          </span>
+        </div>
+        
+        <Button
+          size="sm"
+          className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500"
+          onClick={() => onPredict(market.id, market.leaders[0].name)}
+          data-testid={`button-gainer-predict-${market.id}`}
+        >
+          <TrendingUp className="h-4 w-4 mr-1.5" />
+          Place Prediction
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 function StakeModal({
   state,
   onClose,
@@ -417,6 +492,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
   
   const [upDownInteracted, setUpDownInteracted] = useState(false);
   const [h2hInteracted, setH2hInteracted] = useState(false);
+  const [gainerInteracted, setGainerInteracted] = useState(false);
   const [communityInteracted, setCommunityInteracted] = useState(false);
   const [pendingPrediction, setPendingPrediction] = useState<string | null>(null);
 
@@ -447,6 +523,17 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
     COMMUNITY_MARKETS.filter(m => {
       const matchesCategory = categoryFilter === "all" || m.category === categoryFilter;
       const matchesSearch = !searchQuery || m.question.toLowerCase().includes(searchQuery.toLowerCase());
+      const notPredicted = !predictions.has(m.id);
+      return matchesCategory && matchesSearch && notPredicted;
+    }),
+    [categoryFilter, searchQuery, predictions]
+  );
+
+  const filteredGainer = useMemo(() =>
+    TOP_GAINER_MARKETS.filter(m => {
+      const matchesCategory = categoryFilter === "all" || m.category === categoryFilter;
+      const matchesSearch = !searchQuery || 
+        m.leaders.some(l => l.name.toLowerCase().includes(searchQuery.toLowerCase()));
       const notPredicted = !predictions.has(m.id);
       return matchesCategory && matchesSearch && notPredicted;
     }),
@@ -496,6 +583,20 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
     });
   }, []);
 
+  const handleGainerPredict = useCallback((marketId: string, leaderName: string) => {
+    setStakeModal({
+      isOpen: true,
+      type: 'community',
+      marketId,
+      selection: leaderName,
+      personName: leaderName,
+      onConfirm: () => {
+        setPendingPrediction(marketId);
+        setGainerInteracted(true);
+      },
+    });
+  }, []);
+
   const closeStakeModal = () => {
     setStakeModal(null);
     pendingCycleCallbackRef.current = null;
@@ -504,6 +605,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
   const showJackpot = activeSection === "All" || activeSection === "Weekly Jackpot";
   const showUpDown = activeSection === "All" || activeSection === "Up/Down";
   const showH2H = activeSection === "All" || activeSection === "Head-to-Head";
+  const showGainer = activeSection === "All" || activeSection === "Gainer";
   const showCommunity = activeSection === "All" || activeSection === "Community";
 
   return (
@@ -530,6 +632,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             {section === "Weekly Jackpot" && <Trophy className="h-3 w-3" />}
             {section === "Up/Down" && <TrendingUp className="h-3 w-3" />}
             {section === "Head-to-Head" && <Swords className="h-3 w-3" />}
+            {section === "Gainer" && <TrendingUp className="h-3 w-3" />}
             {section === "Community" && <MessageSquare className="h-3 w-3" />}
             {section}
           </button>
@@ -644,6 +747,34 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
               />
             )}
             emptyMessage="No head-to-head markets match your filters"
+          />
+        </div>
+      )}
+
+      {showGainer && filteredGainer.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-green-400" />
+            <h3 className="text-sm font-semibold">Top Gainer Predictions</h3>
+          </div>
+          <CardDeckContainer
+            items={filteredGainer}
+            viewType="predict"
+            hasInteracted={gainerInteracted}
+            onAdvance={() => {
+              if (pendingPrediction) {
+                setPredictions(prev => new Set(prev).add(pendingPrediction));
+                setPendingPrediction(null);
+              }
+              setGainerInteracted(false);
+            }}
+            renderCard={(market) => (
+              <GainerCard
+                market={market}
+                onPredict={(id, leaderName) => handleGainerPredict(id, leaderName)}
+              />
+            )}
+            emptyMessage="No gainer markets match your filters"
           />
         </div>
       )}
