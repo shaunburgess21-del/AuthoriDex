@@ -1,0 +1,161 @@
+This is the final, comprehensive prompt. It incorporates every safety rail, database requirement, and UI constraint discussed.
+
+Changes made based on the latest feedback:
+
+UI Freeze Clause: Added explicit instruction to not touch row heights, typography, or existing columns.
+
+Transaction Logic: Mandated that vote recording and metric aggregation happen in a single transaction to prevent bugs.
+
+Calculation Logic: Explicitly stated that aggregates must be calculated from COUNT/AVG of raw tables, not just incremented.
+
+User State Retrieval: Added a requirement to fetch the current user's vote status so the buttons show the correct color (Filled vs. Ghost).
+
+Copy and paste this exact prompt into the Replit Plan Agent.
+
+Act as a Senior Full-Stack Engineer. Do not redesign unrelated UI. Implement exactly what is requested below.
+
+Task: Leaderboard Overhaul — Fame Index / Approval / Value Tabs We need to replace the existing "All / Risers / Fallers" control (red-box area) with a multi-tab system ("Fame Index" / "Approval" / "Value") backed by a robust voting architecture.
+
+1. Database Schema: Raw Votes + Aggregates (Critical) We need BOTH raw vote tables (to prevent duplicates & store user state) AND an aggregate metrics table (for fast sorting).
+
+A) Raw Vote Tables (Required)
+
+Table: celebrity_approval_votes
+
+id, celebrity_id (FK), user_id (FK), rating (Integer 1–5), created_at, updated_at.
+
+Constraint: Unique (celebrity_id, user_id) to enforce 1 vote per user.
+
+Table: celebrity_value_votes
+
+id, celebrity_id (FK), user_id (FK), vote (String: "underrated" or "overrated"), created_at, updated_at.
+
+Constraint: Unique (celebrity_id, user_id).
+
+B) Aggregate Table (Required)
+
+Table: celebrity_metrics (1 row per celebrity)
+
+celebrity_id (PK, FK → celebrities.id)
+
+trend_score (Numeric) — Constraint: In the Plan, identify the existing source field used today for Fame Index sorting and ensure this column mirrors it exactly.
+
+Approval Aggregates:
+
+approval_votes_count (Int, default 0)
+
+approval_avg_rating (Float, nullable)
+
+approval_pct (Float 0–100, nullable). Definition: (approval_avg_rating / 5) * 100
+
+Value Aggregates:
+
+underrated_votes_count (Int, default 0)
+
+overrated_votes_count (Int, default 0)
+
+underrated_pct (Float 0–100, nullable)
+
+overrated_pct (Float 0–100, nullable)
+
+value_score (Float -100 to +100). Definition: underrated_pct - overrated_pct
+
+updated_at
+
+C) Aggregation Strategy (Transaction Safety)
+
+Trigger: On every vote upsert, immediately recompute the aggregates for that celebrity.
+
+Requirement: Perform the Vote Upsert + Aggregate Recompute in a single database transaction to prevent race conditions.
+
+Calculation: Aggregates must be computed by querying the raw vote tables (e.g., COUNT(*), AVG(rating)), not by blindly incrementing counters.
+
+2. API Endpoints (Upsert Logic)
+
+POST /api/celebrity/:id/approval-vote
+
+Body: { rating: 1..5 }
+
+Logic: Upsert user's vote → Recompute Aggregates → Return new approval_pct.
+
+POST /api/celebrity/:id/value-vote (Inline, No Modal)
+
+Body: { vote: "underrated" | "overrated" }
+
+Logic: Upsert user's vote → Recompute Aggregates → Return new underrated_pct, overrated_pct, value_score, and user's vote state.
+
+Idempotency: If a user clicks the option they already selected, keep it selected (do not toggle off).
+
+3. Frontend: Tab Control & Sorting Replace "All / Risers / Fallers" pills with:
+
+Fame Index (Default)
+
+Approval
+
+Value
+
+State: Persist ?tab=...&sort=... in URL.
+
+Sorting Rules:
+
+Fame Index: Sort by trend_score.
+
+Approval: Sort by approval_pct.
+
+Value: Sort by value_score (Most Underrated → Most Overrated).
+
+Tie-Breaker: celebrity_id ASC (Stable sort). Nulls always last.
+
+Tooltips: Add info icons with definitions (Trend Score, Community Approval, Underrated vs Overrated).
+
+4. Conditional Row Layouts (Specific per Tab)
+
+UI Freeze: Do not change any leaderboard table columns, row heights, typography, spacing, or button styles beyond swapping the tab pills and the Value-tab action buttons exactly as specified.
+
+User State: The leaderboard query must fetch the current user's vote so buttons can be rendered as "Active" (Filled) or "Inactive" (Ghost/Outline).
+
+Tab A: Fame Index (Default)
+
+Layout: Keep exactly as is (Trend Score display + Existing "Vote" button with modal).
+
+Tab B: Approval
+
+Layout: Keep exactly as is.
+
+Score: Display approval_pct (e.g., "92%"). Keep styling minimal.
+
+Action: Keep existing "Vote" button (opens 1-5 modal).
+
+Tab C: Value (Unique Layout)
+
+Score: Remove Trend Score. Display both percentages: "Underrated 62% | Overrated 38%".
+
+Action: Remove the standard "Vote" button. Replace with two compact inline buttons:
+
+[Underrated] (Green Theme)
+
+[Overrated] (Red Theme)
+
+Interaction: Instant click (No Modal).
+
+Visual State: If user voted "Underrated", the Green button is Solid/Filled, Red is Outline/Ghost.
+
+5. Safe Seeding (Dev Only)
+
+scripts/seed-celebrity-metrics.ts
+
+Constraint: Only run if NODE_ENV !== 'production' AND SEED_METRICS=true.
+
+Trigger: Must ONLY run on explicit manual command. Never run on server start or migrations.
+
+Logic: Populate raw votes (randomized) and trigger aggregation so the UI has realistic data to display.
+
+Deliverables:
+
+Confirm database schema changes (Raw + Aggregates) and unique constraints.
+
+Verify the "Value" tab shows the unique two-button layout and state updates instantly.
+
+Confirm "Fame Index" & "Approval" tabs retain the original design exactly.
+
+Confirm the frontend correctly fetches "My Vote" to display the correct button color (Filled vs Ghost).

@@ -1,0 +1,51 @@
+We would like to change the following toggles on the leaderboard: “All” “Risers” “Fallers” (screenshot attached - elements in red box outline for reference) to the following:
+
+1. Fame Index (trend score)
+
+2. Approval (approval ratings)
+
+3. Value (underrated/overrated)
+
+ 
+
+The above 1, 2, 3 could be too much text if we include the text in brackets - so maybe we just have: "Fame Index | Approval | Value" and then a tooltip further explaing each one - but am happy for your suggestions.
+
+
+
+N.B. selecting either of this toggles will display the relevant "Leaderboard" below. Our existing Leaderboard is relevant only the the 1. Fame Index (trend score) - however - we will now be showing two additional leaderboards governed by the data obtained from FameDex users. 1. from FameDex users voting "Cast Your Vote" section for each celebrity - an overall rating on individual celebrities (this leaderboard will determine the most loved celebrities over time), the 2. from FameDex users voting "Overated/Underated" section for each celebrity - a leaderboard which will display the most overated compared to the most underated celebrities on the leaderboard.
+
+
+
+Clicking each tab will do the following:
+
+ 
+
+1. Fame Index – this will display our current leaderboard as is. Same as the current “All” tab. It is sorted based on the current trend engine scores as per normal. Nothing changes.
+
+2. If you click “Approval”, it should display the leaderboard, but this time, instead of being sorted by the trend engine scores, it will be sorted by approval ratings. So person with the highest approval rating on top and then taper down to the lowest approval rating at the bottom in position 100.
+
+3. If you click "Value", it should display the leaderboard but this time sorted by most underrated, down to the most overrated person. This will be based on the underrated/overrated voting scores we implemented previously on the individual pages of each person on the leaderboard.
+
+ 
+
+Additional notes:
+
+ 
+
+1. We would like all 3 tabs to have a sorting function built. They will be default sorted as described above, however if the user clicks again on one of the tabs, it sorts that tab’s leaderboard in reverse (i.e if they click “Approval” tab again it sorts from 100 down to 1 (lowest to highest approval ratings)). There should be the up/down sort arrows in the tab to show users they can sort)
+
+2. We want you to double check the architecture of the website again and make sure that the underrated/overrated functionality is fully integrated correctly into the back-end of the website and will display/updated correctly for this 3rd Tab functionality. If not let us know.
+
+3. We want you to consider how we could potentially display underrated/overrated score in the main leaderboard columns (fame index tab), like we have the approval ratings score there next to the main fame index score, or is this unnecessary due to space considerations for mobile? We will obviously need to display the underrated/overrated score on the “value” tab
+
+4. We would like basic “info” tool tips for each tab explaining what each is showing (e.g tool tip for “Approval” tab let’s the user know this is showing the leaderboard sorted by FameDex user’s approval rating votes. The “Value” tool tip will let the user know this is displaying the leaderboard sorted by the most underrated to most overrated, as voted by all FameDex users etc).
+
+
+
+Importantly - we do not have data yet for both 2. Approval Ratings and 3. Overated/Underated - but we would like to see how the design looks - so if we can use dummie data for now and then once we include the seed data - then this can adjust based on that seed data and then further change dynamically as new FameDex users begin voting over time. It is important to ensure the dummie data does not interfere with the backend setup of tables etc - so I am happy for you to advise how to approach this. Maybe we consider providing seed data right now and ask Replit to use its discretion to apply the seed data for each celebrity based on what it thinks each celebrity should get. If so - for seed data we would not like to be too harsh for lower rated celebrities - so for eaxample if someone has a low approval rating - like
+
+Nick Fuentes - then give him a 57% or so for "Approval Rating" as the lowest and for Overated/Underated - a % of 65% say he is overated. We also need to think about the best design to represent Underated/Overated % for best UI/UX.
+
+ 
+
+Please let us know if the above makes sense? Do you need any clarification on any of the above or is there anything we need to consider before building?
