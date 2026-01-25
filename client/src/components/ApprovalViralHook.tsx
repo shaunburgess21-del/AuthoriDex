@@ -136,13 +136,13 @@ function ApprovalCard({
           
           <Button
             size="sm"
-            variant="outline"
-            className="w-full mt-2 border-violet-500/50 text-violet-300"
+            variant="default"
+            className="w-full mt-2 bg-blue-500 hover:bg-blue-600 text-white border-none font-semibold"
             onClick={() => onRateClick(person.personId)}
             data-testid={`button-rate-${type}`}
           >
             <Vote className="h-3.5 w-3.5 mr-1.5" />
-            Rate Now
+            Vote Now
           </Button>
         </div>
       </div>
