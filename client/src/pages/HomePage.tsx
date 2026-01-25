@@ -4,7 +4,6 @@ import { LeaderboardRow } from "@/components/LeaderboardRow";
 import { VotingModal } from "@/components/VotingModal";
 import { UserMenu } from "@/components/UserMenu";
 import { FilterDropdown } from "@/components/FilterDropdown";
-import { SortDropdown } from "@/components/SortDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { VoteDeckView } from "@/components/home/VoteDeckView";
@@ -470,7 +469,6 @@ type LeaderboardMode = "all" | "risers" | "fallers";
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [category, setCategory] = useState("all");
-  const [sort, setSort] = useState("rank");
   const [, setLocation] = useLocation();
   const [votingModalOpen, setVotingModalOpen] = useState(false);
   const [votingPersonId, setVotingPersonId] = useState<string | null>(null);
@@ -487,12 +485,11 @@ export default function HomePage() {
     isLoading,
     error,
   } = useInfiniteQuery<TrendingResponse>({
-    queryKey: ['/api/trending', searchQuery, category, sort],
+    queryKey: ['/api/trending', searchQuery, category],
     queryFn: async ({ pageParam = 0 }) => {
       const queryParams = new URLSearchParams();
       if (searchQuery) queryParams.set('search', searchQuery);
       if (category !== 'all') queryParams.set('category', category);
-      if (sort) queryParams.set('sort', sort);
       queryParams.set('limit', String(PAGE_SIZE));
       queryParams.set('offset', String(pageParam));
       
@@ -577,7 +574,7 @@ export default function HomePage() {
     }
   };
 
-  const hasActiveFilters = searchQuery || category !== "all" || sort !== "rank";
+  const hasActiveFilters = searchQuery || category !== "all";
 
   if (isLoading) {
     return (

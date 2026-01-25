@@ -378,18 +378,18 @@ function GainerCard({
         </div>
         
         <div className="flex items-center justify-center mb-3">
-          <span className="text-sm font-semibold text-green-500">
+          <span className="text-sm font-semibold text-violet-400">
             Pool: {market.totalPool.toLocaleString()}
           </span>
         </div>
         
         <Button
           size="sm"
-          className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500"
+          className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500"
           onClick={() => onPredict(market.id, market.leaders[0].name)}
           data-testid={`button-gainer-predict-${market.id}`}
         >
-          <TrendingUp className="h-4 w-4 mr-1.5" />
+          <ChevronRight className="h-4 w-4 mr-1.5" />
           Place Prediction
         </Button>
       </div>
