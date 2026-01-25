@@ -478,7 +478,7 @@ export default function HomePage() {
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
   const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [moversCollapsed, setMoversCollapsed] = useState(false);
+  const [moversCollapsed, setMoversCollapsed] = useState(true);
 
   const {
     data,
