@@ -116,14 +116,12 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
     const isPending = valueVoteMutation.isPending;
 
     return (
-      <div className="flex items-center gap-1">
-        <Button
-          variant={isUnderrated ? "default" : "outline"}
-          size="sm"
-          className={`font-mono text-xs min-w-[52px] h-7 px-2 ${
+      <div className="flex items-center gap-2">
+        <button
+          className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm border ${
             isUnderrated 
-              ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600" 
-              : "border-emerald-600/50 text-emerald-500 hover:bg-emerald-600/10"
+              ? "bg-emerald-500/30 border-emerald-500 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]" 
+              : "bg-emerald-500/10 border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/20 hover:border-emerald-500/60"
           }`}
           onClick={(e) => handleValueVote(e, 'underrated')}
           disabled={isPending}
@@ -133,19 +131,16 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             <Loader2 className="h-3 w-3 animate-spin" />
           ) : (
             <>
-              <ArrowUp className="h-3 w-3 mr-0.5" />
-              <span className="hidden sm:inline">Under</span>
-              <span className="sm:hidden">U</span>
+              <ArrowUp className="h-3 w-3" />
+              <span>Underrated</span>
             </>
           )}
-        </Button>
-        <Button
-          variant={isOverrated ? "default" : "outline"}
-          size="sm"
-          className={`font-mono text-xs min-w-[52px] h-7 px-2 ${
+        </button>
+        <button
+          className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm border ${
             isOverrated 
-              ? "bg-red-600 hover:bg-red-700 text-white border-red-600" 
-              : "border-red-600/50 text-red-500 hover:bg-red-600/10"
+              ? "bg-red-500/30 border-red-500 text-red-400 shadow-[0_0_12px_rgba(239,68,68,0.3)]" 
+              : "bg-red-500/10 border-red-500/40 text-red-500 hover:bg-red-500/20 hover:border-red-500/60"
           }`}
           onClick={(e) => handleValueVote(e, 'overrated')}
           disabled={isPending}
@@ -155,12 +150,11 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             <Loader2 className="h-3 w-3 animate-spin" />
           ) : (
             <>
-              <ArrowDown className="h-3 w-3 mr-0.5" />
-              <span className="hidden sm:inline">Over</span>
-              <span className="sm:hidden">O</span>
+              <ArrowDown className="h-3 w-3" />
+              <span>Overrated</span>
             </>
           )}
-        </Button>
+        </button>
       </div>
     );
   };
