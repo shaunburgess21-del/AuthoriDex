@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, pageViews, apiCache, sentimentVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile } from "@shared/schema";
 import { eq, desc, and, sql, count, gte } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -796,6 +796,324 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching sentiment vote counts:", error);
       res.status(500).json({ error: "Failed to fetch counts" });
+    }
+  });
+
+  // ============ VALUE VOTING (UNDERRATED/OVERRATED) ============
+  // New unified value voting system for the Value leaderboard tab
+
+  // Helper function to recompute celebrity metrics after a vote
+  async function recomputeCelebrityMetrics(celebrityId: string) {
+    try {
+      // Get approval metrics from user_votes (Supabase)
+      const { data: approvalVotes, error: approvalError } = await supabaseServer
+        .from('user_votes')
+        .select('rating')
+        .eq('person_id', celebrityId);
+
+      let approvalVotesCount = 0;
+      let approvalAvgRating: number | null = null;
+      let approvalPct: number | null = null;
+
+      if (!approvalError && approvalVotes && approvalVotes.length > 0) {
+        approvalVotesCount = approvalVotes.length;
+        const sum = approvalVotes.reduce((acc, v) => acc + v.rating, 0);
+        approvalAvgRating = sum / approvalVotesCount;
+        // Convert 1-5 scale to 0-100%: ((avg - 1) / 4) * 100
+        approvalPct = Math.round(((approvalAvgRating - 1) / 4) * 100);
+      }
+
+      // Get value metrics from celebrity_value_votes (local DB)
+      const underratedResult = await db
+        .select({ count: count() })
+        .from(celebrityValueVotes)
+        .where(and(
+          eq(celebrityValueVotes.celebrityId, celebrityId),
+          eq(celebrityValueVotes.vote, 'underrated')
+        ));
+
+      const overratedResult = await db
+        .select({ count: count() })
+        .from(celebrityValueVotes)
+        .where(and(
+          eq(celebrityValueVotes.celebrityId, celebrityId),
+          eq(celebrityValueVotes.vote, 'overrated')
+        ));
+
+      const underratedVotesCount = Number(underratedResult[0]?.count || 0);
+      const overratedVotesCount = Number(overratedResult[0]?.count || 0);
+      const totalValueVotes = underratedVotesCount + overratedVotesCount;
+
+      let underratedPct: number | null = null;
+      let overratedPct: number | null = null;
+      let valueScore: number | null = null;
+
+      if (totalValueVotes > 0) {
+        underratedPct = Math.round((underratedVotesCount / totalValueVotes) * 100);
+        overratedPct = Math.round((overratedVotesCount / totalValueVotes) * 100);
+        valueScore = underratedPct - overratedPct; // -100 to +100
+      }
+
+      // Get current trend score from trending_people
+      const [trendData] = await db
+        .select({ trendScore: trendingPeople.trendScore, fameIndex: trendingPeople.fameIndex })
+        .from(trendingPeople)
+        .where(eq(trendingPeople.id, celebrityId))
+        .limit(1);
+
+      // Upsert celebrity_metrics
+      await db
+        .insert(celebrityMetrics)
+        .values({
+          celebrityId,
+          trendScore: trendData?.trendScore || 0,
+          fameIndex: trendData?.fameIndex || 0,
+          approvalVotesCount,
+          approvalAvgRating,
+          approvalPct,
+          underratedVotesCount,
+          overratedVotesCount,
+          underratedPct,
+          overratedPct,
+          valueScore,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: celebrityMetrics.celebrityId,
+          set: {
+            trendScore: trendData?.trendScore || 0,
+            fameIndex: trendData?.fameIndex || 0,
+            approvalVotesCount,
+            approvalAvgRating,
+            approvalPct,
+            underratedVotesCount,
+            overratedVotesCount,
+            underratedPct,
+            overratedPct,
+            valueScore,
+            updatedAt: new Date(),
+          },
+        });
+
+      return {
+        approvalPct,
+        underratedPct,
+        overratedPct,
+        valueScore,
+      };
+    } catch (error) {
+      console.error("[recomputeCelebrityMetrics] Error:", error);
+      throw error;
+    }
+  }
+
+  // POST /api/celebrity/:id/value-vote - Cast underrated/overrated vote
+  app.post("/api/celebrity/:id/value-vote", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const celebrityId = req.params.id;
+      const userId = req.userId!;
+      const { vote } = req.body;
+
+      if (!vote || !['underrated', 'overrated'].includes(vote)) {
+        return res.status(400).json({ error: "vote must be 'underrated' or 'overrated'" });
+      }
+
+      // Check if celebrity exists
+      const [celebrity] = await db
+        .select({ id: trendingPeople.id, name: trendingPeople.name })
+        .from(trendingPeople)
+        .where(eq(trendingPeople.id, celebrityId))
+        .limit(1);
+
+      if (!celebrity) {
+        return res.status(404).json({ error: "Celebrity not found" });
+      }
+
+      // Upsert the vote (1 vote per user per celebrity, no daily limit)
+      await db
+        .insert(celebrityValueVotes)
+        .values({
+          celebrityId,
+          userId,
+          vote,
+        })
+        .onConflictDoUpdate({
+          target: [celebrityValueVotes.userId, celebrityValueVotes.celebrityId],
+          set: {
+            vote,
+            updatedAt: new Date(),
+          },
+        });
+
+      // Recompute metrics for this celebrity
+      const metrics = await recomputeCelebrityMetrics(celebrityId);
+
+      res.json({
+        success: true,
+        userVote: vote,
+        underratedPct: metrics.underratedPct,
+        overratedPct: metrics.overratedPct,
+        valueScore: metrics.valueScore,
+      });
+    } catch (error: any) {
+      console.error("[value-vote] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to submit vote" });
+    }
+  });
+
+  // GET /api/celebrity/:id/value-vote - Get user's current value vote
+  app.get("/api/celebrity/:id/value-vote", optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const celebrityId = req.params.id;
+      const userId = req.userId;
+
+      let userVote: string | null = null;
+
+      if (userId) {
+        const [vote] = await db
+          .select({ vote: celebrityValueVotes.vote })
+          .from(celebrityValueVotes)
+          .where(and(
+            eq(celebrityValueVotes.celebrityId, celebrityId),
+            eq(celebrityValueVotes.userId, userId)
+          ))
+          .limit(1);
+
+        userVote = vote?.vote || null;
+      }
+
+      // Get current metrics
+      const [metrics] = await db
+        .select()
+        .from(celebrityMetrics)
+        .where(eq(celebrityMetrics.celebrityId, celebrityId))
+        .limit(1);
+
+      res.json({
+        userVote,
+        underratedPct: metrics?.underratedPct ?? null,
+        overratedPct: metrics?.overratedPct ?? null,
+        valueScore: metrics?.valueScore ?? null,
+        underratedVotesCount: metrics?.underratedVotesCount ?? 0,
+        overratedVotesCount: metrics?.overratedVotesCount ?? 0,
+      });
+    } catch (error: any) {
+      console.error("[value-vote GET] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to get vote" });
+    }
+  });
+
+  // GET /api/leaderboard - Enhanced leaderboard with tab support
+  app.get("/api/leaderboard", optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const tab = (req.query.tab as string) || 'fame'; // 'fame' | 'approval' | 'value'
+      const sortDir = (req.query.sort as string) || 'desc'; // 'asc' | 'desc'
+      const category = req.query.category as string;
+      const limit = parseInt(req.query.limit as string) || 100;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const userId = req.userId;
+
+      // Base query: join trending_people with celebrity_metrics
+      let query = db
+        .select({
+          id: trendingPeople.id,
+          name: trendingPeople.name,
+          avatar: trendingPeople.avatar,
+          category: trendingPeople.category,
+          rank: trendingPeople.rank,
+          trendScore: trendingPeople.trendScore,
+          fameIndex: trendingPeople.fameIndex,
+          change24h: trendingPeople.change24h,
+          change7d: trendingPeople.change7d,
+          // Metrics
+          approvalPct: celebrityMetrics.approvalPct,
+          approvalVotesCount: celebrityMetrics.approvalVotesCount,
+          underratedPct: celebrityMetrics.underratedPct,
+          overratedPct: celebrityMetrics.overratedPct,
+          valueScore: celebrityMetrics.valueScore,
+        })
+        .from(trendingPeople)
+        .leftJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId));
+
+      // Apply category filter if provided
+      if (category && category !== 'all') {
+        query = query.where(eq(trendingPeople.category, category)) as typeof query;
+      }
+
+      // Determine sort column based on tab
+      let orderByColumn;
+      switch (tab) {
+        case 'approval':
+          orderByColumn = celebrityMetrics.approvalPct;
+          break;
+        case 'value':
+          orderByColumn = celebrityMetrics.valueScore;
+          break;
+        case 'fame':
+        default:
+          orderByColumn = trendingPeople.fameIndex;
+          break;
+      }
+
+      // Apply sort order (nulls last)
+      if (sortDir === 'asc') {
+        query = query.orderBy(sql`${orderByColumn} ASC NULLS LAST, ${trendingPeople.id} ASC`) as typeof query;
+      } else {
+        query = query.orderBy(sql`${orderByColumn} DESC NULLS LAST, ${trendingPeople.id} ASC`) as typeof query;
+      }
+
+      query = query.limit(limit).offset(offset) as typeof query;
+
+      const results = await query;
+
+      // If user is authenticated and on value tab, fetch their votes
+      let userValueVotes: Record<string, string> = {};
+      if (userId && tab === 'value') {
+        const votes = await db
+          .select({ celebrityId: celebrityValueVotes.celebrityId, vote: celebrityValueVotes.vote })
+          .from(celebrityValueVotes)
+          .where(eq(celebrityValueVotes.userId, userId));
+
+        for (const v of votes) {
+          userValueVotes[v.celebrityId] = v.vote;
+        }
+      }
+
+      // Map results with user vote state
+      const leaderboard = results.map((person, index) => ({
+        ...person,
+        leaderboardRank: offset + index + 1,
+        userValueVote: userValueVotes[person.id] || null,
+      }));
+
+      res.json({
+        tab,
+        sortDir,
+        total: leaderboard.length,
+        data: leaderboard,
+      });
+    } catch (error: any) {
+      console.error("[leaderboard] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch leaderboard" });
+    }
+  });
+
+  // POST /api/celebrity-metrics/sync - Sync all celebrity metrics (admin)
+  app.post("/api/celebrity-metrics/sync", async (req, res) => {
+    try {
+      // Get all celebrities from trending_people
+      const celebrities = await db.select({ id: trendingPeople.id }).from(trendingPeople);
+      
+      let synced = 0;
+      for (const celebrity of celebrities) {
+        await recomputeCelebrityMetrics(celebrity.id);
+        synced++;
+      }
+
+      res.json({ success: true, synced });
+    } catch (error: any) {
+      console.error("[celebrity-metrics/sync] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to sync metrics" });
     }
   });
 

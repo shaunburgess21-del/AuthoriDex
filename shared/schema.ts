@@ -779,6 +779,57 @@ export type PlatformStatus = typeof platformStatus.$inferSelect;
 export type InsertPlatformStatus = z.infer<typeof insertPlatformStatusSchema>;
 
 // ============================================================================
+// CELEBRITY METRICS - Aggregated voting data for fast leaderboard sorting
+// ============================================================================
+
+// Celebrity Metrics - 1 row per celebrity for fast leaderboard queries
+export const celebrityMetrics = pgTable("celebrity_metrics", {
+  celebrityId: varchar("celebrity_id").primaryKey().references(() => trackedPeople.id, { onDelete: "cascade" }),
+  // Fame Index score (mirrors trend_score from trending_people)
+  trendScore: real("trend_score").default(0),
+  fameIndex: integer("fame_index").default(0),
+  // Approval aggregates (from user_votes table)
+  approvalVotesCount: integer("approval_votes_count").notNull().default(0),
+  approvalAvgRating: real("approval_avg_rating"), // 1-5 scale
+  approvalPct: real("approval_pct"), // 0-100 scale ((avg_rating - 1) / 4 * 100)
+  // Value aggregates (from celebrity_value_votes table)
+  underratedVotesCount: integer("underrated_votes_count").notNull().default(0),
+  overratedVotesCount: integer("overrated_votes_count").notNull().default(0),
+  underratedPct: real("underrated_pct"), // 0-100
+  overratedPct: real("overrated_pct"), // 0-100
+  valueScore: real("value_score"), // -100 to +100 (underrated_pct - overrated_pct)
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertCelebrityMetricsSchema = createInsertSchema(celebrityMetrics);
+
+export type CelebrityMetrics = typeof celebrityMetrics.$inferSelect;
+export type InsertCelebrityMetrics = z.infer<typeof insertCelebrityMetricsSchema>;
+
+// Celebrity Value Votes - underrated/overrated votes (1 per user per celebrity)
+export const celebrityValueVotes = pgTable("celebrity_value_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  celebrityId: varchar("celebrity_id").notNull().references(() => trackedPeople.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(), // Supabase auth user ID
+  vote: text("vote").notNull(), // 'underrated' or 'overrated'
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueUserCelebrity: unique().on(table.userId, table.celebrityId),
+  celebrityIdx: index("celebrity_value_votes_celebrity_idx").on(table.celebrityId),
+  userIdx: index("celebrity_value_votes_user_idx").on(table.userId),
+}));
+
+export const insertCelebrityValueVoteSchema = createInsertSchema(celebrityValueVotes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type CelebrityValueVote = typeof celebrityValueVotes.$inferSelect;
+export type InsertCelebrityValueVote = z.infer<typeof insertCelebrityValueVoteSchema>;
+
+// ============================================================================
 // TIER-1 OVERRIDES - Manual corrections for top celebrities
 // ============================================================================
 
