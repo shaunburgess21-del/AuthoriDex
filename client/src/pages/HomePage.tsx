@@ -8,6 +8,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { VoteDeckView } from "@/components/home/VoteDeckView";
 import { PredictDeckView } from "@/components/home/PredictDeckView";
+import { ApprovalViralHook } from "@/components/ApprovalViralHook";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -908,9 +909,17 @@ export default function HomePage() {
           )}
 
           {activeView === "vote" && (
-            <VoteDeckView 
-              onExplore={() => setLocation("/vote")} 
-            />
+            <>
+              <ApprovalViralHook 
+                onRateClick={(personId) => {
+                  setVotingPersonId(personId);
+                  setVotingModalOpen(true);
+                }} 
+              />
+              <VoteDeckView 
+                onExplore={() => setLocation("/vote")} 
+              />
+            </>
           )}
         </AnimatePresence>
       </div>
