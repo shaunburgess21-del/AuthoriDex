@@ -1,0 +1,141 @@
+import { useQuery } from "@tanstack/react-query";
+import { ThumbsUp, ThumbsDown, Star } from "lucide-react";
+import { PersonAvatar } from "@/components/PersonAvatar";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+
+interface ApprovalLeader {
+  personId: string;
+  personName: string;
+  avgRating: number;
+  voteCount: number;
+  approvalPercent: number;
+  avatar: string | null;
+  category: string | null;
+}
+
+interface ApprovalLeadersResponse {
+  highest: ApprovalLeader | null;
+  lowest: ApprovalLeader | null;
+  message?: string;
+}
+
+interface ApprovalViralHookProps {
+  onRateClick: (personId: string) => void;
+}
+
+export function ApprovalViralHook({ onRateClick }: ApprovalViralHookProps) {
+  const { data, isLoading, error } = useQuery<ApprovalLeadersResponse>({
+    queryKey: ['/api/approval-leaders'],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-2 gap-4 px-4 py-6">
+        <div className="h-48 rounded-xl pulse-card-green animate-pulse" />
+        <div className="h-48 rounded-xl pulse-card-red animate-pulse" />
+      </div>
+    );
+  }
+
+  if (error || !data || (!data.highest && !data.lowest)) {
+    return null;
+  }
+
+  return (
+    <div className="px-4 py-6" data-testid="approval-viral-hook">
+      <div className="grid grid-cols-2 gap-4">
+        {data.highest && (
+          <ApprovalCard
+            type="highest"
+            person={data.highest}
+            onRateClick={onRateClick}
+          />
+        )}
+        {data.lowest && (
+          <ApprovalCard
+            type="lowest"
+            person={data.lowest}
+            onRateClick={onRateClick}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ApprovalCard({
+  type,
+  person,
+  onRateClick,
+}: {
+  type: "highest" | "lowest";
+  person: ApprovalLeader;
+  onRateClick: (personId: string) => void;
+}) {
+  const isHighest = type === "highest";
+  const cardClass = isHighest ? "pulse-card-green" : "pulse-card-red";
+  const iconBgClass = isHighest ? "pulse-icon-green" : "pulse-icon-red";
+  const iconColor = isHighest ? "text-green-400" : "text-red-400";
+  const percentColor = isHighest ? "text-green-400" : "text-red-400";
+  const badgeVariant = isHighest ? "default" : "destructive";
+  const Icon = isHighest ? ThumbsUp : ThumbsDown;
+
+  return (
+    <div
+      className={`rounded-xl ${cardClass} transition-all duration-200`}
+      data-testid={`approval-card-${type}`}
+    >
+      <div className="p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${iconBgClass}`}>
+            <Icon className={`h-4 w-4 ${iconColor}`} />
+          </div>
+          <Badge variant={badgeVariant} className="text-xs">
+            {isHighest ? "Highest Approval" : "Lowest Approval"}
+          </Badge>
+        </div>
+        
+        <div className="flex flex-col items-center text-center space-y-3">
+          <PersonAvatar 
+            name={person.personName} 
+            avatar={person.avatar || undefined} 
+            size="lg" 
+          />
+          
+          <div className="space-y-1">
+            <h3 className="font-semibold text-sm text-slate-100 truncate max-w-full">
+              {person.personName}
+            </h3>
+            {person.category && (
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+                {person.category}
+              </p>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-1">
+            <span className={`text-3xl font-bold tabular-nums ${percentColor}`}>
+              {person.approvalPercent}%
+            </span>
+          </div>
+          
+          <div className="flex items-center gap-1 text-[10px] text-slate-500">
+            <Star className="h-3 w-3" />
+            <span>{person.voteCount.toLocaleString()} votes</span>
+          </div>
+          
+          <Button
+            size="sm"
+            variant={isHighest ? "default" : "destructive"}
+            className="w-full mt-2"
+            onClick={() => onRateClick(person.personId)}
+            data-testid={`button-rate-${type}`}
+          >
+            Rate Now
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

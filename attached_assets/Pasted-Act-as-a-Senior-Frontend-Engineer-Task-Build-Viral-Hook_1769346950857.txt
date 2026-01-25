@@ -1,0 +1,55 @@
+Act as a Senior Frontend Engineer.
+
+Task: Build "Viral Hook" Approval Cards (Highest vs. Lowest) We need to fill the empty space between the Hero Section and the Sticky Toggles (where the old Mover cards used to be) with a high-impact "Viral Hook" section featuring just two cards: "Highest Approval" vs. "Lowest Approval".
+
+1. Location & Visibility
+
+Insert: A new component (e.g., <ApprovalViralHook />) in the space directly below the Hero Section and above the Sticky Toggles.
+
+Visibility: This section should only appear when the "Leaderboard" toggle is active.
+
+2. Visual Design (Strict Consistency) You must reuse the exact styling (colors, badges/caps, subtle glows) used elsewhere in the app (like the old Mover cards or Up/Down cards).
+
+Card A (Left): "Highest Approval Rating"
+
+Style: Use the Green theme (Green border glow, Green "Cap/Badge" at the top).
+
+Data: Displays the celebrity with the highest approval_rating (or 1-5 star average).
+
+Card B (Right): "Lowest Approval Rating"
+
+Style: Use the Red theme (Red border glow, Red "Cap/Badge" at the top).
+
+Data: Displays the celebrity with the lowest approval_rating.
+
+3. Card Content & Layout
+
+Layout: Display these two cards side-by-side (Grid: 2 columns). On very small mobile screens, they can stack if necessary, but side-by-side is preferred if space permits.
+
+Inner Content:
+
+Header Badge: "Highest Approval" (Green) / "Lowest Approval" (Red).
+
+Celebrity: Profile Photo (Avatar) + Name.
+
+Stat: Big display of their % Approval (e.g., "98%").
+
+Footer Action: A prominent "Rate Now" button.
+
+4. Interaction (Crucial)
+
+The "Rate Now" Button:
+
+When clicked, this button must open the existing CastVoteModal (the one with the 1-5 star slider/selector).
+
+It must pass the specific celebrity ID from the card so the user votes on that person immediately.
+
+Goal: Convert passive viewers into active voters instantly.
+
+5. Data Logic
+
+Fetch the top 1 and bottom 1 celebrities based on their approval_rating field (or calculate the average from the votes table if a pre-calculated field doesn't exist yet).
+
+Ensure the data updates dynamically as votes come in.
+
+Deliverable: Verify that the new "Green vs. Red" Approval Cards are visible on the Home Page (Leaderboard view) and that the "Rate Now" buttons successfully open the voting modal.

@@ -3059,6 +3059,95 @@ Be concise and factual. Only return the JSON object.`;
     });
   });
 
+  // ============ APPROVAL LEADERS ============
+  // Get highest and lowest rated celebrities based on user votes
+  app.get("/api/approval-leaders", async (req, res) => {
+    try {
+      // Query Supabase for aggregate ratings per person (snake_case columns)
+      const { data: voteStats, error } = await supabaseServer
+        .from('user_votes')
+        .select('person_id, person_name, rating');
+
+      if (error) {
+        console.error("[Approval Leaders] Supabase error:", error);
+        return res.status(500).json({ error: "Failed to fetch vote data" });
+      }
+
+      if (!voteStats || voteStats.length === 0) {
+        return res.json({ highest: null, lowest: null, message: "No votes yet" });
+      }
+
+      // Aggregate ratings by personId
+      const personRatings: Record<string, { personId: string; personName: string; totalRating: number; voteCount: number }> = {};
+      
+      for (const vote of voteStats) {
+        const personId = vote.person_id;
+        const personName = vote.person_name;
+        if (!personRatings[personId]) {
+          personRatings[personId] = {
+            personId,
+            personName,
+            totalRating: 0,
+            voteCount: 0,
+          };
+        }
+        personRatings[personId].totalRating += vote.rating;
+        personRatings[personId].voteCount += 1;
+      }
+
+      // Calculate average rating and approval percentage for each person
+      const personStats = Object.values(personRatings).map(p => ({
+        personId: p.personId,
+        personName: p.personName,
+        avgRating: p.totalRating / p.voteCount,
+        voteCount: p.voteCount,
+        approvalPercent: Math.round(((p.totalRating / p.voteCount) - 1) / 4 * 100),
+      }));
+
+      // Sort to find highest and lowest
+      personStats.sort((a, b) => b.avgRating - a.avgRating);
+      
+      const highest = personStats[0] || null;
+      const lowest = personStats.length > 1 ? personStats[personStats.length - 1] : null;
+
+      // Get avatar from trending_people for each
+      let highestWithAvatar = null;
+      let lowestWithAvatar = null;
+
+      if (highest) {
+        const [personData] = await db.select({ avatar: trendingPeople.avatar, category: trendingPeople.category })
+          .from(trendingPeople)
+          .where(eq(trendingPeople.id, highest.personId))
+          .limit(1);
+        highestWithAvatar = {
+          ...highest,
+          avatar: personData?.avatar || null,
+          category: personData?.category || null,
+        };
+      }
+
+      if (lowest) {
+        const [personData] = await db.select({ avatar: trendingPeople.avatar, category: trendingPeople.category })
+          .from(trendingPeople)
+          .where(eq(trendingPeople.id, lowest.personId))
+          .limit(1);
+        lowestWithAvatar = {
+          ...lowest,
+          avatar: personData?.avatar || null,
+          category: personData?.category || null,
+        };
+      }
+
+      res.json({
+        highest: highestWithAvatar,
+        lowest: lowestWithAvatar,
+      });
+    } catch (error: any) {
+      console.error("[Approval Leaders] Error:", error);
+      res.status(500).json({ error: "Failed to fetch approval leaders" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

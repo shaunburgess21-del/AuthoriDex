@@ -8,6 +8,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { VoteDeckView } from "@/components/home/VoteDeckView";
 import { PredictDeckView } from "@/components/home/PredictDeckView";
+import { ApprovalViralHook } from "@/components/ApprovalViralHook";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -652,6 +653,15 @@ export default function HomePage() {
       </header>
 
       <HeroSection onCastVoteClick={handleHeroCastVote} />
+
+      {activeView === "leaderboard" && (
+        <ApprovalViralHook 
+          onRateClick={(personId) => {
+            setVotingPersonId(personId);
+            setVotingModalOpen(true);
+          }} 
+        />
+      )}
 
       <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-blue-500/5 via-background/95 to-blue-500/5 backdrop-blur-xl">
         <div className="container mx-auto px-4">
