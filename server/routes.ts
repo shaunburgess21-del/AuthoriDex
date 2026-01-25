@@ -3074,7 +3074,26 @@ Be concise and factual. Only return the JSON object.`;
       }
 
       if (!voteStats || voteStats.length === 0) {
-        return res.json({ highest: null, lowest: null, message: "No votes yet" });
+        // Return fallback celebrities for design preview when no votes exist
+        const fallbackHighest = {
+          personId: "elon-musk",
+          personName: "Elon Musk",
+          avgRating: 4.7,
+          voteCount: 0,
+          approvalPercent: 92.5,
+          avatar: null,
+          category: "Tech"
+        };
+        const fallbackLowest = {
+          personId: "nick-fuentes",
+          personName: "Nick Fuentes",
+          avgRating: 1.3,
+          voteCount: 0,
+          approvalPercent: 7.5,
+          avatar: null,
+          category: "Politics"
+        };
+        return res.json({ highest: fallbackHighest, lowest: fallbackLowest, isFallback: true });
       }
 
       // Aggregate ratings by personId
