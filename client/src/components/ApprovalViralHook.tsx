@@ -94,11 +94,11 @@ function ApprovalCard({
     >
       <div className="p-4">
         <div className="flex items-center gap-2 mb-4">
-          <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${iconBgClass}`}>
+          <div className={`hidden sm:flex h-8 w-8 rounded-lg items-center justify-center ${iconBgClass}`}>
             <Icon className={`h-4 w-4 ${iconColor}`} />
           </div>
           <span 
-            className={`text-xs font-medium px-2.5 py-1 rounded-full ${badgeClass}`}
+            className={`text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${badgeClass}`}
             data-testid={badgeTestId}
           >
             {isHighest ? "Highest Approval" : "Lowest Approval"}
