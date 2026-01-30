@@ -130,10 +130,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         people = freshData;
       }
 
+      // Fetch approval metrics for all celebrities
+      const metrics = await db
+        .select({
+          celebrityId: celebrityMetrics.celebrityId,
+          approvalPct: celebrityMetrics.approvalPct,
+          approvalVotesCount: celebrityMetrics.approvalVotesCount,
+          underratedPct: celebrityMetrics.underratedPct,
+          overratedPct: celebrityMetrics.overratedPct,
+          valueScore: celebrityMetrics.valueScore,
+        })
+        .from(celebrityMetrics);
+      
+      // Create a lookup map for metrics
+      const metricsMap = new Map<string, typeof metrics[0]>();
+      for (const m of metrics) {
+        metricsMap.set(m.celebrityId, m);
+      }
+
+      // Merge metrics into people
+      let enrichedPeople = people.map(p => {
+        const m = metricsMap.get(p.id);
+        return {
+          ...p,
+          approvalPct: m?.approvalPct ?? null,
+          approvalVotesCount: m?.approvalVotesCount ?? null,
+          underratedPct: m?.underratedPct ?? null,
+          overratedPct: m?.overratedPct ?? null,
+          valueScore: m?.valueScore ?? null,
+        };
+      });
+
       // Apply search filter
       if (search && typeof search === 'string') {
         const searchLower = search.toLowerCase();
-        people = people.filter(p => 
+        enrichedPeople = enrichedPeople.filter(p => 
           p.name.toLowerCase().includes(searchLower) ||
           (p.category && p.category.toLowerCase().includes(searchLower))
         );
@@ -141,22 +172,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Apply category filter
       if (category && typeof category === 'string') {
-        people = people.filter(p => p.category === category);
+        enrichedPeople = enrichedPeople.filter(p => p.category === category);
       }
 
       // Apply sorting
       if (sort === 'rank') {
-        people.sort((a, b) => a.rank - b.rank);
+        enrichedPeople.sort((a, b) => a.rank - b.rank);
       } else if (sort === 'score') {
-        people.sort((a, b) => b.trendScore - a.trendScore);
+        enrichedPeople.sort((a, b) => b.trendScore - a.trendScore);
       } else if (sort === '24h') {
-        people.sort((a, b) => b.change24h - a.change24h);
+        enrichedPeople.sort((a, b) => b.change24h - a.change24h);
       } else if (sort === '7d') {
-        people.sort((a, b) => b.change7d - a.change7d);
+        enrichedPeople.sort((a, b) => b.change7d - a.change7d);
+      } else if (sort === 'approval') {
+        // Sort by approval percentage (highest first, nulls last)
+        enrichedPeople.sort((a, b) => {
+          if (a.approvalPct === null && b.approvalPct === null) return 0;
+          if (a.approvalPct === null) return 1;
+          if (b.approvalPct === null) return -1;
+          return b.approvalPct - a.approvalPct;
+        });
       }
 
       // Store total count before pagination
-      const totalCount = people.length;
+      const totalCount = enrichedPeople.length;
 
       // Apply pagination if limit is provided
       if (limit && typeof limit === 'string') {
@@ -164,15 +203,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const offsetNum = offset && typeof offset === 'string' ? parseInt(offset, 10) : 0;
         
         if (!isNaN(limitNum) && limitNum > 0) {
-          people = people.slice(offsetNum, offsetNum + limitNum);
+          enrichedPeople = enrichedPeople.slice(offsetNum, offsetNum + limitNum);
         }
       }
 
       // Return paginated response with totalCount
       res.json({
-        data: people,
+        data: enrichedPeople,
         totalCount,
-        hasMore: limit ? (parseInt(offset as string || '0', 10) + people.length) < totalCount : false
+        hasMore: limit ? (parseInt(offset as string || '0', 10) + enrichedPeople.length) < totalCount : false
       });
     } catch (error) {
       console.error("Error fetching trending people:", error);
