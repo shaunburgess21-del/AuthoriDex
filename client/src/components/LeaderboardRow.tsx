@@ -237,12 +237,10 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               <Tooltip>
                 <TooltipTrigger asChild>
                   <p className="font-mono font-semibold text-lg cursor-help" data-testid={`sentiment-score-${person.id}`}>
-                    {sentimentScore ? (
+                    {person.approvalPct != null ? (
                       <>
-                        <span
-                          style={{ color: getSentimentColor(sentimentScore) }}
-                          className="text-[22px]">
-                          {voteToApprovalPercent(sentimentScore)}
+                        <span className="text-violet-400 text-[22px]">
+                          {Math.round(person.approvalPct)}
                         </span>
                         <span className="text-muted-foreground text-[22px] translate-y-[0.5px]">%</span>
                       </>
@@ -251,9 +249,9 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                     )}
                   </p>
                 </TooltipTrigger>
-                {sentimentScore && (
+                {person.approvalPct != null && (
                   <TooltipContent>
-                    {person.name} has a {voteToApprovalPercent(sentimentScore)}% approval rating.
+                    {person.name} has a {Math.round(person.approvalPct)}% approval rating from community votes
                   </TooltipContent>
                 )}
               </Tooltip>
@@ -282,16 +280,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               <Tooltip>
                 <TooltipTrigger asChild>
                   <p className="font-mono font-semibold text-lg cursor-help">
-                    {sentimentScore ? (
-                      <>
-                        <span
-                          style={{ color: getSentimentColor(sentimentScore) }}
-                          className="text-[28px] font-bold">
-                          {voteToApprovalPercent(sentimentScore)}
-                        </span>
-                        <span className="text-muted-foreground text-[22px]">%</span>
-                      </>
-                    ) : person.approvalPct != null ? (
+                    {person.approvalPct != null ? (
                       <>
                         <span className="text-[28px] font-bold text-violet-400">
                           {Math.round(person.approvalPct)}
