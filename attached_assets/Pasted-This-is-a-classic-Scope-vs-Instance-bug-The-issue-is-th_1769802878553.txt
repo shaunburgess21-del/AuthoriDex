@@ -1,0 +1,45 @@
+This is a classic "Scope vs. Instance" bug.
+
+The issue is that the frontend is currently fetching your personal vote (User Scope) and displaying that as the percentage (100% because you voted 5 stars), instead of fetching the Global Aggregate (System Scope) which contains the average of all 1,535 seed votes.
+
+Here is the Bug Fix Prompt to clarify this distinction to Replit and force the display to use the global data.
+
+Act as a Senior Frontend Engineer.
+
+Task: Fix "Approval %" Display and Sorting Logic I have noticed a critical bug in the Leaderboard display. Currently, the "Approval %" shown in the leaderboard row appears to be calculating based on the current user's single vote (showing 100% after I vote) rather than the Global Community Average.
+
+1. The "Source of Truth" Fix
+
+Current Behavior: The frontend is likely calculating the percentage from user_votes (the current user's session) or using a variable like myVote.
+
+Required Behavior: The frontend MUST display the approval_pct column from the celebrity_metrics table.
+
+Logic:
+
+The "Approval %" text (e.g., "92%") must represent the average of ALL votes (including the thousands of seed votes), not just the logged-in user's vote.
+
+Ensure the API response for the Leaderboard includes the joined celebrity_metrics data for every celebrity.
+
+2. Leaderboard Tab Specifics (Review) You must ensure the Sorting vs. Display logic is distinct for each tab:
+
+Tab A: "Fame Index" (Default)
+
+Sorting: Remains sorted by Trend Score (API Data). Do not change this.
+
+Display: It MUST still display the global Approval % (from celebrity_metrics) in the row, even though it is not sorted by it. Currently, it seems to be missing or zero.
+
+Tab B: "Approval"
+
+Sorting: Must sort the list by celebrity_metrics.approval_pct (Highest % to Lowest %).
+
+Display: Obviously displays the Approval % prominentely.
+
+3. Action Plan
+
+Check the API: Ensure the GET request for the leaderboard joins celebrities with celebrity_metrics and returns approval_pct.
+
+Update Component: Change the text rendering logic in the LeaderboardRow component to read {celebrity.metrics.approval_pct}% instead of the user's local state.
+
+Run Aggregation: If the seed data is in user_votes but the metrics table is empty, run the aggregation script to calculate the initial percentages.
+
+Deliverable: Verify that Donald Trump displays ~91% (based on seed data) rather than 100%, and that this percentage appears on both the "Fame Index" and "Approval" tabs.
