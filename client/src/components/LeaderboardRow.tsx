@@ -23,6 +23,17 @@ const getSentimentColor = (value: number): string => {
   return SEGMENT_COLORS_5[value - 1];
 };
 
+// Convert approval percentage (0-100) to a 1-5 rating scale and get corresponding color
+const getApprovalColor = (approvalPct: number): string => {
+  // Handle both fractional (0.93) and integer (93) inputs
+  const normalizedPct = approvalPct <= 1 ? approvalPct * 100 : approvalPct;
+  // Convert 0-100% to 1-5 scale: (pct / 100 * 4) + 1
+  // 0% → 1, 25% → 2, 50% → 3, 75% → 4, 100% → 5
+  const rating = Math.round((normalizedPct / 100) * 4) + 1;
+  const clampedRating = Math.max(1, Math.min(5, rating));
+  return SEGMENT_COLORS_5[clampedRating - 1];
+};
+
 type LeaderboardTab = "fame" | "approval" | "value";
 
 interface ExtendedPerson extends TrendingPerson {
@@ -239,7 +250,10 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                   <p className="font-mono font-semibold text-lg cursor-help" data-testid={`sentiment-score-${person.id}`}>
                     {person.approvalPct != null ? (
                       <>
-                        <span className="text-violet-400 text-[22px]">
+                        <span 
+                          className="text-[22px]"
+                          style={{ color: getApprovalColor(person.approvalPct) }}
+                        >
                           {Math.round(person.approvalPct)}
                         </span>
                         <span className="text-muted-foreground text-[22px] translate-y-[0.5px]">%</span>
@@ -282,7 +296,10 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                   <p className="font-mono font-semibold text-lg cursor-help">
                     {person.approvalPct != null ? (
                       <>
-                        <span className="text-[28px] font-bold text-violet-400">
+                        <span 
+                          className="text-[28px] font-bold"
+                          style={{ color: getApprovalColor(person.approvalPct) }}
+                        >
                           {Math.round(person.approvalPct)}
                         </span>
                         <span className="text-muted-foreground text-[22px]">%</span>

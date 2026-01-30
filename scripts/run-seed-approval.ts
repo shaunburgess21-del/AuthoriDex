@@ -6,21 +6,21 @@
  * Run with: npx tsx scripts/run-seed-approval.ts
  */
 
-import { seedApprovalData } from "../server/seed-approval-data";
+import { seedApprovalDataDirect } from "../server/seed-approval-data";
 
 async function main() {
   console.log("=".repeat(60));
-  console.log("FameDex Approval Seed Runner");
+  console.log("FameDex Approval Seed Runner (Direct Mode)");
   console.log("Using data from FameDex_Seed_Data_For_Replit.csv");
   console.log("=".repeat(60));
   console.log("");
 
   try {
-    console.log("Starting seed process...");
-    console.log("Expected: Elon Musk with 1,535 votes and ~93% approval");
+    console.log("Starting direct seed process...");
+    console.log("Expected: 100 celebrities with approval data");
     console.log("");
 
-    const result = await seedApprovalData();
+    const result = await seedApprovalDataDirect();
 
     console.log("");
     console.log("=".repeat(60));

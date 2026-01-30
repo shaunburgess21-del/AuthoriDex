@@ -5,6 +5,24 @@ import { eq, sql } from "drizzle-orm";
 
 const SEED_USER_ID = "seed-system-approval";
 
+// Manual name mapping for seed names → database names
+const NAME_MAPPING: Record<string, string> = {
+  "MrBeast": "Mr Beast",
+  "Beyonce": "Beyoncé",
+  "Lisa": "Lisa (Blackpink)",
+};
+
+// Normalize names for fuzzy matching: lowercase, strip accents, remove special chars
+function normalizeNameForMatch(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Remove accent marks
+    .replace(/[^a-z0-9\s]/g, "") // Remove special chars except spaces
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 interface SeedCelebrity {
   rank: number;
   name: string;
@@ -185,11 +203,34 @@ export async function seedApprovalData(): Promise<{
 
   for (const celebrity of SEED_DATA) {
     try {
-      const [tracked] = await db
+      // Try manual mapping first
+      const mappedName = NAME_MAPPING[celebrity.name] || celebrity.name;
+      
+      // First try exact case-insensitive match with mapped name
+      let [tracked] = await db
         .select({ id: trackedPeople.id, name: trackedPeople.name })
         .from(trackedPeople)
-        .where(sql`LOWER(${trackedPeople.name}) = LOWER(${celebrity.name})`)
+        .where(sql`LOWER(${trackedPeople.name}) = LOWER(${mappedName})`)
         .limit(1);
+
+      // If not found, try normalized fuzzy matching
+      if (!tracked) {
+        const normalizedSeedName = normalizeNameForMatch(celebrity.name);
+        const allPeople = await db
+          .select({ id: trackedPeople.id, name: trackedPeople.name })
+          .from(trackedPeople);
+        
+        for (const person of allPeople) {
+          const normalizedDbName = normalizeNameForMatch(person.name);
+          if (normalizedDbName === normalizedSeedName || 
+              normalizedDbName.includes(normalizedSeedName) || 
+              normalizedSeedName.includes(normalizedDbName)) {
+            tracked = person;
+            console.log(`[SeedApproval] Fuzzy matched "${celebrity.name}" → "${person.name}"`);
+            break;
+          }
+        }
+      }
 
       if (!tracked) {
         console.log(`[SeedApproval] Celebrity not found in tracked_people: ${celebrity.name}`);
@@ -292,6 +333,149 @@ export async function seedApprovalData(): Promise<{
   }
 
   console.log(`[SeedApproval] Completed. Seeded: ${seeded}, Skipped: ${skipped}, Errors: ${errors.length}`);
+
+  return {
+    success: errors.length === 0,
+    seeded,
+    skipped,
+    errors,
+  };
+}
+
+/**
+ * Fast direct seeding - inserts directly into celebrity_metrics without creating votes.
+ * This is faster and more reliable than the vote-based seeding.
+ */
+export async function seedApprovalDataDirect(): Promise<{
+  success: boolean;
+  seeded: number;
+  skipped: number;
+  errors: string[];
+}> {
+  const errors: string[] = [];
+  let seeded = 0;
+  let skipped = 0;
+
+  console.log("[SeedApprovalDirect] Starting direct approval data seeding for", SEED_DATA.length, "celebrities...");
+
+  for (const celebrity of SEED_DATA) {
+    try {
+      // Try manual mapping first
+      const mappedName = NAME_MAPPING[celebrity.name] || celebrity.name;
+      
+      // First try exact case-insensitive match with mapped name
+      let tracked: { id: string; name: string } | undefined = (await db
+        .select({ id: trackedPeople.id, name: trackedPeople.name })
+        .from(trackedPeople)
+        .where(sql`LOWER(${trackedPeople.name}) = LOWER(${mappedName})`)
+        .limit(1))[0];
+
+      // If not found by name, try deterministic wikiSlug lookup
+      if (!tracked && celebrity.wikiSlug) {
+        const [bySlug] = await db
+          .select({ id: trackedPeople.id, name: trackedPeople.name })
+          .from(trackedPeople)
+          .where(sql`${trackedPeople.wikiSlug} = ${celebrity.wikiSlug}`)
+          .limit(1);
+        
+        if (bySlug) {
+          tracked = bySlug;
+          console.log(`[SeedApprovalDirect] Matched by wikiSlug "${celebrity.wikiSlug}" → "${bySlug.name}"`);
+        }
+      }
+
+      // If still not found, try normalized fuzzy matching as last resort
+      if (!tracked) {
+        const normalizedSeedName = normalizeNameForMatch(celebrity.name);
+        const allPeople = await db
+          .select({ id: trackedPeople.id, name: trackedPeople.name })
+          .from(trackedPeople);
+        
+        for (const person of allPeople) {
+          const normalizedDbName = normalizeNameForMatch(person.name);
+          if (normalizedDbName === normalizedSeedName || 
+              normalizedDbName.includes(normalizedSeedName) || 
+              normalizedSeedName.includes(normalizedDbName)) {
+            tracked = person;
+            console.log(`[SeedApprovalDirect] Fuzzy matched "${celebrity.name}" → "${person.name}"`);
+            break;
+          }
+        }
+      }
+
+      if (!tracked) {
+        console.log(`[SeedApprovalDirect] Celebrity not found in tracked_people: ${celebrity.name}`);
+        errors.push(`Not found: ${celebrity.name}`);
+        continue;
+      }
+
+      const personId = tracked.id;
+
+      // Get trend data
+      const [trendData] = await db
+        .select({ trendScore: trendingPeople.trendScore, fameIndex: trendingPeople.fameIndex })
+        .from(trendingPeople)
+        .where(eq(trendingPeople.id, personId))
+        .limit(1);
+
+      // Convert fractional approval to percentage
+      const approvalPct = celebrity.approvalPercent <= 1 
+        ? Math.round(celebrity.approvalPercent * 100) 
+        : Math.round(celebrity.approvalPercent);
+
+      // Direct insert into celebrity_metrics
+      await db
+        .insert(celebrityMetrics)
+        .values({
+          celebrityId: personId,
+          trendScore: trendData?.trendScore || null,
+          fameIndex: trendData?.fameIndex || null,
+          approvalVotesCount: celebrity.totalVotes,
+          approvalAvgRating: celebrity.avgRating,
+          approvalPct: approvalPct,
+          underratedVotesCount: 0,
+          overratedVotesCount: 0,
+        })
+        .onConflictDoUpdate({
+          target: celebrityMetrics.celebrityId,
+          set: {
+            approvalVotesCount: celebrity.totalVotes,
+            approvalAvgRating: celebrity.avgRating,
+            approvalPct: approvalPct,
+            updatedAt: new Date(),
+          },
+        });
+
+      console.log(`[SeedApprovalDirect] Seeded ${tracked.name}: ${celebrity.totalVotes} votes, approval ${approvalPct}%`);
+      seeded++;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[SeedApprovalDirect] Error processing ${celebrity.name}:`, message);
+      errors.push(`${celebrity.name}: ${message}`);
+    }
+  }
+
+  // Validate final count
+  const [countResult] = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(celebrityMetrics)
+    .where(sql`${celebrityMetrics.approvalPct} IS NOT NULL AND ${celebrityMetrics.approvalVotesCount} > 0`);
+  
+  const finalCount = Number(countResult?.count) || 0;
+  console.log(`[SeedApprovalDirect] Completed. Seeded: ${seeded}, Errors: ${errors.length}, Total in DB: ${finalCount}/${SEED_DATA.length}`);
+  
+  // Log missing celebrities for actionable feedback
+  if (errors.length > 0) {
+    console.error(`[SeedApprovalDirect] Missing celebrities (${errors.length}):`);
+    errors.forEach(err => console.error(`  - ${err}`));
+  }
+
+  // Fail hard if we didn't seed all celebrities
+  if (finalCount < SEED_DATA.length) {
+    const errorMsg = `SEED FAILED: Only ${finalCount}/${SEED_DATA.length} celebrities have approval data. Missing: ${errors.join(', ')}`;
+    console.error(`[SeedApprovalDirect] ${errorMsg}`);
+    throw new Error(errorMsg);
+  }
 
   return {
     success: errors.length === 0,
