@@ -28,6 +28,7 @@ import {
   Clock,
   UserCheck,
   ArrowUpDown,
+  ThumbsUp,
   Plus,
   Edit,
   Trash2,
@@ -387,6 +388,29 @@ export default function AdminDashboard() {
     onError: (error: any) => {
       toast({
         title: "Snapshot Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Seed approval data mutation
+  const seedApprovalMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetchWithAuth("/api/admin/seed-approval", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to seed approval data");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Approval Data Seeded",
+        description: `Seeded ${data.seeded} celebrities, skipped ${data.skipped}`,
+      });
+      refetchStats();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Seeding Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -1718,6 +1742,38 @@ export default function AdminDashboard() {
                       <>
                         <Play className="h-4 w-4 mr-2" />
                         Capture Snapshots
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ThumbsUp className="h-5 w-5 text-green-500" />
+                    Seed Approval Data
+                  </CardTitle>
+                  <CardDescription>
+                    Populate Approval leaderboard with base voting data
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    className="w-full"
+                    onClick={() => seedApprovalMutation.mutate()}
+                    disabled={seedApprovalMutation.isPending}
+                    data-testid="button-seed-approval"
+                  >
+                    {seedApprovalMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Seeding...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4 mr-2" />
+                        Seed Approval Data
                       </>
                     )}
                   </Button>
