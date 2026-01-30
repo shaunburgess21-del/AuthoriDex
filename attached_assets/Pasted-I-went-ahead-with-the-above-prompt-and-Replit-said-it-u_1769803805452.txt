@@ -1,0 +1,52 @@
+I went ahead with the above prompt and Replit said it understood and then built - but the Approval Rating % is still blank - see from Replit: "I understand the issue perfectly! The problem is exactly what Gemini described - the code is prioritizing your personal vote (sentimentScore) over the global aggregate (approvalPct from celebrity_metrics).
+Looking at the code in LeaderboardRow.tsx (lines 284-303):
+{sentimentScore ? (
+  // Shows YOUR vote as 100% because you voted 5/5
+  voteToApprovalPercent(sentimentScore)
+) : person.approvalPct != null ? (
+  // Only shows global % if you haven't voted
+  Math.round(person.approvalPct)
+) : (
+  '—'
+)}
+The Fix Required:
+Always display the global approvalPct from celebrity_metrics as the main percentage
+Verify the API is joining celebrity_metrics and returning approvalPct
+Run the aggregation to populate celebrity_metrics from the seed votes in user_votes
+Display on both Fame Index and Approval tabs
+Here's my plan:
+
+Created task list
+Start building
+I can see the issue clearly now. The API is already returning approvalPct from celebrity_metrics, but the LeaderboardRow component prioritizes the user's personal sentimentScore (from localStorage) over the global aggregate. Let me read more of the component to see the full picture:
+Now I see the full picture. Both tabs have the issue:
+Fame Index tab (lines 239-252): Shows only user's sentimentScore, or '—' if not voted - doesn't show global approvalPct at all
+Approval tab (lines 284-303): Prioritizes user's sentimentScore over global person.approvalPct
+Let me fix both sections to always display the global approvalPct:
+Now let me fix the Approval tab section:
+I see the issue - the API response doesn't include approvalPct! The data is missing. Let me check the API code more carefully:
+The API code looks correct - it's selecting approvalPct from celebrityMetrics. But the field isn't appearing in the response. Let me check if there's data in the celebrity_metrics table:
+I found the issue. The celebrity_metrics table has data, but approval_pct is NULL for all celebrities - the seed data hasn't been run yet or the aggregation hasn't updated the metrics. Let me check the user_votes table:
+The user_votes table is empty! The seed data hasn't been run. Let me check the seed approval endpoint exists:
+The endpoint exists. The issue is the seed data hasn't been run yet. The user_votes table is empty and celebrity_metrics.approval_pct is all NULL.
+Let me check if there's a way to run a quick sync first, then test. Let me look at the seed file:
+The seed data file has 100 celebrities with approval percentages. The frontend fix is complete - it now shows global approvalPct instead of the user's personal vote. However, the celebrity_metrics table is empty because the admin needs to click "Seed Approval Data" first.
+Let me update the task list and have the architect review my changes:
+Let me check if the seed function properly updates celebrity_metrics after inserting votes:
+The seed function correctly updates celebrity_metrics with approvalPct after inserting votes. Let me run a test to verify the complete flow:
+The test passed. The UI fix is working correctly - it now shows the global approvalPct from celebrity_metrics instead of the user's personal vote. Since the approval data hasn't been seeded yet, all rows show "—".
+I've fixed the Approval Rating display bug. Here's what was changed:
+The Fix:
+Fame Index tab - Now displays the global approval percentage from the community aggregate (celebrity_metrics.approvalPct) instead of your personal vote
+Approval tab - Same fix - always shows the global aggregate, not your individual vote
+The Root Cause:
+The code was prioritizing sentimentScore (your localStorage vote) over person.approvalPct (the global average). When you voted 5/5 for Donald Trump, it converted that to 100% and displayed it instead of the community average (~91%).
+What You Need To Do:
+The leaderboard currently shows "—" for all approval percentages because the seed data hasn't been run yet. To populate the approval data:
+Log into the Admin Dashboard as an admin
+Go to System Tools tab
+Click "Seed Approval Data" button
+This will insert the 100 celebrities with their approval ratings (62%-96%) and populate the celebrity_metrics table. Once seeded:
+Fame Index tab will show approval % for each celebrity
+Approval tab will rank celebrities by their approval % (highest first)
+Donald Trump should show ~91% instead of 100%"  See attached screenshots of confirming empty data

@@ -1,0 +1,101 @@
+#,Name,Category,Wiki_Slug,X_Handle,Induction Status,Overall Rating #,Overall Rating %,Average Approval
+1,Elon Musk,Tech,Elon_Musk,elonmusk,Active,1535,0.93,4.72
+2,Donald Trump,Politics,Donald_Trump,realDonaldTrump,Active,1389,0.91,4.64
+3,Taylor Swift,Music,Taylor_Swift,taylorswift13,Active,1314,0.93,4.72
+4,Cristiano Ronaldo,Sports,Cristiano_Ronaldo,Cristiano,Active,1391,0.96,4.84
+5,Mr Beast,Creator,MrBeast,MrBeast,Active,712,0.94,4.76
+6,Jensen Huang,Tech,Jensen_Huang,nvidia,Active,772,0.94,4.76
+7,Narendra Modi,Politics,Narendra_Modi,narendramodi,Active,884,0.84,4.36
+8,Lionel Messi,Sports,Lionel_Messi,TeamMessi,Active,1171,0.95,4.8
+9,Sam Altman,Tech,Sam_Altman,sama,Active,244,0.81,4.24
+10,Beyonce,Music,Beyonce,Beyonce,Active,340,0.83,4.32
+11,Mark Zuckerberg,Tech,Mark_Zuckerberg,finkd,Active,387,0.8099999999999999,4.24
+12,Joe Rogan,Creator,Joe_Rogan,joerogan,Active,1227,0.91,4.64
+13,Vladimir Putin,Politics,Vladimir_Putin,KremlinRussia_E,Active,463,0.74,3.96
+14,Jeff Bezos,Business,Jeff_Bezos,JeffBezos,Active,364,0.7999999999999999,4.2
+15,LeBron James,Sports,LeBron_James,KingJames,Active,244,0.91,4.64
+16,Xi Jinping,Politics,Xi_Jinping,,Active,738,0.81,4.24
+17,Kendrick Lamar,Music,Kendrick_Lamar,kendricklamar,Active,463,0.9,4.6
+18,Kylian MbappÃ,Sports,Kylian_MbappÃ©,KMbappe,Active,365,0.93,4.72
+19,Tim Cook,Tech,Tim_Cook,tim_cook,Active,228,0.84,4.36
+20,Kai Cenat,Creator,Kai_Cenat,KaiCenat,Active,148,0.9,4.6
+21,Drake,Music,Drake_(musician),Drake,Active,542,0.91,4.64
+22,Kim Kardashian,Creator,Kim_Kardashian,KimKardashian,Queue,277,0.86,4.44
+23,Kylie Jenner,Creator,Kylie_Jenner,KylieJenner,Queue,329,0.9,4.6
+24,Kendall Jenner,Creator,Kendall_Jenner,KendallJenner,Queue,340,0.9,4.6
+25,Satya Nadella,Tech,Satya_Nadella,satyanadella,Active,241,0.86,4.44
+26,Bill Gates,Tech,Bill_Gates,BillGates,Active,169,0.84,4.36
+27,Rihanna,Music,Rihanna,rihanna,Active,295,0.91,4.64
+28,Virat Kohli,Sports,Virat_Kohli,imVkohli,Active,227,0.9,4.6
+29,Logan Paul,Creator,Logan_Paul,LoganPaul,Active,367,0.86,4.44
+30,Volodymyr Zelenskyy,Politics,Volodymyr_Zelenskyy,ZelenskyyUa,Active,556,0.8099999999999999,4.24
+31,Bad Bunny,Music,Bad_Bunny,sanbenito,Active,291,0.84,4.36
+32,Larry Ellison,Tech,Larry_Ellison,larryellison,Active,154,0.86,4.44
+33,Emmanuel Macron,Politics,Emmanuel_Macron,EmmanuelMacron,Active,154,0.81,4.24
+34,Lewis Hamilton,Sports,Lewis_Hamilton,LewisHamilton,Active,620,0.92,4.68
+35,IShowSpeed,Creator,IShowSpeed,ishowspeedsui,Active,556,0.91,4.64
+36,Sundar Pichai,Tech,Sundar_Pichai,sundarpichai,Active,183,0.86,4.44
+37,Stephen Curry,Sports,Stephen_Curry,StephenCurry30,Active,227,0.9,4.6
+38,Charli D'Amelio,Creator,Charli_D'Amelio,charlidamelio,Active,589,0.87,4.48
+39,Lisa Su,Tech,Lisa_Su,LisaSu,Active,202,0.91,4.64
+40,Keir Starmer,Politics,Keir_Starmer,Keir_Starmer,Active,305,0.79,4.16
+41,Max Verstappen,Sports,Max_Verstappen,Max33Verstappen,Active,334,0.91,4.64
+42,KSI,Creator,KSI,KSI,Active,332,0.86,4.44
+43,Giorgia Meloni,Politics,Giorgia_Meloni,GiorgiaMeloni,Active,433,0.87,4.48
+44,Travis Scott,Music,Travis_Scott,trvisXX,Active,572,0.91,4.64
+45,Vitalik Buterin,Tech,Vitalik_Buterin,VitalikButerin,Active,194,0.91,4.64
+46,Mohammed bin Salman,Politics,Mohammed_bin_Salman,,Active,740,0.92,4.68
+47,Khaby Lame,Creator,Khaby_Lame,KhabyLame,Active,447,0.91,4.64
+48,Masayoshi Son,Business,Masayoshi_Son,masason,Active,211,0.87,4.48
+49,Ariana Grande,Music,Ariana_Grande,ArianaGrande,Active,900,0.92,4.68
+50,Neymar,Sports,Neymar,neymarjr,Active,381,0.92,4.68
+51,Michael Dell,Business,Michael_Dell,MichaelDell,Active,261,0.93,4.72
+52,Bill Ackman,Politics,Bill_Ackman,BillAckman,Active,309,0.93,4.72
+53,Billie Eilish,Music,Billie_Eilish,billieeilish,Active,404,0.91,4.64
+54,Lex Fridman,Creator,Lex_Fridman,lexfridman,Active,399,0.91,4.64
+55,Pony Ma,Tech,Ma_Huateng,,Active,256,0.9,4.6
+56,Recep Tayyip ErdoÄŸan,Politics,Recep_Tayyip_ErdoÄŸan,RTErdogan,Active,371,0.84,4.36
+57,Erling Haaland,Sports,Erling_Haaland,ErlingHaaland,Active,539,0.91,4.64
+58,Palmer Luckey,Tech,Palmer_Luckey,PalmerLuckey,Active,294,0.93,4.72
+59,Javier Milei,Politics,Javier_Milei,JMilei,Active,381,0.87,4.48
+60,Lisa (Blackpink),Music,Lisa_(rapper),BLACKPINK,Active,216,0.9,4.6
+61,Conor McGregor,Sports,Conor_McGregor,TheNotoriousMMA,Active,912,0.84,4.36
+62,Demis Hassabis,Tech,Demis_Hassabis,demishassabis,Active,244,0.9,4.6
+63,Benjamin Netanyahu,Politics,Benjamin_Netanyahu,netanyahu,Active,231,0.75,4.0
+64,Reed Hastings,Business,Reed_Hastings,reedhastings,Active,305,0.76,4.04
+65,Alexandria Ocasio-Cortez,Politics,Alexandria_Ocasio-Cortez,AOC,Active,385,0.71,3.84
+66,Ed Sheeran,Music,Ed_Sheeran,edsheeran,Active,740,0.91,4.64
+67,Ursula von der Leyen,Politics,Ursula_von_der_Leyen,vonderleyen,Active,185,0.71,3.84
+68,Novak Djokovic,Sports,Novak_Djokovic,DjokerNole,Active,701,0.94,4.76
+69,Jake Paul,Creator,Jake_Paul,jakepaul,Active,374,0.7999999999999999,4.2
+70,Brian Armstrong,Tech,Brian_Armstrong,brian_armstrong,Active,154,0.92,4.68
+71,Gavin Newsom,Politics,Gavin_Newsom,GavinNewsom,Active,311,0.72,3.88
+72,Viktor OrbÃ¡n,Politics,Viktor_OrbÃ¡n,PM_ViktorOrban,Active,152,0.86,4.44
+73,Rory McIlroy,Sports,Rory_McIlroy,McIlroyRory,Active,457,0.93,4.72
+74,Tiger Woods,Sports,Tiger_Woods,TigerWoods,Active,485,0.92,4.68
+75,Nicki Minaj,Music,Nicki_Minaj,NICKIMINAJ,Active,348,0.91,4.64
+76,Adele,Music,Adele,Adele,Active,317,0.9,4.6
+77,Tom Brady,Sports,Tom_Brady,TomBrady,Active,340,0.93,4.72
+78,Tucker Carlson,Creator,Tucker_Carlson,TuckerCarlson,Active,295,0.76,4.04
+79,Nayib Bukele,Politics,Nayib_Bukele,nayibbukele,Active,435,0.92,4.68
+80,Chamath Palihapitiya,Business,Chamath_Palihapitiya,chamath,Active,118,0.91,4.64
+81,David Sacks,Business,David_Sacks,DavidSacks,Active,171,0.91,4.64
+82,Shayne Coplan,Tech,Shayne_Coplan,shayne_coplan,Active,84,0.9,4.6
+83,Ray Dalio,Business,Ray_Dalio,RayDalio,Active,154,0.87,4.48
+84,Peter Thiel,Business,Peter_Thiel,peterthiel,Active,157,0.85,4.4
+85,Kash Patel,Politics,Kash_Patel,Kash,Active,396,0.86,4.44
+86,Scott Bessent,Business,Scott_Bessent,ScottBessent,Active,365,0.87,4.48
+87,Marco Rubio,Politics,Marco_Rubio,marcorubio,Active,606,0.92,4.68
+88,JD Vance,Politics,JD_Vance,JDVance,Active,715,0.86,4.44
+89,Pete Hegseth,Politics,Pete_Hegseth,PeteHegseth,Active,342,0.84,4.36
+90,J.K. Rowling,Creator,J._K._Rowling,jk_rowling,Active,542,0.82,4.28
+91,Scottie Scheffler,Sports,Scottie_Scheffler,,Active,196,0.92,4.68
+92,Bryson DeChambeau,Sports,Bryson_DeChambeau,b_dechambeau,Active,337,0.7999999999999999,4.2
+93,Piers Morgan,Creator,Piers_Morgan,piersmorgan,Active,775,0.84,4.36
+94,Nick Fuentes,Politics,Nick_Fuentes,NickJFuentes,Active,112,0.62,3.48
+95,Changpeng Zhao,Business,Changpeng_Zhao,,Active,367,0.84,4.36
+96,Robert F. Kennedy Jr.,Politics,Robert_F._Kennedy_Jr.,RobertKennedyJr,Active,572,0.82,4.28
+97,Tulsi Gabbard,Politics,Tulsi_Gabbard,TulsiGabbard,Active,538,0.7999999999999999,4.2
+98,Karoline Leavitt,Politics,Karoline_Leavitt,kleavittnh,Active,558,0.84,4.36
+99,Theo Von,Creator,Theo_Von,TheoVon,Active,713,0.82,4.28
+100,Michael Saylor,Tech,Michael_J._Saylor,saylor,Active,401,0.84,4.36
