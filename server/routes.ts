@@ -2560,6 +2560,48 @@ Be concise and factual. Only return the JSON object.`;
     }
   });
 
+  // Seed approval data for "Cast Your Vote" widget (Approval Leaderboard)
+  app.post("/api/admin/seed-approval", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { seedApprovalData } = await import("./seed-approval-data");
+      const result = await seedApprovalData();
+      
+      // Log the admin action
+      const adminId = req.userId!;
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: "admin",
+        actionType: "seed_approval_data",
+        targetTable: "user_votes",
+        targetId: "approval-leaderboard",
+        metadata: { seeded: result.seeded, skipped: result.skipped, errors: result.errors.length },
+      });
+      
+      res.json({
+        success: result.success,
+        message: `Seeded ${result.seeded} celebrities, skipped ${result.skipped}`,
+        seeded: result.seeded,
+        skipped: result.skipped,
+        errors: result.errors,
+      });
+    } catch (error: any) {
+      console.error("Seed approval error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Clear seed approval data
+  app.post("/api/admin/clear-seed-approval", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { clearSeedApprovalData } = await import("./seed-approval-data");
+      const result = await clearSeedApprovalData();
+      res.json(result);
+    } catch (error: any) {
+      console.error("Clear seed approval error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Capture snapshots (admin version - uses session auth)
   app.post("/api/admin/capture-snapshots", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
