@@ -1,0 +1,43 @@
+The issue with the missing percentages is almost certainly a "Name Mismatch" between the CSV file (e.g., "Beyonce") and the database (e.g., "Beyoncé"). The seed script skipped them because it couldn't find an exact text match.
+
+The color issue (Purple instead of Red/Green) is a simple CSS regression—the frontend is likely applying a default "brand color" class instead of the dynamic score color function.
+
+Here is the Fix Prompt to resolve both issues in one go.
+
+Act as a Senior Full-Stack Engineer.
+
+Task: Fix Missing Seed Data & Restore Color Logic We have identified two regressions in the Leaderboard that need immediate fixing.
+
+1. Fix Missing Percentages (Data Matching Logic) The following celebrities are showing "—" (no data) because the seed script likely failed to match their names exactly between the CSV and the Database.
+
+The Problematic Names: JD Vance, Mr Beast, Karoline Leavitt, Robert F. Kennedy Jr., J.K. Rowling, Nick Fuentes, Lisa (Blackpink), Pete Hegseth, Beyonce, Piers Morgan, Bryson DeChambeau, Scottie Scheffler, Changpeng Zhao, Michael Saylor.
+
+The Fix: Update scripts/seed-approval-votes.ts to be more robust.
+
+Normalization: When matching CSV rows to Database celebrities, convert both to lowercase and strip special characters/accents (e.g., match "beyonce" to "beyoncé").
+
+Slug Matching: If available, try matching by wiki_slug or a normalized version of the name first, rather than just the raw display name.
+
+Manual Mapping: Add a small fallback map in the script for stubborn cases (e.g., mapping "Mr Beast" (CSV) to "MrBeast" (DB), or "Robert F. Kennedy Jr." to "RFK Jr").
+
+Action: Update the script and re-run the seed command specifically for these missing records (or re-run for all, using upsert to avoid duplicates).
+
+2. Fix Color Regression (UI Styling) The "Approval %" text is currently displaying as Purple (the default theme color).
+
+Requirement: Revert this to the original dynamic color scale based on the percentage value.
+
+Logic:
+
+Green: High Approval (e.g., > 70%)
+
+Yellow/Orange: Mid Approval (e.g., 50-70%)
+
+Red: Low Approval (e.g., < 50%)
+
+Implementation: In LeaderboardRow.tsx (or wherever the percentage is rendered), ensure you are passing the approvalPct value into the existing color utility function (e.g., getScoreColor or similar) and applying that class to the text span.
+
+Deliverables:
+
+Confirm that the specific missing celebrities (Vance, MrBeast, Beyonce, etc.) now display their % values.
+
+Verify that the text colors are Red/Yellow/Green, not Purple.
