@@ -42,6 +42,7 @@ Preferred communication style: Simple, everyday language.
   - **Ingestion Interval**: Full data ingestion runs every 60 minutes.
   - **EMA Smoothing**: Applied to fameIndex during ingestion for smooth, stock-market-style trend curves.
 - **Trend Context Service** (Jan 2026): Provides "Why Trending" explanations via `getTrendContext()` and `getTrendContextBatch()`.
+  - **Top 10 Only (Jan 2026)**: "Why They're Trending" section only displays for top 10 ranked celebrities. Lower-ranked celebrities have stale/irrelevant news, so the section is hidden to improve UX and reduce AI costs.
   - **Keyword Mapper**: 14 categories (Earnings, Legal News, Music, Politics, Sports, Entertainment, Personal Life, Breaking News, Viral Moment, Heated, Announcement, Public Appearance, Tech News, Business).
   - **Confidence Thresholds**: Requires >= 2 keyword matches for confident tagging; falls back to "In The News" for low confidence.
   - **Driver Detection**: Determines primary/secondary trend drivers (NEWS, SEARCH, SOCIAL, WIKI) based on signal strength.
