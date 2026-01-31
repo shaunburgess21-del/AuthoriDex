@@ -9,6 +9,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
 import { 
   ArrowLeft, 
+  ArrowUp,
+  ArrowDown,
   Plus, 
   Vote,
   Users,
@@ -61,6 +63,7 @@ import { getFilterCategories, type FilterCategory } from "@shared/constants";
 import type { TrendingPerson } from "@shared/schema";
 import { CurateSection } from "@/components/curate";
 import { ApprovalViralHook } from "@/components/ApprovalViralHook";
+import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
 
 const mockCelebrityList = [
   "Taylor Swift", "Elon Musk", "Keanu Reeves", "Beyoncé", "Dwayne Johnson",
@@ -226,6 +229,10 @@ const SECTION_RULES = {
   voice: {
     title: "People's Voice Rules",
     content: "The ultimate community pulse check. Weigh in on current events and controversies. Evergreen polls remain open; timed polls resolve at the specified deadline."
+  },
+  value: {
+    title: "Value Perception Rules",
+    content: "Is their fame score fair? Vote on whether you think each celebrity is underrated or overrated based on their current fame score. Your votes help calibrate the index and reveal community sentiment about true value."
   }
 };
 
@@ -1612,6 +1619,9 @@ export default function VotePage() {
   const [curateCategoryFilter, setCurateCategoryFilter] = useState<FilterCategory>("All");
   const [globalVoteSearchQuery, setGlobalVoteSearchQuery] = useState("");
   const [globalCategoryFilter, setGlobalCategoryFilter] = useState<FilterCategory>("All");
+  
+  const [valuePerceptionOverlayOpen, setValuePerceptionOverlayOpen] = useState(false);
+  const [valuePerceptionCategoryFilter, setValuePerceptionCategoryFilter] = useState<FilterCategory>("All");
 
   const enrichedCandidates = INDUCTION_CANDIDATES.map(c => ({
     ...c,
@@ -1652,6 +1662,33 @@ export default function VotePage() {
   const { data: existingFaceOffVotes = {} } = useQuery<Record<string, string>>({
     queryKey: ['/api/face-offs/user-votes'],
     staleTime: 60 * 1000,
+  });
+  
+  interface ValueLeaderboardResponse {
+    data: Array<{
+      id: string;
+      name: string;
+      avatar: string | null;
+      category: string | null;
+      fameIndex: number | null;
+      trendScore: number;
+      approvalPct: number | null;
+      underratedPct: number | null;
+      overratedPct: number | null;
+      userValueVote: string | null;
+    }>;
+  }
+  
+  const { data: valueCelebritiesData } = useQuery<ValueLeaderboardResponse>({
+    queryKey: ['/api/leaderboard?tab=value&limit=20'],
+    staleTime: 60 * 1000,
+  });
+  
+  const valueCelebrities = valueCelebritiesData?.data || [];
+  
+  const filteredValueCelebrities = valueCelebrities.filter(c => {
+    const matchesCategory = valuePerceptionCategoryFilter === "All" || c.category === valuePerceptionCategoryFilter;
+    return matchesCategory;
   });
   
   const [localFaceOffVotes, setLocalFaceOffVotes] = useState<Record<string, string>>({});
@@ -1697,13 +1734,13 @@ export default function VotePage() {
   });
 
   useEffect(() => {
-    if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen || faceOffsOverlayOpen || inductionSuggestOpen || faceOffSuggestOpen) {
+    if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen || faceOffsOverlayOpen || inductionSuggestOpen || faceOffSuggestOpen || valuePerceptionOverlayOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen, faceOffsOverlayOpen, inductionSuggestOpen, faceOffSuggestOpen]);
+  }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen, faceOffsOverlayOpen, inductionSuggestOpen, faceOffSuggestOpen, valuePerceptionOverlayOpen]);
 
   const addXP = (amount: number, event?: React.MouseEvent) => {
     setXp(prev => prev + amount);
@@ -2192,6 +2229,85 @@ export default function VotePage() {
               data-testid="button-view-all-topics"
             >
               View all topics
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </section>
+        )}
+
+        {/* ZONE 2: Value Perception - Underrated/Overrated Section */}
+        {activeSection === "All" && (
+        <section className="mb-10">
+          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-amber-500/5 via-amber-500/10 to-transparent border border-amber-500/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <BarChart3 className="h-5 w-5 text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-serif font-bold">Underrated / Overrated</h2>
+                  <p className="text-sm text-muted-foreground">Is their fame score fair? You decide.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRulesModalOpen("value")}
+                      className="text-amber-400"
+                      data-testid="button-rules-value"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                    How it works
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            {getFilterCategories(true).map((cat) => (
+              <FilterChip
+                key={cat}
+                category={cat}
+                isActive={valuePerceptionCategoryFilter === cat}
+                onClick={() => setValuePerceptionCategoryFilter(cat as FilterCategory)}
+                testIdPrefix="filter-value"
+                user={user}
+                onAuthRequired={handleAuthRequired}
+              />
+            ))}
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredValueCelebrities.slice(0, 3).map((person) => (
+              <UnderratedOverratedCard 
+                key={person.id} 
+                person={person}
+                onVisitProfile={() => setLocation(`/celebrity/${person.id}`)}
+              />
+            ))}
+          </div>
+
+          {filteredValueCelebrities.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              No celebrities match your filter criteria.
+            </div>
+          )}
+
+          <div className="text-center mt-6">
+            <Button
+              variant="ghost"
+              onClick={() => setValuePerceptionOverlayOpen(true)}
+              className="text-amber-400"
+              data-testid="button-view-all-value"
+            >
+              View all celebrities
               <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </div>
@@ -2890,6 +3006,7 @@ export default function VotePage() {
               {rulesModalOpen === "curate" && "Curate the Profile Rules"}
               {rulesModalOpen === "voice" && "The People's Voice Rules"}
               {rulesModalOpen === "faceoffs" && "Face-Offs Rules"}
+              {rulesModalOpen === "value" && "Value Perception Rules"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4 text-sm">
@@ -2981,6 +3098,29 @@ export default function VotePage() {
                   <div className="flex items-start gap-2">
                     <BarChart3 className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
                     <span>Instant Results: See how your pick compares to the community.</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {rulesModalOpen === "value" && (
+              <div className="space-y-3">
+                <p className="text-muted-foreground">Is their fame score fair? Vote on whether celebrities are underrated or overrated.</p>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <ArrowUp className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                    <span>Vote <span className="text-emerald-400 font-medium">Underrated</span> if you think they deserve more fame</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <ArrowDown className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                    <span>Vote <span className="text-red-400 font-medium">Overrated</span> if you think their fame is inflated</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Users className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                    <span>See how your perception compares to the community</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <BarChart3 className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                    <span>Your votes help calibrate the index and reveal true value</span>
                   </div>
                 </div>
               </div>
@@ -3277,6 +3417,69 @@ export default function VotePage() {
               {filteredFaceOffs.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
                   No face-offs match your filter criteria.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {valuePerceptionOverlayOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
+          >
+            <div className="flex items-center justify-between p-4 border-b border-amber-500/20">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                  <BarChart3 className="h-4 w-4 text-amber-400" />
+                </div>
+                <h2 className="text-xl font-serif font-bold">Underrated / Overrated</h2>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setValuePerceptionOverlayOpen(false)}
+                data-testid="button-close-value-overlay"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            <div className="sticky top-0 z-10 p-4 border-b bg-background/95 backdrop-blur-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                {getFilterCategories(true).map((cat) => (
+                  <FilterChip
+                    key={cat}
+                    category={cat}
+                    isActive={valuePerceptionCategoryFilter === cat}
+                    onClick={() => setValuePerceptionCategoryFilter(cat as FilterCategory)}
+                    testIdPrefix="filter-overlay-value"
+                    user={user}
+                    onAuthRequired={handleAuthRequired}
+                  />
+                ))}
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-6xl mx-auto">
+                {filteredValueCelebrities.map((person) => (
+                  <UnderratedOverratedCard 
+                    key={person.id} 
+                    person={person}
+                    onVisitProfile={() => {
+                      setValuePerceptionOverlayOpen(false);
+                      setLocation(`/celebrity/${person.id}`);
+                    }}
+                  />
+                ))}
+              </div>
+              {filteredValueCelebrities.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground">
+                  No celebrities match your filter criteria.
                 </div>
               )}
             </div>

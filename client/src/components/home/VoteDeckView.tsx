@@ -22,7 +22,10 @@ import {
   ThumbsDown, 
   Minus,
   Check,
-  Star
+  Star,
+  BarChart3,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react";
 import {
   DISCOURSE_TOPICS,
@@ -33,9 +36,12 @@ import {
 } from "@/data/vote";
 import { CurateSection } from "@/components/curate";
 import { getFilterCategories, type FilterCategory } from "@shared/constants";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { ValueVotePerson } from "@/components/UnderratedOverratedCard";
 
-type VoteSection = "All" | "Face-Offs" | "People's Voice" | "Induction Queue" | "Curate Profile";
-const SECTION_TOGGLES: VoteSection[] = ["All", "Face-Offs", "People's Voice", "Induction Queue", "Curate Profile"];
+type VoteSection = "All" | "Face-Offs" | "People's Voice" | "Induction Queue" | "Curate Profile" | "Underrated / Overrated";
+const SECTION_TOGGLES: VoteSection[] = ["All", "Face-Offs", "People's Voice", "Induction Queue", "Curate Profile", "Underrated / Overrated"];
 
 interface VoteDeckViewProps {
   onExplore: () => void;
@@ -294,6 +300,89 @@ function InductionCard({
   );
 }
 
+function ValueCard({
+  person,
+  userVote,
+  onVote,
+  onVisitProfile,
+}: {
+  person: ValueVotePerson;
+  userVote: 'underrated' | 'overrated' | null;
+  onVote: (personId: string, vote: 'underrated' | 'overrated') => void;
+  onVisitProfile: (personId: string) => void;
+}) {
+  const hasVoted = userVote !== null;
+  const totalVotes = (person.underratedCount || 0) + (person.overratedCount || 0);
+  
+  return (
+    <Card className="relative overflow-visible bg-gradient-to-br from-amber-950/30 via-slate-900/90 to-slate-900/90 border border-amber-500/20">
+      <div className="absolute top-3 right-3">
+        <CategoryPill category={person.category || "Unknown"} />
+      </div>
+      <div className="relative p-4">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+          <BarChart3 className="h-3.5 w-3.5 text-amber-400" />
+          <span>{totalVotes.toLocaleString()} votes</span>
+        </div>
+        
+        <div className="flex flex-col items-center text-center mb-4">
+          <PersonAvatar name={person.name} avatar={person.avatar} size="lg" />
+          <h3 className="font-semibold text-base mt-3">{person.name}</h3>
+          <div className="text-sm font-mono text-amber-400 mt-1">
+            {person.fameIndex?.toLocaleString() ?? 'N/A'} Fame
+          </div>
+        </div>
+        
+        {hasVoted ? (
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <div className={`flex-1 p-2 rounded-lg text-center text-xs ${userVote === 'underrated' ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-300' : 'bg-muted/30'}`}>
+                <ArrowUp className="h-3.5 w-3.5 mx-auto mb-1" />
+                {person.underratedPct?.toFixed(0) ?? 0}% Underrated
+              </div>
+              <div className={`flex-1 p-2 rounded-lg text-center text-xs ${userVote === 'overrated' ? 'bg-red-500/20 border border-red-400/40 text-red-300' : 'bg-muted/30'}`}>
+                <ArrowDown className="h-3.5 w-3.5 mx-auto mb-1" />
+                {person.overratedPct?.toFixed(0) ?? 0}% Overrated
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-amber-400"
+              onClick={() => onVisitProfile(person.id)}
+              data-testid={`button-value-profile-${person.id}`}
+            >
+              Visit Profile
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1 bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+              onClick={() => onVote(person.id, 'underrated')}
+              data-testid={`button-value-underrated-${person.id}`}
+            >
+              <ArrowUp className="h-4 w-4 mr-1" />
+              Underrated
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 bg-red-500/10 border-red-500/30 text-red-300"
+              onClick={() => onVote(person.id, 'overrated')}
+              data-testid={`button-value-overrated-${person.id}`}
+            >
+              <ArrowDown className="h-4 w-4 mr-1" />
+              Overrated
+            </Button>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -304,10 +393,12 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   const [faceOffVotes, setFaceOffVotes] = useState<Record<string, string>>({});
   const [pollVotes, setPollVotes] = useState<Record<string, string>>({});
   const [inductionVotes, setInductionVotes] = useState<Set<string>>(new Set());
+  const [valueVotes, setValueVotes] = useState<Record<string, 'underrated' | 'overrated'>>({});
   
   const [faceOffInteracted, setFaceOffInteracted] = useState(false);
   const [pollInteracted, setPollInteracted] = useState(false);
   const [inductionInteracted, setInductionInteracted] = useState(false);
+  const [valueInteracted, setValueInteracted] = useState(false);
 
   // Fetch face-offs from API to get real images
   const { data: faceOffsData = [] } = useQuery<FaceOffData[]>({
@@ -347,6 +438,38 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
     [categoryFilter, searchQuery]
   );
 
+  interface ValueLeaderboardResponse {
+    tab: string;
+    sortDir: string;
+    total: number;
+    data: ValueVotePerson[];
+  }
+  
+  const { data: valueResponse } = useQuery<ValueLeaderboardResponse>({
+    queryKey: ['/api/leaderboard?tab=value&limit=20'],
+    staleTime: 60 * 1000,
+  });
+  
+  const valueCelebrities = valueResponse?.data || [];
+
+  const filteredValue = useMemo(() =>
+    valueCelebrities.filter((c: ValueVotePerson) => {
+      const matchesCategory = categoryFilter === "All" || c.category?.toLowerCase() === categoryFilter.toLowerCase();
+      const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
+    }),
+    [valueCelebrities, categoryFilter, searchQuery]
+  );
+
+  const valueVoteMutation = useMutation({
+    mutationFn: async ({ personId, vote }: { personId: string; vote: 'underrated' | 'overrated' }) => {
+      return apiRequest('POST', `/api/celebrity/${personId}/value-vote`, { vote });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/leaderboard?tab=value&limit=20'] });
+    },
+  });
+
   const handleFaceOffVote = (id: string, option: 'option_a' | 'option_b') => {
     setFaceOffVotes(prev => ({ ...prev, [id]: option }));
   };
@@ -364,10 +487,20 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
     });
   };
 
+  const handleValueVote = (personId: string, vote: 'underrated' | 'overrated') => {
+    setValueVotes(prev => ({ ...prev, [personId]: vote }));
+    valueVoteMutation.mutate({ personId, vote });
+  };
+
+  const handleValueVisitProfile = (personId: string) => {
+    setLocation(`/person/${personId}`);
+  };
+
   const showFaceOffs = activeSection === "All" || activeSection === "Face-Offs";
   const showPolls = activeSection === "All" || activeSection === "People's Voice";
   const showInduction = activeSection === "All" || activeSection === "Induction Queue";
   const showCurate = activeSection === "All" || activeSection === "Curate Profile";
+  const showValue = activeSection === "All" || activeSection === "Underrated / Overrated";
 
   return (
     <motion.div
@@ -392,6 +525,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
             {section === "People's Voice" && <MessageSquare className="h-3 w-3" />}
             {section === "Induction Queue" && <UserPlus className="h-3 w-3" />}
             {section === "Curate Profile" && <ImageIcon className="h-3 w-3" />}
+            {section === "Underrated / Overrated" && <BarChart3 className="h-3 w-3 text-amber-400" />}
             {section}
           </button>
         ))}
@@ -514,6 +648,33 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
 
       {showCurate && (
         <CurateSection categoryFilter={categoryFilter} compact />
+      )}
+
+      {showValue && filteredValue.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-amber-400" />
+            <h3 className="text-sm font-semibold">Underrated / Overrated</h3>
+          </div>
+          <CardDeckContainer
+            items={filteredValue}
+            viewType="vote"
+            hasInteracted={valueInteracted}
+            onAdvance={() => setValueInteracted(false)}
+            renderCard={(person: ValueVotePerson) => (
+              <ValueCard
+                person={person}
+                userVote={person.userValueVote ?? valueVotes[person.id] ?? null}
+                onVote={(id, vote) => {
+                  handleValueVote(id, vote);
+                  setValueInteracted(true);
+                }}
+                onVisitProfile={handleValueVisitProfile}
+              />
+            )}
+            emptyMessage="No celebrities match your filters"
+          />
+        </div>
       )}
 
       <div className="flex flex-col items-center gap-3 pt-4">
