@@ -130,7 +130,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
     return (
       <div className="flex items-center gap-2">
         <button
-          className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm border ${
+          className={`flex items-center justify-center gap-1.5 px-2 md:px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm border whitespace-nowrap ${
             isUnderrated 
               ? "bg-emerald-500/30 border-emerald-500 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]" 
               : "bg-emerald-500/10 border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/20 hover:border-emerald-500/60"
@@ -144,12 +144,13 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
           ) : (
             <>
               <ArrowUp className="h-3 w-3" />
-              <span>Underrated</span>
+              <span className="hidden md:inline">Underrated</span>
+              <span className="md:hidden">Under</span>
             </>
           )}
         </button>
         <button
-          className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm border ${
+          className={`flex items-center justify-center gap-1.5 px-2 md:px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm border whitespace-nowrap ${
             isOverrated 
               ? "bg-red-500/30 border-red-500 text-red-400 shadow-[0_0_12px_rgba(239,68,68,0.3)]" 
               : "bg-red-500/10 border-red-500/40 text-red-500 hover:bg-red-500/20 hover:border-red-500/60"
@@ -163,7 +164,8 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
           ) : (
             <>
               <ArrowDown className="h-3 w-3" />
-              <span>Overrated</span>
+              <span className="hidden md:inline">Overrated</span>
+              <span className="md:hidden">Over</span>
             </>
           )}
         </button>
@@ -228,11 +230,42 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
           <h3 className="font-semibold text-base truncate" data-testid={`text-name-${person.id}`}>
             {person.name}
           </h3>
+          {/* Desktop: Show industry category */}
           {person.category && (
-            <p className="text-sm truncate text-[#94A3B8]">
+            <p className="hidden md:block text-sm truncate text-[#94A3B8]">
               {person.category}
             </p>
           )}
+          {/* Mobile: Show dynamic metric based on active tab */}
+          <p className="md:hidden text-xs text-muted-foreground leading-tight line-clamp-1">
+            {activeTab === "fame" && (
+              <span className="font-mono">
+                Score: {(person.fameIndex ?? Math.round(person.trendScore / 100)).toLocaleString()}
+              </span>
+            )}
+            {activeTab === "approval" && (
+              <span>
+                Approval:{" "}
+                {person.approvalPct != null ? (
+                  <span 
+                    className="font-mono"
+                    style={{ color: getApprovalColor(person.approvalPct) }}
+                  >
+                    {Math.round(person.approvalPct)}%
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </span>
+            )}
+            {activeTab === "value" && (
+              <span className="font-mono">
+                <span className="text-emerald-500">Under: {person.underratedPct ?? 0}%</span>
+                <span className="text-muted-foreground"> • </span>
+                <span className="text-red-500">Over: {person.overratedPct ?? 0}%</span>
+              </span>
+            )}
+          </p>
         </div>
 
         {activeTab === "fame" && (
