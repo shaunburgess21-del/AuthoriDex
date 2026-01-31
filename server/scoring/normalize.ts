@@ -42,8 +42,9 @@ export const DIVERSITY_MULTIPLIERS: Record<number, number> = {
 export const ANTI_SPAM_BASE = 0.35;
 export const ANTI_SPAM_MASS_FACTOR = 0.65;
 
-// EMA smoothing alpha (0.15 recommended)
-export const EMA_ALPHA = 0.15;
+// EMA smoothing alpha - lower = smoother curves (stock market style)
+// 0.08 provides gentle transitions while still responding to changes
+export const EMA_ALPHA = 0.08;
 
 // Sanity check thresholds
 export const FOLLOWER_DROP_THRESHOLD = 0.50; // Reject if drops >50%

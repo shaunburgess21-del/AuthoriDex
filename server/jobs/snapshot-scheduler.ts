@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { trackedPeople, trendSnapshots, apiCache } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { trackedPeople, trendSnapshots, apiCache, trendingPeople } from "@shared/schema";
+import { eq, desc } from "drizzle-orm";
 import { computeTrendScore } from "../scoring/trendScore";
 
 export async function captureHourlySnapshots(): Promise<{ captured: number; errors: number }> {
@@ -16,6 +16,20 @@ export async function captureHourlySnapshots(): Promise<{ captured: number; erro
   try {
     const people = await db.select().from(trackedPeople);
     console.log(`[Snapshot] Processing ${people.length} people`);
+
+    // Fetch previous fameIndex values from trendingPeople for EMA smoothing
+    const currentTrending = await db.select({
+      id: trendingPeople.id,
+      fameIndex: trendingPeople.fameIndex,
+      trendScore: trendingPeople.trendScore,
+    }).from(trendingPeople);
+    
+    const previousFameIndexMap = new Map<string, number>();
+    const previousTrendScoreMap = new Map<string, number>();
+    for (const t of currentTrending) {
+      if (t.fameIndex) previousFameIndexMap.set(t.id, t.fameIndex);
+      if (t.trendScore) previousTrendScoreMap.set(t.id, t.trendScore);
+    }
 
     const cachedData = await db.select().from(apiCache);
     
@@ -69,12 +83,23 @@ export async function captureHourlySnapshots(): Promise<{ captured: number; erro
           },
         };
 
-        const scoreResult = computeTrendScore(inputs);
+        // Get previous values for EMA smoothing (critical for smooth curves!)
+        const prevTrendScore = previousTrendScoreMap.get(person.id);
+        const prevFameIndex = previousFameIndexMap.get(person.id);
+        
+        // Pass previous values for EMA smoothing
+        const scoreResult = computeTrendScore(
+          inputs,
+          prevTrendScore,     // previousScore (for change24h calc)
+          undefined,          // previousScore7d (not needed for snapshots)
+          prevFameIndex       // previousFameIndex (for EMA smoothing!)
+        );
 
         await db.insert(trendSnapshots).values({
           personId: person.id,
           timestamp: hourTimestamp, // Truncated to hour for idempotency
           trendScore: scoreResult.trendScore,
+          fameIndex: scoreResult.fameIndex, // Save smoothed fameIndex!
           newsCount: news?.articleCount24h || 0,
           searchVolume: serper?.searchVolume || 0,
           youtubeViews: 0,
@@ -87,6 +112,8 @@ export async function captureHourlySnapshots(): Promise<{ captured: number; erro
           xReplyVelocity: 0,  // X API disabled
           massScore: scoreResult.massScore,
           velocityScore: scoreResult.velocityScore,
+          velocityAdjusted: scoreResult.velocityAdjusted,
+          diversityMultiplier: scoreResult.diversityMultiplier,
           confidence: scoreResult.confidence,
           momentum: scoreResult.momentum,
           drivers: scoreResult.drivers,

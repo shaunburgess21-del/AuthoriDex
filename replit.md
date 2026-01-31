@@ -34,9 +34,9 @@ Preferred communication style: Simple, everyday language.
   - **Anti-Spam Damping**: `VelocityAdjusted = VelocityScore × (0.35 + 0.65 × MassScore)` ensures high-velocity/low-mass accounts are penalized.
   - **Diversity Multiplier**: Silent penalty based on active platforms. Instagram/YouTube/X marked as NOT_APPLICABLE. Wiki+News+Search = 3/3 active = 1.0x multiplier.
   - **Wiki-as-Primary-Mass**: Wikipedia pageviews serve as the primary mass signal (50% weight).
-  - **EMA Smoothing**: Alpha = 0.15 applied to final scores for stable, smooth curves instead of "barcode" charts.
+  - **EMA Smoothing**: Alpha = 0.08 applied to final scores for smooth, stock-market-style curves (reduced from 0.15 for gentler transitions).
   - **Nullable Change Values**: change24h/change7d show "N/A" when data is unavailable (no fake random values).
-- **Data Jobs**: Includes jobs for full data ingestion, quick scoring, and hourly trend snapshot capture.
+- **Data Jobs**: Includes jobs for full data ingestion (every 60 min), quick scoring, and hourly trend snapshot capture with EMA smoothing.
 - **Trend Context Service** (Jan 2026): Provides "Why Trending" explanations via `getTrendContext()` and `getTrendContextBatch()`.
   - **Keyword Mapper**: 14 categories (Earnings, Legal News, Music, Politics, Sports, Entertainment, Personal Life, Breaking News, Viral Moment, Heated, Announcement, Public Appearance, Tech News, Business).
   - **Confidence Thresholds**: Requires >= 2 keyword matches for confident tagging; falls back to "In The News" for low confidence.

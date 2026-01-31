@@ -12,8 +12,9 @@ import { runDataIngestion } from "./jobs/ingest";
 // Instead, use the /api/cron/* endpoints triggered by external schedulers.
 const SERVERLESS_MODE = process.env.SERVERLESS_MODE === "true" || process.env.VERCEL === "1";
 
-// Data ingestion interval: 2 hours (optimized for Basic tier X API)
-const INGESTION_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours in ms
+// Data ingestion interval: 1 hour (increased frequency for smoother trend curves)
+// Since X API was removed, we have budget for more frequent Wiki/GDELT/Serper calls
+const INGESTION_INTERVAL_MS = 60 * 60 * 1000; // 1 hour in ms
 
 async function scheduledIngestion() {
   log("[Ingestion Scheduler] Starting scheduled data ingestion...");
@@ -40,7 +41,7 @@ function startIngestionScheduler() {
     scheduledIngestion();
   }, 30000);
   
-  // Schedule recurring ingestion every 2 hours
+  // Schedule recurring ingestion every 1 hour
   setInterval(() => {
     scheduledIngestion();
   }, INGESTION_INTERVAL_MS);
