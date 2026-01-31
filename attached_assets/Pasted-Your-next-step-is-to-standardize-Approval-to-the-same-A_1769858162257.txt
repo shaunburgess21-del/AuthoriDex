@@ -1,0 +1,286 @@
+Your next step is to standardize Approval to the same “Aggregate Seed” architecture you’re now using for Value — before you seed Value. That way you don’t end up with two incompatible systems and messy analytics.
+
+What to do next (in order)
+
+Audit what exists right now
+
+Identify the raw approval votes table name (likely celebrity_approval_votes or similar).
+
+Check whether the prior seed job created:
+
+fake users, or
+
+reused real users, or
+
+wrote rows without user references (bad), or
+
+only updated aggregates (best-case).
+
+Confirm where Approval % is currently being computed from (raw votes only vs metrics table).
+
+Switch Approval to “Seed + Real” math (aggregate seed columns)
+Add seed columns that allow you to compute approval without polluting raw votes:
+
+seed_approval_count (int)
+
+seed_approval_sum (int) ← sum of star ratings, e.g. 100 votes averaging 4.2 → sum ≈ 420
+Then your Approval math becomes:
+
+real_count = count(rows in approval votes)
+
+real_sum = sum(rating)
+
+total_count = seed_approval_count + real_count
+
+total_sum = seed_approval_sum + real_sum
+
+approval_avg = total_sum / total_count
+
+approval_pct = (approval_avg / 5) * 100
+
+Clean up the old seeded raw votes
+Because you’re pre-launch, the safest approach is:
+
+Back up the approval votes table (copy to celebrity_approval_votes_backup_YYYYMMDD)
+
+Then remove the seeded rows.
+
+If you can reliably identify seed rows (e.g., created within a known window, or inserted by a specific seed script), delete only those.
+If you cannot distinguish fake vs real (common), and you’re truly pre-launch: truncate the approval votes table and start clean.
+
+Convert your seed spreadsheet into seed columns (not fake rows)
+Instead of generating 1,112 fake votes, you set seed columns so the displayed % matches your target.
+
+For each celebrity:
+
+You already have: seed_vote_count and target_approval_pct
+
+Convert to an average out of 5:
+
+target_avg = (target_approval_pct / 100) * 5
+
+Then:
+
+seed_approval_sum = round(seed_vote_count * target_avg)
+
+seed_approval_count = seed_vote_count
+
+This preserves the correct Approval % immediately, with zero fake users.
+
+Verify end-to-end
+
+Approval leaderboard sorts by approval_pct (not trend_score)
+
+Profile widget (if any) matches the leaderboard
+
+Casting a real vote increments totals correctly (seed + real)
+
+Only then seed Value
+Now you can add:
+
+seed_underrated_count, seed_overrated_count
+…and reuse the same “seed + real” pattern.
+
+Why this is the right move
+
+No fake users → your “real users”, DAU, engagement, retention metrics remain meaningful.
+
+No “my vote already set” bugs from fake votes assigned to real user_ids.
+
+Approval and Value use identical patterns → less surprise, fewer edge cases.
+
+A clean prompt to send to Replit (Plan Agent)
+
+Copy/paste this:
+
+Act as a Senior Backend Architect. Do not redesign UI. Focus on data integrity and seed architecture.
+
+Task: Refactor Approval seeding to “Aggregate Seed + Real Votes” (match Value architecture)
+
+We are standardizing seeding across the app. Approval must NOT rely on fake raw vote rows.
+
+1) Audit current state
+
+Identify the raw approval votes table used for 1–5 ratings (likely celebrity_approval_votes).
+
+Identify where Approval % is computed today (raw votes vs metrics).
+
+Identify whether prior seed work inserted fake rows into the raw votes table.
+
+2) Schema changes (celebrity_metrics)
+
+Add seed aggregate columns:
+
+seed_approval_count INT DEFAULT 0
+
+seed_approval_sum INT DEFAULT 0
+
+3) Approval computation (seed + real)
+
+Update approval aggregation logic everywhere so:
+
+real_count = COUNT(celebrity_approval_votes)
+
+real_sum = SUM(celebrity_approval_votes.rating)
+
+total_count = seed_approval_count + real_count
+
+total_sum = seed_approval_sum + real_sum
+
+approval_avg = total_sum / total_count
+
+approval_pct = (approval_avg / 5) * 100
+
+Edge case: if total_count = 0, approval_pct is null and UI shows “—”.
+
+4) Cleanup of old seeded raw votes (pre-launch)
+
+Create a backup table copy of the raw approval votes table.
+
+If seed rows are identifiable, delete only seed rows.
+
+If not reliably identifiable (likely), and we are pre-launch, truncate the raw approval votes table so it contains only real votes going forward.
+
+5) Seed conversion script (no fake users)
+
+Create scripts/seed-approval-aggregates.ts (dev-only):
+
+Only runs when NODE_ENV !== 'production' AND SEED_METRICS=true
+
+Reads our existing approval seed source (the same file used previously).
+
+For each celebrity:
+
+seed_approval_count = seed_vote_count
+
+target_avg = (target_approval_pct / 100) * 5
+
+seed_approval_sum = round(seed_vote_count * target_avg)
+
+Upsert into celebrity_metrics.
+
+6) Verification
+
+Approval leaderboard sorts by approval_pct (desc) and is stable (tie-breakers).
+
+A real user vote increments totals correctly (seed + real) without affecting user analytics.
+
+Confirm no fake rows exist in raw approval votes table after cleanup.
+
+Deliverable: Report which table was cleaned, which scripts were created, and confirm that the displayed Approval % remains the same as before.
+
+If you want to be extra safe from Replit “doing its own thing”, add one line at the top:
+
+Non-negotiable: Do not create fake users and do not insert seed rows into raw vote tables.
+
+Once Approval is cleaned and stable, your Value seeding becomes straightforward (seed counts only), and you won’t get bitten later when you start measuring real traction on the platform.
+
+Please note we have no real votes as yet because we have not launched - so all votes currently should be applied to seed votes - does this simplify things and should I paste your above suggested prompt or would you prefer to update the promot based on this insight I have just provided 
+
+Yes — this simplifies things a lot, and it makes the cleanup step safe and decisive.
+
+Because you have zero real votes, you can do a clean reset:
+
+TRUNCATE (or DELETE FROM) the raw approval votes table with no risk.
+
+Then move fully to seed aggregates (seed_approval_count, seed_approval_sum) as the only source of Approval % until launch.
+
+Same pattern for Value: seed counts live in metrics, raw vote tables remain empty until real users arrive.
+
+I’d use an updated prompt that’s shorter, firmer, and explicitly says no real votes exist so Replit doesn’t waste time trying to “detect” seed rows.
+
+Updated prompt to paste into Replit Plan Agent (best version)
+
+Act as a Senior Backend Architect. We have NOT launched yet. There are ZERO real user votes in the database. Do not redesign any UI. Implement exactly what is requested.
+
+Task: Refactor Approval to “Aggregate Seed Only” + Reset Raw Vote Tables (Pre-launch)
+
+We are standardizing seed architecture across the app. Approval (1–5 rating) must NOT be seeded via fake raw vote rows. Since we have not launched, we confirm there are no real votes — all existing vote data may be safely reset.
+
+1) Hard reset (safe because pre-launch)
+
+Identify the raw approval vote table (e.g., celebrity_approval_votes) and TRUNCATE it (or delete all rows).
+
+If any related “vote-state” tables were created for approval seeding, truncate them too.
+
+Keep tables/schema; only clear rows.
+
+2) Schema: seed aggregates in celebrity_metrics
+
+In celebrity_metrics, add:
+
+seed_approval_count INT DEFAULT 0
+
+seed_approval_sum INT DEFAULT 0
+
+(Do not add aggregate columns to celebrities.)
+
+3) Approval calculation must be Seed + Real (future-proof)
+
+Update the Approval computation used by:
+
+the Approval Leaderboard sorting
+
+any profile widgets / components showing Approval %
+
+Formula:
+
+real_count = COUNT(raw approval votes)
+
+real_sum = SUM(raw approval votes.rating)
+
+total_count = seed_approval_count + real_count
+
+total_sum = seed_approval_sum + real_sum
+
+approval_avg = total_sum / total_count
+
+approval_pct = (approval_avg / 5) * 100
+
+Edge case: if total_count = 0, return null and UI shows “—”.
+
+4) Seed script (NO fake users, NO raw vote rows)
+
+Create: scripts/seed-approval-aggregates.ts
+
+Guards:
+
+Only run if NODE_ENV !== 'production' AND SEED_METRICS=true
+
+Must be manual run only (not on server startup)
+
+Logic:
+
+Read our existing seed source (same file you used previously for approval seed % + vote count).
+
+For each celebrity:
+
+seed_approval_count = seed_vote_count
+
+target_avg = (target_approval_pct / 100) * 5
+
+seed_approval_sum = round(seed_vote_count * target_avg)
+
+Upsert into celebrity_metrics by celebrity_id
+
+5) Verification (must confirm)
+
+Approval leaderboard sorts by approval_pct (not trend score).
+
+Displayed approval % matches our seed targets after the refactor.
+
+Confirm raw approval vote tables are empty after reset.
+
+Casting a real vote later will increase totals correctly (seed + real).
+
+Deliverable: List tables truncated, confirm seed columns added, confirm approval % still displays correctly, and confirm sorting is by approval_pct.
+
+Why this is the best approach right now
+
+No ambiguity: since you haven’t launched, Replit doesn’t need to “separate seed vs real”.
+
+No fake users ever.
+
+Your analytics stay clean when real votes start.
+
+If you want, after Replit finishes, your next prompt for Value can be almost identical (seed counts for underrated/overrated + keep raw celebrity_value_votes empty until launch).

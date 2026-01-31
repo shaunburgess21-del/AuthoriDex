@@ -222,7 +222,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
         onClick={onVisitProfile}
         data-testid={`row-person-${person.id}`}
       >
-        <RankBadge rank={activeTab === "fame" ? person.rank : (person.leaderboardRank ?? person.rank)} />
+        <RankBadge rank={person.leaderboardRank ?? person.rank} />
         <PersonAvatar name={person.name} avatar={person.avatar} size="md" />
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-base truncate" data-testid={`text-name-${person.id}`}>
