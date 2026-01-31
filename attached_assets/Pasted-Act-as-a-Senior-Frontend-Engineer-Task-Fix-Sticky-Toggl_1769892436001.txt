@@ -1,0 +1,107 @@
+Act as a Senior Frontend Engineer.
+
+Task: Fix “Sticky Toggle” Scroll Position When Switching Tabs
+
+We have 3 sticky toggles on the Home page: Leaderboard, Vote, Predict.
+
+Bug: If a user scrolls down while one toggle is active, then taps another toggle, the page preserves the previous scroll position and lands the user in the middle/bottom of the newly selected section.
+Expected: Whenever a toggle is selected, the UI must jump the user to the top of that section (immediately below the sticky toggle bar), every time.
+
+Requirements
+
+On toggle click, scroll to the top of the selected section (Leaderboard / Vote / Predict).
+
+Must work only after scrolling (this is where the bug shows), and also remain correct when not scrolling.
+
+Must account for the sticky header/toggle height so the section header isn’t hidden behind it.
+
+No visual redesign and do not change any other behavior of these sections.
+
+Implementation Guidance (preferred approach)
+
+Add a ref anchor at the top of each section:
+
+leaderboardTopRef
+
+voteTopRef
+
+predictTopRef
+
+When activeToggle changes (or on toggle click), run:
+
+ref.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+
+then apply an offset for sticky header height using window.scrollBy({ top: -HEADER_OFFSET_PX })
+
+Use a reliable header offset:
+
+either measure the sticky toggle element height via getBoundingClientRect().height
+
+or use a constant (only if you already have one used elsewhere)
+
+Use requestAnimationFrame() (or a short setTimeout(0)) before the scroll so the DOM updates to the new section first.
+
+Acceptance Tests
+
+Scroll halfway down Leaderboard, tap Vote → lands at top of Vote section (not midway).
+
+Scroll near bottom of Vote, tap Predict → lands at top of Predict section (not midway).
+
+Repeat across all toggles, including rapid switching.
+
+Confirm section titles are visible and not hidden under the sticky toggle bar.
+
+Prompt 2 — Make Underrated/Overrated button colors match People’s Voice buttons
+
+Act as a Senior Frontend Engineer.
+
+Task: Normalize Button Colors for “Underrated / Overrated” Cards
+
+In the FameDex Vote ecosystem, the Underrated / Overrated cards have green and red buttons.
+
+Issue: The green/red styling on these buttons does NOT match the green/red styling used in The People’s Voice cards (Support/Neutral/Oppose).
+Goal: Make them visually consistent by reusing the same green and red button styles (colors, border, glow/hover states, etc.) already used in The People’s Voice.
+
+Requirements
+
+Update Underrated button styling to match Support button styling from The People’s Voice.
+
+Update Overrated button styling to match Oppose button styling from The People’s Voice.
+
+This must apply everywhere these buttons appear:
+
+Vote page “Underrated / Overrated” section cards
+
+Home page Vote toggle “Underrated / Overrated” card
+
+Any overlays (“View all celebrities”) for this section
+
+No changes to The People’s Voice buttons themselves (those are the reference standard).
+
+Do not change layouts, spacing, labels, or logic — color/variant consistency only.
+
+Implementation Guidance (preferred approach)
+
+Identify the exact classnames/variants used for:
+
+People’s Voice “Support” (green)
+
+People’s Voice “Oppose” (red)
+
+Apply the same variant/class to:
+
+Underrated → use Support’s class/variant
+
+Overrated → use Oppose’s class/variant
+
+If those styles are defined as shared components (e.g., a <Button variant="support">), reuse that.
+
+If those styles are plain Tailwind class strings, extract them into shared constants or a shared variant so we don’t drift again.
+
+Acceptance Tests
+
+Side-by-side comparison: Underrated button should look like Support; Overrated should look like Oppose.
+
+Hover/active/disabled states remain consistent with People’s Voice.
+
+No other UI elements change.

@@ -543,17 +543,25 @@ export default function HomePage() {
     if (previousView.current !== activeView) {
       previousView.current = activeView;
       
-      // Wait for AnimatePresence transition to start before scrolling
-      // Using setTimeout to ensure the new section DOM is ready
-      const timeoutId = setTimeout(() => {
-        const anchorId = `${activeView}-top`;
-        const anchor = document.getElementById(anchorId);
-        if (anchor) {
-          anchor.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      }, 50);
+      // Get the content container and scroll to its top, accounting for sticky elements
+      const contentContainer = document.querySelector('[data-content-section]');
+      const toggleBar = document.querySelector('[data-toggle-bar]');
       
-      return () => clearTimeout(timeoutId);
+      if (contentContainer && toggleBar) {
+        // Get the absolute position of the content container in the document
+        const contentRect = contentContainer.getBoundingClientRect();
+        const contentTop = window.scrollY + contentRect.top;
+        
+        // The sticky header is h-16 (64px) and toggle bar height
+        const toggleBarRect = toggleBar.getBoundingClientRect();
+        const stickyOffset = 64 + toggleBarRect.height; // header + toggle bar
+        
+        // Scroll so content appears right below the sticky elements
+        window.scrollTo({
+          top: contentTop - stickyOffset,
+          behavior: 'smooth'
+        });
+      }
     }
   }, [activeView]);
 
@@ -692,7 +700,7 @@ export default function HomePage() {
 
       <HeroSection onCastVoteClick={handleHeroCastVote} />
 
-      <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-blue-500/5 via-background/95 to-blue-500/5 backdrop-blur-xl">
+      <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-blue-500/5 via-background/95 to-blue-500/5 backdrop-blur-xl" data-toggle-bar>
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-center gap-2 py-3">
             {(["leaderboard", "vote", "predict"] as HomeView[]).map((view) => {
@@ -719,7 +727,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
+      <div className="container mx-auto px-4 py-8 max-w-7xl" data-content-section>
         <AnimatePresence mode="wait">
           {activeView === "leaderboard" && (
             <motion.div
@@ -728,8 +736,7 @@ export default function HomePage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
             >
-              <div id="leaderboard-top" className="scroll-mt-32" />
-              <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 mb-6 md:grid md:grid-cols-3 md:overflow-visible" data-testid="market-pulse-row">
+                            <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 mb-6 md:grid md:grid-cols-3 md:overflow-visible" data-testid="market-pulse-row">
                 <MarketPulseCard 
                   title="Daily Movers" 
                   icon={Activity} 
@@ -919,8 +926,7 @@ export default function HomePage() {
 
           {activeView === "predict" && (
             <>
-              <div id="predict-top" className="scroll-mt-32" />
-              <PredictDeckView 
+                            <PredictDeckView 
                 trendingPeople={allPeople} 
                 isLoading={isLoading}
                 onExplore={() => setLocation("/predict")} 
@@ -930,8 +936,7 @@ export default function HomePage() {
 
           {activeView === "vote" && (
             <>
-              <div id="vote-top" className="scroll-mt-32" />
-              <ApprovalViralHook 
+                            <ApprovalViralHook 
                 onRateClick={(personId) => {
                   setVotingPersonId(personId);
                   setVotingModalOpen(true);
