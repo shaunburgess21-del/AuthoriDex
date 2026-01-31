@@ -844,25 +844,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Helper function to recompute celebrity metrics after a vote
   async function recomputeCelebrityMetrics(celebrityId: string) {
     try {
-      // Get approval metrics from user_votes (Supabase)
+      // First, get current seed values from celebrity_metrics (pre-launch baseline)
+      const [existingMetrics] = await db
+        .select({
+          seedApprovalCount: celebrityMetrics.seedApprovalCount,
+          seedApprovalSum: celebrityMetrics.seedApprovalSum,
+          seedUnderratedCount: celebrityMetrics.seedUnderratedCount,
+          seedOverratedCount: celebrityMetrics.seedOverratedCount,
+        })
+        .from(celebrityMetrics)
+        .where(eq(celebrityMetrics.celebrityId, celebrityId))
+        .limit(1);
+
+      const seedApprovalCount = existingMetrics?.seedApprovalCount || 0;
+      const seedApprovalSum = existingMetrics?.seedApprovalSum || 0;
+      const seedUnderratedCount = existingMetrics?.seedUnderratedCount || 0;
+      const seedOverratedCount = existingMetrics?.seedOverratedCount || 0;
+
+      // Get REAL approval votes from user_votes (Supabase)
       const { data: approvalVotes, error: approvalError } = await supabaseServer
         .from('user_votes')
         .select('rating')
         .eq('person_id', celebrityId);
 
-      let approvalVotesCount = 0;
+      let realApprovalCount = 0;
+      let realApprovalSum = 0;
+
+      if (!approvalError && approvalVotes && approvalVotes.length > 0) {
+        realApprovalCount = approvalVotes.length;
+        realApprovalSum = approvalVotes.reduce((acc, v) => acc + v.rating, 0);
+      }
+
+      // Calculate DISPLAY totals: seed + real
+      const totalApprovalCount = seedApprovalCount + realApprovalCount;
+      const totalApprovalSum = seedApprovalSum + realApprovalSum;
+
+      let approvalVotesCount = totalApprovalCount;
       let approvalAvgRating: number | null = null;
       let approvalPct: number | null = null;
 
-      if (!approvalError && approvalVotes && approvalVotes.length > 0) {
-        approvalVotesCount = approvalVotes.length;
-        const sum = approvalVotes.reduce((acc, v) => acc + v.rating, 0);
-        approvalAvgRating = sum / approvalVotesCount;
-        // Convert 1-5 scale to 0-100%: ((avg - 1) / 4) * 100
+      if (totalApprovalCount > 0) {
+        approvalAvgRating = totalApprovalSum / totalApprovalCount;
+        // Convert 1-5 scale to 0-100%: ((avg_rating - 1) / 4) * 100
+        // This maps 1 star -> 0%, 5 stars -> 100%
         approvalPct = Math.round(((approvalAvgRating - 1) / 4) * 100);
       }
 
-      // Get value metrics from celebrity_value_votes (local DB)
+      // Get REAL value votes from celebrity_value_votes (local DB)
       const underratedResult = await db
         .select({ count: count() })
         .from(celebrityValueVotes)
@@ -879,8 +907,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eq(celebrityValueVotes.vote, 'overrated')
         ));
 
-      const underratedVotesCount = Number(underratedResult[0]?.count || 0);
-      const overratedVotesCount = Number(overratedResult[0]?.count || 0);
+      const realUnderratedCount = Number(underratedResult[0]?.count || 0);
+      const realOverratedCount = Number(overratedResult[0]?.count || 0);
+
+      // Calculate DISPLAY totals: seed + real
+      const underratedVotesCount = seedUnderratedCount + realUnderratedCount;
+      const overratedVotesCount = seedOverratedCount + realOverratedCount;
       const totalValueVotes = underratedVotesCount + overratedVotesCount;
 
       let underratedPct: number | null = null;
@@ -900,16 +932,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(trendingPeople.id, celebrityId))
         .limit(1);
 
-      // Upsert celebrity_metrics
+      // Upsert celebrity_metrics (preserve seed values, update display values)
       await db
         .insert(celebrityMetrics)
         .values({
           celebrityId,
           trendScore: trendData?.trendScore || 0,
           fameIndex: trendData?.fameIndex || 0,
+          seedApprovalCount,
+          seedApprovalSum,
           approvalVotesCount,
           approvalAvgRating,
           approvalPct,
+          seedUnderratedCount,
+          seedOverratedCount,
           underratedVotesCount,
           overratedVotesCount,
           underratedPct,
@@ -922,6 +958,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           set: {
             trendScore: trendData?.trendScore || 0,
             fameIndex: trendData?.fameIndex || 0,
+            // Don't overwrite seed values - they stay fixed
             approvalVotesCount,
             approvalAvgRating,
             approvalPct,

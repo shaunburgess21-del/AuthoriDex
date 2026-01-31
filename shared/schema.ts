@@ -788,11 +788,17 @@ export const celebrityMetrics = pgTable("celebrity_metrics", {
   // Fame Index score (mirrors trend_score from trending_people)
   trendScore: real("trend_score").default(0),
   fameIndex: integer("fame_index").default(0),
-  // Approval aggregates (from user_votes table)
+  // Approval SEED aggregates (pre-launch baseline, no fake users)
+  seedApprovalCount: integer("seed_approval_count").notNull().default(0),
+  seedApprovalSum: integer("seed_approval_sum").notNull().default(0), // sum of ratings (count * avg_rating)
+  // Approval DISPLAY aggregates (seed + real votes combined)
   approvalVotesCount: integer("approval_votes_count").notNull().default(0),
   approvalAvgRating: real("approval_avg_rating"), // 1-5 scale
   approvalPct: real("approval_pct"), // 0-100 scale ((avg_rating - 1) / 4 * 100)
-  // Value aggregates (from celebrity_value_votes table)
+  // Value SEED aggregates (pre-launch baseline, no fake users)
+  seedUnderratedCount: integer("seed_underrated_count").notNull().default(0),
+  seedOverratedCount: integer("seed_overrated_count").notNull().default(0),
+  // Value DISPLAY aggregates (seed + real votes combined)
   underratedVotesCount: integer("underrated_votes_count").notNull().default(0),
   overratedVotesCount: integer("overrated_votes_count").notNull().default(0),
   underratedPct: real("underrated_pct"), // 0-100
