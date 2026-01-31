@@ -691,10 +691,12 @@ export default function PersonDetailPage() {
           <OverratedUnderratedWidget personId={person.id} personName={person.name} />
         </div>
 
-        {/* Why They're Trending - AI-powered news summary */}
-        <div className="mb-8">
-          <WhyTrendingCard personId={person.id} personName={person.name} />
-        </div>
+        {/* Why They're Trending - AI-powered news summary (only for top 10) */}
+        {person.rank && person.rank <= 10 && (
+          <div className="mb-8">
+            <WhyTrendingCard personId={person.id} personName={person.name} />
+          </div>
+        )}
 
         {/* 2. Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

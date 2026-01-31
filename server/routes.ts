@@ -1797,6 +1797,7 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
   });
 
   // API endpoint to get "Why Trending" context for a person using web search + AI
+  // Only returns content for top 10 ranked celebrities to optimize costs
   app.get("/api/why-trending/:personId", async (req, res) => {
     try {
       const { personId } = req.params;
@@ -1805,6 +1806,18 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       const person = await storage.getTrendingPerson(personId);
       if (!person) {
         return res.status(404).json({ error: "Person not found" });
+      }
+      
+      // Only show "Why Trending" for top 10 ranked celebrities
+      // Lower-ranked celebrities often have stale/irrelevant news
+      if (!person.rank || person.rank > 10) {
+        return res.json({
+          personId,
+          personName: person.name,
+          hasContext: false,
+          message: "Why Trending is only available for top 10 ranked celebrities",
+          fetchedAt: new Date(),
+        });
       }
       
       // Check cache for trending context
