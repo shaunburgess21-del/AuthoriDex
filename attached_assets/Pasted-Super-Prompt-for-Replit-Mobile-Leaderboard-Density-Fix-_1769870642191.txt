@@ -1,0 +1,143 @@
+Super-Prompt for Replit (Mobile Leaderboard Density Fix)
+
+Act as a Senior Frontend Engineer.
+Non-negotiable: Do not redesign the leaderboard or change desktop/tablet layout. Only implement the responsive/mobile changes described below. Preserve existing spacing, typography, card styles, and button styles on md+.
+
+Goal
+
+On mobile only (< md), we currently lose the key metric values because space is limited and we must keep the CTA buttons.
+Fix: On mobile, replace the “Industry” sub-label under the celebrity name with a Metric Subtitle that changes by selected leaderboard tab. Desktop keeps Industry.
+
+Requirements
+1) Mobile spacing improvements (small, safe changes)
+
+Leaderboard container horizontal padding on mobile: reduce to px-2 (keep existing value on md+).
+
+Rank badge/column: reduce width on mobile to w-8 or min-w-[2rem].
+
+If the rank is inside a wide rounded rectangle, compress it (or reduce padding) only on mobile.
+
+Do not change rank styling on md+.
+
+2) Name cell: Mobile swaps Industry → Metric (2 lines max)
+
+In the “Name” column / cell:
+
+Desktop & tablet (md+): keep current behavior:
+
+Line 1: Name
+
+Line 2: Industry (e.g., Tech/Politics/Business/Sports)
+
+Mobile (< md):
+
+Line 1: Name (unchanged)
+
+Line 2: Metric Subtitle (replaces Industry)
+
+Must never wrap to a third line → enforce line-clamp-1 (or truncate) on the subtitle.
+
+Mobile subtitle style
+
+Use: md:hidden text-xs text-muted-foreground leading-tight line-clamp-1
+
+Keep row height consistent. No chips/badges on mobile subtitle.
+
+3) Dynamic metric subtitle content (mobile only)
+
+The subtitle text depends on the active tab:
+
+Tab: Fame Index
+
+Show: Index: {trendScore}
+
+Use the same value currently used for ranking in Fame Index.
+
+Tab: Approval
+
+Show: Approval: {approvalPct}%
+
+Use the existing approval percentage.
+
+Apply existing “good/bad” color logic subtly:
+
+If you already color approval text elsewhere, reuse those classes.
+
+Otherwise: only change text color on the % part (do not add new UI elements).
+
+Tab: Value
+
+Show: Under: {underratedPct}% • Over: {overratedPct}%
+
+Color rule (mobile subtitle only):
+
+“Under …” portion = green text
+
+“Over …” portion = red text
+
+Keep it one line only (truncate if needed).
+
+Null handling (all tabs):
+
+If metric missing, show — (e.g., Approval: — or Under: — • Over: —).
+
+4) Column visibility rules (don’t duplicate metrics)
+
+On mobile, the dedicated “Score” column should be hidden because the metric is now under the name:
+
+Score header: hidden md:block
+
+Score cells: hidden md:block
+
+On md+, Score column remains exactly as it is today.
+
+5) Buttons (CTA) must remain visible and usable
+
+Vote button (Fame Index + Approval tabs): must stay visible on all screen sizes, same style.
+
+Value tab: two buttons (“Underrated” and “Overrated”) must remain visible on all sizes.
+
+Value tab button mobile tightening (only if needed)
+
+If the two buttons don’t fit comfortably on mobile:
+
+On < md, change labels to: “Under” and “Over” (keep full labels on md+).
+
+Ensure the buttons:
+
+stay on one line
+
+don’t push content into a third row
+
+use gap-2, whitespace-nowrap, and optionally min-w-0 + px-2 on mobile
+
+do not reduce tap targets below ~40px height
+
+6) Acceptance criteria (must verify)
+
+Test on narrow screens (e.g., iPhone SE width):
+
+Each leaderboard row is max 2 lines in the name area.
+
+Industry label is hidden on mobile and still visible on md+.
+
+Mobile shows the correct metric subtitle for the active tab:
+
+Fame Index → Index score visible
+
+Approval → Approval % visible
+
+Value → Under/Over split visible
+
+Vote / Under/Over buttons remain clickable and aligned right.
+
+Desktop/tablet remains pixel-identical to current design.
+
+Optional (only if already easy)
+
+If the mobile subtitle feels tight, you may shorten prefixes:
+
+Index: → Idx:
+
+Approval: → Appr:
+But do not change desktop labels.
