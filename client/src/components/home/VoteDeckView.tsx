@@ -37,6 +37,7 @@ import {
 import { CurateSection } from "@/components/curate";
 import { getFilterCategories, type FilterCategory } from "@shared/constants";
 import { useMutation } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { ValueVotePerson } from "@/components/UnderratedOverratedCard";
 
@@ -304,12 +305,12 @@ function ValueCard({
   person,
   userVote,
   onVote,
-  onVisitProfile,
+  onChangeVote,
 }: {
   person: ValueVotePerson;
   userVote: 'underrated' | 'overrated' | null;
   onVote: (personId: string, vote: 'underrated' | 'overrated') => void;
-  onVisitProfile: (personId: string) => void;
+  onChangeVote: (personId: string) => void;
 }) {
   const hasVoted = userVote !== null;
   const totalVotes = (person.underratedCount || 0) + (person.overratedCount || 0);
@@ -334,27 +335,52 @@ function ValueCard({
         </div>
         
         {hasVoted ? (
-          <div className="space-y-3">
-            <div className="flex gap-2">
-              <div className={`flex-1 p-2 rounded-lg text-center text-xs ${userVote === 'underrated' ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-300' : 'bg-muted/30'}`}>
-                <ArrowUp className="h-3.5 w-3.5 mx-auto mb-1" />
-                {person.underratedPct?.toFixed(0) ?? 0}% Underrated
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <ArrowUp className="h-4 w-4 text-[#00C853] shrink-0" />
+              <span className="text-sm text-[#00C853] w-20 shrink-0">Underrated</span>
+              <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-[#00C853] rounded-full transition-all duration-500"
+                  style={{ width: `${person.underratedPct ?? 50}%` }}
+                />
               </div>
-              <div className={`flex-1 p-2 rounded-lg text-center text-xs ${userVote === 'overrated' ? 'bg-red-500/20 border border-red-400/40 text-red-300' : 'bg-muted/30'}`}>
-                <ArrowDown className="h-3.5 w-3.5 mx-auto mb-1" />
-                {person.overratedPct?.toFixed(0) ?? 0}% Overrated
-              </div>
+              <span className="text-sm text-muted-foreground w-10 text-right">{Math.round(person.underratedPct ?? 50)}%</span>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full text-cyan-400"
-              onClick={() => onVisitProfile(person.id)}
-              data-testid={`button-value-profile-${person.id}`}
-            >
-              Visit Profile
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
+            <div className="flex items-center gap-3">
+              <ArrowDown className="h-4 w-4 text-[#FF0000] shrink-0" />
+              <span className="text-sm text-[#FF0000] w-20 shrink-0">Overrated</span>
+              <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-[#FF0000] rounded-full transition-all duration-500"
+                  style={{ width: `${person.overratedPct ?? 50}%` }}
+                />
+              </div>
+              <span className="text-sm text-muted-foreground w-10 text-right">{Math.round(person.overratedPct ?? 50)}%</span>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-white/10">
+              <div className="flex items-center gap-2">
+                {userVote === 'underrated' ? (
+                  <ArrowUp className="h-4 w-4 text-[#00C853]" />
+                ) : (
+                  <ArrowDown className="h-4 w-4 text-[#FF0000]" />
+                )}
+                <span className="text-sm text-muted-foreground">
+                  You voted <span className={userVote === 'underrated' ? 'text-[#00C853]' : 'text-[#FF0000]'}>
+                    {userVote}
+                  </span>
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onChangeVote(person.id)}
+                className="text-xs text-muted-foreground"
+                data-testid={`button-value-change-${person.id}`}
+              >
+                Change
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="flex gap-2">
@@ -461,12 +487,26 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
     [valueCelebrities, categoryFilter, searchQuery]
   );
 
+  const { toast } = useToast();
+  
   const valueVoteMutation = useMutation({
     mutationFn: async ({ personId, vote }: { personId: string; vote: 'underrated' | 'overrated' }) => {
       return apiRequest('POST', `/api/celebrity/${personId}/value-vote`, { vote });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/leaderboard?tab=value&limit=20'] });
+    },
+    onError: (error: any, variables) => {
+      setValueVotes(prev => {
+        const next = { ...prev };
+        delete next[variables.personId];
+        return next;
+      });
+      toast({
+        title: "Vote failed",
+        description: error.message?.includes("401") ? "Please sign in to vote" : (error.message || "Failed to submit vote"),
+        variant: "destructive",
+      });
     },
   });
 
@@ -492,8 +532,12 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
     valueVoteMutation.mutate({ personId, vote });
   };
 
-  const handleValueVisitProfile = (personId: string) => {
-    setLocation(`/person/${personId}`);
+  const handleValueChangeVote = (personId: string) => {
+    setValueVotes(prev => {
+      const next = { ...prev };
+      delete next[personId];
+      return next;
+    });
   };
 
   const showFaceOffs = activeSection === "All" || activeSection === "Face-Offs";
@@ -639,7 +683,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
                   handleValueVote(id, vote);
                   setValueInteracted(true);
                 }}
-                onVisitProfile={handleValueVisitProfile}
+                onChangeVote={handleValueChangeVote}
               />
             )}
             emptyMessage="No celebrities match your filters"
