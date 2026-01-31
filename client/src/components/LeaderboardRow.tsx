@@ -297,7 +297,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                     {person.approvalPct != null ? (
                       <>
                         <span 
-                          className="text-[28px] font-bold"
+                          className="font-bold text-[22px]"
                           style={{ color: getApprovalColor(person.approvalPct) }}
                         >
                           {Math.round(person.approvalPct)}
