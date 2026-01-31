@@ -1,0 +1,267 @@
+Act as a Senior Full-Stack Engineer (frontend-first focus).
+Do not redesign unrelated UI, spacing, typography, colors, or existing sections.
+Only implement exactly what is requested.
+If anything is unclear, ask one clarifying question before changing scope.
+
+Goal
+
+We are removing the “Value” tab (Underrated/Overrated leaderboard) from the Leaderboard section entirely, and relocating Underrated/Overrated voting into the Vote ecosystem:
+
+the Home page → “Vote” mode, and
+
+the dedicated /vote page as a new section.
+
+Backend architecture already exists (seed + real aggregates in celebrity_metrics + celebrity_value_votes). Do not create fake votes/users. Use existing “seed + real” logic.
+
+Part A — Leaderboard Cleanup (Home → Leaderboard mode)
+A1) Remove “Value” tab completely
+
+In the Leaderboard tab row, remove the “Value” tab button entirely.
+
+Remove all “Value tab” state, sorting, UI rendering paths from the Leaderboard component.
+
+After this change, Leaderboard tabs should be only:
+
+Fame Score (or “Fame Index” / “Fame Score” — keep existing naming unless already standardized)
+
+Approval Rating (rename from “Approval” to “Approval Rating”)
+
+A2) Approval tab rename
+
+Change the tab label “Approval” → “Approval Rating”.
+
+No other changes to how approval votes work or display.
+
+A3) Mobile Leaderboard must remain as currently fixed
+
+Keep the current mobile density solution you implemented:
+
+For Fame Score & Approval Rating: the metric replaces industry on mobile.
+
+The dedicated Score column may be hidden on mobile.
+
+This request does not change any of that.
+
+Acceptance check A:
+
+There is no “Value” anywhere in the Leaderboard tab row.
+
+Only Fame Score + Approval Rating remain.
+
+Leaderboard styling/layout remains identical beyond the removed tab + renamed label.
+
+Part B — Add “Underrated / Overrated” voting as a new Vote category
+
+We still want users to vote “Underrated/Overrated”, but NOT in the Leaderboard section anymore.
+
+Data source (must be consistent everywhere)
+
+Use the existing computed/returned values based on celebrity_metrics:
+
+seed_underrated_count, seed_overrated_count
+
+plus real votes from celebrity_value_votes
+
+displayed totals and percentages are computed as:
+
+total_underrated = seed_underrated_count + real_underrated_count
+
+total_overrated = seed_overrated_count + real_overrated_count
+
+total_votes = total_underrated + total_overrated
+
+underrated_pct = total_underrated / total_votes * 100
+
+overrated_pct = total_overrated / total_votes * 100
+
+value_score = underrated_pct - overrated_pct
+
+No fake users. No seed rows inserted into vote tables.
+
+Also ensure user-specific state is supported:
+
+If the user already voted on a celebrity in celebrity_value_votes, show that state on the card (and show results).
+
+Part C — /vote Page: New Section “Underrated / Overrated”
+C1) Placement
+
+On the dedicated /vote page, insert a new section directly below “The People’s Voice” and above the next existing section.
+
+C2) Section header requirements (match existing design language)
+
+The section must visually match the pattern used by existing sections (e.g., Face-Offs / People’s Voice):
+
+Title: “Underrated / Overrated”
+
+Subtitle: “Are these influential figures fairly rated?”
+
+Right-side controls (same style as other sections):
+
+A “?” info icon/button → opens a small modal explaining how it works
+
+A “+ Suggest” button → opens suggestion modal (same UX pattern as other sections)
+
+Info modal content (simple)
+
+Title: “How it works”
+
+Body (short): “Vote whether a celebrity is Underrated or Overrated. Results update in real time.”
+
+Close button.
+
+Suggest modal
+
+Keep it consistent with existing Suggest flows. If Suggest isn’t wired yet, create the UI shell and log/placeholder handler, but do not redesign other Suggest features.
+
+C3) Default view = 3 cards + “View All Celebrities”
+
+Show 3 cards by default in this section.
+
+Include a button under the 3 cards: “View All Celebrities”
+
+Clicking it opens an overlay (full-screen on mobile, modal/overlay on desktop) consistent with other “View all…” overlays:
+
+Contains a searchable list/grid of all celebrities
+
+Uses the same card component
+
+Scrollable
+
+Important: Do not create a new visual design system—reuse existing overlay patterns.
+
+Part D — Card Component: “Underrated/Overrated” Voting Card
+
+Create a reusable component (e.g., UnderratedOverratedCard) used in:
+
+/vote page section
+
+Home page Vote mode (single-card carousel)
+
+Card content & layout (must follow)
+
+Top left: Total votes (e.g., “1,112 votes”)
+
+Top right: Industry pill (Tech/Business/Sports/etc) — keep this on /vote page cards if there’s space (this page is not the constrained leaderboard row).
+
+Prompt text: “Is [Celebrity Name] underrated or overrated?”
+
+Celebrity image: use existing profile image source used across the app
+
+Celebrity name below image
+
+Voting controls (pre-vote)
+
+Two buttons stacked vertically (full width):
+
+Underrated (green theme)
+
+Overrated (red theme)
+
+Voting controls (post-vote state)
+
+After vote is submitted (or if user already voted):
+
+Show results clearly:
+
+Each button displays its percentage (e.g., “Underrated • 65%” and “Overrated • 35%”)
+
+Indicate the user’s selected side (filled/active treatment) and the other as outline/less prominent.
+
+Buttons should not submit again unless user changes their vote (upsert). If vote changes are allowed, keep it consistent with current API behavior:
+
+Clicking the opposite option updates the vote (upsert) and refreshes results.
+
+Part E — Home Page “Vote” mode: Add Overrated/Underrated as a category
+
+There is a “Vote” mode on the Home page (your toggle: Leaderboard / Vote / Predict).
+We need to add a new voting stream for “Underrated/Overrated”.
+
+E1) Add to the Vote filter navigation
+
+Update the Vote-mode category filters (where you have All, Face-Offs, People’s Voice, etc.):
+
+Order must be:
+
+All
+
+Face-Offs
+
+People’s Voice
+
+Overrated/Underrated
+
+Induction Queue
+
+Curate Profile
+
+Add an icon for Overrated/Underrated that visually matches the others (e.g., scale or up/down arrows). Use the same icon library already used.
+
+E2) Behavior in Home → Vote mode
+
+When filter is “Overrated/Underrated”:
+
+Display one card at a time (same pattern as existing single-card voting UX on Home Vote mode)
+
+Use the same card component as /vote page, but adapted for single-card flow.
+
+Required buttons under card (Home Vote mode)
+
+Before voting: show a “Skip” button (loads next celebrity)
+
+After voting: show two buttons:
+
+“Vote Next” (loads next celebrity in the stream)
+
+“Visit Profile” (navigates to that celebrity profile page)
+
+Keep styling consistent with existing Vote mode controls. Don’t redesign.
+
+Part F — API / Wiring Requirements
+F1) Voting endpoint
+
+Use the existing value-vote endpoint or create it if missing:
+
+POST /api/celebrity/:id/value-vote
+
+Body: { vote: "underrated" | "overrated" }
+
+Server: upsert into celebrity_value_votes (unique by celebrity_id + user_id)
+
+Recompute metrics using the existing seed + real aggregation function
+
+Return updated totals + percentages + user vote state
+
+F2) Consistency requirement
+
+The same celebrity’s Underrated/Overrated results must match in:
+
+/vote page cards
+
+Home Vote-mode cards
+
+celebrity profile widget (if it already exists)
+No drift. Same source. Same math.
+
+Part G — Non-negotiable constraints
+
+Do NOT add the “Value” tab back anywhere in Leaderboard.
+
+Do NOT change other sections’ layout or design.
+
+Do NOT generate fake users or fake raw vote rows for seeding.
+
+Reuse existing styling primitives, modal/overlay patterns, and button components.
+
+Deliverables / Definition of Done
+
+Leaderboard shows only Fame Score and Approval Rating tabs (Value removed).
+
+/vote page contains a new Underrated / Overrated section under People’s Voice:
+
+shows 3 cards + “View All Celebrities” overlay + “?” info modal + “+ Suggest” modal.
+
+Home → Vote mode has a new filter Overrated/Underrated with correct ordering + icon.
+
+Users can vote Underrated/Overrated in both places and see results.
+
+Results and vote counts match everywhere and update after voting (optimistic UI preferred).
