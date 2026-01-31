@@ -50,9 +50,10 @@ interface LeaderboardRowProps {
   activeTab?: LeaderboardTab;
   onVisitProfile: () => void;
   onVoteClick?: () => void;
+  onValueVoteClick?: () => void;
 }
 
-export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onVoteClick }: LeaderboardRowProps) {
+export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onVoteClick, onValueVoteClick }: LeaderboardRowProps) {
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
   const [localUserVote, setLocalUserVote] = useState<string | null>(person.userValueVote || null);
   const queryClient = useQueryClient();
@@ -376,8 +377,21 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
 
         {activeTab === "value" && (
           <>
+            {/* Desktop: Show value percentages in dedicated column */}
             {renderValuePercentages()}
-            {renderValueButtons()}
+            {/* Single Vote button opens modal for value voting */}
+            <Button 
+              variant="default" 
+              size="sm"
+              className="font-mono font-bold text-sm min-w-14 justify-center"
+              onClick={(e) => {
+                e.stopPropagation();
+                onValueVoteClick?.();
+              }}
+              data-testid={`button-value-vote-${person.id}`}
+            >
+              Vote
+            </Button>
           </>
         )}
       </div>

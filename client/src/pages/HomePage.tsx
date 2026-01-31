@@ -2,6 +2,7 @@ import { HeroSection } from "@/components/HeroSection";
 import { SearchBar } from "@/components/SearchBar";
 import { LeaderboardRow } from "@/components/LeaderboardRow";
 import { VotingModal } from "@/components/VotingModal";
+import { ValueVoteModal } from "@/components/ValueVoteModal";
 import { UserMenu } from "@/components/UserMenu";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -474,6 +475,8 @@ export default function HomePage() {
   const [, setLocation] = useLocation();
   const [votingModalOpen, setVotingModalOpen] = useState(false);
   const [votingPersonId, setVotingPersonId] = useState<string | null>(null);
+  const [valueVoteModalOpen, setValueVoteModalOpen] = useState(false);
+  const [valueVotePerson, setValueVotePerson] = useState<any>(null);
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
   const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
@@ -574,6 +577,11 @@ export default function HomePage() {
   const handleVoteClick = (personId: string) => {
     setVotingPersonId(personId);
     setVotingModalOpen(true);
+  };
+
+  const handleValueVoteClick = (person: any) => {
+    setValueVotePerson(person);
+    setValueVoteModalOpen(true);
   };
 
   const handleHeroCastVote = () => {
@@ -857,6 +865,7 @@ export default function HomePage() {
                         activeTab={leaderboardTab}
                         onVisitProfile={() => handleVisitProfile(person.id)}
                         onVoteClick={() => handleVoteClick(person.id)}
+                        onValueVoteClick={() => handleValueVoteClick(person)}
                       />
                     ))}
                   </div>
@@ -949,6 +958,12 @@ export default function HomePage() {
         onOpenChange={setVotingModalOpen}
         initialPersonId={votingPersonId}
         peopleList={allPeople}
+      />
+
+      <ValueVoteModal
+        open={valueVoteModalOpen}
+        onOpenChange={setValueVoteModalOpen}
+        person={valueVotePerson}
       />
     </div>
   );
