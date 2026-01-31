@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trackedPeople, trendSnapshots, trendingPeople, apiCache } from "@shared/schema";
-import { eq, desc, and, gte, lte } from "drizzle-orm";
+import { eq, desc, gte } from "drizzle-orm";
 import { computeTrendScore } from "../scoring/trendScore";
 
 export async function runQuickScoring(): Promise<{ processed: number; errors: number }> {
@@ -9,9 +9,7 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
   let processed = 0;
   let errors = 0;
   
-  // Truncate to the hour for idempotency - multiple runs within same hour will conflict
-  const hourTimestamp = new Date();
-  hourTimestamp.setMinutes(0, 0, 0);
+  // NOTE: Quick-score no longer writes snapshots - only updates trending_people table
 
   try {
     const people = await db.select().from(trackedPeople);
@@ -131,29 +129,9 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
           prev24h?.fameIndex ?? undefined  // previousFameIndex for EMA smoothing
         );
 
-        await db.insert(trendSnapshots).values({
-          personId: person.id,
-          timestamp: hourTimestamp, // Truncated to hour for idempotency
-          trendScore: scoreResult.trendScore,
-          fameIndex: scoreResult.fameIndex,
-          newsCount: news?.articleCount24h || 0,
-          searchVolume: 0,
-          youtubeViews: 0,
-          spotifyFollowers: 0,
-          wikiPageviews: wiki?.pageviews24h || 0,
-          wikiDelta: wiki?.delta || 0,
-          newsDelta: news?.delta || 0,
-          searchDelta: inputs.searchDelta,
-          xQuoteVelocity: 0,  // X API disabled
-          xReplyVelocity: 0,  // X API disabled
-          massScore: scoreResult.massScore,
-          velocityScore: scoreResult.velocityScore,
-          velocityAdjusted: scoreResult.velocityAdjusted,
-          confidence: scoreResult.confidence,
-          diversityMultiplier: scoreResult.diversityMultiplier,
-          momentum: scoreResult.momentum,
-          drivers: scoreResult.drivers,
-        }).onConflictDoNothing();
+        // NOTE: Quick-score does NOT write snapshots - only ingest.ts writes snapshots
+        // to prevent duplicate/conflicting data points that cause jagged trend graphs.
+        // This job only updates the trending_people leaderboard table.
 
         scoreResults.push({ person, score: scoreResult });
         processed++;
