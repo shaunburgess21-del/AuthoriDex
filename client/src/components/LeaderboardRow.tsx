@@ -4,11 +4,6 @@ import { RankBadge } from "./RankBadge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useEffect } from "react";
-import { voteToApprovalPercent } from "@/lib/utils";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { ArrowUp, ArrowDown, Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 
 const SEGMENT_COLORS_5 = [
   '#FF0000',
@@ -34,7 +29,7 @@ const getApprovalColor = (approvalPct: number): string => {
   return SEGMENT_COLORS_5[clampedRating - 1];
 };
 
-type LeaderboardTab = "fame" | "approval" | "value";
+type LeaderboardTab = "fame" | "approval";
 
 interface ExtendedPerson extends TrendingPerson {
   approvalPct?: number | null;
@@ -50,18 +45,10 @@ interface LeaderboardRowProps {
   activeTab?: LeaderboardTab;
   onVisitProfile: () => void;
   onVoteClick?: () => void;
-  onValueVoteClick?: () => void;
 }
 
-export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onVoteClick, onValueVoteClick }: LeaderboardRowProps) {
+export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onVoteClick }: LeaderboardRowProps) {
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
-  const [localUserVote, setLocalUserVote] = useState<string | null>(person.userValueVote || null);
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-
-  useEffect(() => {
-    setLocalUserVote(person.userValueVote || null);
-  }, [person.userValueVote]);
 
   useEffect(() => {
     const loadSentimentScore = () => {
@@ -96,127 +83,6 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
       window.removeEventListener('sentiment-vote-updated', handleCustomUpdate);
     };
   }, [person.id]);
-
-  const valueVoteMutation = useMutation({
-    mutationFn: async (voteType: 'underrated' | 'overrated') => {
-      return apiRequest('POST', `/api/celebrity/${person.id}/value-vote`, { vote: voteType });
-    },
-    onMutate: (voteType) => {
-      setLocalUserVote(voteType);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/trending'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
-    },
-    onError: (error: any) => {
-      setLocalUserVote(person.userValueVote || null);
-      toast({
-        title: "Vote failed",
-        description: error.message || "Please sign in to vote",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleValueVote = (e: React.MouseEvent, voteType: 'underrated' | 'overrated') => {
-    e.stopPropagation();
-    valueVoteMutation.mutate(voteType);
-  };
-
-  const renderValueButtons = () => {
-    const isUnderrated = localUserVote === 'underrated';
-    const isOverrated = localUserVote === 'overrated';
-    const isPending = valueVoteMutation.isPending;
-
-    return (
-      <div className="flex items-center gap-2">
-        <button
-          className={`flex items-center justify-center gap-1.5 px-2 md:px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm border whitespace-nowrap ${
-            isUnderrated 
-              ? "bg-emerald-500/30 border-emerald-500 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]" 
-              : "bg-emerald-500/10 border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/20 hover:border-emerald-500/60"
-          }`}
-          onClick={(e) => handleValueVote(e, 'underrated')}
-          disabled={isPending}
-          data-testid={`button-underrated-${person.id}`}
-        >
-          {isPending && localUserVote === 'underrated' ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <>
-              <ArrowUp className="h-3 w-3" />
-              <span className="hidden md:inline">Underrated</span>
-              <span className="md:hidden">Under</span>
-            </>
-          )}
-        </button>
-        <button
-          className={`flex items-center justify-center gap-1.5 px-2 md:px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm border whitespace-nowrap ${
-            isOverrated 
-              ? "bg-red-500/30 border-red-500 text-red-400 shadow-[0_0_12px_rgba(239,68,68,0.3)]" 
-              : "bg-red-500/10 border-red-500/40 text-red-500 hover:bg-red-500/20 hover:border-red-500/60"
-          }`}
-          onClick={(e) => handleValueVote(e, 'overrated')}
-          disabled={isPending}
-          data-testid={`button-overrated-${person.id}`}
-        >
-          {isPending && localUserVote === 'overrated' ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <>
-              <ArrowDown className="h-3 w-3" />
-              <span className="hidden md:inline">Overrated</span>
-              <span className="md:hidden">Over</span>
-            </>
-          )}
-        </button>
-      </div>
-    );
-  };
-
-  const renderValuePercentages = () => {
-    const hasVotes = person.underratedPct != null || person.overratedPct != null;
-    
-    if (!hasVotes) {
-      return (
-        <div className="text-center min-w-[80px] hidden md:block">
-          <p className="text-muted-foreground text-sm">No votes yet</p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="hidden md:flex items-center gap-2 min-w-[100px]">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-1 cursor-help">
-              <ArrowUp className="h-3 w-3 text-emerald-500" />
-              <span className="font-mono text-sm text-emerald-500">
-                {person.underratedPct ?? 0}%
-              </span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>
-            {person.underratedPct ?? 0}% think {person.name} is underrated
-          </TooltipContent>
-        </Tooltip>
-        <span className="text-muted-foreground">/</span>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-1 cursor-help">
-              <ArrowDown className="h-3 w-3 text-red-500" />
-              <span className="font-mono text-sm text-red-500">
-                {person.overratedPct ?? 0}%
-              </span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent>
-            {person.overratedPct ?? 0}% think {person.name} is overrated
-          </TooltipContent>
-        </Tooltip>
-      </div>
-    );
-  };
 
   return (
     <div className="border-b">
@@ -259,13 +125,6 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 )}
               </span>
             )}
-            {activeTab === "value" && (
-              <span className="font-mono">
-                <span className="text-emerald-500">Under: {person.underratedPct ?? 0}%</span>
-                <span className="text-muted-foreground"> • </span>
-                <span className="text-red-500">Over: {person.overratedPct ?? 0}%</span>
-              </span>
-            )}
           </p>
         </div>
 
@@ -305,7 +164,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 )}
               </Tooltip>
               <p className="text-xs text-muted-foreground uppercase tracking-wide translate-y-[0.5px]">
-                Approval
+                Approval Rating
               </p>
             </div>
             <Button 
@@ -349,7 +208,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 </TooltipContent>
               </Tooltip>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                Approval
+                Approval Rating
               </p>
             </div>
             <div className="hidden md:block text-center min-w-[80px]">
@@ -369,26 +228,6 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 onVoteClick?.();
               }}
               data-testid={`button-expand-${person.id}`}
-            >
-              Vote
-            </Button>
-          </>
-        )}
-
-        {activeTab === "value" && (
-          <>
-            {/* Desktop: Show value percentages in dedicated column */}
-            {renderValuePercentages()}
-            {/* Single Vote button opens modal for value voting */}
-            <Button 
-              variant="default" 
-              size="sm"
-              className="font-mono font-bold text-sm min-w-14 justify-center"
-              onClick={(e) => {
-                e.stopPropagation();
-                onValueVoteClick?.();
-              }}
-              data-testid={`button-value-vote-${person.id}`}
             >
               Vote
             </Button>

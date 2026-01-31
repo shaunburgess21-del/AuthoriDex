@@ -2,7 +2,6 @@ import { HeroSection } from "@/components/HeroSection";
 import { SearchBar } from "@/components/SearchBar";
 import { LeaderboardRow } from "@/components/LeaderboardRow";
 import { VotingModal } from "@/components/VotingModal";
-import { ValueVoteModal } from "@/components/ValueVoteModal";
 import { UserMenu } from "@/components/UserMenu";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -466,7 +465,7 @@ interface TrendingResponse {
   hasMore: boolean;
 }
 
-type LeaderboardTab = "fame" | "approval" | "value";
+type LeaderboardTab = "fame" | "approval";
 type SortDirection = "desc" | "asc";
 
 export default function HomePage() {
@@ -475,8 +474,6 @@ export default function HomePage() {
   const [, setLocation] = useLocation();
   const [votingModalOpen, setVotingModalOpen] = useState(false);
   const [votingPersonId, setVotingPersonId] = useState<string | null>(null);
-  const [valueVoteModalOpen, setValueVoteModalOpen] = useState(false);
-  const [valueVotePerson, setValueVotePerson] = useState<any>(null);
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
   const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
@@ -577,11 +574,6 @@ export default function HomePage() {
   const handleVoteClick = (personId: string) => {
     setVotingPersonId(personId);
     setVotingModalOpen(true);
-  };
-
-  const handleValueVoteClick = (person: any) => {
-    setValueVotePerson(person);
-    setValueVoteModalOpen(true);
   };
 
   const handleHeroCastVote = () => {
@@ -789,24 +781,8 @@ export default function HomePage() {
                       title="Sort by community approval rating"
                     >
                       <ThumbsUp className="h-3.5 w-3.5" />
-                      Approval
+                      Approval Rating
                       {leaderboardTab === "approval" && (
-                        <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => handleTabClick("value")}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                        leaderboardTab === "value"
-                          ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                          : "text-muted-foreground hover:bg-muted/50"
-                      }`}
-                      data-testid="tab-leaderboard-value"
-                      title="Sort by community value perception (underrated vs overrated)"
-                    >
-                      <Target className="h-3.5 w-3.5" />
-                      Value
-                      {leaderboardTab === "value" && (
                         <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                       )}
                     </button>
@@ -865,7 +841,6 @@ export default function HomePage() {
                         activeTab={leaderboardTab}
                         onVisitProfile={() => handleVisitProfile(person.id)}
                         onVoteClick={() => handleVoteClick(person.id)}
-                        onValueVoteClick={() => handleValueVoteClick(person)}
                       />
                     ))}
                   </div>
@@ -958,12 +933,6 @@ export default function HomePage() {
         onOpenChange={setVotingModalOpen}
         initialPersonId={votingPersonId}
         peopleList={allPeople}
-      />
-
-      <ValueVoteModal
-        open={valueVoteModalOpen}
-        onOpenChange={setValueVoteModalOpen}
-        person={valueVotePerson}
       />
     </div>
   );
