@@ -20,6 +20,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
   let processed = 0;
   let errors = 0;
 
+  // Truncate to the hour for idempotency - multiple runs within same hour will be deduplicated
+  const hourTimestamp = new Date();
+  hourTimestamp.setMinutes(0, 0, 0);
+
   console.log("[Ingest] Starting data ingestion...");
 
   try {
@@ -140,6 +144,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
 
         await db.insert(trendSnapshots).values({
           personId: person.id,
+          timestamp: hourTimestamp, // Truncated to hour for idempotency
           trendScore: scoreResult.trendScore,
           fameIndex: scoreResult.fameIndex,
           newsCount: news?.articleCount24h || 0,
@@ -159,7 +164,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
           diversityMultiplier: scoreResult.diversityMultiplier,
           momentum: scoreResult.momentum,
           drivers: scoreResult.drivers,
-        });
+        }).onConflictDoNothing(); // Deduplicate multiple runs within same hour
 
         scoreResults.push({ person, score: scoreResult });
         processed++;
