@@ -1857,18 +1857,26 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       });
       
       const headlines = newsContext.sources.map(s => s.title).join('\n');
-      const prompt = `Based on these recent news headlines about ${person.name}, write a brief 1-2 sentence summary explaining why they are currently trending or in the news:
+      const prompt = `Based on these recent news headlines about ${person.name}, write a brief 1-2 sentence summary explaining why they are currently trending or in the news.
+
+IMPORTANT GUIDELINES:
+- Be strictly neutral and objective - do not express opinions or take sides
+- Focus only on factual events and actions, not interpretations or judgments
+- Avoid loaded, biased, or emotionally charged language
+- Do not use words like "controversial", "criticized", "scandal", "backlash" unless directly quoting a headline
+- Present information as a neutral news reporter would
+- For political figures, be especially careful to remain impartial and balanced
 
 Headlines:
 ${headlines}
 
 Return a JSON object with:
 {
-  "summary": "1-2 sentence summary of why they're trending",
+  "summary": "1-2 sentence neutral, factual summary of why they're trending",
   "category": "One of: Politics, Business, Entertainment, Sports, Technology, Legal, Personal Life, Controversy, or General News"
 }
 
-Be concise and factual. Only return the JSON object.`;
+Be concise, factual, and strictly neutral. Only return the JSON object.`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
