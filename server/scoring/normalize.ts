@@ -3,18 +3,22 @@
 // ============================================================================
 
 // Platform weights - FIXED, never redistributed dynamically
+// NOTE (Jan 2026): X API removed from trend score engine due to cost constraints.
+// X API keys preserved for future Platform Insights feature.
+// X weight redistributed to Wiki, News, and Search for velocity.
+// For mass, wiki becomes the primary signal when follower data unavailable.
 export const PLATFORM_WEIGHTS = {
   mass: {
-    wiki: 0.30,
-    x: 0.35,
-    instagram: 0.20,
-    youtube: 0.15,
+    wiki: 0.50,      // Increased from 0.30 (primary mass signal without follower data)
+    x: 0.00,         // DISABLED - X API removed from trend engine
+    instagram: 0.25, // Increased from 0.20 (future placeholder)
+    youtube: 0.25,   // Increased from 0.15 (future placeholder)
   },
   velocity: {
-    wiki: 0.15,
-    news: 0.20,
-    search: 0.25,
-    x: 0.40,
+    wiki: 0.25,      // Increased from 0.15
+    news: 0.35,      // Increased from 0.20
+    search: 0.40,    // Increased from 0.25
+    x: 0.00,         // DISABLED - X API removed from trend engine
   },
 };
 

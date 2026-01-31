@@ -1,11 +1,14 @@
 import { db } from "../db";
 import { trackedPeople, apiCache } from "@shared/schema";
 import { fetchSerperData } from "../providers/serper";
-import { fetchXData } from "../providers/x-api";
+// NOTE (Jan 2026): X API removed from trend score engine due to cost constraints.
+// X API keys preserved for future Platform Insights feature.
+// import { fetchXData } from "../providers/x-api";
 import { runQuickScoring } from "../jobs/quick-score";
 
 async function fetchAllApiData() {
   console.log("🚀 Starting full API data fetch for all celebrities...\n");
+  console.log("ℹ️  Note: X API disabled for trend scoring (kept for Platform Insights)\n");
 
   const people = await db.select().from(trackedPeople);
   console.log(`📊 Found ${people.length} celebrities to process\n`);
@@ -42,48 +45,11 @@ async function fetchAllApiData() {
   
   console.log(`\n📊 Serper Summary: ${serperSuccess} success, ${serperErrors} errors\n`);
 
+  // X API section removed - kept for future Platform Insights feature
   console.log("=" .repeat(60));
-  console.log("🐦 X API (Twitter) - Fetching for celebrities with handles");
+  console.log("🐦 X API - DISABLED (reserved for Platform Insights)");
   console.log("=" .repeat(60));
-  
-  const peopleWithX = people.filter(p => p.xHandle);
-  console.log(`Found ${peopleWithX.length} celebrities with X handles\n`);
-  
-  let xSuccess = 0;
-  let xErrors = 0;
-  let xRateLimited = false;
-  
-  const MAX_X_REQUESTS = 30;
-  
-  for (let i = 0; i < Math.min(peopleWithX.length, MAX_X_REQUESTS); i++) {
-    const person = peopleWithX[i];
-    console.log(`[${i + 1}/${Math.min(peopleWithX.length, MAX_X_REQUESTS)}] Fetching X data for @${person.xHandle}...`);
-    
-    try {
-      const result = await fetchXData(person.xHandle!);
-      if (result) {
-        xSuccess++;
-        console.log(`   ✓ Quotes: ${result.quoteVelocity.toFixed(1)}, Replies: ${result.replyVelocity.toFixed(1)}`);
-      } else {
-        xErrors++;
-        console.log(`   ✗ No data returned`);
-      }
-    } catch (error: any) {
-      if (error?.message?.includes("429") || error?.message?.includes("rate")) {
-        console.log(`   ⚠ Rate limit hit - stopping X API requests`);
-        xRateLimited = true;
-        break;
-      }
-      xErrors++;
-      console.log(`   ✗ Error: ${error}`);
-    }
-    
-    if (i < Math.min(peopleWithX.length, MAX_X_REQUESTS) - 1) {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    }
-  }
-  
-  console.log(`\n📊 X API Summary: ${xSuccess} success, ${xErrors} errors${xRateLimited ? " (rate limited)" : ""}\n`);
+  console.log("   Skipping X API calls for trend scoring\n");
 
   console.log("=" .repeat(60));
   console.log("📈 Running Quick Scoring with new data");
@@ -102,7 +68,7 @@ async function fetchAllApiData() {
   console.log(`   Wikipedia: ${wikiCount} records`);
   console.log(`   GDELT:     ${gdeltCount} records`);
   console.log(`   Serper:    ${serperCount} records`);
-  console.log(`   X API:     ${xCount} records`);
+  console.log(`   X API:     ${xCount} records (historical, not updated)`);
   
   console.log("\n✨ All API data fetched successfully!");
 }

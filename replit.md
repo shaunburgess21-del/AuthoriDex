@@ -25,13 +25,15 @@ Preferred communication style: Simple, everyday language.
 ### Backend
 - **Technology Stack**: Node.js with Express.js, TypeScript, Drizzle ORM.
 - **API Design**: RESTful endpoints with query parameters.
-- **Data Providers**: Integrates with Wikipedia, GDELT, Serper.dev, and X/Twitter APIs for celebrity data.
+- **Data Providers**: Integrates with Wikipedia, GDELT, and Serper.dev APIs for celebrity data.
+  - **Note (Jan 2026)**: X/Twitter API removed from trend score engine due to cost constraints. X API keys preserved for future Platform Insights feature.
 - **Scoring Engine** (Refactored Jan 2026):
   - **Fame Index (0-1,000,000)**: Primary UI score displayed everywhere, computed from normalized trend score. Scale expanded to 0-1,000,000 for greater variance, larger numbers, and prediction difficulty.
   - **Fixed Weights**: Mass (40%) + Velocity (60%), no dynamic redistribution to prevent scoring discontinuities.
+  - **Active Velocity Sources**: Wiki (25%), News (35%), Search (40%) - X API disabled (0%).
   - **Anti-Spam Damping**: `VelocityAdjusted = VelocityScore × (0.35 + 0.65 × MassScore)` ensures high-velocity/low-mass accounts are penalized.
-  - **Diversity Multiplier**: Silent penalty based on active platforms. Instagram/YouTube marked as NOT_APPLICABLE (not tracked yet). Wiki+X+News+Search = 4/4 active = 1.0x multiplier.
-  - **Wiki-as-Primary-Mass**: When follower data is unavailable, wiki pageviews serve as the primary mass signal to prevent score collapse.
+  - **Diversity Multiplier**: Silent penalty based on active platforms. Instagram/YouTube/X marked as NOT_APPLICABLE. Wiki+News+Search = 3/3 active = 1.0x multiplier.
+  - **Wiki-as-Primary-Mass**: Wikipedia pageviews serve as the primary mass signal (50% weight).
   - **EMA Smoothing**: Alpha = 0.15 applied to final scores for stable, smooth curves instead of "barcode" charts.
   - **Nullable Change Values**: change24h/change7d show "N/A" when data is unavailable (no fake random values).
 - **Data Jobs**: Includes jobs for full data ingestion, quick scoring, and hourly trend snapshot capture.
@@ -73,14 +75,14 @@ Preferred communication style: Simple, everyday language.
 - **Wikipedia API**: Pageview data.
 - **GDELT API**: News mention counts.
 - **Serper.dev API**: Google search results.
-- **X/Twitter API**: Quote/reply velocity metrics.
+- **X/Twitter API**: Reserved for future Platform Insights feature (not used in trend scoring).
 - **Google Fonts**: Inter, Space Grotesk, JetBrains Mono.
 - **Supabase**: PostgreSQL database provider.
 
 ### Required Environment Secrets
 - `SERPER_API_KEY`
-- `X_API_KEY`
-- `X_API_SECRET`
+- `X_API_KEY` (reserved for Platform Insights)
+- `X_API_SECRET` (reserved for Platform Insights)
 
 ### Key Libraries
 - **UI Components**: Radix UI.

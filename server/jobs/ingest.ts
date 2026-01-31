@@ -4,7 +4,9 @@ import { desc, eq, sql, gte } from "drizzle-orm";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
 import { fetchBatchGdeltNews } from "../providers/gdelt";
 import { fetchSerperBatch } from "../providers/serper";
-import { fetchXBatch } from "../providers/x-api";
+// NOTE (Jan 2026): X API removed from trend score engine due to cost constraints.
+// X API keys preserved for future Platform Insights feature.
+// import { fetchXBatch } from "../providers/x-api";
 import { computeTrendScore } from "../scoring/trendScore";
 
 export interface IngestResult {
@@ -48,8 +50,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
       1000
     );
 
-    const xHandles = people.filter(p => p.xHandle).map(p => p.xHandle!);
-    const xData = await fetchXBatch(xHandles, 100); // Fetch all 100 celebrities (3x/day = 9K calls/month, within 10K limit)
+    // NOTE (Jan 2026): X API disabled for trend scoring - kept for Platform Insights
+    // const xHandles = people.filter(p => p.xHandle).map(p => p.xHandle!);
+    // const xData = await fetchXBatch(xHandles, 100);
 
     // Fetch historical snapshots for change calculations (same logic as quick-score.ts)
     const now = new Date();
@@ -103,20 +106,22 @@ export async function runDataIngestion(): Promise<IngestResult> {
         const wiki = wikiData.get(person.id);
         const news = gdeltData.get(person.id);
         const serper = serperData.get(person.name.toLowerCase());
-        const xMetrics = person.xHandle 
-          ? xData.get(person.xHandle.toLowerCase().replace("@", ""))
-          : null;
+        // NOTE (Jan 2026): X API disabled for trend scoring - kept for Platform Insights
+        // const xMetrics = person.xHandle 
+        //   ? xData.get(person.xHandle.toLowerCase().replace("@", ""))
+        //   : null;
 
         const inputs = {
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiDelta: wiki?.delta || 0,
           newsDelta: news?.delta || 0,
           searchDelta: serper?.delta || 0,
-          xQuoteVelocity: xMetrics?.quoteVelocity || 0,
-          xReplyVelocity: xMetrics?.replyVelocity || 0,
+          // X API disabled - set to 0
+          xQuoteVelocity: 0,
+          xReplyVelocity: 0,
           activePlatforms: {
             wiki: !!person.wikiSlug,
-            x: !!person.xHandle,
+            x: false,  // X API disabled for trend scoring
             instagram: !!person.instagramHandle,
             youtube: !!person.youtubeId,
           },
@@ -145,8 +150,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
           wikiDelta: wiki?.delta || 0,
           newsDelta: news?.delta || 0,
           searchDelta: serper?.delta || 0,
-          xQuoteVelocity: xMetrics?.quoteVelocity || 0,
-          xReplyVelocity: xMetrics?.replyVelocity || 0,
+          xQuoteVelocity: 0,  // X API disabled
+          xReplyVelocity: 0,  // X API disabled
           massScore: scoreResult.massScore,
           velocityScore: scoreResult.velocityScore,
           velocityAdjusted: scoreResult.velocityAdjusted,

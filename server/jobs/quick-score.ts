@@ -99,20 +99,22 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
         const wiki = person.wikiSlug ? wikiCache.get(person.wikiSlug) : null;
         const news = gdeltCache.get(person.name.toLowerCase());
         const serper = serperCache.get(person.name.toLowerCase());
-        const xMetrics = person.xHandle 
-          ? xCache.get(person.xHandle.toLowerCase().replace("@", ""))
-          : null;
+        // NOTE (Jan 2026): X API disabled for trend scoring - kept for Platform Insights
+        // const xMetrics = person.xHandle 
+        //   ? xCache.get(person.xHandle.toLowerCase().replace("@", ""))
+        //   : null;
 
         const inputs = {
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiDelta: wiki?.delta || 0,
           newsDelta: news?.delta || 0,
           searchDelta: serper?.delta || 0,
-          xQuoteVelocity: xMetrics?.quoteVelocity || 0,
-          xReplyVelocity: xMetrics?.replyVelocity || 0,
+          // X API disabled - set to 0
+          xQuoteVelocity: 0,
+          xReplyVelocity: 0,
           activePlatforms: {
             wiki: !!person.wikiSlug,
-            x: !!person.xHandle,
+            x: false,  // X API disabled for trend scoring
             instagram: !!person.instagramHandle,
             youtube: !!person.youtubeId,
           },
@@ -142,8 +144,8 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
           wikiDelta: wiki?.delta || 0,
           newsDelta: news?.delta || 0,
           searchDelta: inputs.searchDelta,
-          xQuoteVelocity: inputs.xQuoteVelocity,
-          xReplyVelocity: inputs.xReplyVelocity,
+          xQuoteVelocity: 0,  // X API disabled
+          xReplyVelocity: 0,  // X API disabled
           massScore: scoreResult.massScore,
           velocityScore: scoreResult.velocityScore,
           velocityAdjusted: scoreResult.velocityAdjusted,
