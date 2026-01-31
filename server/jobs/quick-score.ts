@@ -163,7 +163,8 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
       }
     }
 
-    scoreResults.sort((a, b) => b.score.trendScore - a.score.trendScore);
+    // Sort by fameIndex (displayed on leaderboard) not trendScore
+    scoreResults.sort((a, b) => b.score.fameIndex - a.score.fameIndex);
 
     await db.delete(trendingPeople);
     console.log(`[QuickScore] Cleared trending_people table`);
