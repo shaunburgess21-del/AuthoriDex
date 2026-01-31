@@ -807,31 +807,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Get aggregated sentiment vote counts for a person
+  // Get aggregated sentiment vote counts for a person (using celebrity_metrics: seed + real)
   app.get("/api/sentiment-votes/:personId/counts", async (req, res) => {
     try {
       const { personId } = req.params;
       
-      const overratedCount = await db
-        .select({ count: count() })
-        .from(sentimentVotes)
-        .where(and(
-          eq(sentimentVotes.personId, personId),
-          eq(sentimentVotes.voteType, 'overrated')
-        ));
+      // Get combined seed + real values from celebrity_metrics
+      const [metrics] = await db
+        .select({
+          underratedVotesCount: celebrityMetrics.underratedVotesCount,
+          overratedVotesCount: celebrityMetrics.overratedVotesCount,
+        })
+        .from(celebrityMetrics)
+        .where(eq(celebrityMetrics.celebrityId, personId))
+        .limit(1);
       
-      const underratedCount = await db
-        .select({ count: count() })
-        .from(sentimentVotes)
-        .where(and(
-          eq(sentimentVotes.personId, personId),
-          eq(sentimentVotes.voteType, 'underrated')
-        ));
-      
-      res.json({
-        overrated: Number(overratedCount[0]?.count || 0),
-        underrated: Number(underratedCount[0]?.count || 0),
-      });
+      if (metrics) {
+        res.json({
+          overrated: metrics.overratedVotesCount || 0,
+          underrated: metrics.underratedVotesCount || 0,
+        });
+      } else {
+        // Fallback: count from raw sentimentVotes table if no metrics exist
+        const overratedCount = await db
+          .select({ count: count() })
+          .from(sentimentVotes)
+          .where(and(
+            eq(sentimentVotes.personId, personId),
+            eq(sentimentVotes.voteType, 'overrated')
+          ));
+        
+        const underratedCount = await db
+          .select({ count: count() })
+          .from(sentimentVotes)
+          .where(and(
+            eq(sentimentVotes.personId, personId),
+            eq(sentimentVotes.voteType, 'underrated')
+          ));
+        
+        res.json({
+          overrated: Number(overratedCount[0]?.count || 0),
+          underrated: Number(underratedCount[0]?.count || 0),
+        });
+      }
     } catch (error) {
       console.error("Error fetching sentiment vote counts:", error);
       res.status(500).json({ error: "Failed to fetch counts" });
