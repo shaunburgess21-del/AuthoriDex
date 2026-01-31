@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
 import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile } from "@shared/schema";
-import { eq, desc, and, sql, count, gte } from "drizzle-orm";
+import { eq, desc, and, sql, count, gte, SQL } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
@@ -1046,11 +1046,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/leaderboard", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const tab = (req.query.tab as string) || 'fame'; // 'fame' | 'approval' | 'value'
-      const sortDir = (req.query.sort as string) || 'desc'; // 'asc' | 'desc'
+      const sortDir = (req.query.sortDir as string) || (req.query.sort as string) || 'desc'; // 'asc' | 'desc'
       const category = req.query.category as string;
+      const search = req.query.search as string;
       const limit = parseInt(req.query.limit as string) || 100;
       const offset = parseInt(req.query.offset as string) || 0;
       const userId = req.userId;
+
+      // Build conditions array
+      const conditions: SQL<unknown>[] = [];
+      
+      // Apply category filter if provided
+      if (category && category !== 'all') {
+        conditions.push(eq(trendingPeople.category, category));
+      }
+      
+      // Apply search filter if provided
+      if (search && search.trim()) {
+        const searchTerm = `%${search.trim().toLowerCase()}%`;
+        conditions.push(sql`LOWER(${trendingPeople.name}) LIKE ${searchTerm}`);
+      }
+
+      // Get total count for pagination (before limit/offset)
+      let countQuery = db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(trendingPeople);
+      
+      if (conditions.length > 0) {
+        countQuery = countQuery.where(and(...conditions)) as typeof countQuery;
+      }
+      
+      const [countResult] = await countQuery;
+      const totalCount = Number(countResult?.count) || 0;
 
       // Base query: join trending_people with celebrity_metrics
       let query = db
@@ -1074,9 +1101,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(trendingPeople)
         .leftJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId));
 
-      // Apply category filter if provided
-      if (category && category !== 'all') {
-        query = query.where(eq(trendingPeople.category, category)) as typeof query;
+      // Apply filters
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as typeof query;
       }
 
       // Determine sort column based on tab
@@ -1094,11 +1121,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           break;
       }
 
-      // Apply sort order (nulls last)
+      // Apply sort order (nulls last, alphabetical tiebreaker for equal values)
       if (sortDir === 'asc') {
-        query = query.orderBy(sql`${orderByColumn} ASC NULLS LAST, ${trendingPeople.id} ASC`) as typeof query;
+        query = query.orderBy(sql`${orderByColumn} ASC NULLS LAST, ${trendingPeople.name} ASC`) as typeof query;
       } else {
-        query = query.orderBy(sql`${orderByColumn} DESC NULLS LAST, ${trendingPeople.id} ASC`) as typeof query;
+        query = query.orderBy(sql`${orderByColumn} DESC NULLS LAST, ${trendingPeople.name} ASC`) as typeof query;
       }
 
       query = query.limit(limit).offset(offset) as typeof query;
@@ -1129,6 +1156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tab,
         sortDir,
         total: leaderboard.length,
+        totalCount,
         data: leaderboard,
       });
     } catch (error: any) {

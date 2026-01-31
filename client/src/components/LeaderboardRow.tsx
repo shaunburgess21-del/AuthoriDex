@@ -42,6 +42,7 @@ interface ExtendedPerson extends TrendingPerson {
   overratedPct?: number | null;
   valueScore?: number | null;
   userValueVote?: string | null;
+  leaderboardRank?: number;
 }
 
 interface LeaderboardRowProps {
@@ -221,7 +222,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
         onClick={onVisitProfile}
         data-testid={`row-person-${person.id}`}
       >
-        <RankBadge rank={person.rank} />
+        <RankBadge rank={activeTab === "fame" ? person.rank : (person.leaderboardRank ?? person.rank)} />
         <PersonAvatar name={person.name} avatar={person.avatar} size="md" />
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-base truncate" data-testid={`text-name-${person.id}`}>

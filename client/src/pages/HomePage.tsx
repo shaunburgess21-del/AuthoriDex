@@ -488,15 +488,17 @@ export default function HomePage() {
     isLoading,
     error,
   } = useInfiniteQuery<TrendingResponse>({
-    queryKey: ['/api/trending', searchQuery, category],
+    queryKey: ['/api/leaderboard', searchQuery, category, leaderboardTab, sortDirection],
     queryFn: async ({ pageParam = 0 }) => {
       const queryParams = new URLSearchParams();
       if (searchQuery) queryParams.set('search', searchQuery);
       if (category !== 'all') queryParams.set('category', category);
       queryParams.set('limit', String(PAGE_SIZE));
       queryParams.set('offset', String(pageParam));
+      queryParams.set('tab', leaderboardTab);
+      queryParams.set('sortDir', sortDirection);
       
-      const response = await fetch(`/api/trending?${queryParams}`);
+      const response = await fetch(`/api/leaderboard?${queryParams}`);
       if (!response.ok) throw new Error('Failed to fetch');
       return response.json();
     },
