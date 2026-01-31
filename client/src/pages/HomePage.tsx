@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Flame } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
@@ -527,6 +527,36 @@ export default function HomePage() {
     }
   }, [isIntersecting, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  // Track if this is the first render (skip scroll on initial load)
+  const isFirstRender = useRef(true);
+  const previousView = useRef<HomeView>(activeView);
+
+  // Scroll to section top when toggle changes
+  useEffect(() => {
+    // Skip on initial render
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
+    // Only scroll if the view actually changed
+    if (previousView.current !== activeView) {
+      previousView.current = activeView;
+      
+      // Wait for AnimatePresence transition to start before scrolling
+      // Using setTimeout to ensure the new section DOM is ready
+      const timeoutId = setTimeout(() => {
+        const anchorId = `${activeView}-top`;
+        const anchor = document.getElementById(anchorId);
+        if (anchor) {
+          anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 50);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [activeView]);
+
   const { data: topGainers = [] } = useQuery<TrendingPerson[]>({
     queryKey: ['/api/trending/movers/gainers'],
     refetchInterval: 5 * 60 * 1000,
@@ -698,6 +728,7 @@ export default function HomePage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
             >
+              <div id="leaderboard-top" className="scroll-mt-32" />
               <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 mb-6 md:grid md:grid-cols-3 md:overflow-visible" data-testid="market-pulse-row">
                 <MarketPulseCard 
                   title="Daily Movers" 
@@ -887,15 +918,19 @@ export default function HomePage() {
           )}
 
           {activeView === "predict" && (
-            <PredictDeckView 
-              trendingPeople={allPeople} 
-              isLoading={isLoading}
-              onExplore={() => setLocation("/predict")} 
-            />
+            <>
+              <div id="predict-top" className="scroll-mt-32" />
+              <PredictDeckView 
+                trendingPeople={allPeople} 
+                isLoading={isLoading}
+                onExplore={() => setLocation("/predict")} 
+              />
+            </>
           )}
 
           {activeView === "vote" && (
             <>
+              <div id="vote-top" className="scroll-mt-32" />
               <ApprovalViralHook 
                 onRateClick={(personId) => {
                   setVotingPersonId(personId);
