@@ -1,0 +1,148 @@
+Act as a Senior Frontend Engineer. Do not redesign unrelated UI. Implement only the changes explicitly requested below. Preserve existing desktop + mobile styling, spacing, typography, and layout everywhere else.
+
+Task: Value Leaderboard — Replace Inline Buttons with Single “Vote” CTA + Modal
+Goal
+
+On mobile, the Value leaderboard row cannot fit:
+
+the metric subtitle ({underratedPct}% Underrated • {overratedPct}% Overrated)
+
+plus the two inline buttons (“Under” / “Over”)
+
+So we will:
+
+Remove the two inline buttons from the Value leaderboard rows (all breakpoints).
+
+Add a single “Vote” button (same styling/component as other leaderboards’ Vote CTA).
+
+When user taps Vote on the Value leaderboard, open a Value Vote Modal (same modal design system as existing “Cast Your Vote” modal), but with only two choices: Underrated or Overrated.
+
+Ensure the Value leaderboard still displays the metric subtitle clearly on mobile:
+Under: {underratedPct}% • Over: {overratedPct}%
+(or expanded form if space permits: {underratedPct}% Underrated • {overratedPct}% Overrated)
+
+1) Leaderboard Row UI Changes (Value tab only)
+A) Remove inline buttons
+
+In Value tab row rendering, remove the inline [Underrated] [Overrated] buttons entirely.
+
+Do not affect Fame Index or Approval tabs.
+
+B) Add single “Vote” button
+
+In Value tab rows, show a single Vote button on the right.
+
+Must reuse the exact same button component/styles used in the other leaderboards (size, radius, color, hover states).
+
+Mobile and desktop should both use this same single Vote button for Value tab.
+
+2) Value Tab Metric Display (Mobile + Desktop rules)
+A) Mobile subtitle (already implemented pattern)
+
+We already replaced Industry with metrics on mobile. Keep that pattern and make Value subtitle readable:
+
+Mobile (<md) subtitle line for Value tab:
+
+Preferred: {underratedPct}% Underrated • {overratedPct}% Overrated
+
+If space is tight, abbreviate:
+
+Under: {underratedPct}% • Over: {overratedPct}%
+
+Enforce line-clamp-1 (or truncate) so it never wraps to a 3rd line.
+
+Keep the same text-xs muted styling used for mobile subtitle.
+
+Null handling: if percentages missing, show Under: — • Over: —.
+
+B) Desktop (md+)
+
+Keep existing desktop “Score” column behavior for Value tab if it exists, BUT ensure the split is visible somewhere:
+
+If Value tab currently shows the split in a score cell, keep it.
+
+If not, add it only inside the existing score cell (do not add new columns).
+
+Do not add bars/badges. Keep it simple text.
+
+3) Value Vote Modal (Two-option modal)
+A) Trigger
+
+Clicking Vote on a Value leaderboard row opens a modal.
+
+B) Modal design constraint
+
+Must use the same modal component and styling pattern as the existing “Cast Your Vote” modal (overlay, card, spacing, typography).
+
+Do not change the existing Cast Your Vote modal.
+
+C) Modal content
+
+Title: Is {CelebrityName} Underrated or Overrated?
+Body: short helper text (1 line): Your vote helps shape the Value leaderboard.
+
+Two primary options (buttons):
+
+Underrated (green themed)
+
+Overrated (red themed)
+
+Button state:
+
+If user has already voted for this celebrity, show their selection as “selected” (filled/active) and the other as outline/ghost.
+
+Provide a subtle “You voted: Underrated/Overrated” text (optional, if already used elsewhere).
+
+D) Vote submission logic
+
+On click:
+
+Call the existing Value vote endpoint (or the existing client mutation) that previously powered the inline buttons:
+
+POST /api/celebrity/:id/value-vote with body { vote: "underrated" | "overrated" }
+
+Use optimistic UI if already implemented elsewhere.
+
+On success:
+
+Close modal OR keep open and show confirmation state (choose simplest consistent approach; closing is fine).
+
+Ensure the leaderboard row and the profile widget reflect the updated vote totals immediately (same behavior as current inline buttons).
+
+E) Error handling
+
+If API call fails, show a small inline error message in the modal: Couldn’t submit vote. Please try again.
+
+Do not silently fail.
+
+4) Sorting + Metrics Consistency (Do not regress)
+
+Value leaderboard sorting must remain by value_score DESC (Most Underrated → Most Overrated), as implemented.
+
+The displayed underratedPct and overratedPct must still come from the same “seed + real” hybrid logic (do not change backend).
+
+Ensure the removal of inline buttons does not break existing per-user vote state tracking.
+
+5) Acceptance Tests / Verification
+
+On mobile (iPhone width):
+
+Value rows show:
+
+Name (line 1)
+
+Metric subtitle (line 2) with both Under and Over percentages
+
+Single Vote button aligned right
+
+Tapping Vote opens modal with two options.
+
+Selecting an option updates totals and user selection state.
+
+On desktop:
+
+Value tab layout remains consistent with existing leaderboard styling.
+
+No UI changes to Fame Index or Approval tabs.
+
+Important: Implement only the above. Do not refactor unrelated components, spacing, or styling.
