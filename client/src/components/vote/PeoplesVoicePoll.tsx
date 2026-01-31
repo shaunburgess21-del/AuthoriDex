@@ -115,17 +115,17 @@ export function PeoplesVoicePoll({
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">Your vote</span>
               <span className={`text-xs font-medium ${
-                voted === 'support' ? 'text-green-400' : 
-                voted === 'oppose' ? 'text-red-400' : 
+                voted === 'support' ? 'text-[#00C853]' : 
+                voted === 'oppose' ? 'text-[#FF0000]' : 
                 'text-white'
               }`}>
                 {voted.charAt(0).toUpperCase() + voted.slice(1)}
               </span>
             </div>
             <div className="flex gap-1 h-2 rounded-full overflow-hidden">
-              <div className="bg-green-500" style={{ width: `${topic.approvePercent}%` }} />
+              <div className="bg-[#00C853]" style={{ width: `${topic.approvePercent}%` }} />
               <div className="bg-gray-400" style={{ width: `${topic.neutralPercent}%` }} />
-              <div className="bg-red-500" style={{ width: `${topic.disapprovePercent}%` }} />
+              <div className="bg-[#FF0000]" style={{ width: `${topic.disapprovePercent}%` }} />
             </div>
             <div className="flex justify-between mt-1.5 text-[10px] text-muted-foreground">
               <span>{topic.approvePercent}% Support</span>

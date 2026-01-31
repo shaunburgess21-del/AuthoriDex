@@ -127,7 +127,7 @@ export function UnderratedOverratedCard({
             variant="outline"
             onClick={() => handleVote('underrated')}
             disabled={isPending}
-            className="w-full bg-emerald-500/10 border-emerald-500/50 text-emerald-400"
+            className="w-full bg-[#00C853]/10 border-[#00C853]/50 text-[#00C853]"
             data-testid={`button-underrated-${person.id}`}
           >
             {isPending ? (
@@ -143,7 +143,7 @@ export function UnderratedOverratedCard({
             variant="outline"
             onClick={() => handleVote('overrated')}
             disabled={isPending}
-            className="w-full bg-red-500/10 border-red-500/50 text-red-400"
+            className="w-full bg-[#FF0000]/10 border-[#FF0000]/50 text-[#FF0000]"
             data-testid={`button-overrated-${person.id}`}
           >
             {isPending ? (
@@ -159,22 +159,22 @@ export function UnderratedOverratedCard({
       ) : (
         <div className="flex flex-col gap-3 mt-auto">
           <div className="flex items-center gap-3">
-            <ArrowUp className="h-4 w-4 text-emerald-400 shrink-0" />
-            <span className="text-sm text-emerald-400 w-20 shrink-0">Underrated</span>
+            <ArrowUp className="h-4 w-4 text-[#00C853] shrink-0" />
+            <span className="text-sm text-[#00C853] w-20 shrink-0">Underrated</span>
             <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
               <div 
-                className="h-full bg-emerald-400 rounded-full transition-all duration-500"
+                className="h-full bg-[#00C853] rounded-full transition-all duration-500"
                 style={{ width: `${underratedPct}%` }}
               />
             </div>
             <span className="text-sm text-muted-foreground w-10 text-right">{Math.round(underratedPct)}%</span>
           </div>
           <div className="flex items-center gap-3">
-            <ArrowDown className="h-4 w-4 text-red-400 shrink-0" />
-            <span className="text-sm text-red-400 w-20 shrink-0">Overrated</span>
+            <ArrowDown className="h-4 w-4 text-[#FF0000] shrink-0" />
+            <span className="text-sm text-[#FF0000] w-20 shrink-0">Overrated</span>
             <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
               <div 
-                className="h-full bg-red-400 rounded-full transition-all duration-500"
+                className="h-full bg-[#FF0000] rounded-full transition-all duration-500"
                 style={{ width: `${overratedPct}%` }}
               />
             </div>
@@ -183,12 +183,12 @@ export function UnderratedOverratedCard({
           <div className="flex items-center justify-between pt-2 border-t border-white/10">
             <div className="flex items-center gap-2">
               {localVote === 'underrated' ? (
-                <ArrowUp className="h-4 w-4 text-emerald-400" />
+                <ArrowUp className="h-4 w-4 text-[#00C853]" />
               ) : (
-                <ArrowDown className="h-4 w-4 text-red-400" />
+                <ArrowDown className="h-4 w-4 text-[#FF0000]" />
               )}
               <span className="text-sm text-muted-foreground">
-                You voted <span className={localVote === 'underrated' ? 'text-emerald-400' : 'text-red-400'}>
+                You voted <span className={localVote === 'underrated' ? 'text-[#00C853]' : 'text-[#FF0000]'}>
                   {localVote}
                 </span>
               </span>

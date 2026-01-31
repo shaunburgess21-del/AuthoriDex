@@ -226,19 +226,19 @@ function PollCard({
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <div className="flex-1 h-3 rounded-full overflow-hidden bg-slate-700/50 flex">
-                <div className="h-full bg-green-500" style={{ width: `${topic.approvePercent}%` }} />
+                <div className="h-full bg-[#00C853]" style={{ width: `${topic.approvePercent}%` }} />
                 <div className="h-full bg-slate-500" style={{ width: `${topic.neutralPercent}%` }} />
-                <div className="h-full bg-red-500" style={{ width: `${topic.disapprovePercent}%` }} />
+                <div className="h-full bg-[#FF0000]" style={{ width: `${topic.disapprovePercent}%` }} />
               </div>
             </div>
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span className={userVote === 'support' ? 'text-green-400 font-semibold' : ''}>
+              <span className={userVote === 'support' ? 'text-[#00C853] font-semibold' : ''}>
                 {topic.approvePercent}% Support
               </span>
               <span className={userVote === 'neutral' ? 'text-slate-300 font-semibold' : ''}>
                 {topic.neutralPercent}% Neutral
               </span>
-              <span className={userVote === 'oppose' ? 'text-red-400 font-semibold' : ''}>
+              <span className={userVote === 'oppose' ? 'text-[#FF0000] font-semibold' : ''}>
                 {topic.disapprovePercent}% Oppose
               </span>
             </div>
@@ -360,7 +360,7 @@ function ValueCard({
           <div className="flex gap-2">
             <Button
               variant="outline"
-              className="flex-1 bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+              className="flex-1 bg-[#00C853]/10 border-[#00C853]/50 text-[#00C853]"
               onClick={() => onVote(person.id, 'underrated')}
               data-testid={`button-value-underrated-${person.id}`}
             >
@@ -369,7 +369,7 @@ function ValueCard({
             </Button>
             <Button
               variant="outline"
-              className="flex-1 bg-red-500/10 border-red-500/30 text-red-300"
+              className="flex-1 bg-[#FF0000]/10 border-[#FF0000]/50 text-[#FF0000]"
               onClick={() => onVote(person.id, 'overrated')}
               data-testid={`button-value-overrated-${person.id}`}
             >

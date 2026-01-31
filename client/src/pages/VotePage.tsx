@@ -883,11 +883,11 @@ function DiscourseCard({
       ) : (
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-3">
-            <ThumbsUp className="h-4 w-4 text-emerald-400 shrink-0" />
-            <span className="text-sm text-emerald-400 w-16 shrink-0">Support</span>
+            <ThumbsUp className="h-4 w-4 text-[#00C853] shrink-0" />
+            <span className="text-sm text-[#00C853] w-16 shrink-0">Support</span>
             <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
               <div 
-                className="h-full bg-emerald-400 rounded-full transition-all duration-500"
+                className="h-full bg-[#00C853] rounded-full transition-all duration-500"
                 style={{ width: `${topic.approvePercent}%` }}
               />
             </div>
@@ -907,11 +907,11 @@ function DiscourseCard({
           </div>
           
           <div className="flex items-center gap-3">
-            <ThumbsDown className="h-4 w-4 text-red-400 shrink-0" />
-            <span className="text-sm text-red-400 w-16 shrink-0">Oppose</span>
+            <ThumbsDown className="h-4 w-4 text-[#FF0000] shrink-0" />
+            <span className="text-sm text-[#FF0000] w-16 shrink-0">Oppose</span>
             <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
               <div 
-                className="h-full bg-red-400 rounded-full transition-all duration-500"
+                className="h-full bg-[#FF0000] rounded-full transition-all duration-500"
                 style={{ width: `${topic.disapprovePercent}%` }}
               />
             </div>
@@ -926,9 +926,9 @@ function DiscourseCard({
             <div 
               className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
                 voted === 'support' 
-                  ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400' 
+                  ? 'bg-[#00C853]/10 border-[#00C853]/40 text-[#00C853]' 
                   : voted === 'oppose'
-                  ? 'bg-red-500/10 border-red-500/40 text-red-400'
+                  ? 'bg-[#FF0000]/10 border-[#FF0000]/40 text-[#FF0000]'
                   : 'bg-slate-500/10 border-slate-500/40 text-slate-400'
               }`}
               data-testid={`badge-voted-${topic.id}`}
@@ -3107,12 +3107,12 @@ export default function VotePage() {
                 <p className="text-muted-foreground">This vote is about public perception — not your personal like/dislike.</p>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
-                    <ArrowUp className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
-                    <span>Vote <span className="text-emerald-400 font-medium">Underrated</span> if you think they deserve more recognition than they currently get.</span>
+                    <ArrowUp className="h-4 w-4 text-[#00C853] mt-0.5 shrink-0" />
+                    <span>Vote <span className="text-[#00C853] font-medium">Underrated</span> if you think they deserve more recognition than they currently get.</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <ArrowDown className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
-                    <span>Vote <span className="text-red-400 font-medium">Overrated</span> if you think they receive more attention or praise than they deserve.</span>
+                    <ArrowDown className="h-4 w-4 text-[#FF0000] mt-0.5 shrink-0" />
+                    <span>Vote <span className="text-[#FF0000] font-medium">Overrated</span> if you think they receive more attention or praise than they deserve.</span>
                   </div>
                   <div className="flex items-start gap-2">
                     <Users className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
