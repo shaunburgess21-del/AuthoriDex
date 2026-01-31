@@ -64,6 +64,12 @@ Preferred communication style: Simple, everyday language.
 - **Security**: XP/credit endpoints restricted to whitelisted actions; high-value awards are server-side only.
 - **Community Schema**: `community_insights`, `insight_votes`, `insight_comments`, `comment_votes`, `platform_insights`, `insight_items`, `user_votes`, `user_favourites`.
 - **Value Voting Schema** (Jan 2026): `celebrity_value_votes` (underrated/overrated votes, 1 per user per celebrity), `celebrity_metrics` (aggregated approval/value metrics for fast leaderboard sorting).
+- **Aggregate Seed Architecture** (Jan 2026): Clean separation of pre-launch seed data from real user votes.
+  - **Seed Columns**: `celebrity_metrics` stores seed data in dedicated columns: `seed_approval_count`, `seed_approval_sum`, `seed_underrated_count`, `seed_overrated_count`.
+  - **Display Formula**: Display values combine seed + real: `display_total = seed_total + real_total`.
+  - **Approval Formula**: `approval_pct = ((avg_rating - 1) / 4) * 100` maps 1-5 stars to 0-100%.
+  - **Value Seeding**: Deterministic script (`scripts/seed-value-aggregates.ts`) populates value seed columns based on fameIndex ranking.
+  - **No Fake Users**: All seed data is stored as aggregates, not individual vote rows, keeping the database clean for analytics.
 
 ### AI-Generated Celebrity Profiles
 - **Feature**: Provides AI-generated biographical data for celebrities, including short/long bios, known for, origin, location, and net worth.
