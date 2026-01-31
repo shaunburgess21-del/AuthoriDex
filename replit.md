@@ -28,7 +28,7 @@ Preferred communication style: Simple, everyday language.
 - **Data Providers**: Integrates with Wikipedia, GDELT, and Serper.dev APIs for celebrity data.
   - **Note (Jan 2026)**: X/Twitter API removed from trend score engine due to cost constraints. X API keys preserved for future Platform Insights feature.
 - **Scoring Engine** (Refactored Jan 2026):
-  - **Fame Index (0-1,000,000)**: Primary UI score displayed everywhere, computed from normalized trend score. Scale expanded to 0-1,000,000 for greater variance, larger numbers, and prediction difficulty.
+  - **Fame Score (0-1,000,000)**: Primary UI score displayed everywhere, computed from normalized trend score. Scale expanded to 0-1,000,000 for greater variance, larger numbers, and prediction difficulty.
   - **Fixed Weights**: Mass (40%) + Velocity (60%), no dynamic redistribution to prevent scoring discontinuities.
   - **Active Velocity Sources**: Wiki (25%), News (35%), Search (40%) - X API disabled (0%).
   - **Anti-Spam Damping**: `VelocityAdjusted = VelocityScore × (0.35 + 0.65 × MassScore)` ensures high-velocity/low-mass accounts are penalized.
@@ -44,7 +44,7 @@ Preferred communication style: Simple, everyday language.
   - **Data Freshness**: Tracks per-source timestamps (wiki, news, search, x) with stale detection (> 1 hour).
   - **Sentiment Voting**: `sentimentVotes` table with 1 vote per user per person per day rate limiting.
 - **Leaderboard Tabs** (Jan 2026): Three-tab system replacing All/Risers/Fallers:
-  - **Fame Index Tab**: Sorted by fameIndex score (default), standard layout with Vote button
+  - **Fame Score Tab**: Sorted by fameIndex score (default), standard layout with Vote button
   - **Approval Tab**: Sorted by approval percentage from community votes, violet styling
   - **Value Tab**: Sorted by value score (-100 to +100), inline Underrated/Overrated voting buttons, amber styling
   - **Sort Toggle**: Clicking the same tab again toggles between ascending/descending sort

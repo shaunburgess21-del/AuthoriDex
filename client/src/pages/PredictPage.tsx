@@ -2246,14 +2246,14 @@ export default function PredictPage() {
           </section>
         )}
 
-        {/* SECTION HEADER: Predict the Fame Index (Official Markets) */}
+        {/* SECTION HEADER: Predict the Fame Score (Official Markets) */}
         {(showSection("jackpot") || showSection("updown") || showSection("h2h") || showSection("gainer")) && (
           <div className="relative overflow-hidden mb-6">
             <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 via-transparent to-transparent" />
             <div className="relative py-4">
               <div className="text-center">
-                <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-fame-index-title">
-                  Predict the Fame Index
+                <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-fame-score-title">
+                  Predict the Fame Score
                 </h2>
                 <p className="text-muted-foreground max-w-2xl mx-auto mb-3">
                   Use your skills to forecast celebrity stock movements. Winners are determined by real-time trend scores.

@@ -242,7 +242,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 {(person.fameIndex ?? Math.round(person.trendScore / 100)).toLocaleString()}
               </p>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                Fame Index
+                Fame Score
               </p>
             </div>
             <div className="hidden md:block text-center min-w-[80px]">
@@ -323,7 +323,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 {(person.fameIndex ?? Math.round(person.trendScore / 100)).toLocaleString()}
               </p>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                Fame Index
+                Fame Score
               </p>
             </div>
             <Button 

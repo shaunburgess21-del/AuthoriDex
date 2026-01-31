@@ -700,7 +700,7 @@ export default function PersonDetailPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card className="text-center p-4">
             <p className="text-sm text-muted-foreground uppercase tracking-wide mb-1">
-              Fame Index
+              Fame Score
             </p>
             <p className="text-3xl font-mono font-bold" data-testid="text-trend-score">
               {(person.fameIndex ?? Math.round(person.trendScore / 100)).toLocaleString()}

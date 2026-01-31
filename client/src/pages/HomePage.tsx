@@ -762,10 +762,10 @@ export default function HomePage() {
                           : "text-muted-foreground hover:bg-muted/50"
                       }`}
                       data-testid="tab-leaderboard-fame"
-                      title="Sort by Fame Index score"
+                      title="Sort by Fame Score"
                     >
                       <Crown className="h-3.5 w-3.5" />
-                      Fame Index
+                      Fame Score
                       {leaderboardTab === "fame" && (
                         <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                       )}
