@@ -231,8 +231,8 @@ const SECTION_RULES = {
     content: "The ultimate community pulse check. Weigh in on current events and controversies. Evergreen polls remain open; timed polls resolve at the specified deadline."
   },
   value: {
-    title: "Value Perception Rules",
-    content: "Is their fame score fair? Vote on whether you think each celebrity is underrated or overrated based on their current fame score. Your votes help calibrate the index and reveal community sentiment about true value."
+    title: "How It Works",
+    content: "This vote is about public perception — not your personal like/dislike. Vote Underrated if you think they deserve more recognition than they currently get. Vote Overrated if you think they receive more attention or praise than they deserve. Compare your view with the community results. Your vote updates the Underrated/Overrated split in real time."
   }
 };
 
@@ -2238,15 +2238,15 @@ export default function VotePage() {
         {/* ZONE 2: Value Perception - Underrated/Overrated Section */}
         {activeSection === "All" && (
         <section className="mb-10">
-          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-amber-500/5 via-amber-500/10 to-transparent border border-amber-500/20">
+          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-                  <BarChart3 className="h-5 w-5 text-amber-400" />
+                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                  <BarChart3 className="h-5 w-5 text-cyan-400" />
                 </div>
                 <div>
                   <h2 className="text-xl font-serif font-bold">Underrated / Overrated</h2>
-                  <p className="text-sm text-muted-foreground">Is their fame score fair? You decide.</p>
+                  <p className="text-sm text-muted-foreground">How does the public rate them — overhyped or underappreciated?</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -2256,7 +2256,7 @@ export default function VotePage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setRulesModalOpen("value")}
-                      className="text-amber-400"
+                      className="text-cyan-400"
                       data-testid="button-rules-value"
                     >
                       <HelpCircle className="h-5 w-5" />
@@ -2304,7 +2304,7 @@ export default function VotePage() {
             <Button
               variant="ghost"
               onClick={() => setValuePerceptionOverlayOpen(true)}
-              className="text-amber-400"
+              className="text-cyan-400"
               data-testid="button-view-all-value"
             >
               View all celebrities
@@ -3006,7 +3006,7 @@ export default function VotePage() {
               {rulesModalOpen === "curate" && "Curate the Profile Rules"}
               {rulesModalOpen === "voice" && "The People's Voice Rules"}
               {rulesModalOpen === "faceoffs" && "Face-Offs Rules"}
-              {rulesModalOpen === "value" && "Value Perception Rules"}
+              {rulesModalOpen === "value" && "How It Works"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4 text-sm">
@@ -3104,23 +3104,23 @@ export default function VotePage() {
             )}
             {rulesModalOpen === "value" && (
               <div className="space-y-3">
-                <p className="text-muted-foreground">Is their fame score fair? Vote on whether celebrities are underrated or overrated.</p>
+                <p className="text-muted-foreground">This vote is about public perception — not your personal like/dislike.</p>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
-                    <ArrowUp className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-                    <span>Vote <span className="text-emerald-400 font-medium">Underrated</span> if you think they deserve more fame</span>
+                    <ArrowUp className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+                    <span>Vote <span className="text-emerald-400 font-medium">Underrated</span> if you think they deserve more recognition than they currently get.</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <ArrowDown className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-                    <span>Vote <span className="text-red-400 font-medium">Overrated</span> if you think their fame is inflated</span>
+                    <ArrowDown className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
+                    <span>Vote <span className="text-red-400 font-medium">Overrated</span> if you think they receive more attention or praise than they deserve.</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Users className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-                    <span>See how your perception compares to the community</span>
+                    <Users className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Compare your view with the community results.</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <BarChart3 className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-                    <span>Your votes help calibrate the index and reveal true value</span>
+                    <BarChart3 className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Your vote updates the Underrated/Overrated split in real time.</span>
                   </div>
                 </div>
               </div>

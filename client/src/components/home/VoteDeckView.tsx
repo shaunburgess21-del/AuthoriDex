@@ -315,20 +315,20 @@ function ValueCard({
   const totalVotes = (person.underratedCount || 0) + (person.overratedCount || 0);
   
   return (
-    <Card className="relative overflow-visible bg-gradient-to-br from-amber-950/30 via-slate-900/90 to-slate-900/90 border border-amber-500/20">
+    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50">
       <div className="absolute top-3 right-3">
         <CategoryPill category={person.category || "Unknown"} />
       </div>
       <div className="relative p-4">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-          <BarChart3 className="h-3.5 w-3.5 text-amber-400" />
+          <BarChart3 className="h-3.5 w-3.5 text-cyan-400" />
           <span>{totalVotes.toLocaleString()} votes</span>
         </div>
         
         <div className="flex flex-col items-center text-center mb-4">
           <PersonAvatar name={person.name} avatar={person.avatar} size="lg" />
           <h3 className="font-semibold text-base mt-3">{person.name}</h3>
-          <div className="text-sm font-mono text-amber-400 mt-1">
+          <div className="text-sm font-mono text-cyan-400 mt-1">
             {person.fameIndex?.toLocaleString() ?? 'N/A'} Fame
           </div>
         </div>
@@ -348,7 +348,7 @@ function ValueCard({
             <Button
               variant="ghost"
               size="sm"
-              className="w-full text-amber-400"
+              className="w-full text-cyan-400"
               onClick={() => onVisitProfile(person.id)}
               data-testid={`button-value-profile-${person.id}`}
             >
@@ -525,7 +525,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
             {section === "People's Voice" && <MessageSquare className="h-3 w-3" />}
             {section === "Induction Queue" && <UserPlus className="h-3 w-3" />}
             {section === "Curate Profile" && <ImageIcon className="h-3 w-3" />}
-            {section === "Underrated / Overrated" && <BarChart3 className="h-3 w-3 text-amber-400" />}
+            {section === "Underrated / Overrated" && <BarChart3 className="h-3 w-3" />}
             {section}
           </button>
         ))}
@@ -620,6 +620,33 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
         </div>
       )}
 
+      {showValue && filteredValue.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-cyan-400" />
+            <h3 className="text-sm font-semibold">Underrated / Overrated</h3>
+          </div>
+          <CardDeckContainer
+            items={filteredValue}
+            viewType="vote"
+            hasInteracted={valueInteracted}
+            onAdvance={() => setValueInteracted(false)}
+            renderCard={(person: ValueVotePerson) => (
+              <ValueCard
+                person={person}
+                userVote={person.userValueVote ?? valueVotes[person.id] ?? null}
+                onVote={(id, vote) => {
+                  handleValueVote(id, vote);
+                  setValueInteracted(true);
+                }}
+                onVisitProfile={handleValueVisitProfile}
+              />
+            )}
+            emptyMessage="No celebrities match your filters"
+          />
+        </div>
+      )}
+
       {showInduction && filteredInduction.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
@@ -648,33 +675,6 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
 
       {showCurate && (
         <CurateSection categoryFilter={categoryFilter} compact />
-      )}
-
-      {showValue && filteredValue.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-amber-400" />
-            <h3 className="text-sm font-semibold">Underrated / Overrated</h3>
-          </div>
-          <CardDeckContainer
-            items={filteredValue}
-            viewType="vote"
-            hasInteracted={valueInteracted}
-            onAdvance={() => setValueInteracted(false)}
-            renderCard={(person: ValueVotePerson) => (
-              <ValueCard
-                person={person}
-                userVote={person.userValueVote ?? valueVotes[person.id] ?? null}
-                onVote={(id, vote) => {
-                  handleValueVote(id, vote);
-                  setValueInteracted(true);
-                }}
-                onVisitProfile={handleValueVisitProfile}
-              />
-            )}
-            emptyMessage="No celebrities match your filters"
-          />
-        </div>
       )}
 
       <div className="flex flex-col items-center gap-3 pt-4">

@@ -90,7 +90,7 @@ export function UnderratedOverratedCard({
       )}
       
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-        <Users className="h-3.5 w-3.5 text-amber-400" />
+        <Users className="h-3.5 w-3.5 text-cyan-400" />
         <span>{totalVotes.toLocaleString()} votes</span>
       </div>
       
@@ -104,7 +104,7 @@ export function UnderratedOverratedCard({
           size="lg" 
         />
         <div className="flex-1 min-w-0">
-          <h3 className="font-serif font-bold text-lg leading-tight group-hover:text-amber-400 transition-colors">
+          <h3 className="font-serif font-bold text-lg leading-tight group-hover:text-cyan-400 transition-colors">
             {person.name}
           </h3>
           <p className="text-sm text-muted-foreground mt-0.5">
