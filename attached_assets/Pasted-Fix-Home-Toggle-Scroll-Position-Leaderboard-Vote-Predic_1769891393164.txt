@@ -1,0 +1,71 @@
+Fix Home Toggle Scroll Position (Leaderboard / Vote / Predict)
+
+Act as a Senior Frontend Engineer.
+
+Problem
+
+On the Home page we have three sticky toggles: Leaderboard, Vote, Predict.
+
+If a user scrolls down while one toggle is active, then switches to another toggle, the page keeps the previous scroll position and shows the user the middle/bottom of the newly selected section. This is confusing.
+
+Required Behavior
+
+Whenever the user selects any toggle (Leaderboard / Vote / Predict), the page should always scroll to the top of that section, i.e. the first content row immediately below the sticky toggle bar.
+
+This should happen only on toggle change (not on internal interactions like voting, filtering, “view all”, etc.).
+
+Implementation Requirements
+
+Add a stable anchor per section
+
+Place an element right below the sticky toggle bar for each section:
+
+#leaderboard-top
+
+#vote-top
+
+#predict-top
+
+On toggle change, force scroll to the correct anchor
+
+When the active toggle changes:
+
+document.getElementById(anchorId)?.scrollIntoView({ behavior: "smooth", block: "start" })
+
+Ensure this scroll occurs after render of the new section content:
+
+use requestAnimationFrame, setTimeout(0), or a useLayoutEffect tied to activeTab.
+
+Sticky header offset
+
+Because the toggle bar is sticky, ensure the section top isn’t hidden behind it:
+
+Prefer CSS: set scroll-margin-top on the anchor element (e.g. scroll-mt-24 / scroll-mt-28 depending on header height).
+
+Avoid brittle “magic number” JS offsets where possible.
+
+Single scroll container
+
+Confirm whether the page scroll container is window or a nested scrollable div.
+
+If it’s a nested container, scroll that container to the anchor (not window) using the correct ref.
+
+No side effects
+
+Do not change any layout/styling besides adding anchors / scroll-margin.
+
+Do not break deep links, modals, overlays, or existing scroll behavior within a section.
+
+Preserve the sticky toggle behavior.
+
+Acceptance Tests
+
+While on Leaderboard, scroll to the bottom → tap Vote → you should land at the top of Vote content (just under toggles).
+
+While on Vote, scroll down → tap Predict → land at top of Predict content.
+
+While on Predict, scroll down → tap Leaderboard → land at top of Leaderboard content.
+
+Switching toggles at the top should still work normally.
+
+Deliver this fix with minimal code changes and verify on mobile + desktop.
