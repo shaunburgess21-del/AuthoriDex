@@ -1,0 +1,118 @@
+Yes — I’m comfortable you proceed to Build, with one important caveat:
+
+✅ You’re safe to proceed because:
+
+There are no fake approval vote rows polluting raw vote tables (great).
+
+Approval is already stored as aggregates in celebrity_metrics (also great).
+
+So you’re not at risk of “fake user” analytics contamination right now.
+
+⚠️ The only real decision left:
+
+Do you want to separate seed vs real now (before launch), or later?
+
+If you don’t separate it now, nothing breaks at launch — but later you’ll have a slightly messier migration because you’ll have “seed + real” mixed into the same columns.
+
+Given you’re pre-launch, the cleanest/lowest-risk time to do it is now, and it’s small.
+
+My recommendation
+
+Do this in one go:
+
+Refactor Approval to add explicit seed columns (and make current columns “display totals”)
+
+Seed Value using the same explicit seed pattern
+
+This keeps your architecture consistent and avoids future confusion.
+
+Extra context you should paste to Replit before you hit Build
+
+Here’s the exact guidance to send (short, very clear):
+
+“Proceed with Option 1: Refactor Approval now + Seed Value after, before launch.”
+
+Act as a Senior Backend Engineer.
+
+We have NOT launched yet (0 real votes). Current approval aggregates live in celebrity_metrics as:
+approval_votes_count, approval_avg_rating, approval_pct.
+
+Goal
+
+Introduce explicit seed columns for Approval so that when real votes start, we can compute:
+display_total = seed + real, without losing the seed baseline.
+
+Required changes
+1) Add seed columns to celebrity_metrics (Approval)
+
+Add:
+
+seed_approval_count INT DEFAULT 0
+
+seed_approval_sum INT DEFAULT 0
+
+(Where seed_approval_sum is the sum of star ratings, i.e., count * avg_rating)
+
+2) Migrate current approval baseline into seed columns
+
+Because we have 0 real votes, treat existing approval aggregates as seed:
+
+Set seed_approval_count = approval_votes_count
+
+Set seed_approval_sum = round(approval_avg_rating * approval_votes_count)
+
+Then set display columns to match seed (for now):
+
+approval_votes_count = seed_approval_count
+
+approval_avg_rating = seed_approval_sum / seed_approval_count (null safe)
+
+approval_pct = (approval_avg_rating / 5) * 100 (null safe)
+
+3) Update approval vote aggregation logic (future-proof)
+
+When real approval votes exist later:
+
+real_count = count(celebrity_approval_votes)
+
+real_sum = sum(rating)
+
+approval_votes_count = seed_approval_count + real_count
+
+approval_avg_rating = (seed_approval_sum + real_sum) / approval_votes_count
+
+approval_pct = (approval_avg_rating / 5) * 100
+
+4) Value seeding: use explicit seed counts from day 1
+
+Add:
+
+seed_underrated_count INT DEFAULT 0
+
+seed_overrated_count INT DEFAULT 0
+
+Displayed totals should be:
+
+underrated_votes_count = seed_underrated_count + real_underrated_count
+
+overrated_votes_count = seed_overrated_count + real_overrated_count
+
+Compute underrated_pct, overrated_pct, value_score from totals
+
+5) Confirmation
+
+No UI redesign
+
+Approval leaderboard continues to sort by approval_pct
+
+Value leaderboard sorts by value_score
+
+Provide a short summary of schema changes + migration steps performed
+
+If you want to keep it even simpler
+
+You can proceed with Value seeding now and leave Approval refactor for later, but I’d only do that if you’re trying to ship today and don’t want any schema changes.
+
+Since you’re not launched yet, I’d do the refactor now.
+
+If you paste the prompt above, Replit should be able to build cleanly without redesigning anything.
