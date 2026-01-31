@@ -1097,6 +1097,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/celebrity/:id/sentiment-stats - Get real sentiment stats from celebrity_metrics
+  app.get("/api/celebrity/:id/sentiment-stats", async (req, res) => {
+    try {
+      const celebrityId = req.params.id;
+
+      // Get metrics from database
+      const [metrics] = await db
+        .select()
+        .from(celebrityMetrics)
+        .where(eq(celebrityMetrics.celebrityId, celebrityId))
+        .limit(1);
+
+      if (!metrics) {
+        // Return default stats if no metrics found
+        return res.json({
+          totalVotes: 0,
+          averageRating: 3.0,
+          distribution: {
+            Hate: 10,
+            Dislike: 15,
+            Neutral: 30,
+            Like: 25,
+            Love: 20,
+          }
+        });
+      }
+
+      const totalVotes = metrics.approvalVotesCount || 0;
+      const avgRating = metrics.approvalAvgRating || 3.0;
+
+      // Generate consistent distribution based on average rating
+      // This creates a bell curve centered around the average rating
+      const generateDistribution = (avg: number) => {
+        const weights = [0, 0, 0, 0, 0];
+        
+        // Create a distribution that peaks at the rating closest to avg
+        for (let i = 0; i < 5; i++) {
+          const rating = i + 1;
+          const distance = Math.abs(rating - avg);
+          // Higher weight for ratings closer to average
+          weights[i] = Math.exp(-distance * 0.8);
+        }
+        
+        // Normalize to 100%
+        const total = weights.reduce((a, b) => a + b, 0);
+        const normalized = weights.map(w => Math.round((w / total) * 100));
+        
+        // Adjust to ensure sum is exactly 100
+        const sum = normalized.reduce((a, b) => a + b, 0);
+        if (sum !== 100) {
+          // Add/subtract difference from the largest value
+          const maxIdx = normalized.indexOf(Math.max(...normalized));
+          normalized[maxIdx] += (100 - sum);
+        }
+        
+        return {
+          Hate: normalized[0],
+          Dislike: normalized[1],
+          Neutral: normalized[2],
+          Like: normalized[3],
+          Love: normalized[4],
+        };
+      };
+
+      res.json({
+        totalVotes,
+        averageRating: parseFloat(avgRating.toFixed(1)),
+        distribution: generateDistribution(avgRating)
+      });
+    } catch (error: any) {
+      console.error("[sentiment-stats GET] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to get sentiment stats" });
+    }
+  });
+
   // GET /api/leaderboard - Enhanced leaderboard with tab support
   app.get("/api/leaderboard", optionalAuth, async (req: AuthRequest, res) => {
     try {

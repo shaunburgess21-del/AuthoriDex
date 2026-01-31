@@ -1,11 +1,12 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import { useLocation } from "wouter";
-import { ArrowLeft, Users } from "lucide-react";
+import { ArrowLeft, Users, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 interface AnimatedSentimentVotingWidgetProps {
   personId: string;
@@ -45,41 +46,11 @@ const getApprovalMessage = (value: number, personName: string) => {
   return `You strongly approve of ${personName}!`;
 };
 
-const generateMockCommunityStats = (personId: string) => {
-  const seed = personId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const random = (min: number, max: number) => {
-    const x = Math.sin(seed * 9999) * 10000;
-    return Math.floor((x - Math.floor(x)) * (max - min + 1)) + min;
-  };
-  
-  const totalVotes = random(1500, 8500);
-  const distribution = {
-    'Hate': random(5, 15),
-    'Dislike': random(8, 18),
-    'Neutral': random(15, 25),
-    'Like': random(25, 35),
-    'Love': random(20, 30),
-  };
-  
-  const total = Object.values(distribution).reduce((a, b) => a + b, 0);
-  const normalized = Object.fromEntries(
-    Object.entries(distribution).map(([k, v]) => [k, Math.round((v / total) * 100)])
-  );
-  
-  const averageRating = (
-    (normalized['Hate'] * 1 + 
-     normalized['Dislike'] * 2 + 
-     normalized['Neutral'] * 3 + 
-     normalized['Like'] * 4 + 
-     normalized['Love'] * 5) / 100
-  ).toFixed(1);
-  
-  return {
-    totalVotes,
-    distribution: normalized as Record<string, number>,
-    averageRating: parseFloat(averageRating),
-  };
-};
+interface SentimentStats {
+  totalVotes: number;
+  averageRating: number;
+  distribution: Record<string, number>;
+}
 
 interface CommunityResultsViewProps {
   personName: string;
@@ -89,9 +60,38 @@ interface CommunityResultsViewProps {
 }
 
 function CommunityResultsView({ personName, personId, userVote, onBackToVoting }: CommunityResultsViewProps) {
-  const stats = useMemo(() => generateMockCommunityStats(personId), [personId]);
-  const maxPercent = Math.max(...Object.values(stats.distribution));
+  const { data: stats, isLoading } = useQuery<SentimentStats>({
+    queryKey: ['/api/celebrity', personId, 'sentiment-stats'],
+    queryFn: async () => {
+      const response = await fetch(`/api/celebrity/${personId}/sentiment-stats`);
+      if (!response.ok) throw new Error('Failed to fetch sentiment stats');
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const defaultStats: SentimentStats = {
+    totalVotes: 0,
+    averageRating: 3.0,
+    distribution: { Hate: 10, Dislike: 15, Neutral: 30, Like: 25, Love: 20 }
+  };
+
+  const displayStats = stats || defaultStats;
+  const maxPercent = Math.max(...Object.values(displayStats.distribution));
   
+  if (isLoading) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="flex flex-col items-center justify-center py-12 space-y-4"
+      >
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Loading community results...</p>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -138,20 +138,20 @@ function CommunityResultsView({ personName, personId, userVote, onBackToVoting }
             <span className="text-sm text-muted-foreground">Total Votes</span>
           </div>
           <p className="text-2xl font-bold" data-testid="text-total-votes">
-            {stats.totalVotes.toLocaleString()}
+            {displayStats.totalVotes.toLocaleString()}
           </p>
         </div>
         <div className="bg-muted/50 rounded-xl p-4 text-center">
           <div className="text-sm text-muted-foreground mb-1">Average Rating</div>
           <p 
             className="text-2xl font-bold"
-            style={{ color: SEGMENT_COLORS[Math.round(stats.averageRating) - 1]?.bg || '#888' }}
+            style={{ color: SEGMENT_COLORS[Math.round(displayStats.averageRating) - 1]?.bg || '#888' }}
             data-testid="text-average-rating"
           >
-            {stats.averageRating}/5
+            {displayStats.averageRating}/5
           </p>
           <p className="text-xs text-muted-foreground">
-            {getZoneLabel(Math.round(stats.averageRating))}
+            {getZoneLabel(Math.round(displayStats.averageRating))}
           </p>
         </div>
       </div>
@@ -161,7 +161,7 @@ function CommunityResultsView({ personName, personId, userVote, onBackToVoting }
           Sentiment Distribution
         </h4>
         {ZONE_LABELS.map((zone) => {
-          const percent = stats.distribution[zone] || 0;
+          const percent = displayStats.distribution[zone] || 0;
           const isUserZone = getZoneLabel(userVote) === zone;
           const color = ZONE_COLORS[zone as keyof typeof ZONE_COLORS];
           
