@@ -556,14 +556,25 @@ export function AnimatedSentimentVotingWidget({
                       </Button>
                     ) : (
                       <div className="space-y-3">
-                        <Button
-                          onClick={onVoteNext}
-                          className="w-full"
-                          size="lg"
-                          data-testid="button-vote-next"
-                        >
-                          Vote Next
-                        </Button>
+                        <div className="flex gap-3">
+                          <Button
+                            onClick={onVoteNext}
+                            className="flex-1"
+                            size="lg"
+                            data-testid="button-vote-next"
+                          >
+                            Vote Next
+                          </Button>
+                          <Button
+                            onClick={handleViewResults}
+                            variant="outline"
+                            className="flex-1"
+                            size="lg"
+                            data-testid="button-view-results-modal"
+                          >
+                            View Results
+                          </Button>
+                        </div>
                         <button
                           onClick={handleVisitProfile}
                           className="w-full text-center text-sm text-primary hover:underline py-2"
