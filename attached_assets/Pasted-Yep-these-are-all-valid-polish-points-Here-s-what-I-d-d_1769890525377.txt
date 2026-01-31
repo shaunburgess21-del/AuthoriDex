@@ -1,0 +1,205 @@
+Yep — these are all valid “polish” points. Here’s what I’d do, and then a very explicit super-prompt you can paste into Replit.
+
+My recommendations (per your 6 points)
+
+Section order on Home > Vote
+
+I’d make it consistent with the /vote page order (below The People’s Voice, above the “Shape the FameDex” stuff like Induction Queue / Curate Profile).
+
+Reason: reduces cognitive load (“same sections, same order everywhere”) and makes the new feature feel “core”, not an afterthought.
+
+Orange theme vs teal
+
+If FameDex “Vote” mode already has a teal identity, keep it consistent: use teal for section chrome (header accent, links, icons, selected filter chip).
+
+You can keep orange as a small accent if you really like it, but only if you apply a systematic rule (e.g., each section has its own color). Otherwise it reads as inconsistent.
+
+My vote: standardize back to teal for all shared UI patterns.
+
+Filter chip icon orange
+
+Keep filter chips consistent:
+
+Default: grey icon + grey label (like the others)
+
+Active/selected: teal (like the others)
+
+Don’t let one filter “look special” unless it’s selected.
+
+“View all candidates” orange
+
+Same principle: use the same teal link/button style as the other “view all …” actions.
+
+Subtitle copy is wrong (“fame score fair?”)
+
+Agree — remove “fame score” from this section entirely.
+
+Better subtitle options (mobile-friendly):
+
+“How does the public rate them — overhyped or underappreciated?”
+
+“Is this person overhyped or underappreciated by the public?”
+
+“Are they underrated or overrated by the general public?”
+
+How-it-works modal copy
+
+Keep “Value Perception” if you like it, but reframe away from “fame score calibration”.
+
+Suggested modal content:
+
+Vote Underrated if you think they deserve more recognition/credit than they currently get.
+
+Vote Overrated if you think they get more attention/praise than they deserve.
+
+Compare your view to the community results.
+
+Optional final line: “This is about public perception, not whether you personally like them.”
+
+Super-prompt for Replit (copy/paste)
+
+Act as a Senior Frontend Engineer.
+Task: Polish “Underrated / Overrated” section styling + copy (NO functional changes to voting logic)
+
+Constraints (Important)
+
+Do NOT change any backend logic, endpoints, vote computation, seed logic, or database.
+
+Do NOT redesign other sections (Face-Offs, People’s Voice, Induction Queue, Curate Profile).
+
+Only apply changes to:
+
+Section ordering on Home > Vote view (if applicable)
+
+Theme consistency (colors/styles) for the Overrated/Underrated section + its filter chip + “View all” link/button
+
+Copy updates for the section subtitle + “How it works” modal text
+
+A) Fix ordering consistency (Home > Vote)
+
+On /vote page keep the section where it is: below “The People’s Voice”.
+
+On Home page > Vote toggle, move the Underrated / Overrated module so it appears in the same conceptual order:
+
+Face-Offs
+
+The People’s Voice
+
+Underrated / Overrated
+
+Induction Queue
+
+Curate Profile
+If the Home Vote view is driven by the same “sections array”, reorder it there. If it’s hard-coded, move the component placement accordingly.
+
+Deliverable: Home > Vote and /vote page show the new section in a consistent position relative to other sections.
+
+B) Standardize styling (remove orange-only special casing)
+
+We want the Overrated/Underrated section to follow the existing Vote page teal theme and shared patterns.
+
+Section header chrome
+
+Replace the orange accent styling with the same styling used by other vote sections:
+
+same border/glow treatment
+
+same title color behavior
+
+same divider/outline styles
+
+If you’re using design tokens (preferred): use the same token/variant used elsewhere (e.g., text-primary, border-primary/20, etc.) rather than hard-coded orange.
+
+Filter chip styling
+
+In the filter row (All, Face-Offs, People’s Voice, etc.):
+
+Default state: grey icon/label (match existing chips)
+
+Selected state: teal icon/label (match existing selected chip behavior)
+
+Remove orange icon coloring unless the chip is selected AND teal is the standard selected color.
+
+“View all …” link/button styling
+
+Change “View all celebrities/candidates” to match the other sections’ “View all …” CTA styling (teal link/button, same hover, same font weight, same icon usage).
+
+Ensure the label is consistent with other sections. Prefer: “View all celebrities”.
+
+Deliverable: The Overrated/Underrated section is visually consistent with other Vote sections; no unique orange-only styling remains unless applied across all sections (do not do that here).
+
+C) Fix the subtitle copy (remove “fame score” language)
+
+In the Overrated/Underrated section header:
+
+Current subtitle: “Is their fame score fair? You decide.” (or similar)
+
+Replace with (exact text):
+
+Subtitle:
+“Are these influential figures overrated or underrated by the public?”
+
+(If space constraints require shorter text, use:)
+“Overrated or underrated by the public?”
+
+Deliverable: Subtitle no longer references “fame score”.
+
+D) Update the “How it works” modal copy (exact text)
+
+Keep the modal title “Value Perception Rules” (unless you think “How it works” is more consistent — but do not rename unless necessary).
+
+Replace the modal body copy with the following (exact wording):
+
+Description line:
+“This vote is about public perception — not your personal like/dislike.”
+
+Bullets:
+
+“Vote Underrated if you think they deserve more recognition than they currently get.”
+
+“Vote Overrated if you think they receive more attention or praise than they deserve.”
+
+“Compare your view with the community results.”
+
+“Your vote updates the Underrated/Overrated split in real time.”
+
+Deliverable: Modal no longer mentions “fame score fairness” or “calibrating the index”.
+
+E) Verification checklist
+
+Home > Vote: Overrated/Underrated appears after People’s Voice.
+
+/vote page: section stays below People’s Voice and matches styling.
+
+Filter chip icon/label colors match other chips (grey default, teal selected).
+
+“View all celebrities” CTA matches other “view all” CTAs (teal styling).
+
+Subtitle + modal copy updated exactly.
+
+If you want, send me one more screenshot after Replit applies these tweaks and I’ll sanity-check spacing + copy tone in context.
+
+Great I agree with all your suggestions.  Regarding the Subtitle - I like this one: "“How does the public rate them — overhyped or underappreciated?”
+
+
+
+Perfect — that subtitle is strong and aligns exactly with your intent (public perception, not “fame score”).
+
+Here’s the exact snippet you can send to Replit to swap in (and keep everything else unchanged):
+
+Subtitle (replace existing):
+“How does the public rate them — overhyped or underappreciated?”
+
+Implementation note (so it doesn’t wrap weirdly on mobile):
+
+Keep it single-line where possible: text-sm + text-muted-foreground + leading-snug
+
+Add line-clamp-1 (or truncate) on mobile to avoid pushing the header taller.
+
+If you want it even more “scan-friendly” on tiny screens, an optional mobile-only shorter variant:
+
+md:block → “How does the public rate them — overhyped or underappreciated?”
+
+md:hidden → “Overhyped or underappreciated?”
+
+But if you prefer one consistent line everywhere, your chosen version is totally fine.
