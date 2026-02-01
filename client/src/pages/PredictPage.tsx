@@ -2218,16 +2218,6 @@ export default function PredictPage() {
                   <TooltipContent>How it works</TooltipContent>
                 </Tooltip>
                 <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="text-violet-500 hover:text-violet-400"
-                  onClick={() => setViewAllCategory("community")}
-                  data-testid="button-view-all-real-world"
-                >
-                  View All
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-                <Button 
                   variant="outline"
                   size="sm"
                   onClick={() => setCreateModalOpen(true)}
@@ -2266,6 +2256,18 @@ export default function PredictPage() {
                 No predictions match your filters
               </div>
             )}
+            <div className="flex justify-center mt-6">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-violet-500 hover:text-violet-400"
+                onClick={() => setViewAllCategory("community")}
+                data-testid="button-view-all-real-world"
+              >
+                View All Markets
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
           </section>
         )}
 
