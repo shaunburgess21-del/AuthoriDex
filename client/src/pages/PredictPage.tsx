@@ -2131,28 +2131,32 @@ export default function PredictPage() {
           </div>
           
           <HorizontalScroll className="sm:pb-0">
-            {CATEGORY_FILTERS.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => {
-                  if (cat.id === "favorites" && !user) {
-                    setLocation("/login");
-                    return;
-                  }
-                  setCategoryFilter(cat.id);
-                }}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all backdrop-blur-sm flex items-center gap-1.5 ${
-                  categoryFilter === cat.id
-                    ? 'bg-violet-500/20 text-violet-300 border border-violet-400/40 shadow-sm shadow-violet-500/20'
-                    : 'bg-background/50 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-violet-400/20'
-                }`}
-                data-testid={`chip-category-${cat.id}`}
-                aria-label={cat.id === "favorites" ? "Favorites" : undefined}
-              >
-                {cat.id === "favorites" && <Star className="h-3.5 w-3.5" />}
-                {cat.id === "favorites" ? <span className="hidden md:inline">{cat.label}</span> : cat.label}
-              </button>
-            ))}
+            {CATEGORY_FILTERS.map((cat) => {
+              const IconComponent = CATEGORY_ICONS[cat.id];
+              const isIconOnly = cat.id === "favorites" || cat.id === "misc";
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => {
+                    if (cat.id === "favorites" && !user) {
+                      setLocation("/login");
+                      return;
+                    }
+                    setCategoryFilter(cat.id);
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all backdrop-blur-sm flex items-center gap-1.5 ${
+                    categoryFilter === cat.id
+                      ? 'bg-violet-500/20 text-violet-300 border border-violet-400/40 shadow-sm shadow-violet-500/20'
+                      : 'bg-background/50 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-violet-400/20'
+                  }`}
+                  data-testid={`chip-category-${cat.id}`}
+                  aria-label={isIconOnly ? cat.label : undefined}
+                >
+                  <IconComponent className="h-3.5 w-3.5" />
+                  {isIconOnly ? <span className="hidden md:inline">{cat.label}</span> : cat.label}
+                </button>
+              );
+            })}
           </HorizontalScroll>
         </div>
 
