@@ -2293,7 +2293,7 @@ export default function PredictPage() {
                   data-testid="button-how-scoring-works"
                 >
                   <Sparkles className="h-4 w-4 text-violet-400" />
-                  <span className="text-sm text-violet-400 font-medium">How Scoring Works</span>
+                  <span className="text-sm text-violet-400 font-medium">How It Works</span>
                 </button>
               </div>
             </div>
