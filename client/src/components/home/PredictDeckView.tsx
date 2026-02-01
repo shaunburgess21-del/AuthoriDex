@@ -47,8 +47,8 @@ const PREDICT_CATEGORY_FILTERS = getFilterCategories(false).map(cat => ({
   label: cat
 }));
 
-type PredictSection = "All" | "Weekly Jackpot" | "Up/Down" | "Head-to-Head" | "Gainer" | "Community";
-const SECTION_TOGGLES: PredictSection[] = ["All", "Weekly Jackpot", "Up/Down", "Head-to-Head", "Gainer", "Community"];
+type PredictSection = "All" | "Real-World" | "Weekly Jackpot" | "Up/Down" | "Head-to-Head" | "Gainer";
+const SECTION_TOGGLES: PredictSection[] = ["All", "Real-World", "Weekly Jackpot", "Up/Down", "Head-to-Head", "Gainer"];
 
 interface PredictDeckViewProps {
   trendingPeople: TrendingPerson[];
@@ -76,7 +76,7 @@ function UpDownCard({
   const isUp = market.change7d >= 0;
   
   return (
-    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20">
+    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20" style={{ minHeight: '340px' }}>
       <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-fuchsia-500/5 rounded-lg" />
       
       <div className="relative p-4">
@@ -90,11 +90,11 @@ function UpDownCard({
           <CategoryPill category={market.category} />
         </div>
         
-        <div className="flex items-center gap-3 mb-3">
-          <PersonAvatar name={market.personName} avatar={market.personAvatar} size="md" />
+        <div className="flex flex-col items-center text-center gap-2 mb-4">
+          <PersonAvatar name={market.personName} avatar={market.personAvatar} size="xl" />
           <div>
-            <p className="font-semibold text-sm">{market.personName}</p>
-            <p className="text-xs text-muted-foreground font-mono">
+            <p className="font-semibold text-base">{market.personName}</p>
+            <p className="text-sm text-muted-foreground font-mono">
               {market.currentScore.toLocaleString()} pts
             </p>
           </div>
@@ -152,7 +152,7 @@ function H2HCard({
   onPredict: (marketId: string, selection: 'person1' | 'person2', personName: string) => void;
 }) {
   return (
-    <Card className="relative overflow-hidden bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20">
+    <Card className="relative overflow-hidden bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20" style={{ minHeight: '340px' }}>
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute left-0 top-0 w-1/2 h-full bg-gradient-to-r from-blue-600/20 to-transparent" />
         <div className="absolute right-0 top-0 w-1/2 h-full bg-gradient-to-l from-purple-600/20 to-transparent" />
@@ -170,9 +170,9 @@ function H2HCard({
         <div className="flex items-center justify-between mb-4">
           <div className="flex flex-col items-center flex-1">
             <div className="relative">
-              <div className="absolute -inset-2 rounded-full bg-blue-500/30 blur-md" />
+              <div className="absolute -inset-3 rounded-full bg-blue-500/30 blur-md" />
               <div className="relative">
-                <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} size="lg" />
+                <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} size="xl" />
               </div>
             </div>
             <p className="text-sm font-semibold mt-2 text-center">{market.person1.name.split(" ")[0]}</p>
@@ -180,16 +180,16 @@ function H2HCard({
           </div>
           
           <div className="relative mx-2">
-            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
-              <span className="text-xs font-bold text-slate-200">VS</span>
+            <div className="h-14 w-14 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
+              <span className="text-sm font-bold text-slate-200">VS</span>
             </div>
           </div>
           
           <div className="flex flex-col items-center flex-1">
             <div className="relative">
-              <div className="absolute -inset-2 rounded-full bg-purple-500/30 blur-md" />
+              <div className="absolute -inset-3 rounded-full bg-purple-500/30 blur-md" />
               <div className="relative">
-                <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} size="lg" />
+                <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} size="xl" />
               </div>
             </div>
             <p className="text-sm font-semibold mt-2 text-center">{market.person2.name.split(" ")[0]}</p>
@@ -251,7 +251,7 @@ function CommunityCard({
   const noOdds = (100 / noPercent).toFixed(2);
   
   return (
-    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20">
+    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20" style={{ minHeight: '340px' }}>
       <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-cyan-500/5 rounded-lg" />
       
       <div className="relative p-4">
@@ -263,18 +263,16 @@ function CommunityCard({
           <CategoryPill category={market.category} />
         </div>
         
-        <p className="text-sm font-semibold mb-3 line-clamp-2">{market.question}</p>
-        
-        <div className="flex items-center gap-3 mb-4">
-          <PersonAvatar name={market.personName} avatar={market.personAvatar} size="sm" />
-          <div>
-            <span className="text-sm font-medium">{market.personName}</span>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Users className="h-3 w-3" />
-              <span>{market.participants} participants</span>
-            </div>
+        <div className="flex flex-col items-center text-center mb-3">
+          <PersonAvatar name={market.personName} avatar={market.personAvatar} size="xl" />
+          <span className="text-sm font-medium mt-2">{market.personName}</span>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Users className="h-3 w-3" />
+            <span>{market.participants} participants</span>
           </div>
         </div>
+        
+        <p className="text-sm font-semibold mb-3 line-clamp-2 text-center">{market.question}</p>
         
         <div className="mb-3">
           <div className="flex items-center justify-between text-xs mb-1.5">
@@ -334,7 +332,7 @@ function GainerCard({
   const categoryLabel = market.category.charAt(0).toUpperCase() + market.category.slice(1);
   
   return (
-    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-green-500/20">
+    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-green-500/20" style={{ minHeight: '340px' }}>
       <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-transparent to-emerald-500/5 rounded-lg" />
       
       <div className="relative p-4">
@@ -349,20 +347,20 @@ function GainerCard({
           {market.leaders.map((leader, idx) => (
             <div 
               key={leader.name}
-              className="flex items-center gap-3 p-2 rounded-lg bg-slate-800/50 border border-slate-700/30"
+              className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50 border border-slate-700/30"
             >
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 {idx === 0 && (
-                  <div className="w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center">
-                    <Trophy className="h-3 w-3 text-amber-400" />
+                  <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center">
+                    <Trophy className="h-3.5 w-3.5 text-amber-400" />
                   </div>
                 )}
                 {idx !== 0 && (
-                  <span className="w-5 h-5 flex items-center justify-center text-xs text-muted-foreground">
+                  <span className="w-6 h-6 flex items-center justify-center text-xs text-muted-foreground">
                     #{idx + 1}
                   </span>
                 )}
-                <PersonAvatar name={leader.name} avatar={leader.avatar} size="sm" />
+                <PersonAvatar name={leader.name} avatar={leader.avatar} size="lg" />
                 <span className="text-sm font-medium truncate">{leader.name}</span>
               </div>
               <div className="text-right">
@@ -602,18 +600,18 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
     pendingCycleCallbackRef.current = null;
   };
 
+  const showRealWorld = activeSection === "All" || activeSection === "Real-World";
   const showJackpot = activeSection === "All" || activeSection === "Weekly Jackpot";
   const showUpDown = activeSection === "All" || activeSection === "Up/Down";
   const showH2H = activeSection === "All" || activeSection === "Head-to-Head";
   const showGainer = activeSection === "All" || activeSection === "Gainer";
-  const showCommunity = activeSection === "All" || activeSection === "Community";
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="max-w-2xl mx-auto space-y-4"
+      className="max-w-4xl mx-auto space-y-4"
     >
       <MarketCycleHero marketState={marketState} />
       
@@ -629,11 +627,11 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             }`}
             data-testid={`toggle-predict-section-${section.toLowerCase().replace(/[\s\/]/g, '-')}`}
           >
+            {section === "Real-World" && <MessageSquare className="h-3 w-3" />}
             {section === "Weekly Jackpot" && <Trophy className="h-3 w-3" />}
             {section === "Up/Down" && <TrendingUp className="h-3 w-3" />}
             {section === "Head-to-Head" && <Swords className="h-3 w-3" />}
             {section === "Gainer" && <TrendingUp className="h-3 w-3" />}
-            {section === "Community" && <MessageSquare className="h-3 w-3" />}
             {section}
           </button>
         ))}
@@ -675,6 +673,34 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
           </button>
         ))}
       </div>
+
+      {showRealWorld && filteredCommunity.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-cyan-400" />
+            <h3 className="text-sm font-semibold">Real-World Markets</h3>
+          </div>
+          <CardDeckContainer
+            items={filteredCommunity}
+            viewType="predict"
+            hasInteracted={communityInteracted}
+            onAdvance={() => {
+              if (pendingPrediction) {
+                setPredictions(prev => new Set(prev).add(pendingPrediction));
+                setPendingPrediction(null);
+              }
+              setCommunityInteracted(false);
+            }}
+            renderCard={(market) => (
+              <CommunityCard
+                market={market}
+                onPredict={(id, optId, optText) => handleCommunityPredict(id, optId, optText)}
+              />
+            )}
+            emptyMessage="No real-world markets match your filters"
+          />
+        </div>
+      )}
 
       {showJackpot && (
         <div className="space-y-2">
@@ -775,34 +801,6 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
               />
             )}
             emptyMessage="No gainer markets match your filters"
-          />
-        </div>
-      )}
-
-      {showCommunity && filteredCommunity.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold">Community Markets</h3>
-          </div>
-          <CardDeckContainer
-            items={filteredCommunity}
-            viewType="predict"
-            hasInteracted={communityInteracted}
-            onAdvance={() => {
-              if (pendingPrediction) {
-                setPredictions(prev => new Set(prev).add(pendingPrediction));
-                setPendingPrediction(null);
-              }
-              setCommunityInteracted(false);
-            }}
-            renderCard={(market) => (
-              <CommunityCard
-                market={market}
-                onPredict={(id, optId, optText) => handleCommunityPredict(id, optId, optText)}
-              />
-            )}
-            emptyMessage="No community markets match your filters"
           />
         </div>
       )}
