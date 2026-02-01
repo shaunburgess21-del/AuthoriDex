@@ -1,0 +1,263 @@
+Yes — Gemini’s 3 additions are spot-on, and they’ll meaningfully reduce the risk of Replit “helpfully” reintroducing fake-user rows or skipping market settlement. Below is the updated final Replit Plan prompt (my original, tightened, with Gemini’s additions integrated and made more explicit + unambiguous).
+
+Copy/paste this into Replit Plan:
+
+Act as a Senior Full-Stack Engineer + Data Architect for the FameDex Replit project.
+
+0) Instruction
+
+Do NOT write code yet.
+Only produce a detailed technical plan + proposed schema + CSV templates + admin workflow.
+We will implement later in small chunks.
+
+1) Context (Read Carefully)
+
+We are moving from placeholder cards to real production content for the Vote and Predict sections. We need a safe, repeatable content pipeline that supports:
+
+Batch upload via CSV (initial seeding of many cards)
+
+Admin panel to create/edit/manage cards one-by-one
+
+Visibility controls (draft/live/archived and optional scheduling)
+
+Hybrid image workflow (CSV creates draft rows; images attached later via Admin)
+
+Aggregate Seed consistency (CRITICAL — see section 6)
+
+We want a plan that integrates cleanly with the architecture we already built (including the seed aggregate pattern used for celebrity voting).
+
+2) Content Types In Scope (for this prompt)
+Vote
+
+A) Face-Offs (needs batch upload)
+
+A vs B preference vote
+
+Fields from “Suggest a Face-Off” UI:
+
+headline (max 60)
+
+contender A (celebrity OR custom)
+
+contender B (celebrity OR custom)
+
+category (industry label)
+
+B) Trending Polls (previously “The People’s Voice”) (needs batch upload)
+
+Support / Neutral / Oppose on current events / topics
+
+Fields from “Suggest a Poll” UI:
+
+headline (max 80)
+
+subject/entity (celebrity OR custom)
+
+timeline (No Deadline / 1 Week / 1 Month / Custom)
+
+short_description (max 140)
+
+C) Underrated / Overrated
+
+NO batch upload needed
+
+Auto-generated for the 100 leaderboard celebrities (already handled / native)
+
+Not in scope to redesign here.
+
+Predict
+
+D) Real-World Markets (needs batch upload + resolution mechanism)
+
+Polymarket-like: verifiable outcome at a point in time
+
+Fields from “Start a Prediction” UI:
+
+title
+
+type (Yes/No initially)
+
+category (industry label)
+
+description (max 200)
+
+MUST include: close_date / resolution_date rules
+
+Native predictions (Weekly Up/Down, Top Gainer, etc.) are not in scope for batch upload in this prompt.
+
+3) Goal / Objective
+
+Design the system so we can:
+
+Import many cards quickly (CSV → creates records safely)
+
+Manage them safely (Admin panel CRUD + status controls + image attachments)
+
+Keep database clean (no fake users)
+
+Ensure markets can be settled (Admin resolves Real-World Markets)
+
+4) Visibility / Status Requirements (Non-Negotiable)
+
+Every content item (face-off, poll, market) must support:
+
+status: draft | live | archived (or draft/scheduled/live/archived if you want scheduling)
+
+Draft items never appear on the public frontend
+
+Admin can toggle status without data loss
+
+5) Hybrid Image Workflow (Non-Negotiable)
+
+CSV cannot contain image files. We need a deliberate workflow:
+
+Step 1: CSV import creates rows in DRAFT status (even if no images are present).
+Step 2: Admin panel has a filter: “Missing images” (or “needs assets”).
+Step 3: Admin uploads images (stored in Supabase Storage) and links them to the record.
+Step 4: Admin flips status to LIVE when ready.
+
+Image selection rules at render time:
+
+If the entity is a leaderboard celebrity, use existing celebrity profile image.
+
+If it’s a custom entity/topic, use the uploaded Supabase Storage image for that card.
+
+You must propose:
+
+Supabase bucket structure (e.g. vote-faceoffs/, vote-polls/, predict-markets/)
+
+Stored DB fields (e.g. image_path, image_url, image_updated_at)
+
+6) CRITICAL: “Aggregate Seed” Consistency (Non-Negotiable)
+
+We already have a robust aggregate seed architecture elsewhere in FameDex.
+
+You must plan these new voting/prediction content tables using the same pattern:
+
+Use seed_count columns per option/outcome (e.g. seed_votes_a, seed_votes_b, seed_support_count, seed_neutral_count, seed_oppose_count, etc.)
+
+Maintain separate real user vote tables (or reuse existing vote tables/endpoints)
+
+UI totals = seed_* + real aggregates
+
+Do NOT create fake user rows for seeding
+
+Do NOT generate “seed users” or “seed vote records”
+
+Your plan must explicitly show:
+
+Which tables hold seed_* counts
+
+Which tables hold real user votes
+
+How totals are computed efficiently
+
+7) CRITICAL: Real-World Markets MUST Have Resolution Mechanism
+
+Unlike other cards, Real-World Markets end and must be settled.
+
+Your plan MUST include:
+
+Market statuses: open | closed | settled (or similar)
+
+winning_outcome field (e.g. yes/no) once settled
+
+settled_at, settled_by_admin_id fields
+
+Admin settlement UI: “Settle Market” → choose winner → system updates market + frontend shows winning outcome & disables further predictions
+
+No code now — just plan and schema.
+
+8) Batch Upload Format Recommendation
+
+You must recommend which approach is safest:
+
+Option 1: Separate CSV per content type
+
+faceoffs.csv
+
+trending_polls.csv
+
+real_world_markets.csv
+
+Option 2: One CSV with a type column
+
+I suspect separate CSVs is safer, but you must decide and justify.
+
+Your plan must include:
+
+Exact CSV headers for each file
+
+Validation rules (category allowed values, max lengths, duplicates, missing required fields)
+
+How we link entity references:
+
+If entity is a celebrity: match by celebrity_id or slug (preferred)
+
+If custom: store custom_label and optional custom_image_path
+
+9) Admin Panel Requirements (Checklist)
+
+Provide a clear checklist of admin features needed:
+
+For Face-Offs + Polls + Markets
+
+List view with filters: status, category, missing images, created_by
+
+Create / edit
+
+Draft/live toggle
+
+Archive
+
+CSV import:
+
+Upload → preview rows → validate → import
+
+Display row errors without importing bad rows
+
+Image manager: upload to Supabase Storage and attach to record
+
+Special: Markets
+
+“Settle Market” interface (as described)
+
+Prevent settlement without a winner selection
+
+After settlement: lock predictions
+
+10) Execution Plan (Chunked) — Avoid Mistakes
+
+Break the implementation into small, safe phases, for example:
+
+Schema + migrations (no UI)
+
+Admin CRUD for ONE content type first (Face-Offs)
+
+CSV import for Face-Offs (preview + validation)
+
+Image workflow + missing images filter
+
+Repeat for Trending Polls
+
+Repeat for Real-World Markets + settlement UI
+
+Frontend wiring + QA
+
+You must propose the chunk order and why.
+
+11) Output Format Required
+
+Return ONLY:
+
+A high-level architecture diagram in words (bullets)
+
+A numbered step-by-step plan (chunked)
+
+CSV templates (headers + 1 example row each)
+
+Risk checklist: top 10 risks + mitigations
+
+Any clarifying assumptions you’re making (keep minimal)
+
+Again: NO CODE YET. ONLY THE PLAN.

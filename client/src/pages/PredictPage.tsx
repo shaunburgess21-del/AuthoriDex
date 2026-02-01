@@ -479,7 +479,7 @@ function SectionHeader({
                 onClick={onRulesClick}
                 data-testid={`button-rules-${title.toLowerCase().replace(/\s+/g, '-')}`}
               >
-                <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                <HelpCircle className="h-4 w-4 text-violet-500" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>How it works</TooltipContent>
@@ -2216,7 +2216,7 @@ export default function PredictPage() {
                       onClick={() => setRulesModalOpen("community")}
                       data-testid="button-rules-real-world-markets"
                     >
-                      <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                      <HelpCircle className="h-4 w-4 text-violet-500" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>How it works</TooltipContent>
