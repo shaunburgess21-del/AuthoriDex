@@ -537,7 +537,7 @@ function SectionFilterBar({
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
         {filters.map((cat) => {
           const IconComponent = CATEGORY_ICONS[cat.id];
-          const isIconOnly = cat.id === "favorites" || cat.id === "misc";
+          const isIconOnly = cat.id === "favorites";
           return (
             <button
               key={cat.id}
@@ -2133,7 +2133,7 @@ export default function PredictPage() {
           <HorizontalScroll className="sm:pb-0">
             {CATEGORY_FILTERS.map((cat) => {
               const IconComponent = CATEGORY_ICONS[cat.id];
-              const isIconOnly = cat.id === "favorites" || cat.id === "misc";
+              const isIconOnly = cat.id === "favorites";
               return (
                 <button
                   key={cat.id}

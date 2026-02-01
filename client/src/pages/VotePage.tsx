@@ -1503,7 +1503,7 @@ function FilterChip({
 }) {
   const isFavorites = category === "Favorites";
   const isCustomTopic = category === "misc";
-  const isIconOnly = isFavorites || isCustomTopic;
+  const isIconOnly = isFavorites;
   const IconComponent = VOTE_CATEGORY_ICONS[category] || LayoutGrid;
   
   const handleClick = () => {
