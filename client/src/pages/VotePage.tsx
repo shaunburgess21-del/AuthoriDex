@@ -2396,10 +2396,6 @@ export default function VotePage() {
               <span className="text-slate-300">Ends in: {countdown}</span>
             </div>
             <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
-              <Vote className="h-3 w-3 text-cyan-400" />
-              <span className="text-slate-300">Total votes: {totalVotes.toLocaleString()}</span>
-            </div>
-            <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
               <Star className="h-3 w-3 text-amber-400" />
               <span className="text-slate-300">Top 1 will be inducted</span>
             </div>
