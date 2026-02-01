@@ -1,0 +1,49 @@
+This makes perfect sense. You are professionalizing this section ("Real-World Markets" sounds much more legitimate) and bringing its functionality up to parity with the rest of the app (Modals + Overlays + consistent UI sizing).
+
+Here is the Strict, Component-Level Prompt for Replit to execute these 4 specific changes without touching anything else.
+
+Act as a Senior Frontend Engineer.
+
+Task: Refactor "Community Predictions" into "Real-World Markets" We need to upgrade the "Community Predictions" section on the /predict page to match the design standards of the rest of the application.
+
+1. Copy Updates (Header & Subtitle)
+
+Find: The section currently labeled "Community Predictions".
+
+Update Heading: Change to "Real-World Markets".
+
+Update Subtitle: Change to "Predict the outcome of verifiable global events."
+
+2. Add "How It Works" Modal (? Icon)
+
+Missing Feature: This section header is missing the ? Info Icon found in other sections.
+
+Action: Add the Info Icon button next to the "Real-World Markets" header.
+
+Behavior: Clicking it must open the standard InfoModal component.
+
+Content:
+
+Title: "Real-World Markets"
+
+Body: "These markets track verifiable global events (e.g., elections, business acquisitions, viral moments). Predictions are settled based on definitive public outcomes."
+
+3. Add "View All" Overlay
+
+Missing Feature: There is no way to view more than the default cards.
+
+Action: Add a "View All Predictions" button below the grid of 3 cards (consistent with the "Weekly Up/Down" section).
+
+Behavior: Clicking this button must open the standard Prediction Overlay (e.g., PredictionListOverlay).
+
+Data: The overlay must display ALL available Real-World Markets, retaining the standard filter buttons and grid layout used in other overlays.
+
+4. UI Polish: Avatar Sizing
+
+Problem: The avatar images in this section's cards are too small compared to the "Weekly Up/Down" cards.
+
+Action: Inspect the WeeklyPredictionCard component (or the "Weekly Up/Down" section) to see the specific Tailwind classes used for the avatar image (likely w-12 h-12 or similar).
+
+Apply: Apply these exact larger dimensions to the avatars in the "Real-World Markets" cards so they look substantial and consistent.
+
+Constraint: Do NOT refactor the logic for how predictions are fetched or calculated. Only update the Section Header, Modal triggers, Overlay triggers, and CSS classes for the avatar size.
