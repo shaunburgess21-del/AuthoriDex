@@ -43,8 +43,12 @@ export const ANTI_SPAM_BASE = 0.35;
 export const ANTI_SPAM_MASS_FACTOR = 0.65;
 
 // EMA smoothing alpha - lower = smoother curves (stock market style)
-// 0.08 provides gentle transitions while still responding to changes
-export const EMA_ALPHA = 0.08;
+// 0.04 provides gentle transitions for stock-market-style curves
+export const EMA_ALPHA = 0.04;
+
+// Rate limiting - maximum change per hour (±5%)
+// Prevents cliff-edge drops from data refresh timing
+export const MAX_HOURLY_CHANGE_PERCENT = 0.05;
 
 // Sanity check thresholds
 export const FOLLOWER_DROP_THRESHOLD = 0.50; // Reject if drops >50%
@@ -118,6 +122,27 @@ export function applyAntiSpamDamping(velocityScore: number, massScore: number): 
 export function applyEmaSmoothing(newScore: number, previousScore: number | null): number {
   if (previousScore === null) return newScore;
   return (EMA_ALPHA * newScore) + ((1 - EMA_ALPHA) * previousScore);
+}
+
+/**
+ * Apply rate limiting to prevent sudden large changes.
+ * Limits the change per update to ±MAX_HOURLY_CHANGE_PERCENT of the previous score.
+ */
+export function applyRateLimiting(newScore: number, previousScore: number | null): number {
+  if (previousScore === null || previousScore === 0) return newScore;
+  
+  const maxChange = previousScore * MAX_HOURLY_CHANGE_PERCENT;
+  const actualChange = newScore - previousScore;
+  
+  if (actualChange > maxChange) {
+    // Cap upward movement
+    return previousScore + maxChange;
+  } else if (actualChange < -maxChange) {
+    // Cap downward movement
+    return previousScore - maxChange;
+  }
+  
+  return newScore;
 }
 
 // ============================================================================

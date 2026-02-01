@@ -5,6 +5,7 @@ import {
   calculateDiversityMultiplier,
   applyAntiSpamDamping,
   applyEmaSmoothing,
+  applyRateLimiting,
   PlatformStatuses,
   ActivePlatforms,
   MISSING_X_PENALTY,
@@ -19,7 +20,8 @@ import {
 } from "./utils";
 
 export interface TrendInputs {
-  wikiPageviews: number;
+  wikiPageviews: number;       // 24h pageviews (used for velocity)
+  wikiPageviews7dAvg: number;  // 7-day daily average (used for mass - more stable baseline)
   wikiDelta: number;
   newsDelta: number;
   searchDelta: number;
@@ -67,9 +69,14 @@ export function computeTrendScore(
   // =========================================================================
   
   // Wiki mass contribution - only if wiki is active
-  // When we don't have follower data, wiki is our primary mass signal
+  // Use 7-day average for stability (prevents cliff-edge drops from data timing)
+  // Fallback to 24h if 7d not available (for backwards compatibility)
+  const wikiPageviewsForMass = inputs.wikiPageviews7dAvg > 0 
+    ? inputs.wikiPageviews7dAvg 
+    : inputs.wikiPageviews;
+  
   let wikiMassScore = inputs.activePlatforms.wiki 
-    ? normalizeMass(inputs.wikiPageviews * 365) 
+    ? normalizeMass(wikiPageviewsForMass * 365) 
     : 0;
   
   // Follower-based mass - only apply if we actually have follower data
@@ -166,8 +173,13 @@ export function computeTrendScore(
   // Multiplied by 10000 for greater variance and prediction difficulty
   let fameIndex = clamp(Math.round(finalScoreRaw * 10000), 0, 1000000);
   
-  // Apply EMA smoothing if we have previous data
+  // Apply stabilization in order:
+  // 1. Rate limiting (±5% cap) - prevents cliff-edge drops from data refresh timing
+  // 2. EMA smoothing - creates smooth stock-market-style curves
   if (previousFameIndex !== undefined) {
+    // First apply rate limiting to cap the maximum change
+    fameIndex = Math.round(applyRateLimiting(fameIndex, previousFameIndex));
+    // Then apply EMA smoothing for gradual transitions
     fameIndex = Math.round(applyEmaSmoothing(fameIndex, previousFameIndex));
   }
   

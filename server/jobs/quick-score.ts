@@ -104,6 +104,7 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
 
         const inputs = {
           wikiPageviews: wiki?.pageviews24h || 0,
+          wikiPageviews7dAvg: wiki?.averageDaily7d || 0, // 7-day average for stable mass baseline
           wikiDelta: wiki?.delta || 0,
           newsDelta: news?.delta || 0,
           searchDelta: serper?.delta || 0,
