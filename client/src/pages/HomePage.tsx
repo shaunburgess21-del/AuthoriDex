@@ -697,9 +697,7 @@ export default function HomePage() {
           </div>
         </div>
       </header>
-
       <HeroSection onCastVoteClick={handleHeroCastVote} />
-
       <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-blue-500/5 via-background/95 to-blue-500/5 backdrop-blur-xl" data-toggle-bar>
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-center gap-2 py-3">
@@ -726,7 +724,6 @@ export default function HomePage() {
           </div>
         </div>
       </div>
-
       <div className="container mx-auto px-4 py-8 max-w-7xl" data-content-section>
         <AnimatePresence mode="wait">
           {activeView === "leaderboard" && (
@@ -770,7 +767,7 @@ export default function HomePage() {
                 <CardHeader className="flex flex-col gap-4 space-y-0 pb-4">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                     <div className="flex-1">
-                      <CardTitle className="text-2xl font-serif">Leaderboard</CardTitle>
+                      <CardTitle className="text-2xl font-serif">Leaderboards</CardTitle>
                       <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60" data-testid="text-leaderboard-freshness">
                         <RefreshCw className="h-3 w-3" />
                         <span>Updated {systemFreshness?.lastScoredAtFormatted || "recently"}</span>
@@ -949,7 +946,6 @@ export default function HomePage() {
           )}
         </AnimatePresence>
       </div>
-
       <footer className="border-t mt-24 py-12">
         <div className="container mx-auto px-4 text-center">
           <p className="text-sm text-muted-foreground">
@@ -957,7 +953,6 @@ export default function HomePage() {
           </p>
         </div>
       </footer>
-
       <AnimatePresence>
         {trendOverlayOpen && (
           <TrendGraphOverlay 
@@ -967,7 +962,6 @@ export default function HomePage() {
           />
         )}
       </AnimatePresence>
-
       <VotingModal 
         open={votingModalOpen} 
         onOpenChange={setVotingModalOpen}
