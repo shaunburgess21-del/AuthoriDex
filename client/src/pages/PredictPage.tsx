@@ -2264,7 +2264,7 @@ export default function PredictPage() {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="text-violet-500 hover:text-violet-400"
+                className="text-violet-500 hover:text-violet-400 text-[14px]"
                 onClick={() => setViewAllCategory("community")}
                 data-testid="button-view-all-real-world"
               >
