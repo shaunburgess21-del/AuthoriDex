@@ -1622,6 +1622,8 @@ export default function VotePage() {
   
   const [valuePerceptionOverlayOpen, setValuePerceptionOverlayOpen] = useState(false);
   const [valuePerceptionCategoryFilter, setValuePerceptionCategoryFilter] = useState<FilterCategory>("All");
+  const [valuePerceptionSearchQuery, setValuePerceptionSearchQuery] = useState("");
+  const [curateSearchQuery, setCurateSearchQuery] = useState("");
 
   const enrichedCandidates = INDUCTION_CANDIDATES.map(c => ({
     ...c,
@@ -1688,7 +1690,8 @@ export default function VotePage() {
   
   const filteredValueCelebrities = valueCelebrities.filter(c => {
     const matchesCategory = valuePerceptionCategoryFilter === "All" || c.category === valuePerceptionCategoryFilter;
-    return matchesCategory;
+    const matchesSearch = !valuePerceptionSearchQuery || c.name.toLowerCase().includes(valuePerceptionSearchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
   });
   
   const [localFaceOffVotes, setLocalFaceOffVotes] = useState<Record<string, string>>({});
@@ -2061,29 +2064,29 @@ export default function VotePage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            {getFilterCategories(true).map((cat) => (
-              <FilterChip
-                key={cat}
-                category={cat}
-                isActive={faceOffsCategoryFilter === cat}
-                onClick={() => setFaceOffsCategoryFilter(cat as FilterCategory)}
-                testIdPrefix="filter-faceoffs"
-                user={user}
-                onAuthRequired={handleAuthRequired}
-              />
-            ))}
-            <div className="hidden md:block ml-auto">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search matchups..."
-                  value={faceOffsSearchQuery}
-                  onChange={(e) => setFaceOffsSearchQuery(e.target.value)}
-                  className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
-                  data-testid="input-faceoffs-search"
+          <div className="flex flex-col gap-2 mb-4">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+              {getFilterCategories(true).map((cat) => (
+                <FilterChip
+                  key={cat}
+                  category={cat}
+                  isActive={faceOffsCategoryFilter === cat}
+                  onClick={() => setFaceOffsCategoryFilter(cat as FilterCategory)}
+                  testIdPrefix="filter-faceoffs"
+                  user={user}
+                  onAuthRequired={handleAuthRequired}
                 />
-              </div>
+              ))}
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search matchups..."
+                value={faceOffsSearchQuery}
+                onChange={(e) => setFaceOffsSearchQuery(e.target.value)}
+                className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
+                data-testid="input-faceoffs-search"
+              />
             </div>
           </div>
           
@@ -2177,29 +2180,29 @@ export default function VotePage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            {getFilterCategories(true).map((cat) => (
-              <FilterChip
-                key={cat}
-                category={cat}
-                isActive={topicsCategoryFilter === cat}
-                onClick={() => setTopicsCategoryFilter(cat as FilterCategory)}
-                testIdPrefix="filter-topics"
-                user={user}
-                onAuthRequired={handleAuthRequired}
-              />
-            ))}
-            <div className="hidden md:block ml-auto">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search topics..."
-                  value={topicsSearchQuery}
-                  onChange={(e) => setTopicsSearchQuery(e.target.value)}
-                  className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
-                  data-testid="input-topics-search"
+          <div className="flex flex-col gap-2 mb-4">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+              {getFilterCategories(true).map((cat) => (
+                <FilterChip
+                  key={cat}
+                  category={cat}
+                  isActive={topicsCategoryFilter === cat}
+                  onClick={() => setTopicsCategoryFilter(cat as FilterCategory)}
+                  testIdPrefix="filter-topics"
+                  user={user}
+                  onAuthRequired={handleAuthRequired}
                 />
-              </div>
+              ))}
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search topics..."
+                value={topicsSearchQuery}
+                onChange={(e) => setTopicsSearchQuery(e.target.value)}
+                className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
+                data-testid="input-topics-search"
+              />
             </div>
           </div>
           
@@ -2268,18 +2271,30 @@ export default function VotePage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            {getFilterCategories(true).map((cat) => (
-              <FilterChip
-                key={cat}
-                category={cat}
-                isActive={valuePerceptionCategoryFilter === cat}
-                onClick={() => setValuePerceptionCategoryFilter(cat as FilterCategory)}
-                testIdPrefix="filter-value"
-                user={user}
-                onAuthRequired={handleAuthRequired}
+          <div className="flex flex-col gap-2 mb-4">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+              {getFilterCategories(true).map((cat) => (
+                <FilterChip
+                  key={cat}
+                  category={cat}
+                  isActive={valuePerceptionCategoryFilter === cat}
+                  onClick={() => setValuePerceptionCategoryFilter(cat as FilterCategory)}
+                  testIdPrefix="filter-value"
+                  user={user}
+                  onAuthRequired={handleAuthRequired}
+                />
+              ))}
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search celebrities..."
+                value={valuePerceptionSearchQuery}
+                onChange={(e) => setValuePerceptionSearchQuery(e.target.value)}
+                className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
+                data-testid="input-value-search"
               />
-            ))}
+            </div>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -2401,60 +2416,31 @@ export default function VotePage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            {getFilterCategories(false).map((cat) => (
-              <FilterChip
-                key={cat}
-                category={cat}
-                isActive={inductionCategoryFilter === cat}
-                onClick={() => setInductionCategoryFilter(cat as FilterCategory)}
-                testIdPrefix="filter-induction"
-                user={user}
-                onAuthRequired={handleAuthRequired}
-              />
-            ))}
-            <div className="hidden md:block ml-auto">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name..."
-                  value={inductionSearchQuery}
-                  onChange={(e) => setInductionSearchQuery(e.target.value)}
-                  className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
-                  data-testid="input-induction-search"
+          <div className="flex flex-col gap-2 mb-4">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+              {getFilterCategories(false).map((cat) => (
+                <FilterChip
+                  key={cat}
+                  category={cat}
+                  isActive={inductionCategoryFilter === cat}
+                  onClick={() => setInductionCategoryFilter(cat as FilterCategory)}
+                  testIdPrefix="filter-induction"
+                  user={user}
+                  onAuthRequired={handleAuthRequired}
                 />
-              </div>
+              ))}
             </div>
-            <button
-              onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
-              className="md:hidden ml-auto rounded-full p-2 bg-slate-800/30 border border-slate-700/40 text-slate-400"
-              data-testid="button-mobile-search-toggle"
-            >
-              <Search className="h-4 w-4" />
-            </button>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name..."
+                value={inductionSearchQuery}
+                onChange={(e) => setInductionSearchQuery(e.target.value)}
+                className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
+                data-testid="input-induction-search"
+              />
+            </div>
           </div>
-
-          <AnimatePresence>
-            {mobileSearchOpen && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="md:hidden mb-4 overflow-hidden"
-              >
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by name (e.g. Elon Musk)"
-                    value={inductionSearchQuery}
-                    onChange={(e) => setInductionSearchQuery(e.target.value)}
-                    className="pl-10 bg-slate-800/30 border-slate-700/40"
-                    data-testid="input-induction-search-mobile"
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             {filteredCandidates.slice(0, 3).map((candidate, index) => (
@@ -2541,20 +2527,30 @@ export default function VotePage() {
             </div>
           </div>
           
-          <div className="flex flex-wrap items-center justify-center gap-2 mb-4 relative">
-            <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-background to-transparent pointer-events-none z-10" />
-            <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-background to-transparent pointer-events-none z-10" />
-            {getFilterCategories(false).map((cat) => (
-              <FilterChip
-                key={cat}
-                category={cat}
-                isActive={curateCategoryFilter === cat}
-                onClick={() => setCurateCategoryFilter(cat as FilterCategory)}
-                testIdPrefix="filter-curate"
-                user={user}
-                onAuthRequired={handleAuthRequired}
+          <div className="flex flex-col gap-2 mb-4">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+              {getFilterCategories(false).map((cat) => (
+                <FilterChip
+                  key={cat}
+                  category={cat}
+                  isActive={curateCategoryFilter === cat}
+                  onClick={() => setCurateCategoryFilter(cat as FilterCategory)}
+                  testIdPrefix="filter-curate"
+                  user={user}
+                  onAuthRequired={handleAuthRequired}
+                />
+              ))}
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search celebrities..."
+                value={curateSearchQuery}
+                onChange={(e) => setCurateSearchQuery(e.target.value)}
+                className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
+                data-testid="input-curate-search"
               />
-            ))}
+            </div>
           </div>
 
           <div className="max-w-md mx-auto">
