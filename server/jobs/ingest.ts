@@ -183,7 +183,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
       }
     }
 
-    scoreResults.sort((a, b) => b.score.trendScore - a.score.trendScore);
+    // Sort by fameIndex (displayed on leaderboard) not trendScore - matches quick-score.ts
+    scoreResults.sort((a, b) => b.score.fameIndex - a.score.fameIndex);
 
     // Fetch primary images for all celebrities (from celebrity_images table)
     // Order by personId first, then by isPrimary (desc) and vote score (desc)
