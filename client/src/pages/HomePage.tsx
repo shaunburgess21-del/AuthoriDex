@@ -702,7 +702,7 @@ export default function HomePage() {
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-center gap-2 py-3">
             {(["leaderboard", "vote", "predict"] as HomeView[]).map((view) => {
-              const icons = { leaderboard: Target, vote: Vote, predict: LineChart };
+              const icons = { leaderboard: TrendingUp, vote: Vote, predict: LineChart };
               const labels = { leaderboard: "Leaderboard", vote: "Vote", predict: "Predict" };
               const Icon = icons[view];
               return (
