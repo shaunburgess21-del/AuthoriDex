@@ -1921,13 +1921,11 @@ export default function VotePage() {
           </div>
         </div>
       </header>
-      
       <ApprovalViralHook 
         onRateClick={(personId) => {
           setLocation(`/person/${personId}`);
         }} 
       />
-      
       <div 
         className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b"
         data-testid="section-toggles-container"
@@ -3104,7 +3102,7 @@ export default function VotePage() {
             )}
             {rulesModalOpen === "value" && (
               <div className="space-y-3">
-                <p className="text-muted-foreground">This vote is about public perception — not your personal like/dislike.</p>
+                <p className="text-muted-foreground">Do you believe the public perception of this person is accurate?</p>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
                     <ArrowUp className="h-4 w-4 text-[#00C853] mt-0.5 shrink-0" />
