@@ -1240,7 +1240,7 @@ function FullScreenOverlay({
         </div>
       </div>
       
-      <div className="container mx-auto px-4 py-6 max-w-6xl">
+      <div className="container mx-auto px-4 py-6 max-w-7xl">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {children}
         </div>
@@ -2095,7 +2095,7 @@ export default function PredictPage() {
         </div>
       </header>
       <div className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b">
-        <div className="container mx-auto px-4 py-3 max-w-6xl">
+        <div className="container mx-auto px-4 py-3 max-w-7xl">
           <HorizontalScroll className="pb-1">
             {PREDICTION_TYPES.map((type) => (
               <button
@@ -2116,7 +2116,7 @@ export default function PredictPage() {
           </HorizontalScroll>
         </div>
       </div>
-      <div className="container mx-auto px-4 py-4 max-w-6xl">
+      <div className="container mx-auto px-4 py-4 max-w-7xl">
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div className="relative flex-1 max-w-[420px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -2172,7 +2172,7 @@ export default function PredictPage() {
           </div>
         </div>
       </div>
-      <div className="container mx-auto px-4 max-w-6xl">
+      <div className="container mx-auto px-4 max-w-7xl">
         {/* SECTION HEADER: Open Markets (Community Predictions) */}
         {showSection("community") && (
           <div className="relative overflow-hidden mb-6">
