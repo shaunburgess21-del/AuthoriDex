@@ -2064,8 +2064,8 @@ export default function VotePage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 mb-4">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2078,7 +2078,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative">
+            <div className="relative flex-1 max-w-[420px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search matchups..."
@@ -2180,8 +2180,8 @@ export default function VotePage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 mb-4">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2194,7 +2194,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative">
+            <div className="relative flex-1 max-w-[420px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search topics..."
@@ -2271,8 +2271,8 @@ export default function VotePage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 mb-4">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2285,7 +2285,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative">
+            <div className="relative flex-1 max-w-[420px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search celebrities..."
@@ -2416,8 +2416,8 @@ export default function VotePage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 mb-4">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
               {getFilterCategories(false).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2430,7 +2430,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative">
+            <div className="relative flex-1 max-w-[420px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search by name..."
@@ -2527,8 +2527,8 @@ export default function VotePage() {
             </div>
           </div>
           
-          <div className="flex flex-col gap-2 mb-4">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
               {getFilterCategories(false).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2541,7 +2541,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative">
+            <div className="relative flex-1 max-w-[420px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search celebrities..."
