@@ -2391,7 +2391,7 @@ export default function VotePage() {
                   data-testid="button-suggest-induction"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  + Suggest
+                  Suggest
                 </Button>
                 <Button
                   size="icon"
@@ -2513,7 +2513,7 @@ export default function VotePage() {
                   data-testid="button-suggest-curate"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  + Suggest
+                  Suggest
                 </Button>
                 <Button
                   size="icon"
