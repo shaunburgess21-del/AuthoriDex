@@ -181,9 +181,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (sort === 'score') {
         enrichedPeople.sort((a, b) => b.trendScore - a.trendScore);
       } else if (sort === '24h') {
-        enrichedPeople.sort((a, b) => b.change24h - a.change24h);
+        enrichedPeople.sort((a, b) => (b.change24h ?? 0) - (a.change24h ?? 0));
       } else if (sort === '7d') {
-        enrichedPeople.sort((a, b) => b.change7d - a.change7d);
+        enrichedPeople.sort((a, b) => (b.change7d ?? 0) - (a.change7d ?? 0));
       } else if (sort === 'approval') {
         // Sort by approval percentage (highest first, nulls last)
         enrichedPeople.sort((a, b) => {
@@ -413,11 +413,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (type === 'gainers') {
-        people = [...people].sort((a, b) => b.change7d - a.change7d).slice(0, 10);
+        people = [...people].sort((a, b) => (b.change7d ?? 0) - (a.change7d ?? 0)).slice(0, 10);
       } else if (type === 'droppers') {
-        people = [...people].sort((a, b) => a.change7d - b.change7d).slice(0, 10);
+        people = [...people].sort((a, b) => (a.change7d ?? 0) - (b.change7d ?? 0)).slice(0, 10);
       } else if (type === 'daily') {
-        people = [...people].sort((a, b) => Math.abs(b.change24h) - Math.abs(a.change24h)).slice(0, 10);
+        people = [...people].sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0)).slice(0, 10);
       }
 
       res.json(people);
