@@ -780,7 +780,7 @@ function WeeklyUpDownCard({
       </div>
       
       <p className="text-xs text-muted-foreground mb-3">
-        Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span>'s Trend Score be higher than start-of-week by close?
+        Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span>'s Trend Score be higher or lower than start-of-week by close?
       </p>
       
       <div className="h-2 rounded-full bg-muted mb-3 overflow-hidden">
