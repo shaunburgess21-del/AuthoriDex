@@ -1,0 +1,51 @@
+This is the final polish step for the Home Page's "Predict" view. You are aligning the dimensions with the "Vote" section and correcting the logical flow (separating "Real-World" events from the "Weekly Game" timer).
+
+Here is the Mega-Prompt to execute these 5 fixes.
+
+Act as a Senior Frontend Engineer.
+
+Task: Fix "Home Page" Predict Toggle Layout & Hierarchy We need to polish the Home page's "Predict" toggle section to match the "Vote" section's dimensions and correct the content hierarchy.
+
+1. Layout & Width (Desktop Fix)
+
+Issue: Content under the "Predict" toggle is too narrow on Desktop.
+
+Action: Increase the max-width of the container to match the new "Vote" toggle width (likely max-w-7xl or similar) so the layout feels expansive.
+
+2. Card Styling Consistency (Height & Images)
+
+Card Height: The cards (Up/Down, Head-to-Head, Top Gainer, Real-World) feel too short compared to the Vote cards.
+
+Action: Increase the min-height of these cards (e.g., add min-h-[400px] or increase vertical padding) to match the "Vote" section.
+
+Avatar Size: The avatars/images in all Predict cards are too small.
+
+Action: Increase the Avatar size on all single-stack cards (e.g., from w-12 to w-16 or w-20) so they stand out.
+
+3. "Real-World Markets" Refactor (Name & Position)
+
+Rename: Find the section currently labeled "Community Markets" (or similar) and rename the header to "Real-World Markets".
+
+Relocate (Critical Hierarchy Change):
+
+Currently, this section might be buried or below the timer.
+
+New Order:
+
+Filters/Search (Top)
+
+"Real-World Markets" Section (Immediate; unrelated to the timer).
+
+Countdown Timer (Weekly Jackpot Timer).
+
+All Other Weekly Markets (Up/Down, Head-to-Head, Top Gainer).
+
+Reasoning: Real-World markets are not governed by the weekly reset timer, so they must appear before the timer visuals to avoid confusion.
+
+Deliverable: Verify that on the Home Page (Predict Toggle):
+
+The container is wide (Desktop).
+
+"Real-World Markets" appears at the top, immediately followed by the Weekly Timer.
+
+All cards are tall and feature large, distinct images.
