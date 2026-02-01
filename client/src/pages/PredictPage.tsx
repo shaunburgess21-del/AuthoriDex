@@ -40,6 +40,7 @@ import {
   Swords,
   Star,
   Cpu,
+  Globe,
   Landmark,
   Briefcase,
   Clapperboard,
@@ -1067,7 +1068,7 @@ function CommunityCard({
       
       {/* Celebrity subject with larger avatar */}
       <div className="flex items-center gap-3 mb-4">
-        <PersonAvatar name={market.personName} avatar={market.personAvatar} size="sm" />
+        <PersonAvatar name={market.personName} avatar={market.personAvatar} size="md" />
         <div>
           <span className="text-sm font-medium">{market.personName}</span>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1819,12 +1820,12 @@ export default function PredictPage() {
       ]
     },
     community: {
-      title: "How Community Predictions Work",
-      description: "User-created markets for unique predictions",
+      title: "Real-World Markets",
+      description: "These markets track verifiable global events (e.g., elections, business acquisitions, viral moments). Predictions are settled based on definitive public outcomes.",
       steps: [
-        { icon: <Users className="h-4 w-4 text-violet-500" />, title: "Created by the Community", description: "Anyone can suggest a prediction market for the community to bet on." },
-        { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Binary Outcomes", description: "Most community predictions have Yes/No outcomes determined by verifiable events." },
-        { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Community Resolution", description: "Markets are resolved based on public information and community consensus." },
+        { icon: <Globe className="h-4 w-4 text-violet-500" />, title: "Verifiable Events", description: "Markets are based on real-world outcomes that can be publicly verified - elections, acquisitions, viral milestones, and more." },
+        { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Yes/No Predictions", description: "Each market has a clear binary outcome. Stake your credits on what you believe will happen." },
+        { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Public Resolution", description: "Markets are settled based on definitive public information. Winners split the pool proportionally." },
       ]
     }
   };
@@ -2193,17 +2194,39 @@ export default function PredictPage() {
           </div>
         )}
 
-        {/* Community Predictions Section - Now First */}
+        {/* Real-World Markets Section - Now First */}
         {showSection("community") && (
           <section className="mb-12">
-            <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mb-4">
+            <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mt-[15px] mb-[15px]">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-serif font-bold truncate">Community Predictions</h2>
-                </div>
-                <p className="text-xs sm:text-sm text-muted-foreground truncate">User-suggested markets from the community</p>
+                <h2 className="text-lg sm:text-xl font-serif font-bold truncate">Real-World Markets</h2>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">Predict the outcome of verifiable global events.</p>
               </div>
               <div className="flex items-center gap-2 shrink-0 ml-3">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-7 w-7"
+                      onClick={() => setRulesModalOpen("community")}
+                      data-testid="button-rules-real-world-markets"
+                    >
+                      <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>How it works</TooltipContent>
+                </Tooltip>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-violet-500 hover:text-violet-400"
+                  onClick={() => setViewAllCategory("community")}
+                  data-testid="button-view-all-real-world"
+                >
+                  View All
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
                 <Button 
                   variant="outline"
                   size="sm"
@@ -2487,6 +2510,31 @@ export default function PredictPage() {
               onSelect={(name) => handleGainerSelect(market, name)}
               isPredicted={predictedMarkets.has(market.id)}
               isShimmering={shimmeringMarket === market.id}
+            />
+          ))}
+      </FullScreenOverlay>
+      <FullScreenOverlay
+        open={viewAllCategory === "community"}
+        onClose={() => setViewAllCategory(null)}
+        title="All Real-World Markets"
+        categoryFilter={overlayCategoryFilter}
+        onCategoryChange={setOverlayCategoryFilter}
+        searchQuery={overlaySearchQuery}
+        onSearchChange={setOverlaySearchQuery}
+        user={user}
+        onAuthRequired={() => setLocation("/login")}
+      >
+        {hydratedCommunity
+          .filter(m => 
+            (overlayCategoryFilter === "all" || m.category === overlayCategoryFilter) &&
+            (!overlaySearchQuery || m.question.toLowerCase().includes(overlaySearchQuery.toLowerCase()) || m.personName.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
+          )
+          .map((market) => (
+            <CommunityCard 
+              key={market.id} 
+              market={market} 
+              onClick={() => handleCommunityClick(market)}
+              isMarketClosed={isMarketClosed}
             />
           ))}
       </FullScreenOverlay>
