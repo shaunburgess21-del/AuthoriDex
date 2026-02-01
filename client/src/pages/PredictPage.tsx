@@ -2191,7 +2191,7 @@ export default function PredictPage() {
                   data-testid="button-prediction-rules"
                 >
                   <Sparkles className="h-4 w-4 text-violet-400" />
-                  <span className="text-sm text-violet-400 font-medium">Prediction Rules</span>
+                  <span className="text-sm text-violet-400 font-medium">How It Works</span>
                 </button>
               </div>
             </div>
