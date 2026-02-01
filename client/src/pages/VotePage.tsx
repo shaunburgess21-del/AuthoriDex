@@ -204,14 +204,14 @@ const DISCOURSE_TOPICS: DiscourseTopicData[] = [
   { id: "d20", headline: "Climate activism tactics", description: "Is disruption effective or counterproductive?", category: "Politics", approvePercent: 35, neutralPercent: 25, disapprovePercent: 40, totalVotes: 167890 },
 ];
 
-const SECTION_TOGGLES = ["All", "Face-Offs", "People's Voice", "Induction Queue", "Curate Profile"] as const;
+const SECTION_TOGGLES = ["All", "Face-Offs", "Trending Polls", "Induction Queue", "Curate Profile"] as const;
 type SectionToggle = typeof SECTION_TOGGLES[number];
 
 const isGovernanceSection = (section: SectionToggle) => 
   section === "Induction Queue" || section === "Curate Profile";
 
 const isPublicOpinionSection = (section: SectionToggle) =>
-  section === "Face-Offs" || section === "People's Voice";
+  section === "Face-Offs" || section === "Trending Polls";
 
 const SECTION_RULES = {
   induction: {
@@ -227,7 +227,7 @@ const SECTION_RULES = {
     content: "Pick your side in head-to-head matchups! Vote for your favorite in classic A vs B showdowns. Each vote earns XP and contributes to the community consensus."
   },
   voice: {
-    title: "People's Voice Rules",
+    title: "Trending Polls Rules",
     content: "The ultimate community pulse check. Weigh in on current events and controversies. Evergreen polls remain open; timed polls resolve at the specified deadline."
   },
   value: {
@@ -1945,7 +1945,7 @@ export default function VotePage() {
                 data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
               >
                 {section === "Face-Offs" && <Swords className="h-4 w-4" />}
-                {section === "People's Voice" && <MessageSquare className="h-4 w-4" />}
+                {section === "Trending Polls" && <MessageSquare className="h-4 w-4" />}
                 {section === "Induction Queue" && <UserPlus className="h-4 w-4" />}
                 {section === "Curate Profile" && <ImageIcon className="h-4 w-4" />}
                 {section}
@@ -1985,7 +1985,7 @@ export default function VotePage() {
         </div>
       </div>
       <div className="container mx-auto px-4 py-8 max-w-6xl pt-[5px] pb-[5px]">
-        {/* VOX POPULI HEADER - Above Face-Offs + People's Voice */}
+        {/* VOX POPULI HEADER - Above Face-Offs + Trending Polls */}
         {(activeSection === "All" || isPublicOpinionSection(activeSection)) && (
         <div className="relative overflow-hidden mb-6">
           <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
@@ -2126,8 +2126,8 @@ export default function VotePage() {
         </section>
         )}
 
-        {/* ZONE 1: Public Opinion - People's Voice Section (Second) */}
-        {(activeSection === "All" || activeSection === "People's Voice") && (
+        {/* ZONE 1: Public Opinion - Trending Polls Section (Second) */}
+        {(activeSection === "All" || activeSection === "Trending Polls") && (
         <section className="mb-10">
           <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
             <div className="flex items-center justify-between">
@@ -2136,7 +2136,7 @@ export default function VotePage() {
                   <MessageSquare className="h-5 w-5 text-cyan-400" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-serif font-bold">The People's Voice</h2>
+                  <h2 className="text-xl font-serif font-bold">Trending Polls</h2>
                   <p className="text-sm text-muted-foreground">Weigh in on current events and controversies.</p>
                 </div>
               </div>
@@ -2314,7 +2314,7 @@ export default function VotePage() {
 
         {/* GOVERNANCE HEADER DIVIDER - Shows between Zone 1 and Zone 3 */}
         {/* Show when: All, Induction Queue, or Curate Profile is selected */}
-        {/* Hide when: Face-Offs or People's Voice is selected */}
+        {/* Hide when: Face-Offs or Trending Polls is selected */}
         {(activeSection === "All" || isGovernanceSection(activeSection)) && (
         <div className="relative overflow-hidden mb-6">
           <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
@@ -3002,7 +3002,7 @@ export default function VotePage() {
               <HelpCircle className="h-5 w-5 text-cyan-400" />
               {rulesModalOpen === "induction" && "Induction Queue Rules"}
               {rulesModalOpen === "curate" && "Curate the Profile Rules"}
-              {rulesModalOpen === "voice" && "The People's Voice Rules"}
+              {rulesModalOpen === "voice" && "Trending Polls Rules"}
               {rulesModalOpen === "faceoffs" && "Face-Offs Rules"}
               {rulesModalOpen === "value" && "How It Works"}
             </DialogTitle>
@@ -3143,7 +3143,7 @@ export default function VotePage() {
                 </div>
                 <div>
                   <span className="font-medium text-cyan-400">Cut Through the Noise:</span>
-                  <span className="text-muted-foreground"> Headlines only tell half the story. Use The People's Voice to capture what the world actually thinks about today's news.</span>
+                  <span className="text-muted-foreground"> Headlines only tell half the story. Use Trending Polls to capture what the world actually thinks about today's news.</span>
                 </div>
               </div>
               <div className="flex items-start gap-3">

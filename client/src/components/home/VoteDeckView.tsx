@@ -41,8 +41,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { ValueVotePerson } from "@/components/UnderratedOverratedCard";
 
-type VoteSection = "All" | "Face-Offs" | "People's Voice" | "Induction Queue" | "Curate Profile" | "Underrated / Overrated";
-const SECTION_TOGGLES: VoteSection[] = ["All", "Face-Offs", "People's Voice", "Induction Queue", "Curate Profile", "Underrated / Overrated"];
+type VoteSection = "All" | "Face-Offs" | "Trending Polls" | "Induction Queue" | "Curate Profile" | "Underrated / Overrated";
+const SECTION_TOGGLES: VoteSection[] = ["All", "Face-Offs", "Trending Polls", "Induction Queue", "Curate Profile", "Underrated / Overrated"];
 
 interface VoteDeckViewProps {
   onExplore: () => void;
@@ -544,7 +544,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   };
 
   const showFaceOffs = activeSection === "All" || activeSection === "Face-Offs";
-  const showPolls = activeSection === "All" || activeSection === "People's Voice";
+  const showPolls = activeSection === "All" || activeSection === "Trending Polls";
   const showInduction = activeSection === "All" || activeSection === "Induction Queue";
   const showCurate = activeSection === "All" || activeSection === "Curate Profile";
   const showValue = activeSection === "All" || activeSection === "Underrated / Overrated";
@@ -569,7 +569,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
             data-testid={`toggle-vote-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
           >
             {section === "Face-Offs" && <Swords className="h-3 w-3" />}
-            {section === "People's Voice" && <MessageSquare className="h-3 w-3" />}
+            {section === "Trending Polls" && <MessageSquare className="h-3 w-3" />}
             {section === "Induction Queue" && <UserPlus className="h-3 w-3" />}
             {section === "Curate Profile" && <ImageIcon className="h-3 w-3" />}
             {section === "Underrated / Overrated" && <BarChart3 className="h-3 w-3" />}
@@ -645,7 +645,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <MessageSquare className="h-4 w-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold">People's Voice</h3>
+            <h3 className="text-sm font-semibold">Trending Polls</h3>
           </div>
           <CardDeckContainer
             items={filteredPolls}

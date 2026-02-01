@@ -58,7 +58,7 @@ export function PeoplesVoicePoll({
             <MessageSquare className="h-4 w-4 text-violet-400" />
           </div>
           <div>
-            <h3 className="font-semibold text-sm">People's Voice</h3>
+            <h3 className="font-semibold text-sm">Trending Polls</h3>
             <p className="text-xs text-muted-foreground">Hot topic</p>
           </div>
         </div>

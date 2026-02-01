@@ -16,7 +16,7 @@ Preferred communication style: Simple, everyday language.
 - **Features**: Global Favorites Filter, Custom Topic Support, unified "+ Suggest" buttons, and a Bloomberg-style Compare Momentum Graph with time range toggles, high-contrast color palette, and interactive legend.
 - **Page Structure**:
     - **Home Page**: Hero Section, Trend Widgets, Prediction Markets Teaser, filterable/sortable Leaderboard.
-    - **Vote Page**: "Community Town Hall" theme, featuring Face-Offs, People's Voice, Induction Queue, and Curate Profile sections. Includes a sticky filter bar and a floating action button for suggestions.
+    - **Vote Page**: "Community Town Hall" theme, featuring Face-Offs, Trending Polls, Induction Queue, and Curate Profile sections. Includes a sticky filter bar and a floating action button for suggestions.
     - **Predict Page**: Parimutuel prediction markets with a "test mode", multi-layer information architecture, sticky prediction type toggle, and various market types.
     - **Me Page**: User account dashboard with XP, credits, rank, votes, and predictions, including sub-routes for detailed views.
     - **Public Profiles**: User profiles showing XP progress and voting stats, with privacy controls.
