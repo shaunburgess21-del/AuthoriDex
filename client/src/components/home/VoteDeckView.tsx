@@ -41,8 +41,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { ValueVotePerson } from "@/components/UnderratedOverratedCard";
 
-type VoteSection = "All" | "Face-Offs" | "Trending Polls" | "Induction Queue" | "Curate Profile" | "Underrated / Overrated";
-const SECTION_TOGGLES: VoteSection[] = ["All", "Face-Offs", "Trending Polls", "Induction Queue", "Curate Profile", "Underrated / Overrated"];
+type VoteSection = "All" | "Face-Offs" | "Trending Polls" | "Underrated / Overrated" | "Induction Queue" | "Curate Profile";
+const SECTION_TOGGLES: VoteSection[] = ["All", "Face-Offs", "Trending Polls", "Underrated / Overrated", "Induction Queue", "Curate Profile"];
 
 interface VoteDeckViewProps {
   onExplore: () => void;
@@ -183,9 +183,9 @@ function PollCard({
   const hasVoted = userVote !== null;
   
   return (
-    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50">
+    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50" style={{ minHeight: '340px' }}>
       <div className="relative p-4">
-        <div className="flex items-center justify-between mb-2 gap-2">
+        <div className="flex items-center justify-between mb-3 gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5 text-cyan-400" />
             <span>{topic.totalVotes.toLocaleString()} votes</span>
@@ -193,8 +193,14 @@ function PollCard({
           <CategoryPill category={topic.category} />
         </div>
         
-        <h3 className="font-semibold text-base mb-1">{topic.headline}</h3>
-        <p className="text-sm text-muted-foreground mb-4">{topic.description}</p>
+        {topic.avatar && (
+          <div className="flex justify-center mb-3">
+            <PersonAvatar name={topic.personName || topic.headline} avatar={topic.avatar} size="xl" />
+          </div>
+        )}
+        
+        <h3 className="font-semibold text-base mb-1 text-center">{topic.headline}</h3>
+        <p className="text-sm text-muted-foreground mb-4 text-center">{topic.description}</p>
         
         {!hasVoted ? (
           <div className="flex flex-col gap-3">
@@ -260,7 +266,7 @@ function InductionCard({
   onVote: (id: string) => void;
 }) {
   return (
-    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50">
+    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50" style={{ minHeight: '300px' }}>
       <div className="absolute top-3 right-3">
         <CategoryPill category={candidate.category} />
       </div>
@@ -271,7 +277,7 @@ function InductionCard({
         </div>
         
         <div className="flex flex-col items-center text-center mb-4">
-          <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="lg" />
+          <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="xl" />
           <h3 className="font-semibold text-base mt-3">{candidate.name}</h3>
         </div>
         
@@ -316,7 +322,7 @@ function ValueCard({
   const totalVotes = (person.underratedCount || 0) + (person.overratedCount || 0);
   
   return (
-    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50">
+    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50" style={{ minHeight: '340px' }}>
       <div className="absolute top-3 right-3">
         <CategoryPill category={person.category || "Unknown"} />
       </div>
@@ -327,7 +333,7 @@ function ValueCard({
         </div>
         
         <div className="flex flex-col items-center text-center mb-4">
-          <PersonAvatar name={person.name} avatar={person.avatar} size="lg" />
+          <PersonAvatar name={person.name} avatar={person.avatar} size="xl" />
           <h3 className="font-semibold text-base mt-3">{person.name}</h3>
           <div className="text-sm font-mono text-cyan-400 mt-1">
             {person.fameIndex?.toLocaleString() ?? 'N/A'} Fame
@@ -554,7 +560,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="max-w-2xl mx-auto space-y-4"
+      className="max-w-4xl mx-auto space-y-4"
     >
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
         {SECTION_TOGGLES.map((section) => (
@@ -721,7 +727,13 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
       )}
 
       {showCurate && (
-        <CurateSection categoryFilter={categoryFilter} compact />
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <ImageIcon className="h-4 w-4 text-cyan-400" />
+            <h3 className="text-sm font-semibold">Curate The Profile</h3>
+          </div>
+          <CurateSection categoryFilter={categoryFilter} compact />
+        </div>
       )}
 
       <div className="flex flex-col items-center gap-3 pt-4">
