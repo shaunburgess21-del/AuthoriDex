@@ -3060,7 +3060,7 @@ export default function VotePage() {
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
                     <MessageSquare className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Vote Yes/No on community-submitted topics</span>
+                    <span>Vote <span className="text-[#00C853] font-medium">Support</span>, <span className="text-slate-400 font-medium">Neutral</span>, or <span className="text-[#FF0000] font-medium">Oppose</span> on various topics.</span>
                   </div>
                   <div className="flex items-start gap-2">
                     <Users className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
