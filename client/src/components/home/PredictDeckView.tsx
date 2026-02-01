@@ -26,7 +26,13 @@ import {
   Zap,
   Target,
   MessageSquare,
-  Star
+  Star,
+  Cpu,
+  Landmark,
+  Briefcase,
+  Clapperboard,
+  Video,
+  LayoutGrid
 } from "lucide-react";
 import {
   MOCK_MARKETS,
@@ -666,7 +672,14 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             data-testid={`chip-predict-category-${cat.id}`}
             aria-label={cat.id === "favorites" ? "Favorites" : undefined}
           >
+            {cat.id === "all" && <LayoutGrid className="h-3.5 w-3.5" />}
             {cat.id === "favorites" && <Star className="h-3.5 w-3.5" />}
+            {cat.id === "tech" && <Cpu className="h-3.5 w-3.5" />}
+            {cat.id === "politics" && <Landmark className="h-3.5 w-3.5" />}
+            {cat.id === "business" && <Briefcase className="h-3.5 w-3.5" />}
+            {cat.id === "entertainment" && <Clapperboard className="h-3.5 w-3.5" />}
+            {cat.id === "sports" && <Trophy className="h-3.5 w-3.5" />}
+            {cat.id === "creator" && <Video className="h-3.5 w-3.5" />}
             {cat.id === "favorites" ? <span className="hidden md:inline">{cat.label}</span> : cat.label}
           </button>
         ))}

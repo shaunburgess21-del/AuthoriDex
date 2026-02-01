@@ -25,7 +25,14 @@ import {
   Star,
   BarChart3,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Cpu,
+  Landmark,
+  Briefcase,
+  Clapperboard,
+  Trophy,
+  Video,
+  LayoutGrid
 } from "lucide-react";
 import {
   DISCOURSE_TOPICS,
@@ -615,7 +622,14 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
             data-testid={`chip-vote-category-${cat.toLowerCase()}`}
             aria-label={cat === "Favorites" ? "Favorites" : undefined}
           >
+            {cat === "All" && <LayoutGrid className="h-3.5 w-3.5" />}
             {cat === "Favorites" && <Star className="h-3.5 w-3.5" />}
+            {cat === "Tech" && <Cpu className="h-3.5 w-3.5" />}
+            {cat === "Politics" && <Landmark className="h-3.5 w-3.5" />}
+            {cat === "Business" && <Briefcase className="h-3.5 w-3.5" />}
+            {cat === "Entertainment" && <Clapperboard className="h-3.5 w-3.5" />}
+            {cat === "Sports" && <Trophy className="h-3.5 w-3.5" />}
+            {cat === "Creator" && <Video className="h-3.5 w-3.5" />}
             {cat === "Favorites" ? <span className="hidden md:inline">{cat}</span> : cat}
           </button>
         ))}
