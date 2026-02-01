@@ -45,8 +45,12 @@ export function ValueVoteModal({ open, onOpenChange, person }: ValueVoteModalPro
       setError(null);
     },
     onSuccess: () => {
+      if (person) {
+        queryClient.invalidateQueries({ queryKey: ['/api/celebrity', person.id, 'value-vote'] });
+      }
       queryClient.invalidateQueries({ queryKey: ['/api/trending'] });
       queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/leaderboard?tab=value&limit=20'] });
       setSuccess(true);
       setTimeout(() => {
         onOpenChange(false);

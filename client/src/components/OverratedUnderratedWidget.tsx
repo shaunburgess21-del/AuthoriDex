@@ -1,18 +1,23 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, Clock, LogIn, Loader2, CheckCircle } from "lucide-react";
+import { ArrowUp, ArrowDown, BarChart3, LogIn, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { getSupabase } from "@/lib/supabase";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface OverratedUnderratedWidgetProps {
   personId: string;
   personName: string;
   compact?: boolean;
+}
+
+interface ValueVoteResponse {
+  userVote: 'underrated' | 'overrated' | null;
+  underratedVotesCount: number;
+  overratedVotesCount: number;
 }
 
 export function OverratedUnderratedWidget({ 
@@ -23,223 +28,205 @@ export function OverratedUnderratedWidget({
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const queryClient = useQueryClient();
-  const [justVoted, setJustVoted] = useState<string | null>(null);
+  const [localVote, setLocalVote] = useState<'underrated' | 'overrated' | null>(null);
+  const [showChange, setShowChange] = useState(false);
 
-  const { data: userVote } = useQuery<{
-    hasVotedToday: boolean;
-    voteType: string | null;
-  }>({
-    queryKey: ["/api/sentiment-votes", personId],
-    enabled: !!user,
-  });
-
-  const { data: voteCounts } = useQuery<{
-    overrated: number;
-    underrated: number;
-  }>({
-    queryKey: [`/api/sentiment-votes/${personId}/counts`],
+  const { data: voteData } = useQuery<ValueVoteResponse>({
+    queryKey: ['/api/celebrity', personId, 'value-vote'],
   });
 
   const voteMutation = useMutation({
-    mutationFn: async (voteType: "overrated" | "underrated") => {
-      const supabase = await getSupabase();
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session?.access_token) {
-        throw new Error("Please sign in to vote");
-      }
-      
-      const response = await fetch("/api/sentiment-votes", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          personId,
-          personName,
-          voteType,
-        }),
-      });
-      
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: "Failed to vote" }));
-        throw new Error(error.error || "Failed to vote");
-      }
-      
-      return response.json();
+    mutationFn: async (vote: 'underrated' | 'overrated') => {
+      return apiRequest('POST', `/api/celebrity/${personId}/value-vote`, { vote });
     },
-    onSuccess: (_, voteType) => {
-      setJustVoted(voteType);
-      queryClient.invalidateQueries({ queryKey: ["/api/sentiment-votes", personId] });
-      queryClient.invalidateQueries({ queryKey: [`/api/sentiment-votes/${personId}/counts`] });
-      toast({
-        title: "Vote recorded",
-        description: "Your sentiment has been recorded. You can change it once per day.",
-      });
-      setTimeout(() => setJustVoted(null), 2000);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/celebrity', personId, 'value-vote'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/trending'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/leaderboard?tab=value&limit=20'] });
+      setShowChange(false);
     },
     onError: (error: any) => {
+      setLocalVote(null);
       toast({
         title: "Vote failed",
-        description: error.message || "Failed to submit your vote",
+        description: error.message?.includes("401") ? "Please sign in to vote" : (error.message || "Failed to submit vote"),
         variant: "destructive",
       });
     },
   });
 
-  const handleVote = (voteType: "overrated" | "underrated") => {
+  const handleVote = (voteType: 'underrated' | 'overrated') => {
     if (!user) {
       setLocation("/login");
       return;
     }
+    setLocalVote(voteType);
     voteMutation.mutate(voteType);
   };
 
-  const totalVotes = (voteCounts?.overrated || 0) + (voteCounts?.underrated || 0);
-  const overratedPercent = totalVotes > 0 
-    ? Math.round((voteCounts?.overrated || 0) / totalVotes * 100) 
-    : 50;
-  const underratedPercent = totalVotes > 0 
-    ? Math.round((voteCounts?.underrated || 0) / totalVotes * 100) 
-    : 50;
+  const handleChangeVote = () => {
+    setLocalVote(null);
+    setShowChange(true);
+  };
 
-  const isVotedOverrated = userVote?.voteType === "overrated" || justVoted === "overrated";
-  const isVotedUnderrated = userVote?.voteType === "underrated" || justVoted === "underrated";
+  const userVote = localVote ?? voteData?.userVote ?? null;
+  const hasVoted = userVote !== null && !showChange;
+  
+  const underratedCount = voteData?.underratedVotesCount || 0;
+  const overratedCount = voteData?.overratedVotesCount || 0;
+  const totalVotes = underratedCount + overratedCount;
+  
+  const underratedPct = totalVotes > 0 ? Math.round((underratedCount / totalVotes) * 100) : 50;
+  const overratedPct = totalVotes > 0 ? Math.round((overratedCount / totalVotes) * 100) : 50;
 
   if (compact) {
     return (
       <div className="flex items-center gap-2" data-testid="widget-overrated-underrated-compact">
         <Button
-          variant={isVotedOverrated ? "default" : "outline"}
-          size="sm"
-          onClick={() => handleVote("overrated")}
-          disabled={voteMutation.isPending}
-          className={isVotedOverrated ? "toggle-elevate toggle-elevated" : ""}
-          data-testid="button-vote-overrated"
-        >
-          {voteMutation.isPending ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <TrendingDown className="h-3 w-3" />
-          )}
-          <span className="text-xs ml-1">{voteCounts?.overrated || 0}</span>
-        </Button>
-        <Button
-          variant={isVotedUnderrated ? "default" : "outline"}
+          variant="outline"
           size="sm"
           onClick={() => handleVote("underrated")}
           disabled={voteMutation.isPending}
-          className={isVotedUnderrated ? "toggle-elevate toggle-elevated" : ""}
+          className={`${userVote === 'underrated' ? 'bg-[#00C853]/20 border-[#00C853]/50 text-[#00C853]' : ''}`}
           data-testid="button-vote-underrated"
         >
-          {voteMutation.isPending ? (
+          {voteMutation.isPending && localVote === 'underrated' ? (
             <Loader2 className="h-3 w-3 animate-spin" />
           ) : (
-            <TrendingUp className="h-3 w-3" />
+            <ArrowUp className="h-3 w-3" />
           )}
-          <span className="text-xs ml-1">{voteCounts?.underrated || 0}</span>
+          <span className="text-xs ml-1">{underratedCount}</span>
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleVote("overrated")}
+          disabled={voteMutation.isPending}
+          className={`${userVote === 'overrated' ? 'bg-[#FF0000]/20 border-[#FF0000]/50 text-[#FF0000]' : ''}`}
+          data-testid="button-vote-overrated"
+        >
+          {voteMutation.isPending && localVote === 'overrated' ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <ArrowDown className="h-3 w-3" />
+          )}
+          <span className="text-xs ml-1">{overratedCount}</span>
         </Button>
       </div>
     );
   }
 
   return (
-    <Card className="p-4" data-testid="widget-overrated-underrated">
-      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-        <h3 className="font-semibold text-sm">Is {personName} fairly rated?</h3>
-        {userVote?.hasVotedToday && (
-          <Badge variant="outline" className="text-xs gap-1">
-            <CheckCircle className="h-3 w-3" />
-            Voted today
-          </Badge>
+    <Card 
+      className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50"
+      data-testid="widget-overrated-underrated"
+    >
+      <div className="relative p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <BarChart3 className="h-3.5 w-3.5 text-cyan-400" />
+            <span>{totalVotes.toLocaleString()} votes</span>
+          </div>
+          <h3 className="font-semibold text-sm">Is {personName} fairly rated?</h3>
+        </div>
+        
+        {hasVoted ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <ArrowUp className="h-4 w-4 text-[#00C853] shrink-0" />
+              <span className="text-sm text-[#00C853] w-20 shrink-0">Underrated</span>
+              <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-[#00C853] rounded-full transition-all duration-500"
+                  style={{ width: `${underratedPct}%` }}
+                />
+              </div>
+              <span className="text-sm text-muted-foreground w-10 text-right">{underratedPct}%</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <ArrowDown className="h-4 w-4 text-[#FF0000] shrink-0" />
+              <span className="text-sm text-[#FF0000] w-20 shrink-0">Overrated</span>
+              <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-[#FF0000] rounded-full transition-all duration-500"
+                  style={{ width: `${overratedPct}%` }}
+                />
+              </div>
+              <span className="text-sm text-muted-foreground w-10 text-right">{overratedPct}%</span>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-white/10">
+              <div className="flex items-center gap-2">
+                {userVote === 'underrated' ? (
+                  <ArrowUp className="h-4 w-4 text-[#00C853]" />
+                ) : (
+                  <ArrowDown className="h-4 w-4 text-[#FF0000]" />
+                )}
+                <span className="text-sm text-muted-foreground">
+                  You voted <span className={userVote === 'underrated' ? 'text-[#00C853]' : 'text-[#FF0000]'}>
+                    {userVote}
+                  </span>
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleChangeVote}
+                className="text-xs text-muted-foreground"
+                data-testid="button-value-change"
+              >
+                Change
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1 bg-[#00C853]/10 border-[#00C853]/50 text-[#00C853]"
+              onClick={() => handleVote('underrated')}
+              disabled={voteMutation.isPending}
+              data-testid="button-vote-underrated"
+            >
+              {voteMutation.isPending && localVote === 'underrated' ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <ArrowUp className="h-4 w-4 mr-1" />
+              )}
+              Underrated
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 bg-[#FF0000]/10 border-[#FF0000]/50 text-[#FF0000]"
+              onClick={() => handleVote('overrated')}
+              disabled={voteMutation.isPending}
+              data-testid="button-vote-overrated"
+            >
+              {voteMutation.isPending && localVote === 'overrated' ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <ArrowDown className="h-4 w-4 mr-1" />
+              )}
+              Overrated
+            </Button>
+          </div>
+        )}
+        
+        {!user && !hasVoted && (
+          <div className="pt-3 mt-3 border-t border-white/10">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLocation("/login")}
+              className="w-full gap-2 text-muted-foreground"
+              data-testid="button-login-to-vote"
+            >
+              <LogIn className="h-4 w-4" />
+              Sign in to cast your vote
+            </Button>
+          </div>
         )}
       </div>
-      
-      <div className="flex gap-3 mb-3">
-        <Button
-          variant={isVotedOverrated ? "default" : "outline"}
-          onClick={() => handleVote("overrated")}
-          disabled={voteMutation.isPending}
-          className={`flex-1 gap-2 ${isVotedOverrated ? "toggle-elevate toggle-elevated" : ""}`}
-          data-testid="button-vote-overrated"
-        >
-          {voteMutation.isPending && voteMutation.variables === "overrated" ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <TrendingDown className="h-4 w-4" />
-          )}
-          Overrated
-        </Button>
-        
-        <Button
-          variant={isVotedUnderrated ? "default" : "outline"}
-          onClick={() => handleVote("underrated")}
-          disabled={voteMutation.isPending}
-          className={`flex-1 gap-2 ${isVotedUnderrated ? "toggle-elevate toggle-elevated" : ""}`}
-          data-testid="button-vote-underrated"
-        >
-          {voteMutation.isPending && voteMutation.variables === "underrated" ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <TrendingUp className="h-4 w-4" />
-          )}
-          Underrated
-        </Button>
-      </div>
-      
-      {totalVotes > 0 ? (
-        <div className="space-y-2">
-          <div className="h-2.5 bg-muted rounded-full overflow-hidden flex">
-            <div 
-              className="bg-red-500/70 transition-all duration-500"
-              style={{ width: `${overratedPercent}%` }}
-            />
-            <div 
-              className="bg-green-500/70 transition-all duration-500"
-              style={{ width: `${underratedPercent}%` }}
-            />
-          </div>
-          
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-red-500/70" />
-              <span>
-                <span className="font-medium text-foreground">{overratedPercent}%</span> overrated
-              </span>
-            </div>
-            <span className="text-[10px]">
-              {totalVotes.toLocaleString()} votes
-            </span>
-            <div className="flex items-center gap-1.5">
-              <span>
-                <span className="font-medium text-foreground">{underratedPercent}%</span> underrated
-              </span>
-              <div className="w-2 h-2 rounded-full bg-green-500/70" />
-            </div>
-          </div>
-        </div>
-      ) : (
-        <p className="text-xs text-center text-muted-foreground">
-          Be the first to share your opinion!
-        </p>
-      )}
-      
-      {!user && (
-        <div className="pt-3 mt-3 border-t border-border/50">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setLocation("/login")}
-            className="w-full gap-2"
-            data-testid="button-login-to-vote"
-          >
-            <LogIn className="h-4 w-4" />
-            Sign in to cast your vote
-          </Button>
-        </div>
-      )}
     </Card>
   );
 }

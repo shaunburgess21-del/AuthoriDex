@@ -686,11 +686,6 @@ export default function PersonDetailPage() {
           </div>
         </div>
 
-        {/* Overrated/Underrated Sentiment Widget */}
-        <div className="mb-8">
-          <OverratedUnderratedWidget personId={person.id} personName={person.name} />
-        </div>
-
         {/* Why They're Trending - AI-powered news summary (only for top 10) */}
         {person.rank && person.rank <= 10 && (
           <div className="mb-8">
@@ -824,6 +819,11 @@ export default function PersonDetailPage() {
                 personName={person.name}
                 isProfilePage={true}
               />
+            </div>
+
+            {/* Overrated/Underrated Widget - below Cast Your Vote */}
+            <div className="mb-8">
+              <OverratedUnderratedWidget personId={person.id} personName={person.name} />
             </div>
 
             {/* Curate the Profile Section */}

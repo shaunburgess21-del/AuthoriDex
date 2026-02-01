@@ -52,6 +52,7 @@ export function UnderratedOverratedCard({
       setLocalVote(voteType);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/celebrity', person.id, 'value-vote'] });
       queryClient.invalidateQueries({ queryKey: ['/api/trending'] });
       queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
       queryClient.invalidateQueries({ queryKey: ['/api/leaderboard?tab=value&limit=20'] });

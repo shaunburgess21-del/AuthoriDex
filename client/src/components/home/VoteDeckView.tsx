@@ -493,7 +493,10 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
     mutationFn: async ({ personId, vote }: { personId: string; vote: 'underrated' | 'overrated' }) => {
       return apiRequest('POST', `/api/celebrity/${personId}/value-vote`, { vote });
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/celebrity', variables.personId, 'value-vote'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/trending'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
       queryClient.invalidateQueries({ queryKey: ['/api/leaderboard?tab=value&limit=20'] });
     },
     onError: (error: any, variables) => {
