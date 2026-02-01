@@ -21,8 +21,16 @@ export async function runDataIngestion(): Promise<IngestResult> {
   let errors = 0;
 
   // Truncate to the hour for idempotency - multiple runs within same hour will be deduplicated
-  const hourTimestamp = new Date();
-  hourTimestamp.setMinutes(0, 0, 0);
+  // Using explicit truncation to prevent any race conditions or serialization issues
+  const now = new Date();
+  const hourTimestamp = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    now.getUTCHours(),
+    0, 0, 0  // minutes, seconds, milliseconds all set to 0
+  ));
+  console.log(`[Ingest] Hour timestamp: ${hourTimestamp.toISOString()}`);
 
   console.log("[Ingest] Starting data ingestion...");
 
