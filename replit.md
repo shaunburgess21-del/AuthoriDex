@@ -27,14 +27,17 @@ Preferred communication style: Simple, everyday language.
 - **API Design**: RESTful endpoints with query parameters.
 - **Data Providers**: Integrates with Wikipedia, GDELT, and Serper.dev APIs for celebrity data.
   - **Note (Jan 2026)**: X/Twitter API removed from trend score engine due to cost constraints. X API keys preserved for future Platform Insights feature.
-- **Scoring Engine** (Refactored Jan 2026):
+- **Scoring Engine** (Refactored Feb 2026):
   - **Fame Score (0-1,000,000)**: Primary UI score displayed everywhere, computed from normalized trend score. Scale expanded to 0-1,000,000 for greater variance, larger numbers, and prediction difficulty.
   - **Fixed Weights**: Mass (40%) + Velocity (60%), no dynamic redistribution to prevent scoring discontinuities.
   - **Active Velocity Sources**: Wiki (25%), News (35%), Search (40%) - X API disabled (0%).
   - **Anti-Spam Damping**: `VelocityAdjusted = VelocityScore × (0.35 + 0.65 × MassScore)` ensures high-velocity/low-mass accounts are penalized.
   - **Diversity Multiplier**: Silent penalty based on active platforms. Instagram/YouTube/X marked as NOT_APPLICABLE. Wiki+News+Search = 3/3 active = 1.0x multiplier.
-  - **Wiki-as-Primary-Mass**: Wikipedia pageviews serve as the primary mass signal (50% weight).
-  - **EMA Smoothing**: Alpha = 0.08 applied to final scores for smooth, stock-market-style curves (reduced from 0.15 for gentler transitions).
+  - **Wiki-as-Primary-Mass**: Wikipedia 7-day daily average serves as the primary mass signal (50% weight). Using 7-day average instead of 24h provides a stable baseline that prevents cliff-edge drops from data timing.
+  - **Score Stabilization (Feb 2026)**: Multi-layered approach to prevent wild score fluctuations:
+    - **Rate Limiting**: ±5% maximum change per hourly update (`MAX_HOURLY_CHANGE_PERCENT = 0.05`). Applied before EMA smoothing to cap cliff-edge drops.
+    - **EMA Smoothing**: Alpha = 0.04 (reduced from 0.08) for gentler, stock-market-style transitions.
+    - **7-Day Mass Baseline**: Mass score uses `wikiPageviews7dAvg` instead of volatile 24h data.
   - **Nullable Change Values**: change24h/change7d show "N/A" when data is unavailable (no fake random values).
 - **Data Jobs** (Refactored Jan 2026):
   - **Single Snapshot Source**: Only `ingest.ts` writes to `trend_snapshots` table. Other jobs (`quick-score.ts`, `snapshot-scheduler.ts`) are disabled for snapshot writing to prevent duplicate data points.
