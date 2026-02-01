@@ -613,8 +613,6 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
       exit={{ opacity: 0, y: -20 }}
       className="max-w-4xl mx-auto space-y-4"
     >
-      <MarketCycleHero marketState={marketState} />
-      
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
         {SECTION_TOGGLES.map((section) => (
           <button
@@ -701,6 +699,8 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
           />
         </div>
       )}
+
+      <MarketCycleHero marketState={marketState} />
 
       {showJackpot && (
         <div className="space-y-2">
