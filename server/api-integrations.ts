@@ -213,47 +213,24 @@ function generateMockMetrics(name: string, index: number): CelebrityMetrics {
   };
 }
 
-// Generate mock historical snapshots for trend graphs
+/**
+ * DEPRECATED: Mock historical data generation is disabled.
+ * 
+ * This function previously wrote raw trendScore values to trend_snapshots,
+ * bypassing the stabilization logic in trendScore.ts (rate limiting, EMA smoothing,
+ * 7-day mass baseline). This caused wild score fluctuations on the leaderboard.
+ * 
+ * All snapshot writing is now handled exclusively by ingest.ts, which:
+ * - Fetches real data from Wikipedia/GDELT/Serper APIs
+ * - Applies ±5% hourly rate limiting
+ * - Applies EMA smoothing (alpha=0.04)
+ * - Uses 7-day Wikipedia average for stable mass scores
+ * 
+ * @deprecated Do not use - function body is intentionally empty
+ */
 async function generateMockHistoricalData(personId: string, currentScore: number): Promise<void> {
-  // Use stable base date (truncated to midnight UTC today)
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  const baseTimestamp = today.getTime();
-  
-  const dataPoints = [];
-  
-  // Generate 365 days of mock historical data with stable timestamps
-  for (let daysAgo = 365; daysAgo >= 0; daysAgo--) {
-    // Create stable timestamp (midnight UTC for each day)
-    const timestamp = new Date(baseTimestamp - daysAgo * 24 * 60 * 60 * 1000);
-    
-    // Create trending pattern: gradual growth with some volatility
-    const dayFactor = 1 - (daysAgo / 400); // Gradual increase over longer period
-    const volatility = (Math.sin(daysAgo * 0.5) * 0.15); // ±15% fluctuation
-    const historicalScore = Math.round(currentScore * (dayFactor + volatility));
-    
-    // Reverse engineer component metrics proportionally
-    const score = Math.max(50000, historicalScore);
-    
-    dataPoints.push({
-      personId,
-      newsCount: Math.round((score / 1000) * 0.3),
-      youtubeViews: Math.round(score * 100),
-      spotifyFollowers: Math.round(score * 20),
-      searchVolume: Math.round((score / 1000) * 0.2),
-      trendScore: score,
-      timestamp,
-    });
-  }
-  
-  // Insert all historical snapshots (duplicates will be ignored via unique constraint)
-  for (const point of dataPoints) {
-    try {
-      await db.insert(trendSnapshots).values(point);
-    } catch (error) {
-      // Silently ignore duplicate errors from unique constraint
-    }
-  }
+  console.log("[generateMockHistoricalData] DISABLED - snapshots are written only by ingest.ts with stabilization");
+  return;
 }
 
 // Aggregate all metrics into a unified trending score

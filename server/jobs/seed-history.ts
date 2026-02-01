@@ -1,71 +1,27 @@
 import { db } from "../db";
 import { trendSnapshots, trendingPeople } from "@shared/schema";
 
+/**
+ * DEPRECATED: Historical snapshot seeding is disabled.
+ * 
+ * This function previously wrote raw trendScore values with random variations
+ * to trend_snapshots, bypassing the stabilization logic in trendScore.ts.
+ * This caused wild score fluctuations (e.g., 56k → 560k within hours).
+ * 
+ * All snapshot writing is now handled exclusively by ingest.ts, which:
+ * - Fetches real data from Wikipedia/GDELT/Serper APIs
+ * - Applies ±5% hourly rate limiting
+ * - Applies EMA smoothing (alpha=0.04)
+ * - Uses 7-day Wikipedia average for stable mass scores
+ * 
+ * Historical data will accumulate naturally over time as ingest.ts runs hourly.
+ * 
+ * @deprecated Do not use - function returns immediately without writing data
+ */
 export async function seedHistoricalSnapshots(daysBack: number = 7): Promise<{ created: number }> {
-  console.log(`[Seed] Generating ${daysBack} days of historical trend data...`);
+  console.log(`[Seed] DISABLED - Historical seeding bypasses stabilization logic.`);
+  console.log(`[Seed] Snapshots are now written only by ingest.ts with rate limiting and EMA smoothing.`);
+  console.log(`[Seed] Historical data will accumulate naturally as the ingestion job runs hourly.`);
   
-  let created = 0;
-  
-  try {
-    const people = await db.select().from(trendingPeople);
-    console.log(`[Seed] Processing ${people.length} people`);
-    
-    const now = new Date();
-    
-    for (const person of people) {
-      const baseScore = person.trendScore || 100000;
-      
-      for (let day = daysBack; day >= 1; day--) {
-        const hoursPerDay = 4;
-        
-        for (let hour = 0; hour < hoursPerDay; hour++) {
-          const timestamp = new Date(now);
-          timestamp.setDate(timestamp.getDate() - day);
-          timestamp.setHours(hour * 6, 0, 0, 0);
-          
-          const dayVariation = (Math.random() - 0.5) * 0.3;
-          const hourVariation = (Math.random() - 0.5) * 0.05;
-          const trendBias = (daysBack - day) / daysBack * 0.15;
-          
-          const multiplier = 1 + dayVariation + hourVariation - trendBias;
-          const trendScore = Math.round(baseScore * Math.max(0.5, Math.min(1.5, multiplier)));
-          
-          const velocityScore = Math.random() * 50 + 25;
-          const massScore = Math.random() * 30 + 20;
-          
-          await db.insert(trendSnapshots).values({
-            personId: person.id,
-            timestamp,
-            trendScore,
-            fameIndex: Math.round(trendScore / 100), // 0-10,000 scale
-            newsCount: Math.round(Math.random() * 100 + 10),
-            searchVolume: Math.round(Math.random() * 500 + 50),
-            youtubeViews: 0,
-            spotifyFollowers: 0,
-            wikiPageviews: Math.round(baseScore / 10 * (0.8 + Math.random() * 0.4)),
-            wikiDelta: (Math.random() - 0.5) * 20,
-            newsDelta: (Math.random() - 0.5) * 15,
-            searchDelta: (Math.random() - 0.5) * 25,
-            xQuoteVelocity: Math.random() * 10,
-            xReplyVelocity: Math.random() * 15,
-            massScore,
-            velocityScore,
-            velocityAdjusted: velocityScore * (0.35 + 0.65 * (massScore / 100)),
-            diversityMultiplier: 1.0,
-            confidence: 0.7 + Math.random() * 0.2,
-            momentum: Math.random() > 0.5 ? "Breakout" : "Stable",
-            drivers: ["wiki", "search", "x"],
-          });
-          
-          created++;
-        }
-      }
-    }
-    
-    console.log(`[Seed] Created ${created} historical snapshots`);
-  } catch (error) {
-    console.error("[Seed] Error:", error);
-  }
-  
-  return { created };
+  return { created: 0 };
 }
