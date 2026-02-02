@@ -44,7 +44,10 @@ Preferred communication style: Simple, everyday language.
       - 0-1 sources spiking: 5% cap (default)
       - 2 sources spiking together: 10% cap
       - 3 sources spiking together: 25% cap (genuine viral moments)
-    - **Spike Detection**: Source considered "spiking" when current value > 1.5× baseline average.
+    - **Spike Detection (Feb 2026)**: Robust detection using median (p50) baselines and minimum deltas:
+      - Source "spiking" when: current > 1.5× p50 baseline AND delta exceeds minimum threshold
+      - Minimum deltas: Wiki 5K pageviews, News 10 articles, Search 500 volume
+      - Using p50 (median) instead of mean is more robust against outliers
     - **Dynamic EMA Alpha**: Alpha varies based on spike count for faster breakout response:
       - 0-1 sources spiking: α=0.08 (default)
       - 2 sources spiking: α=0.12 (faster response)
@@ -57,6 +60,11 @@ Preferred communication style: Simple, everyday language.
     - **7-Day Mass Baseline**: Mass score uses `wikiPageviews7dAvg` instead of volatile 24h data.
     - **DB-Level Idempotency**: Unique index on `(person_id, date_trunc('hour', timestamp))` prevents duplicate hourly snapshots at database level.
     - **Stabilization Stats**: Ingestion logs show effective cap, alpha, spike count, and recalibration status.
+    - **Ingestion Summary Metrics (Feb 2026)**: Enhanced logging at end of each ingestion run:
+      - Spike distribution: Count of celebrities with 0/1/2/3 sources spiking
+      - Rank churn: Entries entering/exiting top 10 and top 20
+      - Rate limited %: How many exceeded the dynamic cap
+      - Avg/Max raw change %: Pre-stabilization score volatility
   - **Nullable Change Values**: change24h/change7d show "N/A" when data is unavailable (no fake random values).
 - **Data Jobs** (Refactored Jan 2026):
   - **Single Snapshot Source**: Only `ingest.ts` writes to `trend_snapshots` table. Other jobs (`quick-score.ts`, `snapshot-scheduler.ts`) are disabled for snapshot writing to prevent duplicate data points.
