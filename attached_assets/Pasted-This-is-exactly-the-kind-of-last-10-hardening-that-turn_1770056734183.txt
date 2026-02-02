@@ -1,0 +1,133 @@
+This is exactly the kind of “last 10%” hardening that turns a cool prototype into something you can trust in front of your brother (and later users). Replit implemented the right quick wins.
+
+Here’s my read on what they just did, plus a few final tuning suggestions I’d keep in your back pocket.
+
+What they just added is genuinely strong
+✅ Spike baseline: mean → median (p50)
+
+Great move. The mean is easily skewed by outliers (one crazy hour), which can either:
+
+suppress spike detection (baseline gets inflated), or
+
+create false spikes (baseline gets dragged weirdly)
+
+Using p50 makes spikes much more “human-realistic.”
+
+✅ Minimum delta thresholds (very important)
+
+This is a big deal. Without minimum deltas, tiny accounts can trigger “breakout mode” from noise.
+
+Their floors are sensible as a first pass:
+
+Wiki: +5,000 pageviews
+
+News: +10 articles
+
+Search: +500 search volume
+
+That will prevent “micro-noise breakouts.”
+
+✅ Spike distribution logging
+
+This gives you immediate “health telemetry”:
+0:85, 1:10, 2:4, 3:1 is what you want in steady state.
+
+If you ever see:
+
+lots of 2s/3s constantly → threshold too low or baselines too low
+
+almost never any 2/3 even during big news days → threshold too high
+
+✅ Rank churn tracking
+
+This is the best “does it feel organic?” metric.
+A healthy engine usually has:
+
+some churn in top 20
+
+less churn in top 10
+
+and churn spikes on major news days
+
+The only thing I’d watch very closely now (for the next 24–48h)
+1) Is the engine still “cap-dominated” after recalibration settles?
+
+They expect “rate limited % dropping from 97% → <30%.” That’s a good target.
+
+In steady state, I’d aim for:
+
+<20–30% capped most hours
+
+spikes in capped% when there’s a real global event
+
+If it stays high even after [RECAL] expires, it means raw scores are still too jumpy.
+
+If that happens, the best fixes (in order):
+
+Smooth population stats slightly (light EMA on p50/p90 per source)
+
+Loosen caps slightly in steady state (5% → 7%)
+
+Increase per-source baselines to be less sensitive
+
+Two tuning recommendations I’d add (small but high ROI)
+A) Make minimum deltas relative to scale (not only fixed)
+
+Fixed floors are good, but they don’t scale well across celebrities with wildly different typical volumes.
+
+Better rule:
+
+Spike if current > 1.5× baseline AND delta > max(fixed_floor, baseline × r)
+
+Example:
+
+for news: delta > max(10, baseline*0.25)
+That means:
+
+if baseline is 5 articles, require at least 10 (fixed floor)
+
+if baseline is 200, require at least 50 additional articles (relative floor)
+
+This prevents big names from spiking too easily on small relative changes, and small names from spiking on noise.
+
+B) Add “churn guardrail” to detect something breaking
+
+Rank churn is your canary.
+
+Set an alert-style log:
+
+If Top 10 churn > 4 or Top 20 churn > 8 in a normal hour → flag “possible data anomaly”
+
+Dump the top 5 movers’ raw vs final and which sources drove them
+
+This makes debugging instant when something weird happens.
+
+What your engine is now (in plain English you can share)
+
+You can tell your brother:
+
+“We calculate each person’s Fame Index hourly from three independent attention signals: Wikipedia demand, news coverage (GDELT), and Google search activity (Serper).
+Each source is normalized using log compression + 7-day percentile ranking so none dominates due to scale.
+We combine them into Mass vs Velocity with a 40/60 weighting, apply anti-spam damping and a platform diversity factor, then stabilize the score using capped hourly changes plus EMA smoothing.
+To keep it organic, we use breakout mode: if multiple signals spike at once, we allow higher caps and faster smoothing so real viral moments move quickly—while single-source noise stays contained.
+We enforce one snapshot per person per hour at the database level, and we log spike distributions and rank churn every run to verify health.”
+
+That’s a very defensible system.
+
+Next thing I’d do (optional, but powerful)
+
+Build a simple internal “why did this move?” debug view for a single celebrity:
+
+raw wiki/news/search
+
+normalized percentiles
+
+spike flags + count
+
+cap applied + alpha used
+
+final score
+
+last 24h change
+
+It’ll save you countless hours, and it’s gold for investor/brother confidence.
