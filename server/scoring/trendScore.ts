@@ -4,7 +4,9 @@ import {
   VELOCITY_ALLOCATION,
   calculateDiversityMultiplier,
   applyAntiSpamDamping,
-  applyEmaSmoothing,
+  applyDynamicEmaSmoothing,
+  getDynamicAlpha,
+  isRecalibrationModeActive,
   PlatformStatuses,
   ActivePlatforms,
   MISSING_X_PENALTY,
@@ -14,6 +16,7 @@ import {
   normalizeSourceValue,
   countSpikingSources,
   applyDynamicRateLimiting,
+  getDynamicRateLimit,
   SpikeDetectionInputs,
 } from "./normalize";
 import { 
@@ -218,24 +221,31 @@ export function computeTrendScore(
   const rawFameIndex = fameIndex; // Store raw value for logging
   
   // Apply stabilization in order:
-  // 1. Dynamic rate limiting (cap varies by source corroboration)
-  //    - 1 source spiking: 5% cap
-  //    - 2 sources spiking: 10% cap
+  // 1. Dynamic rate limiting (cap varies by source corroboration + recalibration)
+  //    - 0-1 sources spiking: 5% cap (10% in recalibration)
+  //    - 2 sources spiking: 10% cap (20% in recalibration)
   //    - 3 sources spiking: 25% cap
-  // 2. EMA smoothing - creates smooth stock-market-style curves
+  // 2. Dynamic EMA smoothing - alpha varies by spike count + recalibration
+  //    - 0-1 sources: 0.08 (0.10 in recalibration)
+  //    - 2 sources: 0.12 (0.15 in recalibration)
+  //    - 3 sources: 0.18 (0.225 in recalibration)
   let stabilizationApplied = false;
   if (previousFameIndex !== undefined) {
     stabilizationApplied = true;
     // First apply dynamic rate limiting based on source corroboration
     const afterRateLimiting = Math.round(applyDynamicRateLimiting(fameIndex, previousFameIndex, spikingSourceCount));
-    // Then apply EMA smoothing for gradual transitions
-    fameIndex = Math.round(applyEmaSmoothing(afterRateLimiting, previousFameIndex));
+    // Then apply dynamic EMA smoothing (alpha varies by spike count)
+    fameIndex = Math.round(applyDynamicEmaSmoothing(afterRateLimiting, previousFameIndex, spikingSourceCount));
     
     // Log significant stabilization events (>10% change would have occurred)
     const rawChange = Math.abs((rawFameIndex - previousFameIndex) / previousFameIndex);
     if (rawChange > 0.10) {
-      const capUsed = spikingSourceCount >= 3 ? '25%' : spikingSourceCount >= 2 ? '10%' : '5%';
-      console.log(`[Stabilization] Raw: ${rawFameIndex}, Prev: ${previousFameIndex}, Final: ${fameIndex} (${Math.round(rawChange * 100)}% raw, ${capUsed} cap, ${spikingSourceCount} sources spiking)`);
+      const effectiveCap = getDynamicRateLimit(spikingSourceCount);
+      const effectiveAlpha = getDynamicAlpha(spikingSourceCount);
+      const recalMode = isRecalibrationModeActive() ? ' [RECAL]' : '';
+      console.log(`[Stabilization] Raw: ${rawFameIndex}, Prev: ${previousFameIndex}, Final: ${fameIndex} ` +
+        `(${Math.round(rawChange * 100)}% raw, ${Math.round(effectiveCap * 100)}% cap, α=${effectiveAlpha.toFixed(2)}, ` +
+        `${spikingSourceCount} spiking)${recalMode}`);
     }
   }
   

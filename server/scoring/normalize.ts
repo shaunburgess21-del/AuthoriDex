@@ -43,14 +43,59 @@ export const ANTI_SPAM_BASE = 0.35;
 export const ANTI_SPAM_MASS_FACTOR = 0.65;
 
 // EMA smoothing alpha - lower = smoother curves (stock market style)
-// 0.08 provides balanced responsiveness: smooth enough to filter noise,
+// Default 0.08 provides balanced responsiveness: smooth enough to filter noise,
 // fast enough to show real breakouts within hours (not days)
-// Max hourly change with 5% cap: ~0.4% per step, ~10% daily compounded
-export const EMA_ALPHA = 0.08;
+export const EMA_ALPHA_DEFAULT = 0.08;
+export const EMA_ALPHA_2_SOURCES = 0.12;  // When 2 sources spike together
+export const EMA_ALPHA_3_SOURCES = 0.18;  // When 3 sources spike (genuine viral)
 
-// Rate limiting - maximum change per hour (±5%)
-// Prevents cliff-edge drops from data refresh timing
+// Rate limiting - maximum change per hour
+// Default 5% cap, increases with multi-source breakouts
 export const MAX_HOURLY_CHANGE_PERCENT = 0.05;
+
+// Legacy constant for backwards compatibility
+export const EMA_ALPHA = EMA_ALPHA_DEFAULT;
+
+// ============================================================================
+// RECALIBRATION MODE - Temporary boost after scoring model changes
+// ============================================================================
+
+// Set this to the timestamp when the scoring model was last changed.
+// For 48 hours after this date, use boosted caps/alpha to speed up transition.
+export const RECALIBRATION_START = new Date('2026-02-02T17:00:00Z');
+export const RECALIBRATION_DURATION_HOURS = 48;
+
+/**
+ * Check if we're currently in recalibration mode.
+ * Active for 48 hours after a scoring model change.
+ */
+export function isRecalibrationModeActive(): boolean {
+  const now = new Date();
+  const endTime = new Date(RECALIBRATION_START.getTime() + RECALIBRATION_DURATION_HOURS * 60 * 60 * 1000);
+  return now >= RECALIBRATION_START && now < endTime;
+}
+
+/**
+ * Get boosted rate limit for recalibration mode.
+ * During recalibration, double the default cap.
+ */
+export function getRecalibrationRateBoost(normalCap: number): number {
+  if (isRecalibrationModeActive()) {
+    return Math.min(normalCap * 2, 0.25); // Max 25% even in recalibration
+  }
+  return normalCap;
+}
+
+/**
+ * Get boosted alpha for recalibration mode.
+ * During recalibration, slightly increase responsiveness.
+ */
+export function getRecalibrationAlphaBoost(normalAlpha: number): number {
+  if (isRecalibrationModeActive()) {
+    return Math.min(normalAlpha * 1.25, 0.25); // Boost by 25%, max 0.25
+  }
+  return normalAlpha;
+}
 
 // Sanity check thresholds
 export const FOLLOWER_DROP_THRESHOLD = 0.50; // Reject if drops >50%
@@ -119,11 +164,45 @@ export function applyAntiSpamDamping(velocityScore: number, massScore: number): 
 }
 
 /**
- * Apply EMA smoothing to a new score.
+ * Apply EMA smoothing to a new score (legacy version with fixed alpha).
  */
 export function applyEmaSmoothing(newScore: number, previousScore: number | null): number {
   if (previousScore === null) return newScore;
   return (EMA_ALPHA * newScore) + ((1 - EMA_ALPHA) * previousScore);
+}
+
+/**
+ * Get dynamic EMA alpha based on number of spiking sources.
+ * More sources spiking = faster response (higher alpha).
+ * Also applies recalibration boost if active.
+ */
+export function getDynamicAlpha(spikingCount: number): number {
+  let baseAlpha: number;
+  switch (spikingCount) {
+    case 3:
+      baseAlpha = EMA_ALPHA_3_SOURCES; // 0.18
+      break;
+    case 2:
+      baseAlpha = EMA_ALPHA_2_SOURCES; // 0.12
+      break;
+    default:
+      baseAlpha = EMA_ALPHA_DEFAULT;   // 0.08
+  }
+  return getRecalibrationAlphaBoost(baseAlpha);
+}
+
+/**
+ * Apply EMA smoothing with dynamic alpha based on spike count.
+ * Higher alpha = faster response to changes.
+ */
+export function applyDynamicEmaSmoothing(
+  newScore: number, 
+  previousScore: number | null,
+  spikingCount: number
+): number {
+  if (previousScore === null) return newScore;
+  const alpha = getDynamicAlpha(spikingCount);
+  return (alpha * newScore) + ((1 - alpha) * previousScore);
 }
 
 /**
@@ -301,18 +380,21 @@ export function countSpikingSources(inputs: SpikeDetectionInputs, threshold: num
 /**
  * Get dynamic rate limit based on source corroboration.
  * More sources spiking = higher allowed change rate.
+ * Also applies recalibration boost if active.
  */
 export function getDynamicRateLimit(spikingCount: number): number {
+  let baseCap: number;
   switch (spikingCount) {
-    case 0:
-    case 1:
-      return MAX_HOURLY_CHANGE_PERCENT; // 5% - default
-    case 2:
-      return 0.10; // 10% - two sources corroborate
     case 3:
+      baseCap = 0.25; // 25% - all three sources agree
+      break;
+    case 2:
+      baseCap = 0.10; // 10% - two sources corroborate
+      break;
     default:
-      return 0.25; // 25% - all three sources agree
+      baseCap = MAX_HOURLY_CHANGE_PERCENT; // 5% - default
   }
+  return getRecalibrationRateBoost(baseCap);
 }
 
 /**
