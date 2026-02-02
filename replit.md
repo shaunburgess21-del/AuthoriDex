@@ -45,10 +45,18 @@ Preferred communication style: Simple, everyday language.
       - 2 sources spiking together: 10% cap
       - 3 sources spiking together: 25% cap (genuine viral moments)
     - **Spike Detection**: Source considered "spiking" when current value > 1.5× baseline average.
-    - **EMA Smoothing**: Alpha = 0.08 for balanced responsiveness (~0.4% max change per hour, ~10% daily compounded). Fast enough for breakouts, smooth enough to filter noise.
+    - **Dynamic EMA Alpha**: Alpha varies based on spike count for faster breakout response:
+      - 0-1 sources spiking: α=0.08 (default)
+      - 2 sources spiking: α=0.12 (faster response)
+      - 3 sources spiking: α=0.18 (genuine viral, rapid movement)
+    - **Recalibration Mode**: Temporary 48h boost after scoring model changes:
+      - Rate caps doubled (5%→10%, 10%→20%, max 25%)
+      - Alpha boosted by 25% (0.08→0.10, etc.)
+      - Configured via `RECALIBRATION_START` timestamp in `normalize.ts`
+      - Auto-expires after 48 hours, tagged with `[RECAL]` in logs
     - **7-Day Mass Baseline**: Mass score uses `wikiPageviews7dAvg` instead of volatile 24h data.
     - **DB-Level Idempotency**: Unique index on `(person_id, date_trunc('hour', timestamp))` prevents duplicate hourly snapshots at database level.
-    - **Stabilization Stats**: Ingestion logs aggregate stats (EMA applied count, rate limited count, avg/max changes, spike counts) for monitoring.
+    - **Stabilization Stats**: Ingestion logs show effective cap, alpha, spike count, and recalibration status.
   - **Nullable Change Values**: change24h/change7d show "N/A" when data is unavailable (no fake random values).
 - **Data Jobs** (Refactored Jan 2026):
   - **Single Snapshot Source**: Only `ingest.ts` writes to `trend_snapshots` table. Other jobs (`quick-score.ts`, `snapshot-scheduler.ts`) are disabled for snapshot writing to prevent duplicate data points.
