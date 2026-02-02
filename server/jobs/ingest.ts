@@ -337,6 +337,40 @@ export async function runDataIngestion(): Promise<IngestResult> {
     
     // Log rank churn
     console.log(`[Rank Churn] Top 10: +${enteredTop10}/-${exitedTop10} | Top 20: +${enteredTop20}/-${exitedTop20}`);
+    
+    // Churn guardrail: flag possible data anomalies
+    const CHURN_THRESHOLD_TOP10 = 4;
+    const CHURN_THRESHOLD_TOP20 = 8;
+    const top10Churn = Math.max(enteredTop10, exitedTop10);
+    const top20Churn = Math.max(enteredTop20, exitedTop20);
+    
+    if (top10Churn > CHURN_THRESHOLD_TOP10 || top20Churn > CHURN_THRESHOLD_TOP20) {
+      console.warn(`[ANOMALY ALERT] Unusual rank churn detected! Top10: ${top10Churn}, Top20: ${top20Churn}`);
+      
+      // Log top 5 biggest movers (by absolute rank change)
+      const movers = scoreResults
+        .map((r, newRank) => {
+          const oldRank = oldRankMap.get(r.person.id) ?? 999;
+          const rankChange = oldRank - (newRank + 1); // Positive = moved up
+          return {
+            name: r.person.name,
+            oldRank,
+            newRank: newRank + 1,
+            rankChange,
+            rawFameIndex: r.score.rawFameIndex,
+            finalFameIndex: r.score.fameIndex,
+            spikingCount: r.score.spikingSourceCount,
+          };
+        })
+        .sort((a, b) => Math.abs(b.rankChange) - Math.abs(a.rankChange))
+        .slice(0, 5);
+      
+      console.warn(`[ANOMALY ALERT] Top 5 movers:`);
+      for (const m of movers) {
+        const direction = m.rankChange > 0 ? '↑' : m.rankChange < 0 ? '↓' : '→';
+        console.warn(`  ${direction} ${m.name}: #${m.oldRank} → #${m.newRank} (raw: ${m.rawFameIndex}, final: ${m.finalFameIndex}, spikes: ${m.spikingCount})`);
+      }
+    }
 
   } catch (error) {
     console.error("[Ingest] Fatal error:", error);
