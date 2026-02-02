@@ -1,0 +1,148 @@
+This is shaping up really well. The latest build addresses the two biggest “feel” problems that remain after normalization:
+
+Breakouts felt too sluggish → dynamic alpha fixes that.
+
+Model-change recalibration drag → 48h recal mode fixes that.
+
+Here are my thoughts, plus a few final refinements I’d consider (none of them huge rewrites).
+
+What’s great about the latest build
+✅ Dynamic alpha based on spike corroboration
+
+This is exactly how you keep curves smooth and make real-world events feel alive.
+
+0–1 spiking → α=0.08 (steady)
+
+2 spiking → α=0.12 (responsive)
+
+3 spiking → α=0.18 (fast)
+
+That’s a strong “organic” compromise: you’re letting multi-signal reality move quickly.
+
+✅ Recalibration mode for 48 hours
+
+This is also a smart operational tool. Any time you change scoring math, you either:
+
+accept “weird for days,” or
+
+temporarily increase responsiveness and settle quickly.
+
+Tagging [RECAL] in logs is a nice touch too.
+
+The only slight red flag in the logs
+
+They report:
+
+“Rate limited 97/100 (at 10% cap)”
+
+If 97% of people are hitting the cap, that means the model shift changed the score scale so much that nearly everyone wants to move more than the cap allows.
+
+That’s not “wrong” during recalibration — but you want this number to drop rapidly over the next hours.
+
+What you want to see
+
+In the first few runs after a major scoring change: high capping is normal
+
+After a day: capping should fall to maybe <30%
+
+In steady-state: capping should be occasional, not constant
+
+If it stays high, it means either:
+
+caps are still too tight relative to how volatile the normalized raw score is, or
+
+the normalization baseline/percentile distribution is shifting too much hour-to-hour.
+
+Recommendations to make it even stronger
+1) Make recalibration “self-ending,” not just time-based (easy upgrade)
+
+Time-based is fine, but you can make it smarter:
+
+End recalibration early if BOTH are true for 2 consecutive runs:
+
+% capped < 30%
+
+max raw change < X% (choose something like 15–20%)
+
+This prevents you from staying in “boost mode” longer than needed.
+
+2) Stabilize the “population stats” with an EMA too
+
+Right now, your source percentiles are computed from last 7 days and refreshed hourly. That’s good, but the percentiles themselves can still drift.
+
+Simple improvement:
+Apply a light EMA on the computed p50/p90 values per source across hours, so the baseline doesn’t “jump” and cause artificial movement.
+
+This helps keep rankings stable without blunt caps.
+
+3) Spike detection: confirm it uses median, not mean
+
+Replit mentioned switching to median “quick win,” but I didn’t see confirmation in the final summary.
+
+If spike baseline is mean-based, it can be distorted by outliers.
+
+Median or EMA-baseline per source is more robust.
+
+If it’s still mean-based, I’d nudge them to change it.
+
+4) “Spike count” should be based on relative change, not just “>1.5× baseline”
+
+“Current > 1.5× baseline” is okay, but some sources are naturally spiky (search/news) and some are smoother (wiki).
+
+More robust approach:
+
+spike if current / baseline > threshold AND current - baseline exceeds a minimum absolute delta (so tiny accounts don’t trigger breakouts too easily)
+
+or spike if percentile jumped by > N points (e.g., +25 percentile points hour-over-hour)
+
+This avoids “false breakouts” from low-volume noise.
+
+5) Add an “explainability” panel (huge trust boost)
+
+Since you’re going to show your brother (and eventually users), give yourself an internal debug panel per celebrity:
+
+raw components (wiki/news/search)
+
+normalized percentiles
+
+velocity vs mass contributions
+
+spike flags
+
+applied cap, applied alpha
+
+final score
+
+When someone asks “why did X move up?”, you’ll have the answer in one screen.
+
+What I’d ask Replit to report back (simple metrics)
+
+Have it print these at the end of ingestion (especially during recal mode):
+
+% capped
+
+avg raw % change, max raw % change
+
+distribution of spike counts: how many with 0,1,2,3 spiking
+
+rank churn: number entering/exiting top 10 and top 20
+
+These numbers will tell you if the engine is behaving organically.
+
+Bottom line
+
+This version is very close to a “launchable” trend engine:
+
+stable storage
+
+normalized inputs
+
+multi-source breakout logic
+
+dynamic responsiveness
+
+controlled migration after model changes
+
+The only thing I’m watching is: 97/100 capped. That should fall quickly. If it doesn’t, then your “raw score” is too jumpy relative to your caps, and you’ll want either slightly higher caps in steady state or slightly more stable population stats.
+
+If you paste one ingestion summary log after ~12 hours (especially the stabilization stats), I can tell you immediately whether you’re converging nicely or if one parameter needs tweaking.
