@@ -1,0 +1,123 @@
+This is a really strong upgrade. What Replit implemented (log compression + percentile normalization + multi-source breakout caps) is basically the “grown-up” version of a trend engine: sources become comparable, and true multi-signal events move faster without letting single-source glitches teleport people.
+
+That said, there are a few things I’d tighten to make sure it stays organic, stable, and scalable.
+
+What looks excellent
+
+Per-source normalization (log1p + 7-day percentile rank): this solves the classic problem where one source dominates just because its numbers are bigger (e.g., Wikipedia vs GDELT).
+
+Breakout mode based on corroboration (1 source → 5%, 2 → 10%, 3 → 25%): this is exactly how you keep movement “organic” while resisting noise.
+
+They kept stabilization in place while recalibrating the score scale, which prevents chaos during the transition.
+
+The 4 main concerns I’d still address
+1) Recalibration transition can “drag” for days if not handled intentionally
+
+Replit is correct that big raw changes are expected right after normalization. But you don’t want the leaderboard to feel “weird” for too long.
+
+Recommendation
+
+Add a one-time migration mode: for the first 24–48 hours after a scoring model change, temporarily:
+
+increase EMA alpha (e.g., 0.08 → 0.12) or
+
+allow a higher cap (e.g., 5% → 10% when 0–1 sources spike)
+Then revert to normal settings automatically.
+
+Otherwise you can spend days slowly “walking” to the new equilibrium.
+
+2) Spike detection baseline should be robust (not a simple mean if you can avoid it)
+
+They said: “spiking when current > 1.5× baseline average.”
+
+If that “baseline average” is a plain mean over a short window, it’s easy to distort (one outlier pushes the average up/down, which changes spike classification).
+
+Recommendation
+Use one of these for each source baseline:
+
+median of last 24h (very robust), or
+
+EMA baseline per source (fast + smooth), or
+
+percentile baseline like p50 or p60 from the last 7 days
+
+This makes “spiking” detection much more reliable.
+
+3) Make sure breakout caps aren’t being “neutralized” by EMA
+
+If your EMA alpha is still low-ish, even a 25% cap won’t move the final score much per hour.
+
+Recommendation
+In breakout mode (2–3 sources spiking), consider temporarily increasing alpha (example):
+
+0–1 sources spiking → alpha = 0.08
+
+2 sources spiking → alpha = 0.12
+
+3 sources spiking → alpha = 0.18
+
+This keeps the curve smooth but allows real breakouts to show up within hours, not days.
+
+4) Computing 7-day stats hourly will get expensive as history grows
+
+Right now it’s “2,792+ snapshots” so it’s cheap. But as FameDex grows (more people, longer history), recomputing rolling percentiles from raw rows each hour may become a DB tax.
+
+Recommendation (future-proof)
+
+Create a small table like source_stats_hourly that stores computed percentiles per hour (p10/p50/p90) for each source.
+
+Update it incrementally each run, rather than scanning all 7d rows each time.
+
+Not urgent today, but worth planning.
+
+Two “quality” upgrades I’d add next
+A) Normalize mass inputs the same way you normalized velocity
+
+Right now normalization seems to be focused on wiki/news/search (velocity sources). If follower counts are part of Mass, they should also be normalized (log + percentile), and staleness should reduce their weight (if follower snapshot is 30+ days old, downweight it).
+
+This prevents “stale follower mass” from unfairly damping someone’s velocity.
+
+B) Add “source health weighting”
+
+If Serper.dev fails or returns cached/stale values, you don’t want it contributing like normal.
+
+Keep it simple:
+
+If source stale > 2 hours, weight ramps down toward 0
+
+When it recovers, weight ramps up over 2–3 hours (prevents catch-up spikes)
+
+Quick verification checklist (do this before you celebrate)
+
+Ask Replit to run and show:
+
+Capped distribution: % of people capped this hour, and average raw change
+
+In normal operation, you don’t want “most” entries capped—capping should be occasional.
+
+Spike counts: how many people have 2 or 3 sources spiking?
+
+If “3 sources spiking” happens too often, your spike threshold is too loose.
+
+Rank churn: how many entries enter/exit top 10 per hour/day?
+
+Healthy: a little movement, not constant roulette.
+
+My overall verdict
+
+This build is a meaningful leap forward: more comparable signals + more human-feeling movement. Your remaining risk is mostly tuning:
+
+spike thresholds (too sensitive vs too strict)
+
+alpha in breakout mode
+
+ensuring recalibration doesn’t take forever
+
+If you paste the key functions (even just pseudocode) for:
+
+percentile calculation,
+
+spike detection baseline,
+
+stabilization ordering (cap then EMA),
+I can sanity-check the exact logic and suggest the cleanest parameter values to start with.
