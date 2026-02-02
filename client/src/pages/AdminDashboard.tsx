@@ -162,6 +162,75 @@ interface InsightComment {
   createdAt: string;
 }
 
+interface ScoreBreakdownData {
+  celebrity: {
+    id: string;
+    name: string;
+    category: string;
+    avatar: string | null;
+  };
+  snapshotTimestamp: string;
+  rawInputs: {
+    wikiPageviews: number;
+    newsCount: number;
+    searchVolume: number;
+  };
+  baselines: {
+    wiki: number;
+    news: number;
+    search: number;
+  };
+  normalizedPercentiles: {
+    wiki: number;
+    news: number;
+    search: number;
+  };
+  spikeStatus: {
+    wiki: boolean;
+    news: boolean;
+    search: boolean;
+  };
+  stabilizationParams: {
+    spikingSourceCount: number;
+    effectiveRateCap: number;
+    effectiveAlpha: number;
+    isRecalibrationActive: boolean;
+  };
+  scoreBreakdown: {
+    massScore: number;
+    velocityScore: number;
+    velocityAdjusted: number;
+    diversityMultiplier: number;
+    trendScore: number;
+    fameIndex: number;
+    momentum: string;
+    drivers: string[];
+  };
+  weights: {
+    mass: number;
+    velocity: number;
+    velocityBreakdown: {
+      wiki: number;
+      news: number;
+      search: number;
+      x: number;
+    };
+  };
+  populationStats: {
+    wiki: { min: number; max: number; p25: number; p50: number; p75: number; p90: number; mean: number; count: number };
+    news: { min: number; max: number; p25: number; p50: number; p75: number; p90: number; mean: number; count: number };
+    search: { min: number; max: number; p25: number; p50: number; p75: number; p90: number; mean: number; count: number };
+  };
+  historicalSnapshots: Array<{
+    timestamp: string;
+    fameIndex: number;
+    trendScore: number;
+    wikiPageviews: number;
+    newsCount: number;
+    searchVolume: number;
+  }>;
+}
+
 // Helper function to get auth headers
 async function getAuthHeaders(): Promise<HeadersInit> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -222,6 +291,10 @@ export default function AdminDashboard() {
   
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; name: string } | null>(null);
+  
+  // Score Breakdown Modal state
+  const [showScoreBreakdown, setShowScoreBreakdown] = useState(false);
+  const [scoreBreakdownCelebrity, setScoreBreakdownCelebrity] = useState<string | null>(null);
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS (React rules of hooks)
   
@@ -293,6 +366,18 @@ export default function AdminDashboard() {
       return res.json();
     },
     enabled: isAdmin && activeSection === "celebrities",
+  });
+
+  // Fetch score breakdown for a celebrity
+  const { data: scoreBreakdown, isLoading: scoreBreakdownLoading } = useQuery<ScoreBreakdownData>({
+    queryKey: ["/api/admin/celebrities", scoreBreakdownCelebrity, "score-breakdown"],
+    queryFn: async () => {
+      if (!scoreBreakdownCelebrity) throw new Error("No celebrity selected");
+      const res = await fetchWithAuth(`/api/admin/celebrities/${scoreBreakdownCelebrity}/score-breakdown`);
+      if (!res.ok) throw new Error("Failed to fetch score breakdown");
+      return res.json();
+    },
+    enabled: isAdmin && showScoreBreakdown && !!scoreBreakdownCelebrity,
   });
 
   // Fetch face-offs - only when admin and on cms section
@@ -1133,6 +1218,18 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setScoreBreakdownCelebrity(celebrity.id);
+                              setShowScoreBreakdown(true);
+                            }}
+                            title="Score Breakdown"
+                            data-testid={`button-score-breakdown-${celebrity.id}`}
+                          >
+                            <Activity className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -1986,6 +2083,267 @@ export default function AdminDashboard() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Score Breakdown Modal */}
+      <Dialog open={showScoreBreakdown} onOpenChange={(open) => {
+        setShowScoreBreakdown(open);
+        if (!open) setScoreBreakdownCelebrity(null);
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Score Breakdown
+              {scoreBreakdown && (
+                <span className="text-muted-foreground font-normal">- {scoreBreakdown.celebrity.name}</span>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Why did this celebrity's score change? Detailed scoring breakdown and spike detection analysis.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {scoreBreakdownLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : scoreBreakdown ? (
+            <div className="space-y-6">
+              {/* Current Score & Timestamp */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card className="p-4 text-center">
+                  <p className="text-2xl font-bold text-violet-500">
+                    {scoreBreakdown.scoreBreakdown.fameIndex.toLocaleString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Fame Index</p>
+                </Card>
+                <Card className="p-4 text-center">
+                  <p className="text-2xl font-bold">{scoreBreakdown.scoreBreakdown.trendScore.toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">Trend Score</p>
+                </Card>
+                <Card className="p-4 text-center">
+                  <Badge className={cn(
+                    "text-sm",
+                    scoreBreakdown.scoreBreakdown.momentum === "Breakout" && "bg-green-500",
+                    scoreBreakdown.scoreBreakdown.momentum === "Sustained" && "bg-blue-500",
+                    scoreBreakdown.scoreBreakdown.momentum === "Cooling" && "bg-amber-500",
+                    scoreBreakdown.scoreBreakdown.momentum === "Stable" && "bg-gray-500"
+                  )}>
+                    {scoreBreakdown.scoreBreakdown.momentum}
+                  </Badge>
+                  <p className="text-xs text-muted-foreground mt-2">Momentum</p>
+                </Card>
+                <Card className="p-4 text-center">
+                  <p className="text-lg font-medium">
+                    {new Date(scoreBreakdown.snapshotTimestamp).toLocaleTimeString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Last Update</p>
+                </Card>
+              </div>
+
+              {/* Raw Inputs & Spike Status */}
+              <Card className="p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Database className="h-4 w-4" />
+                  Raw Inputs & Spike Detection
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2 px-2">Source</th>
+                        <th className="text-right py-2 px-2">Current</th>
+                        <th className="text-right py-2 px-2">7d Baseline</th>
+                        <th className="text-right py-2 px-2">Percentile</th>
+                        <th className="text-center py-2 px-2">Spiking</th>
+                        <th className="text-right py-2 px-2">Weight</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b">
+                        <td className="py-2 px-2 font-medium">Wikipedia</td>
+                        <td className="text-right py-2 px-2">{scoreBreakdown.rawInputs.wikiPageviews.toLocaleString()}</td>
+                        <td className="text-right py-2 px-2 text-muted-foreground">{Math.round(scoreBreakdown.baselines.wiki).toLocaleString()}</td>
+                        <td className="text-right py-2 px-2">
+                          <Badge variant="outline">{(scoreBreakdown.normalizedPercentiles.wiki * 100).toFixed(0)}%</Badge>
+                        </td>
+                        <td className="text-center py-2 px-2">
+                          {scoreBreakdown.spikeStatus.wiki ? (
+                            <Badge className="bg-amber-500">SPIKE</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="text-right py-2 px-2 text-muted-foreground">{(scoreBreakdown.weights.velocityBreakdown.wiki * 100).toFixed(0)}%</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 px-2 font-medium">News</td>
+                        <td className="text-right py-2 px-2">{scoreBreakdown.rawInputs.newsCount.toLocaleString()}</td>
+                        <td className="text-right py-2 px-2 text-muted-foreground">{scoreBreakdown.baselines.news.toFixed(1)}</td>
+                        <td className="text-right py-2 px-2">
+                          <Badge variant="outline">{(scoreBreakdown.normalizedPercentiles.news * 100).toFixed(0)}%</Badge>
+                        </td>
+                        <td className="text-center py-2 px-2">
+                          {scoreBreakdown.spikeStatus.news ? (
+                            <Badge className="bg-amber-500">SPIKE</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="text-right py-2 px-2 text-muted-foreground">{(scoreBreakdown.weights.velocityBreakdown.news * 100).toFixed(0)}%</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-2 font-medium">Search</td>
+                        <td className="text-right py-2 px-2">{scoreBreakdown.rawInputs.searchVolume.toLocaleString()}</td>
+                        <td className="text-right py-2 px-2 text-muted-foreground">{Math.round(scoreBreakdown.baselines.search).toLocaleString()}</td>
+                        <td className="text-right py-2 px-2">
+                          <Badge variant="outline">{(scoreBreakdown.normalizedPercentiles.search * 100).toFixed(0)}%</Badge>
+                        </td>
+                        <td className="text-center py-2 px-2">
+                          {scoreBreakdown.spikeStatus.search ? (
+                            <Badge className="bg-amber-500">SPIKE</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="text-right py-2 px-2 text-muted-foreground">{(scoreBreakdown.weights.velocityBreakdown.search * 100).toFixed(0)}%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              {/* Stabilization Parameters */}
+              <Card className="p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Settings className="h-4 w-4" />
+                  Stabilization Parameters
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="text-center p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xl font-bold">{scoreBreakdown.stabilizationParams.spikingSourceCount}</p>
+                    <p className="text-xs text-muted-foreground">Sources Spiking</p>
+                  </div>
+                  <div className="text-center p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xl font-bold">{(scoreBreakdown.stabilizationParams.effectiveRateCap * 100).toFixed(0)}%</p>
+                    <p className="text-xs text-muted-foreground">Rate Cap</p>
+                  </div>
+                  <div className="text-center p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xl font-bold">{scoreBreakdown.stabilizationParams.effectiveAlpha.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">EMA Alpha</p>
+                  </div>
+                  <div className="text-center p-3 bg-muted/50 rounded-lg">
+                    {scoreBreakdown.stabilizationParams.isRecalibrationActive ? (
+                      <Badge className="bg-amber-500">ACTIVE</Badge>
+                    ) : (
+                      <Badge variant="secondary">OFF</Badge>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">Recalibration</p>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Score Calculation */}
+              <Card className="p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" />
+                  Score Calculation
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                  <div className="text-center p-3 bg-muted/50 rounded-lg">
+                    <p className="text-lg font-bold">{scoreBreakdown.scoreBreakdown.massScore.toFixed(1)}</p>
+                    <p className="text-xs text-muted-foreground">Mass ({(scoreBreakdown.weights.mass * 100).toFixed(0)}%)</p>
+                  </div>
+                  <div className="text-center p-3 bg-muted/50 rounded-lg">
+                    <p className="text-lg font-bold">{scoreBreakdown.scoreBreakdown.velocityScore.toFixed(1)}</p>
+                    <p className="text-xs text-muted-foreground">Velocity (raw)</p>
+                  </div>
+                  <div className="text-center p-3 bg-muted/50 rounded-lg">
+                    <p className="text-lg font-bold">{scoreBreakdown.scoreBreakdown.velocityAdjusted.toFixed(1)}</p>
+                    <p className="text-xs text-muted-foreground">Velocity ({(scoreBreakdown.weights.velocity * 100).toFixed(0)}%)</p>
+                  </div>
+                  <div className="text-center p-3 bg-muted/50 rounded-lg">
+                    <p className="text-lg font-bold">{scoreBreakdown.scoreBreakdown.diversityMultiplier.toFixed(2)}x</p>
+                    <p className="text-xs text-muted-foreground">Diversity</p>
+                  </div>
+                  <div className="text-center p-3 bg-violet-500/20 rounded-lg border border-violet-500/30">
+                    <p className="text-lg font-bold text-violet-400">{scoreBreakdown.scoreBreakdown.fameIndex.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">Final Score</p>
+                  </div>
+                </div>
+                {scoreBreakdown.scoreBreakdown.drivers && scoreBreakdown.scoreBreakdown.drivers.length > 0 && (
+                  <div className="mt-4 flex items-center gap-2 flex-wrap">
+                    <span className="text-sm text-muted-foreground">Drivers:</span>
+                    {scoreBreakdown.scoreBreakdown.drivers.map((driver, i) => (
+                      <Badge key={i} variant="outline">{driver}</Badge>
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              {/* Population Stats Context */}
+              <Card className="p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Population Stats (7-day)
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-xs">
+                        <th className="text-left py-2 px-2">Source</th>
+                        <th className="text-right py-2 px-2">Min</th>
+                        <th className="text-right py-2 px-2">P25</th>
+                        <th className="text-right py-2 px-2">P50</th>
+                        <th className="text-right py-2 px-2">P75</th>
+                        <th className="text-right py-2 px-2">P90</th>
+                        <th className="text-right py-2 px-2">Max</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-xs">
+                      <tr className="border-b">
+                        <td className="py-2 px-2 font-medium">Wiki</td>
+                        <td className="text-right py-2 px-2">{Math.round(scoreBreakdown.populationStats.wiki.min).toLocaleString()}</td>
+                        <td className="text-right py-2 px-2">{Math.round(scoreBreakdown.populationStats.wiki.p25).toLocaleString()}</td>
+                        <td className="text-right py-2 px-2">{Math.round(scoreBreakdown.populationStats.wiki.p50).toLocaleString()}</td>
+                        <td className="text-right py-2 px-2">{Math.round(scoreBreakdown.populationStats.wiki.p75).toLocaleString()}</td>
+                        <td className="text-right py-2 px-2">{Math.round(scoreBreakdown.populationStats.wiki.p90).toLocaleString()}</td>
+                        <td className="text-right py-2 px-2">{Math.round(scoreBreakdown.populationStats.wiki.max).toLocaleString()}</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 px-2 font-medium">News</td>
+                        <td className="text-right py-2 px-2">{scoreBreakdown.populationStats.news.min.toFixed(0)}</td>
+                        <td className="text-right py-2 px-2">{scoreBreakdown.populationStats.news.p25.toFixed(0)}</td>
+                        <td className="text-right py-2 px-2">{scoreBreakdown.populationStats.news.p50.toFixed(0)}</td>
+                        <td className="text-right py-2 px-2">{scoreBreakdown.populationStats.news.p75.toFixed(0)}</td>
+                        <td className="text-right py-2 px-2">{scoreBreakdown.populationStats.news.p90.toFixed(0)}</td>
+                        <td className="text-right py-2 px-2">{scoreBreakdown.populationStats.news.max.toFixed(0)}</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-2 font-medium">Search</td>
+                        <td className="text-right py-2 px-2">{Math.round(scoreBreakdown.populationStats.search.min).toLocaleString()}</td>
+                        <td className="text-right py-2 px-2">{Math.round(scoreBreakdown.populationStats.search.p25).toLocaleString()}</td>
+                        <td className="text-right py-2 px-2">{Math.round(scoreBreakdown.populationStats.search.p50).toLocaleString()}</td>
+                        <td className="text-right py-2 px-2">{Math.round(scoreBreakdown.populationStats.search.p75).toLocaleString()}</td>
+                        <td className="text-right py-2 px-2">{Math.round(scoreBreakdown.populationStats.search.p90).toLocaleString()}</td>
+                        <td className="text-right py-2 px-2">{Math.round(scoreBreakdown.populationStats.search.max).toLocaleString()}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Based on {scoreBreakdown.populationStats.wiki.count} snapshots across all celebrities
+                </p>
+              </Card>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <AlertCircle className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p>Failed to load score breakdown</p>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
