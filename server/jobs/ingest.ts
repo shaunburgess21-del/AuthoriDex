@@ -135,7 +135,18 @@ export async function runDataIngestion(): Promise<IngestResult> {
       maxRawChange: 0,       // Largest raw change %
       avgRawChange: 0,       // Average raw change %
       rawChanges: [] as number[],
+      // Spike count distribution - how many celebrities have 0/1/2/3 sources spiking
+      spikeDistribution: { 0: 0, 1: 0, 2: 0, 3: 0 } as Record<number, number>,
     };
+
+    // Capture old rankings for churn tracking (before we update)
+    const oldRankings = await db.select({
+      id: trendingPeople.id,
+      rank: trendingPeople.rank,
+    }).from(trendingPeople);
+    const oldRankMap = new Map(oldRankings.map(r => [r.id, r.rank]));
+    const oldTop10 = new Set(oldRankings.filter(r => r.rank && r.rank <= 10).map(r => r.id));
+    const oldTop20 = new Set(oldRankings.filter(r => r.rank && r.rank <= 20).map(r => r.id));
 
     const scoreResults: Array<{
       person: typeof people[0];
@@ -195,6 +206,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
 
         // Track stabilization stats using pre-stabilization rawFameIndex
         stabilizationStats.totalProcessed++;
+        // Track spike count distribution (0/1/2/3 sources spiking)
+        const spikeCount = Math.min(3, Math.max(0, scoreResult.spikingSourceCount));
+        stabilizationStats.spikeDistribution[spikeCount]++;
+        
         if (scoreResult.wasStabilized && previousFameIndex !== undefined && previousFameIndex > 0) {
           stabilizationStats.withPreviousScore++;
           // Use rawFameIndex (pre-stabilization) to compute actual raw change
@@ -299,6 +314,15 @@ export async function runDataIngestion(): Promise<IngestResult> {
 
     console.log(`[Ingest] Updated ${scoreResults.length} trending people records`);
 
+    // Calculate rank churn (entries entering/exiting top 10 and top 20)
+    const newTop10 = new Set(scoreResults.slice(0, 10).map(r => r.person.id));
+    const newTop20 = new Set(scoreResults.slice(0, 20).map(r => r.person.id));
+    
+    const enteredTop10 = [...newTop10].filter(id => !oldTop10.has(id)).length;
+    const exitedTop10 = [...oldTop10].filter(id => !newTop10.has(id)).length;
+    const enteredTop20 = [...newTop20].filter(id => !oldTop20.has(id)).length;
+    const exitedTop20 = [...oldTop20].filter(id => !newTop20.has(id)).length;
+
     // Log stabilization stats summary
     if (stabilizationStats.rawChanges.length > 0) {
       stabilizationStats.avgRawChange = stabilizationStats.rawChanges.reduce((a, b) => a + b, 0) / stabilizationStats.rawChanges.length;
@@ -306,6 +330,13 @@ export async function runDataIngestion(): Promise<IngestResult> {
         `Rate limited (>5%): ${stabilizationStats.rateLimited}, Large changes (>10%): ${stabilizationStats.largeChanges}, ` +
         `Avg raw change: ${stabilizationStats.avgRawChange.toFixed(2)}%, Max: ${stabilizationStats.maxRawChange.toFixed(1)}%`);
     }
+    
+    // Log spike distribution (how many have 0/1/2/3 sources spiking)
+    const spikeDist = stabilizationStats.spikeDistribution;
+    console.log(`[Spike Distribution] 0 sources: ${spikeDist[0]}, 1 source: ${spikeDist[1]}, 2 sources: ${spikeDist[2]}, 3 sources: ${spikeDist[3]}`);
+    
+    // Log rank churn
+    console.log(`[Rank Churn] Top 10: +${enteredTop10}/-${exitedTop10} | Top 20: +${enteredTop20}/-${exitedTop20}`);
 
   } catch (error) {
     console.error("[Ingest] Fatal error:", error);
