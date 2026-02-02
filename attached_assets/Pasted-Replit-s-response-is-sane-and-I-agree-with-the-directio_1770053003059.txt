@@ -1,0 +1,121 @@
+Replit’s response is sane, and I agree with the direction. If you want this to be something you can confidently show your brother (and not have it regress next week), I’d do two more “hardening” moves plus a few “quality” upgrades.
+
+1) Yes: add the DB-level “one snapshot per person per hour” protection
+
+This is the most important remaining safety net.
+
+Best implementation (Postgres): generated hour bucket + unique constraint
+
+The expression index approach works, but UPSERT/ON CONFLICT is much cleaner if you have a real column to target.
+
+Idea:
+
+Add a column hour_bucket that always equals date_trunc('hour', timestamp) (stored)
+
+Enforce UNIQUE (person_id, hour_bucket)
+
+Ingestion uses ON CONFLICT (person_id, hour_bucket) DO UPDATE ...
+
+That gives you true idempotency even if some code path writes a weird timestamp.
+
+If you don’t want a generated column, an expression unique index is still good as a “block duplicates” guardrail—but it’s a bit more awkward to target in UPSERT logic.
+
+Production note
+
+If you’re already live and the table is large, create indexes CONCURRENTLY to avoid heavy locking.
+
+2) Re-check the rate limit value and behavior (there’s a subtle inconsistency)
+
+Earlier you shared logs where “final” was moving by about 0.2% per step, even though you mentioned a “5% cap”.
+
+Two points:
+
+If your cap is truly 5% per hour, that does not mean ~800% weekly growth; it’s vastly larger if it compounded each hour. (Even 5% per hour for 24 hours is ~3.2× in a day.)
+
+Your sample “Final vs Prev” changes looked closer to 0.2%, which suggests either:
+
+the cap is actually ~0.2%, or
+
+EMA + cap ordering is effectively producing ~0.2% steps.
+
+This matters because:
+
+Too tight → leaderboard feels “stuck” and misses real breakouts
+
+Too loose → teleporting returns when sources glitch
+
+Action: run one quick query/report on the last 24 hours:
+
+distribution of hourly % changes
+
+percent of rows that were capped
+
+top 10 biggest changes and which sources drove them
+
+If you’re seeing most changes <0.5% and capping frequently, it’s probably over-constrained.
+
+3) Make “rate limiting” organic by turning it into a smart guardrail
+
+I like having a cap, but I’d evolve it beyond a flat number:
+
+A) Multi-source corroboration = higher allowed move
+
+If 3+ sources agree strongly in the same direction (wiki + news + search, etc.), allow larger jumps.
+
+Example rules:
+
+1 source spiking → cap tight (anti-glitch)
+
+2 sources → medium cap
+
+3–4 sources → big cap (“breakout mode”)
+
+This preserves the “organic” feeling: real-world virality tends to show up across multiple signals.
+
+B) “Recovery mode” for source downtime
+
+If a source was missing for hours and returns, don’t let it dump its entire catch-up at once. Ramp its contribution in over 3–6 hours.
+
+This prevents the classic “API came back online → instant #1”.
+
+4) Fix/plan for the 7-day change metric
+
+Earlier Replit noted “0 7d snapshots found”. Even if stabilization is fixed now, make sure:
+
+7d change shows N/A until enough history exists, rather than 0 or garbage
+
+or you backfill initial history once (even if coarse)
+
+This will make your “Weekly Gainers/Droppers” feel far more trustworthy.
+
+5) Add “engine health” monitoring (this is what keeps it stable)
+
+This is where projects usually slip later.
+
+I’d track these every run and show them in an internal admin panel/log summary:
+
+% of celebrities successfully fetched per source
+
+staleness (minutes since last good fetch per source)
+
+% of scores capped this hour (and top 10 capped hardest)
+
+duplicate-attempt count (should be 0 once DB constraint is in)
+
+“source diversity” distribution (how many platforms active per person)
+
+If you see “capped% suddenly spikes to 70%”, you’ll know something broke immediately.
+
+My overall take
+
+✅ The core fix (most recent snapshot continuity + cleanup) is the big win.
+
+✅ Adding the DB unique hour guardrail is absolutely worth it.
+
+⚠️ The only real concern is whether your cap/smoothing is now too conservative, making trends feel delayed. That’s easy to verify with one day of change-distribution stats.
+
+If you paste your current stabilization snippet (the function that takes Raw/Prev and outputs Final) I’ll tell you:
+
+whether the math/order makes sense,
+
+and a clean “breakout mode” version that stays smooth but still lets true rockets hit the top fast.
