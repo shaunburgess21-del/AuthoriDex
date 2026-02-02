@@ -1,0 +1,143 @@
+This is a really good move. With the “Why Did This Move?” admin page, you’ve basically given yourselves the same kind of tooling that legit ranking/recommendation systems rely on: explainability + debuggability. That’s what stops you from guessing when someone asks “why did X jump?”
+
+Here are my thoughts, what I’d sanity-check, and a couple of small upgrades that will make this feature bulletproof and super useful day-to-day.
+
+What Replit built is exactly what you need
+
+The endpoint + modal contents hit the right checklist:
+
+Raw inputs (wiki/news/search) + 7-day baseline
+
+Normalized percentiles (so you see the “comparable” values)
+
+Spike detection flags
+
+Stabilization parameters (cap, alpha, recal mode)
+
+Mass vs velocity breakdown + diversity multiplier
+
+24h history chart
+
+Population stats (min/p25/p50/p75/p90/max)
+
+That’s “production-grade” explainability.
+
+Two quick things to verify (important)
+1) Make sure the breakdown reflects the same computation used in ingestion
+
+A classic trap: the admin page recomputes stuff slightly differently than ingestion (different baseline window, different percentiles, etc.) and you get mismatches.
+
+What to do
+
+Ensure the endpoint is pulling the exact stored values (rawFameIndex, percentiles used, spikingSourceCount, appliedAlpha, appliedCap, wasRateLimited) from the snapshot/scoring result whenever possible.
+
+Only compute “presentation extras” (like formatting, derived percentages) in the endpoint/UI.
+
+If it’s recomputing from scratch, it can drift.
+
+2) Clarify what “Trend Score” vs “Fame Index” means in the UI
+
+You use “Fame Index” as the final output, but Replit mentions “Trend Score” too. If those are both present:
+
+Make sure they’re clearly labeled:
+
+Fame Index (final, stabilized)
+
+Raw Score (pre-stabilization)
+
+Velocity Index (if you show it)
+
+Mass Index (if you show it)
+
+Otherwise people reading it (including your brother) can get confused.
+
+High-impact small improvements (worth doing if easy)
+A) Add “compare to previous hour” directly in the modal
+
+The chart is good, but the fastest debug answer is:
+
+Prev hour: 312,000
+
+Current raw: 420,000
+
+Stabilized final: 330,000
+
+Why: 2 sources spiking → cap 20%, alpha 0.15, etc.
+
+So add a little “last step” panel:
+
+Prev final → Raw → Final
+
+% raw change, % final change
+
+spikes, cap, alpha, recal
+
+This is the “one-glance” explanation.
+
+B) Show which sources actually triggered the spike (not just spike count)
+
+They track spikingSourceCount, but in debugging you want:
+
+Wiki spike: ✅
+
+News spike: ✅
+
+Search spike: ❌
+
+That helps you spot source-specific anomalies instantly (e.g., Serper suddenly noisy).
+
+C) Add a “copy debug summary” button
+
+Have a button that copies something like:
+
+Elon Musk #8→#2 | Prev 326k | Raw 450k (+38%) | Final 420k (+29%) | Spikes: Wiki+News (2) | Cap: 20% | Alpha: 0.15 | Recal: on
+
+This makes sharing in Slack/WhatsApp effortless.
+
+Security/ops note (don’t ignore this)
+
+They hit an auth issue in testing, and the endpoint returns 401 for non-admin — that’s good. Two extra checks:
+
+Confirm no PII or secrets are ever returned (API keys, query strings, etc.).
+
+Ensure the endpoint is protected by the same admin auth middleware as other admin routes.
+
+If you ever expose this to non-admin users later, you’ll want a much more limited view.
+
+A tiny UX improvement for your brother demo
+
+When you show your brother, pick a celebrity who moved in the last 24h and narrate:
+
+“Here’s the 24h chart — smooth, no teleports.”
+
+“Here are the raw inputs — news + search spiked.”
+
+“Here’s how the system reacted — breakout mode lifted caps + alpha.”
+
+“Final score moved fast but controlled — that’s why they rose.”
+
+This makes the engine feel intentional rather than mysterious.
+
+One last “health” feature I’d add later
+
+If you want this admin system to be self-service:
+
+Add a “source freshness” row (per celeb):
+
+Wiki updated: 12 min ago
+
+News updated: 8 min ago
+
+Search updated: 61 min ago (stale)
+
+Because a lot of “why did it not move?” questions are actually “one source was stale.”
+
+Bottom line
+
+This is a big milestone. You now have:
+
+a robust scoring engine, and
+
+a way to prove why it behaves the way it does.
+
+If you can paste a screenshot of the modal (or the JSON payload shape returned by /score-breakdown), I can suggest the best “at-a-glance” layout and the most useful fields to prioritize for quick debugging.
