@@ -12,6 +12,18 @@ import OpenAI from "openai";
 import { gamificationService } from "./services/gamification";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext } from "./providers/serper";
+import { getSourceStats } from "./scoring/sourceStats";
+import { 
+  normalizeSourceValue, 
+  isSourceSpiking, 
+  getDynamicRateLimit, 
+  getDynamicAlpha,
+  isRecalibrationModeActive,
+  SPIKE_MIN_DELTA,
+  PLATFORM_WEIGHTS,
+  MASS_ALLOCATION,
+  VELOCITY_ALLOCATION,
+} from "./scoring/normalize";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Using local PostgreSQL database instead of Supabase
@@ -3098,6 +3110,152 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error deleting celebrity:", error.message);
       res.status(500).json({ error: "Failed to delete celebrity" });
+    }
+  });
+
+  // ============ ADMIN: SCORE BREAKDOWN (Why Did This Move?) ============
+  app.get("/api/admin/celebrities/:id/score-breakdown", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Get celebrity
+      const [celebrity] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, id));
+      if (!celebrity) {
+        return res.status(404).json({ error: "Celebrity not found" });
+      }
+      
+      // Get latest snapshot for this celebrity
+      const [latestSnapshot] = await db.select()
+        .from(trendSnapshots)
+        .where(eq(trendSnapshots.personId, id))
+        .orderBy(desc(trendSnapshots.timestamp))
+        .limit(1);
+      
+      if (!latestSnapshot) {
+        return res.status(404).json({ error: "No snapshot data found for this celebrity" });
+      }
+      
+      // Get 24h historical snapshots for the chart
+      const time24hAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const historicalSnapshots = await db.select({
+        timestamp: trendSnapshots.timestamp,
+        fameIndex: trendSnapshots.fameIndex,
+        trendScore: trendSnapshots.trendScore,
+        wikiPageviews: trendSnapshots.wikiPageviews,
+        newsCount: trendSnapshots.newsCount,
+        searchVolume: trendSnapshots.searchVolume,
+      })
+        .from(trendSnapshots)
+        .where(and(
+          eq(trendSnapshots.personId, id),
+          gte(trendSnapshots.timestamp, time24hAgo)
+        ))
+        .orderBy(trendSnapshots.timestamp);
+      
+      // Get population stats for percentile comparison
+      const sourceStats = await getSourceStats();
+      
+      // Raw inputs from latest snapshot
+      const rawInputs = {
+        wikiPageviews: latestSnapshot.wikiPageviews || 0,
+        newsCount: latestSnapshot.newsCount || 0,
+        searchVolume: latestSnapshot.searchVolume || 0,
+      };
+      
+      // Calculate normalized percentiles for each source
+      const normalizedPercentiles = {
+        wiki: normalizeSourceValue(rawInputs.wikiPageviews, sourceStats.wiki),
+        news: normalizeSourceValue(rawInputs.newsCount, sourceStats.news),
+        search: normalizeSourceValue(rawInputs.searchVolume, sourceStats.search),
+      };
+      
+      // Get 7-day baselines for this celebrity for spike detection
+      const time7dAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const baselineResult = await db.execute(sql`
+        SELECT 
+          PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY wiki_pageviews) as wiki_p50,
+          PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY news_count) as news_p50,
+          PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY search_volume) as search_p50
+        FROM trend_snapshots
+        WHERE person_id = ${id}
+          AND timestamp >= ${time7dAgo}
+      `);
+      
+      const baselines = {
+        wiki: Number((baselineResult.rows[0] as any)?.wiki_p50) || rawInputs.wikiPageviews,
+        news: Number((baselineResult.rows[0] as any)?.news_p50) || rawInputs.newsCount,
+        search: Number((baselineResult.rows[0] as any)?.search_p50) || rawInputs.searchVolume,
+      };
+      
+      // Check spike status for each source
+      const spikeStatus = {
+        wiki: isSourceSpiking(rawInputs.wikiPageviews, baselines.wiki, 1.5, SPIKE_MIN_DELTA.wiki),
+        news: isSourceSpiking(rawInputs.newsCount, baselines.news, 1.5, SPIKE_MIN_DELTA.news),
+        search: isSourceSpiking(rawInputs.searchVolume, baselines.search, 1.5, SPIKE_MIN_DELTA.search),
+      };
+      
+      const spikingSourceCount = Object.values(spikeStatus).filter(Boolean).length;
+      
+      // Stabilization parameters based on spike count
+      const stabilizationParams = {
+        spikingSourceCount,
+        effectiveRateCap: getDynamicRateLimit(spikingSourceCount),
+        effectiveAlpha: getDynamicAlpha(spikingSourceCount),
+        isRecalibrationActive: isRecalibrationModeActive(),
+      };
+      
+      // Final score breakdown
+      const scoreBreakdown = {
+        massScore: latestSnapshot.massScore || 0,
+        velocityScore: latestSnapshot.velocityScore || 0,
+        velocityAdjusted: latestSnapshot.velocityAdjusted || 0,
+        diversityMultiplier: latestSnapshot.diversityMultiplier || 1.0,
+        trendScore: latestSnapshot.trendScore,
+        fameIndex: latestSnapshot.fameIndex || 0,
+        momentum: latestSnapshot.momentum,
+        drivers: latestSnapshot.drivers,
+      };
+      
+      // Weights configuration
+      const weights = {
+        mass: MASS_ALLOCATION,
+        velocity: VELOCITY_ALLOCATION,
+        velocityBreakdown: {
+          wiki: PLATFORM_WEIGHTS.velocity.wiki,
+          news: PLATFORM_WEIGHTS.velocity.news,
+          search: PLATFORM_WEIGHTS.velocity.search,
+          x: PLATFORM_WEIGHTS.velocity.x,
+        },
+      };
+      
+      // Population stats for context
+      const populationStats = {
+        wiki: sourceStats.wiki,
+        news: sourceStats.news,
+        search: sourceStats.search,
+      };
+      
+      res.json({
+        celebrity: {
+          id: celebrity.id,
+          name: celebrity.name,
+          category: celebrity.category,
+          avatar: celebrity.avatar,
+        },
+        snapshotTimestamp: latestSnapshot.timestamp,
+        rawInputs,
+        baselines,
+        normalizedPercentiles,
+        spikeStatus,
+        stabilizationParams,
+        scoreBreakdown,
+        weights,
+        populationStats,
+        historicalSnapshots,
+      });
+    } catch (error: any) {
+      console.error("Error fetching score breakdown:", error.message);
+      res.status(500).json({ error: "Failed to fetch score breakdown" });
     }
   });
 
