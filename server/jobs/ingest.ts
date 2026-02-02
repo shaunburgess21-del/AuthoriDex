@@ -318,10 +318,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
     const newTop10 = new Set(scoreResults.slice(0, 10).map(r => r.person.id));
     const newTop20 = new Set(scoreResults.slice(0, 20).map(r => r.person.id));
     
-    const enteredTop10 = [...newTop10].filter(id => !oldTop10.has(id)).length;
-    const exitedTop10 = [...oldTop10].filter(id => !newTop10.has(id)).length;
-    const enteredTop20 = [...newTop20].filter(id => !oldTop20.has(id)).length;
-    const exitedTop20 = [...oldTop20].filter(id => !newTop20.has(id)).length;
+    const enteredTop10 = Array.from(newTop10).filter(id => !oldTop10.has(id)).length;
+    const exitedTop10 = Array.from(oldTop10).filter(id => !newTop10.has(id)).length;
+    const enteredTop20 = Array.from(newTop20).filter(id => !oldTop20.has(id)).length;
+    const exitedTop20 = Array.from(oldTop20).filter(id => !newTop20.has(id)).length;
 
     // Log stabilization stats summary
     if (stabilizationStats.rawChanges.length > 0) {

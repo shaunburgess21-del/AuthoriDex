@@ -65,6 +65,10 @@ Preferred communication style: Simple, everyday language.
       - Rank churn: Entries entering/exiting top 10 and top 20
       - Rate limited %: How many exceeded the dynamic cap
       - Avg/Max raw change %: Pre-stabilization score volatility
+    - **Churn Guardrail Alerts (Feb 2026)**: Automatic anomaly detection:
+      - Triggers when Top 10 churn > 4 or Top 20 churn > 8
+      - Logs top 5 movers with old/new rank, raw vs final scores, and spike counts
+      - Provides instant debugging when unusual ranking shifts occur
   - **Nullable Change Values**: change24h/change7d show "N/A" when data is unavailable (no fake random values).
 - **Data Jobs** (Refactored Jan 2026):
   - **Single Snapshot Source**: Only `ingest.ts` writes to `trend_snapshots` table. Other jobs (`quick-score.ts`, `snapshot-scheduler.ts`) are disabled for snapshot writing to prevent duplicate data points.
