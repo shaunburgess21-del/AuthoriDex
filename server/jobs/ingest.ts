@@ -161,10 +161,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
           // Raw values for normalization
           newsCount: news?.articleCount24h || 0,
           searchVolume: serper?.searchVolume || 0,
-          // Baseline averages for spike detection (use 7-day avg or estimate from stats)
+          // Baseline medians for spike detection (p50 is more robust than mean)
           wikiBaseline: wiki?.averageDaily7d || sourceStats.wiki.p50,
-          newsBaseline: sourceStats.news.mean,  // Use population mean as baseline
-          searchBaseline: sourceStats.search.mean,
+          newsBaseline: sourceStats.news.p50,  // Use median (p50), not mean - more robust
+          searchBaseline: sourceStats.search.p50,  // Use median (p50), not mean - more robust
           // X API disabled - set to 0
           xQuoteVelocity: 0,
           xReplyVelocity: 0,

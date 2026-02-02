@@ -344,36 +344,52 @@ export const DEFAULT_SOURCE_STATS: AllSourceStats = {
 // MULTI-SOURCE BREAKOUT DETECTION
 // ============================================================================
 
+// Minimum absolute deltas to qualify as a spike (prevents noise on low-volume accounts)
+// These thresholds ensure only meaningful changes trigger breakout mode
+export const SPIKE_MIN_DELTA = {
+  wiki: 5000,    // At least 5K pageview increase
+  news: 10,      // At least 10 new articles
+  search: 500,   // At least 500 search volume increase
+};
+
 /**
  * Detect if a source is "spiking" - current value significantly above baseline.
- * A spike is defined as current > threshold × 7-day average.
+ * A spike requires BOTH:
+ * 1. current > threshold × baseline (relative change)
+ * 2. current - baseline > minDelta (absolute change to filter noise)
+ * 
+ * Using median (p50) baseline is more robust than mean against outliers.
  */
 export function isSourceSpiking(
   currentValue: number, 
-  baselineAvg: number, 
-  threshold: number = 1.5
+  baselineMedian: number, 
+  threshold: number = 1.5,
+  minDelta: number = 0
 ): boolean {
-  if (baselineAvg <= 0) return false;
-  return currentValue > baselineAvg * threshold;
+  if (baselineMedian <= 0) return false;
+  const relativeSpike = currentValue > baselineMedian * threshold;
+  const absoluteSpike = (currentValue - baselineMedian) >= minDelta;
+  return relativeSpike && absoluteSpike;
 }
 
 /**
  * Count how many sources are spiking simultaneously.
+ * Uses median (p50) baselines and minimum delta requirements for robustness.
  */
 export interface SpikeDetectionInputs {
   wikiCurrent: number;
-  wikiBaseline: number;
+  wikiBaseline: number;  // Should be p50 (median), not mean
   newsCurrent: number;
-  newsBaseline: number;
+  newsBaseline: number;  // Should be p50 (median), not mean
   searchCurrent: number;
-  searchBaseline: number;
+  searchBaseline: number;  // Should be p50 (median), not mean
 }
 
 export function countSpikingSources(inputs: SpikeDetectionInputs, threshold: number = 1.5): number {
   let count = 0;
-  if (isSourceSpiking(inputs.wikiCurrent, inputs.wikiBaseline, threshold)) count++;
-  if (isSourceSpiking(inputs.newsCurrent, inputs.newsBaseline, threshold)) count++;
-  if (isSourceSpiking(inputs.searchCurrent, inputs.searchBaseline, threshold)) count++;
+  if (isSourceSpiking(inputs.wikiCurrent, inputs.wikiBaseline, threshold, SPIKE_MIN_DELTA.wiki)) count++;
+  if (isSourceSpiking(inputs.newsCurrent, inputs.newsBaseline, threshold, SPIKE_MIN_DELTA.news)) count++;
+  if (isSourceSpiking(inputs.searchCurrent, inputs.searchBaseline, threshold, SPIKE_MIN_DELTA.search)) count++;
   return count;
 }
 
