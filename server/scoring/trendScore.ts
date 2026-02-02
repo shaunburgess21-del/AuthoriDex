@@ -39,6 +39,8 @@ export interface TrendInputs {
 export interface TrendScoreResult {
   trendScore: number;
   fameIndex: number; // 0-1,000,000 normalized score for UI (higher variance for prediction difficulty)
+  rawFameIndex: number; // Pre-stabilization fameIndex (for monitoring stats)
+  wasStabilized: boolean; // Whether rate limiting/EMA was applied
   massScore: number;
   velocityScore: number;
   velocityAdjusted: number; // After anti-spam damping
@@ -251,6 +253,8 @@ export function computeTrendScore(
   return {
     trendScore: Math.round(trendScore),
     fameIndex,
+    rawFameIndex, // Pre-stabilization value for monitoring
+    wasStabilized: stabilizationApplied,
     massScore: Math.round(massScore * 100) / 100,
     velocityScore: Math.round(velocityScore * 100) / 100,
     velocityAdjusted: Math.round(velocityAdjusted * 100) / 100,

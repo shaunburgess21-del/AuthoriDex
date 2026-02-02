@@ -43,8 +43,10 @@ export const ANTI_SPAM_BASE = 0.35;
 export const ANTI_SPAM_MASS_FACTOR = 0.65;
 
 // EMA smoothing alpha - lower = smoother curves (stock market style)
-// 0.04 provides gentle transitions for stock-market-style curves
-export const EMA_ALPHA = 0.04;
+// 0.08 provides balanced responsiveness: smooth enough to filter noise,
+// fast enough to show real breakouts within hours (not days)
+// Max hourly change with 5% cap: ~0.4% per step, ~10% daily compounded
+export const EMA_ALPHA = 0.08;
 
 // Rate limiting - maximum change per hour (±5%)
 // Prevents cliff-edge drops from data refresh timing

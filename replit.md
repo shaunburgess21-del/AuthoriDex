@@ -36,8 +36,10 @@ Preferred communication style: Simple, everyday language.
   - **Wiki-as-Primary-Mass**: Wikipedia 7-day daily average serves as the primary mass signal (50% weight). Using 7-day average instead of 24h provides a stable baseline that prevents cliff-edge drops from data timing.
   - **Score Stabilization (Feb 2026)**: Multi-layered approach to prevent wild score fluctuations:
     - **Rate Limiting**: ±5% maximum change per hourly update (`MAX_HOURLY_CHANGE_PERCENT = 0.05`). Applied before EMA smoothing to cap cliff-edge drops.
-    - **EMA Smoothing**: Alpha = 0.04 (reduced from 0.08) for gentler, stock-market-style transitions.
+    - **EMA Smoothing**: Alpha = 0.08 for balanced responsiveness (~0.4% max change per hour, ~10% daily compounded). Fast enough for breakouts, smooth enough to filter noise.
     - **7-Day Mass Baseline**: Mass score uses `wikiPageviews7dAvg` instead of volatile 24h data.
+    - **DB-Level Idempotency**: Unique index on `(person_id, date_trunc('hour', timestamp))` prevents duplicate hourly snapshots at database level.
+    - **Stabilization Stats**: Ingestion logs aggregate stats (EMA applied count, rate limited count, avg/max changes) for monitoring.
   - **Nullable Change Values**: change24h/change7d show "N/A" when data is unavailable (no fake random values).
 - **Data Jobs** (Refactored Jan 2026):
   - **Single Snapshot Source**: Only `ingest.ts` writes to `trend_snapshots` table. Other jobs (`quick-score.ts`, `snapshot-scheduler.ts`) are disabled for snapshot writing to prevent duplicate data points.

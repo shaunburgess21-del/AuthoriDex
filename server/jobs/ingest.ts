@@ -122,6 +122,17 @@ export async function runDataIngestion(): Promise<IngestResult> {
     
     console.log(`[Ingest] Found ${mostRecentMap.size} recent snapshots (EMA), ${snapshot24hMap.size} 24h snapshots, ${snapshot7dMap.size} 7d snapshots`);
 
+    // Stabilization stats tracking for monitoring
+    const stabilizationStats = {
+      totalProcessed: 0,
+      withPreviousScore: 0,  // EMA applied
+      rateLimited: 0,        // Hit ±5% cap
+      largeChanges: 0,       // >10% raw change
+      maxRawChange: 0,       // Largest raw change %
+      avgRawChange: 0,       // Average raw change %
+      rawChanges: [] as number[],
+    };
+
     const scoreResults: Array<{
       person: typeof people[0];
       score: ReturnType<typeof computeTrendScore>;
@@ -169,6 +180,18 @@ export async function runDataIngestion(): Promise<IngestResult> {
           prev7d?.trendScore,   // previousScore7d for change7d calculation
           previousFameIndex     // Most recent fameIndex for EMA smoothing
         );
+
+        // Track stabilization stats using pre-stabilization rawFameIndex
+        stabilizationStats.totalProcessed++;
+        if (scoreResult.wasStabilized && previousFameIndex !== undefined && previousFameIndex > 0) {
+          stabilizationStats.withPreviousScore++;
+          // Use rawFameIndex (pre-stabilization) to compute actual raw change
+          const rawChangePct = Math.abs((scoreResult.rawFameIndex - previousFameIndex) / previousFameIndex) * 100;
+          stabilizationStats.rawChanges.push(rawChangePct);
+          if (rawChangePct >= 5) stabilizationStats.rateLimited++; // 5% cap
+          if (rawChangePct > 10) stabilizationStats.largeChanges++;
+          if (rawChangePct > stabilizationStats.maxRawChange) stabilizationStats.maxRawChange = rawChangePct;
+        }
 
         await db.insert(trendSnapshots).values({
           personId: person.id,
@@ -263,6 +286,14 @@ export async function runDataIngestion(): Promise<IngestResult> {
     }
 
     console.log(`[Ingest] Updated ${scoreResults.length} trending people records`);
+
+    // Log stabilization stats summary
+    if (stabilizationStats.rawChanges.length > 0) {
+      stabilizationStats.avgRawChange = stabilizationStats.rawChanges.reduce((a, b) => a + b, 0) / stabilizationStats.rawChanges.length;
+      console.log(`[Stabilization Stats] EMA applied: ${stabilizationStats.withPreviousScore}/${stabilizationStats.totalProcessed}, ` +
+        `Rate limited (>5%): ${stabilizationStats.rateLimited}, Large changes (>10%): ${stabilizationStats.largeChanges}, ` +
+        `Avg raw change: ${stabilizationStats.avgRawChange.toFixed(2)}%, Max: ${stabilizationStats.maxRawChange.toFixed(1)}%`);
+    }
 
   } catch (error) {
     console.error("[Ingest] Fatal error:", error);
