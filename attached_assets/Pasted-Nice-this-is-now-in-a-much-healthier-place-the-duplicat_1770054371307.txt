@@ -1,0 +1,150 @@
+Nice — this is now in a much healthier place: the “duplicate snapshot → no prev → skip stabilization” failure mode is gone, you’ve added the DB hour-bucket uniqueness, and you’ve tuned EMA so it’s not effectively frozen.
+
+Below are (1) my review of the current engine rundown, and (2) specific improvements I’d recommend to make it more accurate, more “organic,” and easier to defend to your brother.
+
+1) Quick review of your current engine description (what looks solid)
+✅ Architecture / reliability
+
+Single writer hourly ingestion + UTC hour truncation is the right backbone.
+
+DB unique index on (person_id, date_trunc('hour', timestamp)) is the right “seatbelt.”
+
+Caching per source ~1 hour matches your ingestion cadence and reduces cost.
+
+✅ Scoring concept
+
+Separating Mass (baseline presence) vs Velocity (momentum) is exactly how you avoid “whoever is biggest always wins.”
+
+Using 7-day Wikipedia avg for mass is a good stabilizer.
+
+Having anti-spam damping so “low-mass can’t game velocity” is smart.
+
+✅ Stabilization
+
+Rate limit first, then EMA is the correct order.
+
+Moving EMA alpha from 0.04 → 0.08 makes the system feel more responsive.
+
+2) The 3 biggest opportunities to improve accuracy and “organic feel”
+A) Your “Mass” block likely has a silent weakness: follower counts are “stored in DB”
+
+This is fine only if you refresh them regularly, otherwise “Mass” becomes stale and can distort damping and rankings.
+
+Recommendation
+
+Treat follower snapshots as slow-moving mass and refresh:
+
+Top 20: daily
+
+21–100: 2–3× per week
+
+Everyone else: weekly
+
+Store “lastUpdatedAt” per platform and down-weight stale follower data (e.g., if >30 days old).
+
+This reduces the chance that someone with outdated follower counts gets unfairly penalized/boosted.
+
+(And yes, even if you drop X velocity, follower counts can remain useful as a mass proxy.)
+
+B) Normalization: make sure each source contributes comparably before weighting
+
+This is the #1 quality lever in multi-source scoring.
+
+If you combine raw counts (GDELT mention counts, Serper counts, Wikipedia pageviews), you risk:
+
+one source dominating because its numeric scale is larger,
+
+or sudden changes because one source is naturally “spikier.”
+
+Recommendation (simple, robust)
+Per person, per source, compute a normalized score like:
+
+log1p(value) to reduce extreme skew
+
+convert into a percentile / z-score relative to your top 100 over the last 7 days
+
+clamp outliers (winsorize) so a single crazy hour doesn’t dominate
+
+Then weight those normalized components.
+
+This immediately makes “organic” movements look more believable and reduces the need for heavy stabilization.
+
+C) Replace “flat caps” with “breakout mode” (multi-source corroboration)
+
+Right now you have:
+
+rate limit ±5% per hour
+
+EMA α=0.08 (so ~0.4% effective step if you’re capped)
+
+That’s okay for stability, but you’ll eventually run into:
+
+“true viral moment feels delayed”
+
+“people complain it updates too slowly”
+
+Recommendation
+Keep the ±5% cap, but allow a higher cap when multiple sources agree.
+
+Example logic:
+
+If only 1 source is driving the spike → cap stays 5%
+
+If 2 sources spike together → cap 10%
+
+If 3 sources spike together → cap 20–30%
+
+This keeps you safe from “one API glitch” while allowing real-world breakouts to rise faster (and it will feel more organic).
+
+3) Smaller but meaningful improvements
+1) Diversity multiplier: make it proportional, not stepwise
+
+Your current:
+
+3/3 = 1.0x
+
+missing 1 = 0.85x
+
+missing 2 = 0.70x
+
+This is fine, but can be slightly harsh if one source fails temporarily.
+
+Alternative
+
+Multiply by (active_sources / total_sources)^p where p is like 0.5–1.0
+This creates a smoother penalty curve.
+
+2) Anti-spam damping: consider using “Mass confidence”
+
+Current:
+
+VelocityAdjusted = Velocity × (0.35 + 0.65 × Mass Score)
+
+That’s fine, but “Mass Score” may include stale follower counts, missing platforms, etc.
+
+Upgrade
+Compute a “mass confidence” score based on:
+
+how many mass components are present,
+
+how fresh follower data is,
+
+whether wiki baseline exists
+
+Then use confidence in the damping factor so missing/stale mass doesn’t distort velocity damping too strongly.
+
+3) Backfill / warm start so the first 7 days don’t look weird
+
+You’re already showing “N/A” for 7d change (good). If you want nicer early UX:
+
+do a one-time backfill of Wikipedia 7d average and maybe GDELT baseline to seed mass.
+
+4) Add “source reliability weights”
+
+If GDELT times out more often than Wikipedia, you can auto-adjust weights slightly:
+
+down-weight sources with high error rate / stale cache
+
+restore when healthy
+
+This prevents “one flaky source” from creating noise.
