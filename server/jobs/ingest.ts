@@ -8,6 +8,7 @@ import { fetchSerperBatch } from "../providers/serper";
 // X API keys preserved for future Platform Insights feature.
 // import { fetchXBatch } from "../providers/x-api";
 import { computeTrendScore } from "../scoring/trendScore";
+import { refreshSourceStats } from "../scoring/sourceStats";
 
 export interface IngestResult {
   processed: number;
@@ -122,6 +123,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
     
     console.log(`[Ingest] Found ${mostRecentMap.size} recent snapshots (EMA), ${snapshot24hMap.size} 24h snapshots, ${snapshot7dMap.size} 7d snapshots`);
 
+    // Fetch 7-day source statistics for normalization
+    const sourceStats = await refreshSourceStats();
+
     // Stabilization stats tracking for monitoring
     const stabilizationStats = {
       totalProcessed: 0,
@@ -154,6 +158,13 @@ export async function runDataIngestion(): Promise<IngestResult> {
           wikiDelta: wiki?.delta || 0,
           newsDelta: news?.delta || 0,
           searchDelta: serper?.delta || 0,
+          // Raw values for normalization
+          newsCount: news?.articleCount24h || 0,
+          searchVolume: serper?.searchVolume || 0,
+          // Baseline averages for spike detection (use 7-day avg or estimate from stats)
+          wikiBaseline: wiki?.averageDaily7d || sourceStats.wiki.p50,
+          newsBaseline: sourceStats.news.mean,  // Use population mean as baseline
+          searchBaseline: sourceStats.search.mean,
           // X API disabled - set to 0
           xQuoteVelocity: 0,
           xReplyVelocity: 0,
@@ -178,7 +189,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
           inputs,
           prev24h?.trendScore,  // previousScore for change24h calculation
           prev7d?.trendScore,   // previousScore7d for change7d calculation
-          previousFameIndex     // Most recent fameIndex for EMA smoothing
+          previousFameIndex,    // Most recent fameIndex for EMA smoothing
+          sourceStats           // 7-day stats for normalization
         );
 
         // Track stabilization stats using pre-stabilization rawFameIndex

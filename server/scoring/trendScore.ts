@@ -5,11 +5,16 @@ import {
   calculateDiversityMultiplier,
   applyAntiSpamDamping,
   applyEmaSmoothing,
-  applyRateLimiting,
   PlatformStatuses,
   ActivePlatforms,
   MISSING_X_PENALTY,
   WIKI_DOMINANCE_CAP,
+  AllSourceStats,
+  DEFAULT_SOURCE_STATS,
+  normalizeSourceValue,
+  countSpikingSources,
+  applyDynamicRateLimiting,
+  SpikeDetectionInputs,
 } from "./normalize";
 import { 
   normalizeMass, 
@@ -27,6 +32,15 @@ export interface TrendInputs {
   searchDelta: number;
   xQuoteVelocity: number;
   xReplyVelocity: number;
+  
+  // Raw source values for normalization (current period)
+  newsCount?: number;          // Raw news article count
+  searchVolume?: number;       // Raw search volume
+  
+  // Baseline averages for spike detection
+  wikiBaseline?: number;       // 7-day avg wiki pageviews
+  newsBaseline?: number;       // 7-day avg news count
+  searchBaseline?: number;     // 7-day avg search volume
   
   totalFollowers?: number;
   
@@ -59,13 +73,18 @@ export interface TrendScoreResult {
  * - Diversity multiplier penalty for missing platforms
  * - Anti-spam damping for velocity
  * - EMA smoothing option
+ * - Per-source normalization (log1p + percentile ranking)
+ * - Multi-source breakout mode (dynamic rate limits)
  */
 export function computeTrendScore(
   inputs: TrendInputs,
   previousScore?: number,
   previousScore7d?: number,
   previousFameIndex?: number,
+  sourceStats?: AllSourceStats,
 ): TrendScoreResult {
+  // Use provided stats or defaults
+  const stats = sourceStats || DEFAULT_SOURCE_STATS;
   // =========================================================================
   // 1. CALCULATE MASS SCORE (0-100)
   // =========================================================================
@@ -109,19 +128,27 @@ export function computeTrendScore(
   }
   
   // =========================================================================
-  // 2. CALCULATE VELOCITY SCORE (0-100)
+  // 2. CALCULATE VELOCITY SCORE (0-100) with per-source normalization
   // =========================================================================
   
-  // Wiki velocity - only if wiki is active
+  // Get raw values for normalization (use pageviews/counts, not deltas)
+  const wikiRaw = inputs.wikiPageviews || 0;
+  const newsRaw = inputs.newsCount ?? 0;
+  const searchRaw = inputs.searchVolume ?? 0;
+  
+  // Normalize each source using log1p + percentile ranking (0-1 output)
+  const wikiNormalized = normalizeSourceValue(wikiRaw, stats.wiki);
+  const newsNormalized = normalizeSourceValue(newsRaw, stats.news);
+  const searchNormalized = normalizeSourceValue(searchRaw, stats.search);
+  
+  // Scale normalized values to 0-100 range for consistency with legacy code
   const wikiVelocityScore = inputs.activePlatforms.wiki 
-    ? normalizeVelocity(inputs.wikiDelta) 
+    ? wikiNormalized * 100
     : 0;
+  const newsVelocityScore = newsNormalized * 100;
+  const searchVelocityScore = searchNormalized * 100;
   
-  // News and search velocities (always available as data sources)
-  const newsVelocityScore = normalizeVelocity(inputs.newsDelta);
-  const searchVelocityScore = normalizeVelocity(inputs.searchDelta);
-  
-  // X velocity - only if X handle is present
+  // X velocity - only if X handle is present (currently disabled)
   const xTotalVelocity = inputs.xQuoteVelocity + inputs.xReplyVelocity;
   const xVelocityScore = inputs.activePlatforms.x 
     ? Math.min(100, xTotalVelocity * 2) 
@@ -134,6 +161,20 @@ export function computeTrendScore(
     (searchVelocityScore * PLATFORM_WEIGHTS.velocity.search) +
     (xVelocityScore * PLATFORM_WEIGHTS.velocity.x)
   );
+  
+  // =========================================================================
+  // 2b. SPIKE DETECTION for dynamic rate limiting
+  // =========================================================================
+  
+  const spikeInputs: SpikeDetectionInputs = {
+    wikiCurrent: wikiRaw,
+    wikiBaseline: inputs.wikiBaseline || inputs.wikiPageviews7dAvg || wikiRaw,
+    newsCurrent: newsRaw,
+    newsBaseline: inputs.newsBaseline || newsRaw,
+    searchCurrent: searchRaw,
+    searchBaseline: inputs.searchBaseline || searchRaw,
+  };
+  const spikingSourceCount = countSpikingSources(spikeInputs);
   
   // =========================================================================
   // 3. APPLY ANTI-SPAM DAMPING TO VELOCITY
@@ -177,20 +218,24 @@ export function computeTrendScore(
   const rawFameIndex = fameIndex; // Store raw value for logging
   
   // Apply stabilization in order:
-  // 1. Rate limiting (±5% cap) - prevents cliff-edge drops from data refresh timing
+  // 1. Dynamic rate limiting (cap varies by source corroboration)
+  //    - 1 source spiking: 5% cap
+  //    - 2 sources spiking: 10% cap
+  //    - 3 sources spiking: 25% cap
   // 2. EMA smoothing - creates smooth stock-market-style curves
   let stabilizationApplied = false;
   if (previousFameIndex !== undefined) {
     stabilizationApplied = true;
-    // First apply rate limiting to cap the maximum change
-    const afterRateLimiting = Math.round(applyRateLimiting(fameIndex, previousFameIndex));
+    // First apply dynamic rate limiting based on source corroboration
+    const afterRateLimiting = Math.round(applyDynamicRateLimiting(fameIndex, previousFameIndex, spikingSourceCount));
     // Then apply EMA smoothing for gradual transitions
     fameIndex = Math.round(applyEmaSmoothing(afterRateLimiting, previousFameIndex));
     
     // Log significant stabilization events (>10% change would have occurred)
     const rawChange = Math.abs((rawFameIndex - previousFameIndex) / previousFameIndex);
     if (rawChange > 0.10) {
-      console.log(`[Stabilization] Raw: ${rawFameIndex}, Prev: ${previousFameIndex}, Final: ${fameIndex} (${Math.round(rawChange * 100)}% capped)`);
+      const capUsed = spikingSourceCount >= 3 ? '25%' : spikingSourceCount >= 2 ? '10%' : '5%';
+      console.log(`[Stabilization] Raw: ${rawFameIndex}, Prev: ${previousFameIndex}, Final: ${fameIndex} (${Math.round(rawChange * 100)}% raw, ${capUsed} cap, ${spikingSourceCount} sources spiking)`);
     }
   }
   

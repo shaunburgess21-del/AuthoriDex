@@ -148,6 +148,198 @@ export function applyRateLimiting(newScore: number, previousScore: number | null
 }
 
 // ============================================================================
+// SOURCE NORMALIZATION - log1p + percentile ranking
+// ============================================================================
+
+/**
+ * Statistics for a single data source across the top 100 over 7 days.
+ * Used to compute percentile-based normalization.
+ */
+export interface SourceStats {
+  min: number;
+  max: number;
+  p25: number;
+  p50: number;
+  p75: number;
+  p90: number;
+  mean: number;
+  count: number;
+}
+
+/**
+ * All source statistics for normalization.
+ */
+export interface AllSourceStats {
+  wiki: SourceStats;
+  news: SourceStats;
+  search: SourceStats;
+}
+
+/**
+ * Apply log1p transformation to compress extreme values.
+ * log1p(x) = ln(1 + x), handles 0 gracefully.
+ */
+export function logTransform(value: number): number {
+  return Math.log1p(Math.max(0, value));
+}
+
+/**
+ * Compute percentile rank of a value given source statistics.
+ * Returns 0-1 where 1 = highest percentile.
+ * Uses linear interpolation between percentile thresholds.
+ */
+export function computePercentileRank(logValue: number, stats: SourceStats): number {
+  if (stats.count === 0 || stats.max === stats.min) return 0.5;
+  
+  const logMin = logTransform(stats.min);
+  const logMax = logTransform(stats.max);
+  const logP25 = logTransform(stats.p25);
+  const logP50 = logTransform(stats.p50);
+  const logP75 = logTransform(stats.p75);
+  const logP90 = logTransform(stats.p90);
+  
+  // Linear interpolation between known percentile thresholds
+  if (logValue <= logMin) return 0;
+  if (logValue >= logMax) return 1;
+  
+  if (logValue <= logP25) {
+    return 0 + 0.25 * ((logValue - logMin) / (logP25 - logMin || 1));
+  } else if (logValue <= logP50) {
+    return 0.25 + 0.25 * ((logValue - logP25) / (logP50 - logP25 || 1));
+  } else if (logValue <= logP75) {
+    return 0.50 + 0.25 * ((logValue - logP50) / (logP75 - logP50 || 1));
+  } else if (logValue <= logP90) {
+    return 0.75 + 0.15 * ((logValue - logP75) / (logP90 - logP75 || 1));
+  } else {
+    return 0.90 + 0.10 * ((logValue - logP90) / (logMax - logP90 || 1));
+  }
+}
+
+/**
+ * Normalize a raw source value to 0-1 using log1p + percentile ranking.
+ * This makes different sources (wiki, news, search) comparable before weighting.
+ */
+export function normalizeSourceValue(rawValue: number, stats: SourceStats): number {
+  const logValue = logTransform(rawValue);
+  return computePercentileRank(logValue, stats);
+}
+
+/**
+ * Default stats to use when no historical data available.
+ * These are reasonable approximations based on observed data ranges.
+ */
+export const DEFAULT_SOURCE_STATS: AllSourceStats = {
+  wiki: {
+    min: 1000,
+    max: 5000000,
+    p25: 10000,
+    p50: 50000,
+    p75: 200000,
+    p90: 500000,
+    mean: 150000,
+    count: 100,
+  },
+  news: {
+    min: 0,
+    max: 1000,
+    p25: 5,
+    p50: 20,
+    p75: 80,
+    p90: 200,
+    mean: 50,
+    count: 100,
+  },
+  search: {
+    min: 0,
+    max: 50000,
+    p25: 100,
+    p50: 500,
+    p75: 2000,
+    p90: 10000,
+    mean: 2000,
+    count: 100,
+  },
+};
+
+// ============================================================================
+// MULTI-SOURCE BREAKOUT DETECTION
+// ============================================================================
+
+/**
+ * Detect if a source is "spiking" - current value significantly above baseline.
+ * A spike is defined as current > threshold × 7-day average.
+ */
+export function isSourceSpiking(
+  currentValue: number, 
+  baselineAvg: number, 
+  threshold: number = 1.5
+): boolean {
+  if (baselineAvg <= 0) return false;
+  return currentValue > baselineAvg * threshold;
+}
+
+/**
+ * Count how many sources are spiking simultaneously.
+ */
+export interface SpikeDetectionInputs {
+  wikiCurrent: number;
+  wikiBaseline: number;
+  newsCurrent: number;
+  newsBaseline: number;
+  searchCurrent: number;
+  searchBaseline: number;
+}
+
+export function countSpikingSources(inputs: SpikeDetectionInputs, threshold: number = 1.5): number {
+  let count = 0;
+  if (isSourceSpiking(inputs.wikiCurrent, inputs.wikiBaseline, threshold)) count++;
+  if (isSourceSpiking(inputs.newsCurrent, inputs.newsBaseline, threshold)) count++;
+  if (isSourceSpiking(inputs.searchCurrent, inputs.searchBaseline, threshold)) count++;
+  return count;
+}
+
+/**
+ * Get dynamic rate limit based on source corroboration.
+ * More sources spiking = higher allowed change rate.
+ */
+export function getDynamicRateLimit(spikingCount: number): number {
+  switch (spikingCount) {
+    case 0:
+    case 1:
+      return MAX_HOURLY_CHANGE_PERCENT; // 5% - default
+    case 2:
+      return 0.10; // 10% - two sources corroborate
+    case 3:
+    default:
+      return 0.25; // 25% - all three sources agree
+  }
+}
+
+/**
+ * Apply rate limiting with dynamic cap based on corroboration.
+ * Limits the change per update based on how many sources are spiking together.
+ */
+export function applyDynamicRateLimiting(
+  newScore: number, 
+  previousScore: number | null,
+  spikingCount: number
+): number {
+  if (previousScore === null || previousScore === 0) return newScore;
+  
+  const dynamicCap = getDynamicRateLimit(spikingCount);
+  const maxChange = previousScore * dynamicCap;
+  const actualChange = newScore - previousScore;
+  
+  if (actualChange > maxChange) {
+    return previousScore + maxChange;
+  } else if (actualChange < -maxChange) {
+    return previousScore - maxChange;
+  }
+  
+  return newScore;
+}
+
+// ============================================================================
 // BACKWARDS COMPATIBILITY - Legacy functions
 // ============================================================================
 
