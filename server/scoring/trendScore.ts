@@ -172,15 +172,24 @@ export function computeTrendScore(
   // Fame Index (0-1,000,000) - the primary UI number
   // Multiplied by 10000 for greater variance and prediction difficulty
   let fameIndex = clamp(Math.round(finalScoreRaw * 10000), 0, 1000000);
+  const rawFameIndex = fameIndex; // Store raw value for logging
   
   // Apply stabilization in order:
   // 1. Rate limiting (±5% cap) - prevents cliff-edge drops from data refresh timing
   // 2. EMA smoothing - creates smooth stock-market-style curves
+  let stabilizationApplied = false;
   if (previousFameIndex !== undefined) {
+    stabilizationApplied = true;
     // First apply rate limiting to cap the maximum change
-    fameIndex = Math.round(applyRateLimiting(fameIndex, previousFameIndex));
+    const afterRateLimiting = Math.round(applyRateLimiting(fameIndex, previousFameIndex));
     // Then apply EMA smoothing for gradual transitions
-    fameIndex = Math.round(applyEmaSmoothing(fameIndex, previousFameIndex));
+    fameIndex = Math.round(applyEmaSmoothing(afterRateLimiting, previousFameIndex));
+    
+    // Log significant stabilization events (>10% change would have occurred)
+    const rawChange = Math.abs((rawFameIndex - previousFameIndex) / previousFameIndex);
+    if (rawChange > 0.10) {
+      console.log(`[Stabilization] Raw: ${rawFameIndex}, Prev: ${previousFameIndex}, Final: ${fameIndex} (${Math.round(rawChange * 100)}% capped)`);
+    }
   }
   
   // Legacy trend score (large number for backwards compatibility)

@@ -80,7 +80,11 @@ export async function runDataIngestion(): Promise<IngestResult> {
       gte(trendSnapshots.timestamp, time7dAgo)
     );
     
-    // Create maps for 24h and 7d lookups (closest snapshot to target time)
+    // Create maps for different lookups:
+    // - mostRecentMap: Most recent snapshot for EMA continuity (CRITICAL for stabilization)
+    // - snapshot24hMap: Snapshot from ~24h ago for change24h calculation
+    // - snapshot7dMap: Snapshot from ~7d ago for change7d calculation
+    const mostRecentMap = new Map<string, { trendScore: number; fameIndex: number | null; timestamp: Date }>();
     const snapshot24hMap = new Map<string, { trendScore: number; fameIndex: number | null }>();
     const snapshot7dMap = new Map<string, { trendScore: number; fameIndex: number | null }>();
     
@@ -88,6 +92,16 @@ export async function runDataIngestion(): Promise<IngestResult> {
       const snapTime = new Date(snap.timestamp).getTime();
       const diff24h = Math.abs(snapTime - time24hAgo.getTime());
       const diff7d = Math.abs(snapTime - time7dAgo.getTime());
+      
+      // Track most recent snapshot per person (for EMA smoothing continuity)
+      const existingRecent = mostRecentMap.get(snap.personId);
+      if (!existingRecent || new Date(snap.timestamp) > existingRecent.timestamp) {
+        mostRecentMap.set(snap.personId, { 
+          trendScore: snap.trendScore, 
+          fameIndex: snap.fameIndex,
+          timestamp: new Date(snap.timestamp)
+        });
+      }
       
       // Keep closest snapshot to 24h ago (within 2 hour window)
       if (diff24h < 2 * 60 * 60 * 1000) {
@@ -106,7 +120,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
       }
     }
     
-    console.log(`[Ingest] Found ${snapshot24hMap.size} 24h snapshots, ${snapshot7dMap.size} 7d snapshots for change calculations`);
+    console.log(`[Ingest] Found ${mostRecentMap.size} recent snapshots (EMA), ${snapshot24hMap.size} 24h snapshots, ${snapshot7dMap.size} 7d snapshots`);
 
     const scoreResults: Array<{
       person: typeof people[0];
@@ -140,15 +154,20 @@ export async function runDataIngestion(): Promise<IngestResult> {
           },
         };
 
-        // Get previous scores for change calculations
+        // Get previous scores for change calculations and EMA smoothing
+        const mostRecent = mostRecentMap.get(person.id);
         const prev24h = snapshot24hMap.get(person.id);
         const prev7d = snapshot7dMap.get(person.id);
+        
+        // CRITICAL: Use MOST RECENT fameIndex for EMA smoothing (not 24h-ago)
+        // This ensures rate limiting and EMA are always applied for smooth transitions
+        const previousFameIndex = mostRecent?.fameIndex ?? undefined;
         
         const scoreResult = computeTrendScore(
           inputs,
           prev24h?.trendScore,  // previousScore for change24h calculation
           prev7d?.trendScore,   // previousScore7d for change7d calculation
-          prev24h?.fameIndex ?? undefined  // previousFameIndex for EMA smoothing
+          previousFameIndex     // Most recent fameIndex for EMA smoothing
         );
 
         await db.insert(trendSnapshots).values({
