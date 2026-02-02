@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { 
   LayoutDashboard, 
   Users, 
@@ -2143,8 +2144,56 @@ export default function AdminDashboard() {
                 </Card>
               </div>
 
+              {/* 24h Fame Score Chart */}
+              {scoreBreakdown.historicalSnapshots && scoreBreakdown.historicalSnapshots.length > 0 && (
+                <Card className="p-4" data-testid="card-fame-chart">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4" />
+                    24h Fame Score History
+                  </h3>
+                  <div className="h-40">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={scoreBreakdown.historicalSnapshots.map(s => ({
+                        ...s,
+                        time: new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                      }))}>
+                        <XAxis 
+                          dataKey="time" 
+                          tick={{ fontSize: 10 }} 
+                          interval="preserveStartEnd"
+                          stroke="hsl(var(--muted-foreground))"
+                        />
+                        <YAxis 
+                          tick={{ fontSize: 10 }}
+                          tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}K` : val}
+                          stroke="hsl(var(--muted-foreground))"
+                          domain={['auto', 'auto']}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--popover))', 
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '6px',
+                            fontSize: '12px'
+                          }}
+                          formatter={(value: number) => [value.toLocaleString(), "Fame Index"]}
+                          labelFormatter={(label) => `Time: ${label}`}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="fameIndex" 
+                          stroke="hsl(263, 70%, 50%)" 
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+              )}
+
               {/* Raw Inputs & Spike Status */}
-              <Card className="p-4">
+              <Card className="p-4" data-testid="card-raw-inputs">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
                   <Database className="h-4 w-4" />
                   Raw Inputs & Spike Detection
@@ -2216,7 +2265,7 @@ export default function AdminDashboard() {
               </Card>
 
               {/* Stabilization Parameters */}
-              <Card className="p-4">
+              <Card className="p-4" data-testid="card-stabilization">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
                   <Settings className="h-4 w-4" />
                   Stabilization Parameters
@@ -2246,7 +2295,7 @@ export default function AdminDashboard() {
               </Card>
 
               {/* Score Calculation */}
-              <Card className="p-4">
+              <Card className="p-4" data-testid="card-score-calculation">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
                   <TrendingUp className="h-4 w-4" />
                   Score Calculation
@@ -2284,7 +2333,7 @@ export default function AdminDashboard() {
               </Card>
 
               {/* Population Stats Context */}
-              <Card className="p-4">
+              <Card className="p-4" data-testid="card-population-stats">
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
                   <Users className="h-4 w-4" />
                   Population Stats (7-day)
