@@ -38,6 +38,12 @@ import {
   Loader2,
   MessageSquare,
   Star,
+  Copy,
+  Check,
+  ArrowRight,
+  X,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -230,6 +236,22 @@ interface ScoreBreakdownData {
     newsCount: number;
     searchVolume: number;
   }>;
+  previousHourComparison: {
+    previousFameIndex: number;
+    rawFameIndexBeforeStabilization: number;
+    currentFameIndex: number;
+    rawChangePercent: number;
+    finalChangePercent: number;
+    wasRateLimited: boolean;
+    previousRank: number;
+    currentRank: number;
+  } | null;
+  sourceFreshness: {
+    wiki: { lastUpdated: string; value: number; isStale: boolean };
+    news: { lastUpdated: string; value: number; isStale: boolean };
+    search: { lastUpdated: string; value: number; isStale: boolean };
+  };
+  currentRank: number;
 }
 
 // Helper function to get auth headers
@@ -255,6 +277,57 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
     },
     credentials: "include",
   });
+}
+
+// Copy Debug Summary Button Component
+function CopyDebugSummaryButton({ scoreBreakdown }: { scoreBreakdown: ScoreBreakdownData }) {
+  const [copied, setCopied] = useState(false);
+  
+  const copyDebugSummary = () => {
+    const prev = scoreBreakdown.previousHourComparison;
+    const spikes = [
+      scoreBreakdown.spikeStatus.wiki && "Wiki",
+      scoreBreakdown.spikeStatus.news && "News",
+      scoreBreakdown.spikeStatus.search && "Search"
+    ].filter(Boolean).join("+") || "None";
+    
+    const rankChange = prev ? 
+      (prev.previousRank !== prev.currentRank ? `#${prev.previousRank}→#${prev.currentRank}` : `#${prev.currentRank}`) : 
+      `#${scoreBreakdown.currentRank}`;
+    
+    const changeStr = prev && prev.finalChangePercent !== 0 ? 
+      `(${prev.finalChangePercent >= 0 ? "+" : ""}${prev.finalChangePercent.toFixed(1)}%)` : "";
+    
+    const summary = `${scoreBreakdown.celebrity.name} ${rankChange} | Fame: ${scoreBreakdown.scoreBreakdown.fameIndex.toLocaleString()} ${changeStr} | Spikes: ${spikes} (${scoreBreakdown.stabilizationParams.spikingSourceCount}) | Cap: ${(scoreBreakdown.stabilizationParams.effectiveRateCap * 100).toFixed(0)}% | Alpha: ${scoreBreakdown.stabilizationParams.effectiveAlpha.toFixed(2)}${scoreBreakdown.stabilizationParams.isRecalibrationActive ? " | RECAL" : ""}`;
+    
+    navigator.clipboard.writeText(summary).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      // Fallback: create temporary textarea for copying
+      const textarea = document.createElement('textarea');
+      textarea.value = summary;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={copyDebugSummary}
+      className="h-7 text-xs gap-1"
+      data-testid="button-copy-debug"
+    >
+      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      {copied ? "Copied!" : "Copy Summary"}
+    </Button>
+  );
 }
 
 export default function AdminDashboard() {
@@ -2118,11 +2191,11 @@ export default function AdminDashboard() {
                   <p className="text-2xl font-bold text-violet-500">
                     {scoreBreakdown.scoreBreakdown.fameIndex.toLocaleString()}
                   </p>
-                  <p className="text-xs text-muted-foreground">Fame Index</p>
+                  <p className="text-xs text-muted-foreground">Fame Index (Final)</p>
                 </Card>
                 <Card className="p-4 text-center">
                   <p className="text-2xl font-bold">{scoreBreakdown.scoreBreakdown.trendScore.toFixed(2)}</p>
-                  <p className="text-xs text-muted-foreground">Trend Score</p>
+                  <p className="text-xs text-muted-foreground">Raw Score (0-1)</p>
                 </Card>
                 <Card className="p-4 text-center">
                   <Badge className={cn(
@@ -2143,6 +2216,66 @@ export default function AdminDashboard() {
                   <p className="text-xs text-muted-foreground">Last Update</p>
                 </Card>
               </div>
+
+              {/* Previous Hour Comparison - Quick Debug Panel */}
+              {scoreBreakdown.previousHourComparison && (
+                <Card className="p-4 border-violet-500/30 bg-violet-500/5" data-testid="card-prev-hour">
+                  <h3 className="font-semibold mb-3 flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      Previous Hour Comparison
+                    </span>
+                    <CopyDebugSummaryButton scoreBreakdown={scoreBreakdown} />
+                  </h3>
+                  <div className="grid grid-cols-3 gap-4 items-center text-center">
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-lg font-bold">{scoreBreakdown.previousHourComparison.previousFameIndex.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">Previous</p>
+                      {scoreBreakdown.previousHourComparison.previousRank !== scoreBreakdown.previousHourComparison.currentRank && (
+                        <Badge variant="outline" className="mt-1 text-xs">
+                          #{scoreBreakdown.previousHourComparison.previousRank}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                      <Badge className={cn(
+                        "text-xs",
+                        scoreBreakdown.previousHourComparison.finalChangePercent > 0 ? "bg-green-500" : 
+                        scoreBreakdown.previousHourComparison.finalChangePercent < 0 ? "bg-red-500" : "bg-gray-500"
+                      )}>
+                        {scoreBreakdown.previousHourComparison.finalChangePercent >= 0 ? "+" : ""}
+                        {scoreBreakdown.previousHourComparison.finalChangePercent.toFixed(1)}%
+                      </Badge>
+                    </div>
+                    <div className="p-3 bg-violet-500/20 rounded-lg border border-violet-500/30">
+                      <p className="text-lg font-bold text-violet-400">{scoreBreakdown.previousHourComparison.currentFameIndex.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">Current</p>
+                      <Badge variant="outline" className="mt-1 text-xs">
+                        #{scoreBreakdown.currentRank}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 justify-center text-xs">
+                    <Badge variant="outline">
+                      Spikes: {[
+                        scoreBreakdown.spikeStatus.wiki && "Wiki",
+                        scoreBreakdown.spikeStatus.news && "News",
+                        scoreBreakdown.spikeStatus.search && "Search"
+                      ].filter(Boolean).join("+") || "None"} ({scoreBreakdown.stabilizationParams.spikingSourceCount})
+                    </Badge>
+                    <Badge variant="outline">
+                      Cap: {(scoreBreakdown.stabilizationParams.effectiveRateCap * 100).toFixed(0)}%
+                    </Badge>
+                    <Badge variant="outline">
+                      Alpha: {scoreBreakdown.stabilizationParams.effectiveAlpha.toFixed(2)}
+                    </Badge>
+                    {scoreBreakdown.stabilizationParams.isRecalibrationActive && (
+                      <Badge className="bg-amber-500">RECAL</Badge>
+                    )}
+                  </div>
+                </Card>
+              )}
 
               {/* 24h Fame Score Chart */}
               {scoreBreakdown.historicalSnapshots && scoreBreakdown.historicalSnapshots.length > 0 && (
@@ -2176,7 +2309,7 @@ export default function AdminDashboard() {
                             borderRadius: '6px',
                             fontSize: '12px'
                           }}
-                          formatter={(value: number) => [value.toLocaleString(), "Fame Index"]}
+                          formatter={(value: number) => [value.toLocaleString(), "Fame Index (Final)"]}
                           labelFormatter={(label) => `Time: ${label}`}
                         />
                         <Line 
@@ -2220,9 +2353,9 @@ export default function AdminDashboard() {
                         </td>
                         <td className="text-center py-2 px-2">
                           {scoreBreakdown.spikeStatus.wiki ? (
-                            <Badge className="bg-amber-500">SPIKE</Badge>
+                            <CheckCircle className="h-5 w-5 text-green-500 mx-auto" />
                           ) : (
-                            <span className="text-muted-foreground">-</span>
+                            <XCircle className="h-5 w-5 text-muted-foreground mx-auto" />
                           )}
                         </td>
                         <td className="text-right py-2 px-2 text-muted-foreground">{(scoreBreakdown.weights.velocityBreakdown.wiki * 100).toFixed(0)}%</td>
@@ -2236,9 +2369,9 @@ export default function AdminDashboard() {
                         </td>
                         <td className="text-center py-2 px-2">
                           {scoreBreakdown.spikeStatus.news ? (
-                            <Badge className="bg-amber-500">SPIKE</Badge>
+                            <CheckCircle className="h-5 w-5 text-green-500 mx-auto" />
                           ) : (
-                            <span className="text-muted-foreground">-</span>
+                            <XCircle className="h-5 w-5 text-muted-foreground mx-auto" />
                           )}
                         </td>
                         <td className="text-right py-2 px-2 text-muted-foreground">{(scoreBreakdown.weights.velocityBreakdown.news * 100).toFixed(0)}%</td>
@@ -2252,15 +2385,31 @@ export default function AdminDashboard() {
                         </td>
                         <td className="text-center py-2 px-2">
                           {scoreBreakdown.spikeStatus.search ? (
-                            <Badge className="bg-amber-500">SPIKE</Badge>
+                            <CheckCircle className="h-5 w-5 text-green-500 mx-auto" />
                           ) : (
-                            <span className="text-muted-foreground">-</span>
+                            <XCircle className="h-5 w-5 text-muted-foreground mx-auto" />
                           )}
                         </td>
                         <td className="text-right py-2 px-2 text-muted-foreground">{(scoreBreakdown.weights.velocityBreakdown.search * 100).toFixed(0)}%</td>
                       </tr>
                     </tbody>
                   </table>
+                </div>
+                {/* Source Freshness Row */}
+                <div className="mt-3 pt-3 border-t flex flex-wrap gap-4 text-xs text-muted-foreground">
+                  <span className="font-medium">Source Freshness:</span>
+                  <span>
+                    Wiki: {new Date(scoreBreakdown.sourceFreshness.wiki.lastUpdated).toLocaleTimeString()}
+                    {scoreBreakdown.sourceFreshness.wiki.isStale && <Badge variant="destructive" className="ml-1 text-[10px]">STALE</Badge>}
+                  </span>
+                  <span>
+                    News: {new Date(scoreBreakdown.sourceFreshness.news.lastUpdated).toLocaleTimeString()}
+                    {scoreBreakdown.sourceFreshness.news.isStale && <Badge variant="destructive" className="ml-1 text-[10px]">STALE</Badge>}
+                  </span>
+                  <span>
+                    Search: {new Date(scoreBreakdown.sourceFreshness.search.lastUpdated).toLocaleTimeString()}
+                    {scoreBreakdown.sourceFreshness.search.isStale && <Badge variant="destructive" className="ml-1 text-[10px]">STALE</Badge>}
+                  </span>
                 </div>
               </Card>
 

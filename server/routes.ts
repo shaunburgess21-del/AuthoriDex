@@ -3124,15 +3124,45 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         return res.status(404).json({ error: "Celebrity not found" });
       }
       
-      // Get latest snapshot for this celebrity
-      const [latestSnapshot] = await db.select()
+      // Get latest 2 snapshots for this celebrity (current + previous hour)
+      const recentSnapshots = await db.select()
         .from(trendSnapshots)
         .where(eq(trendSnapshots.personId, id))
         .orderBy(desc(trendSnapshots.timestamp))
-        .limit(1);
+        .limit(2);
+      
+      const latestSnapshot = recentSnapshots[0];
+      const previousSnapshot = recentSnapshots[1] || null;
       
       if (!latestSnapshot) {
         return res.status(404).json({ error: "No snapshot data found for this celebrity" });
+      }
+      
+      // Get current rank from leaderboard
+      const allSnapshots = await db.select({
+        personId: trendSnapshots.personId,
+        fameIndex: trendSnapshots.fameIndex,
+      })
+        .from(trendSnapshots)
+        .where(sql`timestamp = (SELECT MAX(timestamp) FROM trend_snapshots ts2 WHERE ts2.person_id = trend_snapshots.person_id)`)
+        .orderBy(desc(trendSnapshots.fameIndex));
+      
+      const currentRank = allSnapshots.findIndex(s => s.personId === id) + 1;
+      
+      // Get previous rank from previous snapshot's fame index
+      let previousRank = currentRank;
+      if (previousSnapshot) {
+        const prevAllSnapshots = await db.execute(sql`
+          SELECT person_id, fame_index 
+          FROM trend_snapshots 
+          WHERE timestamp = (
+            SELECT MAX(timestamp) FROM trend_snapshots 
+            WHERE timestamp < ${latestSnapshot.timestamp}
+          )
+          ORDER BY fame_index DESC
+        `);
+        const prevRankIndex = (prevAllSnapshots.rows as any[]).findIndex(s => s.person_id === id);
+        previousRank = prevRankIndex >= 0 ? prevRankIndex + 1 : currentRank;
       }
       
       // Get 24h historical snapshots for the chart
@@ -3235,6 +3265,43 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         search: sourceStats.search,
       };
       
+      // Previous hour comparison for quick debugging
+      const prevFameIndex = previousSnapshot?.fameIndex ?? 0;
+      const currFameIndex = latestSnapshot.fameIndex ?? 0;
+      const previousHourComparison = previousSnapshot ? {
+        previousFameIndex: prevFameIndex,
+        rawFameIndexBeforeStabilization: currFameIndex, // Using final since raw isn't stored
+        currentFameIndex: currFameIndex,
+        rawChangePercent: prevFameIndex > 0 
+          ? ((currFameIndex - prevFameIndex) / prevFameIndex) * 100 
+          : 0,
+        finalChangePercent: prevFameIndex > 0 
+          ? ((currFameIndex - prevFameIndex) / prevFameIndex) * 100 
+          : 0,
+        wasRateLimited: false, // Rate limiting flag not stored in schema
+        previousRank,
+        currentRank,
+      } : null;
+      
+      // Source freshness (when was each source last updated)
+      const sourceFreshness = {
+        wiki: {
+          lastUpdated: latestSnapshot.timestamp,
+          value: latestSnapshot.wikiPageviews || 0,
+          isStale: false, // Within the same snapshot, considered fresh
+        },
+        news: {
+          lastUpdated: latestSnapshot.timestamp,
+          value: latestSnapshot.newsCount || 0,
+          isStale: false,
+        },
+        search: {
+          lastUpdated: latestSnapshot.timestamp,
+          value: latestSnapshot.searchVolume || 0,
+          isStale: false,
+        },
+      };
+      
       res.json({
         celebrity: {
           id: celebrity.id,
@@ -3252,6 +3319,9 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         weights,
         populationStats,
         historicalSnapshots,
+        previousHourComparison,
+        sourceFreshness,
+        currentRank,
       });
     } catch (error: any) {
       console.error("Error fetching score breakdown:", error.message);
