@@ -1,0 +1,155 @@
+Yep — this diagnosis from Replit makes total sense, and it’s a **classic** failure mode for multi-source scoring:
+
+* If **GDELT + Serper suddenly return 0 for everyone**, your model effectively becomes “Wikipedia-only,” and anyone whose rank depended on news/search momentum (like Nicki) can nosedive.
+* The fact that **many people jumped all over the place** + the churn guardrail triggered is exactly what you’d expect when two major velocity channels go dark.
+
+What Replit implemented is the *right class* of fix. I’ll give you: (1) why the fix is good, (2) the two main risks to watch, and (3) a few improvements that make this rock-solid for launch.
+
+---
+
+## 1) Are Replit’s 3 fixes the right approach?
+
+### ✅ A) Retry + timeout + optional SSL relax for GDELT
+
+Good. Transient TLS/cert/timeouts are common with GDELT endpoints or network paths.
+
+* **Retries + backoff + timeout** prevents a slow request from ruining an ingestion run.
+* **Env-flag SSL bypass** is the correct way to keep it from being “always on.”
+
+**One caution:** SSL bypass should be an “emergency lever” only. It’s better to use it temporarily while you troubleshoot root cause.
+
+### ✅ B) Graceful degradation (carry forward last known values)
+
+This is the correct antidote to “everyone goes to zero.”
+If a source fails, you don’t want to write zeros and accidentally rewrite reality.
+
+The key part is what they added:
+
+> treat “failure OR suspiciously low values (90%+ drop)” as degraded and fill-forward.
+
+That’s exactly the right mental model: **0 can be a data bug, not reality.**
+
+### ✅ C) Recovery mode (temporarily loosen caps when data returns)
+
+Also correct — without it you get “source comes back but the system can’t recover fast enough” (because your stabilizers slow everything down).
+
+---
+
+## 2) The two big risks in this design (and how to handle them)
+
+### Risk #1: Fill-forward can mask real drops
+
+If someone genuinely stops trending, but the source is stale and you keep carrying forward, you can artificially “prop them up” for a while.
+
+**Mitigation (simple + important):**
+Add **staleness decay**:
+
+* Hour 0–2 stale: 100% fill-forward
+* Hour 3–6 stale: gradually reduce that source’s contribution (e.g., 80% → 50%)
+* > 6–12h stale: either down-weight heavily or exclude that source for scoring, and renormalize weights
+
+This way you don’t “freeze the world,” but you also don’t tank rankings instantly.
+
+### Risk #2: Your “90% drop = suspicious” rule can false-trigger
+
+A 90% drop might be real for some people or some sources (especially search/news).
+If that rule triggers too often, you’ll overuse fallback, and your engine becomes “sticky.”
+
+**Mitigation: make the anomaly rule smarter:**
+Instead of only “90% drop”, require **at least 2 conditions**:
+
+* `drop > 90%` **AND**
+* source-wide: “many celebs collapsed” (e.g., >70% of the leaderboard saw near-zero) **OR**
+* request-level: the API returned an error/timeout/empty payload pattern **OR**
+* absolute floor: values below a minimum plausible threshold for that celeb (based on their baseline p50/p75)
+
+This will correctly classify the “global zeros” event as a data outage while still allowing genuine individual drops.
+
+---
+
+## 3) The 3 improvements that will make this bulletproof
+
+### A) Add a **Source Health** state machine (per source)
+
+Right now you have: fresh vs fallback and “recovery mode.”
+Make it explicit:
+
+* **HEALTHY**
+* **DEGRADED** (errors/spiky zeros)
+* **OUTAGE** (too many consecutive failures or global-zero detection)
+* **RECOVERY** (first N runs after outage)
+
+Log it like:
+`[SOURCE:NEWS] state=OUTAGE reason=global_zero`
+This makes debugging instant.
+
+### B) Show a UI banner when degraded data is in play
+
+This matters for trust.
+
+If you are fill-forwarding news/search, show:
+
+* “⚠️ Some data sources are temporarily delayed. Rankings may be less responsive.”
+
+And in your new “Why did this move?” panel, show:
+
+* which sources were **fresh vs fallback**
+* how stale they are (minutes since last success)
+
+### C) Don’t just “carry forward raw values” — carry forward **normalized contribution**
+
+Because you now normalize by 7-day percentiles, it’s sometimes cleaner to fill-forward the **source contribution** (or at least store the normalized percentile used).
+
+Why?
+
+* If population stats drift while you’re stale, refitting raw → percentile can create unexpected movement.
+
+Not mandatory today, but it’s the next level of stability.
+
+---
+
+## 4) What likely caused Serper to go to 0 as well?
+
+Replit focused on GDELT cert/timeouts (credible), but both being 0 suggests a broader issue too:
+
+Common causes:
+
+* Serper quota/rate limiting leading to empty/blocked responses
+* request param bug (changed query format)
+* caching returning empty payload cached as “valid”
+* a shared upstream network issue
+
+**Recommendation:** treat “global zeros” as an outage condition regardless of whether the HTTP call “succeeded.”
+
+---
+
+## 5) Quick validation checklist for your team (so you know it’s fixed)
+
+Have Replit run a controlled test:
+
+1. Simulate GDELT failure for 3 hours → ensure:
+
+   * news values are fill-forwarded
+   * ranks do **not** churn wildly
+   * UI shows “degraded”
+2. Restore GDELT → ensure:
+
+   * RECOVERY mode triggers for N runs
+   * cap/alpha boosts allow faster re-convergence
+3. Confirm that in recovery you **don’t overreact**:
+
+   * breakout mode should still require corroboration
+   * recovery cap boost should be bounded (you don’t want “free teleporting”)
+
+---
+
+## My bottom-line take
+
+Replit implemented the right fixes, and this is exactly the sort of issue you *want* to discover now rather than after launch.
+
+If you want one extra “belt-and-suspenders” rule for production:
+
+**If 2+ major velocity sources are OUTAGE at the same time, temporarily freeze the leaderboard ranking updates** (still store snapshots), or show “data delayed” and only update every few hours.
+That prevents “the app looks broken today” moments.
+
+If you can paste one ingestion summary after the fix (showing % fallback used, source health state, spike distribution, rank churn), I’ll tell you if the thresholds look right or if you’re over/under-triggering fallback.
