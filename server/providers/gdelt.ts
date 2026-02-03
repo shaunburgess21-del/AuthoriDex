@@ -21,10 +21,17 @@ if (GDELT_RELAX_SSL) {
 
 // Retry configuration
 const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 1000; // Start with 1 second, exponential backoff
+const RETRY_DELAY_MS = 2000; // Start with 2 seconds, exponential backoff
+const REQUEST_DELAY_MS = 500; // Delay between individual requests
+const JITTER_MAX_MS = 300; // Random jitter to avoid thundering herd
 
 async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Add jitter to delays to avoid predictable request patterns
+function getJitteredDelay(baseMs: number): number {
+  return baseMs + Math.floor(Math.random() * JITTER_MAX_MS);
 }
 
 async function fetchWithRetry(url: string, retries = MAX_RETRIES): Promise<Response | null> {
@@ -46,10 +53,11 @@ async function fetchWithRetry(url: string, retries = MAX_RETRIES): Promise<Respo
         return response;
       }
       
-      // If rate limited or server error, retry
+      // If rate limited or server error, retry with jittered exponential backoff
       if (response.status >= 500 || response.status === 429) {
-        console.log(`[GDELT] Retry ${attempt}/${retries} for ${url.substring(0, 80)}... (status: ${response.status})`);
-        await sleep(RETRY_DELAY_MS * Math.pow(2, attempt - 1)); // Exponential backoff
+        const backoffMs = getJitteredDelay(RETRY_DELAY_MS * Math.pow(2, attempt - 1));
+        console.log(`[GDELT] Retry ${attempt}/${retries} for ${url.substring(0, 80)}... (status: ${response.status}, waiting ${backoffMs}ms)`);
+        await sleep(backoffMs);
         continue;
       }
       
@@ -61,8 +69,9 @@ async function fetchWithRetry(url: string, retries = MAX_RETRIES): Promise<Respo
                        'network';
       
       if (!isLastAttempt) {
-        console.log(`[GDELT] Retry ${attempt}/${retries} after ${errorType} error`);
-        await sleep(RETRY_DELAY_MS * Math.pow(2, attempt - 1));
+        const backoffMs = getJitteredDelay(RETRY_DELAY_MS * Math.pow(2, attempt - 1));
+        console.log(`[GDELT] Retry ${attempt}/${retries} after ${errorType} error (waiting ${backoffMs}ms)`);
+        await sleep(backoffMs);
       } else {
         console.error(`[GDELT] All ${retries} attempts failed (${errorType})`);
       }
@@ -216,7 +225,8 @@ export async function fetchBatchGdeltNews(
   
   for (const person of people) {
     try {
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Use jittered delay between requests to avoid rate limiting
+      await sleep(getJitteredDelay(REQUEST_DELAY_MS));
       
       const data = await fetchGdeltNews(person.name, person.id);
       if (data) {
