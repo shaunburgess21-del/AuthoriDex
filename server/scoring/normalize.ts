@@ -81,7 +81,7 @@ export function isRecalibrationModeActive(): boolean {
  */
 export function getRecalibrationRateBoost(normalCap: number): number {
   if (isRecalibrationModeActive()) {
-    return Math.min(normalCap * 2, 0.25); // Max 25% even in recalibration
+    return Math.min(normalCap * 2, 0.50); // Max 50% in recalibration for multi-source corroboration
   }
   return normalCap;
 }
@@ -455,13 +455,13 @@ export function getDynamicRateLimit(spikingCount: number): number {
   let baseCap: number;
   switch (spikingCount) {
     case 3:
-      baseCap = 0.25; // 25% - all three sources agree
+      baseCap = 0.35; // 35% - all three sources agree (70% in recal)
       break;
     case 2:
-      baseCap = 0.10; // 10% - two sources corroborate
+      baseCap = 0.18; // 18% - two sources corroborate (36% in recal)
       break;
     default:
-      baseCap = MAX_HOURLY_CHANGE_PERCENT; // 5% - default
+      baseCap = MAX_HOURLY_CHANGE_PERCENT; // 5% - default (10% in recal)
   }
   return getRecalibrationRateBoost(baseCap);
 }

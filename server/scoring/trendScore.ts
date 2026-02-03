@@ -260,8 +260,8 @@ export function computeTrendScore(
   // Apply stabilization in order:
   // 1. Dynamic rate limiting (cap varies by source corroboration + recalibration + recovery)
   //    - 0-1 sources spiking: 5% cap (10% in recalibration)
-  //    - 2 sources spiking: 10% cap (20% in recalibration)
-  //    - 3 sources spiking: 25% cap
+  //    - 2 sources spiking: 18% cap (36% in recalibration) - faster rise for corroborated trends
+  //    - 3 sources spiking: 35% cap (50% in recalibration) - explosive viral events
   //    - Recovery mode: boost cap when API data returns after failure
   // 2. Dynamic EMA smoothing - alpha varies by spike count + recalibration
   //    - 0-1 sources: 0.08 (0.10 in recalibration)
