@@ -32,7 +32,9 @@ Preferred communication style: Simple, everyday language.
     - **Score Stabilization**: A multi-layered approach prevents wild score fluctuations using dynamic rate limiting based on source corroboration, robust spike detection, dynamic EMA alpha, and a recalibration mode.
     - **Graceful Degradation**: Handles external API failures by carrying forward last known values and detecting "suspicious drops."
     - **Data Recovery Mode**: Boosts rate caps temporarily when fresh API data returns after fallback.
-    - **Source Health State Machine**: Explicitly tracks the health of each data source (HEALTHY, DEGRADED, OUTAGE, RECOVERY).
+    - **Source Health State Machine**: Explicitly tracks the health of each data source (HEALTHY, DEGRADED, OUTAGE, RECOVERY). Transitions: 2+ failures → DEGRADED, 5+ failures or global-zero → OUTAGE, 3 successful runs → back to HEALTHY.
+    - **Global-Zero Detection**: Requires >50% of celebrities with near-zero values before triggering OUTAGE state (prevents false-positives from individual genuine drops).
+    - **Staleness Decay**: Fill-forwarded values gradually reduce over time: 100% (0-2h), 90→70% (2-4h), 70→50% (4-6h), 50→20% (6-12h), 20% floor (>12h).
 - **Data Jobs**: Ingestion runs hourly, with EMA smoothing applied to `fameIndex` for smooth trend curves.
 - **Trend Context Service**: Provides "Why Trending" explanations for top 10 celebrities, categorizing trends, detecting primary/secondary drivers, and tracking data freshness.
 
