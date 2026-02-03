@@ -8,7 +8,6 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { VoteDeckView } from "@/components/home/VoteDeckView";
 import { PredictDeckView } from "@/components/home/PredictDeckView";
-import { SourceHealthBanner } from "@/components/SourceHealthBanner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -725,7 +724,6 @@ export default function HomePage() {
         </div>
       </div>
       <div className="container mx-auto px-4 py-8 max-w-7xl" data-content-section>
-        <SourceHealthBanner />
         <AnimatePresence mode="wait">
           {activeView === "leaderboard" && (
             <motion.div
