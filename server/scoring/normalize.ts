@@ -573,49 +573,48 @@ export function calculateDynamicVelocityWeights(
 }
 
 // ============================================================================
-// VELOCITY-AWARE MASS DECAY
+// VELOCITY TAPER
 // ============================================================================
-// When velocity signals are near zero (no recent news/search activity),
-// mass should decay faster so celebrities drop quicker after their news cycle ends.
+// When velocity signals are low (no recent news/search activity),
+// taper the velocity contribution so scores "cool down" naturally.
+// IMPORTANT: Mass stays stable as baseline fame. Velocity is what collapses.
 
 /**
- * Calculate a mass decay multiplier based on velocity signals.
- * When velocity is low (no recent news/search), mass decays faster.
+ * Calculate velocity taper multiplier.
+ * When news/search signals are low, taper velocity contribution.
+ * This lets celebrities "cool down" naturally after their news cycle ends.
  * 
- * @param velocityScore - The current velocity score (0-100)
- * @param newsCount - Raw news count for the period
- * @param searchVolume - Raw search volume for the period
- * @returns Decay multiplier (0.5 to 1.0) - lower means more decay
+ * CRITICAL: Apply to VELOCITY, not MASS. Mass = stable baseline fame.
+ * 
+ * @param newsCount - Raw news count for the period (typically 0-10)
+ * @param searchVolume - Composite search activity score (0-100 scale from Serper)
+ * @returns Taper multiplier (0.65 to 1.0) - lower means more velocity reduction
  */
-export function getVelocityAwareMassDecay(
-  velocityScore: number,
+export function getVelocityTaperMultiplier(
   newsCount: number,
   searchVolume: number
 ): number {
   // Thresholds for "low activity"
+  // NOTE: searchVolume is now 0-100 composite score, not millions of results
   const NEWS_LOW_THRESHOLD = 5;       // Below this = very low news activity
-  const SEARCH_LOW_THRESHOLD = 100;   // Below this = very low search activity
-  const VELOCITY_LOW_THRESHOLD = 15;  // Below this = low overall velocity
+  const SEARCH_LOW_THRESHOLD = 30;    // Below this = very low search activity (adjusted for 0-100 scale)
   
   // Count how many signals are "low"
   let lowSignalCount = 0;
   if (newsCount < NEWS_LOW_THRESHOLD) lowSignalCount++;
   if (searchVolume < SEARCH_LOW_THRESHOLD) lowSignalCount++;
-  if (velocityScore < VELOCITY_LOW_THRESHOLD) lowSignalCount++;
   
-  // Apply graduated decay based on number of low signals
-  // 0 low signals = no decay (1.0)
-  // 1 low signal = slight decay (0.92)
-  // 2 low signals = moderate decay (0.80)
-  // 3 low signals = strong decay (0.65)
-  const decayMultipliers: Record<number, number> = {
+  // Apply graduated taper based on number of low signals
+  // 0 low signals = full velocity (1.0)
+  // 1 low signal = slight taper (0.85)
+  // 2 low signals = strong taper (0.65)
+  const taperMultipliers: Record<number, number> = {
     0: 1.00,
-    1: 0.92,
-    2: 0.80,
-    3: 0.65,
+    1: 0.85,
+    2: 0.65,
   };
   
-  return decayMultipliers[lowSignalCount] ?? 0.65;
+  return taperMultipliers[lowSignalCount] ?? 0.65;
 }
 
 // ============================================================================

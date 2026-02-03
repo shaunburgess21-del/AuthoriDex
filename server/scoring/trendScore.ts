@@ -19,7 +19,7 @@ import {
   getDynamicRateLimit,
   SpikeDetectionInputs,
   getRecoveryRateBoost,
-  getVelocityAwareMassDecay,
+  getVelocityTaperMultiplier,
   getRenormalizedVelocityWeights,
   SourceHealthStates,
 } from "./normalize";
@@ -213,19 +213,20 @@ export function computeTrendScore(
   const velocityAdjusted = applyAntiSpamDamping(velocityScore, massScore);
   
   // =========================================================================
-  // 3b. APPLY VELOCITY-AWARE MASS DECAY
+  // 3b. APPLY VELOCITY TAPER
   // =========================================================================
-  // When velocity signals are low (no recent news/search), decay mass faster
-  // This ensures celebrities drop quicker after their news cycle ends
+  // When news/search signals are low, taper velocity contribution.
+  // CRITICAL: Mass stays stable (baseline fame). Velocity is what collapses.
+  // This lets celebrities "cool down" naturally after their news cycle ends.
   
-  const massDecayMultiplier = getVelocityAwareMassDecay(velocityScore, newsRaw, searchRaw);
-  const massScoreDecayed = massScore * massDecayMultiplier;
+  const velocityTaperMultiplier = getVelocityTaperMultiplier(newsRaw, searchRaw);
+  const velocityTapered = velocityAdjusted * velocityTaperMultiplier;
   
   // =========================================================================
   // 4. CALCULATE BASE SCORE
   // =========================================================================
   
-  const baseScore = (massScoreDecayed * MASS_ALLOCATION) + (velocityAdjusted * VELOCITY_ALLOCATION);
+  const baseScore = (massScore * MASS_ALLOCATION) + (velocityTapered * VELOCITY_ALLOCATION);
   
   // =========================================================================
   // 5. CALCULATE DIVERSITY MULTIPLIER (silent penalty)
