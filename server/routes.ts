@@ -24,6 +24,11 @@ import {
   MASS_ALLOCATION,
   VELOCITY_ALLOCATION,
 } from "./scoring/normalize";
+import {
+  getCurrentHealthSnapshot,
+  hasAnyDegradedSource,
+  getHealthSummary,
+} from "./scoring/sourceHealth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Using local PostgreSQL database instead of Supabase
@@ -1181,6 +1186,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("[sentiment-stats GET] Error:", error);
       res.status(500).json({ error: error.message || "Failed to get sentiment stats" });
+    }
+  });
+
+  // GET /api/source-health - Get current data source health status for UI banner
+  app.get("/api/source-health", async (req, res) => {
+    try {
+      const health = getCurrentHealthSnapshot();
+      const hasDegradedSources = hasAnyDegradedSource();
+      
+      // Calculate staleness for each source
+      const now = new Date();
+      const getStaleMinutes = (lastHealthy: Date | null): number | null => {
+        if (!lastHealthy) return null;
+        return Math.round((now.getTime() - lastHealthy.getTime()) / (1000 * 60));
+      };
+      
+      res.json({
+        hasDegradedSources,
+        summary: getHealthSummary(),
+        sources: {
+          news: {
+            state: health.news.state,
+            reason: health.news.reason,
+            staleMinutes: getStaleMinutes(health.news.lastHealthyTimestamp),
+            isHealthy: health.news.state === "HEALTHY",
+          },
+          search: {
+            state: health.search.state,
+            reason: health.search.reason,
+            staleMinutes: getStaleMinutes(health.search.lastHealthyTimestamp),
+            isHealthy: health.search.state === "HEALTHY",
+          },
+          wiki: {
+            state: health.wiki.state,
+            reason: health.wiki.reason,
+            staleMinutes: getStaleMinutes(health.wiki.lastHealthyTimestamp),
+            isHealthy: health.wiki.state === "HEALTHY",
+          },
+        },
+      });
+    } catch (error: any) {
+      console.error("[source-health GET] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to get source health" });
     }
   });
 

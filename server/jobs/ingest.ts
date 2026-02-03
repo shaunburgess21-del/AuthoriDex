@@ -9,6 +9,14 @@ import { fetchSerperBatch } from "../providers/serper";
 // import { fetchXBatch } from "../providers/x-api";
 import { computeTrendScore } from "../scoring/trendScore";
 import { refreshSourceStats } from "../scoring/sourceStats";
+import {
+  calculateGlobalHealthMetrics,
+  updateSourceHealth,
+  getStalenessDecayFactor,
+  getCurrentHealthSnapshot,
+  getHealthSummary,
+  hasAnyDegradedSource,
+} from "../scoring/sourceHealth";
 
 export interface IngestResult {
   processed: number;
@@ -177,11 +185,67 @@ export async function runDataIngestion(): Promise<IngestResult> {
     const gdeltFailed = gdeltData.size === 0;
     const serperFailed = serperData.size === 0;
     
+    // Build maps of current source values for global-zero detection
+    const currentNewsValues = new Map<string, number>();
+    const currentSearchValues = new Map<string, number>();
+    
+    for (const person of people) {
+      const news = gdeltData.get(person.id);
+      const serper = serperData.get(person.name.toLowerCase());
+      currentNewsValues.set(person.id, news?.articleCount24h ?? 0);
+      currentSearchValues.set(person.id, serper?.searchVolume ?? 0);
+    }
+    
+    // GLOBAL-ZERO DETECTION: Check if >50% of celebrities have near-zero values
+    // This indicates a global outage rather than individual genuine drops
+    const globalHealth = calculateGlobalHealthMetrics(
+      currentNewsValues,
+      currentSearchValues,
+      people.length
+    );
+    
+    // Update source health states based on current conditions
+    const newsHealth = updateSourceHealth("news", {
+      apiFailed: gdeltFailed,
+      isGlobalOutage: globalHealth.isNewsGlobalOutage,
+      dataReturned: !gdeltFailed && !globalHealth.isNewsGlobalOutage,
+    });
+    
+    const searchHealth = updateSourceHealth("search", {
+      apiFailed: serperFailed,
+      isGlobalOutage: globalHealth.isSearchGlobalOutage,
+      dataReturned: !serperFailed && !globalHealth.isSearchGlobalOutage,
+    });
+    
+    // Wiki is generally stable - just track if API returned data
+    const wikiApiFailed = wikiData.size === 0;
+    updateSourceHealth("wiki", {
+      apiFailed: wikiApiFailed,
+      isGlobalOutage: false, // Wiki rarely has global-zero issues
+      dataReturned: !wikiApiFailed,
+    });
+    
+    // Log health status
+    console.log(getHealthSummary());
+    
     if (gdeltFailed) {
       console.log('[Ingest] GDELT API failed completely - using graceful degradation (last known values)');
+    } else if (globalHealth.isNewsGlobalOutage) {
+      console.log(`[Ingest] GDELT global-zero detected (${Math.round(globalHealth.newsNearZeroPercent * 100)}% near-zero) - treating as OUTAGE`);
     }
+    
     if (serperFailed) {
       console.log('[Ingest] Serper API failed completely - using graceful degradation (last known values)');
+    } else if (globalHealth.isSearchGlobalOutage) {
+      console.log(`[Ingest] Serper global-zero detected (${Math.round(globalHealth.searchNearZeroPercent * 100)}% near-zero) - treating as OUTAGE`);
+    }
+    
+    // Get staleness decay factors for fill-forward values
+    const newsDecayFactor = getStalenessDecayFactor(newsHealth.lastHealthyTimestamp);
+    const searchDecayFactor = getStalenessDecayFactor(searchHealth.lastHealthyTimestamp);
+    
+    if (newsDecayFactor < 1.0 || searchDecayFactor < 1.0) {
+      console.log(`[Ingest] Staleness decay: News=${(newsDecayFactor * 100).toFixed(0)}%, Search=${(searchDecayFactor * 100).toFixed(0)}%`);
     }
 
     for (const person of people) {
@@ -195,9 +259,13 @@ export async function runDataIngestion(): Promise<IngestResult> {
         //   ? xData.get(person.xHandle.toLowerCase().replace("@", ""))
         //   : null;
 
-        // GRACEFUL DEGRADATION: When API fails or returns suspiciously low values,
-        // carry forward last known values to prevent sudden score drops.
-        // A "suspicious drop" is when current is <10% of previous (cliff-edge detection).
+        // GRACEFUL DEGRADATION: When API is in OUTAGE state (global-zero or complete failure),
+        // carry forward last known values with staleness decay to prevent sudden score drops.
+        // 
+        // Key improvements:
+        // 1. Only trigger fallback during GLOBAL OUTAGE (>50% near-zero), not individual drops
+        // 2. Apply staleness decay: 100% → 50% → 20% over 6-12 hours
+        // 3. Suspicious drops only count if global outage is detected
         let newsCount = news?.articleCount24h ?? 0;
         let newsDelta = news?.delta ?? 0;
         let searchVolume = serper?.searchVolume ?? 0;
@@ -208,27 +276,35 @@ export async function runDataIngestion(): Promise<IngestResult> {
         const prevNewsCount = mostRecent?.newsCount ?? 0;
         const prevSearchVolume = mostRecent?.searchVolume ?? 0;
         
-        // Detect suspicious news drop: API returned data but value is <10% of previous
-        // This catches cases where GDELT responds but with broken/incomplete data
-        const suspiciousNewsDrop = news && prevNewsCount >= 5 && 
-          newsCount < prevNewsCount * 0.1; // 90%+ drop is suspicious
+        // NEWS: Use fallback if source is in OUTAGE state (global-zero or API failed)
+        const newsNeedsOutageFallback = newsHealth.state === "OUTAGE" || newsHealth.state === "DEGRADED";
         
-        // If news API failed OR returned suspiciously low value, use fallback
-        if ((!news || suspiciousNewsDrop) && prevNewsCount > 0) {
-          newsCount = prevNewsCount;
-          newsDelta = mostRecent?.newsDelta ?? 0;
+        // Also detect individual suspicious drop, but only activate fallback if global outage
+        const suspiciousNewsDrop = news && prevNewsCount >= 5 && 
+          newsCount < prevNewsCount * 0.1; // 90%+ drop
+        
+        // Use fallback if: (global outage OR API failed) AND we have historical data
+        if ((newsNeedsOutageFallback || !news || (suspiciousNewsDrop && globalHealth.isNewsGlobalOutage)) 
+            && prevNewsCount > 0) {
+          // Apply staleness decay to fill-forwarded value
+          newsCount = Math.round(prevNewsCount * newsDecayFactor);
+          newsDelta = Math.round((mostRecent?.newsDelta ?? 0) * newsDecayFactor);
           newsUsedFallback = true;
           newsApiUsedFallback++;
         }
         
-        // Detect suspicious search drop: API returned data but value is <10% of previous
-        const suspiciousSearchDrop = serper && prevSearchVolume >= 100 &&
-          searchVolume < prevSearchVolume * 0.1; // 90%+ drop is suspicious
+        // SEARCH: Use fallback if source is in OUTAGE state
+        const searchNeedsOutageFallback = searchHealth.state === "OUTAGE" || searchHealth.state === "DEGRADED";
         
-        // If search API failed OR returned suspiciously low value, use fallback
-        if ((!serper || suspiciousSearchDrop) && prevSearchVolume > 0) {
-          searchVolume = prevSearchVolume;
-          searchDelta = mostRecent?.searchDelta ?? 0;
+        const suspiciousSearchDrop = serper && prevSearchVolume >= 100 &&
+          searchVolume < prevSearchVolume * 0.1; // 90%+ drop
+        
+        // Use fallback if: (global outage OR API failed) AND we have historical data
+        if ((searchNeedsOutageFallback || !serper || (suspiciousSearchDrop && globalHealth.isSearchGlobalOutage))
+            && prevSearchVolume > 0) {
+          // Apply staleness decay to fill-forwarded value
+          searchVolume = Math.round(prevSearchVolume * searchDecayFactor);
+          searchDelta = Math.round((mostRecent?.searchDelta ?? 0) * searchDecayFactor);
           searchUsedFallback = true;
           searchApiUsedFallback++;
         }
