@@ -58,7 +58,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
         people.map(p => ({ id: p.id, name: p.name }))
       );
       const timeoutPromise = new Promise<Map<string, any>>((_, reject) => 
-        setTimeout(() => reject(new Error('GDELT timeout')), 30000)
+        setTimeout(() => reject(new Error('GDELT timeout')), 120000) // 2 minutes for 100 people with jittered delays
       );
       gdeltData = await Promise.race([gdeltPromise, timeoutPromise]);
     } catch (err) {
