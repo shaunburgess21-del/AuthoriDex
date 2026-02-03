@@ -1,0 +1,160 @@
+Got it. Replit’s latest build has **two good ideas** (weight renormalization + fixing the Serper “all zeros” situation), but I’d be careful with the **“velocity-aware mass decay”** concept as implemented — it can accidentally distort what “Mass” is supposed to mean.
+
+Here’s my take, what’s solid, what’s risky, and what I’d do next.
+
+---
+
+## What’s solid ✅
+
+### 1) Weight renormalization during outages (good)
+
+If NEWS and SEARCH are in OUTAGE, redistributing their velocity weights to the remaining active sources is exactly right.
+
+**Just make sure it’s applied only to the *velocity sub-weights*** (and not accidentally changing the overall Mass/Velocity 40/60 split unless that’s intentional). In other words:
+
+* keep Mass vs Velocity at 40/60 (usually)
+* within Velocity, renormalize only across active velocity sources
+
+This stops the “my ranking is broken because one API returned zeros” situation.
+
+### 2) Detecting “global-zero” and treating it as OUTAGE (good)
+
+The log behavior you quoted is the correct reaction:
+
+* GDELT: cert/timeout → outage-ish
+* Serper.dev: “success” but 100% near-zero → treat as OUTAGE
+
+That second case is super important: **a 200 OK can still be bad data**.
+
+---
+
+## What worries me ⚠️
+
+### 1) “Velocity-aware mass decay” is conceptually dangerous if it literally decays *mass*
+
+Mass is your **baseline fame / cultural presence**. Tying it to velocity can create weird behavior like:
+
+* someone with huge baseline presence (big celebrity) looks like they’re “losing mass” just because their velocity is quiet,
+* or conversely, someone’s mass stays artificially high because velocity remained nonzero.
+
+In practice, you usually want:
+
+* Mass = slow-moving baseline (followers, 7d wiki avg, long-term news baseline)
+* Velocity = fast-moving momentum (news/search/wiki delta)
+
+If you want someone to “fall back down” after a trend ends, that should happen via **velocity collapsing**, not by shrinking mass.
+
+**Better approach (recommended):**
+
+* Keep Mass stable and slow.
+* Add a “cooling multiplier” on **velocity**, not mass, like:
+
+  * if velocity is low across signals → velocity contribution tapers down faster.
+
+So instead of “Mass decay multipliers,” do:
+
+* “Velocity taper multipliers” OR “Momentum decay”
+
+That preserves the meaning of Mass.
+
+### 2) The Djokovic #1 outcome is not “fixed,” it’s “explained”
+
+If News + Search are OUTAGE and the score is largely wiki-driven, then whoever has the biggest wiki signal in your top 100 can float to #1 (e.g. Novak Djokovic).
+
+That’s not necessarily “wrong,” but it’s **not the FameDex vision** if your leaderboard is meant to reflect multi-platform momentum.
+
+So I’d treat “Djokovic #1 while 2 sources are OUTAGE” as:
+
+* *expected behavior under degraded conditions*,
+  not as proof that the model is behaving normally.
+
+Which means the UI banner + “source health” indicators matter a lot.
+
+---
+
+## The actual root cause you still need to solve
+
+Replit’s own investigation points to the real culprit:
+
+> Serper cached zeros for 8.7 hours, and “totalResults might not be reliable / response format changed.”
+
+That’s where I’d focus next.
+
+### What to do about Serper “totalResults” unreliability
+
+Instead of relying on a single brittle field, compute a **search activity proxy** from multiple signals in the response.
+
+Common robust options:
+
+1. **Count of organic results returned** (often stable)
+2. Presence of **knowledge graph / top stories / sitelinks** modules (binary boosts)
+3. A weighted heuristic:
+
+   * `searchScore = (organic_count * w1) + (has_kg * w2) + (has_top_stories * w3) + (ads_count * w4)`
+4. If Serper provides `searchInformation` (varies by endpoint), use it — but never as the only input.
+
+### Cache safety rule (very important)
+
+If your parser yields zeros for “too many people,” you must **refuse to cache that as valid**.
+
+Add a “cache validity gate”:
+
+* if >X% of celebs return 0 / near-zero AND there’s no upstream evidence this is real, mark the response as **suspect**, do not overwrite last-good cache.
+
+This single rule prevents “8.7 hours of cached garbage” from ever happening again.
+
+---
+
+## What I’d change in the scoring system (small, high ROI)
+
+### 1) Replace “mass decay” with “velocity taper”
+
+Keep Mass stable. Do:
+
+* If 3 low-velocity signals → reduce *velocity* contribution, not mass.
+* Let the score “cool” by velocity collapsing naturally.
+
+### 2) Make “outage mode” explicit in the UI and scoring
+
+When 2/3 velocity sources are OUTAGE:
+
+* show banner (you already do)
+* optionally apply a mild “confidence penalty” to the final score, or display a “⚠️ low confidence” badge
+* OR freeze rank changes (optional) while still updating snapshots
+
+### 3) Add two numbers to the debug panel
+
+In the “Why did this move?” modal, include:
+
+* **Source freshness** per source (fresh / fallback / stale hours)
+* **Effective weights** after renormalization (so you can see what the model actually used)
+
+That will make these incidents instantly understandable.
+
+---
+
+## Quick check: one detail I’d verify immediately
+
+Replit says:
+
+> “Weight renormalization redirected scoring to Wiki data”
+
+That’s good if you mean **velocity weights** shifted to the remaining velocity channel(s).
+But be careful you didn’t accidentally:
+
+* treat Wiki as both Mass baseline and Velocity replacement in a way that double-counts it.
+
+In outages, it’s easy to over-rely on wiki twice unless you separate:
+
+* wiki mass = 7d average
+* wiki velocity = 24h delta / change
+
+---
+
+## Bottom line
+
+* Weight renormalization + source health = ✅ correct.
+* The Serper parsing/caching issue is the **real** problem to fix next.
+* I’d **undo or rethink “mass decay”** and instead taper velocity / momentum.
+
+If you want, paste the Serper response shape you’re currently parsing (redact keys), and I’ll suggest a robust extraction method that won’t break when one field changes.
