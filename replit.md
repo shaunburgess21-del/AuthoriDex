@@ -35,6 +35,8 @@ Preferred communication style: Simple, everyday language.
     - **Source Health State Machine**: Explicitly tracks the health of each data source (HEALTHY, DEGRADED, OUTAGE, RECOVERY). Transitions: 2+ failures → DEGRADED, 5+ failures or global-zero → OUTAGE, 3 successful runs → back to HEALTHY.
     - **Global-Zero Detection**: Requires >50% of celebrities with near-zero values before triggering OUTAGE state (prevents false-positives from individual genuine drops).
     - **Staleness Decay**: Fill-forwarded values gradually reduce over time: 100% (0-2h), 90→70% (2-4h), 70→50% (4-6h), 50→20% (6-12h), 20% floor (>12h).
+    - **Velocity-Aware Mass Decay** (Feb 2026): Mass scores decay faster when velocity signals are low. Checks 3 signals: newsCount<5, searchVolume<100, velocityScore<15. Decay multipliers: 0 low=1.0, 1 low=0.92, 2 low=0.80, 3 low=0.65. This prevents celebrities from staying at the top after their news cycle ends.
+    - **Weight Renormalization During Outages** (Feb 2026): When sources are in OUTAGE or DEGRADED state, their velocity weights are redistributed proportionally to active sources. This ensures accurate scoring even when APIs fail.
 - **Data Jobs**: Ingestion runs hourly, with EMA smoothing applied to `fameIndex` for smooth trend curves.
 - **Trend Context Service**: Provides "Why Trending" explanations for top 10 celebrities, categorizing trends, detecting primary/secondary drivers, and tracking data freshness.
 
