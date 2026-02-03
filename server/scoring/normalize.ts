@@ -402,7 +402,7 @@ export function getRecoveryRateBoost(recoveringCount: number): number {
 export const SPIKE_MIN_DELTA = {
   wiki: 5000,    // At least 5K pageview increase
   news: 10,      // At least 10 new articles
-  search: 500,   // At least 500 search volume increase
+  search: 15,    // At least 15 points increase on 0-100 composite score scale
 };
 
 /**

@@ -104,7 +104,9 @@ export function calculateGlobalHealthMetrics(
   totalCelebrities: number
 ): GlobalHealthMetrics {
   const newsOutage = detectGlobalOutage(newsValues, 5, totalCelebrities);
-  const searchOutage = detectGlobalOutage(searchValues, 100, totalCelebrities);
+  // NOTE: searchVolume is now composite score 0-100, so threshold must be low
+  // A score of 10 or below indicates very weak search presence
+  const searchOutage = detectGlobalOutage(searchValues, 10, totalCelebrities);
   
   return {
     totalCelebrities,
