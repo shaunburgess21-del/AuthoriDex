@@ -1,0 +1,134 @@
+This is a big maturity jump. With those last improvements, you’ve essentially moved from “a trend score” to a resilient ranking system that can survive real-world API turbulence without embarrassing leaderboard swings.
+
+Here’s my take on what Replit shipped, what I like, and the only remaining things I’d sanity-check/tune.
+
+What Replit just implemented is the right “production pattern”
+✅ 1) Source health state machine
+
+HEALTHY → DEGRADED → OUTAGE → RECOVERY → HEALTHY is exactly how teams run this stuff in production.
+
+I like the explicit thresholds:
+
+2+ failures → DEGRADED
+
+5+ failures or global-zero → OUTAGE
+
+3 successes → HEALTHY
+
+That gives you:
+
+fast detection,
+
+prevents flapping,
+
+and creates a clear narrative in logs.
+
+Small suggestion: Add a “cooldown” timer so it can’t bounce states too quickly (optional, but helps).
+
+✅ 2) Global-zero detection
+
+This is arguably the most important fix for the Nicki scenario.
+
+By requiring >50% of celebrities near-zero to treat it as an outage, you avoid the worst false positive:
+
+“celebrity genuinely cooled off” → doesn’t trigger fallback.
+
+This is exactly the guard you needed.
+
+One tuning note: 50% is a good start. If you want it tighter later:
+
+50% = sensitive (detect outage quickly)
+
+70% = stricter (fewer false positives)
+
+But 50% is fine for launch.
+
+✅ 3) Staleness decay curve
+
+This is the perfect compromise between:
+
+“don’t drop to zero suddenly,” and
+
+“don’t prop someone up forever.”
+
+Their curve is pretty reasonable:
+
+0–2h: 100%
+
+2–4h: 90–70%
+
+4–6h: 70–50%
+
+6–12h: 50–20%
+
+12h+: floor at 20%
+
+This means if a source is down for a day, it’s no longer dominating the score, but it also won’t instantly wreck rankings.
+
+Two micro-tweaks you can consider later:
+
+Make the floor depend on source importance (maybe 10% for Search, 20% for Wiki, etc.)
+
+If a source is fully OUTAGE for long enough, renormalize weights (see below)
+
+✅ 4) UI health banner
+
+Massive trust win. Users (and your brother) will accept “less responsive today” if you’re transparent.
+
+Also important: auto refresh every 60 seconds = perfect.
+
+The only remaining “edge case” I’d plan for
+When a source is OUTAGE, should you renormalize weights?
+
+Right now, you’re decaying the stale source contribution, which is good.
+
+But for long outages, the best “clean” behavior is:
+
+down-weight the stale source, and
+
+renormalize the remaining active sources so the total still makes sense.
+
+Example:
+
+Velocity is normally Search 40%, News 35%, Wiki 25%
+
+If News is OUTAGE for 12h, you might:
+
+set News weight → near 0
+
+renormalize Search/Wiki to (40/(40+25)=61.5%) and (25/(40+25)=38.5%)
+
+This makes “the engine still work” rather than “the engine is partially muted.”
+
+You don’t have to do this now because your decay curve already softens impact, but it’s the next step for correctness during long downtime.
+
+What I’d sanity-check today (quick checklist)
+1) Confirm “near-zero” thresholds per source make sense
+
+Global-zero detection relies on “near-zero” definitions.
+
+Good examples:
+
+News near-zero: <= 1–2 articles
+
+Search near-zero: <= some very small count
+
+Wiki near-zero: depends on whether you’re using hourly or daily signals
+
+If you accidentally set “near-zero” too high, you could misclassify real low activity as outage.
+
+2) Confirm the “stale minutes” in the banner match what’s truly stale
+
+Make sure “stale” is based on:
+
+last successful fetch timestamp for that source
+not just “last ingestion run.”
+
+This is a common mismatch.
+
+3) Confirm fallback values are tagged in snapshots
+
+You want to be able to answer later:
+
+“Was this score based on real Search or decayed Search?”
+So storing per-source freshness flags in snapshots is helpful (sounds like you’re already doing this).
