@@ -69,6 +69,15 @@ Preferred communication style: Simple, everyday language.
       - Triggers when Top 10 churn > 4 or Top 20 churn > 8
       - Logs top 5 movers with old/new rank, raw vs final scores, and spike counts
       - Provides instant debugging when unusual ranking shifts occur
+    - **Graceful Degradation (Feb 2026)**: When external APIs (GDELT/Serper) fail or return suspicious data:
+      - Carries forward last known news/search values instead of using 0
+      - Detects "suspicious drops" (90%+ decrease from previous) as potential API issues
+      - Minimum thresholds: news requires previous ≥5, search requires previous ≥100
+      - Logs fallback usage at end of ingestion: `[Graceful Degradation] News fallback: X/Y`
+    - **Data Recovery Mode (Feb 2026)**: When fresh API data returns after using fallback:
+      - Boosts rate cap temporarily (10% for 1 source, 15% for 2 sources recovering)
+      - Uses freshness flags (`newsIsFresh`, `searchIsFresh`) to detect genuine recovery
+      - Logs with `[RECOVERY:N]` suffix when active
   - **Nullable Change Values**: change24h/change7d show "N/A" when data is unavailable (no fake random values).
 - **Data Jobs** (Refactored Jan 2026):
   - **Single Snapshot Source**: Only `ingest.ts` writes to `trend_snapshots` table. Other jobs (`quick-score.ts`, `snapshot-scheduler.ts`) are disabled for snapshot writing to prevent duplicate data points.
@@ -118,7 +127,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Third-Party API Services
 - **Wikipedia API**: Pageview data.
-- **GDELT API**: News mention counts.
+- **GDELT API**: News mention counts. Has retry logic (3 attempts with exponential backoff), 10-second timeouts, and optional SSL bypass via `GDELT_RELAX_SSL=true` for certificate issues.
 - **Serper.dev API**: Google search results.
 - **X/Twitter API**: Reserved for future Platform Insights feature (not used in trend scoring).
 - **Google Fonts**: Inter, Space Grotesk, JetBrains Mono.

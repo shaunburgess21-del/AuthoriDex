@@ -1,8 +1,75 @@
 import { db } from "../db";
 import { apiCache } from "@shared/schema";
 import { eq, and, gt } from "drizzle-orm";
+import https from "https";
 
 const GDELT_API_BASE = "https://api.gdeltproject.org/api/v2/doc/doc";
+
+// SSL bypass only when explicitly enabled via environment variable
+// GDELT sometimes has certificate issues - this allows recovery during outages
+const GDELT_RELAX_SSL = process.env.GDELT_RELAX_SSL === "true";
+
+// HTTPS agent with conditional SSL verification
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: !GDELT_RELAX_SSL, // Only bypass verification if explicitly enabled
+  timeout: 15000,
+});
+
+if (GDELT_RELAX_SSL) {
+  console.warn("[GDELT] SSL certificate verification disabled via GDELT_RELAX_SSL=true");
+}
+
+// Retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000; // Start with 1 second, exponential backoff
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url: string, retries = MAX_RETRIES): Promise<Response | null> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout per request
+      
+      const response = await fetch(url, { 
+        headers: { "Accept": "application/json" },
+        signal: controller.signal,
+        // @ts-ignore - Node.js fetch accepts agent
+        agent: httpsAgent,
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        return response;
+      }
+      
+      // If rate limited or server error, retry
+      if (response.status >= 500 || response.status === 429) {
+        console.log(`[GDELT] Retry ${attempt}/${retries} for ${url.substring(0, 80)}... (status: ${response.status})`);
+        await sleep(RETRY_DELAY_MS * Math.pow(2, attempt - 1)); // Exponential backoff
+        continue;
+      }
+      
+      return response; // Return non-retryable responses as-is
+    } catch (error: any) {
+      const isLastAttempt = attempt === retries;
+      const errorType = error.name === 'AbortError' ? 'timeout' : 
+                       error.code === 'CERT_HAS_EXPIRED' ? 'certificate' : 
+                       'network';
+      
+      if (!isLastAttempt) {
+        console.log(`[GDELT] Retry ${attempt}/${retries} after ${errorType} error`);
+        await sleep(RETRY_DELAY_MS * Math.pow(2, attempt - 1));
+      } else {
+        console.error(`[GDELT] All ${retries} attempts failed (${errorType})`);
+      }
+    }
+  }
+  return null;
+}
 
 export interface GdeltNewsData {
   query: string;
@@ -84,16 +151,17 @@ export async function fetchGdeltNews(
     const url24h = `${GDELT_API_BASE}?query=${query}&mode=artlist&maxrecords=100&format=json&startdatetime=${formatGdeltDate(yesterday)}&enddatetime=${formatGdeltDate(now)}`;
     const url7d = `${GDELT_API_BASE}?query=${query}&mode=artlist&maxrecords=250&format=json&startdatetime=${formatGdeltDate(weekAgo)}&enddatetime=${formatGdeltDate(now)}`;
     
+    // Use retry-enabled fetch with relaxed SSL
     const [response24h, response7d] = await Promise.all([
-      fetch(url24h, { headers: { "Accept": "application/json" } }),
-      fetch(url7d, { headers: { "Accept": "application/json" } }),
+      fetchWithRetry(url24h),
+      fetchWithRetry(url7d),
     ]);
 
     let articleCount24h = 0;
     let articleCount7d = 0;
     let topHeadlines: string[] = [];
 
-    if (response24h.ok) {
+    if (response24h?.ok) {
       const text = await response24h.text();
       try {
         const data = JSON.parse(text);
@@ -106,7 +174,7 @@ export async function fetchGdeltNews(
       }
     }
 
-    if (response7d.ok) {
+    if (response7d?.ok) {
       const text = await response7d.text();
       try {
         const data = JSON.parse(text);

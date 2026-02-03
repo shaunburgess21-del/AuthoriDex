@@ -18,6 +18,7 @@ import {
   applyDynamicRateLimiting,
   getDynamicRateLimit,
   SpikeDetectionInputs,
+  getRecoveryRateBoost,
 } from "./normalize";
 import { 
   normalizeMass, 
@@ -39,6 +40,14 @@ export interface TrendInputs {
   // Raw source values for normalization (current period)
   newsCount?: number;          // Raw news article count
   searchVolume?: number;       // Raw search volume
+  
+  // Previous source values for recovery detection (graceful degradation)
+  prevNewsCount?: number;      // Previous snapshot's news count
+  prevSearchVolume?: number;   // Previous snapshot's search volume
+  
+  // Freshness flags for recovery detection (when fresh data returns after fallback)
+  newsIsFresh?: boolean;       // True if news data is fresh (not fallback)
+  searchIsFresh?: boolean;     // True if search data is fresh (not fallback)
   
   // Baseline averages for spike detection
   wikiBaseline?: number;       // 7-day avg wiki pageviews
@@ -222,31 +231,77 @@ export function computeTrendScore(
   const rawFameIndex = fameIndex; // Store raw value for logging
   
   // Apply stabilization in order:
-  // 1. Dynamic rate limiting (cap varies by source corroboration + recalibration)
+  // 1. Dynamic rate limiting (cap varies by source corroboration + recalibration + recovery)
   //    - 0-1 sources spiking: 5% cap (10% in recalibration)
   //    - 2 sources spiking: 10% cap (20% in recalibration)
   //    - 3 sources spiking: 25% cap
+  //    - Recovery mode: boost cap when API data returns after failure
   // 2. Dynamic EMA smoothing - alpha varies by spike count + recalibration
   //    - 0-1 sources: 0.08 (0.10 in recalibration)
   //    - 2 sources: 0.12 (0.15 in recalibration)
   //    - 3 sources: 0.18 (0.225 in recalibration)
+  
+  // Detect data recovery (fresh API data after period of fallback/missing data)
+  // Recovery mode allows faster score changes when data sources "come back"
+  let recoveringSources = 0;
+  
+  // News is recovering if: current data is fresh AND previous was likely fallback/missing
+  // "Likely fallback" = previous value was very low (<5) OR current is significantly higher
+  if (inputs.newsIsFresh && (inputs.newsCount || 0) >= 5) {
+    const prevNews = inputs.prevNewsCount ?? 0;
+    // Recovery if: previous was very low OR current is 50%+ higher than previous
+    if (prevNews < 5 || (inputs.newsCount || 0) > prevNews * 1.5) {
+      recoveringSources++;
+    }
+  }
+  
+  // Search is recovering if: current data is fresh AND previous was likely fallback/missing
+  if (inputs.searchIsFresh && (inputs.searchVolume || 0) >= 100) {
+    const prevSearch = inputs.prevSearchVolume ?? 0;
+    // Recovery if: previous was very low OR current is 50%+ higher than previous
+    if (prevSearch < 100 || (inputs.searchVolume || 0) > prevSearch * 1.5) {
+      recoveringSources++;
+    }
+  }
+  
+  const recoveryRateBoost = getRecoveryRateBoost(recoveringSources);
+  
   let stabilizationApplied = false;
   if (previousFameIndex !== undefined) {
     stabilizationApplied = true;
-    // First apply dynamic rate limiting based on source corroboration
-    const afterRateLimiting = Math.round(applyDynamicRateLimiting(fameIndex, previousFameIndex, spikingSourceCount));
+    
+    // Get base rate limit from spike count
+    let effectiveCap = getDynamicRateLimit(spikingSourceCount);
+    
+    // Apply recovery boost if data sources are recovering from failure
+    // Use the higher of spike-based cap or recovery-based cap
+    if (recoveryRateBoost > 0 && recoveryRateBoost > effectiveCap) {
+      effectiveCap = recoveryRateBoost;
+    }
+    
+    // Apply rate limiting manually with potentially boosted cap
+    const maxChange = previousFameIndex * effectiveCap;
+    const actualChange = fameIndex - previousFameIndex;
+    let afterRateLimiting = fameIndex;
+    if (actualChange > maxChange) {
+      afterRateLimiting = previousFameIndex + maxChange;
+    } else if (actualChange < -maxChange) {
+      afterRateLimiting = previousFameIndex - maxChange;
+    }
+    afterRateLimiting = Math.round(afterRateLimiting);
+    
     // Then apply dynamic EMA smoothing (alpha varies by spike count)
     fameIndex = Math.round(applyDynamicEmaSmoothing(afterRateLimiting, previousFameIndex, spikingSourceCount));
     
     // Log significant stabilization events (>10% change would have occurred)
     const rawChange = Math.abs((rawFameIndex - previousFameIndex) / previousFameIndex);
     if (rawChange > 0.10) {
-      const effectiveCap = getDynamicRateLimit(spikingSourceCount);
       const effectiveAlpha = getDynamicAlpha(spikingSourceCount);
       const recalMode = isRecalibrationModeActive() ? ' [RECAL]' : '';
+      const recoveryMode = recoveringSources > 0 ? ` [RECOVERY:${recoveringSources}]` : '';
       console.log(`[Stabilization] Raw: ${rawFameIndex}, Prev: ${previousFameIndex}, Final: ${fameIndex} ` +
         `(${Math.round(rawChange * 100)}% raw, ${Math.round(effectiveCap * 100)}% cap, α=${effectiveAlpha.toFixed(2)}, ` +
-        `${spikingSourceCount} spiking)${recalMode}`);
+        `${spikingSourceCount} spiking)${recalMode}${recoveryMode}`);
     }
   }
   

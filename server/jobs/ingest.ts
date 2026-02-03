@@ -68,6 +68,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     // const xData = await fetchXBatch(xHandles, 100);
 
     // Fetch historical snapshots for change calculations (same logic as quick-score.ts)
+    // Also fetch news/search values for graceful degradation when APIs fail
     const now = new Date();
     const time24hAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const time7dAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -77,15 +78,28 @@ export async function runDataIngestion(): Promise<IngestResult> {
       timestamp: trendSnapshots.timestamp,
       trendScore: trendSnapshots.trendScore,
       fameIndex: trendSnapshots.fameIndex,
+      newsCount: trendSnapshots.newsCount,
+      searchVolume: trendSnapshots.searchVolume,
+      newsDelta: trendSnapshots.newsDelta,
+      searchDelta: trendSnapshots.searchDelta,
     }).from(trendSnapshots).where(
       gte(trendSnapshots.timestamp, time7dAgo)
     );
     
     // Create maps for different lookups:
     // - mostRecentMap: Most recent snapshot for EMA continuity (CRITICAL for stabilization)
+    //   Also stores news/search values for graceful degradation when APIs fail
     // - snapshot24hMap: Snapshot from ~24h ago for change24h calculation
     // - snapshot7dMap: Snapshot from ~7d ago for change7d calculation
-    const mostRecentMap = new Map<string, { trendScore: number; fameIndex: number | null; timestamp: Date }>();
+    const mostRecentMap = new Map<string, { 
+      trendScore: number; 
+      fameIndex: number | null; 
+      timestamp: Date;
+      newsCount: number | null;
+      searchVolume: number | null;
+      newsDelta: number | null;
+      searchDelta: number | null;
+    }>();
     const snapshot24hMap = new Map<string, { trendScore: number; fameIndex: number | null }>();
     const snapshot7dMap = new Map<string, { trendScore: number; fameIndex: number | null }>();
     
@@ -94,13 +108,17 @@ export async function runDataIngestion(): Promise<IngestResult> {
       const diff24h = Math.abs(snapTime - time24hAgo.getTime());
       const diff7d = Math.abs(snapTime - time7dAgo.getTime());
       
-      // Track most recent snapshot per person (for EMA smoothing continuity)
+      // Track most recent snapshot per person (for EMA smoothing continuity + fallback data)
       const existingRecent = mostRecentMap.get(snap.personId);
       if (!existingRecent || new Date(snap.timestamp) > existingRecent.timestamp) {
         mostRecentMap.set(snap.personId, { 
           trendScore: snap.trendScore, 
           fameIndex: snap.fameIndex,
-          timestamp: new Date(snap.timestamp)
+          timestamp: new Date(snap.timestamp),
+          newsCount: snap.newsCount,
+          searchVolume: snap.searchVolume,
+          newsDelta: snap.newsDelta,
+          searchDelta: snap.searchDelta,
         });
       }
       
@@ -153,25 +171,85 @@ export async function runDataIngestion(): Promise<IngestResult> {
       score: ReturnType<typeof computeTrendScore>;
     }> = [];
 
+    // Track API failure stats for logging
+    let newsApiUsedFallback = 0;
+    let searchApiUsedFallback = 0;
+    const gdeltFailed = gdeltData.size === 0;
+    const serperFailed = serperData.size === 0;
+    
+    if (gdeltFailed) {
+      console.log('[Ingest] GDELT API failed completely - using graceful degradation (last known values)');
+    }
+    if (serperFailed) {
+      console.log('[Ingest] Serper API failed completely - using graceful degradation (last known values)');
+    }
+
     for (const person of people) {
       try {
         const wiki = wikiData.get(person.id);
         const news = gdeltData.get(person.id);
         const serper = serperData.get(person.name.toLowerCase());
+        const mostRecent = mostRecentMap.get(person.id);
         // NOTE (Jan 2026): X API disabled for trend scoring - kept for Platform Insights
         // const xMetrics = person.xHandle 
         //   ? xData.get(person.xHandle.toLowerCase().replace("@", ""))
         //   : null;
 
+        // GRACEFUL DEGRADATION: When API fails or returns suspiciously low values,
+        // carry forward last known values to prevent sudden score drops.
+        // A "suspicious drop" is when current is <10% of previous (cliff-edge detection).
+        let newsCount = news?.articleCount24h ?? 0;
+        let newsDelta = news?.delta ?? 0;
+        let searchVolume = serper?.searchVolume ?? 0;
+        let searchDelta = serper?.delta ?? 0;
+        let newsUsedFallback = false;
+        let searchUsedFallback = false;
+        
+        const prevNewsCount = mostRecent?.newsCount ?? 0;
+        const prevSearchVolume = mostRecent?.searchVolume ?? 0;
+        
+        // Detect suspicious news drop: API returned data but value is <10% of previous
+        // This catches cases where GDELT responds but with broken/incomplete data
+        const suspiciousNewsDrop = news && prevNewsCount >= 5 && 
+          newsCount < prevNewsCount * 0.1; // 90%+ drop is suspicious
+        
+        // If news API failed OR returned suspiciously low value, use fallback
+        if ((!news || suspiciousNewsDrop) && prevNewsCount > 0) {
+          newsCount = prevNewsCount;
+          newsDelta = mostRecent?.newsDelta ?? 0;
+          newsUsedFallback = true;
+          newsApiUsedFallback++;
+        }
+        
+        // Detect suspicious search drop: API returned data but value is <10% of previous
+        const suspiciousSearchDrop = serper && prevSearchVolume >= 100 &&
+          searchVolume < prevSearchVolume * 0.1; // 90%+ drop is suspicious
+        
+        // If search API failed OR returned suspiciously low value, use fallback
+        if ((!serper || suspiciousSearchDrop) && prevSearchVolume > 0) {
+          searchVolume = prevSearchVolume;
+          searchDelta = mostRecent?.searchDelta ?? 0;
+          searchUsedFallback = true;
+          searchApiUsedFallback++;
+        }
+
         const inputs = {
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiPageviews7dAvg: wiki?.averageDaily7d || 0, // 7-day average for stable mass baseline
           wikiDelta: wiki?.delta || 0,
-          newsDelta: news?.delta || 0,
-          searchDelta: serper?.delta || 0,
-          // Raw values for normalization
-          newsCount: news?.articleCount24h || 0,
-          searchVolume: serper?.searchVolume || 0,
+          newsDelta: newsDelta,
+          searchDelta: searchDelta,
+          // Raw values for normalization - use graceful degradation values
+          newsCount: newsCount,
+          searchVolume: searchVolume,
+          // Previous values for recovery detection (data returning after API failure)
+          // Only pass previous values if current data is FRESH (not fallback)
+          // This ensures recovery mode triggers when we get fresh data after using fallback
+          prevNewsCount: newsUsedFallback ? newsCount : (prevNewsCount),
+          prevSearchVolume: searchUsedFallback ? searchVolume : (prevSearchVolume),
+          // Flag whether current data is fresh (for recovery detection)
+          newsIsFresh: !newsUsedFallback && (news?.articleCount24h ?? 0) > 0,
+          searchIsFresh: !searchUsedFallback && (serper?.searchVolume ?? 0) > 0,
           // Baseline medians for spike detection (p50 is more robust than mean)
           wikiBaseline: wiki?.averageDaily7d || sourceStats.wiki.p50,
           newsBaseline: sourceStats.news.p50,  // Use median (p50), not mean - more robust
@@ -188,7 +266,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
         };
 
         // Get previous scores for change calculations and EMA smoothing
-        const mostRecent = mostRecentMap.get(person.id);
+        // Note: mostRecent already fetched above for graceful degradation
         const prev24h = snapshot24hMap.get(person.id);
         const prev7d = snapshot7dMap.get(person.id);
         
@@ -225,14 +303,14 @@ export async function runDataIngestion(): Promise<IngestResult> {
           timestamp: hourTimestamp, // Truncated to hour for idempotency
           trendScore: scoreResult.trendScore,
           fameIndex: scoreResult.fameIndex,
-          newsCount: news?.articleCount24h || 0,
-          searchVolume: serper?.searchVolume || 0,
+          newsCount: newsCount,  // Use graceful degradation value
+          searchVolume: searchVolume,  // Use graceful degradation value
           youtubeViews: 0,
           spotifyFollowers: 0,
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiDelta: wiki?.delta || 0,
-          newsDelta: news?.delta || 0,
-          searchDelta: serper?.delta || 0,
+          newsDelta: newsDelta,  // Use graceful degradation value
+          searchDelta: searchDelta,  // Use graceful degradation value
           xQuoteVelocity: 0,  // X API disabled
           xReplyVelocity: 0,  // X API disabled
           massScore: scoreResult.massScore,
@@ -334,6 +412,11 @@ export async function runDataIngestion(): Promise<IngestResult> {
     // Log spike distribution (how many have 0/1/2/3 sources spiking)
     const spikeDist = stabilizationStats.spikeDistribution;
     console.log(`[Spike Distribution] 0 sources: ${spikeDist[0]}, 1 source: ${spikeDist[1]}, 2 sources: ${spikeDist[2]}, 3 sources: ${spikeDist[3]}`);
+    
+    // Log graceful degradation stats (when APIs fail)
+    if (newsApiUsedFallback > 0 || searchApiUsedFallback > 0) {
+      console.log(`[Graceful Degradation] News fallback: ${newsApiUsedFallback}/${people.length}, Search fallback: ${searchApiUsedFallback}/${people.length}`);
+    }
     
     // Log rank churn
     console.log(`[Rank Churn] Top 10: +${enteredTop10}/-${exitedTop10} | Top 20: +${enteredTop20}/-${exitedTop20}`);

@@ -341,6 +341,59 @@ export const DEFAULT_SOURCE_STATS: AllSourceStats = {
 };
 
 // ============================================================================
+// DATA RECOVERY MODE
+// ============================================================================
+
+/**
+ * Detect if a data source is recovering from a failure.
+ * Recovery = previous value was 0 (or very low) but current value is substantial.
+ * This allows faster score recovery when API data returns after an outage.
+ */
+export function isSourceRecovering(
+  currentValue: number,
+  previousValue: number,
+  minThreshold: number
+): boolean {
+  // Previous was effectively 0 (or missing), but current is above threshold
+  return previousValue < minThreshold && currentValue >= minThreshold;
+}
+
+/**
+ * Count how many sources are recovering from missing data.
+ * Used to boost rate caps when API data returns after failures.
+ */
+export interface RecoveryDetectionInputs {
+  newsCurrentValue: number;
+  newsPreviousValue: number;
+  searchCurrentValue: number;
+  searchPreviousValue: number;
+}
+
+export function countRecoveringSources(inputs: RecoveryDetectionInputs): number {
+  let count = 0;
+  // News is recovering if previous was <5 and current is >=5
+  if (isSourceRecovering(inputs.newsCurrentValue, inputs.newsPreviousValue, 5)) count++;
+  // Search is recovering if previous was <100 and current is >=100
+  if (isSourceRecovering(inputs.searchCurrentValue, inputs.searchPreviousValue, 100)) count++;
+  return count;
+}
+
+/**
+ * Get boosted rate limit for data recovery mode.
+ * When sources recover from failure, allow faster score recovery.
+ */
+export function getRecoveryRateBoost(recoveringCount: number): number {
+  switch (recoveringCount) {
+    case 2:
+      return 0.15; // 15% cap when both sources recover
+    case 1:
+      return 0.10; // 10% cap when one source recovers
+    default:
+      return 0; // No boost
+  }
+}
+
+// ============================================================================
 // MULTI-SOURCE BREAKOUT DETECTION
 // ============================================================================
 
