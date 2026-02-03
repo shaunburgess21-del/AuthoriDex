@@ -19,6 +19,9 @@ import {
   getDynamicRateLimit,
   SpikeDetectionInputs,
   getRecoveryRateBoost,
+  getVelocityAwareMassDecay,
+  getRenormalizedVelocityWeights,
+  SourceHealthStates,
 } from "./normalize";
 import { 
   normalizeMass, 
@@ -60,6 +63,9 @@ export interface TrendInputs {
   
   // New: platform statuses for diversity multiplier
   platformStatuses?: PlatformStatuses;
+  
+  // Source health states for weight renormalization during outages
+  sourceHealthStates?: SourceHealthStates;
 }
 
 export interface TrendScoreResult {
@@ -167,12 +173,23 @@ export function computeTrendScore(
     ? Math.min(100, xTotalVelocity * 2) 
     : 0;
   
-  // Total velocity score with fixed weights (no redistribution for missing platforms)
+  // Get velocity weights - use renormalized weights if sources are in outage
+  const healthStates = inputs.sourceHealthStates || {
+    newsOutage: false,
+    searchOutage: false,
+    wikiOutage: false,
+  };
+  const hasAnyOutage = healthStates.newsOutage || healthStates.searchOutage || healthStates.wikiOutage;
+  const velocityWeights = hasAnyOutage 
+    ? getRenormalizedVelocityWeights(healthStates)
+    : PLATFORM_WEIGHTS.velocity;
+  
+  // Total velocity score - uses renormalized weights during outages
   const velocityScore = (
-    (wikiVelocityScore * PLATFORM_WEIGHTS.velocity.wiki) +
-    (newsVelocityScore * PLATFORM_WEIGHTS.velocity.news) +
-    (searchVelocityScore * PLATFORM_WEIGHTS.velocity.search) +
-    (xVelocityScore * PLATFORM_WEIGHTS.velocity.x)
+    (wikiVelocityScore * velocityWeights.wiki) +
+    (newsVelocityScore * velocityWeights.news) +
+    (searchVelocityScore * velocityWeights.search) +
+    (xVelocityScore * velocityWeights.x)
   );
   
   // =========================================================================
@@ -196,10 +213,19 @@ export function computeTrendScore(
   const velocityAdjusted = applyAntiSpamDamping(velocityScore, massScore);
   
   // =========================================================================
+  // 3b. APPLY VELOCITY-AWARE MASS DECAY
+  // =========================================================================
+  // When velocity signals are low (no recent news/search), decay mass faster
+  // This ensures celebrities drop quicker after their news cycle ends
+  
+  const massDecayMultiplier = getVelocityAwareMassDecay(velocityScore, newsRaw, searchRaw);
+  const massScoreDecayed = massScore * massDecayMultiplier;
+  
+  // =========================================================================
   // 4. CALCULATE BASE SCORE
   // =========================================================================
   
-  const baseScore = (massScore * MASS_ALLOCATION) + (velocityAdjusted * VELOCITY_ALLOCATION);
+  const baseScore = (massScoreDecayed * MASS_ALLOCATION) + (velocityAdjusted * VELOCITY_ALLOCATION);
   
   // =========================================================================
   // 5. CALCULATE DIVERSITY MULTIPLIER (silent penalty)

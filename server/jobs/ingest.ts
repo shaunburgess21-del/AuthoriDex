@@ -309,6 +309,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
           searchApiUsedFallback++;
         }
 
+        // Get current source health states for weight renormalization
+        const currentHealthSnapshot = getCurrentHealthSnapshot();
+        
         const inputs = {
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiPageviews7dAvg: wiki?.averageDaily7d || 0, // 7-day average for stable mass baseline
@@ -338,6 +341,12 @@ export async function runDataIngestion(): Promise<IngestResult> {
             x: false,  // X API disabled for trend scoring
             instagram: !!person.instagramHandle,
             youtube: !!person.youtubeId,
+          },
+          // Source health states for weight renormalization during outages
+          sourceHealthStates: {
+            newsOutage: currentHealthSnapshot.news.state === 'OUTAGE' || currentHealthSnapshot.news.state === 'DEGRADED',
+            searchOutage: currentHealthSnapshot.search.state === 'OUTAGE' || currentHealthSnapshot.search.state === 'DEGRADED',
+            wikiOutage: currentHealthSnapshot.wiki.state === 'OUTAGE' || currentHealthSnapshot.wiki.state === 'DEGRADED',
           },
         };
 

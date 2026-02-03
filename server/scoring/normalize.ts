@@ -571,3 +571,104 @@ export function calculateDynamicVelocityWeights(
     xVelocity: PLATFORM_WEIGHTS.velocity.x,
   };
 }
+
+// ============================================================================
+// VELOCITY-AWARE MASS DECAY
+// ============================================================================
+// When velocity signals are near zero (no recent news/search activity),
+// mass should decay faster so celebrities drop quicker after their news cycle ends.
+
+/**
+ * Calculate a mass decay multiplier based on velocity signals.
+ * When velocity is low (no recent news/search), mass decays faster.
+ * 
+ * @param velocityScore - The current velocity score (0-100)
+ * @param newsCount - Raw news count for the period
+ * @param searchVolume - Raw search volume for the period
+ * @returns Decay multiplier (0.5 to 1.0) - lower means more decay
+ */
+export function getVelocityAwareMassDecay(
+  velocityScore: number,
+  newsCount: number,
+  searchVolume: number
+): number {
+  // Thresholds for "low activity"
+  const NEWS_LOW_THRESHOLD = 5;       // Below this = very low news activity
+  const SEARCH_LOW_THRESHOLD = 100;   // Below this = very low search activity
+  const VELOCITY_LOW_THRESHOLD = 15;  // Below this = low overall velocity
+  
+  // Count how many signals are "low"
+  let lowSignalCount = 0;
+  if (newsCount < NEWS_LOW_THRESHOLD) lowSignalCount++;
+  if (searchVolume < SEARCH_LOW_THRESHOLD) lowSignalCount++;
+  if (velocityScore < VELOCITY_LOW_THRESHOLD) lowSignalCount++;
+  
+  // Apply graduated decay based on number of low signals
+  // 0 low signals = no decay (1.0)
+  // 1 low signal = slight decay (0.92)
+  // 2 low signals = moderate decay (0.80)
+  // 3 low signals = strong decay (0.65)
+  const decayMultipliers: Record<number, number> = {
+    0: 1.00,
+    1: 0.92,
+    2: 0.80,
+    3: 0.65,
+  };
+  
+  return decayMultipliers[lowSignalCount] ?? 0.65;
+}
+
+// ============================================================================
+// WEIGHT RENORMALIZATION DURING OUTAGES
+// ============================================================================
+// When a data source is in OUTAGE, redistribute its weight to active sources
+// so the remaining active sources properly fill the scoring gap.
+
+export interface SourceHealthStates {
+  newsOutage: boolean;
+  searchOutage: boolean;
+  wikiOutage: boolean;
+}
+
+export interface RenormalizedVelocityWeights {
+  wiki: number;
+  news: number;
+  search: number;
+  x: number;
+}
+
+/**
+ * Renormalize velocity weights when sources are in outage.
+ * Redistributes disabled source weights proportionally to active sources.
+ * 
+ * Example: If News (35%) is in outage, its weight is distributed:
+ *   - Wiki: 25% + (25/(25+40)) * 35% = 25% + 13.46% = 38.46%
+ *   - Search: 40% + (40/(25+40)) * 35% = 40% + 21.54% = 61.54%
+ */
+export function getRenormalizedVelocityWeights(
+  healthStates: SourceHealthStates
+): RenormalizedVelocityWeights {
+  // Start with base weights
+  let wikiWeight = healthStates.wikiOutage ? 0 : PLATFORM_WEIGHTS.velocity.wiki;
+  let newsWeight = healthStates.newsOutage ? 0 : PLATFORM_WEIGHTS.velocity.news;
+  let searchWeight = healthStates.searchOutage ? 0 : PLATFORM_WEIGHTS.velocity.search;
+  const xWeight = 0; // X is disabled
+  
+  // Calculate how much weight needs redistribution
+  const totalActiveWeight = wikiWeight + newsWeight + searchWeight;
+  
+  // If all sources are down, return zeros
+  if (totalActiveWeight === 0) {
+    return { wiki: 0, news: 0, search: 0, x: 0 };
+  }
+  
+  // Renormalize so active weights sum to 1.0
+  const normalizationFactor = (PLATFORM_WEIGHTS.velocity.wiki + PLATFORM_WEIGHTS.velocity.news + PLATFORM_WEIGHTS.velocity.search) / totalActiveWeight;
+  
+  return {
+    wiki: wikiWeight * normalizationFactor,
+    news: newsWeight * normalizationFactor,
+    search: searchWeight * normalizationFactor,
+    x: xWeight,
+  };
+}
