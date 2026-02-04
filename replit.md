@@ -33,6 +33,7 @@ Preferred communication style: Simple, everyday language.
     - **Graceful Degradation**: Handles external API failures by carrying forward last known values and detecting "suspicious drops."
     - **Fixed Velocity Weights** (Feb 2026 stability fix): Weights are ALWAYS fixed at Wiki 25%, News 35%, Search 40% - even during API outages. Weight redistribution during outages was causing population-wide rank instability.
     - **Recalibration Mode**: DISABLED. Previously allowed higher rate caps (36%) after algorithm changes, but caused excessive volatility. Now uses standard 10% caps.
+    - **Coverage Gate** (Feb 2026): If an external API returns fresh data for <70% of celebrities, the entire run treats that source as degraded and uses previous values for everyone. This ensures population consistency - either most people get fresh data, or nobody does that hour. Prevents "mixed freshness" ranking distortions.
     - **Source Health State Machine**: Explicitly tracks the health of each data source (HEALTHY, DEGRADED, OUTAGE, RECOVERY). Used for logging/monitoring only - does NOT affect weight distribution.
     - **Global-Zero Detection**: Requires >50% of celebrities with near-zero values before triggering OUTAGE state (prevents false-positives from individual genuine drops).
     - **Staleness Decay**: Fill-forwarded values gradually reduce over time: 100% (0-2h), 90→70% (2-4h), 70→50% (4-6h), 50→20% (6-12h), 20% floor (>12h).

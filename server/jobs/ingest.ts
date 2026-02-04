@@ -66,11 +66,31 @@ export async function runDataIngestion(): Promise<IngestResult> {
       console.log('[Ingest] GDELT fetch failed (certificate/timeout), continuing with other sources');
     }
 
-    const serperData = await fetchSerperBatch(
+    // COVERAGE GATE: If GDELT returns fresh data for <70% of celebrities, treat as degraded
+    // and use previous values for EVERYONE to ensure population consistency.
+    // This prevents "mixed freshness" where some celebs get fresh data and others get stale,
+    // which creates unfair ranking comparisons within the same hour.
+    const COVERAGE_THRESHOLD = 0.70;
+    const gdeltCoverage = gdeltData.size / people.length;
+    if (gdeltData.size > 0 && gdeltCoverage < COVERAGE_THRESHOLD) {
+      console.log(`[Coverage Gate] GDELT partial failure: ${gdeltData.size}/${people.length} (${(gdeltCoverage * 100).toFixed(0)}%) < ${COVERAGE_THRESHOLD * 100}% threshold`);
+      console.log(`[Coverage Gate] Treating NEWS as degraded for entire run - using previous values for all celebrities`);
+      gdeltData.clear(); // Clear so everyone uses fallback consistently
+    }
+
+    let serperData = await fetchSerperBatch(
       people.map(p => p.name),
       2,
       1000
     );
+
+    // COVERAGE GATE: Apply same logic to Serper for consistency
+    const serperCoverage = serperData.size / people.length;
+    if (serperData.size > 0 && serperCoverage < COVERAGE_THRESHOLD) {
+      console.log(`[Coverage Gate] Serper partial failure: ${serperData.size}/${people.length} (${(serperCoverage * 100).toFixed(0)}%) < ${COVERAGE_THRESHOLD * 100}% threshold`);
+      console.log(`[Coverage Gate] Treating SEARCH as degraded for entire run - using previous values for all celebrities`);
+      serperData = new Map(); // Clear so everyone uses fallback consistently
+    }
 
     // NOTE (Jan 2026): X API disabled for trend scoring - kept for Platform Insights
     // const xHandles = people.filter(p => p.xHandle).map(p => p.xHandle!);
