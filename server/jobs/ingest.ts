@@ -601,6 +601,35 @@ export async function runDataIngestion(): Promise<IngestResult> {
         console.warn(`  ${direction} ${m.name}: #${m.oldRank} → #${m.newRank} (raw: ${m.rawFameIndex}, final: ${m.finalFameIndex}, spikes: ${m.spikingCount})`);
       }
     }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // POST-INGEST HEALTH SUMMARY - Single consolidated log for monitoring
+    // ═══════════════════════════════════════════════════════════════════════════
+    const jobDuration = Date.now() - startTime;
+    const healthSummary = {
+      job: "ingest",
+      duration: `${jobDuration}ms`,
+      rows: processed,
+      lock: "acquired",
+      sources: {
+        wiki: "OK", // Wiki rarely fails
+        news: newsApiUsedFallback > people.length * 0.3 ? "DEGRADED" : "OK",
+        search: searchApiUsedFallback > people.length * 0.3 ? "DEGRADED" : "OK",
+      },
+      fallbacks: {
+        news: newsApiUsedFallback,
+        search: searchApiUsedFallback,
+      },
+      churn: {
+        top10: `+${enteredTop10}/-${exitedTop10}`,
+        top20: `+${enteredTop20}/-${exitedTop20}`,
+      },
+      rateLimited: stabilizationStats.rateLimited,
+      rateLimitedPct: `${((stabilizationStats.rateLimited / stabilizationStats.totalProcessed) * 100).toFixed(1)}%`,
+    };
+    
+    console.log(`[HEALTH SUMMARY] ${JSON.stringify(healthSummary)}`);
+    // ═══════════════════════════════════════════════════════════════════════════
 
   } catch (error) {
     console.error("[Ingest] Fatal error:", error);

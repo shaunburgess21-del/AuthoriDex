@@ -5,6 +5,7 @@ import { computeTrendScore } from "../scoring/trendScore";
 
 export async function runQuickScoring(): Promise<{ processed: number; errors: number }> {
   console.log("[QuickScore] Starting quick scoring from cached data...");
+  const startTime = Date.now();
   
   let processed = 0;
   let errors = 0;
@@ -224,6 +225,34 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
     });
 
     console.log(`[QuickScore] Updated ${scoreResults.length} trending people records (transaction committed)`);
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // POST-SCORE HEALTH SUMMARY - Single consolidated log for monitoring
+    // ═══════════════════════════════════════════════════════════════════════════
+    const jobDuration = Date.now() - startTime;
+    const avgFameIndex = scoreResults.length > 0 
+      ? scoreResults.reduce((sum, r) => sum + (r.score.fameIndex ?? 0), 0) / scoreResults.length 
+      : 0;
+    const healthSummary = {
+      job: "quick-score",
+      duration: `${jobDuration}ms`,
+      rows: processed,
+      lock: "acquired",
+      sources: {
+        wiki: wikiCache.size > 0 ? "OK" : "EMPTY",
+        news: gdeltCache.size > 0 ? "OK" : "EMPTY",
+        search: serperCache.size > 0 ? "OK" : "EMPTY",
+      },
+      cacheHits: {
+        wiki: wikiCache.size,
+        news: gdeltCache.size,
+        search: serperCache.size,
+      },
+      avgFameIndex: Math.round(avgFameIndex),
+    };
+    
+    console.log(`[HEALTH SUMMARY] ${JSON.stringify(healthSummary)}`);
+    // ═══════════════════════════════════════════════════════════════════════════
 
   } catch (error) {
     console.error("[QuickScore] Fatal error:", error);
