@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { getTrendingData, generateMockPlatformInsights } from "./api-integrations";
+import { generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
 import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile } from "@shared/schema";
 import { eq, desc, and, sql, count, gte, SQL } from "drizzle-orm";
@@ -140,11 +140,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let people = await storage.getTrendingPeople();
       
-      // If storage is empty, fetch fresh data from APIs
+      // If storage is empty, return empty array (ingestion job populates the database)
+      // DO NOT fetch mock data here - it corrupts real scores
       if (people.length === 0) {
-        const freshData = await getTrendingData();
-        await storage.updateTrendingPeople(freshData);
-        people = freshData;
+        console.log('[API] trending_people is empty - waiting for ingestion job to populate');
+        res.json([]);
+        return;
       }
 
       // Fetch approval metrics for all celebrities
@@ -240,14 +241,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/trending/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      let person = await storage.getTrendingPerson(id);
+      const person = await storage.getTrendingPerson(id);
       
-      if (!person) {
-        // Try to get from fresh data
-        const allPeople = await getTrendingData();
-        person = allPeople.find(p => p.id === id);
-      }
-
+      // Only return real data from database - no mock data fallback
       if (!person) {
         return res.status(404).json({ error: "Person not found" });
       }
@@ -304,15 +300,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Refresh trending data (can be called periodically)
+  // Refresh trending data - DEPRECATED
+  // NOTE: This endpoint should NOT write mock data to the database
+  // Real data comes from the scheduled ingestion job (ingest.ts)
   app.post("/api/trending/refresh", async (req, res) => {
     try {
-      const freshData = await getTrendingData();
-      await storage.updateTrendingPeople(freshData);
-      res.json({ success: true, count: freshData.length });
+      // Just return current database data - don't write mock data
+      const currentData = await storage.getTrendingPeople();
+      res.json({ 
+        success: true, 
+        count: currentData.length,
+        message: "Data is managed by scheduled ingestion job"
+      });
     } catch (error) {
-      console.error("Error refreshing trending data:", error);
-      res.status(500).json({ error: "Failed to refresh data" });
+      console.error("Error in trending/refresh:", error);
+      res.status(500).json({ error: "Failed to get data" });
     }
   });
 
@@ -423,10 +425,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { type } = req.params;
       let people = await storage.getTrendingPeople();
       
+      // If storage is empty, return empty array (ingestion job populates the database)
+      // DO NOT fetch mock data here - it corrupts real scores
       if (people.length === 0) {
-        const freshData = await getTrendingData();
-        await storage.updateTrendingPeople(freshData);
-        people = freshData;
+        console.log('[API] trending_people is empty for movers - waiting for ingestion job');
+        res.json([]);
+        return;
       }
 
       if (type === 'gainers') {
