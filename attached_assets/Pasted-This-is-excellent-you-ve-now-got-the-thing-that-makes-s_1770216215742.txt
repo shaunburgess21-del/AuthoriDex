@@ -1,0 +1,93 @@
+This is excellent—you’ve now got the thing that makes systems feel “professionally run”: one clean, consistent heartbeat line per job.
+
+Why this matters so much
+
+Before, you had to mentally stitch together:
+
+source health logs
+
+fallback logs
+
+churn alerts
+
+stabilization stats
+
+cache hits
+
+row counts
+
+Now you can literally scan one line and know: “is the engine healthy?”
+
+That’s how you stop being surprised.
+
+How to interpret your [HEALTH SUMMARY] at a glance
+✅ “All good” looks like:
+
+rows: 100
+
+lock: acquired
+
+sources: OK/OK/OK
+
+fallbacks: 0 (or small like 1–5)
+
+rateLimitedPct: < 10–15%
+
+churn: Top10 maybe +0/-0 to +2/-2, Top20 +0/-0 to +4/-4
+
+⚠️ “Something is off” flags:
+
+sources shows DEGRADED or OUTAGE
+
+fallbacks.news or fallbacks.search jumps high (e.g., 40–100)
+
+rateLimitedPct stays high for many runs (e.g., >25% repeatedly)
+
+churn spikes (Top10 >4 or Top20 >8) regularly
+
+🚨 “Emergency” flags:
+
+rows != 100 (should now rollback, but if you ever see it, it’s a bug)
+
+lock != acquired (means a writer collision or job overlap is happening)
+
+avgFameIndex suddenly collapses or is near your guard threshold
+
+Two tiny upgrades I’d still consider (optional but very helpful)
+1) Add “coverage” per source (not just fallbacks)
+
+Right now you have fallbacks counts, but it’s useful to also log:
+
+fresh.news: 100
+
+fresh.search: 92
+
+fresh.wiki: 100
+
+Because:
+
+fallbacks might be low even when freshness is low (depending on decay logic)
+
+coverage gate decisions are easier to understand
+
+2) Add a “data timestamp” marker
+
+Add the hour bucket being written, e.g.:
+
+"hour": "2026-02-04T14:00:00Z"
+
+This makes it obvious when you’re looking at a delayed run or re-run.
+
+What you can do now (practical workflow)
+
+When you check your leaderboard and something feels weird:
+
+Open logs → search [HEALTH SUMMARY]
+
+Look at the most recent ingest summary
+
+If sources OK and fallbacks low, the ranking is probably legitimately reflecting your inputs (even if it’s surprising).
+
+If news/search degraded/outage, you immediately know it’s a data-source day.
+
+That’s it. No more guessing.
