@@ -19,11 +19,11 @@ if (GDELT_RELAX_SSL) {
   console.warn("[GDELT] SSL certificate verification disabled via GDELT_RELAX_SSL=true");
 }
 
-// Retry configuration
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 2000; // Start with 2 seconds, exponential backoff
-const REQUEST_DELAY_MS = 500; // Delay between individual requests
-const JITTER_MAX_MS = 300; // Random jitter to avoid thundering herd
+// Retry configuration - increased for stability
+const MAX_RETRIES = 4;  // Increased from 3
+const RETRY_DELAY_MS = 3000; // Start with 3 seconds, exponential backoff (increased from 2s)
+const REQUEST_DELAY_MS = 800; // Delay between individual requests (increased from 500ms)
+const JITTER_MAX_MS = 500; // Random jitter to avoid thundering herd (increased from 300ms)
 
 async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -38,7 +38,7 @@ async function fetchWithRetry(url: string, retries = MAX_RETRIES): Promise<Respo
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout per request
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout per request (increased from 10s)
       
       const response = await fetch(url, { 
         headers: { "Accept": "application/json" },

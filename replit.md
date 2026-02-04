@@ -29,14 +29,14 @@ Preferred communication style: Simple, everyday language.
     - **Fixed Weights**: Mass (40%) and Velocity (60%) with no dynamic redistribution.
     - **Active Velocity Sources**: Wikipedia (25%), News (35%), Search (40%). The X/Twitter API is not used for trend scoring due to cost constraints.
     - **Per-Source Normalization**: Each source is independently normalized using `log1p` compression and percentile ranking against 7-day population statistics.
-    - **Score Stabilization**: A multi-layered approach prevents wild score fluctuations using dynamic rate limiting based on source corroboration, robust spike detection, dynamic EMA alpha, and a recalibration mode.
+    - **Score Stabilization**: A multi-layered approach prevents wild score fluctuations using dynamic rate limiting based on source corroboration (max 10% normal, 18% for 2 sources, 35% for 3 sources), robust spike detection, and dynamic EMA alpha.
     - **Graceful Degradation**: Handles external API failures by carrying forward last known values and detecting "suspicious drops."
-    - **Data Recovery Mode**: Boosts rate caps temporarily when fresh API data returns after fallback.
-    - **Source Health State Machine**: Explicitly tracks the health of each data source (HEALTHY, DEGRADED, OUTAGE, RECOVERY). Transitions: 2+ failures → DEGRADED, 5+ failures or global-zero → OUTAGE, 3 successful runs → back to HEALTHY.
+    - **Fixed Velocity Weights** (Feb 2026 stability fix): Weights are ALWAYS fixed at Wiki 25%, News 35%, Search 40% - even during API outages. Weight redistribution during outages was causing population-wide rank instability.
+    - **Recalibration Mode**: DISABLED. Previously allowed higher rate caps (36%) after algorithm changes, but caused excessive volatility. Now uses standard 10% caps.
+    - **Source Health State Machine**: Explicitly tracks the health of each data source (HEALTHY, DEGRADED, OUTAGE, RECOVERY). Used for logging/monitoring only - does NOT affect weight distribution.
     - **Global-Zero Detection**: Requires >50% of celebrities with near-zero values before triggering OUTAGE state (prevents false-positives from individual genuine drops).
     - **Staleness Decay**: Fill-forwarded values gradually reduce over time: 100% (0-2h), 90→70% (2-4h), 70→50% (4-6h), 50→20% (6-12h), 20% floor (>12h).
     - **Velocity Taper** (Feb 2026): When news/search signals are low, velocity contribution is tapered (not mass). Checks 2 signals: newsCount<5, searchVolume<100. Taper multipliers: 0 low=1.0, 1 low=0.85, 2 low=0.65. Mass stays stable as baseline fame; velocity collapses naturally when momentum fades.
-    - **Weight Renormalization During Outages** (Feb 2026): When sources are in OUTAGE or DEGRADED state, their velocity weights are redistributed proportionally to active sources. This ensures accurate scoring even when APIs fail.
     - **Composite Search Activity Score** (Feb 2026): Serper parsing no longer relies on unreliable `totalResults` field. Instead uses a composite score from organic count, knowledge graph presence, news results, related searches, people also ask, and sitelinks.
     - **Cache Validity Gate** (Feb 2026): Serper results with suspiciously low scores (< 10) won't overwrite valid cached data when the drop exceeds 70%. Prevents hours of cached garbage data.
 - **Data Jobs**: Ingestion runs hourly, with EMA smoothing applied to `fameIndex` for smooth trend curves.
@@ -64,7 +64,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Third-Party API Services
 - **Wikipedia API**: Pageview data.
-- **GDELT API**: News mention counts, with retry logic and timeouts.
+- **GDELT API**: News mention counts, with 4 retries, 20s per-request timeout, 180s batch timeout, jittered delays (800ms base + 500ms jitter).
 - **Serper.dev API**: Google search results.
 - **X/Twitter API**: Reserved for future Platform Insights feature.
 - **Google Fonts**: Inter, Space Grotesk, JetBrains Mono.

@@ -62,7 +62,8 @@ export const EMA_ALPHA = EMA_ALPHA_DEFAULT;
 
 // Set this to the timestamp when the scoring model was last changed.
 // For 48 hours after this date, use boosted caps/alpha to speed up transition.
-export const RECALIBRATION_START = new Date('2026-02-02T17:00:00Z');
+// DISABLED: Set to past date to use normal 10% rate caps for stability
+export const RECALIBRATION_START = new Date('2026-01-01T00:00:00Z');
 export const RECALIBRATION_DURATION_HOURS = 48;
 
 /**

@@ -20,8 +20,7 @@ import {
   SpikeDetectionInputs,
   getRecoveryRateBoost,
   getVelocityTaperMultiplier,
-  getRenormalizedVelocityWeights,
-  SourceHealthStates,
+  SourceHealthStates, // Kept for interface compatibility, but not used for weight redistribution
 } from "./normalize";
 import { 
   normalizeMass, 
@@ -173,18 +172,12 @@ export function computeTrendScore(
     ? Math.min(100, xTotalVelocity * 2) 
     : 0;
   
-  // Get velocity weights - use renormalized weights if sources are in outage
-  const healthStates = inputs.sourceHealthStates || {
-    newsOutage: false,
-    searchOutage: false,
-    wikiOutage: false,
-  };
-  const hasAnyOutage = healthStates.newsOutage || healthStates.searchOutage || healthStates.wikiOutage;
-  const velocityWeights = hasAnyOutage 
-    ? getRenormalizedVelocityWeights(healthStates)
-    : PLATFORM_WEIGHTS.velocity;
+  // STABILITY FIX: Always use fixed velocity weights (25% wiki, 35% news, 40% search)
+  // During outages, we use fill-forward data with the SAME weights instead of redistributing.
+  // Weight redistribution was causing population-wide score recalculations and rank instability.
+  const velocityWeights = PLATFORM_WEIGHTS.velocity;
   
-  // Total velocity score - uses renormalized weights during outages
+  // Total velocity score - always uses fixed weights for stability
   const velocityScore = (
     (wikiVelocityScore * velocityWeights.wiki) +
     (newsVelocityScore * velocityWeights.news) +

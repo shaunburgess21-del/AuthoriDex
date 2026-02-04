@@ -52,13 +52,14 @@ export async function runDataIngestion(): Promise<IngestResult> {
     );
 
     // GDELT has SSL certificate issues (Dec 2024) - wrap with timeout and fallback
+    // STABILITY FIX: Increased timeout from 120s to 180s to accommodate improved retry logic
     let gdeltData = new Map<string, any>();
     try {
       const gdeltPromise = fetchBatchGdeltNews(
         people.map(p => ({ id: p.id, name: p.name }))
       );
       const timeoutPromise = new Promise<Map<string, any>>((_, reject) => 
-        setTimeout(() => reject(new Error('GDELT timeout')), 120000) // 2 minutes for 100 people with jittered delays
+        setTimeout(() => reject(new Error('GDELT timeout')), 180000) // 3 minutes for 100 people with jittered delays
       );
       gdeltData = await Promise.race([gdeltPromise, timeoutPromise]);
     } catch (err) {
