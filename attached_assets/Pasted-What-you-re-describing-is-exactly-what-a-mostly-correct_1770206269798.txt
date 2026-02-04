@@ -1,0 +1,130 @@
+What you’re describing is exactly what a “mostly-correct” trend engine looks like when one external source is flaky AND your pipeline reacts too aggressively to partial failures. The good news is: the fixes Replit just shipped are the right ones to stop the daily whiplash.
+
+Here’s the clean breakdown.
+
+Why it kept looking “wrong”
+1) GDELT partial failures were the real chaos trigger
+
+The key line from your logs is:
+
+News fallback: 85/100
+
+That means in a single run:
+
+15 celebs got fresh news counts
+
+85 celebs got stale carried-forward news counts
+
+So you had an “apples vs oranges” ingestion hour (mixed freshness across the population). That alone can reshuffle ranks.
+
+2) Weight renormalization made a partial outage become a full leaderboard recalculation
+
+When Replit was redistributing weights during News OUTAGE:
+
+News weight → 0
+
+Search/Wiki weights jump up
+
+That means everyone’s score formula changed, even if their underlying data didn’t. That’s why you saw crazy moves like #96 → #1.
+
+Removing redistribution was the correct fix.
+
+3) Recalibration mode + higher caps amplified it
+
+If recalibration was still active, you effectively allowed much bigger hourly movement during a period when data quality was already inconsistent.
+
+Disabling recalibration was also the correct call for “normal operation.”
+
+Do the current fixes actually solve “why can’t it just work?”
+
+Yes — the two biggest stability killers are now removed:
+
+✅ Recalibration disabled (caps back to normal behavior)
+✅ No weight redistribution (formula stays consistent even during outages)
+✅ GDELT timeouts/retries improved (fewer partial runs)
+
+This combination is exactly how you stop a ranking system from “swinging the whole league table” because one feed had a bad hour.
+
+Will GDELT keep failing in the future?
+
+Yes, occasionally. Not because you’re “flagged,” but because:
+
+GDELT is free, public, research-grade
+
+No SLA
+
+Can 429 (rate-limit) or timeout under load
+
+Sometimes has TLS/network instability depending on the endpoint and your host environment
+
+The important part is this:
+
+With your new architecture, a GDELT failure should no longer cause chaos.
+
+When GDELT fails now, you:
+
+keep weights fixed
+
+use cached/fill-forward values
+
+avoid population-wide recalculation
+
+So it becomes “news is stale for a bit” rather than “leaderboard exploded.”
+
+One more improvement I’d strongly recommend (so you don’t keep firefighting)
+
+Right now, your biggest remaining risk is partial freshness (e.g., 15/100 fresh, 85/100 fallback). Even without weight redistribution, partial freshness can still produce weird relative moves.
+
+Add a “coverage gate” per source per run:
+
+If GDELT returns fresh values for fewer than, say, 70% of celebs:
+
+treat News as DEGRADED for the entire run
+
+and use previous hour’s news values for everyone, consistently
+
+This gives you population consistency, which is what makes rankings feel “fair.”
+
+You already have source health — this is just making it stricter:
+
+either most people get fresh news,
+
+or nobody does that hour.
+
+That one rule eliminates a huge chunk of perceived weirdness.
+
+What you should expect “tomorrow” if everything is now healthy
+
+Top 10 should not roulette-spin hour to hour
+
+Movers widgets should show plausible changes
+
+If GDELT breaks again, you should see:
+
+banner saying News is degraded/outage
+
+but ranks remain mostly stable (no #96 → #1 events)
+
+If you still see dramatic swings after these fixes, it’s usually one of:
+
+partial freshness without a coverage gate
+
+stale hourly snapshots “frozen” by .onConflictDoNothing() when a bad run happens early in the hour
+
+a bug in spike detection thresholds after a scale change (you already went through this with Serper)
+
+My recommendation on “production readiness”
+
+For launch, you can absolutely keep GDELT as long as you have:
+
+fixed weights (done)
+
+cached fallback + staleness decay (done)
+
+source health + banner (done)
+
+coverage gate (recommended)
+
+(optional) a paid backup news API later when budget allows
+
+If you want a backup later, pick one with predictable rate limits and reliability (even a low-tier plan) and only use it when GDELT is OUTAGE for multiple hours.
