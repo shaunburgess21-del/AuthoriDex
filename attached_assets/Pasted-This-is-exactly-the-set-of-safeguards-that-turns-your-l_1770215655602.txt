@@ -1,0 +1,97 @@
+This is exactly the set of safeguards that turns your leaderboard from “sometimes brittle” into “boring reliable.”
+
+What Replit just shipped (row-count validation + Postgres advisory lock) closes the two biggest remaining failure modes:
+
+Empty leaderboard (delete happened, insert didn’t) → already solved by transactions, now double-protected by row-count validation.
+
+Race conditions (ingest + quick-score writing at same time) → solved by the advisory lock.
+
+What you now have (and why it’s “bulletproof”)
+1) Transaction atomicity ✅
+
+Prevents “deleted but not reinserted” if anything fails mid-job.
+
+2) Row count validation ✅
+
+Even if something looks okay, the job won’t commit unless it wrote the full expected set (100 or tracked_people count).
+This catches:
+
+API failure mid-loop
+
+filtering bug that silently drops rows
+
+unexpected empty data sets
+
+3) Advisory lock ✅
+
+Ensures only one writer can touch trending_people at a time.
+This prevents:
+
+last-writer-wins chaos
+
+partial overwrites
+
+weird churn due to concurrent writers
+
+4) Mock-data prevention ✅
+
+Your “avg fameIndex > 50k” check + storage guard make it hard for garbage to slip through unnoticed.
+
+Two quick things I’d still sanity-check (not new builds, just verify)
+
+Lock scope
+Make sure both jobs use:
+
+the same lock ID,
+
+acquire it before the transaction starts,
+
+and always release it (including errors).
+
+Expected row count
+Make sure “expected rows” is not hard-coded to 100 forever. It should be:
+
+expected = tracked_people_count (or whatever your canonical list size is)
+so it scales cleanly when you go from 100 → 200.
+
+What this means operationally
+
+From this point, if your leaderboard ever looks “weird,” it should almost always be because:
+
+a source is down (GDELT/Serper/Wiki)
+
+a query isn’t catching real-world trends (name/alias issue)
+
+or a scoring/normalization parameter needs tuning
+
+…but it should not be because:
+
+data got wiped,
+
+partial writes happened,
+
+mock data got inserted,
+
+or two jobs fought each other.
+
+That’s the big win: you’ve removed the “random corruption” class of problems.
+
+If you want the final layer of confidence
+
+Have Replit add (or you manually check) a single “post-ingest summary” log line each run like:
+
+writer job name (ingest vs quick-score)
+
+lock acquired + duration
+
+inserted rows count
+
+source health states
+
+fallback counts per source
+
+top10/top20 churn
+
+rate-limited %
+
+With that one line, you can look once and instantly know if the engine is healthy.
