@@ -1,7 +1,20 @@
+/**
+ * @deprecated THIS ENTIRE FILE IS DEPRECATED AND UNUSED
+ * 
+ * DO NOT IMPORT OR USE ANY FUNCTIONS FROM THIS FILE.
+ * 
+ * This file generates mock data that can corrupt the trending_people database.
+ * Real trending data should ONLY be written by server/jobs/ingest.ts.
+ * 
+ * This file is kept for historical reference only and should be deleted
+ * in a future cleanup if no issues arise.
+ */
+
 import { TrendingPerson } from "@shared/schema";
 
-//todo: remove mock functionality - this generates mock trending data
+/** @deprecated - generates mock data, do not use */
 function generateMockTrendingPeople(): TrendingPerson[] {
+  console.error("[DEPRECATED] generateMockTrendingPeople() should not be called!");
   const categories = ["Entertainment", "Sports", "Tech", "Politics", "Business", "Creator"];
   const firstNames = [
     "Taylor", "Elon", "Cristiano", "Kim", "Lionel", "Beyoncé", "LeBron", "Rihanna",

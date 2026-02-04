@@ -164,27 +164,43 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
     // Sort by fameIndex (displayed on leaderboard) not trendScore
     scoreResults.sort((a, b) => b.score.fameIndex - a.score.fameIndex);
 
-    await db.delete(trendingPeople);
-    console.log(`[QuickScore] Cleared trending_people table`);
-
-    for (let i = 0; i < scoreResults.length; i++) {
-      const { person, score } = scoreResults[i];
-
-      await db.insert(trendingPeople).values({
-        id: person.id,
-        name: person.name,
-        avatar: person.avatar,
-        bio: person.bio,
-        rank: i + 1,
-        trendScore: score.trendScore,
-        fameIndex: score.fameIndex,
-        change24h: score.change24h,
-        change7d: score.change7d,
-        category: person.category,
-      });
+    // SAFEGUARD: Validate fameIndex range before writing to database
+    // Real fame_index values should be in the 100k-600k range
+    // Mock/corrupted data typically has values in the 5k-10k range
+    if (scoreResults.length > 0) {
+      const avgFameIndex = scoreResults.reduce((sum, r) => sum + (r.score.fameIndex ?? 0), 0) / scoreResults.length;
+      if (avgFameIndex < 50000) {
+        const errorMsg = `[QuickScore] BLOCKED: Computed data has suspicious avg fameIndex (${avgFameIndex.toFixed(0)}). Real data should be > 50,000. Aborting write.`;
+        console.error(errorMsg);
+        throw new Error(errorMsg);
+      }
+      console.log(`[QuickScore] Validated avg fameIndex: ${avgFameIndex.toFixed(0)} (above 50k threshold)`);
     }
 
-    console.log(`[QuickScore] Updated ${scoreResults.length} trending people records`);
+    // Use transaction to ensure atomicity - if any insert fails, rollback the delete
+    await db.transaction(async (tx) => {
+      await tx.delete(trendingPeople);
+      console.log(`[QuickScore] Cleared trending_people table (in transaction)`);
+
+      for (let i = 0; i < scoreResults.length; i++) {
+        const { person, score } = scoreResults[i];
+
+        await tx.insert(trendingPeople).values({
+          id: person.id,
+          name: person.name,
+          avatar: person.avatar,
+          bio: person.bio,
+          rank: i + 1,
+          trendScore: score.trendScore,
+          fameIndex: score.fameIndex,
+          change24h: score.change24h,
+          change7d: score.change7d,
+          category: person.category,
+        });
+      }
+    });
+
+    console.log(`[QuickScore] Updated ${scoreResults.length} trending people records (transaction committed)`);
 
   } catch (error) {
     console.error("[QuickScore] Fatal error:", error);

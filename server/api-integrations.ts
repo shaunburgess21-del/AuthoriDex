@@ -395,7 +395,15 @@ const CACHE_DURATION = 30 * 1000; // 30 seconds (fast refresh for design work wi
 // Lock to prevent simultaneous fetches
 let fetchInProgress: Promise<TrendingPerson[]> | null = null;
 
+/**
+ * @deprecated DO NOT USE - This function generates mock data that corrupts the database.
+ * Real trending data should ONLY be written by server/jobs/ingest.ts.
+ * API endpoints should ONLY read from the database via storage.getTrendingPeople().
+ * This function is kept for historical reference but should not be imported or called.
+ */
 export async function getTrendingData(): Promise<TrendingPerson[]> {
+  console.error("[DEPRECATED] getTrendingData() called - this function should not be used!");
+  console.error("[DEPRECATED] Real data comes from ingestion job. API endpoints should read from database only.");
   const now = Date.now();
   
   // Return cached data if still valid

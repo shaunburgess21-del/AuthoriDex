@@ -67,16 +67,16 @@ export class MemStorage implements IStorage {
   }
 
   async updateTrendingPeople(people: TrendingPerson[]): Promise<void> {
-    // SAFEGUARD: Reject mock data writes
+    // SAFEGUARD: Reject mock data writes - THROWS ERROR instead of silent failure
     // Real fame_index values should be in the 100k-600k range (from ingestion)
     // Mock data typically has values in the 5k-10k range
     // Block writes where the average fame_index is suspiciously low
     if (people.length > 0) {
       const avgFameIndex = people.reduce((sum, p) => sum + (p.fameIndex ?? 0), 0) / people.length;
       if (avgFameIndex < 50000) {
-        console.error(`[Storage] BLOCKED: Attempted to write mock/corrupted data (avg fameIndex: ${avgFameIndex.toFixed(0)})`);
-        console.error(`[Storage] Real data should have avg fameIndex > 50,000. This write is rejected.`);
-        return; // Silently reject - don't corrupt the database
+        const errorMsg = `[Storage] BLOCKED: Attempted to write mock/corrupted data (avg fameIndex: ${avgFameIndex.toFixed(0)}). Real data should have avg fameIndex > 50,000.`;
+        console.error(errorMsg);
+        throw new Error(errorMsg);
       }
     }
     
