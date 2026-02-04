@@ -606,15 +606,22 @@ export async function runDataIngestion(): Promise<IngestResult> {
     // POST-INGEST HEALTH SUMMARY - Single consolidated log for monitoring
     // ═══════════════════════════════════════════════════════════════════════════
     const jobDuration = Date.now() - startTime;
+    const hourBucket = new Date().toISOString().slice(0, 13) + ":00:00Z"; // e.g. "2026-02-04T14:00:00Z"
     const healthSummary = {
       job: "ingest",
+      hour: hourBucket,
       duration: `${jobDuration}ms`,
       rows: processed,
       lock: "acquired",
       sources: {
-        wiki: "OK", // Wiki rarely fails
+        wiki: wikiData.size < people.length * 0.7 ? "DEGRADED" : "OK",
         news: newsApiUsedFallback > people.length * 0.3 ? "DEGRADED" : "OK",
         search: searchApiUsedFallback > people.length * 0.3 ? "DEGRADED" : "OK",
+      },
+      fresh: {
+        wiki: wikiData.size,
+        news: people.length - newsApiUsedFallback,
+        search: people.length - searchApiUsedFallback,
       },
       fallbacks: {
         news: newsApiUsedFallback,

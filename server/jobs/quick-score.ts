@@ -230,11 +230,13 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
     // POST-SCORE HEALTH SUMMARY - Single consolidated log for monitoring
     // ═══════════════════════════════════════════════════════════════════════════
     const jobDuration = Date.now() - startTime;
+    const hourBucket = new Date().toISOString().slice(0, 13) + ":00:00Z"; // e.g. "2026-02-04T14:00:00Z"
     const avgFameIndex = scoreResults.length > 0 
       ? scoreResults.reduce((sum, r) => sum + (r.score.fameIndex ?? 0), 0) / scoreResults.length 
       : 0;
     const healthSummary = {
       job: "quick-score",
+      hour: hourBucket,
       duration: `${jobDuration}ms`,
       rows: processed,
       lock: "acquired",
