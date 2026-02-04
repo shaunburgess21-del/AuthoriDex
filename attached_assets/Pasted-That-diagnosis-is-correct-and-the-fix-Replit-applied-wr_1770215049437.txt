@@ -1,0 +1,93 @@
+That diagnosis is correct, and the fix Replit applied (wrapping the ingest delete+insert in a transaction) is the single most important thing to prevent an “empty leaderboard” from happening again.
+
+Here’s the clean explanation + the extra “belt-and-suspenders” improvements I’d recommend so this never surprises you again.
+
+Why the leaderboard went empty
+
+You had this pattern in ingest.ts:
+
+DELETE all rows from trending_people
+
+INSERT the new 100 rows
+
+If anything interrupts the job after step 1 (workflow restart, crash, timeout, unhandled exception), step 2 never happens → table stays 0 rows → your UI shows an empty leaderboard.
+
+That’s why refreshing didn’t help: there was simply no data to render.
+
+Why the new fix prevents it
+
+Wrapping the delete+insert in a DB transaction means:
+
+Either both steps happen, or neither happens.
+
+If the process crashes mid-way, the DB rolls back to the previous state automatically.
+
+So you never end up with “deleted but not reinserted.”
+
+That should eliminate the “empty table” failure mode.
+
+Two more changes I’d still add (high ROI)
+1) Don’t “delete all” — use atomic swap / upsert pattern
+
+Even with transactions, “delete all + insert” is brittle and creates pressure on locks.
+
+Better patterns:
+
+Option A: Staging + swap (best)
+
+Write new results into trending_people_next
+
+When complete, atomically swap tables or update a pointer flag
+
+This is how real-time leaderboards avoid flicker and empties entirely
+
+Option B: Upsert + mark stale
+
+Upsert the 100 records by person_id
+
+Mark anything not touched this run as stale/disabled
+
+No full wipe required
+
+Transactions fix the emptiness problem, but swap/upsert makes the whole system more graceful and scalable.
+
+2) Add a “minimum rows” invariant before commit
+
+Before committing the transaction, assert:
+
+row count == expected (e.g., 100)
+
+no null fameIndex
+
+sanity bounds (median in expected range)
+
+If any check fails → throw → rollback.
+
+This prevents “successful” writes that are actually corrupted.
+
+One thing to watch: multi-writer collisions
+
+You now have ingest.ts and quick-score.ts both capable of writing trending_people.
+
+Even with transactions, if they run at the same time you can get:
+
+last-writer-wins
+
+or unexpected churn
+
+Add a writer lock (Postgres advisory lock or a “job lock” row with unique constraint per hour) so only one job writes at a time.
+
+What you can do from your side (simple operational tips)
+
+Avoid restarting the workflow around the top of the hour if ingestion is running.
+
+Watch for a log line like:
+
+“Begin transaction…”
+
+“Inserted 100 rows…”
+
+“Commit…”
+If you ever see “delete started” without a matching “commit,” you know exactly what happened.
+
+But realistically, with the transaction now added, you shouldn’t have to babysit it.
