@@ -439,6 +439,19 @@ export async function runDataIngestion(): Promise<IngestResult> {
     // Sort by fameIndex (displayed on leaderboard) not trendScore - matches quick-score.ts
     scoreResults.sort((a, b) => b.score.fameIndex - a.score.fameIndex);
 
+    // SAFEGUARD: Validate fameIndex range before writing to database
+    // Real fame_index values should be in the 100k-600k range
+    // Mock/corrupted data typically has values in the 5k-10k range
+    if (scoreResults.length > 0) {
+      const avgFameIndex = scoreResults.reduce((sum, r) => sum + (r.score.fameIndex ?? 0), 0) / scoreResults.length;
+      if (avgFameIndex < 50000) {
+        const errorMsg = `[Ingest] BLOCKED: Computed data has suspicious avg fameIndex (${avgFameIndex.toFixed(0)}). Real data should be > 50,000. Aborting write.`;
+        console.error(errorMsg);
+        throw new Error(errorMsg);
+      }
+      console.log(`[Ingest] Validated avg fameIndex: ${avgFameIndex.toFixed(0)} (above 50k threshold)`);
+    }
+
     // Fetch primary images for all celebrities (from celebrity_images table)
     // Order by personId first, then by isPrimary (desc) and vote score (desc)
     // This ensures when we iterate, we see the "best" image for each person first
@@ -461,28 +474,20 @@ export async function runDataIngestion(): Promise<IngestResult> {
     }
     console.log(`[Ingest] Loaded ${primaryImageMap.size} primary avatar images from celebrity_images`);
 
-    await db.delete(trendingPeople);
+    // Use transaction to ensure atomicity - if any insert fails, rollback the delete
+    // This prevents data loss if the server crashes/restarts between delete and inserts
+    await db.transaction(async (tx) => {
+      await tx.delete(trendingPeople);
+      console.log(`[Ingest] Cleared trending_people table (in transaction)`);
 
-    for (let i = 0; i < scoreResults.length; i++) {
-      const { person, score } = scoreResults[i];
-      
-      // Use celebrity_images primary image, fallback to tracked_people avatar
-      const avatarUrl = primaryImageMap.get(person.id) || person.avatar;
+      for (let i = 0; i < scoreResults.length; i++) {
+        const { person, score } = scoreResults[i];
+        
+        // Use celebrity_images primary image, fallback to tracked_people avatar
+        const avatarUrl = primaryImageMap.get(person.id) || person.avatar;
 
-      await db.insert(trendingPeople).values({
-        id: person.id,
-        name: person.name,
-        avatar: avatarUrl,
-        bio: person.bio,
-        rank: i + 1,
-        trendScore: score.trendScore,
-        fameIndex: score.fameIndex,
-        change24h: score.change24h,
-        change7d: score.change7d,
-        category: person.category,
-      }).onConflictDoUpdate({
-        target: trendingPeople.id,
-        set: {
+        await tx.insert(trendingPeople).values({
+          id: person.id,
           name: person.name,
           avatar: avatarUrl,
           bio: person.bio,
@@ -492,11 +497,24 @@ export async function runDataIngestion(): Promise<IngestResult> {
           change24h: score.change24h,
           change7d: score.change7d,
           category: person.category,
-        },
-      });
-    }
+        }).onConflictDoUpdate({
+          target: trendingPeople.id,
+          set: {
+            name: person.name,
+            avatar: avatarUrl,
+            bio: person.bio,
+            rank: i + 1,
+            trendScore: score.trendScore,
+            fameIndex: score.fameIndex,
+            change24h: score.change24h,
+            change7d: score.change7d,
+            category: person.category,
+          },
+        });
+      }
+    });
 
-    console.log(`[Ingest] Updated ${scoreResults.length} trending people records`);
+    console.log(`[Ingest] Updated ${scoreResults.length} trending people records (transaction committed)`);
 
     // Calculate rank churn (entries entering/exiting top 10 and top 20)
     const newTop10 = new Set(scoreResults.slice(0, 10).map(r => r.person.id));
