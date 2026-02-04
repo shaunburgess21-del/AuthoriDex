@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trackedPeople, trendSnapshots, trendingPeople, apiCache } from "@shared/schema";
-import { eq, desc, gte } from "drizzle-orm";
+import { eq, desc, gte, sql } from "drizzle-orm";
 import { computeTrendScore } from "../scoring/trendScore";
 
 export async function runQuickScoring(): Promise<{ processed: number; errors: number }> {
@@ -178,10 +178,23 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
     }
 
     // Use transaction to ensure atomicity - if any insert fails, rollback the delete
+    const expectedRowCount = scoreResults.length;
+    const TRENDING_PEOPLE_LOCK_ID = 12345; // Same lock ID as ingest.ts - prevents concurrent writes
+    
     await db.transaction(async (tx) => {
+      // Acquire advisory lock to prevent concurrent writes from ingest or other quick-score jobs
+      const lockResult = await tx.execute(sql`SELECT pg_try_advisory_xact_lock(${TRENDING_PEOPLE_LOCK_ID})`);
+      // Drizzle returns array of rows directly, not object with .rows
+      const lockAcquired = (lockResult as any)[0]?.pg_try_advisory_xact_lock;
+      if (!lockAcquired) {
+        throw new Error("[QuickScore] Another job is writing to trending_people. Aborting to prevent conflicts.");
+      }
+      console.log(`[QuickScore] Acquired advisory lock for trending_people writes`);
+      
       await tx.delete(trendingPeople);
       console.log(`[QuickScore] Cleared trending_people table (in transaction)`);
 
+      let insertedCount = 0;
       for (let i = 0; i < scoreResults.length; i++) {
         const { person, score } = scoreResults[i];
 
@@ -197,7 +210,17 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
           change7d: score.change7d,
           category: person.category,
         });
+        insertedCount++;
       }
+      
+      // ROW COUNT VALIDATION: Query actual DB row count to verify inserts succeeded
+      const countResult = await tx.execute(sql`SELECT COUNT(*) as count FROM trending_people`);
+      const actualDbCount = parseInt((countResult as any)[0]?.count || '0', 10);
+      
+      if (actualDbCount !== expectedRowCount) {
+        throw new Error(`[QuickScore] Row count mismatch: expected ${expectedRowCount}, DB has ${actualDbCount}. Rolling back.`);
+      }
+      console.log(`[QuickScore] Row count validated: ${actualDbCount} rows in DB (matches expected ${expectedRowCount})`);
     });
 
     console.log(`[QuickScore] Updated ${scoreResults.length} trending people records (transaction committed)`);

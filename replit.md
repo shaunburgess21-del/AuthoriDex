@@ -37,9 +37,11 @@ Preferred communication style: Simple, everyday language.
     - **Mock Data Safeguard** (Feb 2026): Multi-layer protection against mock data corrupting the database:
       1. **Write Restriction**: API endpoints NEVER write to `trending_people` - only `server/jobs/ingest.ts` and `server/jobs/quick-score.ts` write real scores.
       2. **Storage Layer Guard**: `storage.updateTrendingPeople()` THROWS ERROR if avg fameIndex < 50,000 (real data is 100k-600k range).
-      3. **Quick-Score Guard**: `quick-score.ts` validates avg fameIndex before writing and uses transactions for atomicity.
-      4. **Deprecated Functions**: `getTrendingData()` in api-integrations.ts and all of `lunarcrush.ts` are marked DEPRECATED with console errors if called.
-      5. **Critical Architecture Rule**: ONLY ingest.ts and quick-score.ts write to trending_people. Anything else is a bug.
+      3. **Ingest/Quick-Score Guards**: Both jobs validate avg fameIndex before writing and use database transactions for atomicity.
+      4. **Row Count Validation**: Before committing, both jobs verify the inserted row count matches expected count. Mismatch triggers rollback.
+      5. **Advisory Lock**: Both jobs acquire Postgres advisory lock (ID 12345) to prevent concurrent writes. If lock unavailable, job aborts.
+      6. **Deprecated Functions**: `getTrendingData()` in api-integrations.ts and all of `lunarcrush.ts` are marked DEPRECATED with console errors if called.
+      7. **Critical Architecture Rule**: ONLY ingest.ts and quick-score.ts write to trending_people. Anything else is a bug.
     - **Source Health State Machine**: Explicitly tracks the health of each data source (HEALTHY, DEGRADED, OUTAGE, RECOVERY). Used for logging/monitoring only - does NOT affect weight distribution.
     - **Global-Zero Detection**: Requires >50% of celebrities with near-zero values before triggering OUTAGE state (prevents false-positives from individual genuine drops).
     - **Staleness Decay**: Fill-forwarded values gradually reduce over time: 100% (0-2h), 90→70% (2-4h), 70→50% (4-6h), 50→20% (6-12h), 20% floor (>12h).

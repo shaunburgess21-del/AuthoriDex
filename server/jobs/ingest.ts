@@ -476,10 +476,23 @@ export async function runDataIngestion(): Promise<IngestResult> {
 
     // Use transaction to ensure atomicity - if any insert fails, rollback the delete
     // This prevents data loss if the server crashes/restarts between delete and inserts
+    const expectedRowCount = scoreResults.length;
+    const TRENDING_PEOPLE_LOCK_ID = 12345; // Advisory lock ID for trending_people writes
+    
     await db.transaction(async (tx) => {
+      // Acquire advisory lock to prevent concurrent writes from quick-score or other ingest jobs
+      const lockResult = await tx.execute(sql`SELECT pg_try_advisory_xact_lock(${TRENDING_PEOPLE_LOCK_ID})`);
+      // Drizzle returns array of rows directly, not object with .rows
+      const lockAcquired = (lockResult as any)[0]?.pg_try_advisory_xact_lock;
+      if (!lockAcquired) {
+        throw new Error("[Ingest] Another job is writing to trending_people. Aborting to prevent conflicts.");
+      }
+      console.log(`[Ingest] Acquired advisory lock for trending_people writes`);
+      
       await tx.delete(trendingPeople);
       console.log(`[Ingest] Cleared trending_people table (in transaction)`);
 
+      let insertedCount = 0;
       for (let i = 0; i < scoreResults.length; i++) {
         const { person, score } = scoreResults[i];
         
@@ -511,7 +524,17 @@ export async function runDataIngestion(): Promise<IngestResult> {
             category: person.category,
           },
         });
+        insertedCount++;
       }
+      
+      // ROW COUNT VALIDATION: Query actual DB row count to verify inserts succeeded
+      const countResult = await tx.execute(sql`SELECT COUNT(*) as count FROM trending_people`);
+      const actualDbCount = parseInt((countResult as any)[0]?.count || '0', 10);
+      
+      if (actualDbCount !== expectedRowCount) {
+        throw new Error(`[Ingest] Row count mismatch: expected ${expectedRowCount}, DB has ${actualDbCount}. Rolling back.`);
+      }
+      console.log(`[Ingest] Row count validated: ${actualDbCount} rows in DB (matches expected ${expectedRowCount})`);
     });
 
     console.log(`[Ingest] Updated ${scoreResults.length} trending people records (transaction committed)`);
