@@ -1,0 +1,102 @@
+This is actually a good sign overall — but there’s one operational issue you should fix so you don’t get “healthy ingestion but no update.”
+
+1) Is the trend engine healthy?
+
+From what Replit reported: yes.
+
+Wiki: 100/100 OK
+
+News (GDELT): 100/100 OK
+
+Search (Serper): 100/100 OK
+
+Health: ALL_HEALTHY
+
+Avg Fame Index: 311,487 (well above your guard threshold)
+
+Stabilization: working
+
+Recovery markers: normal after a period of sparse data
+
+So the inputs + scoring look fine.
+
+2) So why did ingest “abort”?
+
+Because your advisory lock did its job… but your job coordination isn’t ideal yet.
+
+Replit says:
+
+“Another writer was holding the lock… ingest aborted.”
+
+That means quick-score and ingest overlapped at the write moment.
+
+Two important clarifications
+
+The lock preventing the write is good — it prevents corruption.
+
+But aborting means you might skip an hour’s publish, even though ingestion computed everything.
+
+So the system is safe, but not perfectly scheduled.
+
+3) How to stop this from happening again (best practice)
+
+You want one of these patterns:
+
+Option A (best): Ingest is the only publisher
+
+quick-score never writes trending_people
+
+quick-score can still compute/preview/debug, but only ingest publishes
+This removes 95% of writer-lock collisions.
+
+Option B: Same lock, but quick-score yields to ingest
+
+If you want to keep both writers:
+
+ingest should “win”
+
+quick-score should skip its publish if ingest is near schedule
+
+Example logic:
+
+quick-score: if within ±10 minutes of ingest top-of-hour run → don’t write
+
+or quick-score: try lock, if locked → silently exit (no harm)
+
+Option C: Don’t abort ingest — wait briefly, then retry
+
+Instead of aborting immediately:
+
+try to acquire lock
+
+if not available: wait 5–15 seconds with jitter, retry a few times
+
+if still blocked: abort
+
+This alone will make “missed publish” rare.
+
+4) What you should check right now
+
+Ask Replit to print the latest two [HEALTH SUMMARY] lines for both jobs (ingest + quick-score), including:
+
+hour
+
+duration
+
+lock
+
+and whether it committed a write
+
+Because if ingest aborted, the leaderboard is likely showing the previous hour’s state — not “wrong,” just not updated.
+
+5) My recommendation for launch
+
+Make ingest the single authoritative writer to trending_people, and treat quick-score as:
+
+a fast compute path for admin/debugging
+
+or a cache warmer
+
+but not a publisher
+
+It keeps things simple, and it’s how most systems avoid “two jobs fighting over the same canonical table.”
