@@ -2825,20 +2825,23 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
   
-  // Run scoring engine (recalculates rankings using cached API data)
+  // Run scoring engine PREVIEW (computes scores from cached API data WITHOUT writing to DB)
+  // NOTE: This is a preview-only endpoint. Only ingest.ts writes to trending_people.
   app.post("/api/admin/run-scoring", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { runQuickScoring } = await import("./jobs/quick-score");
       const result = await runQuickScoring();
       res.json({ 
         success: true, 
-        message: "Scoring and rankings updated",
+        message: "Scoring PREVIEW complete (NOT written to DB - only ingest.ts writes)",
         processed: result.processed,
         errors: result.errors,
+        healthSummary: result.healthSummary,
+        previewResults: result.results.slice(0, 20), // Return top 20 for preview
       });
     } catch (error: any) {
-      console.error("Error running scoring:", error.message);
-      res.status(500).json({ error: "Failed to run scoring" });
+      console.error("Error running scoring preview:", error.message);
+      res.status(500).json({ error: "Failed to run scoring preview" });
     }
   });
 
@@ -3880,9 +3883,9 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
   
-  // Run scoring and update rankings (uses cached API data)
-  // Call this after data ingestion or on-demand to recalculate trending rankings
-  // Note: This is different from capture-snapshots - this updates the trending_people table
+  // PREVIEW scoring health check (uses cached API data WITHOUT writing to DB)
+  // NOTE: This does NOT update trending_people - only ingest.ts writes to that table.
+  // This endpoint is useful for monitoring and debugging the scoring engine health.
   app.post("/api/cron/run-scoring", verifyCronSecret, async (req, res) => {
     const startTime = Date.now();
     try {
@@ -3891,14 +3894,16 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       
       res.json({
         success: true,
-        message: "Scoring and rankings updated",
+        message: "Scoring PREVIEW complete (NOT written to DB - only ingest.ts writes)",
         processed: result.processed,
         errors: result.errors,
+        healthSummary: result.healthSummary,
+        topResults: result.results.slice(0, 10).map(r => ({ name: r.name, fameIndex: r.fameIndex, rank: r.rank })),
         duration: Date.now() - startTime,
         timestamp: new Date().toISOString(),
       });
     } catch (error: any) {
-      console.error("[Cron] Scoring error:", error);
+      console.error("[Cron] Scoring preview error:", error);
       res.status(500).json({
         success: false,
         error: error.message,

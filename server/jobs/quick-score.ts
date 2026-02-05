@@ -1,16 +1,52 @@
 import { db } from "../db";
-import { trackedPeople, trendSnapshots, trendingPeople, apiCache } from "@shared/schema";
-import { eq, desc, gte, sql } from "drizzle-orm";
+import { trackedPeople, trendSnapshots, apiCache } from "@shared/schema";
+import { gte } from "drizzle-orm";
 import { computeTrendScore } from "../scoring/trendScore";
 
-export async function runQuickScoring(): Promise<{ processed: number; errors: number }> {
-  console.log("[QuickScore] Starting quick scoring from cached data...");
+/**
+ * COMPUTE-ONLY QUICK SCORING
+ * 
+ * This job computes fame scores from cached API data for preview/debugging purposes.
+ * It does NOT write to trending_people - that is ONLY done by ingest.ts.
+ * 
+ * This design prevents lock conflicts between jobs and ensures a single
+ * authoritative writer to the leaderboard table.
+ * 
+ * Returns: Array of computed scores for preview, plus stats
+ */
+export interface QuickScoreResult {
+  personId: string;
+  name: string;
+  rank: number;
+  fameIndex: number;
+  trendScore: number;
+  change24h: number | null;
+  change7d: number | null;
+  category: string | null;
+}
+
+export interface QuickScoreOutput {
+  processed: number;
+  errors: number;
+  results: QuickScoreResult[];
+  healthSummary: {
+    job: string;
+    hour: string;
+    duration: string;
+    rows: number;
+    sources: { wiki: string; news: string; search: string };
+    cacheHits: { wiki: number; news: number; search: number };
+    avgFameIndex: number;
+  };
+}
+
+export async function runQuickScoring(): Promise<QuickScoreOutput> {
+  console.log("[QuickScore] Starting PREVIEW-ONLY scoring from cached data...");
+  console.log("[QuickScore] NOTE: This job does NOT write to trending_people. Only ingest.ts writes.");
   const startTime = Date.now();
   
   let processed = 0;
   let errors = 0;
-  
-  // NOTE: Quick-score no longer writes snapshots - only updates trending_people table
 
   try {
     const people = await db.select().from(trackedPeople);
@@ -150,9 +186,9 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
           previousFameIndex     // Most recent fameIndex for EMA smoothing
         );
 
-        // NOTE: Quick-score does NOT write snapshots - only ingest.ts writes snapshots
-        // to prevent duplicate/conflicting data points that cause jagged trend graphs.
-        // This job only updates the trending_people leaderboard table.
+        // NOTE: Quick-score is PREVIEW-ONLY - it does NOT write to any tables.
+        // Only ingest.ts writes to trending_people and trend_snapshots.
+        // This job computes scores for debugging/preview purposes only.
 
         scoreResults.push({ person, score: scoreResult });
         processed++;
@@ -165,81 +201,31 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
     // Sort by fameIndex (displayed on leaderboard) not trendScore
     scoreResults.sort((a, b) => b.score.fameIndex - a.score.fameIndex);
 
-    // SAFEGUARD: Validate fameIndex range before writing to database
-    // Real fame_index values should be in the 100k-600k range
-    // Mock/corrupted data typically has values in the 5k-10k range
-    if (scoreResults.length > 0) {
-      const avgFameIndex = scoreResults.reduce((sum, r) => sum + (r.score.fameIndex ?? 0), 0) / scoreResults.length;
-      if (avgFameIndex < 50000) {
-        const errorMsg = `[QuickScore] BLOCKED: Computed data has suspicious avg fameIndex (${avgFameIndex.toFixed(0)}). Real data should be > 50,000. Aborting write.`;
-        console.error(errorMsg);
-        throw new Error(errorMsg);
-      }
-      console.log(`[QuickScore] Validated avg fameIndex: ${avgFameIndex.toFixed(0)} (above 50k threshold)`);
-    }
-
-    // Use transaction to ensure atomicity - if any insert fails, rollback the delete
-    const expectedRowCount = scoreResults.length;
-    const TRENDING_PEOPLE_LOCK_ID = 12345; // Same lock ID as ingest.ts - prevents concurrent writes
-    
-    await db.transaction(async (tx) => {
-      // Acquire advisory lock to prevent concurrent writes from ingest or other quick-score jobs
-      const lockResult = await tx.execute(sql`SELECT pg_try_advisory_xact_lock(${TRENDING_PEOPLE_LOCK_ID})`);
-      // Drizzle returns array of rows directly, not object with .rows
-      const lockAcquired = (lockResult as any)[0]?.pg_try_advisory_xact_lock;
-      if (!lockAcquired) {
-        throw new Error("[QuickScore] Another job is writing to trending_people. Aborting to prevent conflicts.");
-      }
-      console.log(`[QuickScore] Acquired advisory lock for trending_people writes`);
-      
-      await tx.delete(trendingPeople);
-      console.log(`[QuickScore] Cleared trending_people table (in transaction)`);
-
-      let insertedCount = 0;
-      for (let i = 0; i < scoreResults.length; i++) {
-        const { person, score } = scoreResults[i];
-
-        await tx.insert(trendingPeople).values({
-          id: person.id,
-          name: person.name,
-          avatar: person.avatar,
-          bio: person.bio,
-          rank: i + 1,
-          trendScore: score.trendScore,
-          fameIndex: score.fameIndex,
-          change24h: score.change24h,
-          change7d: score.change7d,
-          category: person.category,
-        });
-        insertedCount++;
-      }
-      
-      // ROW COUNT VALIDATION: Query actual DB row count to verify inserts succeeded
-      const countResult = await tx.execute(sql`SELECT COUNT(*) as count FROM trending_people`);
-      const actualDbCount = parseInt((countResult as any)[0]?.count || '0', 10);
-      
-      if (actualDbCount !== expectedRowCount) {
-        throw new Error(`[QuickScore] Row count mismatch: expected ${expectedRowCount}, DB has ${actualDbCount}. Rolling back.`);
-      }
-      console.log(`[QuickScore] Row count validated: ${actualDbCount} rows in DB (matches expected ${expectedRowCount})`);
-    });
-
-    console.log(`[QuickScore] Updated ${scoreResults.length} trending people records (transaction committed)`);
+    // Build preview results (NO DATABASE WRITES)
+    const previewResults: QuickScoreResult[] = scoreResults.map(({ person, score }, index) => ({
+      personId: person.id,
+      name: person.name,
+      rank: index + 1,
+      fameIndex: score.fameIndex,
+      trendScore: score.trendScore,
+      change24h: score.change24h,
+      change7d: score.change7d,
+      category: person.category,
+    }));
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // POST-SCORE HEALTH SUMMARY - Single consolidated log for monitoring
+    // HEALTH SUMMARY - Single consolidated log for monitoring (preview only)
     // ═══════════════════════════════════════════════════════════════════════════
     const jobDuration = Date.now() - startTime;
-    const hourBucket = new Date().toISOString().slice(0, 13) + ":00:00Z"; // e.g. "2026-02-04T14:00:00Z"
+    const hourBucket = new Date().toISOString().slice(0, 13) + ":00:00Z";
     const avgFameIndex = scoreResults.length > 0 
       ? scoreResults.reduce((sum, r) => sum + (r.score.fameIndex ?? 0), 0) / scoreResults.length 
       : 0;
     const healthSummary = {
-      job: "quick-score",
+      job: "quick-score-preview",
       hour: hourBucket,
       duration: `${jobDuration}ms`,
       rows: processed,
-      lock: "acquired",
       sources: {
         wiki: wikiCache.size > 0 ? "OK" : "EMPTY",
         news: gdeltCache.size > 0 ? "OK" : "EMPTY",
@@ -254,15 +240,32 @@ export async function runQuickScoring(): Promise<{ processed: number; errors: nu
     };
     
     console.log(`[HEALTH SUMMARY] ${JSON.stringify(healthSummary)}`);
+    console.log(`[QuickScore] Preview complete: ${processed} scores computed (NOT written to DB)`);
     // ═══════════════════════════════════════════════════════════════════════════
+
+    return { processed, errors, results: previewResults, healthSummary };
 
   } catch (error) {
     console.error("[QuickScore] Fatal error:", error);
     errors++;
+    
+    const jobDuration = Date.now() - startTime;
+    const hourBucket = new Date().toISOString().slice(0, 13) + ":00:00Z";
+    return { 
+      processed, 
+      errors, 
+      results: [],
+      healthSummary: {
+        job: "quick-score-preview",
+        hour: hourBucket,
+        duration: `${jobDuration}ms`,
+        rows: 0,
+        sources: { wiki: "ERROR", news: "ERROR", search: "ERROR" },
+        cacheHits: { wiki: 0, news: 0, search: 0 },
+        avgFameIndex: 0,
+      }
+    };
   }
-
-  console.log(`[QuickScore] Complete: ${processed} processed, ${errors} errors`);
-  return { processed, errors };
 }
 
 if (process.argv[1]?.endsWith('quick-score.ts')) {

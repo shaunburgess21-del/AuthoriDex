@@ -35,13 +35,14 @@ Preferred communication style: Simple, everyday language.
     - **Recalibration Mode**: DISABLED. Previously allowed higher rate caps (36%) after algorithm changes, but caused excessive volatility. Now uses standard 10% caps.
     - **Coverage Gate** (Feb 2026): If an external API returns fresh data for <70% of celebrities, the entire run treats that source as degraded and uses previous values for everyone. This ensures population consistency - either most people get fresh data, or nobody does that hour. Prevents "mixed freshness" ranking distortions.
     - **Mock Data Safeguard** (Feb 2026): Multi-layer protection against mock data corrupting the database:
-      1. **Write Restriction**: API endpoints NEVER write to `trending_people` - only `server/jobs/ingest.ts` and `server/jobs/quick-score.ts` write real scores.
-      2. **Storage Layer Guard**: `storage.updateTrendingPeople()` THROWS ERROR if avg fameIndex < 50,000 (real data is 100k-600k range).
-      3. **Ingest/Quick-Score Guards**: Both jobs validate avg fameIndex before writing and use database transactions for atomicity.
-      4. **Row Count Validation**: Before committing, both jobs verify the inserted row count matches expected count. Mismatch triggers rollback.
-      5. **Advisory Lock**: Both jobs acquire Postgres advisory lock (ID 12345) to prevent concurrent writes. If lock unavailable, job aborts.
-      6. **Deprecated Functions**: `getTrendingData()` in api-integrations.ts and all of `lunarcrush.ts` are marked DEPRECATED with console errors if called.
-      7. **Critical Architecture Rule**: ONLY ingest.ts and quick-score.ts write to trending_people. Anything else is a bug.
+      1. **SINGLE AUTHORITATIVE WRITER**: ONLY `server/jobs/ingest.ts` writes to `trending_people`. This is the canonical truth.
+      2. **Quick-Score is PREVIEW-ONLY**: `server/jobs/quick-score.ts` computes scores for debugging/preview but does NOT write to DB.
+      3. **Storage Layer Guard**: `storage.updateTrendingPeople()` THROWS ERROR if avg fameIndex < 50,000 (real data is 100k-600k range).
+      4. **Ingest Guards**: Ingest validates avg fameIndex before writing and uses database transactions for atomicity.
+      5. **Row Count Validation**: Before committing, ingest verifies the inserted row count matches expected count. Mismatch triggers rollback.
+      6. **Advisory Lock**: Ingest acquires Postgres advisory lock (ID 12345) to prevent concurrent writes. If lock unavailable, job aborts.
+      7. **Deprecated Functions**: `getTrendingData()` in api-integrations.ts and all of `lunarcrush.ts` are marked DEPRECATED with console errors if called.
+      8. **Critical Architecture Rule**: ONLY ingest.ts writes to trending_people. Quick-score is for preview only. API endpoints NEVER write to trending_people.
     - **Source Health State Machine**: Explicitly tracks the health of each data source (HEALTHY, DEGRADED, OUTAGE, RECOVERY). Used for logging/monitoring only - does NOT affect weight distribution.
     - **Global-Zero Detection**: Requires >50% of celebrities with near-zero values before triggering OUTAGE state (prevents false-positives from individual genuine drops).
     - **Staleness Decay**: Fill-forwarded values gradually reduce over time: 100% (0-2h), 90→70% (2-4h), 70→50% (4-6h), 50→20% (6-12h), 20% floor (>12h).
