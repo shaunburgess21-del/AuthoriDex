@@ -1,0 +1,112 @@
+That’s a really useful diagnostic dump. Overall it reads like: engine logic is fine, observability is good, but two data plumbing issues are currently degrading accuracy:
+
+GDELT is degraded and your latest snapshots are writing news_count = 0 for everyone (that’s the most dangerous one), and
+
+Serper fetches are succeeding but your cache “freshness” accounting is off, which risks either extra cost or accidentally reusing stale values.
+
+Below is how I’d interpret each item and what I’d fix first.
+
+1) “All 100 people have news_count = 0 in the most recent hour”
+
+This is the biggest red flag in the report.
+
+Even if GDELT is failing, your system should be doing one of these:
+
+fill-forward the last known news_count into the snapshot, possibly with staleness decay, or
+
+mark it stale but do not write literal zero, unless you have strong evidence the true value is zero.
+
+Why this happens (most common causes)
+
+One of these is almost certainly true:
+
+A) Fallback logic is gated by prevNewsCount > 0
+If your code says “only fallback if we have historical data > 0,” then anyone who previously had 0 (or corrupted 0s from earlier) will keep writing 0 forever during outages.
+
+B) Coverage gate triggers “treat as stale,” but your stale path writes 0
+Coverage gate should flip to “use previous values for everyone.” If instead it flips to “use current map value,” and the map value is empty → 0s.
+
+C) The GDELT fetch fails early, returns empty Map, and later success logs are misleading
+You already saw this pattern before (Promise.race timeout issue). If that came back, you can get “success” logs after the ingest already moved on with empty data.
+
+What to change (recommended behavior)
+
+If NEWS is DEGRADED/OUTAGE OR coverage gate fails OR global-zero triggers:
+
+set news_count = round(prevNewsCount * decayFactor) even if prevNewsCount is 0, but with a bootstrapping rule:
+
+if prevNewsCount is 0 and you have older non-zero within last N hours, use that
+
+else keep 0 (true unknown)
+
+Never overwrite a non-zero prevNewsCount with zero unless you have confirmed fresh data and a real drop.
+
+In short: “GDELT down” should make news stale, not zero.
+
+2) Serper cache “100 successful fetches but only 1 fresh cache entry”
+
+This is suspicious and worth fixing because it can lead to either:
+
+unnecessary API spend (if you’re not actually caching), or
+
+stale inputs (if you think you cached but reads use a different key).
+
+Most likely causes
+
+A) Cache key mismatch (write key ≠ read key)
+Classic examples:
+
+writer uses raw celeb name "Nicki Minaj"; reader uses .toLowerCase() / stripped punctuation
+
+writer includes endpoint type like serper:search:<q>; reader uses serper:<q>
+
+writer includes country/language params; reader doesn’t (or vice versa)
+
+B) “Fresh” calculation is using the wrong timestamp
+Sometimes updated_at never updates (only created_at exists), or you’re reading expires_at wrong.
+
+C) You’re caching under a per-request key, not a per-celeb key
+If you include a random request id or non-normalized query string, you get tons of distinct rows and almost nothing counts as “fresh” by your grouping.
+
+Concrete fix
+
+Create a single helper makeSerperCacheKey(person) used by both read and write
+
+Log: cacheKey, cacheHit, and cacheWrite for 3 celebs per run (sampled)
+
+In the health summary, include:
+
+cacheWrites.search: X
+
+cacheHits.search: Y
+This makes it immediately obvious whether caching is truly working.
+
+3) Snapshot gaps (09,10 then 15,16…)
+
+This is probably just uptime/restarts. Your scheduler sounds “interval from boot” based.
+
+Fix for launch reliability
+
+Use absolute-time scheduling, not “every 60 minutes after process start.”
+
+Cron expression for hourly on the hour (or minute 2) via a real scheduler
+
+Or an external cron (UptimeRobot / GitHub Actions / server cron) that hits your ingest endpoint
+
+This will remove those gaps and make your trend graphs feel consistent.
+
+4) “Brian Armstrong at 52k”
+
+Not a crisis. A few low scores are fine. The average guard protects against garbage writes; you don’t need every individual above 100k.
+
+If you want, you can add a soft floor for UI display (“low confidence / thin data”), but it’s optional.
+
+What I would prioritize (in order)
+
+Fix “news_count zeros written during GDELT degradation” (this affects rankings directly)
+
+Fix Serper cache key + freshness accounting (cost + correctness)
+
+Switch scheduler to absolute hourly timing (history consistency)
+
+Optional: tighten low-score labeling / confidence indicator
