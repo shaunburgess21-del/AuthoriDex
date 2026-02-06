@@ -1,0 +1,65 @@
+Yep — based on what you pasted, there is no mismatch.
+
+Schema explicitly names the constraint: celebrity_value_votes_user_id_celebrity_id_unique
+
+DB has the exact same constraint: UNIQUE (user_id, celebrity_id)
+
+Column order matches
+
+Constraint exists already
+
+Drizzle still prompts: “you’re about to add … unique constraint…”
+
+That combination strongly points to a Drizzle Kit diff/introspection quirk (it sometimes “re-discovers” composite uniques as “needs to be added”, even when present).
+
+So you have two practical choices:
+
+Option A (recommended): Accept it’s a known quirk + make db:push non-interactive and safe
+
+Because you’re on production Supabase and want non-destructive changes only, the safest approach is:
+
+What to tell Replit
+
+Do not try to drop/recreate the constraint.
+
+Add a wrapper command that always selects “No, add without truncating” automatically, so you don’t get stuck in prompts.
+
+Prompt for Replit (copy/paste):
+
+We’ve confirmed celebrity_value_votes_user_id_celebrity_id_unique already exists and matches schema exactly. Drizzle still prompts to “add” it — treat as Drizzle diff quirk.
+
+Do NOT drop/recreate any constraints (production).
+Instead, please add a safe non-interactive script, e.g. npm run db:push:safe, that always chooses:
+“No, add the constraint without truncating the table.”
+
+Use an approach that reliably works in CI/terminal (node/expect wrapper). Then confirm db:push:safe completes without manual input.
+
+This keeps you moving with zero risk of data loss, and the “add constraint” attempt is harmless because the constraint already exists (Postgres will just refuse/skip/return “already exists” depending on how Drizzle issues it — but it won’t truncate).
+
+Option B (cleaner but riskier): Make Drizzle stop trying to add it
+
+There are ways to “nudge” Drizzle to stop detecting it, but most involve changes that could cause Drizzle to attempt drops later, which you explicitly don’t want in production.
+
+So unless you’re willing to do a controlled deeper fix, I’d not do this now.
+
+What I’d do next (in your shoes)
+
+Since your goal is executing the roadmap quickly and safely:
+
+Lock in Option A (add db:push:safe and use it for all schema changes).
+
+Proceed to Phase 1C (trending_polls + trending_poll_votes) — these are additive new tables and low-risk.
+
+Then Phase 1E enhancements to predictionMarkets (add seed_yes/no + winning_outcome) if not already present.
+
+Quick validation checklist before continuing
+
+Ask Replit to confirm:
+
+db:push:safe works without prompts
+
+Running it twice in a row results in “no changes” (or only the same harmless warning but no block)
+
+No destructive statements are being run (no DROP/TRUNCATE)
+
+If you want, paste Replit’s planned method for implementing db:push:safe (they’ll usually propose an expect script or small Node wrapper), and I’ll sanity-check that it truly always selects the non-destructive option.

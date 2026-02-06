@@ -1,0 +1,105 @@
+Nice — the face_offs upgrades + face_off_votes table are exactly the right first “real” milestone, and the changes themselves are non-breaking (new nullable/defaulted columns + new table). ✅
+
+That said, there are two important risks in what Replit described, and I’d fix them before continuing deeper into Phase 1C/1D/1E.
+
+1) Biggest concern: “Applied via SQL” (even if additive)
+
+Replit said: “Let me apply the schema changes directly via SQL…” after db:push friction.
+
+Even if the SQL was “safe”, this creates schema drift risk: your “source of truth” is shared/schema.ts, and your deploy mechanism is npm run db:push. If changes happen outside that pipeline, you can end up with:
+
+schema.ts ≠ production DB,
+
+unexpected diffs in future pushes,
+
+more prompts / weird Drizzle behavior.
+
+What to do now (quick sanity check):
+Ask Replit for:
+
+The exact git diff showing the face_offs + face_off_votes additions in shared/schema.ts
+
+Output of a “dry” npm run db:push immediately after (even if it prompts) + confirmation that the DB now matches schema.
+
+If schema.ts does contain the changes and DB matches it, then you’re okay — but I’d still push to stabilize the workflow.
+
+2) Constraint drift is NOT “harmless” long term
+
+Replit claims: “ADD is a harmless no-op” and “just use --force going forward”.
+
+That’s not a great steady-state. It means:
+
+every future schema push is fragile/interactive,
+
+automation is harder,
+
+you can accidentally accept something you didn’t intend later.
+
+What I recommend (safe, production-friendly)
+
+Make Drizzle stop thinking it needs to create that constraint.
+
+You’ve already tried explicitly naming it, and Drizzle still prompts. That usually means one of these mismatches exists:
+
+constraint name differs slightly (schema vs DB)
+
+column order differs (user_id, celebrity_id vs celebrity_id, user_id)
+
+nullability / index backing differs
+
+Drizzle thinks it’s missing because the introspected metadata differs from what it expects
+
+Next action: ask Replit to print:
+
+the exact celebrity_value_votes table definition snippet from shared/schema.ts (including the unique)
+
+the DB-side constraint definition (from pg_constraint joined to pg_class / pg_attribute) as text (they can do this safely read-only)
+
+Then make the schema match exactly what the DB reports (including column order). This is still non-destructive.
+
+If after that Drizzle still prompts, then the pragmatic approach is:
+
+create a dedicated command like npm run db:push:safe that always selects “no truncate” (so you don’t do it manually),
+
+but keep trying to eliminate the prompt so your pipeline stays clean.
+
+Where you are in the plan now
+
+✅ Phase 1A done (face_offs enhanced)
+✅ Phase 1B done (face_off_votes created)
+
+Next step should be Phase 1C (trending_polls table) — but only after:
+
+schema.ts confirmed as the source of truth (no drift),
+
+you understand why db:push prompts (and ideally reduce it).
+
+Copy/paste message to Replit (to stabilize before proceeding)
+
+Use this:
+
+Before we continue to Phase 1C, please confirm we have zero schema drift and stabilize db:push:
+
+Paste the shared/schema.ts snippets for:
+
+celebrity_value_votes (including the unique constraint)
+
+face_offs
+
+face_off_votes
+
+Paste git diff for the changes.
+
+Run npm run db:push (no changes expected).
+
+If it prompts again about celebrity_value_votes, paste the exact prompt text.
+
+Provide the DB-side definition of the celebrity_value_votes_user_id_celebrity_id_unique constraint (read-only query output).
+
+Goal: make Drizzle stop detecting that constraint as “needs to be added”, so future pushes are clean and non-interactive.
+
+Are you safe to proceed?
+
+You’re safe to proceed functionally (Face-Offs schema + votes table won’t break prod), but I’d pause one step to clean up the db:push prompt situation so it doesn’t bite you in later phases.
+
+If you paste Replit’s outputs (snippets + prompt text), I’ll tell you exactly what needs to change in shared/schema.ts to align with the DB and reduce the drift prompts.
