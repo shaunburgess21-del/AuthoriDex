@@ -1,0 +1,82 @@
+Totally fair — naming drift (“The People’s Voice” / “Community Suggested”) is exactly how duplicates happen.
+
+Here’s the safest way to check without relying on table names:
+
+What to check (2 layers)
+1) In code: search by behavior + fields, not the name
+
+Ask Replit to search shared/schema.ts (and optionally the repo) for:
+
+pgTable( entries that look like polls:
+
+columns like headline, question, prompt, subject, description
+
+vote choices like support/neutral/oppose or yes/no
+
+seed columns like seed_support, seed_neutral, seed_oppose (or similar)
+
+status fields like status / isActive / published
+
+Also search for any of these tokens in the repo:
+
+people's voice, peoples voice, community suggested, poll, poll_votes, support, neutral, oppose
+
+existing API routes like /api/*poll* or components like PollCard, PeoplesVoiceCard
+
+If any pgTable(...) already defines something like that, we should extend/rename it, not create a new one.
+
+2) In Supabase DB: check if a table already exists under a different name
+
+Ask Replit to query the DB for tables that smell like polls:
+
+any table names containing: poll, voice, community, topic, suggest, vote
+
+and any votes table names similarly
+
+Even simpler: list all tables and visually scan for those keywords.
+
+The “no duplicates” rule (decision logic)
+
+Once Replit finds candidates, apply this rule:
+
+If there’s already a “polls” table used by the People’s Voice section → do NOT create trending_polls. Instead:
+
+add missing columns (seed counts, status enum, deadline, imageUrl, etc.)
+
+and/or rename in code only (keep DB table name if renaming is risky in production)
+
+If there’s only a UI component but no DB table (i.e., it’s hardcoded/placeholder) → safe to create trending_polls.
+
+If there’s a DB table but it’s for a different mechanic (e.g., “predictions” yes/no markets) → don’t reuse it; create a dedicated polls table.
+
+A clear prompt you can paste to Replit (Low autonomy)
+
+Use this as your “audit first” message:
+
+Prompt to Replit
+
+Before building Phase 1C/1D, do an audit to avoid duplicates caused by naming drift (“The People’s Voice” / “Community Suggested”).
+
+In shared/schema.ts, search for any pgTable(...) that represents polls/community topics (look for columns like headline/question/prompt/subject and vote options like support/neutral/oppose).
+
+In the DB, list existing tables whose names include: poll, voice, community, topic, suggest, vote.
+
+Report back:
+
+The exact table name(s) found (if any)
+
+The schema snippets for the candidate table(s)
+
+Whether the People’s Voice UI currently reads/writes from any of them (which queries/API routes).
+
+Then:
+
+If an existing table already powers People’s Voice, extend it non-destructively to match the Phase 1C/1D requirements (seed_* counts, status enum draft/live/archived, deadlineAt, imageUrl, votes table with unique(userId,pollId)).
+
+If nothing exists, create new trending_polls + trending_poll_votes as per Phase 1C/1D.
+
+Constraints: production Supabase project; non-breaking additions only; Drizzle ORM in shared/schema.ts; push via expect scripts/db-push-safe.exp; no destructive migrations.
+
+That forces them to prove what exists first, then choose extend vs create.
+
+If you paste what Replit reports back (table names + snippets), I’ll tell you exactly which path to take and what to rename/extend so you don’t end up with two poll systems.
