@@ -448,7 +448,14 @@ export const faceOffs = pgTable("face_offs", {
   optionBText: text("option_b_text").notNull(),
   optionBImage: text("option_b_image"),
   isActive: boolean("is_active").notNull().default(true),
-  displayOrder: integer("display_order").notNull().default(0), // For admin drag-and-drop ordering
+  displayOrder: integer("display_order").notNull().default(0),
+  status: text("status").notNull().default("draft"),
+  personAId: varchar("person_a_id").references(() => trackedPeople.id),
+  personBId: varchar("person_b_id").references(() => trackedPeople.id),
+  seedVotesA: integer("seed_votes_a").notNull().default(0),
+  seedVotesB: integer("seed_votes_b").notNull().default(0),
+  scheduledAt: timestamp("scheduled_at"),
+  createdBy: varchar("created_by"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
