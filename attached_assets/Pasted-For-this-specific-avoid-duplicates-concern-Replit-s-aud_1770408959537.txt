@@ -1,0 +1,51 @@
+For this specific “avoid duplicates” concern, Replit’s audit is already the important part: they proved People’s Voice is hardcoded and there is no existing poll table to extend. So you’re safe to proceed creating trending_polls + trending_poll_votes.
+
+For the remainder of the content-pipeline exercise, a full dump of every table usually isn’t worth it (it’s noisy and easy to misread). What is worth it is a repeatable “delta report” for each new content type you build.
+
+What I’d ask Replit to provide going forward (best balance)
+
+For each phase (Face-Offs ✅, Trending Polls next, then Real-World Markets):
+
+Existing-table check (targeted)
+
+“Search schema + DB for anything that already matches this content type’s behavior/fields.”
+
+Proposed schema diff
+
+Paste the exact pgTable(...) snippets they’re adding/updating (and any pgEnum/indexes).
+
+DB verification
+
+Confirm expect scripts/db-push-safe.exp ran.
+
+Confirm tables exist (names).
+
+Confirm unique constraints exist (names).
+
+Confirm indexes exist (names).
+
+Safety notes
+
+“Non-breaking additions only; no drops; no truncates.”
+
+That gives you confidence without drowning you in irrelevant tables.
+
+If you still want a broader view, request a “lightweight inventory,” not everything
+
+Ask for:
+
+A list of table names only, grouped by domain (votes, comments, content, metrics, auth)
+
+Plus which ones are used in the Vote/Predict UI vs profile-only features
+
+That’s helpful context without a 10-page report.
+
+What to reply to Replit now
+
+You can send:
+
+Thanks — this is clear and sufficient. No need for a full table dump each time.
+Going forward, for each new content type please do the same “targeted audit” + paste the schema snippets + confirm constraint/index names after running expect scripts/db-push-safe.exp.
+Yes, proceed with creating trending_polls and trending_poll_votes schema (Phase 1C + 1D) as planned, non-breaking only.
+
+If you want, I can also paste the exact Phase 1C/1D schema prompt again (with the enum types you already created) so Replit builds it consistently.

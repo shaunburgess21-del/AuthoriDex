@@ -1,0 +1,145 @@
+Prompt for Replit (Trending Polls – Phase 1C + 1D Schema Only)
+
+Act as a Senior Full-Stack Engineer + Data Architect.
+
+Scope
+
+Proceed with Phase 1C + 1D only (Schema Foundation for Trending Polls).
+Do not build admin pages, CSV import, or frontend wiring yet.
+
+Constraints (Non-negotiable)
+
+This is the production Supabase project → non-breaking additions only
+
+Drizzle ORM schema lives in shared/schema.ts (drizzle-zod used for validation)
+
+Use the safe push wrapper: run expect scripts/db-push-safe.exp after schema edits (not npm run db:push directly)
+
+No destructive changes (no drops, truncates, or changing ID types)
+
+No fake users / no fake vote rows. Seed data must be stored as seed_ columns only*.
+
+Pre-check (avoid duplicates)
+
+Before coding:
+
+Confirm there is no existing db-backed polls table. The current “People’s Voice” UI is hardcoded and not persisted (you already audited this).
+
+Confirm we will not touch: community_insights, insight_votes, user_votes, votes, etc.
+
+1) Create trending_polls table (new)
+
+Create a new pgTable("trending_polls", ...) with:
+
+Core columns
+
+id (varchar UUID default gen_random_uuid()), PK
+
+status using the existing Postgres enum content_status via Drizzle contentStatusEnum
+
+values: draft | live | archived
+
+default: draft
+
+category (text, not null) (e.g., tech, business, politics, sports, creator, entertainment)
+
+headline (text, not null) (short title)
+
+subjectText (text, not null) (the main prompt/question shown on the card)
+
+personId (varchar, nullable) FK → tracked_people.id (optional link to a celebrity; if set, use their image by default)
+
+description (text, nullable)
+
+timeline (text, nullable) (e.g., no_deadline, 1_week, 1_month, custom)
+
+deadlineAt (timestamp, nullable)
+
+imageUrl (text, nullable) (used only when personId is null; uploaded later via admin)
+
+Seed columns (aggregate seed pattern, default 0)
+
+seedSupportCount (integer not null default 0)
+
+seedNeutralCount (integer not null default 0)
+
+seedOpposeCount (integer not null default 0)
+
+Admin / timestamps
+
+createdBy (varchar, nullable)
+
+createdAt (timestamp not null defaultNow)
+
+updatedAt (timestamp not null defaultNow)
+
+Indexes
+Add indexes for:
+
+status
+
+category
+
+personId
+
+deadlineAt
+
+2) Create trending_poll_votes table (new, real votes only)
+
+Create a new pgTable("trending_poll_votes", ...) with:
+
+id (varchar UUID default gen_random_uuid()), PK
+
+pollId (varchar not null) FK → trending_polls.id (onDelete cascade)
+
+userId (varchar not null)
+
+choice (text not null) constrained to: support | neutral | oppose
+
+createdAt (timestamp not null defaultNow)
+
+updatedAt (timestamp not null defaultNow)
+
+Constraints
+
+Unique constraint named exactly:
+trending_poll_votes_user_id_poll_id_unique
+on (userId, pollId) → enforce 1 vote per user per poll
+
+Indexes
+
+index on pollId
+
+index on userId
+
+3) Run safe push + verify
+
+After updating shared/schema.ts:
+
+Run: expect scripts/db-push-safe.exp
+
+Verify in DB:
+
+tables exist: trending_polls, trending_poll_votes
+
+unique constraint exists with the exact name above
+
+indexes exist
+
+Verify in app:
+
+TypeScript compiles cleanly
+
+server runs normally
+
+Output required back to me
+
+Paste:
+
+The full pgTable(...) snippet for trending_polls
+
+The full pgTable(...) snippet for trending_poll_votes
+
+The exact unique constraint name created for poll votes
+
+Confirmation that expect scripts/db-push-safe.exp ran successfully
