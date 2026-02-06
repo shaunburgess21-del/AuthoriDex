@@ -1,0 +1,126 @@
+Perfect — this is exactly what we wanted for Phase 1C + 1D. ✅
+Replit’s output looks clean, non-breaking, and consistent with your “seed columns + real votes rows” approach.
+
+A few quick sanity notes (tiny improvements / future-proofing), but nothing here blocks you from moving on:
+
+What’s good (✅ proceed)
+
+trending_polls is new, doesn’t collide with existing community_insights.
+
+Uses contentStatusEnum with default draft ✅
+
+Seed counts are columns (not fake vote rows) ✅
+
+trending_poll_votes is real votes only, and has the unique per user+poll constraint ✅
+
+Indexing is sensible ✅
+
+Safe push ran successfully ✅
+
+App compiles / runs ✅
+
+Small follow-ups to consider (optional, not urgent)
+
+Enforce allowed vote values
+
+Right now choice is just text. That’s okay for now, but later (Phase 2/3) you’ll want either:
+
+a pgEnum("poll_choice", ["support","neutral","oppose"]), or
+
+zod validation + server-side validation that rejects anything else.
+
+This prevents junk values from ever entering production.
+
+Make updatedAt auto-update on update
+
+Drizzle defaultNow() doesn’t automatically change on updates.
+
+Not a crisis (you can update it in code when editing), but worth remembering for admin CRUD later.
+
+personId onDelete behavior
+
+Currently no onDelete specified. That’s usually fine (you probably don’t delete tracked_people in prod anyway).
+
+If you ever do, you may want onDelete: "set null" to prevent poll deletion.
+
+Next step (what you should do now)
+
+You’re ready to move to Phase 2C: Admin CRUD for Trending Polls — but do it the safe way: admin CRUD only, no CSV yet.
+
+Copy/paste prompt for Replit (Trending Polls Admin CRUD only)
+
+If you want, paste this into Replit Plan (Low autonomy is fine):
+
+Prompt to Replit
+
+Proceed with Phase 2C only: build the Admin CRUD UI for Trending Polls.
+Constraints: production Supabase project; non-breaking changes only; do not build CSV import yet; do not touch other features (community_insights / votes / etc).
+
+Requirements
+
+Create protected admin routes under /admin (reuse existing admin auth pattern if it exists). Trending Polls should be accessible at:
+
+/admin/trending-polls (list)
+
+/admin/trending-polls/new (create)
+
+/admin/trending-polls/:id (edit)
+
+List view (/admin/trending-polls)
+
+Table/list of polls with: status, category, headline, personId (or “custom”), deadlineAt, createdAt
+
+Filters:
+
+status: draft/live/archived
+
+category
+
+“Missing Image” filter: status=draft AND personId is null AND imageUrl is null
+
+Actions: Edit, Duplicate (optional), Archive (set status=archived)
+
+Create/Edit form
+Fields:
+
+status (draft/live/archived)
+
+category (text or select)
+
+headline (required)
+
+subjectText (required)
+
+personId (optional selector of tracked_people)
+
+If personId is set, imageUrl becomes optional/hidden (since celebrity image used)
+
+description (optional)
+
+timeline (optional)
+
+deadlineAt (optional date/time)
+
+imageUrl upload/attach only for custom polls (personId null)
+
+Use Supabase storage bucket planned for polls later, but for now allow imageUrl as a text field if upload UI isn’t ready.
+
+seedSupportCount / seedNeutralCount / seedOpposeCount (integers, default 0)
+
+Safety rules
+
+Draft items must not show on public pages.
+
+Live items may show on public pages later (we will wire frontend after CRUD).
+
+No seed vote rows in trending_poll_votes — seeds remain in trending_polls.
+
+Deliverables
+
+Admin list + create/edit works
+
+Validation: headline + subjectText + category required
+
+Confirm no frontend changes were made outside admin routes
+
+If you paste Replit’s next output here, I’ll sanity-check it again before you move to CSV import.
