@@ -1,0 +1,106 @@
+Nice — this is meaningful progress and the persistence change removes the last “restart roulette” problem.
+
+What I like about this build
+
+DB persistence for catch-up state: ✅ This is exactly the missing piece. Now restarts won’t reset exit-streak logic, and you won’t get needless flip-flopping.
+
+Health summary now has the right knobs exposed: ✅ capsUsed, alphaUsed, catchUpExitStreak, catchUpEnteredAt, plus gap metrics. This is “production-grade observability.”
+
+The key numbers are moving the right way:
+
+medianGapPct: 13.2 → 7.7 → 6.8 ✅ (converging)
+
+rateLimitedPct: 75 → 54 → 48 ✅ (converging)
+
+That said…
+
+What still isn’t “launch healthy” yet
+
+Even though things are improving, 48% rate-limited is still high for steady state. It’s no longer catastrophic, but it still suggests the limiter is engaged too often.
+
+Your goal should still be:
+
+medianGapPct < 5%
+
+rateLimitedPct < 25–35% most hours
+
+You’re close on the gap; you’re still a bit far on rate-limited%.
+
+One subtle issue in Replit’s conclusion
+
+They said: “Catch-up mode stayed OFF because loosened base caps are working.”
+
+That might be true, but also note:
+
+medianGapPct 7.7% is just under the 8% trigger.
+
+So you’re in a gray zone: not bad enough to trigger catch-up, but still laggy enough to feel sticky.
+
+Quick improvement: add a “soft catch-up” band
+
+Instead of a single hard threshold, use bands:
+
+If medianGapPct >= 10%: catch-up ON (strong)
+
+If 8–10%: soft catch-up (smaller multiplier, e.g. 1.4x caps / 1.2x alpha)
+
+If < 6% for 2 runs: ensure OFF
+
+This avoids “just below the trigger” limbo.
+
+What I’d do next (simple, safe tuning)
+
+Ask Replit to run a 12-hour observation (no new code) using your health summaries and answer these:
+
+Is NEWS consistently healthy now?
+If NEWS is degraded/outage even intermittently, that alone can inflate rate limiting because raw scores jump when the source returns.
+
+Which tier is doing most of the limiting?
+In the health summary, look at whether most caps are hitting the base tier (0–1 spiking) or spike tiers.
+
+If it’s mostly base tier → base cap still too low or alpha too low.
+
+If it’s spike tiers → spike detection too eager or thresholds too low.
+
+Is p90GapPct staying high (~20%+)?
+If yes, a minority of celebs are still way behind → you’ll see “surprising” moves later as they catch up.
+
+If you want “more organic movement,” here’s the safest lever
+
+Increase alpha slightly before increasing caps again.
+
+Why:
+
+Raising caps can allow weird jumps when a source hiccups.
+
+Raising alpha makes the score follow reality faster without allowing arbitrary cliffs.
+
+Example steady-state ladder (roughly):
+
+0–1 spiking: alpha 0.10 (was 0.08)
+
+2 spiking: alpha 0.14
+
+3 spiking: alpha 0.20
+
+Keep caps where they are for now unless medianGap stalls.
+
+The one thing I’d verify immediately (since it bit you before)
+
+Make sure the catch-up persistence does not overwrite the cache table in a way that interferes with other providers. Using a unique cacheKey like system:catchup_state is fine. Just ensure it:
+
+has a long TTL or no expiry (or is refreshed each run)
+
+doesn’t get swept by cache cleanup routines
+
+Bottom line
+
+You’re now in the “getting stable and alive” phase:
+
+✅ you fixed the architectural freeze problem
+
+✅ you fixed restart sensitivity
+
+⚠️ you still need to bring rateLimitedPct down further for a truly organic feel
+
+If you paste the next one [HEALTH SUMMARY] from ingest (the new JSON with capsUsed/alphaUsed), I’ll tell you exactly which knob to touch (alpha vs base cap vs thresholds) to get to “organic-but-safe” fastest.
