@@ -485,6 +485,69 @@ export const insertFaceOffVoteSchema = createInsertSchema(faceOffVotes).omit({
 export type FaceOffVote = typeof faceOffVotes.$inferSelect;
 export type InsertFaceOffVote = z.infer<typeof insertFaceOffVoteSchema>;
 
+// ============================================================================
+// TRENDING POLLS (Phase 1C) — "People's Voice" / Community Polls
+// ============================================================================
+
+export const trendingPolls = pgTable("trending_polls", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  status: contentStatusEnum("status").notNull().default("draft"),
+  category: text("category").notNull(),
+  headline: text("headline").notNull(),
+  subjectText: text("subject_text").notNull(),
+  personId: varchar("person_id").references(() => trackedPeople.id),
+  description: text("description"),
+  timeline: text("timeline"),
+  deadlineAt: timestamp("deadline_at"),
+  imageUrl: text("image_url"),
+  seedSupportCount: integer("seed_support_count").notNull().default(0),
+  seedNeutralCount: integer("seed_neutral_count").notNull().default(0),
+  seedOpposeCount: integer("seed_oppose_count").notNull().default(0),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  statusIdx: index("trending_polls_status_idx").on(table.status),
+  categoryIdx: index("trending_polls_category_idx").on(table.category),
+  personIdIdx: index("trending_polls_person_id_idx").on(table.personId),
+  deadlineAtIdx: index("trending_polls_deadline_at_idx").on(table.deadlineAt),
+}));
+
+export const insertTrendingPollSchema = createInsertSchema(trendingPolls).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type TrendingPoll = typeof trendingPolls.$inferSelect;
+export type InsertTrendingPoll = z.infer<typeof insertTrendingPollSchema>;
+
+// ============================================================================
+// TRENDING POLL VOTES (Phase 1D) — Real user votes only (no seed rows)
+// ============================================================================
+
+export const trendingPollVotes = pgTable("trending_poll_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pollId: varchar("poll_id").notNull().references(() => trendingPolls.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  choice: text("choice").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueUserPoll: unique("trending_poll_votes_user_id_poll_id_unique").on(table.userId, table.pollId),
+  pollIdIdx: index("trending_poll_votes_poll_id_idx").on(table.pollId),
+  userIdIdx: index("trending_poll_votes_user_id_idx").on(table.userId),
+}));
+
+export const insertTrendingPollVoteSchema = createInsertSchema(trendingPollVotes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type TrendingPollVote = typeof trendingPollVotes.$inferSelect;
+export type InsertTrendingPollVote = z.infer<typeof insertTrendingPollVoteSchema>;
+
 // Relations for new tables
 export const celebrityImagesRelations = relations(celebrityImages, ({ one }) => ({
   person: one(trackedPeople, {
