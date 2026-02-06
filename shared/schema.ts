@@ -824,7 +824,7 @@ export const celebrityValueVotes = pgTable("celebrity_value_votes", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
-  uniqueUserCelebrity: unique().on(table.userId, table.celebrityId),
+  uniqueUserCelebrity: unique("celebrity_value_votes_user_id_celebrity_id_unique").on(table.userId, table.celebrityId),
   celebrityIdx: index("celebrity_value_votes_celebrity_idx").on(table.celebrityId),
   userIdx: index("celebrity_value_votes_user_idx").on(table.userId),
 }));
