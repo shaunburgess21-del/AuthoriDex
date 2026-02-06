@@ -1118,20 +1118,21 @@ export default function AdminDashboard() {
       seedOpposeCount: poll.seedOpposeCount,
     });
     if (poll.personId) {
+      const pid = poll.personId;
       setCelebritySearchInput("Loading...");
       setSelectedCelebrityName("Loading...");
       fetchWithAuth(`/api/admin/celebrities?search=`).then(r => r.ok ? r.json() : []).then((celebs: Celebrity[]) => {
-        const found = celebs.find(c => c.id === poll.personId);
+        const found = celebs.find(c => c.id === pid);
         if (found) {
           setCelebritySearchInput(found.name);
           setSelectedCelebrityName(found.name);
         } else {
-          setCelebritySearchInput(poll.personId.slice(0, 8) + "...");
-          setSelectedCelebrityName(poll.personId.slice(0, 8) + "...");
+          setCelebritySearchInput(pid.slice(0, 8) + "...");
+          setSelectedCelebrityName(pid.slice(0, 8) + "...");
         }
       }).catch(() => {
-        setCelebritySearchInput(poll.personId.slice(0, 8) + "...");
-        setSelectedCelebrityName(poll.personId.slice(0, 8) + "...");
+        setCelebritySearchInput(pid.slice(0, 8) + "...");
+        setSelectedCelebrityName(pid.slice(0, 8) + "...");
       });
     } else {
       setCelebritySearchInput("");
