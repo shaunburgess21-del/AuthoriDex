@@ -43,18 +43,74 @@ export const ANTI_SPAM_BASE = 0.35;
 export const ANTI_SPAM_MASS_FACTOR = 0.65;
 
 // EMA smoothing alpha - lower = smoother curves (stock market style)
-// Default 0.08 provides balanced responsiveness: smooth enough to filter noise,
+// Default 0.10 provides balanced responsiveness: smooth enough to filter noise,
 // fast enough to show real breakouts within hours (not days)
-export const EMA_ALPHA_DEFAULT = 0.08;
-export const EMA_ALPHA_2_SOURCES = 0.12;  // When 2 sources spike together
-export const EMA_ALPHA_3_SOURCES = 0.18;  // When 3 sources spike (genuine viral)
+export const EMA_ALPHA_DEFAULT = 0.10;
+export const EMA_ALPHA_2_SOURCES = 0.15;  // When 2 sources spike together
+export const EMA_ALPHA_3_SOURCES = 0.22;  // When 3 sources spike (genuine viral)
 
 // Rate limiting - maximum change per hour
-// Default 5% cap, increases with multi-source breakouts
-export const MAX_HOURLY_CHANGE_PERCENT = 0.05;
+// Default 8% cap (raised from 5%), increases with multi-source breakouts
+// Target: <25% of population rate-limited in steady state
+export const MAX_HOURLY_CHANGE_PERCENT = 0.08;
 
 // Legacy constant for backwards compatibility
 export const EMA_ALPHA = EMA_ALPHA_DEFAULT;
+
+// ============================================================================
+// AUTO CATCH-UP MODE - Gap-driven dynamic rate boosting
+// ============================================================================
+// When the median gap between raw and final scores exceeds a threshold,
+// the system enters catch-up mode with higher caps and alpha to let scores
+// converge to reality. Exits automatically when gap is low for consecutive runs.
+
+export const CATCHUP_ENTER_THRESHOLD = 0.08;   // Enter when medianGapPct > 8%
+export const CATCHUP_EXIT_THRESHOLD = 0.04;    // Exit when medianGapPct < 4%
+export const CATCHUP_EXIT_CONSECUTIVE = 2;     // Must be below exit threshold for 2 runs
+export const CATCHUP_CAP_MULTIPLIER = 2.5;     // Multiply caps by 2.5x during catch-up
+export const CATCHUP_ALPHA_MULTIPLIER = 1.8;   // Multiply alpha by 1.8x during catch-up
+
+let catchUpModeActive = false;
+let consecutiveBelowExitCount = 0;
+
+export function isCatchUpModeActive(): boolean {
+  return catchUpModeActive;
+}
+
+export function updateCatchUpMode(medianGapPct: number): { active: boolean; changed: boolean } {
+  const wasPreviouslyActive = catchUpModeActive;
+
+  if (!catchUpModeActive) {
+    if (medianGapPct > CATCHUP_ENTER_THRESHOLD) {
+      catchUpModeActive = true;
+      consecutiveBelowExitCount = 0;
+      console.log(`[CatchUp] ENTERING catch-up mode (medianGap=${(medianGapPct * 100).toFixed(1)}% > ${(CATCHUP_ENTER_THRESHOLD * 100).toFixed(0)}% threshold)`);
+    }
+  } else {
+    if (medianGapPct < CATCHUP_EXIT_THRESHOLD) {
+      consecutiveBelowExitCount++;
+      if (consecutiveBelowExitCount >= CATCHUP_EXIT_CONSECUTIVE) {
+        catchUpModeActive = false;
+        consecutiveBelowExitCount = 0;
+        console.log(`[CatchUp] EXITING catch-up mode (medianGap=${(medianGapPct * 100).toFixed(1)}% < ${(CATCHUP_EXIT_THRESHOLD * 100).toFixed(0)}% for ${CATCHUP_EXIT_CONSECUTIVE} runs)`);
+      } else {
+        console.log(`[CatchUp] Below exit threshold (${consecutiveBelowExitCount}/${CATCHUP_EXIT_CONSECUTIVE} consecutive)`);
+      }
+    } else {
+      consecutiveBelowExitCount = 0;
+    }
+  }
+
+  return { active: catchUpModeActive, changed: catchUpModeActive !== wasPreviouslyActive };
+}
+
+export function getCatchUpCapMultiplier(): number {
+  return catchUpModeActive ? CATCHUP_CAP_MULTIPLIER : 1.0;
+}
+
+export function getCatchUpAlphaMultiplier(): number {
+  return catchUpModeActive ? CATCHUP_ALPHA_MULTIPLIER : 1.0;
+}
 
 // ============================================================================
 // RECALIBRATION MODE - Temporary boost after scoring model changes
@@ -175,21 +231,22 @@ export function applyEmaSmoothing(newScore: number, previousScore: number | null
 /**
  * Get dynamic EMA alpha based on number of spiking sources.
  * More sources spiking = faster response (higher alpha).
- * Also applies recalibration boost if active.
+ * Also applies recalibration and catch-up boosts if active.
  */
 export function getDynamicAlpha(spikingCount: number): number {
   let baseAlpha: number;
   switch (spikingCount) {
     case 3:
-      baseAlpha = EMA_ALPHA_3_SOURCES; // 0.18
+      baseAlpha = EMA_ALPHA_3_SOURCES; // 0.22
       break;
     case 2:
-      baseAlpha = EMA_ALPHA_2_SOURCES; // 0.12
+      baseAlpha = EMA_ALPHA_2_SOURCES; // 0.15
       break;
     default:
-      baseAlpha = EMA_ALPHA_DEFAULT;   // 0.08
+      baseAlpha = EMA_ALPHA_DEFAULT;   // 0.10
   }
-  return getRecalibrationAlphaBoost(baseAlpha);
+  const recalBoosted = getRecalibrationAlphaBoost(baseAlpha);
+  return Math.min(recalBoosted * getCatchUpAlphaMultiplier(), 0.40);
 }
 
 /**
@@ -450,21 +507,25 @@ export function countSpikingSources(inputs: SpikeDetectionInputs, threshold: num
 /**
  * Get dynamic rate limit based on source corroboration.
  * More sources spiking = higher allowed change rate.
- * Also applies recalibration boost if active.
+ * Also applies recalibration and catch-up boosts if active.
  */
 export function getDynamicRateLimit(spikingCount: number): number {
   let baseCap: number;
   switch (spikingCount) {
     case 3:
-      baseCap = 0.35; // 35% - all three sources agree (70% in recal)
+      baseCap = 0.35; // 35% - all three sources agree
       break;
     case 2:
-      baseCap = 0.18; // 18% - two sources corroborate (36% in recal)
+      baseCap = 0.20; // 20% - two sources corroborate (raised from 18%)
+      break;
+    case 1:
+      baseCap = 0.12; // 12% - one source spiking (raised from 8%)
       break;
     default:
-      baseCap = MAX_HOURLY_CHANGE_PERCENT; // 5% - default (10% in recal)
+      baseCap = MAX_HOURLY_CHANGE_PERCENT; // 8% - default steady-state
   }
-  return getRecalibrationRateBoost(baseCap);
+  const recalBoosted = getRecalibrationRateBoost(baseCap);
+  return recalBoosted * getCatchUpCapMultiplier();
 }
 
 /**

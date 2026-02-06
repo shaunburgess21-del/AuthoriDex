@@ -17,6 +17,10 @@ import {
   getHealthSummary,
   hasAnyDegradedSource,
 } from "../scoring/sourceHealth";
+import {
+  updateCatchUpMode,
+  isCatchUpModeActive,
+} from "../scoring/normalize";
 
 export interface IngestResult {
   processed: number;
@@ -208,12 +212,12 @@ export async function runDataIngestion(): Promise<IngestResult> {
     const stabilizationStats = {
       totalProcessed: 0,
       withPreviousScore: 0,  // EMA applied
-      rateLimited: 0,        // Hit ±5% cap
+      rateLimited: 0,        // Hit rate cap
       largeChanges: 0,       // >10% raw change
       maxRawChange: 0,       // Largest raw change %
       avgRawChange: 0,       // Average raw change %
       rawChanges: [] as number[],
-      // Spike count distribution - how many celebrities have 0/1/2/3 sources spiking
+      gapPcts: [] as number[], // abs(raw - final) / final for each celebrity
       spikeDistribution: { 0: 0, 1: 0, 2: 0, 3: 0 } as Record<number, number>,
     };
 
@@ -465,12 +469,16 @@ export async function runDataIngestion(): Promise<IngestResult> {
         
         if (scoreResult.wasStabilized && previousFameIndex !== undefined && previousFameIndex > 0) {
           stabilizationStats.withPreviousScore++;
-          // Use rawFameIndex (pre-stabilization) to compute actual raw change
           const rawChangePct = Math.abs((scoreResult.rawFameIndex - previousFameIndex) / previousFameIndex) * 100;
           stabilizationStats.rawChanges.push(rawChangePct);
-          if (rawChangePct >= 5) stabilizationStats.rateLimited++; // 5% cap
+          if (rawChangePct >= 8) stabilizationStats.rateLimited++; // 8% cap (raised from 5%)
           if (rawChangePct > 10) stabilizationStats.largeChanges++;
           if (rawChangePct > stabilizationStats.maxRawChange) stabilizationStats.maxRawChange = rawChangePct;
+        }
+
+        if (scoreResult.fameIndex > 0) {
+          const gapPct = Math.abs(scoreResult.rawFameIndex - scoreResult.fameIndex) / scoreResult.fameIndex;
+          stabilizationStats.gapPcts.push(gapPct);
         }
 
         const snapshotValues = {
@@ -525,6 +533,16 @@ export async function runDataIngestion(): Promise<IngestResult> {
         errors++;
       }
     }
+
+    // Compute gap metrics (raw vs final score divergence) for catch-up mode
+    const sortedGaps = [...stabilizationStats.gapPcts].sort((a, b) => a - b);
+    const medianGapPct = sortedGaps.length > 0 ? sortedGaps[Math.floor(sortedGaps.length / 2)] : 0;
+    const p90GapPct = sortedGaps.length > 0 ? sortedGaps[Math.floor(sortedGaps.length * 0.9)] : 0;
+
+    // Update catch-up mode based on median gap
+    updateCatchUpMode(medianGapPct);
+    const catchUpActive = isCatchUpModeActive();
+    console.log(`[Gap Metrics] medianGap=${(medianGapPct * 100).toFixed(1)}%, p90Gap=${(p90GapPct * 100).toFixed(1)}%, catchUp=${catchUpActive ? 'ACTIVE' : 'OFF'}`);
 
     // Sort by fameIndex (displayed on leaderboard) not trendScore - matches quick-score.ts
     scoreResults.sort((a, b) => b.score.fameIndex - a.score.fameIndex);
@@ -736,6 +754,11 @@ export async function runDataIngestion(): Promise<IngestResult> {
       },
       rateLimited: stabilizationStats.rateLimited,
       rateLimitedPct: `${((stabilizationStats.rateLimited / stabilizationStats.totalProcessed) * 100).toFixed(1)}%`,
+      convergence: {
+        medianGapPct: `${(medianGapPct * 100).toFixed(1)}%`,
+        p90GapPct: `${(p90GapPct * 100).toFixed(1)}%`,
+        catchUpMode: catchUpActive ? "ACTIVE" : "OFF",
+      },
     };
     
     console.log(`[HEALTH SUMMARY] ${JSON.stringify(healthSummary)}`);
