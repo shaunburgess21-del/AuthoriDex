@@ -1,8 +1,11 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, real, timestamp, unique, jsonb, serial, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, text, varchar, integer, real, timestamp, unique, jsonb, serial, boolean, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
+
+export const contentStatusEnum = pgEnum("content_status", ["draft", "live", "archived"]);
+export const marketOutcomeEnum = pgEnum("market_outcome", ["yes", "no"]);
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
