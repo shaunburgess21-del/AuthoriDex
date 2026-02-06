@@ -1,0 +1,50 @@
+That error is a classic React rule-of-hooks violation:
+
+“Rendered more hooks than during the previous render.”
+It happens when a useState / useEffect / useCallback / useMemo (any hook) is being called conditionally (inside an if, switch, return early, inside a tab render, etc.). On one render React “sees” N hooks, on the next it “sees” N+1 hooks → crash.
+
+Your screenshot points at AdminDashboard.tsx:1057 where searchCelebrities = useCallback(...) lives. That means Replit likely declared this hook inside a conditional block (e.g., only when the “Trending Polls” tab is active, or only when modal open, or only after auth loads).
+
+What to tell Replit (copy/paste prompt)
+
+Use Low autonomy.
+
+Fix the AdminDashboard crash: “Rendered more hooks than during the previous render” at AdminDashboard.tsx:1057 (searchCelebrities useCallback).
+
+This is a Rules of Hooks issue: a hook is being called conditionally (likely inside a tab branch / modal branch / if (activeTab === ...) / early return).
+
+Required fix:
+1) Ensure ALL hooks (useState/useEffect/useMemo/useCallback/useQuery etc.) are declared unconditionally at the top level of the AdminDashboard component, in a stable order, before any conditional returns or tab-specific rendering.
+2) Move searchCelebrities useCallback (and any related useState/useRef for debounce / results) out of any conditional blocks and into the main hook section with the other hooks.
+3) If the autocomplete UI is only used in the Trending Poll modal/tab, keep the UI conditional, but NOT the hooks.
+4) After fix: restart dev server and confirm AdminDashboard loads without runtime overlay.
+
+Deliverables:
+- Paste the before/after snippet around where searchCelebrities and its related states are declared.
+- Confirm there are no hooks inside tab render functions or conditional branches.
+
+What you can quickly check yourself (optional, 60 seconds)
+
+Open AdminDashboard.tsx and search for:
+
+useCallback( (especially searchCelebrities)
+
+useState(, useEffect(, useMemo(, useQuery(
+Then check whether any of these appear inside something like:
+
+if (...) { ... useCallback(...) ... }
+
+switch(tab) { case ...: const x = useState(...) }
+
+inside a function like renderPollsTab() that is called conditionally
+
+If yes → that’s the culprit.
+
+Why this happened now
+
+Because the trending polls autocomplete was added, and someone probably did:
+
+“Only define the hook when Polls tab is active”
+instead of “define hook always, use it only when needed”.
+
+Send that prompt to Replit. Once the admin page loads again, you’ll be able to run the poll-create tests properly.

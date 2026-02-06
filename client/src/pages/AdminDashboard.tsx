@@ -907,6 +907,24 @@ export default function AdminDashboard() {
     },
   });
 
+  const searchCelebrities = useCallback(async (query: string) => {
+    if (!query || query.length < 2) {
+      setCelebritySearchResults([]);
+      setShowCelebrityDropdown(false);
+      return;
+    }
+    try {
+      const res = await fetchWithAuth(`/api/admin/celebrities?search=${encodeURIComponent(query)}`);
+      if (res.ok) {
+        const results = await res.json();
+        setCelebritySearchResults(results.slice(0, 10));
+        setShowCelebrityDropdown(true);
+      }
+    } catch (e) {
+      console.error("Celebrity search failed:", e);
+    }
+  }, []);
+
   // ============ CONDITIONAL RENDERING (after all hooks) ============
   
   // Show loading while auth is initializing
@@ -1053,24 +1071,6 @@ export default function AdminDashboard() {
     setCelebritySearchResults([]);
     setShowCelebrityDropdown(false);
   };
-
-  const searchCelebrities = useCallback(async (query: string) => {
-    if (!query || query.length < 2) {
-      setCelebritySearchResults([]);
-      setShowCelebrityDropdown(false);
-      return;
-    }
-    try {
-      const res = await fetchWithAuth(`/api/admin/celebrities?search=${encodeURIComponent(query)}`);
-      if (res.ok) {
-        const results = await res.json();
-        setCelebritySearchResults(results.slice(0, 10));
-        setShowCelebrityDropdown(true);
-      }
-    } catch (e) {
-      console.error("Celebrity search failed:", e);
-    }
-  }, []);
 
   const handleCelebritySearchChange = (value: string) => {
     setCelebritySearchInput(value);
