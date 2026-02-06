@@ -1,0 +1,12 @@
+#!/usr/bin/expect -f
+set timeout 120
+spawn npx drizzle-kit push
+expect {
+    "truncate" {
+        send "\r"
+        exp_continue
+    }
+    eof
+}
+set result [wait]
+exit [lindex $result 3]
