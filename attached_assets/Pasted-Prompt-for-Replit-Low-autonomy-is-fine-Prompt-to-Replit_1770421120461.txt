@@ -1,0 +1,83 @@
+Prompt for Replit (Low autonomy is fine)
+
+Prompt to Replit:
+
+We want to remove hardcoded Trending Poll topics (DISCOURSE_TOPICS in PeoplesVoicePoll.tsx) and manage all polls via the database + admin panel.
+
+A) Seed hardcoded polls into DB (one-time migration)
+
+Create a one-time seed script OR admin-only route that:
+
+Reads the current DISCOURSE_TOPICS array (from the code)
+
+Inserts each item into trending_polls with:
+
+status='live'
+
+category mapped from the existing topic category (include “Custom Topic” where applicable)
+
+headline, subjectText, description (if present)
+
+personId if the hardcoded topic maps to a tracked celebrity (match by slug/name if available, otherwise leave null)
+
+imageUrl null (unless hardcoded already has one)
+
+Seed counts: if the UI shows vote totals for these cards, set them as seedSupportCount/seedNeutralCount/seedOpposeCount (aggregate seed pattern; no fake vote rows)
+
+De-dupe rule: do not insert if a poll already exists with the same headline (or same headline + subjectText). Log skipped items.
+
+After seeding, confirm in DB:
+
+count of polls inserted
+
+any duplicates skipped
+
+B) Frontend: switch Trending Polls to DB-only
+
+Implement public endpoint GET /api/trending-polls returning status='live' polls.
+
+Update Vote page Trending Poll section:
+
+Fetch and render from /api/trending-polls
+
+Remove all references to DISCOURSE_TOPICS (no fallback).
+
+Ensure image fallback rules:
+
+if personId => use celebrity image
+
+else if imageUrl => use it
+
+else show placeholder
+
+C) Admin workflow: let us delete what we don’t want
+
+Ensure Admin CRUD supports delete/archive for polls (already exists).
+
+We will delete/archive unwanted seeded polls from the Admin UI after migration.
+
+Output required
+
+Paste the seed script/route added
+
+Paste the updated PeoplesVoicePoll.tsx (or the component changed)
+
+Confirm seeded poll count + “Trending Polls now DB-only”
+
+After Replit does that, your “cleanup” is easy
+
+Go to Admin → Game CMS → Trending Polls
+
+Delete/archive the ones you don’t want
+
+Edit wording / categories
+
+Add images where needed
+
+If you want, paste the DISCOURSE_TOPICS array here and I’ll also suggest:
+
+better headlines/questions
+
+which ones to keep vs remove
+
+category assignments (incl. “Custom Topic”)
