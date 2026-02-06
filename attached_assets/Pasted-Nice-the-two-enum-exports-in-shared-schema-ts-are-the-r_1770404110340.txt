@@ -1,0 +1,64 @@
+Nice — the two enum exports in shared/schema.ts are the right first move.
+
+But I don’t love how Replit “worked around” the db:push prompt by running raw SQL, for two reasons:
+
+It violates your project rule (“No raw SQL migrations”) even if the SQL was harmless.
+
+The bigger issue (the celebrity_value_votes unique constraint drift) is still there, which means future schema pushes will keep getting blocked at the worst possible time (when you’re adding tables/columns).
+
+What I’d do next (safe + practical)
+Step 0 — Verify Replit didn’t change anything else
+
+Ask Replit to show you the exact diff:
+
+Prompt to Replit (Low autonomy):
+
+Please paste the exact git diff for the changes you made (only shared/schema.ts). I need to confirm only:
+
+pgEnum was added to the import, and
+
+contentStatusEnum and marketOutcomeEnum were added.
+No other files should be changed.
+
+That’s your “sanity check” before moving forward.
+
+Step 1 — Fix the celebrity_value_votes constraint prompt (so db:push stops blocking)
+
+This is important because you’re about to do Phase 1A–1E, and you don’t want schema pushes to get stuck.
+
+Goal: Make npm run db:push run cleanly without surprise prompts.
+
+Prompt to Replit (Low autonomy):
+
+There’s a pre-existing Drizzle ↔ DB drift causing an interactive prompt about a unique constraint on celebrity_value_votes.
+
+Please do the following:
+
+Identify exactly what Drizzle thinks needs to change vs what exists in Postgres (constraint/index names + columns).
+
+Propose the safest non-breaking resolution that does NOT drop tables, truncate data, or change ID types.
+
+Implement the fix by updating shared/schema.ts to match production reality (or by adding the missing index in a non-destructive way) so that npm run db:push runs without prompts.
+
+Then run npm run db:push manually and confirm it completes cleanly.
+
+Do not use raw SQL. Do not use --force unless you can prove it’s non-destructive for this change.
+
+Why this matters: If you ignore this drift, every schema change becomes risky + confusing.
+
+Step 2 — Only after that: proceed with Phase 1 schema additions
+
+Once db:push runs cleanly, you can safely do the real work:
+
+Recommended order for tonight (3–5 hours):
+
+✅ Enums (already done, but verify diff)
+
+✅ Fix constraint drift so pushes work reliably
+
+Phase 1A: add missing columns to face_offs
+
+Phase 1B: create face_off_votes
+(Stop here for tonight.)
+
+That’s a realistic, high-impact chunk without spilling into too many new systems at once.
