@@ -22,7 +22,6 @@ async function scheduledIngestion() {
   try {
     const result = await runDataIngestion();
     log(`[Ingestion Scheduler] Complete: ${result.processed} processed, ${result.errors} errors, ${result.duration}ms`);
-    log(`[Ingestion Scheduler] Next ingestion scheduled for: ${new Date(Date.now() + INGESTION_INTERVAL_MS).toISOString()}`);
   } catch (error) {
     log(`[Ingestion Scheduler] Error during ingestion: ${error}`);
   }
@@ -34,17 +33,31 @@ function startIngestionScheduler() {
     return;
   }
   
-  log(`[Ingestion Scheduler] Starting (interval: ${INGESTION_INTERVAL_MS / 1000 / 60 / 60} hours)`);
+  log(`[Ingestion Scheduler] Starting (absolute hourly scheduling at :02 past each hour)`);
   
   // Run initial ingestion after 30 second delay (let server fully initialize)
   setTimeout(() => {
     scheduledIngestion();
   }, 30000);
   
-  // Schedule recurring ingestion every 1 hour
-  setInterval(() => {
-    scheduledIngestion();
-  }, INGESTION_INTERVAL_MS);
+  // Schedule next run at :02 past the next hour, then repeat every hour
+  // This ensures consistent timing regardless of when the server started
+  function scheduleNextHourlyRun() {
+    const now = new Date();
+    const nextHour = new Date(now);
+    nextHour.setMinutes(2, 0, 0); // :02:00 past the hour
+    if (nextHour <= now) {
+      nextHour.setHours(nextHour.getHours() + 1);
+    }
+    const msUntilNext = nextHour.getTime() - now.getTime();
+    log(`[Ingestion Scheduler] Next scheduled run at ${nextHour.toISOString()} (in ${Math.round(msUntilNext / 1000 / 60)} min)`);
+    setTimeout(async () => {
+      await scheduledIngestion();
+      scheduleNextHourlyRun();
+    }, msUntilNext);
+  }
+  
+  scheduleNextHourlyRun();
 }
 
 const app = express();

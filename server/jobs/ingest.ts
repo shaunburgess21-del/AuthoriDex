@@ -118,6 +118,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
     // Create maps for different lookups:
     // - mostRecentMap: Most recent snapshot for EMA continuity (CRITICAL for stabilization)
     //   Also stores news/search values for graceful degradation when APIs fail
+    // - lastNonZeroNewsMap: Most recent snapshot with non-zero newsCount per person
+    //   Used as bootstrap fallback when GDELT has been down for multiple runs
+    // - lastNonZeroSearchMap: Same for search volume
     // - snapshot24hMap: Snapshot from ~24h ago for change24h calculation
     // - snapshot7dMap: Snapshot from ~7d ago for change7d calculation
     const mostRecentMap = new Map<string, { 
@@ -129,6 +132,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
       newsDelta: number | null;
       searchDelta: number | null;
     }>();
+    const lastNonZeroNewsMap = new Map<string, { newsCount: number; newsDelta: number; timestamp: Date }>();
+    const lastNonZeroSearchMap = new Map<string, { searchVolume: number; searchDelta: number; timestamp: Date }>();
     const snapshot24hMap = new Map<string, { trendScore: number; fameIndex: number | null }>();
     const snapshot7dMap = new Map<string, { trendScore: number; fameIndex: number | null }>();
     
@@ -150,6 +155,30 @@ export async function runDataIngestion(): Promise<IngestResult> {
           searchDelta: snap.searchDelta,
         });
       }
+
+      // Track last non-zero news snapshot (for bootstrap recovery from zero-propagation)
+      if ((snap.newsCount ?? 0) > 0) {
+        const existingNews = lastNonZeroNewsMap.get(snap.personId);
+        if (!existingNews || new Date(snap.timestamp) > existingNews.timestamp) {
+          lastNonZeroNewsMap.set(snap.personId, {
+            newsCount: snap.newsCount!,
+            newsDelta: snap.newsDelta ?? 0,
+            timestamp: new Date(snap.timestamp),
+          });
+        }
+      }
+
+      // Track last non-zero search snapshot (same bootstrap logic)
+      if ((snap.searchVolume ?? 0) > 0) {
+        const existingSearch = lastNonZeroSearchMap.get(snap.personId);
+        if (!existingSearch || new Date(snap.timestamp) > existingSearch.timestamp) {
+          lastNonZeroSearchMap.set(snap.personId, {
+            searchVolume: snap.searchVolume!,
+            searchDelta: snap.searchDelta ?? 0,
+            timestamp: new Date(snap.timestamp),
+          });
+        }
+      }
       
       // Keep closest snapshot to 24h ago (within 2 hour window)
       if (diff24h < 2 * 60 * 60 * 1000) {
@@ -167,6 +196,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
         }
       }
     }
+    
+    console.log(`[Ingest] Bootstrap maps: ${lastNonZeroNewsMap.size} people with non-zero news history, ${lastNonZeroSearchMap.size} with non-zero search history`);
     
     console.log(`[Ingest] Found ${mostRecentMap.size} recent snapshots (EMA), ${snapshot24hMap.size} 24h snapshots, ${snapshot7dMap.size} 7d snapshots`);
 
@@ -304,14 +335,34 @@ export async function runDataIngestion(): Promise<IngestResult> {
         const suspiciousNewsDrop = news && prevNewsCount >= 5 && 
           newsCount < prevNewsCount * 0.1; // 90%+ drop
         
-        // Use fallback if: (global outage OR API failed) AND we have historical data
-        if ((newsNeedsOutageFallback || !news || (suspiciousNewsDrop && globalHealth.isNewsGlobalOutage)) 
-            && prevNewsCount > 0) {
-          // Apply staleness decay to fill-forwarded value
-          newsCount = Math.round(prevNewsCount * newsDecayFactor);
-          newsDelta = Math.round((mostRecent?.newsDelta ?? 0) * newsDecayFactor);
-          newsUsedFallback = true;
-          newsApiUsedFallback++;
+        // Use fallback if: (global outage OR API failed)
+        // Bootstrap recovery: if prevNewsCount is 0 (from prior zero-propagation), 
+        // look back in history for the last non-zero value to prevent permanent zero-lock
+        if (newsNeedsOutageFallback || !news || (suspiciousNewsDrop && globalHealth.isNewsGlobalOutage)) {
+          let fallbackNewsCount = prevNewsCount;
+          let fallbackNewsDelta = mostRecent?.newsDelta ?? 0;
+          let fallbackDecay = newsDecayFactor;
+
+          if (fallbackNewsCount <= 0) {
+            const lastNonZero = lastNonZeroNewsMap.get(person.id);
+            if (lastNonZero) {
+              fallbackNewsCount = lastNonZero.newsCount;
+              fallbackNewsDelta = lastNonZero.newsDelta;
+              const staleHours = (now.getTime() - lastNonZero.timestamp.getTime()) / (1000 * 60 * 60);
+              if (staleHours <= 2) fallbackDecay = 1.0;
+              else if (staleHours <= 4) fallbackDecay = 1.0 - ((staleHours - 2) / 2) * 0.3;
+              else if (staleHours <= 6) fallbackDecay = 0.7 - ((staleHours - 4) / 2) * 0.2;
+              else if (staleHours <= 12) fallbackDecay = 0.5 - ((staleHours - 6) / 6) * 0.3;
+              else fallbackDecay = 0.2;
+            }
+          }
+
+          if (fallbackNewsCount > 0) {
+            newsCount = Math.round(fallbackNewsCount * fallbackDecay);
+            newsDelta = Math.round(fallbackNewsDelta * fallbackDecay);
+            newsUsedFallback = true;
+            newsApiUsedFallback++;
+          }
         }
         
         // SEARCH: Use fallback if source is in OUTAGE state
@@ -320,14 +371,32 @@ export async function runDataIngestion(): Promise<IngestResult> {
         const suspiciousSearchDrop = serper && prevSearchVolume >= 100 &&
           searchVolume < prevSearchVolume * 0.1; // 90%+ drop
         
-        // Use fallback if: (global outage OR API failed) AND we have historical data
-        if ((searchNeedsOutageFallback || !serper || (suspiciousSearchDrop && globalHealth.isSearchGlobalOutage))
-            && prevSearchVolume > 0) {
-          // Apply staleness decay to fill-forwarded value
-          searchVolume = Math.round(prevSearchVolume * searchDecayFactor);
-          searchDelta = Math.round((mostRecent?.searchDelta ?? 0) * searchDecayFactor);
-          searchUsedFallback = true;
-          searchApiUsedFallback++;
+        // Same bootstrap recovery logic for search
+        if (searchNeedsOutageFallback || !serper || (suspiciousSearchDrop && globalHealth.isSearchGlobalOutage)) {
+          let fallbackSearchVolume = prevSearchVolume;
+          let fallbackSearchDelta = mostRecent?.searchDelta ?? 0;
+          let fallbackDecay = searchDecayFactor;
+
+          if (fallbackSearchVolume <= 0) {
+            const lastNonZero = lastNonZeroSearchMap.get(person.id);
+            if (lastNonZero) {
+              fallbackSearchVolume = lastNonZero.searchVolume;
+              fallbackSearchDelta = lastNonZero.searchDelta;
+              const staleHours = (now.getTime() - lastNonZero.timestamp.getTime()) / (1000 * 60 * 60);
+              if (staleHours <= 2) fallbackDecay = 1.0;
+              else if (staleHours <= 4) fallbackDecay = 1.0 - ((staleHours - 2) / 2) * 0.3;
+              else if (staleHours <= 6) fallbackDecay = 0.7 - ((staleHours - 4) / 2) * 0.2;
+              else if (staleHours <= 12) fallbackDecay = 0.5 - ((staleHours - 6) / 6) * 0.3;
+              else fallbackDecay = 0.2;
+            }
+          }
+
+          if (fallbackSearchVolume > 0) {
+            searchVolume = Math.round(fallbackSearchVolume * fallbackDecay);
+            searchDelta = Math.round(fallbackSearchDelta * fallbackDecay);
+            searchUsedFallback = true;
+            searchApiUsedFallback++;
+          }
         }
 
         // Get current source health states for weight renormalization
@@ -404,7 +473,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
           if (rawChangePct > stabilizationStats.maxRawChange) stabilizationStats.maxRawChange = rawChangePct;
         }
 
-        await db.insert(trendSnapshots).values({
+        const snapshotValues = {
           personId: person.id,
           timestamp: hourTimestamp, // Truncated to hour for idempotency
           trendScore: scoreResult.trendScore,
@@ -426,7 +495,28 @@ export async function runDataIngestion(): Promise<IngestResult> {
           diversityMultiplier: scoreResult.diversityMultiplier,
           momentum: scoreResult.momentum,
           drivers: scoreResult.drivers,
-        }).onConflictDoNothing(); // Deduplicate multiple runs within same hour
+        };
+        await db.insert(trendSnapshots).values(snapshotValues)
+          .onConflictDoUpdate({
+            target: [trendSnapshots.personId, trendSnapshots.timestamp],
+            set: {
+              trendScore: snapshotValues.trendScore,
+              fameIndex: snapshotValues.fameIndex,
+              newsCount: snapshotValues.newsCount,
+              searchVolume: snapshotValues.searchVolume,
+              wikiPageviews: snapshotValues.wikiPageviews,
+              wikiDelta: snapshotValues.wikiDelta,
+              newsDelta: snapshotValues.newsDelta,
+              searchDelta: snapshotValues.searchDelta,
+              massScore: snapshotValues.massScore,
+              velocityScore: snapshotValues.velocityScore,
+              velocityAdjusted: snapshotValues.velocityAdjusted,
+              confidence: snapshotValues.confidence,
+              diversityMultiplier: snapshotValues.diversityMultiplier,
+              momentum: snapshotValues.momentum,
+              drivers: snapshotValues.drivers,
+            },
+          });
 
         scoreResults.push({ person, score: scoreResult });
         processed++;
@@ -565,7 +655,11 @@ export async function runDataIngestion(): Promise<IngestResult> {
     
     // Log graceful degradation stats (when APIs fail)
     if (newsApiUsedFallback > 0 || searchApiUsedFallback > 0) {
-      console.log(`[Graceful Degradation] News fallback: ${newsApiUsedFallback}/${people.length}, Search fallback: ${searchApiUsedFallback}/${people.length}`);
+      const newsBootstrapped = newsApiUsedFallback > 0 && Array.from(lastNonZeroNewsMap.keys()).length > 0 ? 
+        ` (${lastNonZeroNewsMap.size} bootstrapped from history)` : '';
+      const searchBootstrapped = searchApiUsedFallback > 0 && Array.from(lastNonZeroSearchMap.keys()).length > 0 ? 
+        ` (${lastNonZeroSearchMap.size} bootstrapped from history)` : '';
+      console.log(`[Graceful Degradation] News fallback: ${newsApiUsedFallback}/${people.length}${newsBootstrapped}, Search fallback: ${searchApiUsedFallback}/${people.length}${searchBootstrapped}`);
     }
     
     // Log rank churn
@@ -629,6 +723,12 @@ export async function runDataIngestion(): Promise<IngestResult> {
       fallbacks: {
         news: newsApiUsedFallback,
         search: searchApiUsedFallback,
+      },
+      bootstrap: {
+        newsHistory: lastNonZeroNewsMap.size,
+        searchHistory: lastNonZeroSearchMap.size,
+        newsDecay: `${(newsDecayFactor * 100).toFixed(0)}%`,
+        searchDecay: `${(searchDecayFactor * 100).toFixed(0)}%`,
       },
       churn: {
         top10: `+${enteredTop10}/-${exitedTop10}`,
