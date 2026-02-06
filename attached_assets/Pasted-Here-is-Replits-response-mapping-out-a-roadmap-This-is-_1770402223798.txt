@@ -1,0 +1,178 @@
+Here is Replits response mapping out a roadmap: "This is a solid planning document from ChatGPT. Let me analyze what already exists in FameDex and then provide you with a clear, actionable roadmap that builds on your current architecture.
+
+First, let me check the current state of your database schemas and admin panel to understand what's already in place:
+
+Now I have a clear picture of what exists and what's needed. Let me provide you with a comprehensive roadmap.
+
+FameDex Content Pipeline Roadmap
+Current State Analysis
+What Already Exists:
+
+Component	Status	Notes
+face_offs table	Partial	Has basic structure, missing status, seed columns, celebrity linking
+predictionMarkets table	Good	Has status workflow (OPEN → CLOSED_PENDING → RESOLVED), settlementBy
+celebrityMetrics aggregate pattern	Complete	Template for seed data approach
+Admin Panel	Missing	No admin pages exist yet
+CSV Import	Missing	No batch upload capability
+Trending Polls table	Missing	Need to create
+Phase-by-Phase Implementation Plan
+Phase 1: Schema Enhancements (Foundation)
+Estimated: 1 session
+
+1A. Enhance face_offs table:
+
+Add status: 'draft' | 'live' | 'archived' (default: 'draft')
+Add person_a_id, person_b_id (optional FK to tracked_people for celebrity linking)
+Add seed_votes_a, seed_votes_b (aggregate seed pattern)
+Add scheduled_at (optional scheduling)
+Add created_by (admin user ID)
+1B. Create face_off_votes table:
+
+Real user votes only (no fake users)
+user_id, face_off_id, choice ('a' or 'b'), created_at
+Unique constraint: one vote per user per face-off
+1C. Create trending_polls table:
+
+headline, subject_text, subject_image, person_id (optional celebrity link)
+category, description, timeline, deadline_at
+status: 'draft' | 'live' | 'archived'
+seed_support_count, seed_neutral_count, seed_oppose_count
+created_by, created_at
+1D. Create trending_poll_votes table:
+
+Real user votes only
+user_id, poll_id, choice ('support' | 'neutral' | 'oppose')
+Unique constraint: one vote per user per poll
+1E. Enhance predictionMarkets for Real-World Markets:
+
+Add winning_outcome field for settlement
+Add seed_yes_count, seed_no_count for seed data
+Ensure marketType = 'community' distinguishes Real-World Markets
+Phase 2: Admin Panel Core (CRUD)
+Estimated: 2 sessions
+
+2A. Admin Layout & Navigation:
+
+Protected admin routes (role check)
+Sidebar with sections: Face-Offs, Trending Polls, Real-World Markets, Users, System
+2B. Face-Offs Admin:
+
+List view with filters: status, category, "missing images"
+Create/Edit form matching "Suggest a Face-Off" UI fields
+Status toggle (draft → live → archived)
+Display order (drag-and-drop or manual)
+2C. Trending Polls Admin:
+
+List view with same filter pattern
+Create/Edit form matching "Suggest a Poll" UI fields
+Status toggle and ordering
+2D. Real-World Markets Admin:
+
+List view with status filters (open, closed, settled)
+Create/Edit form
+Settlement UI: "Settle Market" → choose winner (Yes/No) → confirm → lock further predictions
+Phase 3: CSV Import Pipeline
+Estimated: 1-2 sessions
+
+3A. Separate CSV files (recommended for safety):
+
+faceoffs.csv
+trending_polls.csv
+real_world_markets.csv
+3B. CSV Import Flow:
+
+Upload → Parse → Preview rows in table
+Validation: required fields, max lengths, valid category values
+Display errors per row (red highlight) without importing bad rows
+Import → Creates records in DRAFT status
+Admin reviews, uploads images, then sets to LIVE
+3C. CSV Templates:
+
+faceoffs.csv:
+
+headline,option_a_text,option_a_celebrity_slug,option_b_text,option_b_celebrity_slug,category,seed_votes_a,seed_votes_b
+"SpaceX vs Blue Origin",SpaceX,,Blue Origin,,tech,0,0
+"Messi vs Ronaldo",Lionel Messi,lionel-messi,Cristiano Ronaldo,cristiano-ronaldo,sports,45,55
+trending_polls.csv:
+
+headline,subject_text,person_slug,category,description,timeline,seed_support,seed_neutral,seed_oppose
+"Should AI replace teachers?",AI in Education,,tech,"Vote on AI replacing human teachers",1_week,0,0,0
+"Taylor Swift Tour 2025",Taylor Swift,taylor-swift,entertainment,"Is the new tour worth the hype?",no_deadline,60,20,20
+real_world_markets.csv:
+
+title,category,description,end_date,seed_yes,seed_no
+"Will Bitcoin reach $100k by July 2026?",business,"Bitcoin price prediction",2026-07-01,0,0
+"Will Apple release AR glasses in 2026?",tech,"Apple Vision product line expansion",2026-12-31,0,0
+Phase 4: Hybrid Image Workflow
+Estimated: 1 session
+
+4A. Image Selection Logic:
+
+If person_id is set → use celebrity's existing profile image
+If custom entity → use uploaded Supabase Storage image
+4B. Supabase Storage Buckets:
+
+vote-faceoffs/
+vote-polls/
+predict-markets/
+4C. Admin "Missing Images" Filter:
+
+Filter cards where status = 'draft' AND image_url IS NULL AND person_id IS NULL
+Upload interface → attaches to record → enables LIVE toggle
+Phase 5: Seed Data Application
+Estimated: 1 session
+
+5A. Vote Cards (Static Seeds):
+
+Seed values remain permanent
+Display formula: total_votes_a = seed_votes_a + real_votes_a
+No weekly reset
+5B. Predict Cards (Weekly Reset Seeds):
+
+For FameDex-native predictions (Weekly Up/Down, H2H, Top Gainer)
+Seed data resets at market close (11:59 PM Sunday UTC)
+Real bets carry over to settlement
+5C. Seeding Scripts:
+
+scripts/seed-faceoffs.ts - Populate seed_votes_a/b based on CSV data
+scripts/seed-polls.ts - Populate seed_support/neutral/oppose
+scripts/seed-markets.ts - Populate seed_yes/no
+Phase 6: Auto-Generated Native Cards
+Estimated: 1 session
+
+6A. Underrated/Overrated (Vote Section):
+
+Already complete via celebrity_metrics + celebrity_value_votes
+Auto-generates for all 100 leaderboard celebrities
+Links to profile page "Vote" toggle widget
+6B. Weekly Up/Down (Predict Section):
+
+Auto-generate 100 market entries from leaderboard
+Links to profile page "Predict" toggle widget
+Resets weekly with market cycle
+6C. Head-to-Head & Top Gainer:
+
+Curated by admin (Phase 2 admin panel)
+Link cards to profile pages for participating celebrities
+Risk Checklist
+Risk	Mitigation
+Fake user rows in DB	Aggregate seed pattern - seed columns only, no fabricated vote records
+CSV import creating duplicates	Unique constraints + validation before import
+Markets never settled	Admin settlement UI with required winner selection
+Status changes losing data	Archive status instead of delete
+Image upload failures	Draft status until images attached
+Celebrity slug mismatches	Validate slugs against tracked_people during import
+Weekly reset breaking predictions	Separate seed columns from real bets; only reset seeds
+Schema migration breaking existing data	Use npm run db:push --force with tested schemas
+Recommended Execution Order
+Phase 1A-1E (Schema) → Single migration, no UI yet
+Phase 2B (Face-Offs Admin CRUD) → Learn the pattern
+Phase 3 (CSV Import for Face-Offs) → Test import flow
+Phase 4 (Image workflow) → Complete Face-Offs end-to-end
+Phase 2C + 3 (Trending Polls) → Repeat pattern
+Phase 2D + 3 (Real-World Markets + Settlement) → Repeat pattern
+Phase 5 (Seed scripts) → Apply baseline data
+Phase 6 (Auto-generated cards) → Native integrations
+This gives you a clear, chunked approach that builds incrementally. Each phase can be tested independently before moving on. Would you like me to start with Phase 1 (Schema Enhancements) as the first build step?"
+
+ChatGPT - can you place this into an actionable and easy to understand step by step guideline for us to implement

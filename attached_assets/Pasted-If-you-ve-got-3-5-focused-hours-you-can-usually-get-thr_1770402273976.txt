@@ -1,0 +1,127 @@
+If you’ve got 3–5 focused hours, you can usually get through all of Phase 1 (Schema Enhancements) and, if things go smoothly, start Phase 2A (admin shell + route protection). Trying to go beyond that (full CRUD + CSV import + image workflow) in one sitting is where mistakes creep in.
+
+What you can realistically finish tonight (3–5 hours)
+
+Best-case (strong momentum, no surprises):
+
+✅ Phase 1 (Schema Enhancements) complete
+
+✅ Phase 2A (Admin shell + protection) complete
+
+⏳ Start Phase 2B (Face-Offs Admin list + create draft)
+
+More typical / safer target:
+
+✅ Phase 1 complete
+
+✅ Phase 2A complete
+
+Stop there, test, and commit.
+
+That’s already huge progress because everything else depends on a stable schema + safe admin entry point.
+
+Is Phase 1 step one?
+
+Yes — Phase 1 is step one.
+
+If the schema is not right, every UI/admin/import decision becomes messy and you’ll rebuild twice.
+
+Do we do Phase 1 in Replit or Supabase?
+
+You do it from Replit, because Replit is where your app’s database schema/migrations are defined and pushed.
+
+But the database lives in Supabase.
+
+So the workflow is basically:
+
+Edit schema/migrations in Replit
+
+Apply/push those changes to Supabase
+
+Verify in Supabase Table Editor / SQL Editor that columns + constraints exist
+
+In short: build in Replit → deploy to Supabase → verify in Supabase.
+
+What we should do tonight (tight, low-risk plan)
+Step 0 — Safety checkpoint (5–10 min)
+
+Ensure you have a recent backup / at least confidence nothing critical will be overwritten.
+
+Confirm you have a dev/staging DB (ideal). If not, we proceed carefully.
+
+Step 1 — Phase 1A: Upgrade face_offs (20–40 min)
+
+Add:
+
+status (draft|live|archived) default draft
+
+person_a_id, person_b_id optional FK to tracked_people
+
+seed_votes_a, seed_votes_b default 0
+
+scheduled_at optional
+
+created_by optional
+
+Verify: existing queries still load, existing rows remain.
+
+Step 2 — Phase 1B: Create face_off_votes + unique constraint (20–40 min)
+
+Add table
+
+Add unique constraint on (user_id, face_off_id)
+
+Verify: 1 vote works, 2nd fails.
+
+Step 3 — Phase 1C + 1D: trending_polls + trending_poll_votes (40–70 min)
+
+Create tables
+
+Add status + seed columns
+
+Add unique constraint
+
+Verify: insert poll draft, 1 vote works, 2nd blocked.
+
+Step 4 — Phase 1E: predictionMarkets enhancement (20–40 min)
+
+Add seed_yes_count, seed_no_count
+
+Add winning_outcome nullable
+
+Confirm marketType distinguishes community markets
+
+Verify: existing markets still render.
+
+Step 5 — Stop and test (20–40 min)
+
+Quick smoke-test the app
+
+Make sure nothing broke
+
+Commit changes
+
+That’s a clean “end of night” point.
+
+Next steps (so we proceed together)
+
+To keep this practical and not theoretical, paste one of these and I’ll guide the exact next move:
+
+What stack are you using for schema?
+
+Prisma? Drizzle? Supabase SQL migrations?
+(Just tell me which one shows in your repo / package.json.)
+
+What is the name of your “tracked people” table?
+You referenced tracked_people — confirm the exact table name.
+
+Do you have a dev/staging Supabase project, or is this production?
+If it’s production, we’ll add extra caution (non-breaking changes only, no destructive migrations).
+
+If you reply with:
+
+“We use Prisma” (or Drizzle / SQL)
+
+table name for tracked people
+
+dev vs prod
