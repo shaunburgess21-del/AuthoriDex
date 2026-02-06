@@ -1,0 +1,96 @@
+Prompt for Replit (Trending Polls — Admin Modal fixes + field alignment)
+
+Act as a senior full-stack engineer. We are working in production Supabase (non-breaking changes only). Trending Polls tables already exist: trending_polls + trending_poll_votes. Admin CRUD was added inside AdminDashboard.tsx, but the Create Poll modal is broken and a few fields don’t match the intended product behavior.
+
+A) Fix the Create Poll submit error (blocking issue)
+
+When I click Create Poll, I get this error toast:
+
+Create Failed — Cannot read properties of undefined (reading 'getSession')
+
+This prevents creating polls reliably.
+
+Requirement:
+
+Find the exact source of getSession being called on undefined (likely a missing/undefined Supabase client reference inside the admin fetch helper, mutation, or API call path).
+
+Fix it so Trending Poll create/update works exactly like Face-Offs CRUD, using the same authenticated request mechanism already proven to work.
+
+Confirm:
+
+Create poll works
+
+Edit poll works
+
+Status updates (draft/live/archived) work
+
+No auth header “missing” issues (admin actions should work from the admin UI session)
+
+B) Category dropdown must include “Custom Topic”
+
+In the Create Poll modal, Category is a dropdown with:
+Tech, Entertainment, Sports, Politics, Business, Creator
+
+Add: Custom Topic as an option.
+
+Important:
+
+If Category = Custom Topic, then the poll is not tied to a standard industry label.
+
+It must still work with filters (frontend + admin list filters). If the UI uses fixed chips, add this chip too.
+
+C) Clarify / fix “Description (optional)” usage
+
+Currently the modal has Description (optional) but on the frontend Trending Poll cards (Support / Neutral / Oppose) I don’t see where description displays.
+
+Do one of these (pick the best UX option and implement):
+
+Option 1 (Preferred): Show description in the card UI as small helper text below the question / prompt, above the buttons (or under the prompt text).
+
+Option 2: If we intentionally don’t show it on the card, then:
+
+Remove the field from the Create/Edit modal, OR
+
+Keep it but display it somewhere meaningful (e.g., poll detail drawer, hover tooltip, or “View details” modal).
+
+Deliverable: confirm exactly where description will display and ensure it’s consistent.
+
+D) Timeline + Deadline fields are likely wrong for Trending Polls
+
+Trending Polls are meant to be indefinite ongoing votes in most cases (unlike Predictions). Right now the admin modal includes Timeline and Deadline.
+
+Requirement:
+
+Default behavior for Trending Polls should be No Deadline.
+
+Timeline/Deadline should not be required to create a poll.
+
+If we keep them:
+
+Timeline should default to no_deadline
+
+Deadline should be optional and only used if we choose to expire a poll later.
+
+Also ensure these fields do not cause validation errors on create.
+
+E) Quick sanity checks after fixes
+
+After implementing, confirm:
+
+I can create a poll with only: Status, Category, Headline, Subject/Question (and optional linked celebrity OR optional image URL).
+
+If personId (linked celebrity) is set → frontend automatically uses celebrity image (ignore imageUrl).
+
+If no linked celebrity → imageUrl is optional (poll can still be created; “Missing Image” filter should catch it only if we want images required for custom topics).
+
+Output required from you
+
+When done, paste:
+
+The exact code location and fix for the getSession undefined issue (what was undefined and why)
+
+The updated Category options including Custom Topic
+
+Where description is displayed on the frontend (or confirmation it was removed / moved)
+
+A confirmation checklist that Create/Edit/Archive works in admin without errors
