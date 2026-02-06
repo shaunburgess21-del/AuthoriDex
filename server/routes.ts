@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { eq, desc, and, sql, count, gte, SQL } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -3803,6 +3803,134 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error reordering face-offs:", error.message);
       res.status(500).json({ error: "Failed to reorder face-offs" });
+    }
+  });
+
+  // ===========================================
+  // ADMIN: TRENDING POLLS CRUD
+  // ===========================================
+
+  app.get("/api/admin/trending-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const pollList = await db.select().from(trendingPolls).orderBy(desc(trendingPolls.createdAt));
+      res.json(pollList);
+    } catch (error: any) {
+      console.error("Error fetching trending polls:", error.message);
+      res.status(500).json({ error: "Failed to fetch trending polls" });
+    }
+  });
+
+  app.post("/api/admin/trending-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount } = req.body;
+      const adminId = req.userId!;
+
+      if (!headline || !subjectText || !category) {
+        return res.status(400).json({ error: "Headline, subject text, and category are required" });
+      }
+
+      const [created] = await db.insert(trendingPolls).values({
+        status: status || "draft",
+        category,
+        headline,
+        subjectText,
+        personId: personId || null,
+        description: description || null,
+        timeline: timeline || null,
+        deadlineAt: deadlineAt ? new Date(deadlineAt) : null,
+        imageUrl: imageUrl || null,
+        seedSupportCount: seedSupportCount || 0,
+        seedNeutralCount: seedNeutralCount || 0,
+        seedOpposeCount: seedOpposeCount || 0,
+        createdBy: adminId,
+      }).returning();
+
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'create_trending_poll',
+        targetTable: 'trending_polls',
+        targetId: created.id,
+        newData: created,
+      });
+
+      res.json(created);
+    } catch (error: any) {
+      console.error("Error creating trending poll:", error.message);
+      res.status(500).json({ error: "Failed to create trending poll" });
+    }
+  });
+
+  app.patch("/api/admin/trending-polls/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const adminId = req.userId!;
+
+      const [existing] = await db.select().from(trendingPolls).where(eq(trendingPolls.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Trending poll not found" });
+      }
+
+      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount } = req.body;
+
+      const updates: any = { updatedAt: new Date() };
+      if (status !== undefined) updates.status = status;
+      if (category !== undefined) updates.category = category;
+      if (headline !== undefined) updates.headline = headline;
+      if (subjectText !== undefined) updates.subjectText = subjectText;
+      if (personId !== undefined) updates.personId = personId || null;
+      if (description !== undefined) updates.description = description || null;
+      if (timeline !== undefined) updates.timeline = timeline || null;
+      if (deadlineAt !== undefined) updates.deadlineAt = deadlineAt ? new Date(deadlineAt) : null;
+      if (imageUrl !== undefined) updates.imageUrl = imageUrl || null;
+      if (seedSupportCount !== undefined) updates.seedSupportCount = seedSupportCount;
+      if (seedNeutralCount !== undefined) updates.seedNeutralCount = seedNeutralCount;
+      if (seedOpposeCount !== undefined) updates.seedOpposeCount = seedOpposeCount;
+
+      const [updated] = await db.update(trendingPolls).set(updates).where(eq(trendingPolls.id, id)).returning();
+
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'update_trending_poll',
+        targetTable: 'trending_polls',
+        targetId: id,
+        previousData: existing,
+        newData: updated,
+      });
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating trending poll:", error.message);
+      res.status(500).json({ error: "Failed to update trending poll" });
+    }
+  });
+
+  app.delete("/api/admin/trending-polls/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const adminId = req.userId!;
+
+      const [existing] = await db.select().from(trendingPolls).where(eq(trendingPolls.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Trending poll not found" });
+      }
+
+      await db.delete(trendingPolls).where(eq(trendingPolls.id, id));
+
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'delete_trending_poll',
+        targetTable: 'trending_polls',
+        targetId: id,
+        previousData: existing,
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting trending poll:", error.message);
+      res.status(500).json({ error: "Failed to delete trending poll" });
     }
   });
 

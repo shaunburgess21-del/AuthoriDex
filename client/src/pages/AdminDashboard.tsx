@@ -71,6 +71,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import type { TrendingPoll } from "@shared/schema";
 
 type AdminSection = "overview" | "celebrities" | "cms" | "moderation" | "settlement" | "users" | "tools";
 
@@ -363,6 +364,25 @@ export default function AdminDashboard() {
     isActive: true,
   });
   
+  const [showPollModal, setShowPollModal] = useState(false);
+  const [editingPoll, setEditingPoll] = useState<TrendingPoll | null>(null);
+  const [pollFilter, setPollFilter] = useState<string>("all");
+  const [pollCategoryFilter, setPollCategoryFilter] = useState<string>("all");
+  const [pollForm, setPollForm] = useState({
+    status: "draft" as "draft" | "live" | "archived",
+    category: "Tech",
+    headline: "",
+    subjectText: "",
+    personId: "",
+    description: "",
+    timeline: "",
+    deadlineAt: "",
+    imageUrl: "",
+    seedSupportCount: 0,
+    seedNeutralCount: 0,
+    seedOpposeCount: 0,
+  });
+  
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; name: string } | null>(null);
   
@@ -460,6 +480,16 @@ export default function AdminDashboard() {
     queryFn: async () => {
       const res = await fetchWithAuth("/api/admin/face-offs");
       if (!res.ok) throw new Error("Failed to fetch face-offs");
+      return res.json();
+    },
+    enabled: isAdmin && activeSection === "cms",
+  });
+
+  const { data: trendingPollsList, isLoading: pollsLoading } = useQuery<TrendingPoll[]>({
+    queryKey: ["/api/admin/trending-polls"],
+    queryFn: async () => {
+      const res = await fetchWithAuth("/api/admin/trending-polls");
+      if (!res.ok) throw new Error("Failed to fetch trending polls");
       return res.json();
     },
     enabled: isAdmin && activeSection === "cms",
@@ -752,6 +782,65 @@ export default function AdminDashboard() {
     },
   });
 
+  const createPollMutation = useMutation({
+    mutationFn: async (data: typeof pollForm) => {
+      const res = await fetchWithAuth("/api/admin/trending-polls", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Failed to create poll");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Poll Created", description: "New trending poll added successfully" });
+      setShowPollModal(false);
+      setEditingPoll(null);
+      resetPollForm();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Create Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updatePollMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const res = await fetchWithAuth(`/api/admin/trending-polls/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Failed to update poll");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Poll Updated", description: "Trending poll updated successfully" });
+      setShowPollModal(false);
+      setEditingPoll(null);
+      resetPollForm();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deletePollMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetchWithAuth(`/api/admin/trending-polls/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete poll");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Poll Deleted", description: "Trending poll removed successfully" });
+      setShowDeleteConfirm(false);
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   // Moderation mutations
   const deleteInsightMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -913,6 +1002,59 @@ export default function AdminDashboard() {
     }
   };
 
+  const resetPollForm = () => {
+    setPollForm({
+      status: "draft",
+      category: "Tech",
+      headline: "",
+      subjectText: "",
+      personId: "",
+      description: "",
+      timeline: "",
+      deadlineAt: "",
+      imageUrl: "",
+      seedSupportCount: 0,
+      seedNeutralCount: 0,
+      seedOpposeCount: 0,
+    });
+  };
+
+  const openEditPoll = (poll: TrendingPoll) => {
+    setEditingPoll(poll);
+    setPollForm({
+      status: poll.status as "draft" | "live" | "archived",
+      category: poll.category,
+      headline: poll.headline,
+      subjectText: poll.subjectText,
+      personId: poll.personId || "",
+      description: poll.description || "",
+      timeline: poll.timeline || "",
+      deadlineAt: poll.deadlineAt ? new Date(poll.deadlineAt).toISOString().slice(0, 16) : "",
+      imageUrl: poll.imageUrl || "",
+      seedSupportCount: poll.seedSupportCount,
+      seedNeutralCount: poll.seedNeutralCount,
+      seedOpposeCount: poll.seedOpposeCount,
+    });
+    setShowPollModal(true);
+  };
+
+  const handleSavePoll = () => {
+    if (editingPoll) {
+      updatePollMutation.mutate({ id: editingPoll.id, data: pollForm });
+    } else {
+      createPollMutation.mutate(pollForm);
+    }
+  };
+
+  const filteredPolls = trendingPollsList?.filter((poll) => {
+    if (pollFilter === "missing_image") {
+      return poll.status === "draft" && !poll.personId && !poll.imageUrl;
+    }
+    if (pollFilter !== "all" && poll.status !== pollFilter) return false;
+    if (pollCategoryFilter !== "all" && poll.category !== pollCategoryFilter) return false;
+    return true;
+  });
+
   const handleDeleteConfirm = () => {
     if (!deleteTarget) return;
     if (deleteTarget.type === "celebrity") {
@@ -923,6 +1065,8 @@ export default function AdminDashboard() {
       deleteInsightMutation.mutate(deleteTarget.id);
     } else if (deleteTarget.type === "comment") {
       deleteCommentMutation.mutate(deleteTarget.id);
+    } else if (deleteTarget.type === "poll") {
+      deletePollMutation.mutate(deleteTarget.id);
     }
   };
 
@@ -1373,6 +1517,9 @@ export default function AdminDashboard() {
                 <TabsTrigger value="faceoffs" data-testid="tab-faceoffs">
                   Face-Offs
                 </TabsTrigger>
+                <TabsTrigger value="polls" data-testid="tab-polls">
+                  Trending Polls
+                </TabsTrigger>
                 <TabsTrigger value="induction" data-testid="tab-induction">
                   Induction Queue
                 </TabsTrigger>
@@ -1521,6 +1668,170 @@ export default function AdminDashboard() {
                         >
                           <Plus className="h-4 w-4 mr-2" />
                           Create First Face-Off
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="polls" className="mt-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2">
+                    <div>
+                      <CardTitle>Trending Polls</CardTitle>
+                      <CardDescription>Manage community polling questions</CardDescription>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setEditingPoll(null);
+                        resetPollForm();
+                        setShowPollModal(true);
+                      }}
+                      data-testid="button-add-poll"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Poll
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2 mb-4 flex-wrap">
+                      <Select value={pollFilter} onValueChange={setPollFilter}>
+                        <SelectTrigger className="w-[140px]" data-testid="select-poll-status-filter">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Status</SelectItem>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="live">Live</SelectItem>
+                          <SelectItem value="archived">Archived</SelectItem>
+                          <SelectItem value="missing_image">Missing Image</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={pollCategoryFilter} onValueChange={setPollCategoryFilter}>
+                        <SelectTrigger className="w-[140px]" data-testid="select-poll-category-filter">
+                          <SelectValue placeholder="Category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Categories</SelectItem>
+                          <SelectItem value="Tech">Tech</SelectItem>
+                          <SelectItem value="Entertainment">Entertainment</SelectItem>
+                          <SelectItem value="Sports">Sports</SelectItem>
+                          <SelectItem value="Politics">Politics</SelectItem>
+                          <SelectItem value="Business">Business</SelectItem>
+                          <SelectItem value="Creator">Creator</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {pollsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : filteredPolls && filteredPolls.length > 0 ? (
+                      <div className="space-y-3" data-testid="poll-list">
+                        {filteredPolls.map((poll) => (
+                          <div
+                            key={poll.id}
+                            className="flex items-center justify-between p-3 rounded-lg border"
+                            data-testid={`poll-row-${poll.id}`}
+                          >
+                            <div className="flex-1">
+                              <p className="font-medium">{poll.headline}</p>
+                              <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">{poll.subjectText}</p>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <Badge variant="outline" className="text-xs">{poll.category}</Badge>
+                                <Badge
+                                  variant={
+                                    poll.status === "live"
+                                      ? "default"
+                                      : poll.status === "draft"
+                                      ? "secondary"
+                                      : "outline"
+                                  }
+                                  className="text-xs"
+                                >
+                                  {poll.status}
+                                </Badge>
+                                {poll.personId && (
+                                  <Badge variant="outline" className="text-xs">
+                                    <Users className="h-3 w-3 mr-1" />
+                                    Linked
+                                  </Badge>
+                                )}
+                                {!poll.personId && !poll.imageUrl && poll.status === "draft" && (
+                                  <Badge variant="destructive" className="text-xs">
+                                    <AlertCircle className="h-3 w-3 mr-1" />
+                                    No Image
+                                  </Badge>
+                                )}
+                                {poll.deadlineAt && (
+                                  <span className="text-xs text-muted-foreground">
+                                    <Clock className="h-3 w-3 inline mr-1" />
+                                    {new Date(poll.deadlineAt).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {poll.status !== "archived" && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    fetchWithAuth(`/api/admin/trending-polls/${poll.id}`, {
+                                      method: "PATCH",
+                                      body: JSON.stringify({ status: "archived" }),
+                                    }).then(() => {
+                                      toast({ title: "Poll Archived" });
+                                      queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
+                                    });
+                                  }}
+                                  title="Archive"
+                                  data-testid={`button-archive-poll-${poll.id}`}
+                                >
+                                  <Ban className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openEditPoll(poll)}
+                                data-testid={`button-edit-poll-${poll.id}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => {
+                                  setDeleteTarget({ type: "poll", id: poll.id, name: poll.headline });
+                                  setShowDeleteConfirm(true);
+                                }}
+                                data-testid={`button-delete-poll-${poll.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Vote className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p>No trending polls yet</p>
+                        <Button
+                          className="mt-4"
+                          onClick={() => {
+                            setEditingPoll(null);
+                            resetPollForm();
+                            setShowPollModal(true);
+                          }}
+                          data-testid="button-create-first-poll"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create First Poll
                         </Button>
                       </div>
                     )}
@@ -2641,6 +2952,206 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
+      {/* Poll Create/Edit Dialog */}
+      <Dialog open={showPollModal} onOpenChange={setShowPollModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingPoll ? "Edit Poll" : "Create Poll"}</DialogTitle>
+            <DialogDescription>
+              {editingPoll ? "Update trending poll details" : "Create a new trending poll question"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="poll-status">Status</Label>
+                <Select
+                  value={pollForm.status}
+                  onValueChange={(value) => setPollForm({ ...pollForm, status: value as "draft" | "live" | "archived" })}
+                >
+                  <SelectTrigger data-testid="select-poll-status">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="live">Live</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="poll-category">Category</Label>
+                <Select
+                  value={pollForm.category}
+                  onValueChange={(value) => setPollForm({ ...pollForm, category: value })}
+                >
+                  <SelectTrigger data-testid="select-poll-category">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Tech">Tech</SelectItem>
+                    <SelectItem value="Entertainment">Entertainment</SelectItem>
+                    <SelectItem value="Sports">Sports</SelectItem>
+                    <SelectItem value="Politics">Politics</SelectItem>
+                    <SelectItem value="Business">Business</SelectItem>
+                    <SelectItem value="Creator">Creator</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="poll-headline">Headline</Label>
+              <Input
+                id="poll-headline"
+                value={pollForm.headline}
+                onChange={(e) => setPollForm({ ...pollForm, headline: e.target.value })}
+                placeholder="Short title for the poll"
+                data-testid="input-poll-headline"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="poll-subject">Subject / Question</Label>
+              <Textarea
+                id="poll-subject"
+                value={pollForm.subjectText}
+                onChange={(e) => setPollForm({ ...pollForm, subjectText: e.target.value })}
+                placeholder="The main question shown on the poll card"
+                className="resize-none"
+                data-testid="input-poll-subject"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="poll-description">Description (optional)</Label>
+              <Textarea
+                id="poll-description"
+                value={pollForm.description}
+                onChange={(e) => setPollForm({ ...pollForm, description: e.target.value })}
+                placeholder="Additional context or details"
+                className="resize-none"
+                data-testid="input-poll-description"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="poll-person">Linked Celebrity (optional)</Label>
+                <Input
+                  id="poll-person"
+                  value={pollForm.personId}
+                  onChange={(e) => setPollForm({ ...pollForm, personId: e.target.value })}
+                  placeholder="Person ID from tracked_people"
+                  data-testid="input-poll-person-id"
+                />
+                <p className="text-xs text-muted-foreground">If set, celebrity image is used automatically</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="poll-image">Image URL (optional)</Label>
+                <Input
+                  id="poll-image"
+                  value={pollForm.imageUrl}
+                  onChange={(e) => setPollForm({ ...pollForm, imageUrl: e.target.value })}
+                  placeholder="Custom image URL (when no celebrity linked)"
+                  disabled={!!pollForm.personId}
+                  data-testid="input-poll-image-url"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="poll-timeline">Timeline</Label>
+                <Select
+                  value={pollForm.timeline || "no_deadline"}
+                  onValueChange={(value) => setPollForm({ ...pollForm, timeline: value })}
+                >
+                  <SelectTrigger data-testid="select-poll-timeline">
+                    <SelectValue placeholder="Select timeline" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="no_deadline">No Deadline</SelectItem>
+                    <SelectItem value="1_week">1 Week</SelectItem>
+                    <SelectItem value="1_month">1 Month</SelectItem>
+                    <SelectItem value="custom">Custom</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="poll-deadline">Deadline (optional)</Label>
+                <Input
+                  id="poll-deadline"
+                  type="datetime-local"
+                  value={pollForm.deadlineAt}
+                  onChange={(e) => setPollForm({ ...pollForm, deadlineAt: e.target.value })}
+                  data-testid="input-poll-deadline"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Seed Vote Counts</Label>
+              <p className="text-xs text-muted-foreground">Pre-populate display counts (not real vote rows)</p>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="poll-seed-support" className="text-xs">Support</Label>
+                  <Input
+                    id="poll-seed-support"
+                    type="number"
+                    min="0"
+                    value={pollForm.seedSupportCount}
+                    onChange={(e) => setPollForm({ ...pollForm, seedSupportCount: parseInt(e.target.value) || 0 })}
+                    data-testid="input-poll-seed-support"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="poll-seed-neutral" className="text-xs">Neutral</Label>
+                  <Input
+                    id="poll-seed-neutral"
+                    type="number"
+                    min="0"
+                    value={pollForm.seedNeutralCount}
+                    onChange={(e) => setPollForm({ ...pollForm, seedNeutralCount: parseInt(e.target.value) || 0 })}
+                    data-testid="input-poll-seed-neutral"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="poll-seed-oppose" className="text-xs">Oppose</Label>
+                  <Input
+                    id="poll-seed-oppose"
+                    type="number"
+                    min="0"
+                    value={pollForm.seedOpposeCount}
+                    onChange={(e) => setPollForm({ ...pollForm, seedOpposeCount: parseInt(e.target.value) || 0 })}
+                    data-testid="input-poll-seed-oppose"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPollModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSavePoll}
+              disabled={
+                !pollForm.headline ||
+                !pollForm.subjectText ||
+                !pollForm.category ||
+                createPollMutation.isPending ||
+                updatePollMutation.isPending
+              }
+              data-testid="button-save-poll"
+            >
+              {(createPollMutation.isPending || updatePollMutation.isPending) ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                editingPoll ? "Update Poll" : "Create Poll"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation Modal */}
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <DialogContent>
@@ -2660,12 +3171,13 @@ export default function AdminDashboard() {
               disabled={
                 deleteCelebrityMutation.isPending || 
                 deleteFaceOffMutation.isPending || 
+                deletePollMutation.isPending ||
                 deleteInsightMutation.isPending || 
                 deleteCommentMutation.isPending
               }
               data-testid="button-confirm-delete"
             >
-              {(deleteCelebrityMutation.isPending || deleteFaceOffMutation.isPending || deleteInsightMutation.isPending || deleteCommentMutation.isPending) ? (
+              {(deleteCelebrityMutation.isPending || deleteFaceOffMutation.isPending || deletePollMutation.isPending || deleteInsightMutation.isPending || deleteCommentMutation.isPending) ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Deleting...
