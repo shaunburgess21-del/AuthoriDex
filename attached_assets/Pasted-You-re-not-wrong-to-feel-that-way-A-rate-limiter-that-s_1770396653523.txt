@@ -1,0 +1,116 @@
+You’re not wrong to feel that way. A rate limiter that’s doing its job too well will make the leaderboard feel “stuck,” and if the top 10 doesn’t reshuffle for hours while the internet is obviously moving, users will assume your data is fake.
+
+But you also don’t want to go back to the earlier chaos where outages or parsing bugs teleport people around.
+
+The right answer is: keep stabilization, but change how it stabilizes so it doesn’t freeze reality.
+
+Why it feels frozen right now
+
+From Replit’s own numbers:
+
+86% rate-limited each cycle is way too high for steady-state.
+
+Big “raw vs shown” gaps (15–25%) means the system is lagging reality.
+
+Some people are being “propped up” because the limiter prevents natural drops.
+
+This usually happens after a model change or a bad-data period: you end up with misaligned baselines, and conservative caps keep you from catching up.
+
+My take: rate limits are necessary, but yours should be “rarely engaged”
+
+In a healthy engine, stabilization triggers should be exceptional, not the norm.
+
+A good target:
+
+Normal days: < 15–25% of people hit the limiter
+
+Busy news days: maybe 25–40%
+
+If you’re at 86%, your limiter is dominating the system.
+
+What to do instead (practical options)
+Option 1 (best): “Catch-up mode” that ends automatically
+
+You already had recalibration mode—bring that idea back, but make it self-ending and gap-driven, not time-based.
+
+Catch-up mode trigger: if the median (abs(raw-final)/final) across celebs is above, say, 8–10%, you’re behind reality.
+
+Catch-up behavior:
+
+raise caps temporarily (e.g., 20–25%)
+
+raise alpha temporarily (e.g., 0.12–0.18)
+
+end catch-up mode automatically once median gap drops below 3–4% for 2–3 runs
+
+This preserves smoothness but lets the board “re-sync” quickly.
+
+Option 2: Don’t cap everyone the same — cap based on confidence
+
+Right now you cap changes mostly by a fixed percent and spike count.
+Better: cap harder when inputs are unreliable, cap lighter when they’re corroborated.
+
+Examples:
+
+If all 3 sources are healthy and 2–3 spike together → allow fast moves
+
+If a source is degraded/outage or coverage-gated → cap more conservatively
+
+You already have health + coverage gates. Use them to compute a confidence score and set caps accordingly.
+
+Option 3: Cap ranks, not scores (softly)
+
+Sometimes the “freeze” is because score caps prevent crossing.
+You can allow rank mobility without letting scores jump wildly by applying a soft constraint like:
+
+allow score changes freely, but limit rank delta per hour (e.g., max ±20 positions unless corroborated by multiple sources)
+
+This keeps UI movement organic while preventing ridiculous jumps.
+
+Option 4: Drop the hard cap and use robust smoothing instead
+
+Instead of “max 10%,” use a robust filter:
+
+EMA with a slightly higher alpha
+
+plus outlier rejection (“winsorize” extreme raw changes)
+
+plus source-health-based weighting
+
+This makes movement feel more real, but it’s more complex than catch-up mode.
+
+My recommendation for FameDex launch
+
+Do Option 1 + Option 2:
+
+Auto catch-up mode (gap-driven) so you never get stuck for days after a bad run.
+
+Confidence-based caps so real viral moments move quickly when your data supports it.
+
+That gives you:
+
+“boring stable” during outages
+
+“alive and responsive” during real trends
+
+no more frozen top 10
+
+A concrete tuning target for you
+
+Ask Replit to add these two metrics to the health summary:
+
+medianGapPct = median(abs(raw-final)/final)
+
+p90GapPct = 90th percentile gap
+
+Then tune until you typically see:
+
+medianGapPct < 3–5%
+
+rateLimitedPct < 25% most hours
+
+top10 churn non-zero occasionally (not constant, not zero forever)
+
+Bottom line
+
+Rate limits aren’t “bad,” but yours are currently acting like the primary scoring mechanism, not a safety net. That’s why it feels limiting.
