@@ -467,6 +467,24 @@ export const insertFaceOffSchema = createInsertSchema(faceOffs).omit({
 export type FaceOff = typeof faceOffs.$inferSelect;
 export type InsertFaceOff = z.infer<typeof insertFaceOffSchema>;
 
+export const faceOffVotes = pgTable("face_off_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  faceOffId: varchar("face_off_id").notNull().references(() => faceOffs.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  choice: text("choice").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueUserFaceOff: unique("face_off_votes_user_id_face_off_id_unique").on(table.userId, table.faceOffId),
+}));
+
+export const insertFaceOffVoteSchema = createInsertSchema(faceOffVotes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type FaceOffVote = typeof faceOffVotes.$inferSelect;
+export type InsertFaceOffVote = z.infer<typeof insertFaceOffVoteSchema>;
+
 // Relations for new tables
 export const celebrityImagesRelations = relations(celebrityImages, ({ one }) => ({
   person: one(trackedPeople, {
