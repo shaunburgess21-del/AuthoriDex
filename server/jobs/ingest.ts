@@ -20,6 +20,7 @@ import {
 import {
   updateCatchUpMode,
   isCatchUpModeActive,
+  getCatchUpBand,
   loadCatchUpStateFromDB,
   getCatchUpExitStreak,
   getCatchUpEnteredAtHour,
@@ -552,11 +553,12 @@ export async function runDataIngestion(): Promise<IngestResult> {
 
     await updateCatchUpMode(medianGapPct);
     const catchUpActive = isCatchUpModeActive();
+    const catchUpCurrentBand = getCatchUpBand();
     const catchUpExitStreak = getCatchUpExitStreak();
     const catchUpEnteredAt = getCatchUpEnteredAtHour();
     const capMultiplier = getCatchUpCapMultiplier();
     const alphaMultiplier = getCatchUpAlphaMultiplier();
-    console.log(`[Gap Metrics] medianGap=${(medianGapPct * 100).toFixed(1)}%, p90Gap=${(p90GapPct * 100).toFixed(1)}%, catchUp=${catchUpActive ? 'ACTIVE' : 'OFF'}, exitStreak=${catchUpExitStreak}`);
+    console.log(`[Gap Metrics] medianGap=${(medianGapPct * 100).toFixed(1)}%, p90Gap=${(p90GapPct * 100).toFixed(1)}%, catchUp=${catchUpCurrentBand}, exitStreak=${catchUpExitStreak}`);
 
     // Sort by fameIndex (displayed on leaderboard) not trendScore - matches quick-score.ts
     scoreResults.sort((a, b) => b.score.fameIndex - a.score.fameIndex);
@@ -771,7 +773,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
       convergence: {
         medianGapPct: `${(medianGapPct * 100).toFixed(1)}%`,
         p90GapPct: `${(p90GapPct * 100).toFixed(1)}%`,
-        catchUpMode: catchUpActive ? "ACTIVE" : "OFF",
+        catchUpMode: catchUpCurrentBand,
         catchUpExitStreak: catchUpExitStreak,
         catchUpEnteredAt: catchUpEnteredAt,
       },

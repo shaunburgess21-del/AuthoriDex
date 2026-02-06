@@ -45,7 +45,7 @@ export const ANTI_SPAM_MASS_FACTOR = 0.65;
 // EMA smoothing alpha - lower = smoother curves (stock market style)
 // Default 0.10 provides balanced responsiveness: smooth enough to filter noise,
 // fast enough to show real breakouts within hours (not days)
-export const EMA_ALPHA_DEFAULT = 0.10;
+export const EMA_ALPHA_DEFAULT = 0.12;  // Raised from 0.10 - base tier was doing most rate limiting
 export const EMA_ALPHA_2_SOURCES = 0.15;  // When 2 sources spike together
 export const EMA_ALPHA_3_SOURCES = 0.22;  // When 3 sources spike (genuine viral)
 
@@ -65,28 +65,39 @@ export const EMA_ALPHA = EMA_ALPHA_DEFAULT;
 // converge to reality. Exits automatically when gap is low for consecutive runs.
 // State is persisted to DB (api_cache) so restarts don't reset the streak.
 
-export const CATCHUP_ENTER_THRESHOLD = 0.08;   // Enter when medianGapPct > 8%
-export const CATCHUP_EXIT_THRESHOLD = 0.04;    // Exit when medianGapPct < 4%
-export const CATCHUP_EXIT_CONSECUTIVE = 2;     // Must be below exit threshold for 2 runs
-export const CATCHUP_CAP_MULTIPLIER = 2.5;     // Multiply caps by 2.5x during catch-up
-export const CATCHUP_ALPHA_MULTIPLIER = 1.8;   // Multiply alpha by 1.8x during catch-up
+export const CATCHUP_FULL_ENTER_THRESHOLD = 0.10;  // Enter FULL when medianGapPct > 10%
+export const CATCHUP_SOFT_ENTER_THRESHOLD = 0.06;  // Enter SOFT when medianGapPct > 6%
+export const CATCHUP_EXIT_THRESHOLD = 0.04;         // Exit when medianGapPct < 4%
+export const CATCHUP_EXIT_CONSECUTIVE = 2;           // Must be below exit threshold for 2 runs
+
+export const CATCHUP_FULL_CAP_MULTIPLIER = 2.5;     // Multiply caps by 2.5x during full catch-up
+export const CATCHUP_FULL_ALPHA_MULTIPLIER = 1.8;   // Multiply alpha by 1.8x during full catch-up
+export const CATCHUP_SOFT_CAP_MULTIPLIER = 1.4;     // Multiply caps by 1.4x during soft catch-up
+export const CATCHUP_SOFT_ALPHA_MULTIPLIER = 1.2;   // Multiply alpha by 1.2x during soft catch-up
+
+export type CatchUpBand = "OFF" | "SOFT" | "FULL";
 
 const CATCHUP_CACHE_KEY = "system:catchup_state";
 
 interface CatchUpState {
   active: boolean;
+  band: CatchUpBand;
   exitStreak: number;
   enteredAtHour: string | null;
   lastUpdated: string;
 }
 
-let catchUpModeActive = false;
+let catchUpBand: CatchUpBand = "OFF";
 let consecutiveBelowExitCount = 0;
 let catchUpEnteredAtHour: string | null = null;
 let catchUpStateLoaded = false;
 
 export function isCatchUpModeActive(): boolean {
-  return catchUpModeActive;
+  return catchUpBand !== "OFF";
+}
+
+export function getCatchUpBand(): CatchUpBand {
+  return catchUpBand;
 }
 
 export function getCatchUpExitStreak(): number {
@@ -109,11 +120,11 @@ export async function loadCatchUpStateFromDB(): Promise<void> {
 
     if (cached) {
       const state: CatchUpState = JSON.parse(cached.responseData);
-      catchUpModeActive = state.active;
+      catchUpBand = state.band || (state.active ? "FULL" : "OFF");
       consecutiveBelowExitCount = state.exitStreak;
       catchUpEnteredAtHour = state.enteredAtHour;
       catchUpStateLoaded = true;
-      console.log(`[CatchUp] Loaded persisted state: active=${state.active}, exitStreak=${state.exitStreak}, enteredAt=${state.enteredAtHour}`);
+      console.log(`[CatchUp] Loaded persisted state: band=${catchUpBand}, exitStreak=${state.exitStreak}, enteredAt=${state.enteredAtHour}`);
     } else {
       catchUpStateLoaded = true;
       console.log(`[CatchUp] No persisted state found, starting fresh`);
@@ -131,7 +142,8 @@ async function persistCatchUpStateToDB(): Promise<void> {
     const { eq } = await import("drizzle-orm");
 
     const state: CatchUpState = {
-      active: catchUpModeActive,
+      active: catchUpBand !== "OFF",
+      band: catchUpBand,
       exitStreak: consecutiveBelowExitCount,
       enteredAtHour: catchUpEnteredAtHour,
       lastUpdated: new Date().toISOString(),
@@ -162,47 +174,67 @@ async function persistCatchUpStateToDB(): Promise<void> {
   }
 }
 
-export async function updateCatchUpMode(medianGapPct: number): Promise<{ active: boolean; changed: boolean }> {
+export async function updateCatchUpMode(medianGapPct: number): Promise<{ band: CatchUpBand; changed: boolean }> {
   if (!catchUpStateLoaded) {
     await loadCatchUpStateFromDB();
   }
 
-  const wasPreviouslyActive = catchUpModeActive;
+  const previousBand = catchUpBand;
 
-  if (!catchUpModeActive) {
-    if (medianGapPct > CATCHUP_ENTER_THRESHOLD) {
-      catchUpModeActive = true;
+  if (catchUpBand === "OFF") {
+    if (medianGapPct > CATCHUP_FULL_ENTER_THRESHOLD) {
+      catchUpBand = "FULL";
       consecutiveBelowExitCount = 0;
       catchUpEnteredAtHour = new Date().toISOString();
-      console.log(`[CatchUp] ENTERING catch-up mode (medianGap=${(medianGapPct * 100).toFixed(1)}% > ${(CATCHUP_ENTER_THRESHOLD * 100).toFixed(0)}% threshold)`);
+      console.log(`[CatchUp] ENTERING FULL catch-up (medianGap=${(medianGapPct * 100).toFixed(1)}% > ${(CATCHUP_FULL_ENTER_THRESHOLD * 100).toFixed(0)}% threshold)`);
+    } else if (medianGapPct > CATCHUP_SOFT_ENTER_THRESHOLD) {
+      catchUpBand = "SOFT";
+      consecutiveBelowExitCount = 0;
+      catchUpEnteredAtHour = new Date().toISOString();
+      console.log(`[CatchUp] ENTERING SOFT catch-up (medianGap=${(medianGapPct * 100).toFixed(1)}% in ${(CATCHUP_SOFT_ENTER_THRESHOLD * 100).toFixed(0)}%-${(CATCHUP_FULL_ENTER_THRESHOLD * 100).toFixed(0)}% band)`);
     }
   } else {
     if (medianGapPct < CATCHUP_EXIT_THRESHOLD) {
       consecutiveBelowExitCount++;
       if (consecutiveBelowExitCount >= CATCHUP_EXIT_CONSECUTIVE) {
-        catchUpModeActive = false;
+        catchUpBand = "OFF";
         consecutiveBelowExitCount = 0;
         catchUpEnteredAtHour = null;
-        console.log(`[CatchUp] EXITING catch-up mode (medianGap=${(medianGapPct * 100).toFixed(1)}% < ${(CATCHUP_EXIT_THRESHOLD * 100).toFixed(0)}% for ${CATCHUP_EXIT_CONSECUTIVE} runs)`);
+        console.log(`[CatchUp] EXITING catch-up (medianGap=${(medianGapPct * 100).toFixed(1)}% < ${(CATCHUP_EXIT_THRESHOLD * 100).toFixed(0)}% for ${CATCHUP_EXIT_CONSECUTIVE} runs)`);
       } else {
         console.log(`[CatchUp] Below exit threshold (${consecutiveBelowExitCount}/${CATCHUP_EXIT_CONSECUTIVE} consecutive)`);
       }
     } else {
       consecutiveBelowExitCount = 0;
+      if (catchUpBand === "SOFT" && medianGapPct > CATCHUP_FULL_ENTER_THRESHOLD) {
+        catchUpBand = "FULL";
+        console.log(`[CatchUp] ESCALATING to FULL catch-up (medianGap=${(medianGapPct * 100).toFixed(1)}% > ${(CATCHUP_FULL_ENTER_THRESHOLD * 100).toFixed(0)}%)`);
+      } else if (catchUpBand === "FULL" && medianGapPct < CATCHUP_FULL_ENTER_THRESHOLD) {
+        catchUpBand = "SOFT";
+        console.log(`[CatchUp] DE-ESCALATING to SOFT catch-up (medianGap=${(medianGapPct * 100).toFixed(1)}% < ${(CATCHUP_FULL_ENTER_THRESHOLD * 100).toFixed(0)}%)`);
+      }
     }
   }
 
   await persistCatchUpStateToDB();
 
-  return { active: catchUpModeActive, changed: catchUpModeActive !== wasPreviouslyActive };
+  return { band: catchUpBand, changed: catchUpBand !== previousBand };
 }
 
 export function getCatchUpCapMultiplier(): number {
-  return catchUpModeActive ? CATCHUP_CAP_MULTIPLIER : 1.0;
+  switch (catchUpBand) {
+    case "FULL": return CATCHUP_FULL_CAP_MULTIPLIER;
+    case "SOFT": return CATCHUP_SOFT_CAP_MULTIPLIER;
+    default: return 1.0;
+  }
 }
 
 export function getCatchUpAlphaMultiplier(): number {
-  return catchUpModeActive ? CATCHUP_ALPHA_MULTIPLIER : 1.0;
+  switch (catchUpBand) {
+    case "FULL": return CATCHUP_FULL_ALPHA_MULTIPLIER;
+    case "SOFT": return CATCHUP_SOFT_ALPHA_MULTIPLIER;
+    default: return 1.0;
+  }
 }
 
 // ============================================================================
