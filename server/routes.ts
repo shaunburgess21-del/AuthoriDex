@@ -3856,8 +3856,13 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
 
       res.json(created);
     } catch (error: any) {
-      console.error("Error creating trending poll:", error.message);
-      res.status(500).json({ error: "Failed to create trending poll" });
+      console.error("Error creating trending poll:", error.message, error.detail || "");
+      const detail = error.detail || error.message || "Unknown error";
+      if (detail.includes("foreign key") || detail.includes("violates")) {
+        res.status(400).json({ error: "Invalid linked celebrity ID. Please select a celebrity from the dropdown.", details: detail });
+      } else {
+        res.status(500).json({ error: `Failed to create trending poll: ${detail}`, details: detail });
+      }
     }
   });
 
@@ -3901,8 +3906,13 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
 
       res.json(updated);
     } catch (error: any) {
-      console.error("Error updating trending poll:", error.message);
-      res.status(500).json({ error: "Failed to update trending poll" });
+      console.error("Error updating trending poll:", error.message, error.detail || "");
+      const detail = error.detail || error.message || "Unknown error";
+      if (detail.includes("foreign key") || detail.includes("violates")) {
+        res.status(400).json({ error: "Invalid linked celebrity ID. Please select a celebrity from the dropdown.", details: detail });
+      } else {
+        res.status(500).json({ error: `Failed to update trending poll: ${detail}`, details: detail });
+      }
     }
   });
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -384,6 +384,12 @@ export default function AdminDashboard() {
     seedOpposeCount: 0,
   });
   
+  const [celebritySearchInput, setCelebritySearchInput] = useState("");
+  const [celebritySearchResults, setCelebritySearchResults] = useState<Celebrity[]>([]);
+  const [showCelebrityDropdown, setShowCelebrityDropdown] = useState(false);
+  const [selectedCelebrityName, setSelectedCelebrityName] = useState("");
+  const celebritySearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; name: string } | null>(null);
   
@@ -785,11 +791,23 @@ export default function AdminDashboard() {
 
   const createPollMutation = useMutation({
     mutationFn: async (data: typeof pollForm) => {
+      const cleanData = {
+        ...data,
+        personId: data.personId || null,
+        timeline: data.timeline || null,
+        deadlineAt: data.deadlineAt || null,
+        imageUrl: data.imageUrl || null,
+        description: data.description || null,
+      };
       const res = await fetchWithAuth("/api/admin/trending-polls", {
         method: "POST",
-        body: JSON.stringify(data),
+        body: JSON.stringify(cleanData),
       });
-      if (!res.ok) throw new Error("Failed to create poll");
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Create poll error:", res.status, errBody);
+        throw new Error(errBody.error || errBody.details || `Server error ${res.status}`);
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -806,11 +824,23 @@ export default function AdminDashboard() {
 
   const updatePollMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const cleanData = {
+        ...data,
+        personId: data.personId || null,
+        timeline: data.timeline || null,
+        deadlineAt: data.deadlineAt || null,
+        imageUrl: data.imageUrl || null,
+        description: data.description || null,
+      };
       const res = await fetchWithAuth(`/api/admin/trending-polls/${id}`, {
         method: "PATCH",
-        body: JSON.stringify(data),
+        body: JSON.stringify(cleanData),
       });
-      if (!res.ok) throw new Error("Failed to update poll");
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Update poll error:", res.status, errBody);
+        throw new Error(errBody.error || errBody.details || `Server error ${res.status}`);
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -1018,6 +1048,57 @@ export default function AdminDashboard() {
       seedNeutralCount: 0,
       seedOpposeCount: 0,
     });
+    setCelebritySearchInput("");
+    setSelectedCelebrityName("");
+    setCelebritySearchResults([]);
+    setShowCelebrityDropdown(false);
+  };
+
+  const searchCelebrities = useCallback(async (query: string) => {
+    if (!query || query.length < 2) {
+      setCelebritySearchResults([]);
+      setShowCelebrityDropdown(false);
+      return;
+    }
+    try {
+      const res = await fetchWithAuth(`/api/admin/celebrities?search=${encodeURIComponent(query)}`);
+      if (res.ok) {
+        const results = await res.json();
+        setCelebritySearchResults(results.slice(0, 10));
+        setShowCelebrityDropdown(true);
+      }
+    } catch (e) {
+      console.error("Celebrity search failed:", e);
+    }
+  }, []);
+
+  const handleCelebritySearchChange = (value: string) => {
+    setCelebritySearchInput(value);
+    if (!value) {
+      setPollForm(prev => ({ ...prev, personId: "" }));
+      setSelectedCelebrityName("");
+      setCelebritySearchResults([]);
+      setShowCelebrityDropdown(false);
+      return;
+    }
+    if (celebritySearchTimer.current) clearTimeout(celebritySearchTimer.current);
+    celebritySearchTimer.current = setTimeout(() => searchCelebrities(value), 300);
+  };
+
+  const selectCelebrity = (celeb: Celebrity) => {
+    setPollForm(prev => ({ ...prev, personId: celeb.id }));
+    setSelectedCelebrityName(celeb.name);
+    setCelebritySearchInput(celeb.name);
+    setShowCelebrityDropdown(false);
+    setCelebritySearchResults([]);
+  };
+
+  const clearCelebrity = () => {
+    setPollForm(prev => ({ ...prev, personId: "" }));
+    setSelectedCelebrityName("");
+    setCelebritySearchInput("");
+    setShowCelebrityDropdown(false);
+    setCelebritySearchResults([]);
   };
 
   const openEditPoll = (poll: TrendingPoll) => {
@@ -1036,6 +1117,26 @@ export default function AdminDashboard() {
       seedNeutralCount: poll.seedNeutralCount,
       seedOpposeCount: poll.seedOpposeCount,
     });
+    if (poll.personId) {
+      setCelebritySearchInput("Loading...");
+      setSelectedCelebrityName("Loading...");
+      fetchWithAuth(`/api/admin/celebrities?search=`).then(r => r.ok ? r.json() : []).then((celebs: Celebrity[]) => {
+        const found = celebs.find(c => c.id === poll.personId);
+        if (found) {
+          setCelebritySearchInput(found.name);
+          setSelectedCelebrityName(found.name);
+        } else {
+          setCelebritySearchInput(poll.personId.slice(0, 8) + "...");
+          setSelectedCelebrityName(poll.personId.slice(0, 8) + "...");
+        }
+      }).catch(() => {
+        setCelebritySearchInput(poll.personId.slice(0, 8) + "...");
+        setSelectedCelebrityName(poll.personId.slice(0, 8) + "...");
+      });
+    } else {
+      setCelebritySearchInput("");
+      setSelectedCelebrityName("");
+    }
     setShowPollModal(true);
   };
 
@@ -3035,16 +3136,53 @@ export default function AdminDashboard() {
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
+              <div className="space-y-2 relative">
                 <Label htmlFor="poll-person">Linked Celebrity (optional)</Label>
-                <Input
-                  id="poll-person"
-                  value={pollForm.personId}
-                  onChange={(e) => setPollForm({ ...pollForm, personId: e.target.value })}
-                  placeholder="Person ID from tracked_people"
-                  data-testid="input-poll-person-id"
-                />
-                <p className="text-xs text-muted-foreground">If set, celebrity image is used automatically</p>
+                {pollForm.personId && selectedCelebrityName ? (
+                  <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/30">
+                    <span className="text-sm flex-1 truncate">{selectedCelebrityName}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={clearCelebrity}
+                      data-testid="button-clear-celebrity"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Input
+                    id="poll-person"
+                    value={celebritySearchInput}
+                    onChange={(e) => handleCelebritySearchChange(e.target.value)}
+                    onFocus={() => { if (celebritySearchResults.length > 0) setShowCelebrityDropdown(true); }}
+                    onBlur={() => { setTimeout(() => setShowCelebrityDropdown(false), 200); }}
+                    placeholder="Search by name..."
+                    autoComplete="off"
+                    data-testid="input-poll-person-search"
+                  />
+                )}
+                {showCelebrityDropdown && celebritySearchResults.length > 0 && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto" data-testid="celebrity-search-dropdown">
+                    {celebritySearchResults.map((celeb) => (
+                      <button
+                        key={celeb.id}
+                        type="button"
+                        className="w-full text-left px-3 py-2 text-sm hover-elevate flex items-center gap-2"
+                        onMouseDown={(e) => { e.preventDefault(); selectCelebrity(celeb); }}
+                        data-testid={`celebrity-option-${celeb.id}`}
+                      >
+                        {celeb.avatar && <img src={celeb.avatar} alt="" className="h-6 w-6 rounded object-cover" />}
+                        <span>{celeb.name}</span>
+                        <span className="text-xs text-muted-foreground ml-auto">{celeb.category}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {pollForm.personId ? `ID: ${pollForm.personId.slice(0, 8)}...` : "Search and select a celebrity"}
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="poll-image">Image URL (optional)</Label>
