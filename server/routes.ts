@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
 import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
-import { eq, desc, and, sql, count, gte, SQL } from "drizzle-orm";
+import { eq, desc, and, sql, count, gte, ilike, SQL } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
@@ -3807,6 +3807,61 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   });
 
   // ===========================================
+  // PUBLIC: TRENDING POLLS
+  // ===========================================
+
+  app.get("/api/trending-polls", async (req, res) => {
+    try {
+      const polls = await db
+        .select({
+          id: trendingPolls.id,
+          headline: trendingPolls.headline,
+          subjectText: trendingPolls.subjectText,
+          description: trendingPolls.description,
+          category: trendingPolls.category,
+          personId: trendingPolls.personId,
+          imageUrl: trendingPolls.imageUrl,
+          seedSupportCount: trendingPolls.seedSupportCount,
+          seedNeutralCount: trendingPolls.seedNeutralCount,
+          seedOpposeCount: trendingPolls.seedOpposeCount,
+          status: trendingPolls.status,
+          createdAt: trendingPolls.createdAt,
+          personName: trackedPeople.name,
+          personAvatar: trackedPeople.avatar,
+        })
+        .from(trendingPolls)
+        .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
+        .where(eq(trendingPolls.status, 'live'))
+        .orderBy(desc(trendingPolls.createdAt));
+
+      const result = polls.map(p => {
+        const total = (p.seedSupportCount || 0) + (p.seedNeutralCount || 0) + (p.seedOpposeCount || 0);
+        return {
+          id: p.id,
+          headline: p.headline,
+          subjectText: p.subjectText,
+          description: p.description,
+          category: p.category,
+          personId: p.personId,
+          personName: p.personName || null,
+          personAvatar: p.personAvatar || null,
+          imageUrl: p.imageUrl,
+          totalVotes: total,
+          approvePercent: total > 0 ? Math.round(((p.seedSupportCount || 0) / total) * 100) : 0,
+          neutralPercent: total > 0 ? Math.round(((p.seedNeutralCount || 0) / total) * 100) : 0,
+          disapprovePercent: total > 0 ? Math.round(((p.seedOpposeCount || 0) / total) * 100) : 0,
+          status: p.status,
+        };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error fetching public trending polls:", error.message);
+      res.status(500).json({ error: "Failed to fetch trending polls" });
+    }
+  });
+
+  // ===========================================
   // ADMIN: TRENDING POLLS CRUD
   // ===========================================
 
@@ -3941,6 +3996,90 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error deleting trending poll:", error.message);
       res.status(500).json({ error: "Failed to delete trending poll" });
+    }
+  });
+
+  // ===========================================
+  // ADMIN: SEED TRENDING POLLS FROM HARDCODED DATA
+  // ===========================================
+
+  app.post("/api/admin/seed-trending-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const SEED_TOPICS = [
+        { headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", category: "Tech", approvePercent: 35, neutralPercent: 20, disapprovePercent: 45, totalVotes: 89432, personName: "Elon Musk" },
+        { headline: "AI replacing jobs", description: "Should we embrace or regulate AI in the workplace?", category: "Tech", approvePercent: 28, neutralPercent: 32, disapprovePercent: 40, totalVotes: 156789 },
+        { headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Entertainment", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567, personName: "Taylor Swift" },
+        { headline: "Spotify's royalty model", description: "Are artists fairly compensated by streaming?", category: "Entertainment", approvePercent: 22, neutralPercent: 28, disapprovePercent: 50, totalVotes: 145678 },
+        { headline: "MrBeast's philanthropy", description: "Is it genuine or just content?", category: "Creator", approvePercent: 68, neutralPercent: 20, disapprovePercent: 12, totalVotes: 98765, personName: "MrBeast" },
+        { headline: "NFL Sunday Ticket pricing", description: "Is streaming football too expensive?", category: "Sports", approvePercent: 18, neutralPercent: 22, disapprovePercent: 60, totalVotes: 76543 },
+        { headline: "Meta's rebrand to AI company", description: "Is the pivot from social media working?", category: "Tech", approvePercent: 25, neutralPercent: 35, disapprovePercent: 40, totalVotes: 112345, personName: "Mark Zuckerberg" },
+        { headline: "Drake vs Kendrick beef", description: "Who won the rap battle?", category: "Entertainment", approvePercent: 45, neutralPercent: 15, disapprovePercent: 40, totalVotes: 287654, personName: "Drake" },
+        { headline: "LeBron's longevity", description: "Greatest athlete of all time?", category: "Sports", approvePercent: 55, neutralPercent: 25, disapprovePercent: 20, totalVotes: 198765, personName: "LeBron James" },
+        { headline: "Crypto regulation", description: "Should governments control digital currencies?", category: "Business", approvePercent: 40, neutralPercent: 20, disapprovePercent: 40, totalVotes: 134567 },
+        { headline: "TikTok ban debate", description: "National security vs free speech?", category: "Politics", approvePercent: 35, neutralPercent: 30, disapprovePercent: 35, totalVotes: 256789 },
+        { headline: "OpenAI board drama", description: "Was firing Sam Altman justified?", category: "Tech", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 189432, personName: "Sam Altman" },
+        { headline: "Beyonce's country album", description: "Authentic exploration or cultural appropriation?", category: "Entertainment", approvePercent: 65, neutralPercent: 20, disapprovePercent: 15, totalVotes: 176543, personName: "Beyonce" },
+        { headline: "YouTube Premium worth it?", description: "Is ad-free viewing worth the subscription?", category: "Creator", approvePercent: 48, neutralPercent: 22, disapprovePercent: 30, totalVotes: 87654 },
+        { headline: "F1's US expansion", description: "Is Formula 1 becoming too commercial?", category: "Sports", approvePercent: 40, neutralPercent: 35, disapprovePercent: 25, totalVotes: 65432 },
+        { headline: "Billionaire space race", description: "Vanity project or advancing humanity?", category: "Tech", approvePercent: 30, neutralPercent: 25, disapprovePercent: 45, totalVotes: 145678 },
+        { headline: "Student loan forgiveness", description: "Fair policy or overreach?", category: "Politics", approvePercent: 52, neutralPercent: 18, disapprovePercent: 30, totalVotes: 234567 },
+        { headline: "Ozempic for weight loss", description: "Medical breakthrough or vanity?", category: "Business", approvePercent: 38, neutralPercent: 32, disapprovePercent: 30, totalVotes: 112345 },
+        { headline: "Twitch streamer earnings", description: "Are top streamers overpaid?", category: "Creator", approvePercent: 25, neutralPercent: 35, disapprovePercent: 40, totalVotes: 78965 },
+        { headline: "Climate activism tactics", description: "Is disruption effective or counterproductive?", category: "Politics", approvePercent: 35, neutralPercent: 25, disapprovePercent: 40, totalVotes: 167890 },
+      ];
+
+      let inserted = 0;
+      let skipped = 0;
+
+      for (const topic of SEED_TOPICS) {
+        const [existing] = await db
+          .select({ id: trendingPolls.id })
+          .from(trendingPolls)
+          .where(eq(trendingPolls.headline, topic.headline))
+          .limit(1);
+
+        if (existing) {
+          skipped++;
+          continue;
+        }
+
+        let personId: string | null = null;
+        if (topic.personName) {
+          const [matched] = await db
+            .select({ id: trackedPeople.id })
+            .from(trackedPeople)
+            .where(ilike(trackedPeople.name, topic.personName))
+            .limit(1);
+          if (matched) {
+            personId = matched.id;
+          }
+        }
+
+        const seedSupportCount = Math.round((topic.approvePercent / 100) * topic.totalVotes);
+        const seedNeutralCount = Math.round((topic.neutralPercent / 100) * topic.totalVotes);
+        const seedOpposeCount = Math.round((topic.disapprovePercent / 100) * topic.totalVotes);
+
+        await db.insert(trendingPolls).values({
+          status: 'live',
+          category: topic.category,
+          headline: topic.headline,
+          subjectText: topic.description,
+          description: topic.description,
+          personId,
+          imageUrl: null,
+          seedSupportCount,
+          seedNeutralCount,
+          seedOpposeCount,
+          createdBy: req.userId || null,
+        });
+
+        inserted++;
+      }
+
+      res.json({ success: true, inserted, skipped });
+    } catch (error: any) {
+      console.error("Error seeding trending polls:", error.message);
+      res.status(500).json({ error: "Failed to seed trending polls" });
     }
   });
 
