@@ -58,11 +58,12 @@ export const MAX_HOURLY_CHANGE_PERCENT = 0.08;
 export const EMA_ALPHA = EMA_ALPHA_DEFAULT;
 
 // ============================================================================
-// AUTO CATCH-UP MODE - Gap-driven dynamic rate boosting
+// AUTO CATCH-UP MODE - Gap-driven dynamic rate boosting (DB-persisted)
 // ============================================================================
 // When the median gap between raw and final scores exceeds a threshold,
 // the system enters catch-up mode with higher caps and alpha to let scores
 // converge to reality. Exits automatically when gap is low for consecutive runs.
+// State is persisted to DB (api_cache) so restarts don't reset the streak.
 
 export const CATCHUP_ENTER_THRESHOLD = 0.08;   // Enter when medianGapPct > 8%
 export const CATCHUP_EXIT_THRESHOLD = 0.04;    // Exit when medianGapPct < 4%
@@ -70,20 +71,109 @@ export const CATCHUP_EXIT_CONSECUTIVE = 2;     // Must be below exit threshold f
 export const CATCHUP_CAP_MULTIPLIER = 2.5;     // Multiply caps by 2.5x during catch-up
 export const CATCHUP_ALPHA_MULTIPLIER = 1.8;   // Multiply alpha by 1.8x during catch-up
 
+const CATCHUP_CACHE_KEY = "system:catchup_state";
+
+interface CatchUpState {
+  active: boolean;
+  exitStreak: number;
+  enteredAtHour: string | null;
+  lastUpdated: string;
+}
+
 let catchUpModeActive = false;
 let consecutiveBelowExitCount = 0;
+let catchUpEnteredAtHour: string | null = null;
+let catchUpStateLoaded = false;
 
 export function isCatchUpModeActive(): boolean {
   return catchUpModeActive;
 }
 
-export function updateCatchUpMode(medianGapPct: number): { active: boolean; changed: boolean } {
+export function getCatchUpExitStreak(): number {
+  return consecutiveBelowExitCount;
+}
+
+export function getCatchUpEnteredAtHour(): string | null {
+  return catchUpEnteredAtHour;
+}
+
+export async function loadCatchUpStateFromDB(): Promise<void> {
+  try {
+    const { db } = await import("../db");
+    const { apiCache } = await import("@shared/schema");
+    const { eq } = await import("drizzle-orm");
+
+    const cached = await db.query.apiCache.findFirst({
+      where: eq(apiCache.cacheKey, CATCHUP_CACHE_KEY),
+    });
+
+    if (cached) {
+      const state: CatchUpState = JSON.parse(cached.responseData);
+      catchUpModeActive = state.active;
+      consecutiveBelowExitCount = state.exitStreak;
+      catchUpEnteredAtHour = state.enteredAtHour;
+      catchUpStateLoaded = true;
+      console.log(`[CatchUp] Loaded persisted state: active=${state.active}, exitStreak=${state.exitStreak}, enteredAt=${state.enteredAtHour}`);
+    } else {
+      catchUpStateLoaded = true;
+      console.log(`[CatchUp] No persisted state found, starting fresh`);
+    }
+  } catch (err) {
+    console.error(`[CatchUp] Failed to load persisted state, using defaults:`, err);
+    catchUpStateLoaded = true;
+  }
+}
+
+async function persistCatchUpStateToDB(): Promise<void> {
+  try {
+    const { db } = await import("../db");
+    const { apiCache } = await import("@shared/schema");
+    const { eq } = await import("drizzle-orm");
+
+    const state: CatchUpState = {
+      active: catchUpModeActive,
+      exitStreak: consecutiveBelowExitCount,
+      enteredAtHour: catchUpEnteredAtHour,
+      lastUpdated: new Date().toISOString(),
+    };
+
+    const existing = await db.query.apiCache.findFirst({
+      where: eq(apiCache.cacheKey, CATCHUP_CACHE_KEY),
+    });
+
+    if (existing) {
+      await db.update(apiCache)
+        .set({
+          responseData: JSON.stringify(state),
+          fetchedAt: new Date(),
+          expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        })
+        .where(eq(apiCache.cacheKey, CATCHUP_CACHE_KEY));
+    } else {
+      await db.insert(apiCache).values({
+        cacheKey: CATCHUP_CACHE_KEY,
+        provider: "system",
+        responseData: JSON.stringify(state),
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      });
+    }
+  } catch (err) {
+    console.error(`[CatchUp] Failed to persist state to DB:`, err);
+  }
+}
+
+export async function updateCatchUpMode(medianGapPct: number): Promise<{ active: boolean; changed: boolean }> {
+  if (!catchUpStateLoaded) {
+    await loadCatchUpStateFromDB();
+  }
+
   const wasPreviouslyActive = catchUpModeActive;
 
   if (!catchUpModeActive) {
     if (medianGapPct > CATCHUP_ENTER_THRESHOLD) {
       catchUpModeActive = true;
       consecutiveBelowExitCount = 0;
+      catchUpEnteredAtHour = new Date().toISOString();
       console.log(`[CatchUp] ENTERING catch-up mode (medianGap=${(medianGapPct * 100).toFixed(1)}% > ${(CATCHUP_ENTER_THRESHOLD * 100).toFixed(0)}% threshold)`);
     }
   } else {
@@ -92,6 +182,7 @@ export function updateCatchUpMode(medianGapPct: number): { active: boolean; chan
       if (consecutiveBelowExitCount >= CATCHUP_EXIT_CONSECUTIVE) {
         catchUpModeActive = false;
         consecutiveBelowExitCount = 0;
+        catchUpEnteredAtHour = null;
         console.log(`[CatchUp] EXITING catch-up mode (medianGap=${(medianGapPct * 100).toFixed(1)}% < ${(CATCHUP_EXIT_THRESHOLD * 100).toFixed(0)}% for ${CATCHUP_EXIT_CONSECUTIVE} runs)`);
       } else {
         console.log(`[CatchUp] Below exit threshold (${consecutiveBelowExitCount}/${CATCHUP_EXIT_CONSECUTIVE} consecutive)`);
@@ -100,6 +191,8 @@ export function updateCatchUpMode(medianGapPct: number): { active: boolean; chan
       consecutiveBelowExitCount = 0;
     }
   }
+
+  await persistCatchUpStateToDB();
 
   return { active: catchUpModeActive, changed: catchUpModeActive !== wasPreviouslyActive };
 }

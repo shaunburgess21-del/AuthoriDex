@@ -20,6 +20,15 @@ import {
 import {
   updateCatchUpMode,
   isCatchUpModeActive,
+  loadCatchUpStateFromDB,
+  getCatchUpExitStreak,
+  getCatchUpEnteredAtHour,
+  getCatchUpCapMultiplier,
+  getCatchUpAlphaMultiplier,
+  MAX_HOURLY_CHANGE_PERCENT,
+  EMA_ALPHA_DEFAULT,
+  EMA_ALPHA_2_SOURCES,
+  EMA_ALPHA_3_SOURCES,
 } from "../scoring/normalize";
 
 export interface IngestResult {
@@ -46,6 +55,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
   console.log(`[Ingest] Hour timestamp: ${hourTimestamp.toISOString()}`);
 
   console.log("[Ingest] Starting data ingestion...");
+
+  await loadCatchUpStateFromDB();
 
   try {
     const people = await db.select().from(trackedPeople);
@@ -539,10 +550,13 @@ export async function runDataIngestion(): Promise<IngestResult> {
     const medianGapPct = sortedGaps.length > 0 ? sortedGaps[Math.floor(sortedGaps.length / 2)] : 0;
     const p90GapPct = sortedGaps.length > 0 ? sortedGaps[Math.floor(sortedGaps.length * 0.9)] : 0;
 
-    // Update catch-up mode based on median gap
-    updateCatchUpMode(medianGapPct);
+    await updateCatchUpMode(medianGapPct);
     const catchUpActive = isCatchUpModeActive();
-    console.log(`[Gap Metrics] medianGap=${(medianGapPct * 100).toFixed(1)}%, p90Gap=${(p90GapPct * 100).toFixed(1)}%, catchUp=${catchUpActive ? 'ACTIVE' : 'OFF'}`);
+    const catchUpExitStreak = getCatchUpExitStreak();
+    const catchUpEnteredAt = getCatchUpEnteredAtHour();
+    const capMultiplier = getCatchUpCapMultiplier();
+    const alphaMultiplier = getCatchUpAlphaMultiplier();
+    console.log(`[Gap Metrics] medianGap=${(medianGapPct * 100).toFixed(1)}%, p90Gap=${(p90GapPct * 100).toFixed(1)}%, catchUp=${catchUpActive ? 'ACTIVE' : 'OFF'}, exitStreak=${catchUpExitStreak}`);
 
     // Sort by fameIndex (displayed on leaderboard) not trendScore - matches quick-score.ts
     scoreResults.sort((a, b) => b.score.fameIndex - a.score.fameIndex);
@@ -758,6 +772,21 @@ export async function runDataIngestion(): Promise<IngestResult> {
         medianGapPct: `${(medianGapPct * 100).toFixed(1)}%`,
         p90GapPct: `${(p90GapPct * 100).toFixed(1)}%`,
         catchUpMode: catchUpActive ? "ACTIVE" : "OFF",
+        catchUpExitStreak: catchUpExitStreak,
+        catchUpEnteredAt: catchUpEnteredAt,
+      },
+      capsUsed: {
+        base: `${(MAX_HOURLY_CHANGE_PERCENT * capMultiplier * 100).toFixed(1)}%`,
+        spike1: `${(0.12 * capMultiplier * 100).toFixed(1)}%`,
+        spike2: `${(0.20 * capMultiplier * 100).toFixed(1)}%`,
+        spike3: `${(0.35 * capMultiplier * 100).toFixed(1)}%`,
+        multiplier: `${capMultiplier}x`,
+      },
+      alphaUsed: {
+        base: `${(EMA_ALPHA_DEFAULT * alphaMultiplier).toFixed(3)}`,
+        spike2: `${(EMA_ALPHA_2_SOURCES * alphaMultiplier).toFixed(3)}`,
+        spike3: `${Math.min(EMA_ALPHA_3_SOURCES * alphaMultiplier, 0.40).toFixed(3)}`,
+        multiplier: `${alphaMultiplier}x`,
       },
     };
     
