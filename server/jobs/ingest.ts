@@ -480,10 +480,12 @@ export async function runDataIngestion(): Promise<IngestResult> {
     const TRENDING_PEOPLE_LOCK_ID = 12345; // Advisory lock ID for trending_people writes
     
     await db.transaction(async (tx) => {
-      // Acquire advisory lock to prevent concurrent writes from quick-score or other ingest jobs
+      // Acquire advisory lock to prevent concurrent writes from other ingest jobs
       const lockResult = await tx.execute(sql`SELECT pg_try_advisory_xact_lock(${TRENDING_PEOPLE_LOCK_ID})`);
-      // Drizzle returns array of rows directly, not object with .rows
-      const lockAcquired = (lockResult as any)[0]?.pg_try_advisory_xact_lock;
+      // Handle both possible Drizzle return formats: array of rows OR object with .rows
+      const rows = Array.isArray(lockResult) ? lockResult : (lockResult as any).rows ?? [];
+      const lockAcquired = rows[0]?.pg_try_advisory_xact_lock;
+      console.log(`[Ingest] Advisory lock result: ${JSON.stringify(rows[0])}, acquired: ${lockAcquired}`);
       if (!lockAcquired) {
         throw new Error("[Ingest] Another job is writing to trending_people. Aborting to prevent conflicts.");
       }
@@ -529,7 +531,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
       
       // ROW COUNT VALIDATION: Query actual DB row count to verify inserts succeeded
       const countResult = await tx.execute(sql`SELECT COUNT(*) as count FROM trending_people`);
-      const actualDbCount = parseInt((countResult as any)[0]?.count || '0', 10);
+      const countRows = Array.isArray(countResult) ? countResult : (countResult as any).rows ?? [];
+      const actualDbCount = parseInt(countRows[0]?.count || '0', 10);
       
       if (actualDbCount !== expectedRowCount) {
         throw new Error(`[Ingest] Row count mismatch: expected ${expectedRowCount}, DB has ${actualDbCount}. Rolling back.`);
