@@ -1,0 +1,74 @@
+Overall: yes — it’s the right direction, but I’d tweak the order and tighten the scope so you don’t trigger another “agent spiral” (and big Replit bill).
+
+What I like
+
+Correct root cause: Linked Celebrity is sending a name but DB expects a UUID → FK insert fails.
+
+Correct next fix: make Linked Celebrity an autocomplete that stores UUID.
+
+Correct improvement: surface real backend error messages (right now you’re debugging blind).
+
+Correct observation: Vote page is still using DISCOURSE_TOPICS, so admin-created polls won’t show.
+
+What I would change (important)
+1) Split into two phases (don’t do everything in one build)
+
+Phase A (must do now): “Creation works + errors visible”
+
+Fix Linked Celebrity field (UUID)
+
+Improve backend error response + show real error in toast/console
+
+Confirm you can create/edit/archive polls in Admin
+
+✅ Stop here and test.
+This alone unblocks you from creating content tonight.
+
+Phase B (after A is solid): “Frontend reads from DB”
+
+Add GET /api/trending-polls (live only)
+
+Update Vote page to use DB instead of hardcoded array
+
+Decide what to do with DISCOURSE_TOPICS (replace vs fallback)
+
+2) I would not do “merge DB + hardcoded fallback” long-term
+
+It sounds safe, but it often creates:
+
+duplicates
+
+inconsistent counts
+
+weird filtering/category behavior
+
+harder debugging
+
+Better pattern:
+
+temporary feature flag: USE_DB_POLLS=true
+
+Or: “Use DB if any exist, else fallback to hardcoded”.
+
+3) “Seed the 5 main placeholder polls” is optional
+
+Only do seeding after the admin create flow works.
+Otherwise you can seed broken data and confuse the UI.
+
+The only clarification you must enforce in the plan
+
+Make sure Replit implements:
+
+Linked Celebrity = select/autocomplete that stores tracked_people.id
+
+If user types text and doesn’t select a real person → personId = null
+
+If personId is null and it’s a custom topic → require imageUrl (or at least warn)
+
+My recommended “go/no-go”
+
+✅ Go, but with this instruction to Replit:
+
+“Do Phase A only first (admin create fix + error visibility). Do not touch Vote page or add public endpoints until we confirm Admin CRUD is working and we can create a poll successfully.”
+
+If you want, paste that back to Replit as a tightening note and run it on Low autonomy.

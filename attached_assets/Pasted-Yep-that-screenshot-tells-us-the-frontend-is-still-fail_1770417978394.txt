@@ -1,0 +1,77 @@
+Yep — that screenshot tells us the frontend is still failing the POST /api/admin/trending-polls call (or it’s returning a non-200 and your UI is showing the generic “Failed to create poll”).
+
+Most likely causes (in order of probability):
+
+Linked Celebrity field is sending “Elon Musk” as a string into personId (DB expects UUID), causing the insert to fail.
+
+Backend validation is rejecting something (category value mismatch, missing required field, etc.).
+
+The request is hitting auth middleware and failing (less likely now, since the toast is no longer the “getSession” error, but still possible).
+
+Below is a single consolidated prompt you can paste to Replit to fix this properly, without guesswork.
+
+Prompt for Replit (copy/paste)
+
+We still cannot create a Trending Poll from the Admin UI. Clicking Create Poll shows a red toast: “Create Failed → Failed to create poll” (see screenshot). Please fix this end-to-end.
+
+Goal
+
+When an admin submits the “Create Poll” modal, the poll must be created successfully in trending_polls and appear in the admin list.
+
+1) Add real error visibility (must-do first)
+
+Right now the UI shows a generic failure. Update the AdminDashboard Trending Polls create handler to:
+
+Log the actual fetch response status + response body (JSON) to console in dev
+
+Show the backend error message in the toast (e.g., error.message), not just “Failed to create poll”
+
+Also update the backend POST handler to always return a helpful JSON error:
+
+{ "error": "…human readable…", "details": "…optional…" }
+
+2) Fix Linked Celebrity field (probable root cause)
+
+In the screenshot the “Linked Celebrity” input contains “Elon Musk” (a name). But trending_polls.person_id expects a UUID from tracked_people.id.
+
+Implement one of these (preferred in order):
+
+Preferred:
+
+Make “Linked Celebrity” an autocomplete/select that searches tracked_people and stores the selected row’s id (UUID) into personId.
+
+The field should display the name, but submit the UUID.
+
+Acceptable quick fix:
+
+If the user types text that is not a UUID, submit personId = null and treat it as a custom topic, requiring Image URL (or allow blank).
+
+Also ensure: if personId is set, ignore imageUrl on the frontend (celebrity image should be used).
+
+3) Category: add “Custom Topic” properly
+
+Ensure Custom Topic is allowed in backend validation and stored as category value (decide the exact stored string, e.g. "custom" or "custom_topic" or "Custom Topic"—but be consistent across admin + frontend filters).
+
+Ensure the create request passes a valid category string that the backend accepts.
+
+4) Timeline / Deadline fields
+
+Trending Polls are indefinite by default:
+
+Keep fields optional.
+
+Default timeline to "no_deadline" and deadlineAt to null.
+
+Backend should accept nulls without failing.
+
+5) Verify with an actual test (required)
+
+After the fix:
+
+Create poll with no linked celebrity + optional imageUrl
+
+Create poll with a linked celebrity selected (UUID)
+
+Confirm both insert into DB and appear in admin list
+
+Paste the actual console/backend error you found originally and confirm what change fixed it.

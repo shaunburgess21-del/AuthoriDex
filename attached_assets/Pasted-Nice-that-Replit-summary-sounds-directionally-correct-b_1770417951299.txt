@@ -1,0 +1,89 @@
+Nice — that Replit summary sounds directionally correct, but there are two big “sanity check” flags in what they wrote that you should verify before you trust it:
+
+1) They referenced PeoplesVoicePoll.tsx + DISCOURSE_TOPICS (hardcoded)
+
+That’s the old placeholder component you mentioned earlier.
+
+So when they say:
+
+“Description already displays on the frontend poll cards … line 74 in PeoplesVoicePoll.tsx”
+
+…that may be irrelevant if your live Trending Polls section is supposed to be driven by the new DB table (trending_polls), not the hardcoded array.
+
+✅ What to verify right now
+
+Go to the Vote page → Trending Polls section.
+
+Create a new poll in Admin.
+
+Refresh the Vote page.
+
+If your new poll does NOT appear, then they fixed admin UI but the frontend is still showing hardcoded DISCOURSE_TOPICS instead of DB content.
+
+If that happens, you’ll want Replit to:
+
+Replace DISCOURSE_TOPICS with a fetch from /api/trending-polls (or whatever endpoint exists)
+
+Render DB-driven cards
+
+Then decide where description displays (card body, tooltip, etc.)
+
+2) The “getSession undefined” fix: OK, but make it consistent
+
+Their root cause explanation makes sense: in your project, supabase is likely exported as a Promise / async getter, and AdminDashboard.tsx was using it wrong.
+
+✅ What to verify
+
+Can you now Create Poll without that red toast?
+
+Can you Edit and Archive a poll?
+
+Can you do the same for Face-Offs (to ensure nothing broke)?
+
+If yes, it’s good enough. (Longer-term, the cleanest fix is: AdminDashboard should use the same getSupabase() pattern as the rest of the app, not manually await a Promise export in random places.)
+
+3) “Custom Topic” category: make sure it exists everywhere it matters
+
+They added it to the admin dropdowns — good.
+
+✅ Verify these too:
+
+The frontend filter chips include “Custom Topic” (or at least don’t break when a poll has that category).
+
+Backend validation doesn’t reject it (e.g., if there’s a allowedCategories list somewhere).
+
+4) Person selector risk (you already noticed it)
+
+Your screenshot shows “Elon Musk” typed into a field. If the backend expects a UUID (personId), typing a name won’t work unless it’s an autocomplete that stores the ID.
+
+This can cause “it saved” vs “it didn’t actually link” confusion.
+
+✅ Quick test:
+
+Create one poll with Linked Celebrity blank.
+
+Create another poll with Linked Celebrity set using a real tracked_people.id (if the UI supports selecting one).
+
+Confirm the linked one pulls the celebrity image and name correctly.
+
+What I would message Replit now (copy/paste)
+
+Use this to force the key verification + close the loop:
+
+Prompt to Replit
+
+Please confirm whether the Vote page “Trending Polls” section is currently DB-driven from trending_polls, or still using the placeholder PeoplesVoicePoll.tsx + DISCOURSE_TOPICS.
+
+If still placeholder: replace it so the frontend renders live polls from the database (status=live), and confirm where description is displayed on the actual DB-driven card.
+
+In AdminDashboard.tsx, please share the exact diff for the getAuthHeaders() / supabase session fix, and confirm Create/Edit/Archive works from the admin UI session.
+
+Confirm “Custom Topic” is supported end-to-end:
+
+Admin dropdowns ✅
+
+Backend accepts it
+
+Frontend filters/chips won’t break and can display it.
+
+Linked Celebrity field: confirm the UI stores a real tracked_people.id (UUID). If it’s currently a free-text input, change it to an autocomplete/select that saves the UUID.
