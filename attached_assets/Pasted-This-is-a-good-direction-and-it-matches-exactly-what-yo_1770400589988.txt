@@ -1,0 +1,101 @@
+This is a good direction, and it matches exactly what you were feeling: the limiter was doing “most of the ranking,” not acting as a guardrail.
+
+A few thoughts (and one important warning) based on what Replit just implemented and what it reported:
+
+What looks correct / promising
+
+They correctly identified the “double damping”:
+rate cap (5%) then EMA alpha (0.08) ⇒ tiny effective movement.
+So loosening caps alone wouldn’t fully fix it; you need to adjust the pair (cap + alpha). ✅
+
+Gap-driven catch-up mode is the right mechanism (not time-based):
+Trigger at medianGapPct > 8%, exit when < 4% for 2 runs. ✅
+That will fix “stuck top 10 after outages/model changes” without you babysitting it.
+
+They added the right telemetry: medianGapPct and p90GapPct. ✅
+That’s now your “truth meter” for whether the leaderboard is lagging reality.
+
+The one big concern: catch-up mode is in-memory
+
+Replit said:
+
+“server restarted… catch-up mode state is in-memory…”
+
+That means restarts will keep re-triggering catch-up mode, which can be okay, but it can also cause oscillation if your server restarts often.
+
+Fix (high ROI)
+
+Persist catch-up mode state in DB (or even in your existing api_cache table):
+
+catchUpActive
+
+enteredAtHour
+
+exitStreak count (consecutive runs below threshold)
+
+So a restart doesn’t reset the streak logic and doesn’t cause flip-flopping.
+
+Sanity targets for “organic movement”
+
+You can use these as rules of thumb:
+
+medianGapPct in steady state: < 5%
+
+p90GapPct: < 15–20%
+
+rateLimitedPct: ideally < 25–35% most hours
+(If it’s still 60–80% after convergence, caps are still too tight or alpha too low.)
+
+Also, you should see some top 10 churn. Not constant, but not frozen:
+
+Top 10 churn 0–2 is normal most hours
+
+Occasional spikes 3–5 during big news cycles is fine
+
+Don’t “loosen base caps” too far (yet)
+
+Replit moved base cap from 5% → 8%, plus multipliers.
+
+That’s probably safe, but watch for one failure mode:
+
+If a source glitches and returns inflated values, 8% base + higher alpha can “pump” the whole board faster than before.
+
+You already have coverage gates + anomaly alerts, so you’re mostly safe—but this is why hard caps still matter.
+
+What I’d ask Replit to do next (short list)
+
+Persist catch-up mode state (DB-backed) so restarts don’t reset it.
+
+Add to the health summary:
+
+catchUpActive
+
+catchUpExitStreak
+
+capsUsed (base cap, and spike-tier caps) and alphaUsed (base + spike tiers)
+
+After 3–5 successful hourly runs, pull a mini report:
+
+medianGapPct trend (should drop quickly)
+
+rateLimitedPct trend (should drop as gap closes)
+
+top 10 churn trend
+
+If you see medianGapPct staying high even with catch-up active, then something else is wrong (usually stale inputs or a normalization stat mismatch).
+
+My bottom-line opinion on your rate limits
+
+You’re right: the old setup was too limiting for a consumer “what’s hot right now” product.
+
+But you don’t actually want “no limits.” You want:
+
+fast convergence when behind (catch-up mode)
+
+fast movement when corroborated (spike tiers)
+
+slow movement when uncertain (outages, stale, coverage gate)
+
+That’s exactly what you’re converging toward now.
+
+If you paste one real [HEALTH SUMMARY] from the next completed ingest (with the new fields), I’ll tell you whether you’re now in the “organic zone” or whether you should tweak the thresholds (8% trigger / 4% exit / 2-run streak / 2.5x cap / 1.8x alpha).
