@@ -257,7 +257,8 @@ interface ScoreBreakdownData {
 
 // Helper function to get auth headers
 async function getAuthHeaders(): Promise<HeadersInit> {
-  const { data: { session } } = await supabase.auth.getSession();
+  const client = await supabase;
+  const { data: { session } } = await client.auth.getSession();
   if (!session?.access_token) {
     throw new Error("Not authenticated");
   }
@@ -1721,6 +1722,7 @@ export default function AdminDashboard() {
                           <SelectItem value="Politics">Politics</SelectItem>
                           <SelectItem value="Business">Business</SelectItem>
                           <SelectItem value="Creator">Creator</SelectItem>
+                          <SelectItem value="Custom Topic">Custom Topic</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -2995,6 +2997,7 @@ export default function AdminDashboard() {
                     <SelectItem value="Politics">Politics</SelectItem>
                     <SelectItem value="Business">Business</SelectItem>
                     <SelectItem value="Creator">Creator</SelectItem>
+                    <SelectItem value="Custom Topic">Custom Topic</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
