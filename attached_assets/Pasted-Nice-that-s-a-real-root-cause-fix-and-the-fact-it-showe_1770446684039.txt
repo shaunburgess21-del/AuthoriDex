@@ -1,0 +1,94 @@
+Nice — that’s a real root-cause fix (and the fact it showed up in Serper + X + AI Trending suggests you just eliminated an entire class of “looks healthy but is actually stale” bugs).
+
+A few thoughts + what I’d do next to make sure this doesn’t bite you again:
+
+What Replit fixed (and why it matters)
+
+The core bug was “UPDATE fetchedAt but not expiresAt” → cache entries look recently fetched but are already expired (or effectively immortal/invalid depending on how you read them).
+
+Refactoring to a single upsert that always sets fetchedAt + expiresAt together is the right permanent pattern.
+
+Adding both:
+
+write-time guard (never write bad TTLs)
+
+read-time guard (treat legacy bad rows as miss + log)
+gives you belt + suspenders.
+
+That should materially improve:
+
+Source health accuracy
+
+Coverage gate correctness
+
+Staleness decay behavior
+
+Your “health summary” trustworthiness
+
+What to verify today (15-minute checklist)
+
+After the next ingest run, check the [HEALTH SUMMARY] line and confirm:
+
+Serper
+
+sources.search is OK
+
+fresh.search is near 100
+
+fallbacks.search is near 0
+
+rateLimitedPct should trend down over subsequent runs (as catch-up converges)
+
+Cache sanity
+Run a quick DB spot check (even from your admin debug endpoint if you have it):
+
+number of Serper cache rows ~100
+
+expiresAt > fetchedAt for a few random rows
+
+expiresAt about fetchedAt + TTL
+
+The “Brian Armstrong / Michael Saylor” question
+Now that cache is correct, you can finally answer “are they genuinely low, or mis-resolved?”
+
+Open the score breakdown for each and look at:
+
+search inputs (0–100 composite) — if it’s consistently low and the query is just the name, that’s a strong sign you need a query override.
+
+news count — if low across days, that’s “not in news” not a bug.
+
+wiki — if it’s non-trivial but velocity is low, they’ll still sit low (expected).
+
+One extra hardening step I’d still add
+
+Even with the TTL fix, you’ll still occasionally get “wrong person” resolution (especially Brian Armstrong). The most reliable fix:
+
+Add per-person “canonical identity” fields
+
+wiki_page_title (or pageid)
+
+search_query_override
+
+optional news_query_override
+
+Then your ingestion uses those canonical identifiers rather than a raw name string.
+
+If you do only one thing for Armstrong: set search query to:
+
+Brian Armstrong Coinbase CEO
+
+For Saylor:
+
+Michael Saylor MicroStrategy
+
+This usually makes their search/news signals far more “correct” (even if they still end up low vs pop stars).
+
+If they’re still bottom after all that
+
+Then it’s editorial:
+
+If FameDex is “general public celeb leaderboard,” swapping in Alcaraz + Sinner makes sense.
+
+If you want a “Business/Crypto” lane, keep them, but expect them to rank lower unless there’s a big news cycle.
+
+If you paste the score-breakdown raw inputs for Brian + Saylor (wiki views, news count, search score, and the query string used), I’ll tell you definitively which bucket they’re in: mis-resolved vs genuinely low-interest vs being damped by stabilization/catch-up.
