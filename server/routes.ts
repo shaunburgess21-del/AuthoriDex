@@ -3100,7 +3100,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   app.patch("/api/admin/celebrities/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { name, category, status, wikiSlug, xHandle, avatar } = req.body;
+      const { name, category, status, wikiSlug, xHandle, avatar, searchQueryOverride } = req.body;
       const adminId = req.userId!;
       
       const [existing] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, id));
@@ -3115,6 +3115,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       if (wikiSlug !== undefined) updates.wikiSlug = wikiSlug;
       if (xHandle !== undefined) updates.xHandle = xHandle;
       if (avatar !== undefined) updates.avatar = avatar;
+      if (searchQueryOverride !== undefined) updates.searchQueryOverride = searchQueryOverride || null;
       
       await db.update(trackedPeople).set(updates).where(eq(trackedPeople.id, id));
       
@@ -3386,7 +3387,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   // Add new celebrity
   app.post("/api/admin/celebrities", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { name, category, status, wikiSlug, xHandle, avatar } = req.body;
+      const { name, category, status, wikiSlug, xHandle, avatar, searchQueryOverride } = req.body;
       const adminId = req.userId!;
       
       if (!name) {
@@ -3400,6 +3401,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         wikiSlug: wikiSlug || null,
         xHandle: xHandle || null,
         avatar: avatar || null,
+        searchQueryOverride: searchQueryOverride || null,
       }).returning();
       
       // Audit log

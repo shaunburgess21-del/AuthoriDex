@@ -136,6 +136,7 @@ interface Celebrity {
   avatar: string | null;
   wikiSlug: string | null;
   xHandle: string | null;
+  searchQueryOverride: string | null;
   displayOrder: number;
 }
 
@@ -353,6 +354,7 @@ export default function AdminDashboard() {
     status: "main_leaderboard",
     wikiSlug: "",
     xHandle: "",
+    searchQueryOverride: "",
   });
   
   const [showFaceOffModal, setShowFaceOffModal] = useState(false);
@@ -683,7 +685,7 @@ export default function AdminDashboard() {
       toast({ title: "Celebrity Created", description: "New celebrity added successfully" });
       setShowCelebrityModal(false);
       setEditingCelebrity(null);
-      setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "" });
+      setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
     },
     onError: (error: any) => {
@@ -704,7 +706,7 @@ export default function AdminDashboard() {
       toast({ title: "Celebrity Updated", description: "Celebrity updated successfully" });
       setShowCelebrityModal(false);
       setEditingCelebrity(null);
-      setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "" });
+      setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
     },
     onError: (error: any) => {
@@ -1019,6 +1021,7 @@ export default function AdminDashboard() {
       status: celebrity.status,
       wikiSlug: celebrity.wikiSlug || "",
       xHandle: celebrity.xHandle || "",
+      searchQueryOverride: celebrity.searchQueryOverride || "",
     });
     setShowCelebrityModal(true);
   };
@@ -1470,7 +1473,7 @@ export default function AdminDashboard() {
               <Button 
                 onClick={() => {
                   setEditingCelebrity(null);
-                  setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "" });
+                  setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
                   setShowCelebrityModal(true);
                 }}
                 data-testid="button-add-celebrity"
@@ -2551,6 +2554,19 @@ export default function AdminDashboard() {
                 placeholder="e.g., @elonmusk"
                 data-testid="input-celebrity-xhandle"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="celeb-search-override">Search Query Override (optional)</Label>
+              <Input
+                id="celeb-search-override"
+                value={celebrityForm.searchQueryOverride}
+                onChange={(e) => setCelebrityForm({ ...celebrityForm, searchQueryOverride: e.target.value })}
+                placeholder='e.g., "Brian Armstrong" Coinbase CEO'
+                data-testid="input-celebrity-search-override"
+              />
+              <p className="text-xs text-muted-foreground">
+                Custom search query for Serper. Use this to disambiguate common names.
+              </p>
             </div>
           </div>
           <DialogFooter>

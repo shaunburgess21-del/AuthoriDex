@@ -95,7 +95,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     }
 
     let serperData = await fetchSerperBatch(
-      people.map(p => p.name),
+      people.map(p => ({ name: p.name, searchQueryOverride: p.searchQueryOverride })),
       2,
       1000
     );

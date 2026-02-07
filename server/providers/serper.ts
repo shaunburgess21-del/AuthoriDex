@@ -71,7 +71,7 @@ interface SerperSearchResponse {
   sitelinks?: { inline?: Array<{ title: string; link: string }>; expanded?: Array<{ title: string; link: string }> };
 }
 
-export async function fetchSerperData(name: string): Promise<SerperResult | null> {
+export async function fetchSerperData(name: string, searchQueryOverride?: string | null): Promise<SerperResult | null> {
   if (!SERPER_API_KEY) {
     console.log(`[Serper] No API key configured, skipping ${name}`);
     return null;
@@ -99,7 +99,7 @@ export async function fetchSerperData(name: string): Promise<SerperResult | null
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        q: name,
+        q: searchQueryOverride || name,
         num: 10,
         gl: "us",
         hl: "en",
@@ -182,7 +182,7 @@ export async function fetchSerperData(name: string): Promise<SerperResult | null
 }
 
 export async function fetchSerperBatch(
-  names: string[],
+  people: Array<{ name: string; searchQueryOverride?: string | null }>,
   concurrency: number = 2,
   delayMs: number = 500
 ): Promise<Map<string, SerperResult>> {
@@ -191,21 +191,21 @@ export async function fetchSerperBatch(
 
   const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const tasks = names.map((name, index) =>
+  const tasks = people.map((person, index) =>
     limit(async () => {
       if (index > 0) {
         await delay(delayMs);
       }
-      const result = await fetchSerperData(name);
+      const result = await fetchSerperData(person.name, person.searchQueryOverride);
       if (result) {
-        results.set(name.toLowerCase(), result);
-        console.log(`[Serper] Successfully fetched data for ${name}`);
+        results.set(person.name.toLowerCase(), result);
+        console.log(`[Serper] Successfully fetched data for ${person.name}`);
       }
     })
   );
 
   await Promise.all(tasks);
-  console.log(`[Serper] Batch complete: ${results.size}/${names.length} successful`);
+  console.log(`[Serper] Batch complete: ${results.size}/${people.length} successful`);
 
   return results;
 }
