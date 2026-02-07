@@ -1,0 +1,55 @@
+Yep — Replit’s diagnosis is consistent with what your screenshot suggests, and I’d treat it as two separate problems:
+
+1) The 1D chart labels are objectively broken (must-fix)
+
+If the label is literally a string like "09:00 AM" with no date, then any data spanning >24h or crossing midnight will show repeated “09:00 AM” ticks and make the chart look “loop-y”.
+
+What I’d do
+
+Make the 1D query hard constrain to last 24 hours (not “today” or “last N points”).
+
+Store/plot timestamps, not preformatted strings.
+
+Format x-axis as:
+
+< 36h window: HH:mm plus a day separator when the date changes
+
+>= 36h window: MMM d HH:mm (e.g., Feb 7 09:00)
+
+This is high ROI because it reduces false alarms instantly.
+
+2) Wikipedia “yesterday total” is a real source of step-changes (should-fix)
+
+If you’re pulling yesterday’s total pageviews (static until midnight UTC), you’ve built in a daily step function. That will absolutely create boundary artifacts that look like “drops” or “jumps”.
+
+Better options
+
+Use Wikipedia pageviews API in a way that gives you:
+
+rolling 24h sum (best), or
+
+hourly series and then compute rolling windows yourself, or
+
+at minimum: use a 7-day rolling average and only update once per day intentionally (but then don’t show it as hourly-reactive).
+
+If you keep “yesterday total,” then accept it’s mass not velocity, and don’t let it create hour-to-hour cliffs in what users interpret as momentum.
+
+3) The stabilizer “straight ramps” are expected (but you can make them feel organic)
+
+Even when the underlying cause is legitimate (cache expiry, source flip, daily boundary), your cap will produce straight-line recoveries.
+
+Two improvements that keep safety while looking natural:
+
+Use rolling inputs so there are fewer cliffs to recover from.
+
+Make cap behavior asymmetric:
+
+allow faster recovery when you detect a systematic boundary artifact (e.g., wiki boundary), but keep conservative caps otherwise.
+
+What I’d tell Replit to do (order)
+
+Fix 1D chart time axis (timestamp-based + correct 24h window)
+
+Change Wiki input to rolling (or demote it to daily-updated mass only)
+
+Only after that: inspect any remaining sawtooth—then decide if it’s source freshness flips vs stabilizer tuning.

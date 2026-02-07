@@ -1,0 +1,88 @@
+Replit’s diagnosis is plausible, but the “perfectly equal up/down” sawtooth you’re seeing usually comes from one of these very specific mechanics in a scoring pipeline like yours:
+
+What causes that “same drop, same climb back” pattern?
+1) You’re graphing a value that periodically “snaps” to a different input regime (then gets rate-limited back)
+
+This happens when, on certain hours, the engine suddenly sees a materially lower raw input (or treats a source as stale/zero), so the computed raw score drops, and then your stabilizer/catch-up rules push it back toward the previous level at a fixed max per-cycle movement.
+That creates the “uniform ramps” back up.
+
+Typical triggers:
+
+A source flips between fresh vs fallback for the hour (coverage gate / source health change).
+
+A source returns near-zero briefly and gets rejected/treated as stale.
+
+A cached value expires and the “new” fetched value is lower/higher than the carried-forward value.
+
+If the stabilizer is working, you’ll see recoveries that look mechanically identical because they’re hitting the cap.
+
+2) “Daily reset” effects from cumulative metrics (especially Wiki)
+
+If any part of your score uses a day-to-date counter (or a “calendar day” bucket), you will see a drop at the boundary and a climb as the day accumulates again.
+
+But: your chart shows multiple identical “09:00 AM” points and repeated plateaus, which smells more like rendering + sampling than a single midnight reset.
+
+3) Your chart labels are lying (time axis formatting bug)
+
+That repeated “09:00 AM” is a classic symptom of:
+
+formatting ticks with time only (no date), so multiple days show the same hour label, or
+
+the chart is using local time for labels but your data is stored in UTC hour buckets, or
+
+ticks are being downsampled and landing on the same hour-of-day across different dates.
+
+So the “sawtooth” can look more regular than it really is.
+
+The fastest way to confirm the root cause (no guessing)
+
+Pick one of the “valley → peak” transitions and check the Score Breakdown modal for those two timestamps:
+
+Look for:
+
+Which source changed freshness (fresh vs fallback) between the two points
+
+Whether news/search/wiki raw values dropped to zero or got replaced by fill-forward values
+
+Whether the rate cap line shows it’s clamping the move (you’ll see the same cap used repeatedly)
+
+If the rise is capped every time, the line will look like a ruler-straight climb.
+
+Fixes that actually remove the sawtooth (depending on cause)
+If it’s “fresh/fallback flips” hour-to-hour
+
+Make the coverage gate + fallback decision sticky for a short window (e.g., “if NEWS is stale this hour, keep it stale for 2 hours unless >90% coverage returns”).
+This prevents oscillating regimes.
+
+If it’s “calendar reset / cumulative metric” (Wiki day-to-date)
+
+Don’t use a day-to-date number for “velocity”. Instead use:
+
+last 24h pageviews, or
+
+hourly pageviews + rolling sum, or
+
+delta of a rolling window.
+This eliminates hard boundary cliffs.
+
+If it’s mostly the stabilizer creating “ramps”
+
+You already added catch-up mode, which helps. The final tweak is:
+
+when a drop is caused by a known systematic boundary (like calendar reset), don’t clamp the “recovery” the same way—treat it as “non-event” by using a rolling metric.
+
+If it’s mainly the chart
+
+Change x-axis labels to include date when range > 12h, e.g. Feb 7 09:00.
+
+Ensure you’re plotting sorted timestamps and not accidentally reusing the same hour bucket.
+
+Make sure the “1D” query is truly last 24h, not “today” or “since midnight”.
+
+My bet, given your screenshot
+
+That perfectly flat plateaus + symmetric spikes + repeated 09:00 labels strongly suggests a combination of:
+
+stabilizer caps shaping the recoveries, and
+
+a chart/window/labeling issue making the pattern look more regular than it is.

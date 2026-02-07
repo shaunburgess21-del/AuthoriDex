@@ -1,0 +1,55 @@
+Nice — this is the right outcome.
+
+A couple quick clarifications and what I’d do next (no drama, just making sure you actually get the benefit):
+
+1) Was it “broken” before?
+
+Replit is correct: it wasn’t necessarily broken if both sides keyed the Map by person.name.toLowerCase() consistently.
+
+But your instinct (and mine) was still valid: keying by personId is the safer architecture long-term (duplicate names, renamed entries, punctuation/casing differences, etc.). So the change they just made is a clean hardening win.
+
+2) Quotes in the override string
+
+Yes — quotes like "Brian Armstrong" are normal Google query syntax and can improve disambiguation. So that’s fine.
+
+3) The two improvements they implemented are exactly the two I’d pick
+
+✅ Map keyed by personId (robust)
+
+✅ Logging the override query used (immediate observability)
+
+4) How you should verify it’s working (fast + definitive)
+
+After the next ingest run:
+
+A) Logs
+
+Search for those lines like:
+
+[Serper] Using override query for Brian Armstrong: ...
+
+[Serper] Using override query for Michael Saylor: ...
+
+If you see them: ✅ the override is being applied.
+
+B) Score Breakdown for Brian + Saylor
+
+Open the “Why did this move?” modal and check:
+
+search_volume is non-zero and not suspiciously flat.
+
+Their search percentile isn’t stuck at the bottom because of a missing value.
+
+5) If they’re still bottom after overrides
+
+Then it’s probably real (they’re niche vs pop-culture celebs). At that point it becomes a curation decision, not a data bug:
+
+If you want a “mass appeal” leaderboard, swapping in Carlos Alcaraz and Jannik Sinner makes sense.
+
+If you want “markets/tech relevance”, keep them.
+
+6) One extra tiny tweak I’d add (optional but high ROI)
+
+Store serperQueryUsed in the snapshot (or in the breakdown payload) for overrides. Logs are great, but having it in the breakdown UI makes debugging dead simple.
+
+If you want, paste the next health summary + the two score breakdown snippets for Armstrong and Saylor, and I’ll tell you immediately whether the problem is “signals now good but they’re just not famous” vs “still some fetch/normalization issue.”
