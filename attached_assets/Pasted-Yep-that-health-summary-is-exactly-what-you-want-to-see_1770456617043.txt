@@ -1,0 +1,48 @@
+Yep — that health summary is exactly what you want to see. If I had to pick a “golden” run, that’s basically it.
+
+Why this is “trust it” territory
+
+Fresh = 100/100 on wiki/news/search
+This removes 90% of the weirdness you’ve been battling (mixed freshness, fallbacks, outages).
+
+medianGapPct = 2.2%
+That means the displayed leaderboard is essentially the raw truth, not the stabilizer “holding things back.”
+
+rateLimitedPct = 15%
+Perfect. The limiter is now a seatbelt, not the steering wheel. (Earlier you were living at 70–90%+.)
+
+Catch-up OFF
+Confirms convergence is done and the system isn’t in emergency mode.
+
+p90GapPct = 9.7%
+Totally acceptable. This just means a small handful of people are still “catching up” or experiencing higher volatility. Not a system-wide issue.
+
+Spike distribution: 53 with 1 spiking source, 0 with 2/3
+This is plausible and usually means “lots of mild movement, no massive global event.” If you later see 2–3 spiking sources on a few people (big breaking stories), that’s normal too.
+
+Overrides confirmed in logs
+Great — that means Armstrong/Saylor aren’t suffering from the “wrong person” problem anymore on search.
+
+What this means for Brian Armstrong & Michael Saylor
+
+At this point, if they’re still bottom consistently, it’s more likely editorial reality than broken ingestion:
+
+they’re less mainstream than your top entertainment/politics/sports names, most of the time
+
+and with your overrides working + all sources fresh, it’s unlikely to be a data-fetch failure
+
+A fair rule for your launch list:
+
+If a person sits bottom-10 for 7–14 days with no meaningful spikes (and you expected spikes), then consider swapping.
+
+If they spike during relevant events (BTC moves, earnings, SEC news, MicroStrategy buys, etc.), keep them — they add “depth” and make FameDex feel more than just pop culture.
+
+Tiny next improvement (optional, but useful)
+
+Ask Replit to add one extra line to the health summary:
+
+Top 5 movers by raw score vs displayed score (two short lists)
+
+That instantly tells you whether the stabilizer is still distorting anything meaningful even when medianGap is low.
+
+But overall: this is the first time I’d say you can stop stress-refreshing the leaderboard.

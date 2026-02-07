@@ -1,0 +1,60 @@
+This is a good build, and the reasoning is mostly right. A couple of nuances so you don’t accidentally “fix the sawtooth” by hiding real movement:
+
+What they did that’s 100% correct
+1) Chart fix: move to ISO timestamps + smarter tick formatting
+
+✅ This is the right approach. If you plot time strings (“09:00 AM”) you’ll always get confusing repeats. Using an ISO timestamp as the x value, then formatting it on the client per range, is the correct architecture.
+
+Also good: adding a “date+time” label at midnight crossings so you can visually see the boundary.
+
+The Wikipedia change: good intent, but watch the tradeoff
+
+Replit’s “use 7-day avg for wiki velocity normalization” will remove the daily cliff-edge, but it also makes wiki less responsive as a velocity signal (because 7-day avg barely moves hour to hour).
+
+Whether that’s correct depends on what you want wiki to represent:
+
+If wiki is “mass/baseline fame”
+
+Then ✅ yes — wiki should primarily live in mass, and should not create hour-to-hour momentum swings.
+
+If you want wiki to also contribute to “velocity”
+
+Then I’d prefer this instead of 7-day avg:
+
+Fetch hourly Wikipedia pageviews and compute a rolling 24h sum (or rolling 6h/12h) yourself.
+
+That gives you a true velocity-like wiki signal without daily resets.
+
+So: their change is a solid “ship now” fix to eliminate artifacts, but later you’ll probably want hourly wiki if you want wiki to meaningfully affect momentum.
+
+One more thing to sanity check (important)
+
+If your Wiki source is “yesterday total,” switching to 7-day avg for velocity will dramatically reduce the chance wiki drives spikes. That’s fine, but make sure:
+
+spike detection thresholds for wiki still make sense, and
+
+your velocity mix isn’t now basically “news + search only” (which may be exactly what you want).
+
+My recommended “next 2 checks” (quick)
+
+After the next ingest, open Trump score breakdown and confirm:
+
+wiki contribution is smoother,
+
+sawtooth is reduced,
+
+and the remaining ramps correspond to real news/search changes or source health flips.
+
+Look at the health summary for a couple of runs:
+
+medianGapPct should keep trending down
+
+rateLimitedPct should ideally be under ~25–35% steady-state (higher = still “frozen-ish”)
+
+Bottom line
+
+Chart fix: perfect.
+
+Wiki smoothing: good pragmatic fix to remove fake sawtooth, but long-term the best solution is hourly wiki + rolling windows if you want wiki to behave like velocity.
+
+If you share one updated 1D chart screenshot after the next ingest, I can tell you immediately whether the remaining pattern is now “normal stabilizer behavior” or still an artifact (source flips / caching).

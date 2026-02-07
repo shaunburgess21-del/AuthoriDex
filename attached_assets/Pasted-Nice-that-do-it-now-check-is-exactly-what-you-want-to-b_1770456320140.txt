@@ -1,0 +1,72 @@
+Nice — that “do it now” check is exactly what you want to be doing, and based on what Replit reported, this is the first time in your whole saga where the system looks genuinely boringly healthy.
+
+What the latest results imply (in plain English)
+
+1) Catch-up mode OFF is a big green flag
+If catch-up exited cleanly, it means the engine believes the displayed (EMA) scores have converged close enough to raw scores. That usually correlates with:
+
+medianGapPct back in a sane range
+
+rateLimitedPct no longer “freezing” the leaderboard
+
+If you keep seeing it flip back on repeatedly, that’s when you worry again (data instability or too-tight caps).
+
+2) The sawtooth being gone + “smooth ramp” = the correct kind of movement
+A smooth ramp is what you expect from EMA convergence, especially after an outage / bug period. The previous sawtooth pattern was “system artifact” behavior. This new curve is “stabilizer doing its job” behavior.
+
+3) Wiki stepping didn’t disturb velocity
+That’s the whole point of the change. If wiki updates daily and you treat it like an hourly velocity input, it will create fake momentum. Using 7-day avg for the wiki velocity normalization basically neutralizes the midnight cliff.
+
+So: ✅ the design tradeoff is working as intended.
+
+Do I believe the Top 10 they listed is “real”?
+
+It’s “real” in the sense that:
+
+Sources are healthy
+
+No source-flip weight redistribution (you removed that)
+
+No table wipe issues
+
+No lock issues
+
+No cache TTL corruption
+
+Catch-up already finished
+
+So the ranking should be internally consistent.
+
+But “real” also depends on who your 100 tracked people are and whether news/search are correctly capturing the right entity (your new overrides help here). For example, if your set has a lot of music/US politics/tech, it’s not crazy that Bad Bunny, Trump, Musk, etc sit high.
+
+The one thing I’d still verify (quick and decisive)
+
+Ask Replit to paste the latest [HEALTH SUMMARY] line(s) for the last run and the previous run.
+
+You want to eyeball 4 fields:
+
+sources all OK
+
+fresh counts high (close to 100/100)
+
+medianGapPct ideally < ~5%
+
+rateLimitedPct ideally < ~25–35% (doesn’t need to be tiny, just not 70–90% again)
+
+If those look good across 2–3 runs, you’re finally in “trust it” territory.
+
+On Brian Armstrong / Michael Saylor being bottom
+
+Now that you’ve implemented searchQueryOverride and keyed Serper results by person.id, you can distinguish:
+
+They’re genuinely not trending (likely much of the time), vs
+
+They’re undercounted due to ambiguous queries (which the override should fix)
+
+The clean test:
+
+compare their raw inputs vs a similarly “niche” person you know is working
+
+check whether their search/news values are consistently near the bottom even when you’d expect spikes (e.g., BTC moves, MicroStrategy news)
+
+If they’re always flat even during obvious news cycles, it’s still a query/entity issue. If they spike when expected but still rank low, they may just be less mainstream than your other celebs — and swapping in Alcaraz/Sinner would make your top 100 “feel” more recognizably popular.
