@@ -95,7 +95,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     }
 
     let serperData = await fetchSerperBatch(
-      people.map(p => ({ name: p.name, searchQueryOverride: p.searchQueryOverride })),
+      people.map(p => ({ id: p.id, name: p.name, searchQueryOverride: p.searchQueryOverride })),
       2,
       1000
     );
@@ -259,7 +259,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     
     for (const person of people) {
       const news = gdeltData.get(person.id);
-      const serper = serperData.get(person.name.toLowerCase());
+      const serper = serperData.get(person.id);
       currentNewsValues.set(person.id, news?.articleCount24h ?? 0);
       currentSearchValues.set(person.id, serper?.searchVolume ?? 0);
     }
@@ -320,7 +320,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
       try {
         const wiki = wikiData.get(person.id);
         const news = gdeltData.get(person.id);
-        const serper = serperData.get(person.name.toLowerCase());
+        const serper = serperData.get(person.id);
         const mostRecent = mostRecentMap.get(person.id);
         // NOTE (Jan 2026): X API disabled for trend scoring - kept for Platform Insights
         // const xMetrics = person.xHandle 

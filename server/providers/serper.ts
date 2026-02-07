@@ -182,7 +182,7 @@ export async function fetchSerperData(name: string, searchQueryOverride?: string
 }
 
 export async function fetchSerperBatch(
-  people: Array<{ name: string; searchQueryOverride?: string | null }>,
+  people: Array<{ id: string; name: string; searchQueryOverride?: string | null }>,
   concurrency: number = 2,
   delayMs: number = 500
 ): Promise<Map<string, SerperResult>> {
@@ -196,9 +196,12 @@ export async function fetchSerperBatch(
       if (index > 0) {
         await delay(delayMs);
       }
+      if (person.searchQueryOverride) {
+        console.log(`[Serper] Using override query for ${person.name}: "${person.searchQueryOverride}"`);
+      }
       const result = await fetchSerperData(person.name, person.searchQueryOverride);
       if (result) {
-        results.set(person.name.toLowerCase(), result);
+        results.set(person.id, result);
         console.log(`[Serper] Successfully fetched data for ${person.name}`);
       }
     })
