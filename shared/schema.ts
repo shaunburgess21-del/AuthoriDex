@@ -44,6 +44,7 @@ export const trackedPeople = pgTable("tracked_people", {
   xHandle: text("x_handle"),
   instagramHandle: text("instagram_handle"),
   tiktokHandle: text("tiktok_handle"),
+  searchQueryOverride: text("search_query_override"),
   status: text("status").notNull().default("main_leaderboard"),
 });
 
