@@ -1,10 +1,58 @@
 import { db } from "../db";
 import { apiCache } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, gt } from "drizzle-orm";
 import pLimit from "p-limit";
 
 const SERPER_API_KEY = process.env.SERPER_API_KEY;
 const SERPER_BASE_URL = "https://google.serper.dev/search";
+
+async function getCachedResponse(cacheKey: string): Promise<{ responseData: string; fetchedAt: Date } | null> {
+  const cached = await db.query.apiCache.findFirst({
+    where: and(
+      eq(apiCache.cacheKey, cacheKey),
+      gt(apiCache.expiresAt, new Date())
+    ),
+  });
+
+  if (!cached) return null;
+
+  if (cached.expiresAt < cached.fetchedAt) {
+    console.warn(`[CACHE_INVALID] ${cacheKey}: expiresAt (${cached.expiresAt.toISOString()}) < fetchedAt (${cached.fetchedAt.toISOString()}), treating as stale`);
+    return null;
+  }
+
+  return { responseData: cached.responseData, fetchedAt: cached.fetchedAt };
+}
+
+async function setCachedResponse(
+  cacheKey: string,
+  provider: string,
+  data: string,
+  ttlHours: number
+): Promise<void> {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + ttlHours * 60 * 60 * 1000);
+
+  if (expiresAt <= now) {
+    console.error(`[CACHE_GUARD] Refusing to write cache for ${cacheKey}: expiresAt <= now (ttlHours=${ttlHours})`);
+    return;
+  }
+
+  await db.insert(apiCache).values({
+    cacheKey,
+    provider,
+    responseData: data,
+    fetchedAt: now,
+    expiresAt,
+  }).onConflictDoUpdate({
+    target: apiCache.cacheKey,
+    set: {
+      responseData: data,
+      fetchedAt: now,
+      expiresAt,
+    },
+  });
+}
 
 interface SerperResult {
   searchVolume: number;
@@ -33,18 +81,16 @@ export async function fetchSerperData(name: string): Promise<SerperResult | null
   const CACHE_TTL_HOURS = 12;
 
   try {
-    const [cached] = await db
+    const cached = await getCachedResponse(cacheKey);
+    if (cached) {
+      return JSON.parse(cached.responseData);
+    }
+
+    const [rawCached] = await db
       .select()
       .from(apiCache)
       .where(eq(apiCache.cacheKey, cacheKey))
       .limit(1);
-
-    if (cached) {
-      const cacheAge = Date.now() - new Date(cached.fetchedAt).getTime();
-      if (cacheAge < CACHE_TTL_HOURS * 60 * 60 * 1000) {
-        return JSON.parse(cached.responseData);
-      }
-    }
 
     const response = await fetch(SERPER_BASE_URL, {
       method: "POST",
@@ -113,8 +159,8 @@ export async function fetchSerperData(name: string): Promise<SerperResult | null
     // CACHE VALIDITY GATE
     // Prevent caching garbage data when there's a suspicious drop.
     // If new value drops >70% from cached value, refuse to update cache.
-    if (cached) {
-      const cachedResult = JSON.parse(cached.responseData) as SerperResult;
+    if (rawCached) {
+      const cachedResult = JSON.parse(rawCached.responseData) as SerperResult;
       const dropPercent = cachedResult.searchVolume > 0 
         ? (1 - searchVolume / cachedResult.searchVolume) * 100 
         : 0;
@@ -126,23 +172,7 @@ export async function fetchSerperData(name: string): Promise<SerperResult | null
       }
     }
 
-    if (cached) {
-      await db
-        .update(apiCache)
-        .set({
-          responseData: JSON.stringify(result),
-          fetchedAt: new Date(),
-        })
-        .where(eq(apiCache.cacheKey, cacheKey));
-    } else {
-      await db.insert(apiCache).values({
-        cacheKey,
-        provider: "serper",
-        responseData: JSON.stringify(result),
-        fetchedAt: new Date(),
-        expiresAt: new Date(Date.now() + CACHE_TTL_HOURS * 60 * 60 * 1000),
-      });
-    }
+    await setCachedResponse(cacheKey, "serper", JSON.stringify(result), CACHE_TTL_HOURS);
 
     return result;
   } catch (error) {
@@ -278,18 +308,9 @@ export async function fetchTrendingNewsContext(name: string): Promise<TrendingNe
   const CACHE_TTL_HOURS = 6; // Cache trending context for 6 hours
 
   try {
-    // Check cache first
-    const [cached] = await db
-      .select()
-      .from(apiCache)
-      .where(eq(apiCache.cacheKey, cacheKey))
-      .limit(1);
-
+    const cached = await getCachedResponse(cacheKey);
     if (cached) {
-      const cacheAge = Date.now() - new Date(cached.fetchedAt).getTime();
-      if (cacheAge < CACHE_TTL_HOURS * 60 * 60 * 1000) {
-        return JSON.parse(cached.responseData);
-      }
+      return JSON.parse(cached.responseData);
     }
 
     // Search for recent news about the person (last week)
@@ -334,24 +355,7 @@ export async function fetchTrendingNewsContext(name: string): Promise<TrendingNe
       fetchedAt: new Date(),
     };
 
-    // Cache the result
-    if (cached) {
-      await db
-        .update(apiCache)
-        .set({
-          responseData: JSON.stringify(result),
-          fetchedAt: new Date(),
-        })
-        .where(eq(apiCache.cacheKey, cacheKey));
-    } else {
-      await db.insert(apiCache).values({
-        cacheKey,
-        provider: "serper",
-        responseData: JSON.stringify(result),
-        fetchedAt: new Date(),
-        expiresAt: new Date(Date.now() + CACHE_TTL_HOURS * 60 * 60 * 1000),
-      });
-    }
+    await setCachedResponse(cacheKey, "serper", JSON.stringify(result), CACHE_TTL_HOURS);
 
     return result;
   } catch (error) {

@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { apiCache } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, gt } from "drizzle-orm";
 import pLimit from "p-limit";
 
 const X_API_KEY = process.env.X_API_KEY;
@@ -62,14 +62,14 @@ export async function fetchXData(handle: string): Promise<XMetrics | null> {
     const [cached] = await db
       .select()
       .from(apiCache)
-      .where(eq(apiCache.cacheKey, cacheKey))
+      .where(and(
+        eq(apiCache.cacheKey, cacheKey),
+        gt(apiCache.expiresAt, new Date())
+      ))
       .limit(1);
 
-    if (cached) {
-      const cacheAge = Date.now() - new Date(cached.fetchedAt).getTime();
-      if (cacheAge < CACHE_TTL_HOURS * 60 * 60 * 1000) {
-        return JSON.parse(cached.responseData);
-      }
+    if (cached && cached.expiresAt >= cached.fetchedAt) {
+      return JSON.parse(cached.responseData);
     }
 
     const query = encodeURIComponent(`@${cleanHandle} -is:retweet`);
@@ -127,23 +127,23 @@ export async function fetchXData(handle: string): Promise<XMetrics | null> {
       delta,
     };
 
-    if (cached) {
-      await db
-        .update(apiCache)
-        .set({
-          responseData: JSON.stringify(result),
-          fetchedAt: new Date(),
-        })
-        .where(eq(apiCache.cacheKey, cacheKey));
-    } else {
-      await db.insert(apiCache).values({
-        cacheKey,
-        provider: "x",
+    const cacheNow = new Date();
+    const cacheExpiresAt = new Date(cacheNow.getTime() + CACHE_TTL_HOURS * 60 * 60 * 1000);
+
+    await db.insert(apiCache).values({
+      cacheKey,
+      provider: "x",
+      responseData: JSON.stringify(result),
+      fetchedAt: cacheNow,
+      expiresAt: cacheExpiresAt,
+    }).onConflictDoUpdate({
+      target: apiCache.cacheKey,
+      set: {
         responseData: JSON.stringify(result),
-        fetchedAt: new Date(),
-        expiresAt: new Date(Date.now() + CACHE_TTL_HOURS * 60 * 60 * 1000),
-      });
-    }
+        fetchedAt: cacheNow,
+        expiresAt: cacheExpiresAt,
+      },
+    });
 
     return result;
   } catch (error) {
