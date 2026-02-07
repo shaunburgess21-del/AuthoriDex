@@ -792,6 +792,25 @@ export async function runDataIngestion(): Promise<IngestResult> {
       },
     };
     
+    const stabilizerGaps = scoreResults.map(r => {
+      const raw = r.score.rawFameIndex;
+      const displayed = r.score.fameIndex;
+      const gapPct = displayed > 0 ? ((raw - displayed) / displayed) * 100 : 0;
+      return { name: r.person.name, raw: Math.round(raw), displayed: Math.round(displayed), gapPct };
+    });
+
+    const heldBack = stabilizerGaps.filter(g => g.gapPct > 0).sort((a, b) => b.gapPct - a.gapPct).slice(0, 5);
+    const proppedUp = stabilizerGaps.filter(g => g.gapPct < 0).sort((a, b) => a.gapPct - b.gapPct).slice(0, 5);
+
+    console.log(`[Stabilizer Gaps] Top ${heldBack.length} held back (raw > displayed):`);
+    for (const g of heldBack) {
+      console.log(`  ${g.name}: raw=${g.raw.toLocaleString()} displayed=${g.displayed.toLocaleString()} gap=+${g.gapPct.toFixed(1)}%`);
+    }
+    console.log(`[Stabilizer Gaps] Top ${proppedUp.length} propped up (raw < displayed):`);
+    for (const g of proppedUp) {
+      console.log(`  ${g.name}: raw=${g.raw.toLocaleString()} displayed=${g.displayed.toLocaleString()} gap=${g.gapPct.toFixed(1)}%`);
+    }
+
     console.log(`[HEALTH SUMMARY] ${JSON.stringify(healthSummary)}`);
     // ═══════════════════════════════════════════════════════════════════════════
 
