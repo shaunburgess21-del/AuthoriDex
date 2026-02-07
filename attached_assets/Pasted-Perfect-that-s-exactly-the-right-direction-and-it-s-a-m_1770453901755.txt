@@ -1,0 +1,82 @@
+Perfect — that’s exactly the right direction, and it’s a meaningful quality upgrade (not just another “band-aid”).
+
+A couple of important notes + a quick “make sure it actually works” checklist:
+
+1) Good news: you already had the Wikipedia side
+
+Replit is right that wikiSlug already gives you canonical identity for Wikipedia. That’s the biggest win for disambiguation on the “mass” side.
+
+So the main new value here is Serper disambiguation via searchQueryOverride.
+
+2) One critical thing to double-check: mapping results back correctly
+
+Because Serper returns a Map keyed by whatever query string you used, you must ensure the ingest step looks up the result using the same key.
+
+What can go wrong:
+
+You fetch with "Brian Armstrong Coinbase CEO"
+
+But later you lookup with person.name.toLowerCase() ("brian armstrong")
+→ result miss → search score becomes 0/fallback → override “does nothing”.
+
+Best practice: in the fetchBatch, use an internal stable key like person_id, not query strings.
+
+Quick fix pattern:
+
+Build an array of { personId, query }
+
+Fetch all queries
+
+Return a Map<personId, SerperResult> (or object keyed by personId)
+
+In ingest, read by personId, not by name/query.
+
+If Replit didn’t do that and is still using .get(person.name.toLowerCase()), you may see no change for Armstrong/Saylor.
+
+3) Seed strings: make them valid + consistent
+
+Replit wrote:
+
+Brian Armstrong: "Brian Armstrong" Coinbase CEO
+
+That has a weird quote placement. It should be something like:
+
+Brian Armstrong Coinbase CEO
+
+Michael Saylor MicroStrategy Bitcoin
+
+Not a show-stopper, but remove odd punctuation so you don’t accidentally degrade search quality.
+
+4) How to confirm the overrides are working (5-minute test)
+
+After the next ingest run:
+
+Open your Score Breakdown modal for Brian Armstrong.
+
+Confirm you see:
+
+the query used (you might need to add “queryUsed” to breakdown if it’s not shown)
+
+search_volume is non-zero and looks plausible (on your 0–100 scale)
+
+Compare:
+
+Brian’s search_volume before vs after override
+
+Saylor’s before vs after
+
+In logs / health summary:
+
+fresh.search should stay ~100
+
+no unusual fallbacks.search spike
+
+If search_volume stays stuck near 0 while other celebs have normal values, that’s almost always a mapping miss.
+
+5) Next small upgrade (high ROI)
+
+Add a second optional field:
+
+newsQueryOverride
+
+Even if you don’t fully swap off GDELT yet, it helps a lot when a person’s name is ambiguous in news too
