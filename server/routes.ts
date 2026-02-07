@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
 import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
-import { eq, desc, and, sql, count, gte, ilike, SQL } from "drizzle-orm";
+import { eq, desc, and, gt, sql, count, gte, ilike, SQL } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
@@ -1966,14 +1966,14 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       const [cached] = await db
         .select()
         .from(apiCache)
-        .where(eq(apiCache.cacheKey, cacheKey))
+        .where(and(
+          eq(apiCache.cacheKey, cacheKey),
+          gt(apiCache.expiresAt, new Date())
+        ))
         .limit(1);
       
-      if (cached) {
-        const cacheAge = Date.now() - new Date(cached.fetchedAt).getTime();
-        if (cacheAge < CACHE_TTL_HOURS * 60 * 60 * 1000) {
-          return res.json(JSON.parse(cached.responseData));
-        }
+      if (cached && cached.expiresAt >= cached.fetchedAt) {
+        return res.json(JSON.parse(cached.responseData));
       }
       
       // Fetch recent news via Serper
@@ -2038,24 +2038,23 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         fetchedAt: new Date(),
       };
       
-      // Cache the result
-      if (cached) {
-        await db
-          .update(apiCache)
-          .set({
-            responseData: JSON.stringify(result),
-            fetchedAt: new Date(),
-          })
-          .where(eq(apiCache.cacheKey, cacheKey));
-      } else {
-        await db.insert(apiCache).values({
-          cacheKey,
-          provider: "ai_trending",
+      const cacheNow = new Date();
+      const cacheExpiresAt = new Date(cacheNow.getTime() + CACHE_TTL_HOURS * 60 * 60 * 1000);
+      
+      await db.insert(apiCache).values({
+        cacheKey,
+        provider: "ai_trending",
+        responseData: JSON.stringify(result),
+        fetchedAt: cacheNow,
+        expiresAt: cacheExpiresAt,
+      }).onConflictDoUpdate({
+        target: apiCache.cacheKey,
+        set: {
           responseData: JSON.stringify(result),
-          fetchedAt: new Date(),
-          expiresAt: new Date(Date.now() + CACHE_TTL_HOURS * 60 * 60 * 1000),
-        });
-      }
+          fetchedAt: cacheNow,
+          expiresAt: cacheExpiresAt,
+        },
+      });
       
       res.json(result);
     } catch (error: any) {
