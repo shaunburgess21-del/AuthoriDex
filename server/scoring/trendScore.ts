@@ -150,7 +150,10 @@ export function computeTrendScore(
   // =========================================================================
   
   // Get raw values for normalization (use pageviews/counts, not deltas)
-  const wikiRaw = inputs.wikiPageviews || 0;
+  // Wiki: use 7-day average instead of raw 24h to prevent daily boundary cliffs.
+  // Wiki data is fetched once per day (yesterday's total), so raw 24h creates step-changes
+  // at midnight UTC. The 7-day average smooths this into a gradually-changing signal.
+  const wikiRaw = inputs.wikiPageviews7dAvg > 0 ? inputs.wikiPageviews7dAvg : (inputs.wikiPageviews || 0);
   const newsRaw = inputs.newsCount ?? 0;
   const searchRaw = inputs.searchVolume ?? 0;
   

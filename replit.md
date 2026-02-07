@@ -52,6 +52,7 @@ Preferred communication style: Simple, everyday language.
     - **Composite Search Activity Score** (Feb 2026): Serper parsing no longer relies on unreliable `totalResults` field. Instead uses a composite score from organic count, knowledge graph presence, news results, related searches, people also ask, and sitelinks.
     - **Cache Validity Gate** (Feb 2026): Serper results with suspiciously low scores (< 10) won't overwrite valid cached data when the drop exceeds 70%. Prevents hours of cached garbage data.
     - **Search Query Override** (Feb 2026): `searchQueryOverride` column on `tracked_people` allows admin to specify a custom Serper search query for disambiguating common names (e.g., `"Brian Armstrong" Coinbase CEO`). The `wikiSlug` column already handles Wikipedia disambiguation. Both editable from Admin Dashboard celebrity management.
+    - **Wiki Velocity Smoothing** (Feb 2026): Wiki velocity normalization uses 7-day rolling average (`averageDaily7d`) instead of raw `pageviews24h` to eliminate daily boundary cliff-edges at midnight UTC. Mass already used 7d avg; now velocity does too.
 - **Data Jobs**: Ingestion runs hourly, with EMA smoothing applied to `fameIndex` for smooth trend curves.
 - **Trend Context Service**: Provides "Why Trending" explanations for top 10 celebrities, categorizing trends, detecting primary/secondary drivers, and tracking data freshness.
 

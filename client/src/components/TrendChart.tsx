@@ -39,24 +39,56 @@ interface CustomTooltipProps {
   timeRange: TimeRange;
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function toTimeStr(d: Date): string {
+  const hours = d.getHours();
+  const minutes = d.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const h12 = hours % 12 || 12;
+  return `${h12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+}
+
+function formatTimestampForAxis(isoString: string, timeRange: TimeRange, data: HistoryDataPoint[]): string {
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return isoString;
+
+  if (timeRange === "1D") {
+    const firstDate = data.length > 0 ? new Date(data[0].timestamp).getDate() : d.getDate();
+    if (d.getDate() !== firstDate) {
+      return `${MONTHS[d.getMonth()]} ${d.getDate()} ${toTimeStr(d)}`;
+    }
+    return toTimeStr(d);
+  } else if (timeRange === "7D" || timeRange === "30D") {
+    return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  } else {
+    return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  }
+}
+
+function formatTooltipDate(isoString: string, timeRange: TimeRange): string {
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return isoString;
+
+  if (timeRange === "1D" || timeRange === "7D") {
+    return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${toTimeStr(d)}`;
+  }
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
 function CustomTooltip({ active, payload, startScore, timeRange }: CustomTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   
   const currentScore = payload[0].value;
   const dataPoint = payload[0].payload;
-  const delta = ((currentScore - startScore) / startScore) * 100;
+  const delta = startScore > 0 ? ((currentScore - startScore) / startScore) * 100 : 0;
   const isPositive = delta >= 0;
-  
-  const formatDate = () => {
-    if (timeRange === "1D") {
-      return dataPoint.time || dataPoint.date;
-    }
-    return dataPoint.date;
-  };
   
   return (
     <div className="bg-card border border-border rounded-lg p-3 shadow-xl">
-      <p className="text-xs text-muted-foreground mb-1">{formatDate()}</p>
+      <p className="text-xs text-muted-foreground mb-1">
+        {formatTooltipDate(dataPoint.timestamp, timeRange)}
+      </p>
       <p className="font-mono font-bold text-lg">
         {currentScore.toLocaleString()}
       </p>
@@ -88,33 +120,9 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
     return value.toString();
   };
 
-  const formatXAxisTick = useCallback((value: string, index: number) => {
-    if (!historyData) return value;
-    
-    const dataPoint = historyData.find(d => d.date === value || d.time === value);
-    if (!dataPoint) return value;
-
-    if (timeRange === "1D") {
-      return dataPoint.time || value;
-    } else if (timeRange === "7D" || timeRange === "30D") {
-      const parts = value.split('/');
-      if (parts.length >= 2) {
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const monthIndex = parseInt(parts[0], 10) - 1;
-        const day = parts[1];
-        return `${day} ${months[monthIndex] || ''}`;
-      }
-      return value;
-    } else {
-      const parts = value.split('/');
-      if (parts.length >= 2) {
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const monthIndex = parseInt(parts[0], 10) - 1;
-        return months[monthIndex] || value;
-      }
-      return value;
-    }
-  }, [historyData, timeRange]);
+  const formatXAxisTick = useCallback((value: string) => {
+    return formatTimestampForAxis(value, timeRange, historyData || []);
+  }, [timeRange, historyData]);
 
   const getTickInterval = useCallback(() => {
     if (!historyData) return 0;
@@ -123,7 +131,7 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
     if (typeof window !== 'undefined' && window.innerWidth < 640) {
       return Math.max(1, Math.floor(dataLength / 4));
     }
-    return Math.max(1, Math.floor(dataLength / 7));
+    return Math.max(1, Math.floor(dataLength / 6));
   }, [historyData]);
 
   const handleMouseMove = useCallback((state: any) => {
@@ -191,7 +199,7 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
                   strokeOpacity={0.15}
                 />
                 <XAxis 
-                  dataKey="date" 
+                  dataKey="timestamp" 
                   className="text-xs"
                   tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
                   tickFormatter={formatXAxisTick}
@@ -218,7 +226,7 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
                 />
                 {activeIndex !== null && historyData[activeIndex] && (
                   <ReferenceLine
-                    x={historyData[activeIndex].date}
+                    x={historyData[activeIndex].timestamp}
                     stroke="hsl(var(--primary))"
                     strokeWidth={1}
                     strokeDasharray="4 4"
