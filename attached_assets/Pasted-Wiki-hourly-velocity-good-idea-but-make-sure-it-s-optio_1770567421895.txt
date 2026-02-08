@@ -1,0 +1,51 @@
+Wiki hourly velocity: good idea, but make sure it’s optional + measured. Don’t “just switch” the engine; add it behind a flag and log both old/new wiki-velocity side-by-side for a few runs. Also confirm Wikimedia hourly endpoint/limits are OK.
+
+Armstrong/Saylor verification: I agree this is the highest ROI backend-only item. But rather than hardcoding an “expectedSpike date”, implement a reusable entity-diagnostic mode you can run for any person (top result title/domain + percentiles + raw inputs) and then test a couple known events manually.
+
+Minimal snapshot diagnostics: agree, but keep it truly minimal and versioned (e.g., diagnosticsVersion: 1) so future scoring changes don’t make old fields ambiguous.
+
+Everything else (guardrail “escape hatch”, extra recalibration changes) can wait until you see real evidence you need it.
+
+Final “single prompt” to send to Replit (backend-only)
+
+Copy/paste this:
+
+Backend-only next improvements (no user UI work):
+
+1) Entity resolution verification for low performers (start with Brian Armstrong + Michael Saylor)
+
+Add a small diagnostic function/log mode that outputs, per person:
+
+personId, name
+
+searchQueryUsed (including override) and top 1–3 Serper result titles + domains (so we can confirm the entity matches)
+
+wiki/news/search raw inputs and percentiles for the run
+
+a simple conclusion flag like ENTITY_MATCH_OK vs POSSIBLE_MISMATCH
+
+Goal: determine if they’re truly “bottom” or if the engine is tracking the wrong entity.
+
+2) Add minimal per-snapshot diagnostics (storage-light, versioned)
+
+In trend_snapshots (or a small JSON column), store only what we can’t reliably reconstruct later:
+
+diagnosticsVersion: 1
+
+raw inputs: rawWikiPageviews, rawNewsCount, rawSearchVolume
+
+freshness flags/counts: wikiFresh, newsFresh, searchFresh (or freshness age)
+
+stabilizer info: wasRateLimited, appliedCapPct, appliedAlpha, spikingSourceCount
+
+Keep it minimal; do not store full percentiles/normalized internals.
+
+3) Wikipedia hourly velocity (feature-flagged + A/B logged)
+
+Add optional fetch of hourly Wikipedia pageviews for last 24h (hour buckets), compute a rolling window (e.g., 6h or 12h) for a true wiki velocity signal.
+
+Keep current behavior as default; add USE_HOURLY_WIKI_VELOCITY=false flag.
+
+For a week, log both values in health logs (wikiVelocity_old vs wikiVelocity_hourly) without changing ranking, then optionally enable.
+
+Confirm Wikimedia hourly granularity endpoint + rate limits/caching strategy before rolling out.
