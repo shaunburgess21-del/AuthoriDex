@@ -1,7 +1,7 @@
 # FameDex - Real-Time Fame Tracking Platform
 
 ## Overview
-FameDex is a real-time platform designed to track trending celebrities and influencers globally. It aggregates data from various sources to provide live trend rankings, unified trend scores, and percentage changes. The platform aims to be a leading tool for analyzing global fame, offering search, filter, sort, and detailed analytics capabilities. It is inspired by financial tracking and social trending interfaces.
+FameDex is a real-time platform designed to track trending celebrities and influencers globally. It aggregates data from various sources to provide live trend rankings, unified trend scores, and percentage changes. The platform aims to be a leading tool for analyzing global fame, offering search, filter, sort, and detailed analytics capabilities, inspired by financial tracking and social trending interfaces. It includes features like prediction markets and gamified user interactions.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -10,94 +10,51 @@ Preferred communication style: Simple, everyday language.
 
 ### Frontend
 - **Technology Stack**: React 18 with TypeScript, Vite, Wouter, TanStack Query, Tailwind CSS.
-- **UI/UX**: Radix UI and shadcn/ui (New York style) with a custom dark/light theme using HSL color tokens and a glassy neon aesthetic. It features a mobile-first responsive design.
-- **Interactive Elements**: Expandable leaderboard rows, a VotingModal with "Vote Next" functionality, and square avatars with rounded corners.
-- **Key Features**: Global Favorites Filter, Custom Topic Support, unified "+ Suggest" buttons, and a Bloomberg-style Compare Momentum Graph with time range toggles and high-contrast colors.
+- **UI/UX**: Radix UI and shadcn/ui (New York style) with custom dark/light themes, HSL color tokens, and a glassy neon aesthetic. It features a mobile-first responsive design.
+- **Key Features**: Global Favorites Filter, Custom Topic Support, "+ Suggest" buttons, Bloomberg-style Compare Momentum Graph, and interactive elements like expandable leaderboard rows and a VotingModal.
 - **Page Structure**:
-    - **Home Page**: Hero Section, Trend Widgets, Prediction Markets Teaser, filterable/sortable Leaderboard.
-    - **Vote Page**: "Community Town Hall" theme with Face-Offs, Trending Polls, Induction Queue, and Curate Profile sections.
-    - **Predict Page**: Parimutuel prediction markets with a "test mode" and various market types.
-    - **Me Page**: User account dashboard with XP, credits, rank, votes, and predictions.
-    - **Public Profiles**: User profiles displaying XP progress and voting statistics, with privacy controls.
-    - **Admin Panel**: Protected routes for site management, including celebrity, game, moderation, settlement, user, and system tool management.
+    - **Core Pages**: Home (hero, trend widgets, leaderboard), Vote (community town hall, face-offs, polls), Predict (parimutuel markets), Me (user dashboard), Public Profiles.
+    - **Admin Panel**: Protected routes for comprehensive site management (celebrities, users, moderation, system tools).
 
 ### Backend
 - **Technology Stack**: Node.js with Express.js, TypeScript, Drizzle ORM.
-- **API Design**: RESTful endpoints with query parameters.
+- **API Design**: RESTful endpoints.
 - **Scoring Engine**:
     - **Fame Score**: A primary UI score (0-1,000,000) derived from a normalized trend score.
-    - **Fixed Weights**: Mass (40%) and Velocity (60%) with no dynamic redistribution.
-    - **Active Velocity Sources**: Wikipedia (25%), News (35%), Search (40%). The X/Twitter API is not used for trend scoring due to cost constraints.
-    - **Per-Source Normalization**: Each source is independently normalized using `log1p` compression and percentile ranking against 7-day population statistics.
-    - **Score Stabilization**: A multi-layered approach prevents wild score fluctuations using dynamic rate limiting based on source corroboration (max 8% steady-state, 12% for 1 source spiking, 20% for 2 sources, 35% for 3 sources), robust spike detection, and dynamic EMA alpha (0.12 / 0.15 / 0.22).
-    - **Auto Catch-Up Mode** (Feb 2026): Three-band gap-driven rate boosting replaces binary catch-up. Bands: OFF (medianGap <6%), SOFT (6-10%, 1.4x caps / 1.2x alpha), FULL (>10%, 2.5x caps / 1.8x alpha). Can escalate SOFT→FULL or de-escalate FULL→SOFT based on medianGapPct. Exits when medianGap <4% for 2 consecutive runs. State is **DB-persisted** (in `api_cache` with key `system:catchup_state`) so restarts don't reset the exit streak counter.
-    - **Convergence Metrics** (Feb 2026): Health summary now includes `medianGapPct`, `p90GapPct`, `catchUpMode` (OFF/SOFT/FULL), `catchUpExitStreak`, `catchUpEnteredAt`, `capsUsed` (effective caps with multipliers), and `alphaUsed` (effective alphas with multipliers). Healthy targets: medianGapPct < 5%, rateLimitedPct < 25%.
-    - **Graceful Degradation**: Handles external API failures by carrying forward last known values and detecting "suspicious drops."
-    - **Fixed Velocity Weights** (Feb 2026 stability fix): Weights are ALWAYS fixed at Wiki 25%, News 35%, Search 40% - even during API outages. Weight redistribution during outages was causing population-wide rank instability.
-    - **Recalibration Mode**: DISABLED (replaced by Auto Catch-Up Mode). Previously allowed higher rate caps after algorithm changes, but was time-based with no automatic exit condition.
-    - **Coverage Gate** (Feb 2026): If an external API returns fresh data for <70% of celebrities, the entire run treats that source as degraded and uses previous values for everyone. This ensures population consistency - either most people get fresh data, or nobody does that hour. Prevents "mixed freshness" ranking distortions.
-    - **Mock Data Safeguard** (Feb 2026): Multi-layer protection against mock data corrupting the database:
-      1. **SINGLE AUTHORITATIVE WRITER**: ONLY `server/jobs/ingest.ts` writes to `trending_people`. This is the canonical truth.
-      2. **Quick-Score is PREVIEW-ONLY**: `server/jobs/quick-score.ts` computes scores for debugging/preview but does NOT write to DB.
-      3. **Storage Layer Guard**: `storage.updateTrendingPeople()` THROWS ERROR if avg fameIndex < 50,000 (real data is 100k-600k range).
-      4. **Ingest Guards**: Ingest validates avg fameIndex before writing and uses database transactions for atomicity.
-      5. **Row Count Validation**: Before committing, ingest verifies the inserted row count matches expected count. Mismatch triggers rollback.
-      6. **Advisory Lock**: Ingest acquires Postgres advisory lock (ID 12345) to prevent concurrent writes. If lock unavailable, job aborts.
-      7. **Deprecated Functions**: `getTrendingData()` in api-integrations.ts and all of `lunarcrush.ts` are marked DEPRECATED with console errors if called.
-      8. **Critical Architecture Rule**: ONLY ingest.ts writes to trending_people. Quick-score is for preview only. API endpoints NEVER write to trending_people.
-    - **Source Health State Machine**: Explicitly tracks the health of each data source (HEALTHY, DEGRADED, OUTAGE, RECOVERY). Used for logging/monitoring only - does NOT affect weight distribution.
-    - **Global-Zero Detection**: Requires >50% of celebrities with near-zero values before triggering OUTAGE state (prevents false-positives from individual genuine drops).
-    - **Staleness Decay**: Fill-forwarded values gradually reduce over time: 100% (0-2h), 90→70% (2-4h), 70→50% (4-6h), 50→20% (6-12h), 20% floor (>12h).
-    - **Velocity Taper** (Feb 2026): When news/search signals are low, velocity contribution is tapered (not mass). Checks 2 signals: newsCount<5, searchVolume<100. Taper multipliers: 0 low=1.0, 1 low=0.85, 2 low=0.65. Mass stays stable as baseline fame; velocity collapses naturally when momentum fades.
-    - **Composite Search Activity Score** (Feb 2026): Serper parsing no longer relies on unreliable `totalResults` field. Instead uses a composite score from organic count, knowledge graph presence, news results, related searches, people also ask, and sitelinks.
-    - **Cache Validity Gate** (Feb 2026): Serper results with suspiciously low scores (< 10) won't overwrite valid cached data when the drop exceeds 70%. Prevents hours of cached garbage data.
-    - **Search Query Override** (Feb 2026): `searchQueryOverride` column on `tracked_people` allows admin to specify a custom Serper search query for disambiguating common names (e.g., `"Brian Armstrong" Coinbase CEO`). The `wikiSlug` column already handles Wikipedia disambiguation. Both editable from Admin Dashboard celebrity management.
-    - **Wiki Velocity Smoothing** (Feb 2026): Wiki velocity normalization uses 7-day rolling average (`averageDaily7d`) instead of raw `pageviews24h` to eliminate daily boundary cliff-edges at midnight UTC. Mass already used 7d avg; now velocity does too.
-    - **Snapshot Origin Tracking** (Feb 2026): `snapshot_origin` column on `trend_snapshots` tracks the source of each write (`ingest`, `preview`, `backfill`). All chart, stats, and normalization queries filter by `timestamp = date_trunc('hour', timestamp)` to exclude non-ingest pollution. Only `ingest.ts` writes to `trend_snapshots`.
-    - **Per-Snapshot Diagnostics** (Feb 2026): `diagnostics` JSONB column on `trend_snapshots` stores versioned debug data per snapshot (v:1). Captures: raw inputs (wiki/news/search before normalization), freshness flags (which sources returned live data vs fallback), and stabilizer state (rate limited, applied cap%, applied alpha, spiking source count, raw fame index). Minimal footprint — no percentiles or normalized internals stored (those can be reconstructed).
-    - **Entity Resolution Diagnostics** (Feb 2026): Admin tool in `server/diagnostics/entity-resolution.ts` that verifies Serper search results match the intended celebrity. Per-person output: search query used, top 3 result titles/domains, knowledge graph presence, raw inputs with percentile rankings, and a conclusion flag (ENTITY_MATCH_OK / POSSIBLE_MISMATCH / NO_DATA). Available as admin API endpoints (`GET /api/admin/diagnostics/entity/:personId`, `POST /api/admin/diagnostics/entity-batch`) and in the Admin Dashboard System Tools tab.
-    - **REQUIRE_DB_GUARDRAILS** (Feb 2026): Environment flag for production fail-closed mode. When set to `true`, ingest.ts aborts ALL writes if DB constraints (chk_snapshot_origin_values, chk_ingest_hour_truncated) are missing. Check is at the very top of `runDataIngestion()` before any API calls. Uses `server/guardrails.ts` shared module to communicate startup verification status.
-- **Data Jobs**: Ingestion runs hourly, with EMA smoothing applied to `fameIndex` for smooth trend curves.
-- **Trend Context Service**: Provides "Why Trending" explanations for top 10 celebrities, categorizing trends, detecting primary/secondary drivers, and tracking data freshness.
+    - **Fixed Weights**: Mass (40%) and Velocity (60%), with velocity sources from Wikipedia (25%), News (35%), Search (40%).
+    - **Normalization & Stabilization**: Per-source normalization using `log1p` and percentile ranking; multi-layered stabilization prevents fluctuations with dynamic rate limiting, spike detection, and dynamic EMA alpha.
+    - **Auto Catch-Up Mode**: Three-band gap-driven rate boosting for data ingestion, with state persisted in the database.
+    - **Robustness**: Graceful degradation handles external API failures, and a coverage gate ensures data consistency.
+    - **Data Integrity**: Multi-layer protection against mock data corruption, strict writing protocols for `trending_people` via `ingest.ts`, and DB-level guardrails for `trend_snapshots`.
+    - **Trend Context**: AI-generated "Why Trending" summaries (`gpt-4o-mini`) with sophisticated caching and rate limiting, providing 1-2 sentence summaries and categories. Non-AI trend context uses keyword matching for driver detection.
+    - **Velocity Taper**: Tapers velocity contribution when news/search signals are low to maintain stable mass while reflecting fading momentum.
+    - **Search & Wiki Improvements**: Composite Search Activity Score, Cache Validity Gate for Serper results, Search Query Override for disambiguation, and Wiki Velocity Smoothing using 7-day rolling averages.
+    - **Snapshot Diagnostics**: `diagnostics` JSONB column in `trend_snapshots` stores versioned debug data per snapshot.
+    - **Entity Resolution Diagnostics**: Admin tools to verify Serper search results match intended celebrities.
 
 ### Serverless Architecture
-- **Design**: Stateless, with all state managed in Supabase Database.
-- **Cron Endpoints**: Scheduled tasks are exposed as authenticated API endpoints for external schedulers.
+- **Design**: Stateless, using Supabase Database for all state management.
+- **Cron Endpoints**: Authenticated API endpoints for scheduled tasks.
 
 ### Data Storage
 - **Database**: Supabase-backed PostgreSQL with Drizzle ORM.
-- **Core Schema**: Includes tables for `users`, `tracked_people`, `trending_people`, `trend_snapshots`, `api_cache`, and `celebrity_profiles`.
-- **Gamification Schema**: `xp_ledger`, `credit_ledger`, `xp_actions`, `ranks`, `votes`, `induction_candidates`, `celebrity_images`, `face_offs`, `profiles`.
-- **Prediction Markets Schema**: `prediction_markets`, `market_entries`, `market_bets`.
-- **Admin Schema**: `admin_audit_log`.
-- **Gamification Service**: Provides functions for XP/credit management and rank calculation.
-- **Community Schema**: `community_insights`, `insight_votes`, `insight_comments`, `platform_insights`, `insight_items`, `user_votes`, `user_favourites`.
-- **Value Voting Schema**: `celebrity_value_votes` and `celebrity_metrics` for aggregating approval/value data.
-- **Aggregate Seed Architecture**: Separates pre-launch seed data from real user votes, storing seed data in dedicated columns within `celebrity_metrics`.
-- **DB-Level Constraints on `trend_snapshots`** (Feb 2026, SQL-only, not in Drizzle schema):
-  - `chk_snapshot_origin_values`: CHECK (snapshot_origin IN ('ingest', 'preview', 'backfill'))
-  - `chk_ingest_hour_truncated`: CHECK (snapshot_origin != 'ingest' OR timestamp = date_trunc('hour', timestamp))
-  - These are the "never again" guardrails preventing polluted data at the DB level. If schema is ever re-pushed, these must be re-applied manually.
-  - Partial index `idx_snapshots_ingest_person_time`: (person_id, timestamp DESC) WHERE snapshot_origin='ingest' — optimizes all filtered snapshot reads.
-  - Startup assertion in `server/index.ts` verifies constraints exist and logs `[DB_GUARDRAIL_MISSING]` if not.
-
-### AI-Generated Celebrity Profiles
-- **Feature**: Provides AI-generated biographical data, including bios, known for, origin, location, and net worth, cached for 30 days to minimize API calls.
+- **Core Schemas**: `users`, `tracked_people`, `trending_people`, `trend_snapshots`, `api_cache`, `celebrity_profiles`.
+- **Gamification Schemas**: `xp_ledger`, `credit_ledger`, `xp_actions`, `ranks`, `votes`, `induction_candidates`, `celebrity_images`, `face_offs`, `profiles`.
+- **Prediction Markets Schemas**: `prediction_markets`, `market_entries`, `market_bets`.
+- **Community Schemas**: `community_insights`, `insight_votes`, `insight_comments`, `platform_insights`, `insight_items`, `user_votes`, `user_favourites`.
+- **Value Voting**: `celebrity_value_votes`, `celebrity_metrics` for approval/value aggregation.
+- **AI-Generated Celebrity Profiles**: Cached biographical data (bios, known for, origin, location, net worth) to minimize API calls.
 
 ## External Dependencies
 
 ### Third-Party API Services
 - **Wikipedia API**: Pageview data.
-- **GDELT API**: News mention counts, with 4 retries, 20s per-request timeout, 180s batch timeout, jittered delays (800ms base + 500ms jitter).
+- **GDELT API**: News mention counts.
 - **Serper.dev API**: Google search results.
-- **X/Twitter API**: Reserved for future Platform Insights feature.
+- **X/Twitter API**: Reserved for future Platform Insights.
 - **Google Fonts**: Inter, Space Grotesk, JetBrains Mono.
 - **Supabase**: PostgreSQL database provider.
-
-### Required Environment Secrets
-- `SERPER_API_KEY`
-- `X_API_KEY` (for Platform Insights)
-- `X_API_SECRET` (for Platform Insights)
+- **OpenAI**: `gpt-4o-mini` for AI-generated summaries.
 
 ### Key Libraries
 - **UI Components**: Radix UI.

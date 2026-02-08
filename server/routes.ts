@@ -9,6 +9,7 @@ import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
+import { createHash } from "crypto";
 import { gamificationService } from "./services/gamification";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext } from "./providers/serper";
@@ -1948,21 +1949,83 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
     }
   });
 
-  // API endpoint to get "Why Trending" context for a person using web search + AI
-  // Only returns content for top 10 ranked celebrities to optimize costs
+  // ============ WHY TRENDING - AI-Generated Summary ============
+  // Improvements (Feb 2026):
+  //   A) Top-10 hysteresis: sticky eligibility (enter <=10, exit >=12 or 2 consecutive checks outside)
+  //   B) Input hash: skip OpenAI call if headlines unchanged, just extend TTL
+  //   C) Provenance: store model, promptVersion, headlinesUsed in cached payload
+  //   D) Rate limit: max 1 OpenAI generation per person per 30 minutes
+
+  const WHY_TRENDING_PROMPT_VERSION = 2;
+  const WHY_TRENDING_CACHE_TTL_HOURS = 6;
+  const WHY_TRENDING_RATE_LIMIT_MINUTES = 30;
+
+  function computeHeadlineHash(headlineUrls: string[]): string {
+    return createHash("sha256").update(headlineUrls.sort().join("|")).digest("hex").slice(0, 16);
+  }
+
+  async function getTop10Eligibility(personId: string): Promise<{ eligible: boolean; lastRankSeen: number; consecutiveOutside: number }> {
+    const eligibilityCacheKey = `top10_eligible:${personId}`;
+    const [row] = await db.select().from(apiCache).where(eq(apiCache.cacheKey, eligibilityCacheKey)).limit(1);
+    if (row) {
+      try {
+        return JSON.parse(row.responseData);
+      } catch {}
+    }
+    return { eligible: false, lastRankSeen: 999, consecutiveOutside: 0 };
+  }
+
+  async function updateTop10Eligibility(personId: string, rank: number | null): Promise<boolean> {
+    const eligibilityCacheKey = `top10_eligible:${personId}`;
+    const state = await getTop10Eligibility(personId);
+    const currentRank = rank ?? 999;
+
+    if (currentRank <= 10) {
+      state.eligible = true;
+      state.consecutiveOutside = 0;
+    } else if (currentRank >= 12) {
+      state.eligible = false;
+      state.consecutiveOutside = 0;
+    } else {
+      state.consecutiveOutside += 1;
+      if (state.consecutiveOutside >= 2) {
+        state.eligible = false;
+      }
+    }
+    state.lastRankSeen = currentRank;
+
+    const now = new Date();
+    const farFuture = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+    await db.insert(apiCache).values({
+      cacheKey: eligibilityCacheKey,
+      provider: "system",
+      responseData: JSON.stringify(state),
+      fetchedAt: now,
+      expiresAt: farFuture,
+    }).onConflictDoUpdate({
+      target: apiCache.cacheKey,
+      set: {
+        responseData: JSON.stringify(state),
+        fetchedAt: now,
+      },
+    });
+
+    return state.eligible;
+  }
+
   app.get("/api/why-trending/:personId", async (req, res) => {
     try {
       const { personId } = req.params;
       
-      // Get person from storage
       const person = await storage.getTrendingPerson(personId);
       if (!person) {
         return res.status(404).json({ error: "Person not found" });
       }
       
-      // Only show "Why Trending" for top 10 ranked celebrities
-      // Lower-ranked celebrities often have stale/irrelevant news
-      if (!person.rank || person.rank > 10) {
+      // A) Top-10 hysteresis: update eligibility state, then check it
+      const eligible = await updateTop10Eligibility(personId, person.rank ?? null);
+      
+      if (!eligible) {
         return res.json({
           personId,
           personName: person.name,
@@ -1972,24 +2035,20 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         });
       }
       
-      // Check cache for trending context
+      // Check existing cache (may be expired - we still need it for input hash comparison)
       const cacheKey = `why_trending:${personId}`;
-      const CACHE_TTL_HOURS = 6;
-      
       const [cached] = await db
         .select()
         .from(apiCache)
-        .where(and(
-          eq(apiCache.cacheKey, cacheKey),
-          gt(apiCache.expiresAt, new Date())
-        ))
+        .where(eq(apiCache.cacheKey, cacheKey))
         .limit(1);
       
-      if (cached && cached.expiresAt >= cached.fetchedAt) {
+      // If cache exists and is still valid, return it immediately
+      if (cached && cached.expiresAt && cached.expiresAt > new Date()) {
         return res.json(JSON.parse(cached.responseData));
       }
       
-      // Fetch recent news via Serper
+      // Fetch fresh news via Serper (Serper has its own 6h cache)
       const newsContext = await fetchTrendingNewsContext(person.name);
       
       if (!newsContext || newsContext.sources.length === 0) {
@@ -2002,13 +2061,59 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         });
       }
       
-      // Use AI to summarize why they're trending
+      // B) Compute input hash from headline URLs/titles
+      const headlineIdentifiers = newsContext.sources.map(s => s.link || s.title);
+      const currentInputHash = computeHeadlineHash(headlineIdentifiers);
+      
+      // If we have a previous cached result and the input hash is unchanged, extend TTL without calling OpenAI
+      if (cached) {
+        try {
+          const previousResult = JSON.parse(cached.responseData);
+          if (previousResult.inputHash === currentInputHash && previousResult.hasContext) {
+            console.log(`[WhyTrending] Input hash unchanged for ${person.name}, extending TTL (skipping OpenAI)`);
+            const extendNow = new Date();
+            const extendExpiresAt = new Date(extendNow.getTime() + WHY_TRENDING_CACHE_TTL_HOURS * 60 * 60 * 1000);
+            previousResult.fetchedAt = extendNow;
+            const updatedResponseData = JSON.stringify(previousResult);
+            await db.insert(apiCache).values({
+              cacheKey,
+              provider: "ai_trending",
+              responseData: updatedResponseData,
+              fetchedAt: extendNow,
+              expiresAt: extendExpiresAt,
+            }).onConflictDoUpdate({
+              target: apiCache.cacheKey,
+              set: { responseData: updatedResponseData, fetchedAt: extendNow, expiresAt: extendExpiresAt },
+            });
+            return res.json(previousResult);
+          }
+        } catch {}
+      }
+      
+      // D) Per-person rate limit: no more than 1 OpenAI generation per 30 minutes
+      const rateLimitKey = `why_trending_ratelimit:${personId}`;
+      const [rateLimitRow] = await db.select().from(apiCache).where(eq(apiCache.cacheKey, rateLimitKey)).limit(1);
+      if (rateLimitRow && rateLimitRow.expiresAt && rateLimitRow.expiresAt > new Date()) {
+        console.log(`[WhyTrending] Rate limited for ${person.name}, returning stale cache or empty`);
+        if (cached) {
+          try { return res.json(JSON.parse(cached.responseData)); } catch {}
+        }
+        return res.json({
+          personId,
+          personName: person.name,
+          hasContext: false,
+          message: "Rate limited - please try again later",
+          fetchedAt: new Date(),
+        });
+      }
+      
+      // Call OpenAI to generate summary
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
       
-      const headlines = newsContext.sources.map(s => s.title).join('\n');
+      const headlinesText = newsContext.sources.map(s => s.title).join('\n');
       const prompt = `Based on these recent news headlines about ${person.name}, write a brief 1-2 sentence summary explaining why they are currently trending or in the news.
 
 IMPORTANT GUIDELINES:
@@ -2020,7 +2125,7 @@ IMPORTANT GUIDELINES:
 - For political figures, be especially careful to remain impartial and balanced
 
 Headlines:
-${headlines}
+${headlinesText}
 
 Return a JSON object with:
 {
@@ -2040,6 +2145,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const content = response.choices[0]?.message?.content;
       const parsed = content ? JSON.parse(content) : { summary: newsContext.headline, category: newsContext.category };
       
+      // C) Build result with provenance fields + input hash
       const result = {
         personId,
         personName: person.name,
@@ -2049,10 +2155,19 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         topHeadline: newsContext.headline,
         sources: newsContext.sources.slice(0, 3),
         fetchedAt: new Date(),
+        inputHash: currentInputHash,
+        provenance: {
+          model: "gpt-4o-mini",
+          promptVersion: WHY_TRENDING_PROMPT_VERSION,
+          serperQuery: person.name,
+          serperTbs: "qdr:w",
+          headlinesUsed: newsContext.sources.slice(0, 5).map(s => ({ title: s.title, link: s.link })),
+          generatedAt: new Date().toISOString(),
+        },
       };
       
       const cacheNow = new Date();
-      const cacheExpiresAt = new Date(cacheNow.getTime() + CACHE_TTL_HOURS * 60 * 60 * 1000);
+      const cacheExpiresAt = new Date(cacheNow.getTime() + WHY_TRENDING_CACHE_TTL_HOURS * 60 * 60 * 1000);
       
       await db.insert(apiCache).values({
         cacheKey,
@@ -2069,6 +2184,21 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         },
       });
       
+      // D) Set rate limit marker AFTER successful generation (fail-safe: transient failures won't lock out for 30 min)
+      const rlNow = new Date();
+      const rlExpires = new Date(rlNow.getTime() + WHY_TRENDING_RATE_LIMIT_MINUTES * 60 * 1000);
+      await db.insert(apiCache).values({
+        cacheKey: rateLimitKey,
+        provider: "system",
+        responseData: JSON.stringify({ personId, generatedAt: rlNow.toISOString() }),
+        fetchedAt: rlNow,
+        expiresAt: rlExpires,
+      }).onConflictDoUpdate({
+        target: apiCache.cacheKey,
+        set: { fetchedAt: rlNow, expiresAt: rlExpires, responseData: JSON.stringify({ personId, generatedAt: rlNow.toISOString() }) },
+      });
+      
+      console.log(`[WhyTrending] Generated new summary for ${person.name} (hash: ${currentInputHash})`);
       res.json(result);
     } catch (error: any) {
       console.error("Error fetching why trending:", error);
