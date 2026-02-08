@@ -279,7 +279,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(and(
           eq(trendSnapshots.personId, id),
           sql`${trendSnapshots.timestamp} >= ${cutoffDate}`,
-          sql`EXTRACT(MINUTE FROM ${trendSnapshots.timestamp}) <= 3`
+          sql`${trendSnapshots.timestamp} = date_trunc('hour', ${trendSnapshots.timestamp})`,
+          eq(trendSnapshots.snapshotOrigin, 'ingest')
         ))
         .orderBy(desc(trendSnapshots.timestamp))
         .limit(daysNum * 24); // Max one per hour for requested days
@@ -3187,7 +3188,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         .from(trendSnapshots)
         .where(and(
           eq(trendSnapshots.personId, id),
-          sql`EXTRACT(MINUTE FROM ${trendSnapshots.timestamp}) <= 3`
+          sql`${trendSnapshots.timestamp} = date_trunc('hour', ${trendSnapshots.timestamp})`,
+          eq(trendSnapshots.snapshotOrigin, 'ingest')
         ))
         .orderBy(desc(trendSnapshots.timestamp))
         .limit(2);
@@ -3205,7 +3207,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         fameIndex: trendSnapshots.fameIndex,
       })
         .from(trendSnapshots)
-        .where(sql`EXTRACT(MINUTE FROM timestamp) <= 3 AND timestamp = (SELECT MAX(timestamp) FROM trend_snapshots ts2 WHERE ts2.person_id = trend_snapshots.person_id AND EXTRACT(MINUTE FROM ts2.timestamp) <= 3)`)
+        .where(sql`timestamp = date_trunc('hour', timestamp) AND snapshot_origin = 'ingest' AND timestamp = (SELECT MAX(timestamp) FROM trend_snapshots ts2 WHERE ts2.person_id = trend_snapshots.person_id AND ts2.timestamp = date_trunc('hour', ts2.timestamp) AND ts2.snapshot_origin = 'ingest')`)
         .orderBy(desc(trendSnapshots.fameIndex));
       
       const currentRank = allSnapshots.findIndex(s => s.personId === id) + 1;
@@ -3216,11 +3218,13 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         const prevAllSnapshots = await db.execute(sql`
           SELECT person_id, fame_index 
           FROM trend_snapshots 
-          WHERE EXTRACT(MINUTE FROM timestamp) <= 3
+          WHERE timestamp = date_trunc('hour', timestamp)
+            AND snapshot_origin = 'ingest'
             AND timestamp = (
               SELECT MAX(timestamp) FROM trend_snapshots 
               WHERE timestamp < ${latestSnapshot.timestamp}
-                AND EXTRACT(MINUTE FROM timestamp) <= 3
+                AND timestamp = date_trunc('hour', timestamp)
+                AND snapshot_origin = 'ingest'
             )
           ORDER BY fame_index DESC
         `);
@@ -3242,7 +3246,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         .where(and(
           eq(trendSnapshots.personId, id),
           gte(trendSnapshots.timestamp, time24hAgo),
-          sql`EXTRACT(MINUTE FROM ${trendSnapshots.timestamp}) <= 3`
+          sql`${trendSnapshots.timestamp} = date_trunc('hour', ${trendSnapshots.timestamp})`,
+          eq(trendSnapshots.snapshotOrigin, 'ingest')
         ))
         .orderBy(trendSnapshots.timestamp);
       
@@ -3273,7 +3278,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         FROM trend_snapshots
         WHERE person_id = ${id}
           AND timestamp >= ${time7dAgo}
-          AND EXTRACT(MINUTE FROM timestamp) <= 3
+          AND timestamp = date_trunc('hour', timestamp)
+          AND snapshot_origin = 'ingest'
       `);
       
       const baselines = {

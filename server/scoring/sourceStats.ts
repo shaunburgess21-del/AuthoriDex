@@ -23,7 +23,8 @@ export async function fetch7DaySourceStats(): Promise<AllSourceStats> {
           search_volume
         FROM trend_snapshots
         WHERE timestamp >= ${sevenDaysAgo}
-          AND EXTRACT(MINUTE FROM timestamp) <= 3
+          AND timestamp = date_trunc('hour', timestamp)
+          AND snapshot_origin = 'ingest'
           AND wiki_pageviews IS NOT NULL
           AND news_count IS NOT NULL
           AND search_volume IS NOT NULL

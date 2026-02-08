@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trackedPeople, trendSnapshots, apiCache } from "@shared/schema";
-import { gte } from "drizzle-orm";
+import { gte, and, eq } from "drizzle-orm";
 import { computeTrendScore } from "../scoring/trendScore";
 
 /**
@@ -93,7 +93,10 @@ export async function runQuickScoring(): Promise<QuickScoreOutput> {
       trendScore: trendSnapshots.trendScore,
       fameIndex: trendSnapshots.fameIndex,
     }).from(trendSnapshots).where(
-      gte(trendSnapshots.timestamp, time7dAgo)
+      and(
+        gte(trendSnapshots.timestamp, time7dAgo),
+        eq(trendSnapshots.snapshotOrigin, 'ingest')
+      )
     );
     
     // Create maps for different lookups:

@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trackedPeople, trendSnapshots, trendingPeople, celebrityImages } from "@shared/schema";
-import { desc, eq, sql, gte } from "drizzle-orm";
+import { desc, eq, sql, gte, and } from "drizzle-orm";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
 import { fetchBatchGdeltNews } from "../providers/gdelt";
 import { fetchSerperBatch } from "../providers/serper";
@@ -128,7 +128,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
       newsDelta: trendSnapshots.newsDelta,
       searchDelta: trendSnapshots.searchDelta,
     }).from(trendSnapshots).where(
-      gte(trendSnapshots.timestamp, time7dAgo)
+      and(
+        gte(trendSnapshots.timestamp, time7dAgo),
+        eq(trendSnapshots.snapshotOrigin, 'ingest')
+      )
     );
     
     // Create maps for different lookups:
@@ -515,6 +518,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
           diversityMultiplier: scoreResult.diversityMultiplier,
           momentum: scoreResult.momentum,
           drivers: scoreResult.drivers,
+          snapshotOrigin: 'ingest',
         };
         await db.insert(trendSnapshots).values(snapshotValues)
           .onConflictDoUpdate({
@@ -535,6 +539,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
               diversityMultiplier: snapshotValues.diversityMultiplier,
               momentum: snapshotValues.momentum,
               drivers: snapshotValues.drivers,
+              snapshotOrigin: snapshotValues.snapshotOrigin,
             },
           });
 
@@ -827,6 +832,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
 
 export async function getLastIngestionTime(): Promise<Date | null> {
   const lastSnapshot = await db.query.trendSnapshots.findFirst({
+    where: eq(trendSnapshots.snapshotOrigin, 'ingest'),
     orderBy: [desc(trendSnapshots.timestamp)],
   });
 

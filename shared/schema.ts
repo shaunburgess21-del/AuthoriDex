@@ -79,6 +79,7 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   diversityMultiplier: real("diversity_multiplier").default(1.0),
   momentum: text("momentum").default("Stable"),
   drivers: text("drivers").array(),
+  snapshotOrigin: text("snapshot_origin").default("ingest"),
 }, (table) => ({
   uniquePersonTimestamp: unique().on(table.personId, table.timestamp),
 }));
