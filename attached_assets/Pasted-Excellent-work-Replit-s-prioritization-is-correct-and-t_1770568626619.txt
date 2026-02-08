@@ -1,0 +1,206 @@
+Excellent work. Replit's prioritization is correct, and the implementation is production-grade. Here's my assessment:
+
+What Was Built (Quality Check) ✅
+1. Entity Resolution Diagnostic
+Grade: A+ — This is exactly what you needed.
+
+Why it's good:
+
+Checks top 3 Serper results (catches ambiguous matches immediately)
+
+Knowledge Graph validation (if KG title ≠ your intended person → mismatch)
+
+Batch mode (run all 100 at once, filter by status)
+
+Admin UI + API (accessible without code changes)
+
+Critical next step: Run it TODAY for Armstrong & Saylor:
+
+bash
+# Via curl or admin panel:
+GET /api/admin/entity-diagnostic?personId=brian-armstrong
+GET /api/admin/entity-diagnostic?personId=michael-saylor
+
+# Or batch all low-performers:
+GET /api/admin/entity-diagnostic/batch?filter=possible_mismatch
+Decision tree:
+
+If verdict: "POSSIBLE_MISMATCH" → add/fix searchQueryOverride
+
+If verdict: "ENTITY_MATCH_OK" but still bottom-20 → swap them for Alcaraz/Sinner
+
+2. Per-Snapshot Diagnostics
+Grade: A — Smart, minimal, versioned.
+
+Why it's good:
+
+Versioned (v:1) — you can evolve the schema later
+
+Stores only non-recomputable data (raw inputs, freshness, stabilizer state)
+
+JSONB (Postgres-native, efficient indexing if needed)
+
+Partial index already exists (chart queries won't slow down)
+
+One thing to verify (5 min check):
+
+sql
+-- After 24 hours, check snapshot size growth:
+SELECT 
+  pg_size_pretty(pg_total_relation_size('trend_snapshots')) AS total_size,
+  COUNT(*) AS row_count,
+  pg_size_pretty(pg_total_relation_size('trend_snapshots') / COUNT(*)) AS avg_row_size
+FROM trend_snapshots;
+Expected: ~200-500 bytes/row (including JSONB). If >1KB/row, the JSON is too fat.
+
+3. REQUIRE_DB_GUARDRAILS Mode
+Grade: A+ — Defensive excellence.
+
+This is the "never ship broken constraints" safety net. If a migration fails or someone manually drops a constraint, ingest aborts instead of writing garbage.
+
+Perfect for production.
+
+What's Missing (Intentional Deferrals)
+These weren't built, but that's correct prioritization:
+
+✅ Wiki hourly velocity — Deferred (highest risk, marginal gain until proven needed)
+
+✅ Guardrail breakout escape hatch — Not mentioned (can add later if needed)
+
+✅ newsQueryOverride — Skipped (searchQueryOverride is higher priority)
+
+No issues here — you're shipping iteratively, not scope-creeping.
+
+Immediate Action Items (This Week)
+Day 1 (Today/Monday): Run Entity Diagnostics
+bash
+# In admin panel or via curl:
+1. Run batch diagnostic: GET /api/admin/entity-diagnostic/batch
+2. Filter results by "POSSIBLE_MISMATCH"
+3. For Armstrong/Saylor specifically, check:
+   - Top 3 result titles (do they match the person you intended?)
+   - Knowledge Graph name
+   - Raw percentiles (are they spiking on known news days?)
+Outcome: Editorial decision by Tuesday:
+
+Fix query overrides, or
+
+Swap them for Alcaraz/Sinner
+
+Day 2-3: Monitor Diagnostics in Production
+After one full day of hourly snapshots with diagnostics:
+
+Check 1: Storage growth
+
+sql
+SELECT pg_size_pretty(pg_total_relation_size('trend_snapshots'));
+-- Should grow by ~10-50 MB/day for 100 people
+Check 2: Diagnostic coverage
+
+sql
+SELECT 
+  COUNT(*) FILTER (WHERE diagnostics IS NOT NULL) AS with_diag,
+  COUNT(*) FILTER (WHERE diagnostics IS NULL) AS without_diag
+FROM trend_snapshots
+WHERE timestamp > NOW() - INTERVAL '24 hours';
+-- Expect: 100% with_diag for new snapshots
+Check 3: Usefulness test
+
+Pick one celeb who moved significantly yesterday
+
+Pull their snapshot diagnostics
+
+Verify you can answer "why did they move?" from the stored data
+
+Day 4-5: Baseline Stability
+Once diagnostics are proven:
+
+Observe for 3-5 days:
+
+rateLimitedPct stays 10-30% (not 0%, not 80%)
+
+medianGapPct stays <8%
+
+No "POSSIBLE_MISMATCH" entities remain in top 50
+
+Hourly snapshots arrive consistently at :02 past hour
+
+If all green for 5 days → engine is launch-ready.
+
+Risks & Mitigations
+Risk 1: Diagnostics JSONB Bloats Storage
+Likelihood: Low
+Mitigation: Already planned — monitor pg_total_relation_size daily for 3 days
+Threshold: If row size >1KB, strip unnecessary fields from diagnostics JSON
+
+Risk 2: Entity Diagnostic Reveals Widespread Mismatches
+Likelihood: Medium (10-20% of celebs could have ambiguous names)
+Mitigation: Batch diagnostic already built — you'll see full list in one run
+Fix: Add searchQueryOverride for any "POSSIBLE_MISMATCH" cases
+
+Risk 3: Guardrail Mode Triggers on False Positive
+Likelihood: Very low (constraints exist and tested)
+Mitigation: Logs will show which constraint failed
+Fix: If it triggers, disable REQUIRE_DB_GUARDRAILS temporarily, fix constraint, re-enable
+
+What NOT to Do Right Now
+Don't:
+
+❌ Add Wiki hourly velocity yet (wait until entity diagnostics prove current Wiki is the bottleneck)
+
+❌ Add more diagnostic fields (current set is sufficient)
+
+❌ Optimize prematurely (JSONB performance is fine until proven otherwise)
+
+❌ Touch stabilization logic (it's working, don't destabilize)
+
+Keep it boring for 5 days.
+
+My Honest Assessment
+Your engine is now instrumented for production.
+
+The entity diagnostic tool answers "is our data correct?"
+The snapshot diagnostics answer "why did this change?"
+The guardrail mode answers "will we ever ship broken data?"
+
+These three additions transformed your system from:
+
+❌ "Scores look weird sometimes, not sure why"
+
+To:
+
+✅ "Every score is auditable, every entity is verifiable, every constraint is enforced"
+
+Final Checklist Before Demo/Launch
+Backend health (by Friday):
+
+ Entity diagnostic run for all 100 celebs
+
+ Zero "POSSIBLE_MISMATCH" in top 50
+
+ Armstrong/Saylor either fixed or swapped
+
+ 5 days of stable hourly snapshots with diagnostics
+
+ rateLimitedPct and medianGapPct in healthy ranges
+
+ Storage growth <50MB/day
+
+Operational:
+
+ Guardrail mode hasn't aborted any runs
+
+ No off-hour snapshots in 5 days
+
+ Health summary shows all sources HEALTHY or gracefully DEGRADED
+
+If all ✅ → you're production-ready.
+
+Bottom Line
+Replit built exactly what you needed, in the right order, with smart defensive patterns.
+
+Next 48 hours: Run entity diagnostics, make editorial decision on Armstrong/Saylor.
+Next 5 days: Observe stability, monitor diagnostics.
+After that: Demo to your brother, then launch.
+
+Want me to write the exact SQL queries to validate diagnostics coverage and storage growth?
