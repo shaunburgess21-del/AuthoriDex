@@ -1960,8 +1960,24 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
   const WHY_TRENDING_CACHE_TTL_HOURS = 6;
   const WHY_TRENDING_RATE_LIMIT_MINUTES = 30;
 
-  function computeHeadlineHash(headlineUrls: string[]): string {
-    return createHash("sha256").update(headlineUrls.sort().join("|")).digest("hex").slice(0, 16);
+  function extractDomain(url: string): string {
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      return url.slice(0, 30);
+    }
+  }
+
+  function normalizeTitle(title: string): string {
+    return title.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+  }
+
+  function computeHeadlineHash(sources: Array<{ title: string; link?: string }>): string {
+    const stableIds = sources.map(s => {
+      const domain = s.link ? extractDomain(s.link) : "unknown";
+      return `${domain}|${normalizeTitle(s.title)}`;
+    });
+    return createHash("sha256").update(stableIds.sort().join("||")).digest("hex").slice(0, 16);
   }
 
   async function getTop10Eligibility(personId: string): Promise<{ eligible: boolean; lastRankSeen: number; consecutiveOutside: number }> {
@@ -2045,25 +2061,88 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       
       // If cache exists and is still valid, return it immediately
       if (cached && cached.expiresAt && cached.expiresAt > new Date()) {
-        return res.json(JSON.parse(cached.responseData));
+        const hitResult = JSON.parse(cached.responseData);
+        hitResult.cacheStatus = "HIT";
+        if (hitResult.provenance?.generatedAt) {
+          hitResult.staleAgeMinutes = Math.round((Date.now() - new Date(hitResult.provenance.generatedAt).getTime()) / 60000);
+        }
+        return res.json(hitResult);
       }
       
-      // Fetch fresh news via Serper (Serper has its own 6h cache)
-      const newsContext = await fetchTrendingNewsContext(person.name);
-      
-      if (!newsContext || newsContext.sources.length === 0) {
+      // E) Single-flight lock: prevent cache stampede when multiple users hit cold cache simultaneously
+      const lockKey = `why_trending_lock:${personId}`;
+      const WHY_TRENDING_LOCK_TTL_SECONDS = 60;
+      const [lockRow] = await db.select().from(apiCache).where(eq(apiCache.cacheKey, lockKey)).limit(1);
+      if (lockRow && lockRow.expiresAt && lockRow.expiresAt > new Date()) {
+        console.log(`[WhyTrending] Generation locked for ${person.name}, serving stale or empty`);
+        if (cached) {
+          try {
+            const staleResult = JSON.parse(cached.responseData);
+            staleResult.cacheStatus = "LOCKED_STALE";
+            if (staleResult.provenance?.generatedAt) {
+              staleResult.staleAgeMinutes = Math.round((Date.now() - new Date(staleResult.provenance.generatedAt).getTime()) / 60000);
+            }
+            return res.json(staleResult);
+          } catch {}
+        }
         return res.json({
           personId,
           personName: person.name,
           hasContext: false,
+          cacheStatus: "LOCKED_COLD",
+          message: "Summary is being generated, please try again shortly",
+          fetchedAt: new Date(),
+        });
+      }
+      
+      // Acquire single-flight lock before doing any work
+      const lockNow = new Date();
+      const lockExpires = new Date(lockNow.getTime() + WHY_TRENDING_LOCK_TTL_SECONDS * 1000);
+      await db.insert(apiCache).values({
+        cacheKey: lockKey,
+        provider: "system",
+        responseData: JSON.stringify({ personId, lockedAt: lockNow.toISOString() }),
+        fetchedAt: lockNow,
+        expiresAt: lockExpires,
+      }).onConflictDoUpdate({
+        target: apiCache.cacheKey,
+        set: { fetchedAt: lockNow, expiresAt: lockExpires, responseData: JSON.stringify({ personId, lockedAt: lockNow.toISOString() }) },
+      });
+      
+      // Fetch fresh news via Serper (Serper has its own 6h cache)
+      const newsContext = await fetchTrendingNewsContext(person.name);
+      
+      // Helper: release single-flight lock (expire immediately)
+      const releaseLock = async () => {
+        try {
+          await db.insert(apiCache).values({
+            cacheKey: lockKey,
+            provider: "system",
+            responseData: JSON.stringify({ personId, releasedAt: new Date().toISOString() }),
+            fetchedAt: new Date(),
+            expiresAt: new Date(0),
+          }).onConflictDoUpdate({
+            target: apiCache.cacheKey,
+            set: { expiresAt: new Date(0), fetchedAt: new Date() },
+          });
+        } catch {}
+      };
+      
+      if (!newsContext || newsContext.sources.length === 0) {
+        await releaseLock();
+        return res.json({
+          personId,
+          personName: person.name,
+          hasContext: false,
+          cacheStatus: "NO_NEWS",
+          staleAgeMinutes: null,
           message: "No recent trending context available",
           fetchedAt: new Date(),
         });
       }
       
-      // B) Compute input hash from headline URLs/titles
-      const headlineIdentifiers = newsContext.sources.map(s => s.link || s.title);
-      const currentInputHash = computeHeadlineHash(headlineIdentifiers);
+      // B) Compute input hash from domain+normalizedTitle (stable even if tracking URLs change)
+      const currentInputHash = computeHeadlineHash(newsContext.sources);
       
       // If we have a previous cached result and the input hash is unchanged, extend TTL without calling OpenAI
       if (cached) {
@@ -2074,6 +2153,10 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
             const extendNow = new Date();
             const extendExpiresAt = new Date(extendNow.getTime() + WHY_TRENDING_CACHE_TTL_HOURS * 60 * 60 * 1000);
             previousResult.fetchedAt = extendNow;
+            previousResult.cacheStatus = "STALE_EXTENDED";
+            previousResult.staleAgeMinutes = previousResult.provenance?.generatedAt
+              ? Math.round((Date.now() - new Date(previousResult.provenance.generatedAt).getTime()) / 60000)
+              : null;
             const updatedResponseData = JSON.stringify(previousResult);
             await db.insert(apiCache).values({
               cacheKey,
@@ -2085,6 +2168,7 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
               target: apiCache.cacheKey,
               set: { responseData: updatedResponseData, fetchedAt: extendNow, expiresAt: extendExpiresAt },
             });
+            await releaseLock();
             return res.json(previousResult);
           }
         } catch {}
@@ -2095,13 +2179,23 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       const [rateLimitRow] = await db.select().from(apiCache).where(eq(apiCache.cacheKey, rateLimitKey)).limit(1);
       if (rateLimitRow && rateLimitRow.expiresAt && rateLimitRow.expiresAt > new Date()) {
         console.log(`[WhyTrending] Rate limited for ${person.name}, returning stale cache or empty`);
+        await releaseLock();
         if (cached) {
-          try { return res.json(JSON.parse(cached.responseData)); } catch {}
+          try {
+            const rlResult = JSON.parse(cached.responseData);
+            rlResult.cacheStatus = "RATE_LIMITED";
+            rlResult.staleAgeMinutes = rlResult.provenance?.generatedAt
+              ? Math.round((Date.now() - new Date(rlResult.provenance.generatedAt).getTime()) / 60000)
+              : null;
+            return res.json(rlResult);
+          } catch {}
         }
         return res.json({
           personId,
           personName: person.name,
           hasContext: false,
+          cacheStatus: "RATE_LIMITED",
+          staleAgeMinutes: null,
           message: "Rate limited - please try again later",
           fetchedAt: new Date(),
         });
@@ -2145,7 +2239,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const content = response.choices[0]?.message?.content;
       const parsed = content ? JSON.parse(content) : { summary: newsContext.headline, category: newsContext.category };
       
-      // C) Build result with provenance fields + input hash
+      // C) Build result with provenance fields + input hash + debug fields
+      const generatedAt = new Date().toISOString();
       const result = {
         personId,
         personName: person.name,
@@ -2156,13 +2251,15 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         sources: newsContext.sources.slice(0, 3),
         fetchedAt: new Date(),
         inputHash: currentInputHash,
+        cacheStatus: "REGENERATED" as string,
+        staleAgeMinutes: 0,
         provenance: {
           model: "gpt-4o-mini",
           promptVersion: WHY_TRENDING_PROMPT_VERSION,
           serperQuery: person.name,
           serperTbs: "qdr:w",
           headlinesUsed: newsContext.sources.slice(0, 5).map(s => ({ title: s.title, link: s.link })),
-          generatedAt: new Date().toISOString(),
+          generatedAt,
         },
       };
       
@@ -2198,10 +2295,26 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         set: { fetchedAt: rlNow, expiresAt: rlExpires, responseData: JSON.stringify({ personId, generatedAt: rlNow.toISOString() }) },
       });
       
+      await releaseLock();
+      
       console.log(`[WhyTrending] Generated new summary for ${person.name} (hash: ${currentInputHash})`);
       res.json(result);
     } catch (error: any) {
       console.error("Error fetching why trending:", error);
+      // Release lock on error so it doesn't block for 60s
+      try {
+        const errLockKey = `why_trending_lock:${req.params.personId}`;
+        await db.insert(apiCache).values({
+          cacheKey: errLockKey,
+          provider: "system",
+          responseData: JSON.stringify({ error: true }),
+          fetchedAt: new Date(),
+          expiresAt: new Date(0),
+        }).onConflictDoUpdate({
+          target: apiCache.cacheKey,
+          set: { expiresAt: new Date(0), fetchedAt: new Date() },
+        });
+      } catch {}
       res.status(500).json({ error: "Failed to fetch trending context", message: error.message });
     }
   });

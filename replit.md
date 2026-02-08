@@ -27,6 +27,7 @@ Preferred communication style: Simple, everyday language.
     - **Robustness**: Graceful degradation handles external API failures, and a coverage gate ensures data consistency.
     - **Data Integrity**: Multi-layer protection against mock data corruption, strict writing protocols for `trending_people` via `ingest.ts`, and DB-level guardrails for `trend_snapshots`.
     - **Trend Context**: AI-generated "Why Trending" summaries (`gpt-4o-mini`) with sophisticated caching and rate limiting, providing 1-2 sentence summaries and categories. Non-AI trend context uses keyword matching for driver detection.
+    - **Why Trending Hardening (Feb 2026)**: Top-10 hysteresis (enter ≤10, exit ≥12, rank-11 grace), input hash caching (domain+title SHA-256, skip OpenAI if headlines unchanged), single-flight lock (60s TTL prevents cache stampede), per-person rate limit (30 min), provenance fields (model, promptVersion, headlinesUsed), debug fields (cacheStatus: HIT|STALE_EXTENDED|REGENERATED|RATE_LIMITED|LOCKED_STALE|LOCKED_COLD|NO_NEWS, staleAgeMinutes).
     - **Velocity Taper**: Tapers velocity contribution when news/search signals are low to maintain stable mass while reflecting fading momentum.
     - **Search & Wiki Improvements**: Composite Search Activity Score, Cache Validity Gate for Serper results, Search Query Override for disambiguation, and Wiki Velocity Smoothing using 7-day rolling averages.
     - **Snapshot Diagnostics**: `diagnostics` JSONB column in `trend_snapshots` stores versioned debug data per snapshot.
