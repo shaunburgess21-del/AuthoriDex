@@ -1,0 +1,96 @@
+This is a very good direction, and it stays inside your constraint (no user-facing UI “health” stuff). Replit’s plan is basically the “correct end state” for snapshots.
+
+A few tight notes so you lock it in properly and don’t reintroduce the issue later:
+
+What Replit did right (✅)
+
+Tightened the time filter to timestamp = date_trunc('hour', timestamp)
+
+This is the right “ingest bucket” invariant. No more “minute <= 3” ambiguity.
+
+Added snapshot_origin and set it to 'ingest' on ingest writes
+
+Huge debugging win, tiny schema cost. Perfect.
+
+Added origin filters everywhere (snapshot_origin='ingest' + hour-trunc)
+
+Belt + braces. If anything ever writes bad rows again, they won’t surface.
+
+This is all robust and not UI-facing.
+
+The one thing I’d still add (non-UI, high ROI)
+Add a DB-level constraint to enforce the invariant
+
+Right now you’re enforcing it in code via query filters, which is good, but the best place to prevent garbage is the database.
+
+If you can, add:
+
+CHECK constraint: timestamp = date_trunc('hour', timestamp) when snapshot_origin='ingest'
+
+Or even stricter: always enforce it for all rows, and if you ever want PREVIEW later, use a different table.
+
+This prevents:
+
+accidental writes,
+
+future refactors,
+
+“one-off scripts” writing junk.
+
+If you don’t want constraints yet, the next best thing is:
+
+a BEFORE INSERT trigger that rejects ingest rows not hour-truncated.
+
+Small but important: make snapshot_origin an enum (or at least validated)
+
+If it’s just a string column, enforce allowed values:
+
+('ingest','preview','backfill')
+
+Otherwise one typo ('Ingest') will quietly create a new “origin class” that your filters won’t include.
+
+Verify you didn’t accidentally hide legit data (quick sanity list)
+
+After this change, double-check in logs / DB (internal only, not UI):
+
+Latest ingest run writes exactly 100 snapshots with:
+
+snapshot_origin='ingest'
+
+timestamp exactly on the hour
+
+All chart/history endpoints return the same number of points as before minus the polluted ones
+
+“Why they’re trending” / context features that read snapshots still work (they can silently break if they depended on the old loose query)
+
+One more robustness improvement for the engine (not UI)
+
+Now that you’re stable, the next “worth it” engine hardening is:
+
+Add job_run_id to ingest outputs (logs + snapshots optional)
+
+Not for users—just for you and debugging.
+
+generate a UUID at ingest start
+
+include it in every log line + health summary
+
+optionally store it on snapshots
+
+That makes future investigations trivial:
+
+“these 100 rows came from run abc123; what was source health then?”
+
+If you only want one field, snapshot_origin already gets you 80–90% of the benefit, so this is optional.
+
+Bottom line
+
+Replit’s implementation is the right move:
+
+✅ tighten filter to hour-trunc
+
+✅ add snapshot_origin
+
+✅ filter by origin everywhere
+
+If you add one more thing, make it a DB constraint enforcing hour-trunc for ingest snapshots. That’s the “never again” guardrail.
