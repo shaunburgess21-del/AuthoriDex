@@ -1,0 +1,58 @@
+Yep — Replit’s diagnosis makes total sense, and the chart shape you’re seeing (big sharp “mountains” that snap back to the same baseline) is exactly what you’d expect if off-hour preview runs are getting mixed into the same time-series as your real ingest snapshots.
+
+What’s most likely happening
+
+Real ingest runs on the hour (or at a predictable cadence) and has full source coverage (news/search/wiki).
+
+Quick-score / preview runs happen at “random” minutes (22:04, 21:39, etc.) and often don’t have the same source completeness (e.g., news_count = 0), so their computed score is materially different.
+
+Your “1D” chart query just grabs “last 24h snapshots” and plots them all, so it alternates between:
+
+real ingest point (higher / stable) and
+
+preview point (lower because missing news/search/etc.)
+→ resulting in artificial spikes/dips.
+
+The fix (high confidence)
+
+Preview/quick-score should not write to trend_snapshots at all. It can compute and return a JSON payload for admins/debugging, but it should not contaminate the historical series.
+
+If you still want preview runs to leave an audit trail, do it safely:
+
+Best-practice options (pick 1)
+
+Best / simplest: quick-score writes nowhere (pure compute-only).
+
+Good: quick-score writes to a separate table, e.g. trend_snapshots_preview.
+
+Also good: keep one table, but add snapshot_source (enum: INGEST, PREVIEW, BACKFILL) and filter the chart to INGEST only.
+
+Cleanup you should do (once)
+
+After the code fix, you’ll want to remove the polluted points so charts instantly look sane:
+
+Delete snapshots where:
+
+timestamp is not on the hour (or not matching your ingest schedule), and/or
+
+snapshot_source = PREVIEW, and/or
+
+news_count = 0 and it’s known that hour should have had news.
+
+(If you’re nervous about deletion, move them into an archive table instead.)
+
+Extra guardrails so this never comes back
+
+These are cheap and hugely reduce future “mystery graphs”:
+
+DB constraint / validation: only allow trend_snapshots inserts from ingest job context (or require snapshot_source).
+
+Health summary addition: log a count of snapshots written and whether they were INGEST vs PREVIEW.
+
+Chart query hardening: “1D” should always fetch exactly last 24h ingest points (e.g., last 24–30 ingests), not “everything in the last 24h regardless of origin.”
+
+UI hint (mobile-friendly): tiny badge in the chart legend like Data: hourly ingests (no extra per-row space needed).
+
+Quick sanity check you can do right now
+
+If you look at the spike timestamps and they’re not aligned to your ingest hour, that’s basically a smoking gun that mixed writers are polluting the series.
