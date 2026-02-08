@@ -75,6 +75,8 @@ Preferred communication style: Simple, everyday language.
   - `chk_snapshot_origin_values`: CHECK (snapshot_origin IN ('ingest', 'preview', 'backfill'))
   - `chk_ingest_hour_truncated`: CHECK (snapshot_origin != 'ingest' OR timestamp = date_trunc('hour', timestamp))
   - These are the "never again" guardrails preventing polluted data at the DB level. If schema is ever re-pushed, these must be re-applied manually.
+  - Partial index `idx_snapshots_ingest_person_time`: (person_id, timestamp DESC) WHERE snapshot_origin='ingest' — optimizes all filtered snapshot reads.
+  - Startup assertion in `server/index.ts` verifies constraints exist and logs `[DB_GUARDRAIL_MISSING]` if not.
 
 ### AI-Generated Celebrity Profiles
 - **Feature**: Provides AI-generated biographical data, including bios, known for, origin, location, and net worth, cached for 30 days to minimize API calls.

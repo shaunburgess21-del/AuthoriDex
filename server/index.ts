@@ -4,6 +4,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startSnapshotScheduler } from "./jobs/snapshot-scheduler";
 import { runDataIngestion } from "./jobs/ingest";
+import { pool } from "./db";
 
 // ===========================================
 // SERVERLESS MODE DETECTION
@@ -15,6 +16,32 @@ const SERVERLESS_MODE = process.env.SERVERLESS_MODE === "true" || process.env.VE
 // Data ingestion interval: 1 hour (increased frequency for smoother trend curves)
 // Since X API was removed, we have budget for more frequent Wiki/GDELT/Serper calls
 const INGESTION_INTERVAL_MS = 60 * 60 * 1000; // 1 hour in ms
+
+const REQUIRED_DB_CONSTRAINTS = [
+  'chk_snapshot_origin_values',
+  'chk_ingest_hour_truncated',
+];
+
+async function verifyDbConstraints() {
+  try {
+    const result = await pool.query(
+      `SELECT conname FROM pg_constraint 
+       WHERE conrelid = 'trend_snapshots'::regclass 
+       AND contype = 'c' 
+       AND conname = ANY($1)`,
+      [REQUIRED_DB_CONSTRAINTS]
+    );
+    const found = result.rows.map((r: any) => r.conname);
+    const missing = REQUIRED_DB_CONSTRAINTS.filter(c => !found.includes(c));
+    if (missing.length > 0) {
+      log(`[DB_GUARDRAIL_MISSING] CRITICAL: Missing constraints on trend_snapshots: ${missing.join(', ')}. Data integrity is at risk! Re-apply via SQL.`);
+    } else {
+      log(`[DB Guardrails] All ${REQUIRED_DB_CONSTRAINTS.length} constraints verified on trend_snapshots`);
+    }
+  } catch (err) {
+    log(`[DB Guardrails] WARNING: Could not verify constraints: ${err}`);
+  }
+}
 
 async function scheduledIngestion() {
   log("[Ingestion Scheduler] Starting scheduled data ingestion...");
@@ -128,6 +155,8 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    
+    verifyDbConstraints();
     
     // Start hourly snapshot scheduler (captures data points for graphs)
     startSnapshotScheduler(60 * 60 * 1000);
