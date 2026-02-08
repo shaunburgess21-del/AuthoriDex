@@ -71,6 +71,10 @@ Preferred communication style: Simple, everyday language.
 - **Community Schema**: `community_insights`, `insight_votes`, `insight_comments`, `platform_insights`, `insight_items`, `user_votes`, `user_favourites`.
 - **Value Voting Schema**: `celebrity_value_votes` and `celebrity_metrics` for aggregating approval/value data.
 - **Aggregate Seed Architecture**: Separates pre-launch seed data from real user votes, storing seed data in dedicated columns within `celebrity_metrics`.
+- **DB-Level Constraints on `trend_snapshots`** (Feb 2026, SQL-only, not in Drizzle schema):
+  - `chk_snapshot_origin_values`: CHECK (snapshot_origin IN ('ingest', 'preview', 'backfill'))
+  - `chk_ingest_hour_truncated`: CHECK (snapshot_origin != 'ingest' OR timestamp = date_trunc('hour', timestamp))
+  - These are the "never again" guardrails preventing polluted data at the DB level. If schema is ever re-pushed, these must be re-applied manually.
 
 ### AI-Generated Celebrity Profiles
 - **Feature**: Provides AI-generated biographical data, including bios, known for, origin, location, and net worth, cached for 30 days to minimize API calls.
