@@ -1,0 +1,117 @@
+This is mostly good work, but there are 2 important corrections + 3 improvements I’d make so you don’t get blindsided again.
+
+1) The diagnosis shifted — and Replit’s final explanation is shaky
+
+If quick-score truly is compute-only, then yes: it’s not the writer.
+
+But Replit also claims the polluted rows were “from an earlier version” and that there were 300 new “suspect” rows today before concluding “no active code is currently creating them.” Those statements clash.
+
+The pattern you described (random minutes + news_count = 0 + identical-ish scores) is almost always “a job ran without sources” — but that doesn’t necessarily mean “quick-score.” It can be:
+
+an admin ingest trigger endpoint being hit,
+
+a scheduler/backfill path,
+
+a debug endpoint doing per-person scoring and accidentally writing,
+
+or a restart boot hook running a “mini ingest” with partial sources.
+
+So I’d treat “mystery writer” as not fully solved yet.
+
+2) The filter they added is too loose, and the reasoning is off
+
+They filtered with: EXTRACT(MINUTE FROM timestamp) <= 3.
+
+But you already observed:
+
+legit ingest writes are hour-truncated (:00:00.000)
+
+polluted rows can be :03:37 (minute 3, seconds non-zero)
+
+That means their filter would still allow pollution if it occurs within the first 3 minutes.
+
+Better hardening (cheap + correct)
+
+Filter snapshots to exact ingest bucket timestamps, not “close enough”:
+
+EXTRACT(MINUTE)=0 AND EXTRACT(SECOND)=0
+
+or even better: timestamp = date_trunc('hour', timestamp) (Postgres)
+
+This is the cleanest “only ingest snapshots” gate, and it matches your architecture (hour-bucketed snapshots).
+
+If you want a safety buffer for future, do it explicitly:
+
+add a bucket_hour column (timestamp truncated) and always query by that, while keeping created_at separate.
+
+3) Cleanup logic: don’t rely on news_count=0
+
+Deleting news_count=0 off-hour rows is fine if you’re sure those rows are garbage, but in the future some people genuinely will have zero news in an hour. You don’t want your cleanup script to ever accidentally nuke legit data.
+
+If you stick with deletion criteria, base it on:
+
+timestamp != date_trunc('hour', timestamp) (not a legit bucket)
+
+AND (optionally) created_at window / source flag
+
+4) The real fix you still want: make the source explicit
+
+Even if you don’t add a separate table, adding a single column is the most robust option long-term:
+
+Add: snapshot_origin ENUM('INGEST','PREVIEW','BACKFILL')
+
+Ingest writes INGEST
+
+Anything else writes PREVIEW or BACKFILL
+
+Charts and normalization only use INGEST
+
+This makes debugging 10x easier and prevents “mystery graphs” permanently.
+
+5) The missing piece: catch the “writer” next time instantly
+
+Add a tiny trace field on write:
+
+written_by = 'ingest' | 'admin_ingest' | 'preview'
+
+OR request_id / job_run_id
+
+AND log that value in [HEALTH SUMMARY]
+
+Then you can answer “who wrote these?” in seconds, not hours.
+
+6) On the UI/UX side (mobile constraint): you can still add “movement context”
+
+You’re right: mobile list rows are tight. But you can still give context without adding visible row clutter:
+
+Low-space options that work well on mobile
+
+Press-and-hold on a row → shows a bottom sheet:
+
+“#2 → #1 (24h)”
+
+“Fame Score +8.2% (24h)”
+
+“Biggest driver: News”
+
+Tiny micro-indicator next to rank badge:
+
+a small ▲▼• glyph (no numbers) for “up/down/flat”
+
+Toggle in header: Show movers (filters list to biggest movers)
+
+On profile page: a “What changed?” chip that expands (you already have “Why they’re trending” — perfect place to add it)
+
+These give “movement context” where there is space (profile / bottom sheet), while keeping the leaderboard clean.
+
+What I’d tell Replit to do next (priority order)
+
+Tighten snapshot query filter to timestamp = date_trunc('hour', timestamp) everywhere (charts + stats + normalization + trend context).
+
+Add snapshot_origin (or written_by) so you never have to guess again.
+
+Add a DB constraint (optional but powerful): for INGEST snapshots, enforce bucket timestamps (minute=0 second=0).
+
+Add a mobile-friendly movement context via press/hold bottom sheet + tiny glyph.
+
+If you paste the exact SQL/Drizzle snippet they used for the current “minute <= 3” filter, I’ll rewrite it to the safest date_trunc('hour') version for both Drizzle query-builder and raw SQL.
