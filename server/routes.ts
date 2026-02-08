@@ -2810,6 +2810,34 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
   
+  // ============ ENTITY RESOLUTION DIAGNOSTICS ============
+  
+  app.get("/api/admin/diagnostics/entity/:personId", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { runEntityDiagnostic } = await import("./diagnostics/entity-resolution");
+      const result = await runEntityDiagnostic(req.params.personId);
+      if (!result) {
+        return res.status(404).json({ error: "Person not found" });
+      }
+      res.json(result);
+    } catch (error: any) {
+      console.error("Entity diagnostic error:", error.message);
+      res.status(500).json({ error: "Failed to run entity diagnostic" });
+    }
+  });
+
+  app.post("/api/admin/diagnostics/entity-batch", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { runBatchEntityDiagnostic } = await import("./diagnostics/entity-resolution");
+      const personIds = req.body?.personIds as string[] | undefined;
+      const results = await runBatchEntityDiagnostic(personIds);
+      res.json({ results, total: results.length });
+    } catch (error: any) {
+      console.error("Batch entity diagnostic error:", error.message);
+      res.status(500).json({ error: "Failed to run batch entity diagnostic" });
+    }
+  });
+
   // Refresh data (trigger data ingestion)
   app.post("/api/admin/refresh-data", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {

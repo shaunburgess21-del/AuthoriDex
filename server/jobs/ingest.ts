@@ -26,6 +26,8 @@ import {
   getCatchUpEnteredAtHour,
   getCatchUpCapMultiplier,
   getCatchUpAlphaMultiplier,
+  getDynamicRateLimit,
+  getDynamicAlpha,
   MAX_HOURLY_CHANGE_PERCENT,
   EMA_ALPHA_DEFAULT,
   EMA_ALPHA_2_SOURCES,
@@ -504,21 +506,47 @@ export async function runDataIngestion(): Promise<IngestResult> {
           stabilizationStats.gapPcts.push(gapPct);
         }
 
+        const wasRateLimited = scoreResult.wasStabilized && previousFameIndex !== undefined && previousFameIndex > 0;
+        const appliedCapPct = getDynamicRateLimit(scoreResult.spikingSourceCount);
+        const appliedAlpha = getDynamicAlpha(scoreResult.spikingSourceCount);
+
+        const diagnosticsData = {
+          v: 1,
+          raw: {
+            wiki: wiki?.pageviews24h ?? 0,
+            wiki7d: wiki?.averageDaily7d ?? 0,
+            news: news?.articleCount24h ?? 0,
+            search: serper?.searchVolume ?? 0,
+          },
+          fresh: {
+            wiki: !!wiki,
+            news: !newsUsedFallback && (news?.articleCount24h ?? 0) > 0,
+            search: !searchUsedFallback && (serper?.searchVolume ?? 0) > 0,
+          },
+          stab: {
+            limited: wasRateLimited,
+            capPct: Math.round(appliedCapPct * 1000) / 1000,
+            alpha: Math.round(appliedAlpha * 1000) / 1000,
+            spikes: scoreResult.spikingSourceCount,
+            rawFame: scoreResult.rawFameIndex,
+          },
+        };
+
         const snapshotValues = {
           personId: person.id,
-          timestamp: hourTimestamp, // Truncated to hour for idempotency
+          timestamp: hourTimestamp,
           trendScore: scoreResult.trendScore,
           fameIndex: scoreResult.fameIndex,
-          newsCount: newsCount,  // Use graceful degradation value
-          searchVolume: searchVolume,  // Use graceful degradation value
+          newsCount: newsCount,
+          searchVolume: searchVolume,
           youtubeViews: 0,
           spotifyFollowers: 0,
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiDelta: wiki?.delta || 0,
-          newsDelta: newsDelta,  // Use graceful degradation value
-          searchDelta: searchDelta,  // Use graceful degradation value
-          xQuoteVelocity: 0,  // X API disabled
-          xReplyVelocity: 0,  // X API disabled
+          newsDelta: newsDelta,
+          searchDelta: searchDelta,
+          xQuoteVelocity: 0,
+          xReplyVelocity: 0,
           massScore: scoreResult.massScore,
           velocityScore: scoreResult.velocityScore,
           velocityAdjusted: scoreResult.velocityAdjusted,
@@ -527,6 +555,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
           momentum: scoreResult.momentum,
           drivers: scoreResult.drivers,
           snapshotOrigin: 'ingest',
+          diagnostics: diagnosticsData,
         };
         await db.insert(trendSnapshots).values(snapshotValues)
           .onConflictDoUpdate({
@@ -548,6 +577,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
               momentum: snapshotValues.momentum,
               drivers: snapshotValues.drivers,
               snapshotOrigin: snapshotValues.snapshotOrigin,
+              diagnostics: snapshotValues.diagnostics,
             },
           });
 

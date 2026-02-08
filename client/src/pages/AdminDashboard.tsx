@@ -399,6 +399,11 @@ export default function AdminDashboard() {
   const [showScoreBreakdown, setShowScoreBreakdown] = useState(false);
   const [scoreBreakdownCelebrity, setScoreBreakdownCelebrity] = useState<string | null>(null);
 
+  // Entity Diagnostic state
+  const [entityDiagResults, setEntityDiagResults] = useState<any[] | null>(null);
+  const [entityDiagLoading, setEntityDiagLoading] = useState(false);
+  const [entityDiagFilter, setEntityDiagFilter] = useState<string>("all");
+
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS (React rules of hooks)
   
   // Fetch admin stats - only when user is admin
@@ -908,6 +913,32 @@ export default function AdminDashboard() {
       toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
     },
   });
+
+  const runEntityDiagnostics = useCallback(async (personIds?: string[]) => {
+    setEntityDiagLoading(true);
+    try {
+      const res = await fetchWithAuth("/api/admin/diagnostics/entity-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ personIds }),
+      });
+      if (!res.ok) throw new Error("Failed to run diagnostics");
+      const data = await res.json();
+      setEntityDiagResults(data.results);
+      toast({
+        title: "Entity Diagnostics Complete",
+        description: `Analyzed ${data.total} celebrities`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Diagnostics Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setEntityDiagLoading(false);
+    }
+  }, [toast]);
 
   const searchCelebrities = useCallback(async (query: string) => {
     if (!query || query.length < 2) {
@@ -2401,6 +2432,173 @@ export default function AdminDashboard() {
                     <span className="text-sm text-muted-foreground">Manual trigger</span>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Search className="h-5 w-5 text-orange-500" />
+                      Entity Resolution Diagnostics
+                    </CardTitle>
+                    <CardDescription>
+                      Verify Serper search results match the correct person for each celebrity
+                    </CardDescription>
+                  </div>
+                  <Button
+                    onClick={() => runEntityDiagnostics()}
+                    disabled={entityDiagLoading}
+                    data-testid="button-run-entity-diagnostics"
+                  >
+                    {entityDiagLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4 mr-2" />
+                        Run Full Scan
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {!entityDiagResults && !entityDiagLoading && (
+                  <p className="text-sm text-muted-foreground" data-testid="text-entity-diag-empty">
+                    Click "Run Full Scan" to analyze all celebrities. This queries Serper for each person and checks if the search results match the expected entity.
+                  </p>
+                )}
+                {entityDiagLoading && (
+                  <div className="flex items-center justify-center py-8" data-testid="loader-entity-diag">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <span className="ml-3 text-muted-foreground">Querying Serper for all celebrities (this may take a minute)...</span>
+                  </div>
+                )}
+                {entityDiagResults && !entityDiagLoading && (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant={entityDiagFilter === "all" ? "default" : "outline"}
+                        className="cursor-pointer toggle-elevate"
+                        onClick={() => setEntityDiagFilter("all")}
+                        data-testid="badge-filter-all"
+                      >
+                        All ({entityDiagResults.length})
+                      </Badge>
+                      <Badge
+                        variant={entityDiagFilter === "mismatch" ? "destructive" : "outline"}
+                        className="cursor-pointer toggle-elevate"
+                        onClick={() => setEntityDiagFilter("mismatch")}
+                        data-testid="badge-filter-mismatch"
+                      >
+                        Possible Mismatch ({entityDiagResults.filter((r: any) => r.conclusion === "POSSIBLE_MISMATCH").length})
+                      </Badge>
+                      <Badge
+                        variant={entityDiagFilter === "ok" ? "default" : "outline"}
+                        className="cursor-pointer toggle-elevate"
+                        onClick={() => setEntityDiagFilter("ok")}
+                        data-testid="badge-filter-ok"
+                      >
+                        Match OK ({entityDiagResults.filter((r: any) => r.conclusion === "ENTITY_MATCH_OK").length})
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                      {entityDiagResults
+                        .filter((r: any) => {
+                          if (entityDiagFilter === "mismatch") return r.conclusion === "POSSIBLE_MISMATCH" || r.conclusion === "NO_DATA";
+                          if (entityDiagFilter === "ok") return r.conclusion === "ENTITY_MATCH_OK";
+                          return true;
+                        })
+                        .map((result: any) => (
+                          <div
+                            key={result.personId}
+                            className={cn(
+                              "p-4 rounded-lg border space-y-2",
+                              result.conclusion === "POSSIBLE_MISMATCH" && "border-red-500/30 bg-red-500/5",
+                              result.conclusion === "ENTITY_MATCH_OK" && "border-green-500/20",
+                              result.conclusion === "NO_DATA" && "border-yellow-500/30 bg-yellow-500/5"
+                            )}
+                            data-testid={`entity-diag-result-${result.personId}`}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{result.name}</span>
+                                {result.latestRank && (
+                                  <Badge variant="outline">#{result.latestRank}</Badge>
+                                )}
+                                <Badge
+                                  variant={
+                                    result.conclusion === "ENTITY_MATCH_OK" ? "default" :
+                                    result.conclusion === "POSSIBLE_MISMATCH" ? "destructive" :
+                                    "secondary"
+                                  }
+                                  data-testid={`badge-conclusion-${result.personId}`}
+                                >
+                                  {result.conclusion === "ENTITY_MATCH_OK" && <CheckCircle className="h-3 w-3 mr-1" />}
+                                  {result.conclusion === "POSSIBLE_MISMATCH" && <XCircle className="h-3 w-3 mr-1" />}
+                                  {result.conclusion === "ENTITY_MATCH_OK" ? "Match OK" :
+                                   result.conclusion === "POSSIBLE_MISMATCH" ? "Possible Mismatch" : "No Data"}
+                                </Badge>
+                              </div>
+                              <span className="text-sm text-muted-foreground font-mono">
+                                Fame: {result.latestFameIndex?.toLocaleString() ?? "N/A"}
+                              </span>
+                            </div>
+
+                            <div className="text-sm text-muted-foreground">
+                              Query: <span className="font-mono">{result.searchQueryUsed}</span>
+                              {result.wikiSlug && (
+                                <span className="ml-2">| Wiki: <span className="font-mono">{result.wikiSlug}</span></span>
+                              )}
+                            </div>
+
+                            {result.mismatchReasons.length > 0 && (
+                              <div className="text-sm space-y-1">
+                                {result.mismatchReasons.map((reason: string, i: number) => (
+                                  <div key={i} className="flex items-center gap-1 text-red-400">
+                                    <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                                    {reason}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {result.topResults.length > 0 && (
+                              <div className="text-sm space-y-1 mt-2">
+                                <span className="text-muted-foreground font-medium">Top Results:</span>
+                                {result.topResults.map((r: any, i: number) => (
+                                  <div key={i} className="ml-4 text-muted-foreground">
+                                    #{r.position}. <span className="text-foreground">{r.title}</span>
+                                    <span className="ml-1 text-muted-foreground/60">({r.domain})</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {result.knowledgeGraph && (
+                              <div className="text-sm ml-4 text-muted-foreground">
+                                KG: <span className="text-foreground">{result.knowledgeGraph.title}</span>
+                                {result.knowledgeGraph.type && (
+                                  <span className="ml-1 text-muted-foreground/60">({result.knowledgeGraph.type})</span>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mt-2 pt-2 border-t">
+                              <span>Wiki: {result.rawInputs.wikiPageviews.toLocaleString()} views (p{(result.percentiles.wikiPercentile * 100).toFixed(0)})</span>
+                              <span>News: {result.rawInputs.newsCount} articles (p{(result.percentiles.newsPercentile * 100).toFixed(0)})</span>
+                              <span>Search: {result.rawInputs.searchVolume.toFixed(1)} score (p{(result.percentiles.searchPercentile * 100).toFixed(0)})</span>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

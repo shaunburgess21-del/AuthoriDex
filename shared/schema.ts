@@ -80,6 +80,7 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   momentum: text("momentum").default("Stable"),
   drivers: text("drivers").array(),
   snapshotOrigin: text("snapshot_origin").default("ingest"),
+  diagnostics: jsonb("diagnostics"),
 }, (table) => ({
   uniquePersonTimestamp: unique().on(table.personId, table.timestamp),
 }));
