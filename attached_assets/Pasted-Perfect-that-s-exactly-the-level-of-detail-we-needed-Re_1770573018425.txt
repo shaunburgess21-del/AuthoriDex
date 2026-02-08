@@ -1,0 +1,153 @@
+Perfect — that’s exactly the level of detail we needed. Replit’s current setup is already pretty sane:
+
+Request-time only
+
+Top-10 gate
+
+Serper news cached 6h
+
+OpenAI cached 6h
+
+Short JSON response, low token cap
+
+Neutral prompt constraints
+
+Plus your non-AI Trend Context running for everyone (great)
+
+Where you can still get bitten is thrash at rank 10/11 and TTL-only regen (even if nothing changed). Here are my thoughts + a final “send to Replit” prompt.
+
+My thoughts on Replit’s current design
+What’s good (keep)
+
+On-demand is good for cost control (no background LLM burn).
+
+Cache with TTL (6h) is good.
+
+Separate Serper cache is good.
+
+Top-10 gate is good.
+
+Trend Context (non-AI) is excellent — that’s your “LLM-light” backbone.
+
+What I’d improve (high leverage, low risk)
+A) Add “top-10 hysteresis” to stop boundary thrash
+
+Right now: rank 11 → 10 triggers LLM work, 10 → 11 disables it, 11 → 10 triggers again, etc.
+
+Fix: treat “top 10 eligibility” as a sticky state:
+
+Enter when rank <= 10
+
+Exit when rank >= 12 (or after N consecutive runs outside top 10)
+
+This single change can cut your calls dramatically during volatility.
+
+B) Add input-hash caching, not just TTL caching
+
+Today you regenerate every 6 hours even if the same headlines come back.
+
+Fix: compute an inputHash from:
+
+headline URLs (or titles+domains)
+
+personId
+
+(optional) the driver result from trend-context (NEWS/SEARCH/WIKI/SOCIAL)
+Then:
+
+if inputHash unchanged and cached result exists, extend TTL or just reuse it
+
+only regenerate when TTL expired and inputHash changed (or a “force refresh”)
+
+C) Store provenance (minimal)
+
+You don’t need to persist it on the person record—store it in the cached object:
+
+model: "gpt-4o-mini"
+
+promptVersion: 1
+
+serperTbs: "qdr:w"
+
+headlinesUsed: [urls]
+
+This pays off the first time a summary looks weird and you want to debug.
+
+D) Use Trend Context to gate early refresh
+
+You already compute driver + tags without AI. Use that to decide whether to regenerate early.
+
+Example:
+
+If driver is NEWS and isHeated=true and top headline set changed → allow refresh even within TTL (or shorten TTL to 2h for heated)
+
+If driver is stable and no headline change → don’t refresh even if TTL expired (optional)
+
+This makes the system feel “alive” without extra cost.
+
+Final prompt you can send to Replit (copy/paste)
+
+Goal: keep current architecture (request-time, top-10 only, cached), but reduce call thrash + make outputs auditable.
+
+Add top-10 hysteresis / sticky eligibility
+
+Create a small top10_state cache key (or store in api_cache) like top10_eligible:{personId} with:
+
+eligible: boolean
+
+enteredAt, exitedAt
+
+lastRankSeen
+
+Rules:
+
+set eligible=true when rank <= 10
+
+set eligible=false only when rank >= 12 (or after 2 consecutive checks rank>10)
+
+The /api/why-trending/:personId endpoint should use this eligibility state (not just instant rank) to decide whether to generate/return.
+
+Add input hash for why-trending generation
+
+Compute inputHash = sha256(personId + sorted(headlineUrls) + driver + primaryTag)
+
+headlineUrls from Serper response (fallback to title+domain if url missing)
+
+driver/tag from trend-context if available
+
+Store inputHash alongside the cached why-trending result in api_cache.
+
+Regeneration rules:
+
+If cached result exists AND inputHash unchanged → return cached result (even if TTL expired, optionally extend TTL)
+
+If inputHash changed OR cache missing → regenerate (still respecting TTL if you prefer strict TTL)
+
+Provenance fields in cached payload
+Add to cached value:
+
+model, promptVersion, serperQuery, serperTbs, headlinesUsed[], generatedAt
+This is for audit/debug only.
+
+Use Trend Context to avoid unnecessary OpenAI calls
+
+If trend-context driver != NEWS and Serper returns empty or low-quality headlines, return hasContext:false without calling OpenAI.
+
+If trend-context says driver=NEWS and isHeated=true, allow refresh earlier than 6h when headline set changes.
+
+Safety: rate-limit the endpoint
+Even with caching, add a simple per-person guard:
+
+“no more than 1 OpenAI generation per person per X minutes” (e.g., 30–60 min), regardless of rank toggling.
+
+One small note on “LLM costs”
+
+Even if you’re not paying per call directly, request-time generation has:
+
+latency cost (slower page load if cold cache)
+
+quota/rate-limit risk
+
+budget cost somewhere (Replit bundle or API key billing)
+
+Your caching already handles most of it — the above changes just make it bulletproof.

@@ -1,0 +1,110 @@
+Oh yes. I believe (according to Replit) OpenAI (you) has a deal with replit where it is integrated, so Replit uses that for the paragraph and news sources generation. I can ask replit for more information if you would like. Like the frequencies etc. By the way, we only generate those "why trending" paragraphs for people in the top 10, as anyone lower we feel there wouldn't be good trending info. So if someone moves into the top 10, replit has built it that the paragraph automatically shows, if they drop out it is hidden
+
+Got you — and your “only top 10” rule is exactly the right way to keep costs + noise down.
+
+A couple clarifications and a tight set of recommendations you can hand to Replit (no UI changes required, just backend hygiene + cost control).
+
+What’s probably happening with “Replit uses OpenAI”
+
+Replit’s AI features often run through their own integrated LLM routing (could be OpenAI, Anthropic, etc., depending on product/settings). Even if it feels “free,” there’s still a runtime cost + latency somewhere — either billed to you, bundled into Replit, or rate-limited behind the scenes.
+
+You don’t need perfect details to design it correctly — you just need to make your implementation:
+
+cached
+
+idempotent
+
+not regenerated too often
+
+traceable
+
+Your current logic (top 10 only) is strong — two “gotchas” to watch
+1) Thrash near the boundary
+
+If rank #10 and #11 keep swapping hourly, you’ll regenerate text too often unless you add hysteresis.
+
+Fix: only (re)generate when one of these is true:
+
+newly enters top 10 and hasn’t had a summary in the last X hours
+
+summary is older than TTL (e.g., 6–12 hours)
+
+a “drivers changed” signal (e.g., top driver source changed, or big delta)
+
+2) Inconsistent summaries from different runs
+
+LLMs can paraphrase differently each time. Users may notice “why trending” changes even when the data didn’t.
+
+Fix: lock it to a stable input bundle and cache it.
+
+The best “ask Replit” message (copy/paste)
+
+Here’s a clean prompt you can send Replit to confirm how it works + harden it:
+
+Prompt to Replit:
+
+Where is the “Why They’re Trending” paragraph generated?
+
+Is it produced at ingest time (server job) or at request time (when user opens profile)?
+
+Which model/provider is used (OpenAI/Anthropic/etc.) and where is it configured?
+
+What triggers regeneration?
+
+Only when a person enters the top 10?
+
+Does it regenerate every ingest run while they remain top 10?
+
+Is there a TTL/caching rule?
+
+Add cost/latency guardrails:
+Please implement:
+
+whyTrendingGeneratedAt timestamp
+
+whyTrendingTtlHours (e.g., 6 or 12)
+
+Do not regenerate if now - generatedAt < TTL unless forced
+
+Add whyTrendingInputHash (hash of top headlines + key metrics)
+
+Only regenerate if input hash changes materially OR TTL expired
+
+Make it deterministic-ish:
+
+Limit to top 3 headlines + 3 signals (wiki/news/search percentiles + freshness flags)
+
+Keep prompt strict: 1–2 sentences max, no speculation, cite the headline themes
+
+Store provenance for debugging:
+In the stored object, include:
+
+model name (string)
+
+prompt version
+
+input headline IDs/URLs used
+So if something looks off, we can audit it.
+
+Boundary thrash protection (top-10 hysteresis):
+
+Only start showing/generating when rank <= 10
+
+Only stop showing when rank >= 12 (or after N runs out of top 10)
+This prevents flip-flopping.
+
+My recommendation on frequency (simple default)
+
+Since you only show top 10, I’d set:
+
+TTL = 12 hours (or 6 if you want it “newsier”)
+
+Regenerate early only if: the top headline set changes meaningfully (input hash changed)
+
+That gives you “fresh enough” without burning calls.
+
+If you want, I can tighten the exact “input hash” definition
+
+Example: hash of (topHeadlineUrls + roundedPercentiles + freshnessFlags + timestampHourBucket) so it changes only when something actually changes.
+
+If you paste what Replit says about the current trigger/caching (even 2–3 lines), I’ll turn it into a final, super-specific implementation spec.
