@@ -5,6 +5,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { startSnapshotScheduler } from "./jobs/snapshot-scheduler";
 import { runDataIngestion } from "./jobs/ingest";
 import { pool } from "./db";
+import { setDbGuardrailsVerified } from "./guardrails";
 
 // ===========================================
 // SERVERLESS MODE DETECTION
@@ -22,6 +23,8 @@ const REQUIRED_DB_CONSTRAINTS = [
   'chk_ingest_hour_truncated',
 ];
 
+const REQUIRE_DB_GUARDRAILS = process.env.REQUIRE_DB_GUARDRAILS === 'true';
+
 async function verifyDbConstraints() {
   try {
     const result = await pool.query(
@@ -35,11 +38,17 @@ async function verifyDbConstraints() {
     const missing = REQUIRED_DB_CONSTRAINTS.filter(c => !found.includes(c));
     if (missing.length > 0) {
       log(`[DB_GUARDRAIL_MISSING] CRITICAL: Missing constraints on trend_snapshots: ${missing.join(', ')}. Data integrity is at risk! Re-apply via SQL.`);
+      if (REQUIRE_DB_GUARDRAILS) {
+        log(`[DB_GUARDRAIL_MISSING] REQUIRE_DB_GUARDRAILS=true — ingest writes are BLOCKED until constraints are restored.`);
+      }
+      setDbGuardrailsVerified(false);
     } else {
       log(`[DB Guardrails] All ${REQUIRED_DB_CONSTRAINTS.length} constraints verified on trend_snapshots`);
+      setDbGuardrailsVerified(true);
     }
   } catch (err) {
     log(`[DB Guardrails] WARNING: Could not verify constraints: ${err}`);
+    setDbGuardrailsVerified(false);
   }
 }
 

@@ -43,6 +43,14 @@ export async function runDataIngestion(): Promise<IngestResult> {
   let processed = 0;
   let errors = 0;
 
+  if (process.env.REQUIRE_DB_GUARDRAILS === 'true') {
+    const { dbGuardrailsVerified } = await import('../guardrails');
+    if (!dbGuardrailsVerified) {
+      console.error(`[Ingest] ABORT: REQUIRE_DB_GUARDRAILS=true but DB constraints are missing. Refusing to write to prevent data corruption.`);
+      return { processed: 0, errors: 1, duration: Date.now() - startTime };
+    }
+  }
+
   // Truncate to the hour for idempotency - multiple runs within same hour will be deduplicated
   // Using explicit truncation to prevent any race conditions or serialization issues
   const now = new Date();
