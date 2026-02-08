@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trendSnapshots, trackedPeople, apiCache } from "@shared/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 
 export type TrendDriver = "NEWS" | "SEARCH" | "SOCIAL" | "WIKI";
 
@@ -148,7 +148,10 @@ export async function getTrendContext(personId: string): Promise<TrendContext> {
   const latestSnapshot = await db
     .select()
     .from(trendSnapshots)
-    .where(eq(trendSnapshots.personId, personId))
+    .where(and(
+      eq(trendSnapshots.personId, personId),
+      sql`EXTRACT(MINUTE FROM ${trendSnapshots.timestamp}) <= 3`
+    ))
     .orderBy(desc(trendSnapshots.timestamp))
     .limit(1);
   
@@ -252,6 +255,7 @@ export async function getTrendContextBatch(personIds: string[]): Promise<Map<str
   const allSnapshots = await db
     .select()
     .from(trendSnapshots)
+    .where(sql`EXTRACT(MINUTE FROM ${trendSnapshots.timestamp}) <= 3`)
     .orderBy(desc(trendSnapshots.timestamp));
   const allCache = await db.select().from(apiCache);
   

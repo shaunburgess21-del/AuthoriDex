@@ -271,12 +271,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const cutoffDate = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000);
       
       // Fetch snapshots for this person within the time range
+      // Safety net: only include on-the-hour snapshots (written by ingest.ts)
+      // Off-hour snapshots with unique millisecond timestamps are pollution
       const snapshots = await db
         .select()
         .from(trendSnapshots)
         .where(and(
           eq(trendSnapshots.personId, id),
-          sql`${trendSnapshots.timestamp} >= ${cutoffDate}`
+          sql`${trendSnapshots.timestamp} >= ${cutoffDate}`,
+          sql`EXTRACT(MINUTE FROM ${trendSnapshots.timestamp}) <= 3`
         ))
         .orderBy(desc(trendSnapshots.timestamp))
         .limit(daysNum * 24); // Max one per hour for requested days
@@ -3179,10 +3182,13 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         return res.status(404).json({ error: "Celebrity not found" });
       }
       
-      // Get latest 2 snapshots for this celebrity (current + previous hour)
+      // Get latest 2 on-hour snapshots for this celebrity (current + previous hour)
       const recentSnapshots = await db.select()
         .from(trendSnapshots)
-        .where(eq(trendSnapshots.personId, id))
+        .where(and(
+          eq(trendSnapshots.personId, id),
+          sql`EXTRACT(MINUTE FROM ${trendSnapshots.timestamp}) <= 3`
+        ))
         .orderBy(desc(trendSnapshots.timestamp))
         .limit(2);
       
@@ -3199,7 +3205,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         fameIndex: trendSnapshots.fameIndex,
       })
         .from(trendSnapshots)
-        .where(sql`timestamp = (SELECT MAX(timestamp) FROM trend_snapshots ts2 WHERE ts2.person_id = trend_snapshots.person_id)`)
+        .where(sql`EXTRACT(MINUTE FROM timestamp) <= 3 AND timestamp = (SELECT MAX(timestamp) FROM trend_snapshots ts2 WHERE ts2.person_id = trend_snapshots.person_id AND EXTRACT(MINUTE FROM ts2.timestamp) <= 3)`)
         .orderBy(desc(trendSnapshots.fameIndex));
       
       const currentRank = allSnapshots.findIndex(s => s.personId === id) + 1;
@@ -3210,17 +3216,19 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         const prevAllSnapshots = await db.execute(sql`
           SELECT person_id, fame_index 
           FROM trend_snapshots 
-          WHERE timestamp = (
-            SELECT MAX(timestamp) FROM trend_snapshots 
-            WHERE timestamp < ${latestSnapshot.timestamp}
-          )
+          WHERE EXTRACT(MINUTE FROM timestamp) <= 3
+            AND timestamp = (
+              SELECT MAX(timestamp) FROM trend_snapshots 
+              WHERE timestamp < ${latestSnapshot.timestamp}
+                AND EXTRACT(MINUTE FROM timestamp) <= 3
+            )
           ORDER BY fame_index DESC
         `);
         const prevRankIndex = (prevAllSnapshots.rows as any[]).findIndex(s => s.person_id === id);
         previousRank = prevRankIndex >= 0 ? prevRankIndex + 1 : currentRank;
       }
       
-      // Get 24h historical snapshots for the chart
+      // Get 24h historical on-hour snapshots for the chart
       const time24hAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
       const historicalSnapshots = await db.select({
         timestamp: trendSnapshots.timestamp,
@@ -3233,7 +3241,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         .from(trendSnapshots)
         .where(and(
           eq(trendSnapshots.personId, id),
-          gte(trendSnapshots.timestamp, time24hAgo)
+          gte(trendSnapshots.timestamp, time24hAgo),
+          sql`EXTRACT(MINUTE FROM ${trendSnapshots.timestamp}) <= 3`
         ))
         .orderBy(trendSnapshots.timestamp);
       
@@ -3264,6 +3273,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         FROM trend_snapshots
         WHERE person_id = ${id}
           AND timestamp >= ${time7dAgo}
+          AND EXTRACT(MINUTE FROM timestamp) <= 3
       `);
       
       const baselines = {
