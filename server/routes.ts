@@ -1969,7 +1969,11 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
   }
 
   function normalizeTitle(title: string): string {
-    return title.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+    let t = title;
+    t = t.replace(/[\u200B-\u200D\uFEFF\u00AD]/g, "");
+    t = t.replace(/\s*[-–—|]\s*(CNN|Reuters|AP|BBC|NBC|CBS|ABC|Fox News|CNBC|Bloomberg|Forbes|WSJ|The Guardian|The New York Times|Associated Press|NPR|USA Today|The Washington Post|Sky News|Al Jazeera|MSNBC|The Hill|Politico|TechCrunch|The Verge|Variety|TMZ|E! News|People|Entertainment Weekly|ESPN|Daily Mail|NY Post|New York Post|Axios|Business Insider|The Independent)\.?$/i, "");
+    t = t.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+    return t;
   }
 
   function computeHeadlineHash(sources: Array<{ title: string; link?: string }>): string {
@@ -2071,7 +2075,7 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       
       // E) Single-flight lock: prevent cache stampede when multiple users hit cold cache simultaneously
       const lockKey = `why_trending_lock:${personId}`;
-      const WHY_TRENDING_LOCK_TTL_SECONDS = 60;
+      const WHY_TRENDING_LOCK_TTL_SECONDS = 90;
       const [lockRow] = await db.select().from(apiCache).where(eq(apiCache.cacheKey, lockKey)).limit(1);
       if (lockRow && lockRow.expiresAt && lockRow.expiresAt > new Date()) {
         console.log(`[WhyTrending] Generation locked for ${person.name}, serving stale or empty`);
@@ -2301,7 +2305,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       res.json(result);
     } catch (error: any) {
       console.error("Error fetching why trending:", error);
-      // Release lock on error so it doesn't block for 60s
+      // Release lock on error so it doesn't block for 90s
       try {
         const errLockKey = `why_trending_lock:${req.params.personId}`;
         await db.insert(apiCache).values({
