@@ -1,0 +1,279 @@
+Yep — I can absolutely package “the next 20 improvements” into one consolidated spec you can hand to Replit, so you’re not playing ping-pong.
+
+Two things are true at once:
+
+I can propose a big, high-ROI roadmap now (architecture, data integrity, scoring stability, observability, cache semantics, chart hygiene, etc.).
+
+Sometimes I only spot the next best fix after seeing what Replit actually implemented (because implementations create new edge cases). But we can reduce that massively by baking in “defense in depth” patterns up front.
+
+Below is a single long, prioritized checklist you can paste to Replit. It’s written as an implementation spec + acceptance criteria, and avoids user-facing UI changes (per your request).
+
+FameDex Trend Score Engine – Consolidated Hardening + Quality Roadmap (No user-facing UI)
+A) Data integrity: make it impossible to corrupt leaderboards/snapshots
+
+A1. Enforce snapshot invariants in the database (not just code)
+
+Add a DB constraint (or trigger) to prevent “bad ingest snapshots” ever being written.
+
+Rule: if snapshot_origin='ingest', then timestamp = date_trunc('hour', timestamp)
+
+Also validate: snapshot_origin must be in a fixed set (enum or CHECK): ('ingest','preview','backfill').
+
+Acceptance:
+
+Any attempt to insert a non-hour-truncated ingest snapshot fails at DB level.
+
+Any attempt to insert an unknown origin fails.
+
+A2. Single-writer / atomic publish guarantees
+
+Keep “ingest is authoritative writer” for trending_people.
+
+Ensure the write pattern is always atomic:
+
+transaction
+
+row count validation
+
+advisory lock
+
+never leave table empty
+
+Acceptance:
+
+Crash mid-run never produces empty leaderboard.
+
+Concurrent write attempts cannot partially overwrite.
+
+A3. Add “job_run_id” for debugging and traceability (internal-only)
+
+Generate job_run_id=uuid at ingest start.
+
+Include it in:
+
+all logs for that run
+
+optionally trend_snapshots.job_run_id (nullable)
+
+Acceptance:
+
+You can take any snapshot row and trace it to a specific ingest run and its source health.
+
+B) Source reliability + “mixed freshness” correctness
+
+B1. Coverage gate is good — extend it consistently
+
+You already have a 70% gate for GDELT/Serper; make it a formal per-source policy:
+
+minCoveragePct, maxStalenessHours, decayModel per source.
+
+Acceptance:
+
+No source can be “fresh for a few celebs, stale for the rest” within same run.
+
+B2. Add “source_value carry-forward” that cannot collapse to zero
+
+Fix any remaining “zero propagation” class of bugs by formalizing fallback logic:
+
+If a source is in OUTAGE/DEGRADED and previous value exists, carry forward previous value then apply decay.
+
+Never write “0” unless you are sure true value is 0 (rare for news/search).
+
+Acceptance:
+
+After an outage, values decay smoothly, never cliff to zero unless truly zero.
+
+B3. Add per-person identity anchoring (lightweight)
+
+You already added searchQueryOverride. Extend the same pattern to:
+
+newsQueryOverride (optional, for ambiguous names)
+
+wikiSlug already exists; ensure it’s used everywhere wiki is referenced.
+
+Add internal logs when overrides are used, plus “override hit rate”.
+
+Acceptance:
+
+Ambiguous people stop getting polluted signals.
+
+B4. Normalize “query keys” by personId everywhere
+
+Any maps/caches keyed by “name” should be keyed by personId.
+
+Acceptance:
+
+Duplicate names can’t collide.
+
+C) Scoring model: improve “truthiness” without losing stability
+
+C1. Separate “mass” vs “velocity” strictly by granularity
+
+Wiki daily totals should feed mass, not velocity, unless you fetch hourly wiki.
+
+You already smoothed wiki velocity with 7d avg — keep that.
+
+Future (optional): implement hourly wiki pageviews and a rolling 24h window if you want wiki velocity later.
+
+Acceptance:
+
+No sawtooth artifacts from daily boundary.
+
+C2. Make stabilization adaptive but bounded
+You already built catch-up mode + gap metrics. Tighten it into a formal policy:
+
+Targets:
+
+medianGapPct < 5%
+
+rateLimitedPct < 25% steady state
+
+Catch-up:
+
+triggers when median gap > X (eg 8%)
+
+exits when median gap < Y for N runs (eg <4% for 2)
+
+Add an “outlier lane”:
+
+if individual gap > 40%: allow higher cap for that individual only (still bounded)
+
+Acceptance:
+
+Scores converge quickly after disruptions without freezing the board.
+
+C3. Add “per-source corroboration weighting” (optional but powerful)
+
+If 2+ sources agree on direction, allow faster moves.
+
+If only 1 source spikes and others are stale, cap harder.
+
+Acceptance:
+
+Real events move quickly; single-source noise doesn’t.
+
+C4. Improve “rank churn sanity”
+
+Internal-only checks:
+
+if top10 churn is extreme and source health is degraded, flag run internally (logs) and optionally “don’t publish” that run.
+
+Acceptance:
+
+Prevents embarrassing leaderboard flips during partial outages.
+
+D) Snapshot + history correctness (what the charts show)
+
+D1. Snapshots must only represent authoritative ingest
+
+Ensure anything “preview” never writes snapshots.
+
+If you ever want preview snapshots later:
+
+write them to a separate table or origin='preview' and never query them for charts by default.
+
+Acceptance:
+
+History charts can’t be polluted.
+
+D2. History queries should be explicit about what they return
+
+For 1D: last 24 hours of ingest snapshots only.
+
+For 7D/30D: on-hour ingest snapshots only.
+
+Consider downsampling: 7D uses hourly; 30D uses every 3 hours; 6M uses daily, etc.
+
+Acceptance:
+
+fast, consistent charts; no repeated tick labels; no “random spikes”.
+
+E) Caching correctness + cost control
+
+E1. Cache invariants
+
+You just fixed expiresAt bugs — lock this in:
+
+expiresAt > fetchedAt
+
+“read guard” treats invalid rows as cache miss
+
+“write guard” refuses invalid writes
+
+Acceptance:
+
+TTL can never go negative again.
+
+E2. Cache key versioning
+
+Add a cacheKeyVersion or include v1 in cacheKey.
+
+If you change query formats, bump version to avoid mixing old/new cached responses.
+
+Acceptance:
+
+Future schema/query changes don’t poison cache.
+
+E3. Rate limit and budget enforcement (internal-only)
+
+Per run: enforce max calls per provider.
+
+If budget exceeded: degrade that source for the whole run (coverage gate style).
+
+Acceptance:
+
+predictable spend; no surprise API blow-ups.
+
+F) Operational robustness (no UI)
+
+F1. Scheduler: make it “wall clock hourly,” not “interval since boot”
+
+Use a cron-like scheduler aligned to :02 past the hour (you already aim for this).
+
+Ensure restarts don’t cause weird bursts.
+
+Acceptance:
+
+consistent snapshot cadence.
+
+F2. Alerts (internal logs only)
+
+No UI. Just structured logs:
+
+if source outage persists > N hours
+
+if rows != expected
+
+if medianGapPct rising for 3 runs
+
+Acceptance:
+
+you spot issues before users do.
+
+Implementation order (highest ROI first)
+
+DB constraint + enum for snapshot_origin + hour-trunc ingest snapshots
+
+job_run_id (logs + optional column)
+
+Outlier lane for extreme gap individuals
+
+Scheduler wall-clock alignment
+
+Cache key versioning + provider call budgets
+
+newsQueryOverride optional + identity anchoring refinements
+
+Acceptance checklist (what you verify after all changes)
+
+Leaderboard never empty on restart/failure.
+
+No polluted snapshots can be inserted (DB blocks it).
+
+History charts show only ingest snapshots.
+
+medianGapPct < 5% and rateLimitedPct < 25% in steady state.
+
+Source outages don’t produce zeros; they decay smoothly.
+
+Cache TTL can’t become invalid.

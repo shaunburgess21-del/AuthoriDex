@@ -1,0 +1,91 @@
+Nice — that latest build actually knocks out two of the biggest items from my packaged spec (DB constraints + origin whitelist), and the sanity check is a good sign the system is “boringly healthy” again.
+
+Before you hand the big package to Replit, I’d add just a few tweaks based on what they did:
+
+1) Make the constraints “schema-managed”, not “SQL-only”
+
+Right now they’re documented as “SQL-only (not in Drizzle) so re-push might wipe them.” That’s the one thing I’d tighten.
+
+Add to the package:
+
+Put these constraints under a migration file / migrations system so they’re applied automatically.
+
+Add a startup assertion (cheap check) that verifies constraints exist and logs a single loud warning if they don’t.
+
+Acceptance:
+
+Fresh deploy / DB reset automatically re-applies constraints.
+
+If constraints are missing, the app logs [DB_GUARDRAIL_MISSING] and refuses to start or runs in “safe read-only” mode (your call).
+
+2) Tighten all snapshot reads to use snapshot_origin='ingest' (already done) AND add an index
+
+They’ve added origin filters everywhere (good). Now you want performance to stay good as snapshots grow.
+
+Add to the package:
+
+DB index: (person_id, timestamp) where snapshot_origin='ingest'
+
+Or composite index: (snapshot_origin, person_id, timestamp desc) depending on query patterns.
+
+Acceptance:
+
+History endpoint stays fast even at 90 days / 180 days of hourly snapshots.
+
+3) “Mystery writer” is mostly solved, but add a cheap tripwire anyway
+
+Even with constraints, you still want to know if anything tries to write off-hour ingest snapshots.
+
+Add to the package:
+
+In ingest write path, log job_run_id (or at least a generated run token) and write it to logs consistently.
+
+Add a DB trigger (optional) to log attempted invalid inserts (or just rely on app logs around insert failures).
+
+Acceptance:
+
+If something tries to write invalid snapshots, you can trace it immediately in logs.
+
+4) Revisit whether we still need job_run_id
+
+Replit wants to skip it. Fair — but now that you’re building lots of robustness, it becomes a cheap “black box flight recorder”.
+
+My updated stance:
+
+Keep snapshot_origin as the main debugging lever.
+
+Add job_run_id only if it’s easy (UUID generated per ingest run, stored in snapshots + health summary log).
+
+It’s not required, but it makes incident debugging way faster later.
+
+5) Add “wall clock scheduler” to reduce gaps (still worth it)
+
+You’ve seen restarts cause gaps and weird cadence.
+
+Add to the package:
+
+Schedule ingest at an absolute time (:02) using cron-style scheduling instead of setInterval-from-boot.
+
+Ensure only one scheduler is active (avoid double schedules after hot reloads).
+
+Acceptance:
+
+Over 24h, you get the expected number of runs (±1), without clusters after restarts.
+
+What I would not add right now
+
+Big model changes, new data sources, or anything that changes user-facing ranking behavior materially — you’ve only just stabilized the core.
+
+Copy/paste addendum to append to the package for Replit
+
+If you want something you can literally paste:
+
+Migrations: Move DB constraints (chk_ingest_hour_truncated, chk_snapshot_origin_values) into managed migrations; add a startup check that asserts they exist.
+
+Indexes: Add partial/composite indexes optimized for ingest snapshot reads: at minimum (person_id, timestamp desc) filtered on snapshot_origin='ingest'.
+
+Tripwire logging: Standardize a per-run token (optional job_run_id) in logs; log any rejected snapshot insert attempts with that token.
+
+Scheduler: Replace interval scheduling with wall-clock cron scheduling aligned to :02; prevent duplicate schedulers on restart/hot reload.
+
+That’s it. Everything else in the big package still stands, but those four are the only “new” items I’d add based on their latest build.
