@@ -274,7 +274,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Safety net: only include on-the-hour snapshots (written by ingest.ts)
       // Off-hour snapshots with unique millisecond timestamps are pollution
       const snapshots = await db
-        .select()
+        .select({
+          timestamp: trendSnapshots.timestamp,
+          trendScore: trendSnapshots.trendScore,
+          fameIndex: trendSnapshots.fameIndex,
+          newsCount: trendSnapshots.newsCount,
+          youtubeViews: trendSnapshots.youtubeViews,
+          spotifyFollowers: trendSnapshots.spotifyFollowers,
+          searchVolume: trendSnapshots.searchVolume,
+          wikiPageviews: trendSnapshots.wikiPageviews,
+        })
         .from(trendSnapshots)
         .where(and(
           eq(trendSnapshots.personId, id),

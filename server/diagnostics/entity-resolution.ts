@@ -15,6 +15,7 @@ export interface EntityDiagnosticResult {
   wikiSlug: string | null;
   topResults: Array<{
     title: string;
+    url: string;
     domain: string;
     snippet: string;
     position: number;
@@ -139,6 +140,7 @@ export async function runEntityDiagnostic(personId: string): Promise<EntityDiagn
 
         topResults = (data.organic || []).slice(0, 3).map((r: any, i: number) => ({
           title: r.title || "",
+          url: r.link || "",
           domain: extractDomain(r.link || ""),
           snippet: r.snippet || "",
           position: r.position || i + 1,
@@ -279,6 +281,11 @@ export async function runBatchEntityDiagnostic(
     const order = { POSSIBLE_MISMATCH: 0, NO_DATA: 1, ENTITY_MATCH_OK: 2 };
     return order[a.conclusion] - order[b.conclusion];
   });
+
+  const ok = results.filter(r => r.conclusion === "ENTITY_MATCH_OK").length;
+  const possibleMismatch = results.filter(r => r.conclusion === "POSSIBLE_MISMATCH").length;
+  const noData = results.filter(r => r.conclusion === "NO_DATA").length;
+  console.log(`ENTITY_DIAG_SUMMARY { ok: ${ok}, possibleMismatch: ${possibleMismatch}, noData: ${noData} }`);
 
   return results;
 }

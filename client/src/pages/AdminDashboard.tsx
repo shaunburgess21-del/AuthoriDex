@@ -2574,7 +2574,12 @@ export default function AdminDashboard() {
                                 {result.topResults.map((r: any, i: number) => (
                                   <div key={i} className="ml-4 text-muted-foreground">
                                     #{r.position}. <span className="text-foreground">{r.title}</span>
-                                    <span className="ml-1 text-muted-foreground/60">({r.domain})</span>
+                                    {r.url ? (
+                                      <a href={r.url} target="_blank" rel="noopener noreferrer" className="ml-1 text-blue-400 hover:underline text-xs" data-testid={`link-entity-result-${i}`}>({r.domain})</a>
+                                    ) : (
+                                      <span className="ml-1 text-muted-foreground/60">({r.domain})</span>
+                                    )}
+                                    {r.snippet && <div className="text-xs text-muted-foreground/50 ml-4 truncate max-w-[400px]" title={r.snippet}>{r.snippet}</div>}
                                   </div>
                                 ))}
                               </div>

@@ -34,6 +34,18 @@ import {
   EMA_ALPHA_3_SOURCES,
 } from "../scoring/normalize";
 
+export const SNAPSHOT_DIAGNOSTICS_VERSION = 1;
+
+export function parseSnapshotDiagnostics(diagnostics: unknown): Record<string, any> | null {
+  if (!diagnostics || typeof diagnostics !== "object") return null;
+  const d = diagnostics as Record<string, any>;
+  if (d.v !== SNAPSHOT_DIAGNOSTICS_VERSION) {
+    console.warn(`[DIAG_VERSION_MISMATCH] Expected v:${SNAPSHOT_DIAGNOSTICS_VERSION}, got v:${d.v} — treating as absent`);
+    return null;
+  }
+  return d;
+}
+
 export interface IngestResult {
   processed: number;
   errors: number;
@@ -511,7 +523,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
         const appliedAlpha = getDynamicAlpha(scoreResult.spikingSourceCount);
 
         const diagnosticsData = {
-          v: 1,
+          v: SNAPSHOT_DIAGNOSTICS_VERSION,
           raw: {
             wiki: wiki?.pageviews24h ?? 0,
             wiki7d: wiki?.averageDaily7d ?? 0,
