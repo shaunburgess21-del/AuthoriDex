@@ -1,6 +1,7 @@
 import { HeroSection } from "@/components/HeroSection";
 import { SearchBar } from "@/components/SearchBar";
-import { LeaderboardRow, getExceptionalIndicator } from "@/components/LeaderboardRow";
+import { LeaderboardRow, getExceptionalIndicator, computePercentileThresholds } from "@/components/LeaderboardRow";
+import type { PercentileThresholds } from "@/components/LeaderboardRow";
 import { VotingModal } from "@/components/VotingModal";
 import { UserMenu } from "@/components/UserMenu";
 import { FilterDropdown } from "@/components/FilterDropdown";
@@ -479,7 +480,18 @@ export default function HomePage() {
   const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [moversCollapsed, setMoversCollapsed] = useState(true);
-  const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(true);
+  const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(() => {
+    try {
+      const saved = localStorage.getItem('trending_now_collapsed');
+      return saved !== null ? saved === 'true' : true;
+    } catch { return true; }
+  });
+
+  const handleTrendingNowToggle = () => {
+    const next = !trendingNowCollapsed;
+    setTrendingNowCollapsed(next);
+    try { localStorage.setItem('trending_now_collapsed', String(next)); } catch {}
+  };
 
   const {
     data,
@@ -596,13 +608,18 @@ export default function HomePage() {
     return allPeople;
   }, [allPeople]);
 
+  const percentileThresholds = useMemo(() => {
+    if (allPeople.length === 0) return undefined;
+    return computePercentileThresholds(allPeople as any);
+  }, [allPeople]);
+
   const exceptionalIds = useMemo(() => {
-    const maxExceptional = Math.max(1, Math.floor(displayPeople.length * 0.19));
+    if (!percentileThresholds) return new Set<string>();
     const candidates = displayPeople
-      .filter(p => getExceptionalIndicator(p as any) !== null)
+      .filter(p => getExceptionalIndicator(p as any, percentileThresholds) !== null)
       .map(p => p.id);
-    return new Set(candidates.slice(0, maxExceptional));
-  }, [displayPeople]);
+    return new Set(candidates);
+  }, [displayPeople, percentileThresholds]);
 
   const { data: systemFreshness } = useQuery<{ lastScoredAt: string; lastScoredAtFormatted: string }>({
     queryKey: ['/api/system/freshness'],
@@ -776,7 +793,7 @@ export default function HomePage() {
                 people={dailyMovers}
                 onPersonClick={handleVisitProfile}
                 collapsed={trendingNowCollapsed}
-                onToggle={() => setTrendingNowCollapsed(!trendingNowCollapsed)}
+                onToggle={handleTrendingNowToggle}
               />
 
               <Card id="leaderboard">
@@ -896,6 +913,7 @@ export default function HomePage() {
                         onVisitProfile={() => handleVisitProfile(person.id)}
                         onVoteClick={() => handleVoteClick(person.id)}
                         showExceptional={exceptionalIds.has(person.id)}
+                        thresholds={percentileThresholds}
                       />
                     ))}
                   </div>

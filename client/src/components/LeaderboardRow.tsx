@@ -41,31 +41,64 @@ interface LeaderboardRowProps {
   onVisitProfile: () => void;
   onVoteClick?: () => void;
   showExceptional?: boolean;
+  thresholds?: PercentileThresholds;
 }
 
-function getExceptionalIndicator(person: ExtendedPerson): { icon: typeof Flame; color: string; label: string } | null {
+interface PercentileThresholds {
+  rankChangeP90: number;
+  deltaP90: number;
+  negRankChangeP10: number;
+  negDeltaP10: number;
+}
+
+function computePercentileThresholds(people: ExtendedPerson[]): PercentileThresholds {
+  const rankChanges = people.filter(p => p.rankChange != null).map(p => p.rankChange!);
+  const deltas = people.filter(p => p.change24h != null).map(p => p.change24h!);
+
+  const positiveRC = rankChanges.filter(v => v > 0).sort((a, b) => b - a);
+  const positiveDeltas = deltas.filter(v => v > 0).sort((a, b) => b - a);
+  const negativeRC = rankChanges.filter(v => v < 0).sort((a, b) => a - b);
+  const negativeDeltas = deltas.filter(v => v < 0).sort((a, b) => a - b);
+
+  const p5Index = (arr: number[]) => Math.max(0, Math.floor(arr.length * 0.05));
+
+  return {
+    rankChangeP90: positiveRC.length > 0 ? positiveRC[p5Index(positiveRC)] : 999,
+    deltaP90: positiveDeltas.length > 0 ? positiveDeltas[p5Index(positiveDeltas)] : 999,
+    negRankChangeP10: negativeRC.length > 0 ? negativeRC[p5Index(negativeRC)] : -999,
+    negDeltaP10: negativeDeltas.length > 0 ? negativeDeltas[p5Index(negativeDeltas)] : -999,
+  };
+}
+
+function getExceptionalIndicator(
+  person: ExtendedPerson,
+  thresholds?: PercentileThresholds
+): { icon: typeof Flame; color: string; label: string } | null {
   const delta = person.change24h;
   const rankChange = person.rankChange;
 
-  if (rankChange != null && rankChange >= 10 && delta != null && delta >= 40) {
+  if (!thresholds) return null;
+
+  if (rankChange != null && rankChange >= thresholds.rankChangeP90 && delta != null && delta >= thresholds.deltaP90) {
     return { icon: Flame, color: "text-orange-400", label: "Breakout" };
   }
-  if (delta != null && delta >= 55) {
+  if (delta != null && delta >= thresholds.deltaP90) {
     return { icon: Zap, color: "text-yellow-400", label: "Spiking" };
   }
-  if (rankChange != null && rankChange >= 15) {
+  if (rankChange != null && rankChange >= thresholds.rankChangeP90) {
     return { icon: Flame, color: "text-orange-400", label: "Rising fast" };
   }
-  if (rankChange != null && rankChange <= -8 && delta != null && delta <= -25) {
+  if (rankChange != null && rankChange <= thresholds.negRankChangeP10 && delta != null && delta <= thresholds.negDeltaP10) {
     return { icon: Snowflake, color: "text-blue-400", label: "Cooling" };
   }
 
   return null;
 }
 
-export { getExceptionalIndicator };
+export { getExceptionalIndicator, computePercentileThresholds };
+export type { PercentileThresholds };
 
-export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onVoteClick, showExceptional = true }: LeaderboardRowProps) {
+export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onVoteClick, showExceptional = true, thresholds }: LeaderboardRowProps) {
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
 
   useEffect(() => {
@@ -110,7 +143,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
   const fameScore = person.fameIndex ?? Math.round(person.trendScore / 100);
   const delta24h = formatDelta(person.change24h);
   const showDelta = person.change24h != null && Math.abs(person.change24h) >= 2;
-  const exceptional = showExceptional ? getExceptionalIndicator(person) : null;
+  const exceptional = showExceptional ? getExceptionalIndicator(person, thresholds) : null;
   const ExceptionalIcon = exceptional?.icon;
   const hasVoted = sentimentScore !== null;
 
@@ -230,6 +263,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               variant={hasVoted ? "default" : "outline"}
               size="icon"
               className="md:hidden"
+              aria-label={`Vote for ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onVoteClick?.();
@@ -242,6 +276,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               variant={hasVoted ? "default" : "outline"}
               size="icon"
               className="hidden md:inline-flex"
+              aria-label={`Vote for ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onVoteClick?.();
@@ -294,6 +329,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               variant={hasVoted ? "default" : "outline"}
               size="icon"
               className="md:hidden"
+              aria-label={`Vote for ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onVoteClick?.();
@@ -306,6 +342,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               variant={hasVoted ? "default" : "outline"}
               size="icon"
               className="hidden md:inline-flex"
+              aria-label={`Vote for ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onVoteClick?.();
