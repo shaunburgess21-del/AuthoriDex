@@ -12,22 +12,20 @@ export function RankBadge({ rank, rankChange }: RankBadgeProps) {
   const showChange = rankChange != null && Math.abs(rankChange) >= 2;
 
   return (
-    <div className="flex flex-col items-center gap-0.5 min-w-[3.5rem]">
-      <Badge
-        variant={isTop10 ? "default" : "secondary"}
-        className={cn(
-          "font-mono font-bold text-base w-14 justify-center",
-          isTop10 && "bg-primary text-primary-foreground"
-        )}
-        data-testid={`badge-rank-${rank}`}
-      >
-        #{rank}
-      </Badge>
+    <Badge
+      variant={isTop10 ? "default" : "secondary"}
+      className={cn(
+        "font-mono font-bold text-sm gap-0.5 min-w-[3rem] justify-center whitespace-nowrap",
+        isTop10 && "bg-primary text-primary-foreground"
+      )}
+      data-testid={`badge-rank-${rank}`}
+    >
+      #{rank}
       {showChange && (
         <span
           className={cn(
-            "flex items-center text-[10px] font-semibold leading-none",
-            rankChange! > 0 ? "text-emerald-400" : "text-red-400"
+            "inline-flex items-center text-[10px] font-semibold ml-0.5",
+            rankChange! > 0 ? "text-emerald-300" : "text-red-300"
           )}
           data-testid={`rank-change-${rank}`}
         >
@@ -39,6 +37,6 @@ export function RankBadge({ rank, rankChange }: RankBadgeProps) {
           {Math.abs(rankChange!)}
         </span>
       )}
-    </div>
+    </Badge>
   );
 }

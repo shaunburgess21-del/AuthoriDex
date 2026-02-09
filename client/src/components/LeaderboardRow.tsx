@@ -70,10 +70,15 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
 
   useEffect(() => {
     const loadSentimentScore = () => {
-      const savedVote = localStorage.getItem(`sentiment-vote-${person.id}`);
-      if (savedVote) {
-        setSentimentScore(parseInt(savedVote, 10));
-      } else {
+      try {
+        const savedVote = typeof window !== "undefined" ? localStorage.getItem(`sentiment-vote-${person.id}`) : null;
+        if (savedVote) {
+          const parsed = parseInt(savedVote, 10);
+          setSentimentScore(Number.isFinite(parsed) ? parsed : null);
+        } else {
+          setSentimentScore(null);
+        }
+      } catch {
         setSentimentScore(null);
       }
     };
@@ -107,6 +112,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
   const showDelta = person.change24h != null && Math.abs(person.change24h) >= 2;
   const exceptional = showExceptional ? getExceptionalIndicator(person) : null;
   const ExceptionalIcon = exceptional?.icon;
+  const hasVoted = sentimentScore !== null;
 
   return (
     <div className="border-b">
@@ -136,7 +142,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               {person.category}
             </p>
           )}
-          <p className="md:hidden text-xs text-muted-foreground leading-tight line-clamp-1">
+          <p className="md:hidden text-xs text-muted-foreground leading-tight truncate">
             {activeTab === "fame" && (
               <span className="font-mono">
                 {compactNumber(fameScore)}
@@ -211,7 +217,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               </p>
             </div>
             <Button
-              variant="default"
+              variant={hasVoted ? "default" : "outline"}
               size="icon"
               className="md:hidden"
               onClick={(e) => {
@@ -220,10 +226,10 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               }}
               data-testid={`button-vote-icon-${person.id}`}
             >
-              <ThumbsUp className="h-4 w-4" />
+              <ThumbsUp className={`h-4 w-4 ${hasVoted ? "fill-current" : ""}`} />
             </Button>
             <Button
-              variant="default"
+              variant={hasVoted ? "default" : "outline"}
               size="sm"
               className="font-mono font-bold text-sm min-w-14 justify-center hidden md:inline-flex"
               onClick={(e) => {
@@ -232,7 +238,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               }}
               data-testid={`button-expand-${person.id}`}
             >
-              Vote
+              {hasVoted ? "Voted" : "Vote"}
             </Button>
           </>
         )}
@@ -275,7 +281,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               </p>
             </div>
             <Button
-              variant="default"
+              variant={hasVoted ? "default" : "outline"}
               size="icon"
               className="md:hidden"
               onClick={(e) => {
@@ -284,10 +290,10 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               }}
               data-testid={`button-vote-icon-${person.id}`}
             >
-              <ThumbsUp className="h-4 w-4" />
+              <ThumbsUp className={`h-4 w-4 ${hasVoted ? "fill-current" : ""}`} />
             </Button>
             <Button
-              variant="default"
+              variant={hasVoted ? "default" : "outline"}
               size="sm"
               className="font-mono font-bold text-sm min-w-14 justify-center hidden md:inline-flex"
               onClick={(e) => {
@@ -296,7 +302,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               }}
               data-testid={`button-expand-${person.id}`}
             >
-              Vote
+              {hasVoted ? "Voted" : "Vote"}
             </Button>
           </>
         )}

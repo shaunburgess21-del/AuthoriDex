@@ -3,7 +3,6 @@ import { compactNumber, formatDelta } from "@/lib/formatNumber";
 import { Flame, ChevronDown, ChevronUp, X } from "lucide-react";
 import { useState } from "react";
 import { PersonAvatar } from "./PersonAvatar";
-
 interface TrendingNowFeedProps {
   people: TrendingPerson[];
   onPersonClick: (id: string) => void;
@@ -17,20 +16,38 @@ function getSafeLocalStorage(key: string): string | null {
   }
 }
 
+function getDriverTag(person: TrendingPerson): { label: string; color: string } | null {
+  const delta = person.change24h ?? 0;
+  if (Math.abs(delta) < 5) return null;
+
+  if (delta >= 25) return { label: "Spiking", color: "text-yellow-400 border-yellow-400/30" };
+  if (delta >= 15) return { label: "Surging", color: "text-orange-400 border-orange-400/30" };
+  if (delta >= 5) return { label: "Rising", color: "text-emerald-400 border-emerald-400/30" };
+  if (delta <= -15) return { label: "Cooling", color: "text-blue-400 border-blue-400/30" };
+  if (delta <= -5) return { label: "Dipping", color: "text-red-400 border-red-400/30" };
+  return null;
+}
+
+const DEFAULT_VISIBLE = 3;
+
 export function TrendingNowFeed({ people, onPersonClick }: TrendingNowFeedProps) {
   const [dismissed, setDismissed] = useState(() => getSafeLocalStorage("trending-now-dismissed") === "true");
   const [expanded, setExpanded] = useState(true);
+  const [showAll, setShowAll] = useState(false);
 
   const hotMovers = people
     .filter(p => p.change24h != null && Math.abs(p.change24h) >= 5)
     .sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0))
-    .slice(0, 5);
+    .slice(0, 8);
 
   if (dismissed || hotMovers.length === 0) return null;
 
+  const visibleMovers = showAll ? hotMovers : hotMovers.slice(0, DEFAULT_VISIBLE);
+  const hasMore = hotMovers.length > DEFAULT_VISIBLE;
+
   const handleDismiss = () => {
     setDismissed(true);
-    localStorage.setItem("trending-now-dismissed", "true");
+    try { localStorage.setItem("trending-now-dismissed", "true"); } catch {}
   };
 
   return (
@@ -68,9 +85,10 @@ export function TrendingNowFeed({ people, onPersonClick }: TrendingNowFeedProps)
       </div>
       {expanded && (
         <div className="px-4 pb-3 space-y-1">
-          {hotMovers.map((person) => {
+          {visibleMovers.map((person) => {
             const delta = formatDelta(person.change24h);
             const isUp = (person.change24h ?? 0) > 0;
+            const driver = getDriverTag(person);
             return (
               <div
                 key={person.id}
@@ -80,17 +98,31 @@ export function TrendingNowFeed({ people, onPersonClick }: TrendingNowFeedProps)
               >
                 <PersonAvatar name={person.name} avatar={person.avatar} size="sm" />
                 <span className="text-sm font-medium truncate flex-1">{person.name}</span>
-                <span className="text-[11px] font-mono text-muted-foreground">
-                  {compactNumber(person.fameIndex ?? Math.round(person.trendScore / 100))}
-                </span>
+                {driver && (
+                  <span className={`text-[10px] font-medium shrink-0 ${driver.color.split(' ')[0]}`}>
+                    {driver.label}
+                  </span>
+                )}
                 {delta && (
-                  <span className={`text-xs font-mono font-semibold ${isUp ? "text-emerald-400" : "text-red-400"}`}>
+                  <span className={`text-xs font-mono font-semibold shrink-0 ${isUp ? "text-emerald-400" : "text-red-400"}`}>
                     {delta}
                   </span>
                 )}
               </div>
             );
           })}
+          {hasMore && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAll(!showAll);
+              }}
+              className="w-full text-center text-xs text-muted-foreground hover:text-foreground py-1.5 transition-colors"
+              data-testid="trending-now-show-more"
+            >
+              {showAll ? "Show less" : `Show ${hotMovers.length - DEFAULT_VISIBLE} more`}
+            </button>
+          )}
         </div>
       )}
     </div>

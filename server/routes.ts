@@ -31,6 +31,55 @@ import {
   getHealthSummary,
 } from "./scoring/sourceHealth";
 
+// Cached snapshot rank lookup (shared between /api/trending and /api/leaderboard)
+let _cachedPrevRanks: Map<string, number> | null = null;
+let _cachedPrevRanksAt = 0;
+const RANK_CACHE_TTL = 60_000; // 1 minute
+
+async function getSnapshotRankMap(): Promise<Map<string, number>> {
+  const now = Date.now();
+  if (_cachedPrevRanks && now - _cachedPrevRanksAt < RANK_CACHE_TTL) {
+    return _cachedPrevRanks;
+  }
+
+  const map = new Map<string, number>();
+  try {
+    const t24hAgo = new Date(now - 24 * 60 * 60 * 1000);
+    const tLow = new Date(now - 28 * 60 * 60 * 1000);
+    const tHigh = new Date(now - 20 * 60 * 60 * 1000);
+
+    const [nearestTs] = await db
+      .select({ ts: trendSnapshots.timestamp })
+      .from(trendSnapshots)
+      .where(sql`${trendSnapshots.timestamp} BETWEEN ${tLow} AND ${tHigh}`)
+      .orderBy(sql`ABS(EXTRACT(EPOCH FROM ${trendSnapshots.timestamp} - ${t24hAgo}::timestamp))`)
+      .limit(1);
+
+    if (nearestTs) {
+      const prevSnapshot = await db
+        .select({
+          personId: trendSnapshots.personId,
+          fameIndex: trendSnapshots.fameIndex,
+        })
+        .from(trendSnapshots)
+        .where(eq(trendSnapshots.timestamp, nearestTs.ts))
+        .orderBy(sql`${trendSnapshots.fameIndex} DESC NULLS LAST`);
+
+      prevSnapshot.forEach((s, i) => {
+        map.set(s.personId, i + 1);
+      });
+    }
+  } catch (e) {
+    console.warn("[rankChange] Snapshot rank computation failed:", e);
+  }
+
+  if (map.size > 0) {
+    _cachedPrevRanks = map;
+    _cachedPrevRanksAt = now;
+  }
+  return map;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Using local PostgreSQL database instead of Supabase
   // Supabase seeding disabled while Supabase is paused
@@ -167,15 +216,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metricsMap.set(m.celebrityId, m);
       }
 
-      // Compute rank changes by estimating previous fame index
-      const previousScores = people.map(p => {
-        const fi = p.fameIndex ?? Math.round(p.trendScore / 100);
-        const delta = p.change24h ?? 0;
-        const prevFi = delta !== 0 ? fi / (1 + delta / 100) : fi;
-        return { id: p.id, prevFi };
-      }).sort((a, b) => b.prevFi - a.prevFi);
-      const prevRankMap = new Map<string, number>();
-      previousScores.forEach((s, i) => prevRankMap.set(s.id, i + 1));
+      // Compute rank changes from actual trend_snapshots ~24h ago (cached)
+      let prevRankMap = await getSnapshotRankMap();
+
+      // Fallback: estimate from change24h if snapshot lookup returned empty
+      if (prevRankMap.size === 0) {
+        prevRankMap = new Map<string, number>();
+        const previousScores = people.map(p => {
+          const fi = p.fameIndex ?? Math.round(p.trendScore / 100);
+          const delta = p.change24h ?? 0;
+          const prevFi = delta !== 0 ? fi / (1 + delta / 100) : fi;
+          return { id: p.id, prevFi };
+        }).sort((a, b) => b.prevFi - a.prevFi);
+        previousScores.forEach((s, i) => prevRankMap.set(s.id, i + 1));
+      }
 
       // Merge metrics + rankChange into people
       let enrichedPeople = people.map(p => {
@@ -1366,25 +1420,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Compute rank changes by estimating previous fame index from change24h
-      const allForRank = await db
-        .select({
-          id: trendingPeople.id,
-          rank: trendingPeople.rank,
-          fameIndex: trendingPeople.fameIndex,
-          trendScore: trendingPeople.trendScore,
-          change24h: trendingPeople.change24h,
-        })
-        .from(trendingPeople)
-        .orderBy(sql`${trendingPeople.fameIndex} DESC NULLS LAST`);
+      // Compute rank changes from actual trend_snapshots ~24h ago (cached)
+      let prevRankLookup = await getSnapshotRankMap();
 
-      const prevScores = allForRank.map(p => {
-        const fi = p.fameIndex ?? Math.round(p.trendScore / 100);
-        const d = p.change24h ?? 0;
-        return { id: p.id, prevFi: d !== 0 ? fi / (1 + d / 100) : fi };
-      }).sort((a, b) => b.prevFi - a.prevFi);
-      const prevRankLookup = new Map<string, number>();
-      prevScores.forEach((s, i) => prevRankLookup.set(s.id, i + 1));
+      // Fallback: estimate from change24h if snapshot lookup returned empty
+      if (prevRankLookup.size === 0) {
+        prevRankLookup = new Map<string, number>();
+        const allForRank = await db
+          .select({
+            id: trendingPeople.id,
+            rank: trendingPeople.rank,
+            fameIndex: trendingPeople.fameIndex,
+            trendScore: trendingPeople.trendScore,
+            change24h: trendingPeople.change24h,
+          })
+          .from(trendingPeople)
+          .orderBy(sql`${trendingPeople.fameIndex} DESC NULLS LAST`);
+
+        const prevScores = allForRank.map(p => {
+          const fi = p.fameIndex ?? Math.round(p.trendScore / 100);
+          const d = p.change24h ?? 0;
+          return { id: p.id, prevFi: d !== 0 ? fi / (1 + d / 100) : fi };
+        }).sort((a, b) => b.prevFi - a.prevFi);
+        prevScores.forEach((s, i) => prevRankLookup.set(s.id, i + 1));
+      }
 
       // Map results with user vote state + rank change
       const leaderboard = results.map((person, index) => {
