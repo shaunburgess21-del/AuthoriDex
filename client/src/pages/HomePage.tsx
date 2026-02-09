@@ -608,10 +608,22 @@ export default function HomePage() {
     return allPeople;
   }, [allPeople]);
 
+  const { data: fullLeaderboardForThresholds } = useQuery<TrendingResponse>({
+    queryKey: ['/api/leaderboard', 'thresholds-full'],
+    queryFn: async () => {
+      const response = await fetch(`/api/leaderboard?limit=100&offset=0&tab=fame&sortDir=desc`);
+      if (!response.ok) throw new Error('Failed to fetch');
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+  });
+
   const percentileThresholds = useMemo(() => {
-    if (allPeople.length === 0) return undefined;
-    return computePercentileThresholds(allPeople as any);
-  }, [allPeople]);
+    const thresholdPeople = fullLeaderboardForThresholds?.data;
+    if (!thresholdPeople || thresholdPeople.length === 0) return undefined;
+    return computePercentileThresholds(thresholdPeople as any);
+  }, [fullLeaderboardForThresholds]);
 
   const exceptionalIds = useMemo(() => {
     if (!percentileThresholds) return new Set<string>();

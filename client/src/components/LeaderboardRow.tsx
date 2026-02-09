@@ -60,7 +60,7 @@ function computePercentileThresholds(people: ExtendedPerson[]): PercentileThresh
   const negativeRC = rankChanges.filter(v => v < 0).sort((a, b) => a - b);
   const negativeDeltas = deltas.filter(v => v < 0).sort((a, b) => a - b);
 
-  const p5Index = (arr: number[]) => Math.max(0, Math.floor(arr.length * 0.05));
+  const p5Index = (arr: number[]) => Math.max(0, Math.ceil(arr.length * 0.05) - 1);
 
   return {
     rankChangeP90: positiveRC.length > 0 ? positiveRC[p5Index(positiveRC)] : 999,
