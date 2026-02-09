@@ -1,0 +1,163 @@
+I looked closely at the updated mobile screenshot — this is a big upgrade. The list is now “scanable” on a tiny screen, which is the whole game on mobile.
+
+What’s working really well
+
+Smart secondary line: showing 648k · +27.2% (instead of “Score: 637,584”) is exactly the kind of high-signal compression you want. You’ve added meaning without adding height.
+
+Vote as an icon: huge space win. The right side of each row is no longer dominated by a chunky button.
+
+Trending Now mini-feed: this is the first thing that makes the page feel “alive” and gives instant FOMO. Great retention mechanic.
+
+Mode microcopy: subtle, but it prevents “what am I even looking at?” confusion for first-time users.
+
+Exceptional indicators being rare: if they’ve capped this to ~<20%, that’s perfect. It keeps 🔥/⚡ meaningful.
+
+Tweaks I’d do next (small, high impact)
+1) Make rank-change more visually legible
+
+Right now the arrow-under-badge idea is correct, but it’s easy to miss when you’re flick-scrolling.
+
+Best upgrade:
+
+Put it inside the badge as #4 ↑2 / #9 ↓3 (only when |change| ≥ 2).
+
+Or add a tiny colored “pip” next to the badge.
+
+This improves “rising/falling” scanning instantly.
+
+2) Make the vote icon state obvious
+
+If a user has voted, the icon should change state:
+
+outline 👍 = not voted
+
+filled 👍 = voted
+Optional: tiny count next to it only on larger phones (or inside the bottom sheet / profile).
+
+3) Row tap behavior: pick one clear rule
+
+On mobile, ambiguity kills UX.
+
+Tap row → open profile (most expected)
+
+Tap a small “details” chevron / ⓘ → open the quick sheet
+
+Avoid relying on long-press as the only way to get details (it’s discoverability-poor)
+
+Even if you keep long-press, add a subtle hint once: “Tip: hold a row for details” (show once, then store dismissal).
+
+4) Tighten “Trending Now” presentation
+
+The feed is great — now make it fast to consume:
+
+default to 3 items
+
+show one reason tag (e.g., “Search spiking”, “News surge”) if you have it
+
+keep it dismissible (you already did — good)
+
+5) Consistency between Fame Score vs Approval mode
+
+Approval mode looks clean, but make sure the secondary line stays consistent in structure:
+
+Fame mode: 648k · +27% (+ optional driver)
+
+Approval mode: 96% · 1.4k votes
+Same rhythm, same separators, same truncation rules.
+
+One potential concern (not a blocker)
+
+Replit’s “rankChange” calculation based on back-solving from change24h can be directionally right but sometimes wrong if multiple people move around each other. It’s fine for UI spice, but long-term the most accurate version is:
+
+store yesterday’s rank (or rank 24h ago snapshot) and compute true delta
+
+What I’d ask Replit for as the next 30-minute polish pass
+
+Rank badge format #4 ↑2 (only if |Δ| ≥ 2)
+
+Vote icon outline/filled state + tiny success micro-animation
+
+Add a visible ⓘ or chevron to open the detail sheet (don’t rely on long-press)
+
+Trending Now: 3 items + optional driver tag + “Show more”
+
+If you want, paste one more screenshot showing:
+
+a row where rank-change is visible
+
+the bottom sheet / detail interaction (if it exists)
+…and I’ll tell you exactly what to adjust visually (spacing, hierarchy, and which elements should be bold vs muted).
+
+eah — Claude’s take is basically aligned with mine, just more “hype-y” and with a few extra polish ideas. The substance is good. Here’s how I’d score it:
+
+Where Claude is dead-right
+1) Rank-change visibility
+
+If you can’t instantly see rank movement while flick-scrolling, the feature is wasted. Putting it inside the badge (#4 ↑2) is the best UX. Bigger arrow / higher contrast is also valid.
+
+2) Vote icon state
+
+This is the biggest UX “must”. If users don’t see a clear state change (outline → filled + tiny bounce), they’ll mistrust the action.
+
+3) Secondary line truncation
+
+100%. On small phones, wrapping kills scanability. truncate / ellipsis + “most important info leftmost” is the rule.
+
+4) Long-press scroll interference warning
+
+Also correct. If long-press is implemented badly it makes the whole list feel sticky. Even if it’s implemented well, discoverability is still the real issue.
+
+Where Claude adds nice-to-haves (but not urgent)
+A) Trending Now collapse animation
+
+Nice polish, not a needle-mover. Do it if it’s truly 10 minutes, otherwise skip.
+
+B) Tooltips for 🔥/⚡
+
+On mobile, tooltips are awkward. Better pattern:
+
+bottom sheet / detail view explains meaning (“🔥 Rank jump”, “⚡ Big spike”)
+
+or a tiny “?” in the header once.
+
+Where I’d push back a bit
+1) The “Replit is senior-level” claim
+
+They did catch a real integration bug (rankChange on the wrong endpoint) — that’s genuinely solid. But keep your head: you still want to sanity-check anything that affects “truth” in the UI (especially rankChange).
+
+2) The aggressive roadmap part
+
+The roadmap is exciting, but you’ll get more value by doing:
+
+one retention loop (alerts OR daily recap)
+
+one engagement loop (predictions OR streaks)
+
+one “scale metric” (Reach score)
+rather than shipping 10 features in a week and getting messy UX.
+
+The one thing both Claude and I keep circling that matters most
+RankChange accuracy
+
+If they compute rankChange by back-solving from change24h, it can be wrong when people swap positions (Claude/you already highlighted this). That’s fine for “spice”, but once users notice it’s wrong, trust drops.
+
+Best fix: compute rankChange from snapshots:
+
+rank_now vs rank_24h_ago (or nearest snapshot >= 20h and <= 28h ago, with fallback)
+This is worth doing before you lean on rank-change as a headline UI element.
+
+What I’d do next (tight and practical)
+
+If you want the “next 60 minutes” checklist:
+
+Badge becomes #4 ↑2 (bigger, inside badge)
+
+Vote icon state (outline/filled + micro-bounce)
+
+Add a visible ⓘ / chevron to open details (don’t rely on long-press alone)
+
+Truncate secondary line on narrow widths
+
+Make rankChange “true” from snapshots (or clearly label it as “estimated” until you do)
+
+Then stop polishing and build Reach Score next, because it answers your brother’s “no cap” intuition and gives users an “absolute size” metric alongside your “relative momentum” metric.
