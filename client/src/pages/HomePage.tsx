@@ -1,6 +1,6 @@
 import { HeroSection } from "@/components/HeroSection";
 import { SearchBar } from "@/components/SearchBar";
-import { LeaderboardRow } from "@/components/LeaderboardRow";
+import { LeaderboardRow, getExceptionalIndicator } from "@/components/LeaderboardRow";
 import { VotingModal } from "@/components/VotingModal";
 import { UserMenu } from "@/components/UserMenu";
 import { FilterDropdown } from "@/components/FilterDropdown";
@@ -8,6 +8,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { VoteDeckView } from "@/components/home/VoteDeckView";
 import { PredictDeckView } from "@/components/home/PredictDeckView";
+import { TrendingNowFeed } from "@/components/TrendingNowFeed";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -594,6 +595,14 @@ export default function HomePage() {
     return allPeople;
   }, [allPeople]);
 
+  const exceptionalIds = useMemo(() => {
+    const maxExceptional = Math.max(1, Math.floor(displayPeople.length * 0.19));
+    const candidates = displayPeople
+      .filter(p => getExceptionalIndicator(p as any) !== null)
+      .map(p => p.id);
+    return new Set(candidates.slice(0, maxExceptional));
+  }, [displayPeople]);
+
   const { data: systemFreshness } = useQuery<{ lastScoredAt: string; lastScoredAtFormatted: string }>({
     queryKey: ['/api/system/freshness'],
     refetchInterval: 30 * 1000,
@@ -762,6 +771,8 @@ export default function HomePage() {
                 />
               </div>
 
+              <TrendingNowFeed people={dailyMovers} onPersonClick={handleVisitProfile} />
+
               <Card id="leaderboard">
                 <CardHeader className="flex flex-col gap-4 space-y-0 pb-4">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -821,6 +832,9 @@ export default function HomePage() {
                       )}
                     </button>
                   </div>
+                  <p className="text-[11px] text-muted-foreground/50 -mt-1" data-testid="text-mode-microcopy">
+                    {leaderboardTab === "fame" ? "Ranked by real-world trending data" : "Ranked by community votes"}
+                  </p>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="px-6 py-4 border-b bg-muted/30">
@@ -875,6 +889,7 @@ export default function HomePage() {
                         activeTab={leaderboardTab}
                         onVisitProfile={() => handleVisitProfile(person.id)}
                         onVoteClick={() => handleVoteClick(person.id)}
+                        showExceptional={exceptionalIds.has(person.id)}
                       />
                     ))}
                   </div>

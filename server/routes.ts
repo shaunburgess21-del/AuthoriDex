@@ -167,9 +167,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metricsMap.set(m.celebrityId, m);
       }
 
-      // Merge metrics into people
+      // Compute rank changes by estimating previous fame index
+      const previousScores = people.map(p => {
+        const fi = p.fameIndex ?? Math.round(p.trendScore / 100);
+        const delta = p.change24h ?? 0;
+        const prevFi = delta !== 0 ? fi / (1 + delta / 100) : fi;
+        return { id: p.id, prevFi };
+      }).sort((a, b) => b.prevFi - a.prevFi);
+      const prevRankMap = new Map<string, number>();
+      previousScores.forEach((s, i) => prevRankMap.set(s.id, i + 1));
+
+      // Merge metrics + rankChange into people
       let enrichedPeople = people.map(p => {
         const m = metricsMap.get(p.id);
+        const prevRank = prevRankMap.get(p.id) ?? p.rank;
+        const rankChange = prevRank - p.rank;
         return {
           ...p,
           approvalPct: m?.approvalPct ?? null,
@@ -177,6 +189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           underratedPct: m?.underratedPct ?? null,
           overratedPct: m?.overratedPct ?? null,
           valueScore: m?.valueScore ?? null,
+          rankChange,
         };
       });
 
@@ -1353,12 +1366,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Map results with user vote state
-      const leaderboard = results.map((person, index) => ({
-        ...person,
-        leaderboardRank: offset + index + 1,
-        userValueVote: userValueVotes[person.id] || null,
-      }));
+      // Compute rank changes by estimating previous fame index from change24h
+      const allForRank = await db
+        .select({
+          id: trendingPeople.id,
+          rank: trendingPeople.rank,
+          fameIndex: trendingPeople.fameIndex,
+          trendScore: trendingPeople.trendScore,
+          change24h: trendingPeople.change24h,
+        })
+        .from(trendingPeople)
+        .orderBy(sql`${trendingPeople.fameIndex} DESC NULLS LAST`);
+
+      const prevScores = allForRank.map(p => {
+        const fi = p.fameIndex ?? Math.round(p.trendScore / 100);
+        const d = p.change24h ?? 0;
+        return { id: p.id, prevFi: d !== 0 ? fi / (1 + d / 100) : fi };
+      }).sort((a, b) => b.prevFi - a.prevFi);
+      const prevRankLookup = new Map<string, number>();
+      prevScores.forEach((s, i) => prevRankLookup.set(s.id, i + 1));
+
+      // Map results with user vote state + rank change
+      const leaderboard = results.map((person, index) => {
+        const prevRank = prevRankLookup.get(person.id) ?? person.rank;
+        return {
+          ...person,
+          leaderboardRank: offset + index + 1,
+          userValueVote: userValueVotes[person.id] || null,
+          rankChange: prevRank - person.rank,
+        };
+      });
 
       res.json({
         tab,

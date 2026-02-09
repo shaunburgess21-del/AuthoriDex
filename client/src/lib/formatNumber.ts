@@ -7,6 +7,26 @@ export function formatNumber(value: number): string {
   return Math.round(value).toLocaleString('en-US');
 }
 
+export function compactNumber(num: number, decimals = 0): string {
+  const abs = Math.abs(num);
+  if (abs >= 1_000_000) return `${(num / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (abs >= 1_000) return `${(num / 1_000).toFixed(decimals).replace(/\.0$/, '')}k`;
+  return Math.round(num).toString();
+}
+
+export function formatDelta(value: number | null | undefined): string | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(1)}%`;
+}
+
+export function compactVotes(count: number | null | undefined): string {
+  if (count == null) return '0';
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
+  return count.toString();
+}
+
 /**
  * Format a net worth string to be more readable
  * Converts large numbers to B/M format and handles various input formats
