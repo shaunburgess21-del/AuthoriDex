@@ -1,0 +1,86 @@
+Yep — there are a few non-launchy gems in Claude’s feedback that are worth including. Most of the “ship today / roadmap / launch Friday” stuff you can ignore, but the polish + desktop leverage + thresholds sanity-check points are good.
+
+The best “include this” bits from Claude
+1) Rank arrow contrast check (tiny but real)
+
+On mobile badges, low-contrast arrows disappear fast. Claude’s point is basically:
+
+make sure ↑/↓ has enough contrast against the badge background
+
+test on a dim phone + outdoors + low brightness
+
+What to tell Replit: “Please verify arrow contrast/size on mobile; if it’s subtle, bump weight/brightness slightly.”
+
+2) “Voted” text might be redundant
+
+You already have outline vs filled 👍 which is strong feedback. The word “Voted” can become visual noise in a long list.
+
+Suggestion: keep the filled icon as the persistent state, and if you want reassurance:
+
+show “Voted” only as a 1–2 second toast / micro-feedback right after tapping (then disappear)
+
+That keeps the list clean.
+
+3) Desktop can be richer without hurting mobile
+
+This is a genuinely good UX principle: you’ve nailed mobile compression, now desktop can carry extra meaning.
+
+But: don’t add 3 new columns and turn it into a spreadsheet.
+
+What’s worth considering on desktop only:
+
+a 24h % change column (small, right-aligned)
+
+optionally a rank delta column (+13 / −5)
+
+sparklines are optional (only if you can keep them legible)
+
+This makes desktop feel “premium” without changing mobile.
+
+4) Exceptional indicators sanity-check
+
+Claude noticed they weren’t visible in screenshots and asked if thresholds are too strict.
+
+That’s a good product check:
+
+If 🔥/⚡ almost never appear, they’re not doing work.
+
+If they appear on everything, they become noise.
+
+My take: keep them rare, but not extinct. A practical target is ~5–15% of visible rows on an average day. If you’re seeing 0% for days, loosen slightly.
+
+5) Trending Now expansion behavior
+
+Claude asked “does it expand in place or navigate away?”
+
+Correct answer: expand in place (accordion). Navigation breaks flow.
+
+If you already have that, great. If not, make it in-place with a simple height/opacity transition.
+
+What I would NOT include (because it’s launch-brained)
+
+“Ship to production today”
+
+“Launch Friday”
+
+“Get 10 beta users this week”
+
+the whole multi-day sprint plan
+
+Not because it’s wrong, but because you explicitly aren’t trying to launch immediately, and it distracts from the concrete UX tweaks.
+
+A clean message to send Replit (copy/paste)
+
+If you want something tight to forward:
+
+Please verify rank delta arrow contrast/legibility in the badge on mobile (small arrows can disappear). If subtle, bump weight/brightness slightly.
+
+Consider removing persistent “Voted” text to reduce clutter; keep filled icon as the state, and optionally show a 1–2s toast after voting instead.
+
+Desktop-only enhancement idea: add a small 24h % change (and/or rank delta) column to use the extra width—keep it minimal, not spreadsheet-y.
+
+Sanity-check exceptional indicator thresholds: aim for ~5–15% of visible rows on a typical day (rare but not extinct). If it’s 0% for days, loosen slightly.
+
+Ensure Trending Now expands in-place (accordion), not navigation; a light transition would make it feel smoother.
+
+If you want, I can also suggest exact threshold values for 🔥/⚡/❄️ based on the data you’re seeing (like typical daily deltas), but even without that, the “rare but not extinct” rule will guide you well.
