@@ -47,16 +47,16 @@ function getExceptionalIndicator(person: ExtendedPerson): { icon: typeof Flame; 
   const delta = person.change24h;
   const rankChange = person.rankChange;
 
-  if (rankChange != null && rankChange >= 3 && delta != null && delta >= 15) {
+  if (rankChange != null && rankChange >= 10 && delta != null && delta >= 40) {
     return { icon: Flame, color: "text-orange-400", label: "Breakout" };
   }
-  if (delta != null && delta >= 25) {
+  if (delta != null && delta >= 55) {
     return { icon: Zap, color: "text-yellow-400", label: "Spiking" };
   }
-  if (rankChange != null && rankChange >= 5) {
+  if (rankChange != null && rankChange >= 15) {
     return { icon: Flame, color: "text-orange-400", label: "Rising fast" };
   }
-  if (rankChange != null && rankChange <= -3 && delta != null && delta <= -15) {
+  if (rankChange != null && rankChange <= -8 && delta != null && delta <= -25) {
     return { icon: Snowflake, color: "text-blue-400", label: "Cooling" };
   }
 
@@ -187,6 +187,16 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 Fame Score
               </p>
             </div>
+            {showDelta && (
+              <div className="hidden lg:block text-right min-w-[60px]" data-testid={`text-delta-desktop-${person.id}`}>
+                <p className={`font-mono font-semibold text-sm tabular-nums ${person.change24h! > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {delta24h}
+                </p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                  24h
+                </p>
+              </div>
+            )}
             <div className="hidden md:block text-center min-w-[80px]">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -230,15 +240,15 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             </Button>
             <Button
               variant={hasVoted ? "default" : "outline"}
-              size="sm"
-              className="font-mono font-bold text-sm min-w-14 justify-center hidden md:inline-flex"
+              size="icon"
+              className="hidden md:inline-flex"
               onClick={(e) => {
                 e.stopPropagation();
                 onVoteClick?.();
               }}
               data-testid={`button-expand-${person.id}`}
             >
-              {hasVoted ? "Voted" : "Vote"}
+              <ThumbsUp className={`h-4 w-4 ${hasVoted ? "fill-current" : ""}`} />
             </Button>
           </>
         )}
@@ -294,15 +304,15 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             </Button>
             <Button
               variant={hasVoted ? "default" : "outline"}
-              size="sm"
-              className="font-mono font-bold text-sm min-w-14 justify-center hidden md:inline-flex"
+              size="icon"
+              className="hidden md:inline-flex"
               onClick={(e) => {
                 e.stopPropagation();
                 onVoteClick?.();
               }}
               data-testid={`button-expand-${person.id}`}
             >
-              {hasVoted ? "Voted" : "Vote"}
+              <ThumbsUp className={`h-4 w-4 ${hasVoted ? "fill-current" : ""}`} />
             </Button>
           </>
         )}

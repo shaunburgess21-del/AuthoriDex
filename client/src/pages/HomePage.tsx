@@ -479,6 +479,7 @@ export default function HomePage() {
   const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [moversCollapsed, setMoversCollapsed] = useState(true);
+  const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(true);
 
   const {
     data,
@@ -771,7 +772,12 @@ export default function HomePage() {
                 />
               </div>
 
-              <TrendingNowFeed people={dailyMovers} onPersonClick={handleVisitProfile} />
+              <TrendingNowFeed
+                people={dailyMovers}
+                onPersonClick={handleVisitProfile}
+                collapsed={trendingNowCollapsed}
+                onToggle={() => setTrendingNowCollapsed(!trendingNowCollapsed)}
+              />
 
               <Card id="leaderboard">
                 <CardHeader className="flex flex-col gap-4 space-y-0 pb-4">

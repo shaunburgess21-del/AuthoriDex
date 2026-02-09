@@ -1,38 +1,31 @@
 import { TrendingPerson } from "@shared/schema";
-import { compactNumber, formatDelta } from "@/lib/formatNumber";
-import { Flame, ChevronDown, ChevronUp, X } from "lucide-react";
+import { formatDelta } from "@/lib/formatNumber";
+import { Flame, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { PersonAvatar } from "./PersonAvatar";
+
 interface TrendingNowFeedProps {
   people: TrendingPerson[];
   onPersonClick: (id: string) => void;
-}
-
-function getSafeLocalStorage(key: string): string | null {
-  try {
-    return typeof window !== "undefined" ? localStorage.getItem(key) : null;
-  } catch {
-    return null;
-  }
+  collapsed: boolean;
+  onToggle: () => void;
 }
 
 function getDriverTag(person: TrendingPerson): { label: string; color: string } | null {
   const delta = person.change24h ?? 0;
   if (Math.abs(delta) < 5) return null;
 
-  if (delta >= 25) return { label: "Spiking", color: "text-yellow-400 border-yellow-400/30" };
-  if (delta >= 15) return { label: "Surging", color: "text-orange-400 border-orange-400/30" };
-  if (delta >= 5) return { label: "Rising", color: "text-emerald-400 border-emerald-400/30" };
-  if (delta <= -15) return { label: "Cooling", color: "text-blue-400 border-blue-400/30" };
-  if (delta <= -5) return { label: "Dipping", color: "text-red-400 border-red-400/30" };
+  if (delta >= 25) return { label: "Spiking", color: "text-yellow-400" };
+  if (delta >= 15) return { label: "Surging", color: "text-orange-300" };
+  if (delta >= 5) return { label: "Rising", color: "text-emerald-400" };
+  if (delta <= -15) return { label: "Cooling", color: "text-blue-400" };
+  if (delta <= -5) return { label: "Dipping", color: "text-red-400" };
   return null;
 }
 
 const DEFAULT_VISIBLE = 3;
 
-export function TrendingNowFeed({ people, onPersonClick }: TrendingNowFeedProps) {
-  const [dismissed, setDismissed] = useState(() => getSafeLocalStorage("trending-now-dismissed") === "true");
-  const [expanded, setExpanded] = useState(true);
+export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle }: TrendingNowFeedProps) {
   const [showAll, setShowAll] = useState(false);
 
   const hotMovers = people
@@ -40,91 +33,84 @@ export function TrendingNowFeed({ people, onPersonClick }: TrendingNowFeedProps)
     .sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0))
     .slice(0, 8);
 
-  if (dismissed || hotMovers.length === 0) return null;
+  if (hotMovers.length === 0) return null;
 
   const visibleMovers = showAll ? hotMovers : hotMovers.slice(0, DEFAULT_VISIBLE);
   const hasMore = hotMovers.length > DEFAULT_VISIBLE;
 
-  const handleDismiss = () => {
-    setDismissed(true);
-    try { localStorage.setItem("trending-now-dismissed", "true"); } catch {}
-  };
-
   return (
     <div
-      className="mb-4 rounded-lg border border-orange-500/20 bg-orange-500/5"
+      className="rounded-xl pulse-card-orange transition-all duration-200"
       data-testid="trending-now-feed"
     >
-      <div
-        className="flex items-center justify-between px-4 py-2.5 cursor-pointer"
-        onClick={() => setExpanded(!expanded)}
-        data-testid="trending-now-header"
-      >
-        <div className="flex items-center gap-2">
-          <Flame className="h-4 w-4 text-orange-400" />
-          <span className="text-sm font-semibold text-orange-300">Trending Now</span>
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">24h</span>
+      <div className={`p-4 ${collapsed ? 'pt-4 pb-4' : 'pt-5'}`}>
+        <div
+          className="flex items-center gap-3 cursor-pointer select-none group"
+          onClick={onToggle}
+          data-testid="trending-now-header"
+        >
+          <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-orange">
+            <Flame className="h-4 w-4 text-orange-400" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-slate-100">Trending Now</h3>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">24h Hot Movers</p>
+          </div>
+          <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
+            <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDismiss();
-            }}
-            className="p-1 rounded hover:bg-muted/50 text-muted-foreground"
-            data-testid="trending-now-dismiss"
-          >
-            <X className="h-3 w-3" />
-          </button>
-          {expanded ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          )}
-        </div>
-      </div>
-      {expanded && (
-        <div className="px-4 pb-3 space-y-1">
-          {visibleMovers.map((person) => {
-            const delta = formatDelta(person.change24h);
-            const isUp = (person.change24h ?? 0) > 0;
-            const driver = getDriverTag(person);
-            return (
-              <div
-                key={person.id}
-                className="flex items-center gap-2.5 py-1.5 rounded-md px-2 hover-elevate active-elevate-2 cursor-pointer"
-                onClick={() => onPersonClick(person.id)}
-                data-testid={`trending-now-item-${person.id}`}
+
+        {!collapsed && (
+          <div className="space-y-1.5 mt-4">
+            {visibleMovers.map((person, idx) => {
+              const delta = formatDelta(person.change24h);
+              const isUp = (person.change24h ?? 0) > 0;
+              const driver = getDriverTag(person);
+              return (
+                <div
+                  key={person.id}
+                  className="flex items-center gap-2.5 p-2 rounded-lg hover-elevate cursor-pointer bg-slate-800/30 border border-slate-700/30 transition-colors hover:border-slate-600/50"
+                  onClick={() => onPersonClick(person.id)}
+                  data-testid={`trending-now-item-${person.id}`}
+                >
+                  <span className="font-mono font-bold text-slate-500 w-4 text-center text-[14px]">{idx + 1}</span>
+                  <PersonAvatar name={person.name} avatar={person.avatar} size="sm" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-xs truncate text-slate-200">{person.name}</p>
+                    {driver && (
+                      <p className={`text-[10px] ${driver.color}`}>{driver.label}</p>
+                    )}
+                  </div>
+                  {delta && (
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
+                        isUp
+                          ? "bg-green-500/15 text-green-400"
+                          : "bg-red-500/15 text-red-400"
+                      }`}
+                    >
+                      {delta}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+            {hasMore && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowAll(!showAll);
+                }}
+                className="w-full text-center text-xs text-slate-500 hover:text-slate-300 py-1.5 transition-colors"
+                data-testid="trending-now-show-more"
               >
-                <PersonAvatar name={person.name} avatar={person.avatar} size="sm" />
-                <span className="text-sm font-medium truncate flex-1">{person.name}</span>
-                {driver && (
-                  <span className={`text-[10px] font-medium shrink-0 ${driver.color.split(' ')[0]}`}>
-                    {driver.label}
-                  </span>
-                )}
-                {delta && (
-                  <span className={`text-xs font-mono font-semibold shrink-0 ${isUp ? "text-emerald-400" : "text-red-400"}`}>
-                    {delta}
-                  </span>
-                )}
-              </div>
-            );
-          })}
-          {hasMore && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowAll(!showAll);
-              }}
-              className="w-full text-center text-xs text-muted-foreground hover:text-foreground py-1.5 transition-colors"
-              data-testid="trending-now-show-more"
-            >
-              {showAll ? "Show less" : `Show ${hotMovers.length - DEFAULT_VISIBLE} more`}
-            </button>
-          )}
-        </div>
-      )}
+                {showAll ? "Show less" : `Show ${hotMovers.length - DEFAULT_VISIBLE} more`}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -472,7 +472,8 @@
   /* Base styles for all pulse cards */
   .pulse-card-blue,
   .pulse-card-green,
-  .pulse-card-red {
+  .pulse-card-red,
+  .pulse-card-orange {
     position: relative;
     border-radius: 0.75rem;
     overflow: hidden;
@@ -482,7 +483,8 @@
   /* Accent bar at top - pseudo-element */
   .pulse-card-blue::before,
   .pulse-card-green::before,
-  .pulse-card-red::before {
+  .pulse-card-red::before,
+  .pulse-card-orange::before {
     content: '';
     position: absolute;
     top: 0;
@@ -495,7 +497,8 @@
   /* Ambient glow behind card - pseudo-element */
   .pulse-card-blue::after,
   .pulse-card-green::after,
-  .pulse-card-red::after {
+  .pulse-card-red::after,
+  .pulse-card-orange::after {
     content: '';
     position: absolute;
     inset: -1px;
@@ -595,6 +598,36 @@
   .pulse-icon-red {
     background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
     box-shadow: 0 0 20px -4px rgba(239, 68, 68, 0.4);
+  }
+
+  /* ===== ORANGE (Trending Now) ===== */
+  .pulse-card-orange {
+    background: linear-gradient(135deg, rgba(249, 115, 22, 0.08) 0%, transparent 40%),
+                linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+    border: 1px solid rgba(249, 115, 22, 0.2);
+    box-shadow: 
+      0 4px 20px -4px rgba(249, 115, 22, 0.15),
+      0 0 40px -10px rgba(249, 115, 22, 0.1);
+  }
+  .pulse-card-orange::before {
+    background: linear-gradient(90deg, rgb(249, 115, 22) 0%, rgba(249, 115, 22, 0.3) 100%);
+  }
+  .pulse-card-orange::after {
+    background: radial-gradient(ellipse at top left, rgba(249, 115, 22, 0.3) 0%, transparent 60%);
+  }
+  .pulse-card-orange:hover {
+    transform: translateY(-2px);
+    border-color: rgba(249, 115, 22, 0.4);
+    box-shadow: 
+      0 8px 30px -4px rgba(249, 115, 22, 0.25),
+      0 0 50px -10px rgba(249, 115, 22, 0.2);
+  }
+  .pulse-card-orange:hover::after {
+    opacity: 1;
+  }
+  .pulse-icon-orange {
+    background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(249, 115, 22, 0.1) 100%);
+    box-shadow: 0 0 20px -4px rgba(249, 115, 22, 0.4);
   }
 
 }

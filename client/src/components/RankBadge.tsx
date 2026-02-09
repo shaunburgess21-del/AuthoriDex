@@ -24,8 +24,8 @@ export function RankBadge({ rank, rankChange }: RankBadgeProps) {
       {showChange && (
         <span
           className={cn(
-            "inline-flex items-center text-[10px] font-semibold ml-0.5",
-            rankChange! > 0 ? "text-emerald-300" : "text-red-300"
+            "inline-flex items-center text-[10px] font-bold ml-0.5",
+            rankChange! > 0 ? "text-emerald-200" : "text-red-200"
           )}
           data-testid={`rank-change-${rank}`}
         >
