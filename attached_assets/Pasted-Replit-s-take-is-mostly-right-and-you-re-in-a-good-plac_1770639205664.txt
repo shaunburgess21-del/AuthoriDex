@@ -1,0 +1,63 @@
+Replit’s take is mostly right, and you’re in a good place. The one thing I wouldn’t leave as “no action items” is this:
+
+The real “gotcha” you’ll hit first: scaling the population without score whiplash
+
+Right now your velocity normalization is percentile-based vs the tracked set. That’s fine for 100 curated celebs, but the first time you:
+
+add 50 more people,
+
+swap categories (sports-heavy week),
+
+or broaden into “long tail” names,
+
+…your percentiles (and thus Fame Scores) can shift even if the world didn’t change. Users will experience it as “the engine changed” or “scores are fake”.
+
+One small engineering step now that prevents a big future headache:
+
+Freeze a reference distribution for normalization (even if you keep the curated 100).
+
+A practical version that isn’t over-engineering:
+
+Maintain population stats (p25/p50/p75/p90) using a rolling window (e.g., last 14 or 30 days) and don’t recompute them purely off “who is currently tracked” each run.
+
+Or: compute stats over a fixed “reference cohort” (e.g., your “core 200” later), even if you display only 100 on the leaderboard.
+
+UX effect: scores become “stable over time” and changes feel attributable to real events, not list edits.
+
+That’s the highest-leverage future-proofing move.
+
+On the cap debate
+
+I agree with both you and Replit: keep the 1M cap. “Mythical ceiling” is good UX.
+
+If you want open-ended growth later, do it as a separate metric (“Reach” / followers / subscribers), not the Fame Index.
+
+Top-end compression
+
+Also agree: it’s a feature. You want 90–100 to be rare.
+
+Just make sure you have one “escape valve” for truly global moments (you already do: spikingSourceCount-based caps + alpha). So you’re covered.
+
+Anti-spam damping
+
+Replit’s “curated set so not urgent” is fair, but I’d add one clean rule for later:
+
+If spikingSourceCount >= 2 and the direction agrees across sources, apply a lighter damping floor for that hour (or temporarily raise the 0.35 floor). That’s the simplest “breakout exception”.
+
+Confidence penalty (X)
+
+If it’s not used for ranking, fine. But I’d still do this tiny hygiene change:
+
+Set the X penalty to NOT_APPLICABLE when X is disabled, so future devs don’t accidentally reuse it.
+
+The prompt to send Replit (short + high leverage)
+
+Here’s a tight message you can paste:
+
+One future-proofing item I think is worth doing sooner rather than later (even while we’re at 100 celebs):
+Our velocity normalization is percentile-based vs the tracked set, so adding/removing people later will cause score shifts that users will perceive as “engine changed”.
+Proposal: introduce a “stable reference distribution” for population stats (p25/p50/p75/p90) used in normalization — e.g., computed from a rolling 14–30 day window and/or a fixed reference cohort — so scores remain comparable over time and don’t whiplash when we edit the tracked list.
+
+Tiny hygiene: mark X-penalty as NOT_APPLICABLE when X is disabled (so it can’t accidentally distort anything later).
+
+Everything else (1M cap, compression, damping) seems correct for the curated 100.

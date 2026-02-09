@@ -1,0 +1,92 @@
+Perfect — that spec is detailed enough to sanity-check the actual mechanics, the cap question, and the UX implications.
+
+1) Is there a “hard cap”?
+
+Yes: Step 6 clamps Fame Score to 0–1,000,000:
+
+fameIndex = clamp(round(baseScore * diversityMultiplier * 10000), 0, 1000000)
+
+So displayed Fame Score can’t exceed 1,000,000, even if the blended baseScore would imply it.
+
+Should you keep the cap?
+
+For your current product positioning (relative “who’s hot now” across a fixed population of ~100), keeping a cap is actually good UX:
+
+Users learn what numbers mean (e.g., 450k vs 650k).
+
+Visual design stays stable.
+
+Prevents “number inflation” over months/years.
+
+If you ever expand to thousands of people and want the number to represent more absolute “global attention,” you can revisit, but right now the cap helps you.
+
+2) Bigger issue than the cap: your mapping can unintentionally compress the top end
+
+Right now:
+
+baseScore is 0–100
+
+You multiply by 10,000 → 0–1,000,000
+
+So 609,000 implies baseScore ≈ 60.9 (assuming diversity=1.0).
+
+That means your “top of leaderboard” living around 500k–700k is totally plausible — but whether you ever see 900k–1,000k depends on whether baseScore can realistically reach 90–100 given your normalization + damping.
+
+The real question to answer (for UX):
+
+Do you want 1,000,000 to be:
+
+A mythical ceiling (almost never reached except global mega-events)? ✅ good for drama
+
+Or a reachable top (top people sometimes hit it)? ❌ often makes rankings feel “maxed out”
+
+I’d lean mythical ceiling. It makes “approaching 1M” feel like a rare moment.
+
+3) A couple of things in this formula that are worth flagging
+A) Mass score annualization is a bit odd
+
+You take wikiPageviews7dAvg * 365, then log-scale between 10,000 annual and 1B annual.
+
+That means mass is essentially:
+
+“Daily avg pageviews, stretched to annual”
+
+Log10-scaled into 0–100
+
+It’s fine, but the choice of (10k → 0, 1B → 100) matters a lot. If your population grows beyond 100 celebs, you might want to derive the min/max from percentiles instead of fixed constants so it remains calibrated.
+
+Simple improvement: clamp mass mapping based on population stats (p5 to p95) rather than fixed (1e4, 1e9) targets.
+
+B) Velocity normalization is relative to your tracked set (not the world)
+
+You’re doing percentile ranking vs the 100 tracked celebrities. That’s totally fine for an MVP, but it implies:
+
+If you swap in/out people, the scale shifts.
+
+If you expand to 500–5,000 people, velocity distribution changes and old scores aren’t comparable.
+
+UX implication: The score is an “index within this set.” That’s okay — just be aware.
+
+If you want the score to feel stable over time, eventually you’ll want:
+
+a fixed “reference population” distribution, or
+
+population stats computed over a larger stable universe.
+
+C) Anti-spam damping is strong (and probably good)
+
+velocityAdjusted = velocityScore * (0.35 + 0.65*(mass/100))
+
+So a person with mass=0 only gets 35% of velocity. That’s a good anti-gaming rule.
+
+But it also means: newcomers / niche people are structurally suppressed, even if they genuinely trend.
+
+A nicer UX version (later) is:
+
+keep damping, but allow “breakout exceptions” when 2–3 sources corroborate (which you already track via spikingSourceCount).
+
+D) Your “Confidence Score” currently penalizes missing X handle
+
+You said: “legacy, currently applies to all since X is disabled.”
+
+If that penalty is actually used anywhere meaningful, it will mislead (everyone gets punished equally). If it’s only displayed internally, ignore. If it touches ranking/scoring, remove/neutralize it until X is live.
