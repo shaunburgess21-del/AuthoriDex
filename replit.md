@@ -22,7 +22,7 @@ Preferred communication style: Simple, everyday language.
 - **Scoring Engine**:
     - **Fame Score**: A primary UI score (0-1,000,000) derived from a normalized trend score.
     - **Fixed Weights**: Mass (40%) and Velocity (60%), with velocity sources from Wikipedia (25%), News (35%), Search (40%).
-    - **Normalization & Stabilization**: Per-source normalization using `log1p` and percentile ranking; multi-layered stabilization prevents fluctuations with dynamic rate limiting, spike detection, and dynamic EMA alpha.
+    - **Normalization & Stabilization**: Per-source normalization using `log1p` and percentile ranking against a **rolling 14-day reference distribution** (p25/p50/p75/p90 computed from actual `trend_snapshots` data, persisted to `api_cache` as `system:source_stats_reference` for restart survival). Falls back to persisted stats, then hardcoded defaults as last resort. Multi-layered stabilization prevents fluctuations with dynamic rate limiting, spike detection, and dynamic EMA alpha.
     - **Auto Catch-Up Mode**: Three-band gap-driven rate boosting for data ingestion, with state persisted in the database.
     - **Robustness**: Graceful degradation handles external API failures, and a coverage gate ensures data consistency.
     - **Data Integrity**: Multi-layer protection against mock data corruption, strict writing protocols for `trending_people` via `ingest.ts`, and DB-level guardrails for `trend_snapshots`.

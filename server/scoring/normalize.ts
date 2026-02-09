@@ -707,7 +707,10 @@ export const STANDARD_WEIGHTS: StandardWeights = {
 };
 
 // Legacy constants
-export const MISSING_X_PENALTY = 0.6;
+// X penalty neutralized: X API is disabled (NOT_APPLICABLE), so penalizing
+// everyone equally is misleading. Set to 1.0 to prevent accidental distortion
+// if confidence is ever used for ranking. Restore to 0.6 when X is re-enabled.
+export const MISSING_X_PENALTY = 1.0;
 export const WIKI_DOMINANCE_CAP = 0.4;
 
 export interface AdjustedMassWeights {

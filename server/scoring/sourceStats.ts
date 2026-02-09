@@ -1,18 +1,15 @@
 import { db } from "../db";
-import { trendSnapshots } from "@shared/schema";
-import { sql, desc, gte } from "drizzle-orm";
+import { apiCache } from "@shared/schema";
+import { sql, eq } from "drizzle-orm";
 import { SourceStats, AllSourceStats, DEFAULT_SOURCE_STATS } from "./normalize";
 
-/**
- * Fetch 7-day source statistics from trend_snapshots table.
- * Used for percentile-based normalization of raw source values.
- * 
- * Computes min, max, percentiles (p25, p50, p75, p90), mean, and count
- * for each source (wiki, news, search) across all snapshots in the last 7 days.
- */
-export async function fetch7DaySourceStats(): Promise<AllSourceStats> {
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+const STATS_CACHE_KEY = "system:source_stats_reference";
+const ROLLING_WINDOW_DAYS = 14;
+const MIN_SNAPSHOT_COUNT = 100;
+
+export async function fetchRollingSourceStats(): Promise<AllSourceStats> {
+  const windowStart = new Date();
+  windowStart.setDate(windowStart.getDate() - ROLLING_WINDOW_DAYS);
   
   try {
     const result = await db.execute(sql`
@@ -22,7 +19,7 @@ export async function fetch7DaySourceStats(): Promise<AllSourceStats> {
           news_count,
           search_volume
         FROM trend_snapshots
-        WHERE timestamp >= ${sevenDaysAgo}
+        WHERE timestamp >= ${windowStart}
           AND timestamp = date_trunc('hour', timestamp)
           AND snapshot_origin = 'ingest'
           AND wiki_pageviews IS NOT NULL
@@ -30,7 +27,6 @@ export async function fetch7DaySourceStats(): Promise<AllSourceStats> {
           AND search_volume IS NOT NULL
       )
       SELECT
-        -- Wiki stats
         MIN(wiki_pageviews) as wiki_min,
         MAX(wiki_pageviews) as wiki_max,
         PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY wiki_pageviews) as wiki_p25,
@@ -39,7 +35,6 @@ export async function fetch7DaySourceStats(): Promise<AllSourceStats> {
         PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY wiki_pageviews) as wiki_p90,
         AVG(wiki_pageviews) as wiki_mean,
         
-        -- News stats
         MIN(news_count) as news_min,
         MAX(news_count) as news_max,
         PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY news_count) as news_p25,
@@ -48,7 +43,6 @@ export async function fetch7DaySourceStats(): Promise<AllSourceStats> {
         PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY news_count) as news_p90,
         AVG(news_count) as news_mean,
         
-        -- Search stats
         MIN(search_volume) as search_min,
         MAX(search_volume) as search_max,
         PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY search_volume) as search_p25,
@@ -62,68 +56,128 @@ export async function fetch7DaySourceStats(): Promise<AllSourceStats> {
     `);
     
     if (!result.rows || result.rows.length === 0 || !result.rows[0].total_count) {
-      console.log("[SourceStats] No recent data, using defaults");
-      return DEFAULT_SOURCE_STATS;
+      console.log(`[SourceStats] No data in ${ROLLING_WINDOW_DAYS}-day window, trying persisted reference`);
+      return await loadPersistedStats();
     }
     
     const row = result.rows[0] as Record<string, number>;
     const count = Number(row.total_count);
     
-    if (count < 100) {
-      console.log(`[SourceStats] Only ${count} snapshots, using defaults`);
-      return DEFAULT_SOURCE_STATS;
+    if (count < MIN_SNAPSHOT_COUNT) {
+      console.log(`[SourceStats] Only ${count} snapshots in ${ROLLING_WINDOW_DAYS}-day window, trying persisted reference`);
+      return await loadPersistedStats();
     }
+    
+    const n = (v: number, fallback: number) => (Number.isFinite(v) ? v : fallback);
     
     const stats: AllSourceStats = {
       wiki: {
-        min: Number(row.wiki_min) || DEFAULT_SOURCE_STATS.wiki.min,
-        max: Number(row.wiki_max) || DEFAULT_SOURCE_STATS.wiki.max,
-        p25: Number(row.wiki_p25) || DEFAULT_SOURCE_STATS.wiki.p25,
-        p50: Number(row.wiki_p50) || DEFAULT_SOURCE_STATS.wiki.p50,
-        p75: Number(row.wiki_p75) || DEFAULT_SOURCE_STATS.wiki.p75,
-        p90: Number(row.wiki_p90) || DEFAULT_SOURCE_STATS.wiki.p90,
-        mean: Number(row.wiki_mean) || DEFAULT_SOURCE_STATS.wiki.mean,
+        min: n(Number(row.wiki_min), DEFAULT_SOURCE_STATS.wiki.min),
+        max: n(Number(row.wiki_max), DEFAULT_SOURCE_STATS.wiki.max),
+        p25: n(Number(row.wiki_p25), DEFAULT_SOURCE_STATS.wiki.p25),
+        p50: n(Number(row.wiki_p50), DEFAULT_SOURCE_STATS.wiki.p50),
+        p75: n(Number(row.wiki_p75), DEFAULT_SOURCE_STATS.wiki.p75),
+        p90: n(Number(row.wiki_p90), DEFAULT_SOURCE_STATS.wiki.p90),
+        mean: n(Number(row.wiki_mean), DEFAULT_SOURCE_STATS.wiki.mean),
         count,
       },
       news: {
-        min: Number(row.news_min) || DEFAULT_SOURCE_STATS.news.min,
-        max: Number(row.news_max) || DEFAULT_SOURCE_STATS.news.max,
-        p25: Number(row.news_p25) || DEFAULT_SOURCE_STATS.news.p25,
-        p50: Number(row.news_p50) || DEFAULT_SOURCE_STATS.news.p50,
-        p75: Number(row.news_p75) || DEFAULT_SOURCE_STATS.news.p75,
-        p90: Number(row.news_p90) || DEFAULT_SOURCE_STATS.news.p90,
-        mean: Number(row.news_mean) || DEFAULT_SOURCE_STATS.news.mean,
+        min: n(Number(row.news_min), DEFAULT_SOURCE_STATS.news.min),
+        max: n(Number(row.news_max), DEFAULT_SOURCE_STATS.news.max),
+        p25: n(Number(row.news_p25), DEFAULT_SOURCE_STATS.news.p25),
+        p50: n(Number(row.news_p50), DEFAULT_SOURCE_STATS.news.p50),
+        p75: n(Number(row.news_p75), DEFAULT_SOURCE_STATS.news.p75),
+        p90: n(Number(row.news_p90), DEFAULT_SOURCE_STATS.news.p90),
+        mean: n(Number(row.news_mean), DEFAULT_SOURCE_STATS.news.mean),
         count,
       },
       search: {
-        min: Number(row.search_min) || DEFAULT_SOURCE_STATS.search.min,
-        max: Number(row.search_max) || DEFAULT_SOURCE_STATS.search.max,
-        p25: Number(row.search_p25) || DEFAULT_SOURCE_STATS.search.p25,
-        p50: Number(row.search_p50) || DEFAULT_SOURCE_STATS.search.p50,
-        p75: Number(row.search_p75) || DEFAULT_SOURCE_STATS.search.p75,
-        p90: Number(row.search_p90) || DEFAULT_SOURCE_STATS.search.p90,
-        mean: Number(row.search_mean) || DEFAULT_SOURCE_STATS.search.mean,
+        min: n(Number(row.search_min), DEFAULT_SOURCE_STATS.search.min),
+        max: n(Number(row.search_max), DEFAULT_SOURCE_STATS.search.max),
+        p25: n(Number(row.search_p25), DEFAULT_SOURCE_STATS.search.p25),
+        p50: n(Number(row.search_p50), DEFAULT_SOURCE_STATS.search.p50),
+        p75: n(Number(row.search_p75), DEFAULT_SOURCE_STATS.search.p75),
+        p90: n(Number(row.search_p90), DEFAULT_SOURCE_STATS.search.p90),
+        mean: n(Number(row.search_mean), DEFAULT_SOURCE_STATS.search.mean),
         count,
       },
     };
     
-    console.log(`[SourceStats] Computed from ${count} snapshots: ` +
+    console.log(`[SourceStats] Computed from ${count} snapshots (${ROLLING_WINDOW_DAYS}-day window): ` +
       `wiki p50=${stats.wiki.p50.toFixed(0)}, news p50=${stats.news.p50.toFixed(1)}, search p50=${stats.search.p50.toFixed(0)}`);
+    
+    await persistStats(stats);
     
     return stats;
   } catch (error) {
     console.error("[SourceStats] Error fetching stats:", error);
-    return DEFAULT_SOURCE_STATS;
+    return await loadPersistedStats();
   }
 }
 
-/**
- * Cached source stats to avoid repeated DB queries.
- * Refreshed every hour during ingestion.
- */
+async function persistStats(stats: AllSourceStats): Promise<void> {
+  try {
+    const payload = {
+      ...stats,
+      computedAt: new Date().toISOString(),
+      windowDays: ROLLING_WINDOW_DAYS,
+    };
+    
+    const existing = await db.query.apiCache.findFirst({
+      where: eq(apiCache.cacheKey, STATS_CACHE_KEY),
+    });
+
+    if (existing) {
+      await db.update(apiCache)
+        .set({
+          responseData: JSON.stringify(payload),
+          fetchedAt: new Date(),
+          expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        })
+        .where(eq(apiCache.cacheKey, STATS_CACHE_KEY));
+    } else {
+      await db.insert(apiCache).values({
+        cacheKey: STATS_CACHE_KEY,
+        provider: "system",
+        responseData: JSON.stringify(payload),
+        fetchedAt: new Date(),
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      });
+    }
+    console.log(`[SourceStats] Persisted reference distribution to DB`);
+  } catch (err) {
+    console.error("[SourceStats] Failed to persist stats:", err);
+  }
+}
+
+async function loadPersistedStats(): Promise<AllSourceStats> {
+  try {
+    const cached = await db.query.apiCache.findFirst({
+      where: eq(apiCache.cacheKey, STATS_CACHE_KEY),
+    });
+
+    if (cached) {
+      const parsed = JSON.parse(cached.responseData) as AllSourceStats & { computedAt?: string };
+      console.log(`[SourceStats] Loaded persisted reference distribution (computed: ${parsed.computedAt || 'unknown'})`);
+      return {
+        wiki: parsed.wiki,
+        news: parsed.news,
+        search: parsed.search,
+      };
+    }
+  } catch (err) {
+    console.error("[SourceStats] Failed to load persisted stats:", err);
+  }
+
+  console.log("[SourceStats] No persisted stats available, using hardcoded defaults (last resort)");
+  return DEFAULT_SOURCE_STATS;
+}
+
+export { fetchRollingSourceStats as fetch7DaySourceStats };
+
 let cachedStats: AllSourceStats | null = null;
 let cacheTimestamp: number = 0;
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const CACHE_TTL_MS = 60 * 60 * 1000;
 
 export async function getSourceStats(): Promise<AllSourceStats> {
   const now = Date.now();
@@ -131,16 +185,13 @@ export async function getSourceStats(): Promise<AllSourceStats> {
     return cachedStats;
   }
   
-  cachedStats = await fetch7DaySourceStats();
+  cachedStats = await fetchRollingSourceStats();
   cacheTimestamp = now;
   return cachedStats;
 }
 
-/**
- * Force refresh of cached stats (called at start of ingestion).
- */
 export async function refreshSourceStats(): Promise<AllSourceStats> {
-  cachedStats = await fetch7DaySourceStats();
+  cachedStats = await fetchRollingSourceStats();
   cacheTimestamp = Date.now();
   return cachedStats;
 }
