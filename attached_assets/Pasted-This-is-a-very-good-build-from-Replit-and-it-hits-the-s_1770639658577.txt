@@ -1,0 +1,63 @@
+This is a very good build from Replit — and it hits the spirit of what we were aiming for (score stability over time + no weird “list edit whiplash”) without adding much complexity.
+
+A few thoughts / tiny follow-ups I’d consider (all backend, low risk):
+
+1) The “stable reference distribution” is now real
+
+✅ Moving from 7 → 14 days helps a lot.
+✅ Persisting stats so restarts don’t temporarily fall back to weird defaults is exactly the right move.
+✅ Fixing || → ?? for legitimate zeros is important (good catch).
+
+If you want slightly more stability later, make the window configurable via env var (e.g., SOURCE_STATS_WINDOW_DAYS=14/21/30). That lets you tune it without code changes.
+
+2) Make sure the persisted stats are versioned + timestamped
+
+Since they’re now stored in api_cache, I’d add (if not already):
+
+statsVersion (e.g., 1)
+
+windowDays (14)
+
+computedAt (timestamp)
+
+optionally rowCount used to compute them
+
+That way if you ever change the fields/definition (or add new sources), you don’t accidentally read “old-format” stats and silently mis-normalize.
+
+3) Guard against “weird weeks” (optional, but useful)
+
+A 14-day window can still get skewed by unusual events (e.g., huge global news week). Two easy stabilizers if you ever see this:
+
+Use trimmed percentiles (you already are: p25/p50/p75/p90 is pretty robust)
+
+Add a simple sanity clamp like “p90 must be >= p50” (obvious, but prevents corrupted stats from poisoning normalization)
+
+Not urgent, but good belt-and-suspenders.
+
+4) Confirm what happens when you expand beyond 100 people
+
+This update reduces score whiplash, but note: if you compute stats from snapshots of the full tracked set, adding 400 new low-signal people will change the distribution. It’ll be much smoother than before, but still a shift.
+
+The “ultimate” way to avoid that later (if you go big) is:
+
+compute reference stats over a fixed reference cohort (e.g., “core 200”), or
+
+compute stats using only the currently displayed cohort (your curated top list)
+
+Again: not needed now, but worth keeping in mind if you scale the universe.
+
+5) On your brother’s “no hard cap” view
+
+This build doesn’t affect the 1M ceiling, but it does strengthen the “index” nature of your score (comparability over time). I still think the 1M cap is good UX for users.
+
+If you ever want “unbounded growth,” I’d do it as a separate metric (e.g., “Reach” or “Lifetime Fame”), not by removing the leaderboard ceiling. Users like scales that are legible.
+
+If you want one last small message to send Replit
+
+“This looks great. Two tiny follow-ups:
+
+please version + timestamp the persisted sourceStats payload (statsVersion, windowDays, computedAt, rowCount), so future stat format changes can’t silently mis-normalize.
+
+make the rolling window configurable via env var (default 14), so we can tune stability later without code changes.”
+
+If they’ve already included those fields, then honestly: you’re done here. This is in the “boringly robust” zone again.
