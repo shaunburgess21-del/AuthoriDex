@@ -79,17 +79,20 @@ function getExceptionalIndicator(
 
   if (!thresholds) return null;
 
+  const fmtDelta = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v)}%`;
+  const fmtRank = (v: number) => `${v > 0 ? '+' : ''}${v} ranks`;
+
   if (rankChange != null && rankChange >= thresholds.rankChangeP90 && delta != null && delta >= thresholds.deltaP90) {
-    return { icon: Flame, color: "text-orange-400", label: "Breakout", description: "Surging in both rank and score — one of the biggest movers right now" };
+    return { icon: Flame, color: "text-orange-400", label: "Breakout", description: `${fmtDelta(delta)} score and ${fmtRank(rankChange)} in 24h` };
   }
   if (delta != null && delta >= thresholds.deltaP90) {
-    return { icon: Zap, color: "text-yellow-400", label: "Spiking", description: "Fame score jumped significantly in the last 24 hours" };
+    return { icon: Zap, color: "text-yellow-400", label: "Spiking", description: `Fame score ${fmtDelta(delta)} in 24h` };
   }
   if (rankChange != null && rankChange >= thresholds.rankChangeP90) {
-    return { icon: Flame, color: "text-orange-400", label: "Rising", description: "Climbing the ranks faster than most — gaining momentum" };
+    return { icon: Flame, color: "text-orange-400", label: "Rising", description: `Climbed ${fmtRank(rankChange)} in 24h` };
   }
   if (rankChange != null && rankChange <= thresholds.negRankChangeP10 && delta != null && delta <= thresholds.negDeltaP10) {
-    return { icon: Snowflake, color: "text-blue-400", label: "Cooling", description: "Dropping in both rank and score — interest is fading" };
+    return { icon: Snowflake, color: "text-blue-400", label: "Cooling", description: `${fmtDelta(delta)} score and ${fmtRank(rankChange)} in 24h` };
   }
 
   return null;
@@ -98,8 +101,26 @@ function getExceptionalIndicator(
 export { getExceptionalIndicator, computePercentileThresholds };
 export type { PercentileThresholds };
 
+const EVER_VOTED_KEY = "famedex-has-ever-voted";
+
+function getHasEverVoted(): boolean {
+  try {
+    return localStorage.getItem(EVER_VOTED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markEverVoted() {
+  try {
+    localStorage.setItem(EVER_VOTED_KEY, "1");
+    window.dispatchEvent(new CustomEvent("famedex-ever-voted"));
+  } catch {}
+}
+
 export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onVoteClick, showExceptional = true, thresholds }: LeaderboardRowProps) {
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
+  const [hasEverVoted, setHasEverVoted] = useState(getHasEverVoted);
 
   useEffect(() => {
     const loadSentimentScore = () => {
@@ -108,6 +129,9 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
         if (savedVote) {
           const parsed = parseInt(savedVote, 10);
           setSentimentScore(Number.isFinite(parsed) ? parsed : null);
+          if (!getHasEverVoted()) {
+            markEverVoted();
+          }
         } else {
           setSentimentScore(null);
         }
@@ -128,15 +152,22 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
       const customEvent = e as CustomEvent;
       if (customEvent.detail?.personId === person.id) {
         loadSentimentScore();
+        if (!getHasEverVoted()) {
+          markEverVoted();
+        }
       }
     };
 
+    const handleEverVoted = () => setHasEverVoted(true);
+
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('sentiment-vote-updated', handleCustomUpdate);
+    window.addEventListener('famedex-ever-voted', handleEverVoted);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('sentiment-vote-updated', handleCustomUpdate);
+      window.removeEventListener('famedex-ever-voted', handleEverVoted);
     };
   }, [person.id]);
 
@@ -146,6 +177,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
   const exceptional = showExceptional ? getExceptionalIndicator(person, thresholds) : null;
   const ExceptionalIcon = exceptional?.icon;
   const hasVoted = sentimentScore !== null;
+  const showVotePulse = !hasVoted && !hasEverVoted;
 
   const prevScoreRef = useRef(fameScore);
   const [scoreFlash, setScoreFlash] = useState(false);
@@ -278,7 +310,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             <Button
               variant={hasVoted ? "default" : "outline"}
               size="icon"
-              className={`md:hidden ${!hasVoted ? "vote-cta-pulse" : ""}`}
+              className={`md:hidden ${showVotePulse ? "vote-cta-pulse" : ""}`}
               aria-label={`Vote for ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -291,7 +323,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             <Button
               variant={hasVoted ? "default" : "outline"}
               size="icon"
-              className={`hidden md:inline-flex ${!hasVoted ? "vote-cta-pulse" : ""}`}
+              className={`hidden md:inline-flex ${showVotePulse ? "vote-cta-pulse" : ""}`}
               aria-label={`Vote for ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -344,7 +376,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             <Button
               variant={hasVoted ? "default" : "outline"}
               size="icon"
-              className={`md:hidden ${!hasVoted ? "vote-cta-pulse" : ""}`}
+              className={`md:hidden ${showVotePulse ? "vote-cta-pulse" : ""}`}
               aria-label={`Vote for ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -357,7 +389,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             <Button
               variant={hasVoted ? "default" : "outline"}
               size="icon"
-              className={`hidden md:inline-flex ${!hasVoted ? "vote-cta-pulse" : ""}`}
+              className={`hidden md:inline-flex ${showVotePulse ? "vote-cta-pulse" : ""}`}
               aria-label={`Vote for ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();

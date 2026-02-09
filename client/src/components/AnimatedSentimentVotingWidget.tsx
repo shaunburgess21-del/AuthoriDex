@@ -244,6 +244,11 @@ export function AnimatedSentimentVotingWidget({
 
     setIsSubmitted(true);
     localStorage.setItem(`sentiment-vote-${personId}`, currentValue.toString());
+
+    try {
+      localStorage.setItem("famedex-has-ever-voted", "1");
+    } catch {}
+    window.dispatchEvent(new CustomEvent('famedex-ever-voted'));
     
     window.dispatchEvent(new CustomEvent('sentiment-vote-updated', {
       detail: { personId, value: currentValue }

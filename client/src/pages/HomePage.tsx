@@ -480,6 +480,17 @@ export default function HomePage() {
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
   const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
+  const [showVoteTip, setShowVoteTip] = useState(() => {
+    try {
+      return localStorage.getItem("famedex-vote-tip-dismissed") !== "1" && localStorage.getItem("famedex-has-ever-voted") !== "1";
+    } catch { return false; }
+  });
+
+  useEffect(() => {
+    const handleEverVoted = () => setShowVoteTip(false);
+    window.addEventListener("famedex-ever-voted", handleEverVoted);
+    return () => window.removeEventListener("famedex-ever-voted", handleEverVoted);
+  }, []);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [moversCollapsed, setMoversCollapsed] = useState(true);
   const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(() => {
@@ -956,6 +967,27 @@ export default function HomePage() {
                         <Snowflake className="h-3 w-3 text-blue-400" />
                         Cooling
                       </span>
+                    </div>
+                  )}
+                  {showVoteTip && (
+                    <div className="mx-4 sm:mx-6 my-2 px-3 py-2.5 rounded-md bg-primary/5 border border-primary/15 flex items-center justify-between gap-3" data-testid="vote-tip-banner">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <ThumbsUp className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span>Tap <span className="font-medium text-foreground">the thumbs-up</span> next to any name to cast your vote</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        className="shrink-0 text-muted-foreground/60 min-h-0 p-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowVoteTip(false);
+                          try { localStorage.setItem("famedex-vote-tip-dismissed", "1"); } catch {}
+                        }}
+                        aria-label="Dismiss tip"
+                        data-testid="button-dismiss-vote-tip"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   )}
                   <div>
