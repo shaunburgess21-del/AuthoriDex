@@ -13,11 +13,13 @@ import { TrendingNowFeed } from "@/components/TrendingNowFeed";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Flame } from "lucide-react";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Flame, Snowflake } from "lucide-react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { TrendingPerson } from "@shared/schema";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { Loader2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
@@ -659,6 +661,16 @@ export default function HomePage() {
     }
   };
 
+  const handlePullRefresh = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
+    await queryClient.invalidateQueries({ queryKey: ['/api/trending/movers'] });
+    await queryClient.invalidateQueries({ queryKey: ['/api/system/freshness'] });
+  }, []);
+
+  const { containerRef: pullRefreshRef, pullDistance, isRefreshing: isPullRefreshing } = usePullToRefresh({
+    onRefresh: handlePullRefresh,
+  });
+
   const hasActiveFilters = searchQuery || category !== "all";
 
   if (isLoading) {
@@ -686,7 +698,21 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen pb-20 md:pb-0">
+    <div className="min-h-screen pb-20 md:pb-0" ref={pullRefreshRef}>
+      {(pullDistance > 0 || isPullRefreshing) && (
+        <div
+          className="fixed top-0 left-0 right-0 z-[60] flex items-center justify-center pointer-events-none transition-opacity"
+          style={{ 
+            height: `${Math.max(pullDistance, isPullRefreshing ? 48 : 0)}px`,
+            opacity: Math.min(pullDistance / 40, 1),
+          }}
+          data-testid="pull-to-refresh-indicator"
+        >
+          <div className={`p-2 rounded-full bg-primary/10 backdrop-blur-sm border border-primary/20 ${isPullRefreshing ? '' : ''}`}>
+            <RefreshCw className={`h-5 w-5 text-primary ${isPullRefreshing ? 'ptr-spinner' : ''}`} style={{ transform: !isPullRefreshing ? `rotate(${pullDistance * 3}deg)` : undefined }} />
+          </div>
+        </div>
+      )}
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <button 
@@ -911,6 +937,27 @@ export default function HomePage() {
                       )}
                     </div>
                   </div>
+                  {leaderboardTab === "fame" && percentileThresholds && (
+                    <div className="px-4 sm:px-6 py-2.5 border-b bg-muted/20 flex items-center gap-4 flex-wrap text-[11px] text-muted-foreground" data-testid="indicator-legend">
+                      <span className="uppercase tracking-wider font-medium text-muted-foreground/60 mr-1">Key:</span>
+                      <span className="inline-flex items-center gap-1">
+                        <Flame className="h-3 w-3 text-orange-400" />
+                        Breakout
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Zap className="h-3 w-3 text-yellow-400" />
+                        Spiking
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Flame className="h-3 w-3 text-orange-400" />
+                        Rising
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Snowflake className="h-3 w-3 text-blue-400" />
+                        Cooling
+                      </span>
+                    </div>
+                  )}
                   <div>
                     {displayPeople.length === 0 && !isLoading && (
                       <div className="p-8 text-center text-muted-foreground">

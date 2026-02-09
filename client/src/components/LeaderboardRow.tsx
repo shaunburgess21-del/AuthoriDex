@@ -3,7 +3,7 @@ import { PersonAvatar } from "./PersonAvatar";
 import { RankBadge } from "./RankBadge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { compactNumber, formatDelta, compactVotes } from "@/lib/formatNumber";
 import { ThumbsUp, Flame, Snowflake, Zap } from "lucide-react";
 
@@ -73,23 +73,23 @@ function computePercentileThresholds(people: ExtendedPerson[]): PercentileThresh
 function getExceptionalIndicator(
   person: ExtendedPerson,
   thresholds?: PercentileThresholds
-): { icon: typeof Flame; color: string; label: string } | null {
+): { icon: typeof Flame; color: string; label: string; description: string } | null {
   const delta = person.change24h;
   const rankChange = person.rankChange;
 
   if (!thresholds) return null;
 
   if (rankChange != null && rankChange >= thresholds.rankChangeP90 && delta != null && delta >= thresholds.deltaP90) {
-    return { icon: Flame, color: "text-orange-400", label: "Breakout" };
+    return { icon: Flame, color: "text-orange-400", label: "Breakout", description: "Surging in both rank and score — one of the biggest movers right now" };
   }
   if (delta != null && delta >= thresholds.deltaP90) {
-    return { icon: Zap, color: "text-yellow-400", label: "Spiking" };
+    return { icon: Zap, color: "text-yellow-400", label: "Spiking", description: "Fame score jumped significantly in the last 24 hours" };
   }
   if (rankChange != null && rankChange >= thresholds.rankChangeP90) {
-    return { icon: Flame, color: "text-orange-400", label: "Rising fast" };
+    return { icon: Flame, color: "text-orange-400", label: "Rising", description: "Climbing the ranks faster than most — gaining momentum" };
   }
   if (rankChange != null && rankChange <= thresholds.negRankChangeP10 && delta != null && delta <= thresholds.negDeltaP10) {
-    return { icon: Snowflake, color: "text-blue-400", label: "Cooling" };
+    return { icon: Snowflake, color: "text-blue-400", label: "Cooling", description: "Dropping in both rank and score — interest is fading" };
   }
 
   return null;
@@ -147,6 +147,17 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
   const ExceptionalIcon = exceptional?.icon;
   const hasVoted = sentimentScore !== null;
 
+  const prevScoreRef = useRef(fameScore);
+  const [scoreFlash, setScoreFlash] = useState(false);
+  useEffect(() => {
+    if (prevScoreRef.current !== fameScore) {
+      prevScoreRef.current = fameScore;
+      setScoreFlash(true);
+      const t = setTimeout(() => setScoreFlash(false), 300);
+      return () => clearTimeout(t);
+    }
+  }, [fameScore]);
+
   return (
     <div className="border-b">
       <div
@@ -164,9 +175,14 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             {exceptional && ExceptionalIcon && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <ExceptionalIcon className={`h-3.5 w-3.5 shrink-0 ${exceptional.color}`} data-testid={`indicator-${person.id}`} />
+                  <span className="inline-flex cursor-help" data-testid={`indicator-${person.id}`}>
+                    <ExceptionalIcon className={`h-3.5 w-3.5 shrink-0 ${exceptional.color}`} />
+                  </span>
                 </TooltipTrigger>
-                <TooltipContent>{exceptional.label}</TooltipContent>
+                <TooltipContent side="top" className="max-w-[220px] text-center">
+                  <p className="font-semibold text-xs">{exceptional.label}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{exceptional.description}</p>
+                </TooltipContent>
               </Tooltip>
             )}
           </div>
@@ -213,7 +229,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
         {activeTab === "fame" && (
           <>
             <div className="text-right hidden sm:block">
-              <p className="font-mono font-bold text-2xl" data-testid={`text-score-${person.id}`}>
+              <p className={`font-mono font-bold text-2xl ${scoreFlash ? 'number-flash' : ''}`} data-testid={`text-score-${person.id}`}>
                 {fameScore.toLocaleString()}
               </p>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">
@@ -262,7 +278,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             <Button
               variant={hasVoted ? "default" : "outline"}
               size="icon"
-              className="md:hidden"
+              className={`md:hidden ${!hasVoted ? "vote-cta-pulse" : ""}`}
               aria-label={`Vote for ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -275,7 +291,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             <Button
               variant={hasVoted ? "default" : "outline"}
               size="icon"
-              className="hidden md:inline-flex"
+              className={`hidden md:inline-flex ${!hasVoted ? "vote-cta-pulse" : ""}`}
               aria-label={`Vote for ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -328,7 +344,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             <Button
               variant={hasVoted ? "default" : "outline"}
               size="icon"
-              className="md:hidden"
+              className={`md:hidden ${!hasVoted ? "vote-cta-pulse" : ""}`}
               aria-label={`Vote for ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -341,7 +357,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             <Button
               variant={hasVoted ? "default" : "outline"}
               size="icon"
-              className="hidden md:inline-flex"
+              className={`hidden md:inline-flex ${!hasVoted ? "vote-cta-pulse" : ""}`}
               aria-label={`Vote for ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();

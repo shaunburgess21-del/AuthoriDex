@@ -630,4 +630,35 @@
     box-shadow: 0 0 20px -4px rgba(249, 115, 22, 0.4);
   }
 
+  /* ===== VOTE CTA PULSE ===== */
+  @keyframes vote-cta-pulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+    }
+    50% {
+      box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+    }
+  }
+  .vote-cta-pulse {
+    animation: vote-cta-pulse 2s ease-in-out 3;
+  }
+
+  /* ===== ANIMATED NUMBER COUNTER ===== */
+  @keyframes count-flash {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+  }
+  .number-flash {
+    animation: count-flash 0.3s ease-out;
+  }
+
+  /* ===== PULL TO REFRESH ===== */
+  @keyframes ptr-spin {
+    to { transform: rotate(360deg); }
+  }
+  .ptr-spinner {
+    animation: ptr-spin 0.8s linear infinite;
+  }
+
 }
