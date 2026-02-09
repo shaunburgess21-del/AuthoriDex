@@ -175,7 +175,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     }>();
     const lastNonZeroNewsMap = new Map<string, { newsCount: number; newsDelta: number; timestamp: Date }>();
     const lastNonZeroSearchMap = new Map<string, { searchVolume: number; searchDelta: number; timestamp: Date }>();
-    const snapshot24hMap = new Map<string, { trendScore: number; fameIndex: number | null }>();
+    const snapshot24hMap = new Map<string, { trendScore: number; fameIndex: number | null; timestamp?: Date }>();
     const snapshot7dMap = new Map<string, { trendScore: number; fameIndex: number | null }>();
     
     for (const snap of historicalSnapshots) {
@@ -221,11 +221,11 @@ export async function runDataIngestion(): Promise<IngestResult> {
         }
       }
       
-      // Keep closest snapshot to 24h ago (within 2 hour window)
-      if (diff24h < 2 * 60 * 60 * 1000) {
+      // Keep closest snapshot to 24h ago (within 4 hour window to survive gaps)
+      if (diff24h < 4 * 60 * 60 * 1000) {
         const existing = snapshot24hMap.get(snap.personId);
-        if (!existing) {
-          snapshot24hMap.set(snap.personId, { trendScore: snap.trendScore, fameIndex: snap.fameIndex });
+        if (!existing || diff24h < Math.abs(new Date(existing.timestamp!).getTime() - time24hAgo.getTime())) {
+          snapshot24hMap.set(snap.personId, { trendScore: snap.trendScore, fameIndex: snap.fameIndex, timestamp: snap.timestamp });
         }
       }
       
