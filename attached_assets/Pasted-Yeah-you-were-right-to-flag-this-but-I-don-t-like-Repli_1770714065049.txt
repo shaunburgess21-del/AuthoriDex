@@ -1,0 +1,91 @@
+Yeah—you were right to flag this, but I don’t like Replit’s proposed fix (“only show leaderboard icons for people who are in Trending Now”). It solves the confusion by throwing away information.
+
+What’s actually going wrong (from your screenshot)
+
+You currently have two different concepts:
+
+Trending Now = a list widget (looks like “top % movers” in last 24h)
+
+Row indicators (Breakout / Spiking / Rising / Cooling) = badges based on percentile thresholds (rank jump, % change, etc.)
+
+That’s fine as long as the visual language is distinct.
+
+But right now, it isn’t—the same flame icon is being used in multiple places:
+
+The Trending Now header uses a flame
+
+The leaderboard “Rising” badge is a flame
+
+And your legend shows icons, but Breakout and Rising appear to share the same flame icon in the legend too (at least visually).
+
+So a user sees a flame next to Lewis and thinks: “Oh, he’s trending now—why isn’t he in the Trending Now list?”
+
+✅ The right fix (keep both systems, fix the semantics)
+
+1) Make every indicator icon unique (non-negotiable)
+
+Reserve the flame exclusively for Trending Now / Hot Movers.
+
+Then use clearly different icons for the row badges:
+
+Breakout → 🚀 (rocket)
+
+Spiking → ⚡ (bolt)
+
+Rising → 📈 (trending up arrow)
+
+Cooling → ❄️ (snowflake)
+
+This one change will remove 80% of the confusion instantly.
+
+2) Rename/clarify Trending Now so it’s obviously a specific list
+
+Instead of “Trending Now” (which sounds like “anyone with a badge”), make it:
+
+“Hot Movers (Top % gainers)”
+
+Subtitle: “Last 24h – sorted by % change”
+
+Now users understand it’s a ranking widget, not a category membership list.
+
+3) Make the badge tooltip explicitly say what it means
+
+You already moved tooltips to “real numbers” (great). Make sure they read like:
+
+📈 Rising — up 43 ranks (24h)
+
+⚡ Spiking — +49% Fame Score (24h)
+
+That makes it obvious why someone can have a badge but not be in the “top 8 % gainers”.
+
+🚫 Why I’d avoid Replit’s proposed “align by membership”
+If you only show row icons for people in Trending Now:
+
+You lose the value of “Rising” and “Cooling” badges across the list.
+
+You’ll hide genuinely useful signals (e.g., big rank movers with moderate % change).
+
+You also create a weird dependency: if Trending Now is capped at 8, only 8 people can ever show “trending” indicators even if 15 are genuinely exceptional.
+
+A better “alignment” if you want it
+If you really want consistency between the widget and badges, do this instead:
+
+Trending Now shows tabs/chips: Hot %, Biggest Rank Jump, Cooling
+
+Each chip uses the same icon as its badge
+
+Still capped to 8 per chip
+
+But honestly: just fixing the icon collisions + copy is the cleanest.
+
+What I’d tell Replit (copy/paste):
+
+“Don’t restrict row badges to Trending Now membership. Keep both systems.”
+
+“Reserve the flame icon for Trending Now only.”
+
+“Make badge icons unique: Breakout=rocket, Spiking=bolt, Rising=trendingUp arrow, Cooling=snowflake.”
+
+“Rename Trending Now to ‘Hot Movers (Top % gainers)’ and add subtitle ‘sorted by 24h % change’.”
+
+“Ensure tooltips state the metric: ‘up X ranks’ or ‘+Y% in 24h’.”
