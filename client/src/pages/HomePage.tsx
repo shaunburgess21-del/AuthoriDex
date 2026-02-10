@@ -950,7 +950,6 @@ export default function HomePage() {
                   </div>
                   {leaderboardTab === "fame" && percentileThresholds && (
                     <div className="px-4 sm:px-6 py-2.5 border-b bg-muted/20 flex items-center gap-4 flex-wrap text-[11px] text-muted-foreground" data-testid="indicator-legend">
-                      <span className="uppercase tracking-wider font-medium text-muted-foreground/60 mr-1">Key:</span>
                       <span className="inline-flex items-center gap-1">
                         <Flame className="h-3 w-3 text-orange-400" />
                         Breakout
