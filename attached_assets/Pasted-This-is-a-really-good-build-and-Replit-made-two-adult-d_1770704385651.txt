@@ -1,0 +1,269 @@
+This is a really good build, and Replit made two “adult” decisions that are easy to miss:
+
+They moved the “ever voted” flag to the actual voting widget (source of truth), not just the leaderboard row listener. That prevents weird cases where a user votes on a profile page and the leaderboard still pulses forever. That’s exactly the kind of polish that prevents future headaches.
+
+They made the tip banner robust (listening for the event + reading localStorage in initializer/useEffect). That’s the right pattern for cross-component onboarding UI.
+
+What’s now excellent (UX-wise)
+1) Tooltip with real numbers
+
+This is the single biggest clarity upgrade. Your icons are no longer “mystery glyphs”—they are now explainable at the moment the user cares.
+
+2) Vote pulse only until first-ever vote
+
+Perfect. You keep the CTA energy without turning the leaderboard into a Christmas tree forever.
+
+3) One-time vote tip banner
+
+Also correct. It names the action (“vote”) explicitly, which the pulse alone can’t do.
+
+Tiny enhancements I’d still consider (optional)
+A) Make the tooltip copy consistent across all icons
+
+Just ensure each tooltip follows the same structure:
+
+[Icon] [Label] — [What happened]
+24h: [metric] · Rank: [metric] (only include what’s relevant)
+
+Examples:
+
+⚡ Spiking — Big score surge
+24h: +61%
+
+🚀 Breakout — Big surge + big rank jump
+24h: +61% · Rank: +9
+
+❄️ Cooling — Fast drop-off
+24h: -28%
+
+📈 Rising — Climbing the board
+Rank: +9
+
+(Users learn the pattern quickly.)
+
+B) Add a “Why?” affordance for Trending Now rows
+
+If “Trending Now” already has driver tags, consider making the driver tag itself tappable (or a small ⓘ) to open “Why Trending” directly, not just the profile page. That turns the widget into a mini-explainer feed.
+
+C) Only show the vote tip banner on the leaderboard tab(s)
+
+If you have multiple home states/toggles, ensure the banner only appears where the 👍 is visible. Otherwise you risk “Tip: vote” showing when the user is on a view where voting isn’t obvious.
+
+One thing to double-check (not a blocker)
+
+Replit mentioned making the dismiss button larger and not using size="icon" with manual h/w. That’s fine. Just ensure:
+
+The tap target is at least ~40px on mobile (feels easy to hit).
+
+The banner doesn’t push too much content down on very small screens.
+
+Bottom line
+
+Yes—this is worth sharing with Replit as “approved.” If you want to add one more high-impact improvement without opening a rabbit hole, I’d do B (tappable driver tag → Why Trending). It strengthens your core “explainability” loop and makes the page feel smarter.
+
+If you paste one screenshot of the tooltip in action (any icon), I’ll sanity-check the wording/format quickly.
+
+Additionally I saw an error yesterday and asked Replit to fix:
+
+I'm looking at the mobile leaderboard now. And attached is a screenshot I took earlier. What happened to those green + percentages underneath each persons name, like in the screenshot?
+
+
+
+Good catch — those green percentages showing the 24-hour change (like "+25.1%") were part of the mobile row layout. Let me quickly check what's happening in the current code.
+
+Let me look at the exact mobile row layout to see if the percentage got hidden:
+
+I can see it right there in the code — the mobile row does still show the score and the green/red percentage change (lines 194-203). The code at line 198 shows compactNumber(fameScore) followed by the delta like "+25.1%".
+
+So the data is still being rendered. The issue is likely that showDelta is evaluating to false. Let me check what controls that:
+
+Found it. Line 145:
+
+const showDelta = person.change24h != null && Math.abs(person.change24h) >= 2;
+The threshold is Math.abs(person.change24h) >= 2 — so it only shows the percentage if the 24h change is at least 2%. Let me check what the current data looks like:
+
+There it is — the change_24h column is empty/null for every single celebrity right now. That's why the green percentages aren't showing. The code is fine — it checks person.change24h != null and since it's null, it skips displaying it.
+
+This is a data issue rather than a code issue. The change_24h values get calculated during the ingestion process by comparing the current score to the score from 24 hours ago. If the ingestion hasn't been running long enough to have a full 24-hour comparison window, or if something reset the snapshots, those values would be null.
+
+In your earlier screenshot, the system had been running long enough to compute those 24h changes. Right now, the data just doesn't have those values populated.
+
+Want me to look into why the ingestion isn't computing the 24h changes anymore, or is this something you'd like to come back to later?
+
+yes please check
+
+Let me dig into how the 24h change gets calculated.
+
+Good — snapshots exist from Jan 31 through Feb 9, so there should be 24h history. Let me check what the 24h lookup is finding:
+
+Found it. Line 224-228 — it only keeps the 24h snapshot if the timestamp difference is within a 2-hour window. Let me check what timestamps the snapshots actually have:
+
+I can see the problem clearly now. There's a gap in the snapshot data. Look at Feb 8:
+
+Feb 8 has snapshots at: 00:00, 01:00, 02:00, then jumps to 11:00, 13:00-18:00, then 23:00
+Feb 9 has snapshots from 01:00 onward mostly continuously
+The 24h lookup uses a 2-hour tolerance window. So if the current time is ~20:00 on Feb 9, it looks for a snapshot near 20:00 on Feb 8. But there's no snapshot between 18:00 and 23:00 on Feb 8 — a 5-hour gap. That's outside the 2-hour window, so it finds nothing.
+
+Even for more recent hours (e.g., current time 18:00 Feb 9 → looking for 18:00 Feb 8), Feb 8 at 18:00 does exist, so it should work for some hours. But the key issue is that the last ingestion run determines what gets written to trending_people, and if that particular run can't find a matching 24h snapshot, change_24h stays null.
+
+The fix is straightforward — widen the 24h snapshot matching window from 2 hours to something more forgiving (like 4-6 hours), so gaps in the data don't wipe out the percentage changes.
+
+Here's my plan:
+
+Created task list
+Start building
+Let me fix this right away. The issue is clear — the 2-hour matching window is too tight for the gaps in snapshot data.
+
+I also notice the 24h matching logic only keeps the first match rather than the closest match. Let me fix both issues — widen the window to 4 hours and pick the closest snapshot:
+
+Now I need to update the type of the snapshot24hMap to include the timestamp field:
+
+Now let me restart the workflow and wait for the next ingestion run to verify:
+
+Let me wait a moment for the server to start and check if there's an ingestion run happening:
+
+The ingestion runs on a schedule. Let me check the logs to see when the next run will be and what the current state is:
+
+Checked console and system logs
+The server is running and the next ingestion is in ~36 minutes. Rather than waiting, let me manually trigger the ingestion endpoint to verify the fix works immediately:
+
+The cron endpoint needs auth. Let me check how to call it:
+
+It timed out — ingestion takes a while because it fetches from Wikipedia, GDELT, etc. Let me check the logs to see if it's running and what the 24h snapshot count shows:
+
+Checked console and system logs
+Good — the ingestion is running. It triggered two concurrent runs. Let me wait for it to finish and check the result:
+
+The ingestion is still running — it's fetching from GDELT (which takes a while due to rate limits). Let me wait a bit longer and then check the results:
+
+It looks like the server restarted during the ingestion. Let me check the previous log to see if the ingestion completed, and also just directly check the database:
+
+The change_24h is still null. The ingestion was interrupted by the server restart before it could complete the score calculation. The change_7d values are populated though (using a 12-hour window), which confirms the 7d lookup works.
+
+Let me check the previous log file to understand what happened:
+
+The previous log file didn't contain the ingestion completion either — the two concurrent runs probably crashed each other. Let me check a broader search of the old log:
+
+The ingestion was interrupted. Let me wait for the next scheduled run at :02 past the hour. But first, let me verify the code change is correct by looking at how the earlier log from today looked:
+
+Let me check the earlier ingestion log more carefully:
+
+The ingestion log from earlier was truncated. Let me check the next scheduled ingestion will pick this up. But actually, let me also look at whether the issue might be that the ingestion is happening at 20:00 now, and looking for snapshots at ~20:00 yesterday (Feb 8). Let me check what exists near that time:
+
+Now I see the problem clearly. At ~20:00 UTC on Feb 9, the code looks for a snapshot from ~20:00 UTC on Feb 8. The available snapshots on Feb 8 near that time are: 18:00 and 23:00 — with a 5-hour gap between them.
+
+With the old 2-hour window: 20:00 ± 2h = 18:00-22:00. The 18:00 snapshot is exactly at the boundary, but the 23:00 one is outside. So it might find the 18:00 one (diff = 2h exactly), but diff24h < 2 * 60 * 60 * 1000 is a strict less-than, so exactly 2h is excluded!
+
+With my new 4-hour window: 20:00 ± 4h = 16:00-00:00. Both the 18:00 (2h diff) and 23:00 (3h diff) snapshots qualify, and the code picks the closest one (18:00). This should work.
+
+The fix is correct. Let me just wait for the next scheduled ingestion to complete and verify. Let me check the logs:
+
+Checked console and system logs
+The ingestion is running now — GDELT fetches are using cache. Let me wait for it to finish:
+
+The server restarted again, interrupting the ingestion. It seems each ingestion run is getting interrupted by server restarts. Let me check what's happening — the previous run's log was cut short:
+
+The server keeps restarting and interrupting the ingestion. This is probably because HMR/file watches are restarting the dev server. Let me stop fighting with the restarts and just verify the logic is correct. The next full scheduled ingestion at :02 past the hour should complete without interruption (since I won't be editing files). Let me verify the data will be correct by checking what the widened window would find:
+
+The 4-hour window is working — there are snapshots from Feb 8 at 17:00, 18:00, and 23:00, which are within the expanded window. For example, if the current time is ~20:30 UTC and it looks 24h back to ~20:30 UTC yesterday, it would find the 18:00 snapshot (2.5h diff) and the 23:00 snapshot (2.5h diff), both within the 4-hour window.
+
+Let me also count how many people would have matches:
+
+All 100 people have snapshots within the 4-hour window. The fix is confirmed — the next complete ingestion run will populate change_24h for all celebrities, and the green percentages will reappear on mobile.
+
+The fix is in place. Here's what was happening:
+
+The green percentages (like "+25.1%") were missing because the system couldn't find matching snapshot data from 24 hours ago. There are some gaps in the snapshot history — for example, yesterday (Feb 8) has no data between 18:00 and 23:00, which is a 5-hour gap. The code was looking for a snapshot within a 2-hour window of exactly 24 hours ago, and that window was too tight — it was falling into the gap and finding nothing.
+
+I've widened that matching window from 2 hours to 4 hours, and I also improved it to pick the closest match rather than just the first one it finds. I verified that all 100 celebrities now have matching data within the new window.
+
+The green percentages will come back after the next scheduled data refresh (runs at the top of each hour). You should see them reappear within the next ~30 minutes or so.
+
+
+
+
+Yep — Replit diagnosed the right root cause, and the fix direction is correct. There are just a couple of important “make it bulletproof” points to add before you move on.
+
+What actually caused the missing green %s
+
+Two things combined:
+
+Gaps in snapshots around the “24h ago” timestamp
+So the matcher couldn’t find a snapshot close enough to “exactly 24 hours ago”.
+
+A subtle boundary bug in the old code
+Replit spotted it: the old check was effectively diff < 2 hours (strictly less-than).
+That means a snapshot exactly 2 hours away (right on the boundary) gets excluded.
+
+That’s why you can have data at 18:00 and be looking for 20:00, but it still returns “no match” even though it’s “within 2 hours” in a human sense.
+
+Replit’s fix: good, but tighten it
+✅ Widening the window to 4h + choosing the closest snapshot
+
+That’s the right pragmatic approach. You’ll get far fewer nulls and the leaderboard won’t “go blind” just because a run was missed.
+
+Add this “correctness” tweak
+
+Make sure the new logic uses inclusive bounds:
+
+use <= windowMs not < windowMs
+
+It’s a tiny change but prevents the exact same boundary failure from happening at 4 hours instead of 2.
+
+Add this “data quality” tweak
+
+If you have two candidates equidistant (e.g., 18:00 and 23:00 both 2.5h away), define a deterministic tie-breaker, like:
+
+prefer the earlier snapshot (more conservative)
+or
+
+prefer the latest snapshot (more recent)
+
+Either is fine — just don’t let it be accidental.
+
+Bigger issue in that log: concurrent ingestions + restarts
+
+The “two concurrent runs” and dev-server restarts are a real reliability hazard. Even if the matching fix is correct, the system can still end up with null change_24h if:
+
+an ingestion run is interrupted mid-write
+
+two ingestions overlap and stomp state
+
+trending_people update happens before snapshot calculations finish
+
+Two simple hardening steps (worth asking Replit to do)
+
+Enforce a single ingestion at a time
+
+DB-based lock (recommended) or a durable api_cache lock
+
+If lock exists, exit fast (don’t start another run)
+
+Make the “publish step” atomic
+Only update trending_people.change_24h after you’ve successfully computed the snapshot matches.
+
+If you want to be extra safe: write results into a temp table / temp structure, then swap/update in one transaction.
+
+UX/accuracy note: widening window affects meaning
+
+With a 4-hour tolerance, “24h change” can become “~20–28h change” in edge cases.
+
+That’s totally acceptable for UX, but you can make it honest with one subtle improvement:
+
+In the tooltip or debug metadata, store change24h_basis_hours (how far off the match was)
+
+If it’s > 2h off, optionally label it “~24h change” in internal diagnostics (users don’t need this unless you want transparency later)
+
+What I’d send Replit (copy/paste)
+
+Confirm the matcher uses inclusive window: diffMs <= windowMs.
+
+Add deterministic tie-break when closest diffs equal.
+
+Add ingestion single-run locking to prevent overlaps.
+
+Ensure trending_people publish happens after change_24h is computed (atomic/transactional if possible).
+
+Optional: store how far off the match was (basis hours) for debugging.
+
+If you want, paste the specific matcher snippet (the old diff24h < ... section and the new “closest snapshot” code) and I’ll point out the exact line changes to make it airtight.
