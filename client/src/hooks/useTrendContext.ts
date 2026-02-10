@@ -65,10 +65,10 @@ export function useSystemFreshness() {
 
 export function getDriverLabel(driver: TrendDriver | null): string {
   switch (driver) {
-    case "NEWS": return "In The News";
-    case "SEARCH": return "Search Spike";
-    case "SOCIAL": return "Viral on X";
-    case "WIKI": return "Wikipedia Surge";
+    case "NEWS": return "News surge";
+    case "SEARCH": return "Search spiking";
+    case "SOCIAL": return "Social buzz";
+    case "WIKI": return "Wiki views up";
     default: return "Steady";
   }
 }

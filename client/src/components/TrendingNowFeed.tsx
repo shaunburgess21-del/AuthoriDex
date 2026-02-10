@@ -1,9 +1,9 @@
 import { TrendingPerson } from "@shared/schema";
 import { formatDelta } from "@/lib/formatNumber";
-import { Flame, ChevronDown, Info } from "lucide-react";
+import { Flame, ChevronDown, Info, TrendingUp, TrendingDown, Newspaper, Search, Globe, MessageCircle, ArrowRight } from "lucide-react";
 import { useState } from "react";
 import { PersonAvatar } from "./PersonAvatar";
-import { useTrendContextBatch } from "@/hooks/useTrendContext";
+import { useTrendContextBatch, getDriverLabel } from "@/hooks/useTrendContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 
@@ -88,30 +88,68 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle }: 
                     {driver && (
                       <div className="flex items-center gap-1.5">
                         <span className={`text-[10px] ${driver.color}`}>{driver.label}</span>
-                        {ctx?.reasonTag && ctx.reasonTag !== "Unknown" && (
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <button
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center justify-center min-w-[28px] min-h-[28px] rounded-md p-1 -m-1"
-                                data-testid={`trending-now-why-${person.id}`}
-                              >
-                                <Info className="h-3 w-3 text-slate-500" />
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent
-                              side="top"
-                              align="start"
-                              className="w-auto max-w-[260px] p-3"
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
                               onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center justify-center min-w-[28px] min-h-[28px] rounded-md p-1 -m-1"
+                              data-testid={`trending-now-why-${person.id}`}
                             >
-                              <p className="font-semibold text-xs">{ctx.reasonTag}</p>
-                              {ctx.headlineSnippet && (
-                                <p className="text-[11px] text-muted-foreground mt-1 italic">"{ctx.headlineSnippet}"</p>
+                              <Info className="h-3 w-3 text-slate-500" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            side="top"
+                            align="start"
+                            className="w-[220px] p-3"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <p className="font-semibold text-xs mb-2">Why {person.name.split(" ")[0]} is moving</p>
+                            <div className="space-y-1.5 text-[11px]">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  {(person.change24h ?? 0) >= 0
+                                    ? <TrendingUp className="h-3 w-3 text-emerald-400" />
+                                    : <TrendingDown className="h-3 w-3 text-red-400" />}
+                                  24h Change
+                                </span>
+                                <span className={`font-mono font-medium ${(person.change24h ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                  {formatDelta(person.change24h)}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  <Globe className="h-3 w-3" />
+                                  Rank
+                                </span>
+                                <span className="font-mono font-medium">#{person.rank}</span>
+                              </div>
+                              {ctx?.primaryDriver && (
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-muted-foreground flex items-center gap-1">
+                                    {ctx.primaryDriver === "NEWS" && <Newspaper className="h-3 w-3" />}
+                                    {ctx.primaryDriver === "SEARCH" && <Search className="h-3 w-3" />}
+                                    {ctx.primaryDriver === "WIKI" && <Globe className="h-3 w-3" />}
+                                    {ctx.primaryDriver === "SOCIAL" && <MessageCircle className="h-3 w-3" />}
+                                    Driver
+                                  </span>
+                                  <span className="font-medium">{getDriverLabel(ctx.primaryDriver)}</span>
+                                </div>
                               )}
-                            </PopoverContent>
-                          </Popover>
-                        )}
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onPersonClick(person.id);
+                              }}
+                              className="mt-3 flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 transition-colors"
+                              data-testid={`trending-now-details-${person.id}`}
+                            >
+                              View full details
+                              <ArrowRight className="h-3 w-3" />
+                            </button>
+                          </PopoverContent>
+                        </Popover>
                       </div>
                     )}
                   </div>
