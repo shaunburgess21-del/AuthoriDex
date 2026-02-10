@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatNumber";
 import { OverratedUnderratedWidget } from "@/components/OverratedUnderratedWidget";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
+import { getExceptionalIndicator, computePercentileThresholds } from "@/components/LeaderboardRow";
 
 interface CurateProfilePoll {
   id: string;
@@ -460,6 +461,30 @@ export default function PersonDetailPage() {
     enabled: !!params?.id,
   });
 
+  const { data: allPeople = [] } = useQuery<TrendingPerson[]>({
+    queryKey: ['/api/trending', 'hot-mover-check'],
+    queryFn: async () => {
+      const res = await fetch('/api/trending');
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [];
+    },
+  });
+
+  const isHotMover = useMemo(() => {
+    if (!person || !Array.isArray(allPeople) || allPeople.length === 0) return false;
+    const withRankChange = allPeople.map((p, _i, arr) => ({
+      ...p,
+      rankChange: (p as any).rankChange ?? null,
+    }));
+    const thresholds = computePercentileThresholds(withRankChange as any);
+    const indicator = getExceptionalIndicator(
+      { ...person, rankChange: (person as any).rankChange ?? null } as any,
+      thresholds
+    );
+    return indicator !== null;
+  }, [person, allPeople]);
+
   // Check if person is favorited
   useEffect(() => {
     if (!user || !person) return;
@@ -686,10 +711,10 @@ export default function PersonDetailPage() {
           </div>
         </div>
 
-        {/* Why They're Trending - AI-powered news summary (only for top 10) */}
-        {person.rank && person.rank <= 10 && (
+        {/* Why They're Trending - AI-powered news summary (top 10 + Hot Movers) */}
+        {((person.rank && person.rank <= 10) || isHotMover) && (
           <div className="mb-8">
-            <WhyTrendingCard personId={person.id} personName={person.name} />
+            <WhyTrendingCard personId={person.id} personName={person.name} hotMover={isHotMover && !(person.rank && person.rank <= 10)} />
           </div>
         )}
 

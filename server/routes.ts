@@ -2144,15 +2144,16 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         return res.status(404).json({ error: "Person not found" });
       }
       
-      // A) Top-10 hysteresis: update eligibility state, then check it
-      const eligible = await updateTop10Eligibility(personId, person.rank ?? null);
+      const hotMover = req.query.hotMover === "true";
+      
+      const eligible = hotMover || await updateTop10Eligibility(personId, person.rank ?? null);
       
       if (!eligible) {
         return res.json({
           personId,
           personName: person.name,
           hasContext: false,
-          message: "Why Trending is only available for top 10 ranked celebrities",
+          message: "Why Trending is only available for top 10 ranked celebrities and Hot Movers",
           fetchedAt: new Date(),
         });
       }

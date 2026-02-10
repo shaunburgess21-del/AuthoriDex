@@ -19,6 +19,7 @@ interface WhyTrendingData {
 interface WhyTrendingCardProps {
   personId: string;
   personName: string;
+  hotMover?: boolean;
 }
 
 function formatRelativeTime(dateString: string): string {
@@ -46,9 +47,15 @@ const categoryColors: Record<string, string> = {
   "In The News": "bg-slate-500/20 text-slate-400 border-slate-500/30",
 };
 
-export function WhyTrendingCard({ personId, personName }: WhyTrendingCardProps) {
+export function WhyTrendingCard({ personId, personName, hotMover }: WhyTrendingCardProps) {
+  const url = hotMover ? `/api/why-trending/${personId}?hotMover=true` : `/api/why-trending/${personId}`;
   const { data, isLoading, error } = useQuery<WhyTrendingData>({
-    queryKey: ['/api/why-trending', personId],
+    queryKey: ['/api/why-trending', personId, hotMover ? 'hot' : 'default'],
+    queryFn: async () => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Failed to fetch');
+      return res.json();
+    },
   });
 
   if (isLoading) {
