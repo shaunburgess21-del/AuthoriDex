@@ -5,7 +5,6 @@ import { useState } from "react";
 import { PersonAvatar } from "./PersonAvatar";
 import { useTrendContextBatch, getDriverLabel, TrendDriver } from "@/hooks/useTrendContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tooltip as UITooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 
 type EnrichedPerson = TrendingPerson & { rankChange?: number | null };
@@ -161,16 +160,25 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle }: 
                                     {ctx.primaryDriver === "SOCIAL" && <MessageCircle className="h-3 w-3" />}
                                     Driver
                                   </span>
-                                  <UITooltip>
-                                    <TooltipTrigger asChild>
-                                      <span className="font-medium cursor-help border-b border-dotted border-muted-foreground/40" data-testid={`trending-now-driver-${person.id}`}>
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <button
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="font-medium cursor-help border-b border-dotted border-muted-foreground/40 text-[11px] bg-transparent p-0"
+                                        data-testid={`trending-now-driver-${person.id}`}
+                                      >
                                         {getDriverLabel(ctx.primaryDriver)}
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="text-xs max-w-[200px]">
+                                      </button>
+                                    </PopoverTrigger>
+                                    <PopoverContent
+                                      side="top"
+                                      align="end"
+                                      className="w-auto max-w-[200px] p-2 text-xs"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
                                       {getDriverExplanation(ctx.primaryDriver)}
-                                    </TooltipContent>
-                                  </UITooltip>
+                                    </PopoverContent>
+                                  </Popover>
                                 </div>
                               )}
                             </div>

@@ -51,20 +51,23 @@ function MarketPulseCard({
       iconColor: "text-blue-400",
       cardClass: "pulse-card-blue",
       iconBgClass: "pulse-icon-blue",
+      subtitle: "Movement \u00B7 24h",
     },
     gainer: {
       iconColor: "text-green-400",
       cardClass: "pulse-card-green",
       iconBgClass: "pulse-icon-green",
+      subtitle: "Momentum \u00B7 7d",
     },
     dropper: {
       iconColor: "text-red-400",
       cardClass: "pulse-card-red",
       iconBgClass: "pulse-icon-red",
+      subtitle: "Cooling \u00B7 7d",
     },
   };
   
-  const { iconColor, cardClass, iconBgClass } = colorConfig[type];
+  const { iconColor, cardClass, iconBgClass, subtitle } = colorConfig[type];
   
   return (
     <div 
@@ -82,7 +85,7 @@ function MarketPulseCard({
           </div>
           <div className="flex-1">
             <h3 className="text-sm font-semibold text-slate-100">{title}</h3>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Top 5</p>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">{subtitle}</p>
           </div>
           <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
             <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
