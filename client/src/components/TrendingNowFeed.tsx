@@ -1,14 +1,17 @@
 import { TrendingPerson } from "@shared/schema";
 import { formatDelta } from "@/lib/formatNumber";
-import { Flame, ChevronDown, Info, TrendingUp, TrendingDown, Newspaper, Search, Globe, MessageCircle, ArrowRight } from "lucide-react";
+import { Flame, ChevronDown, Info, TrendingUp, TrendingDown, Newspaper, Search, Globe, MessageCircle, ArrowRight, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { useState } from "react";
 import { PersonAvatar } from "./PersonAvatar";
-import { useTrendContextBatch, getDriverLabel } from "@/hooks/useTrendContext";
+import { useTrendContextBatch, getDriverLabel, TrendDriver } from "@/hooks/useTrendContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip as UITooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 
+type EnrichedPerson = TrendingPerson & { rankChange?: number | null };
+
 interface TrendingNowFeedProps {
-  people: TrendingPerson[];
+  people: EnrichedPerson[];
   onPersonClick: (id: string) => void;
   collapsed: boolean;
   onToggle: () => void;
@@ -24,6 +27,16 @@ function getDriverTag(person: TrendingPerson): { label: string; color: string } 
   if (delta <= -15) return { label: "Cooling", color: "text-blue-400" };
   if (delta <= -5) return { label: "Dipping", color: "text-red-400" };
   return null;
+}
+
+function getDriverExplanation(driver: TrendDriver): string {
+  switch (driver) {
+    case "NEWS": return "Increased news coverage and media mentions";
+    case "SEARCH": return "Search interest surged significantly";
+    case "WIKI": return "Wikipedia pageviews rising fast";
+    case "SOCIAL": return "High social media velocity and engagement";
+    default: return "";
+  }
 }
 
 const DEFAULT_VISIBLE = 3;
@@ -74,6 +87,8 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle }: 
               const isUp = (person.change24h ?? 0) > 0;
               const driver = getDriverTag(person);
               const ctx = trendContexts?.[person.id];
+              const rc = person.rankChange ?? null;
+              const showRankChange = rc !== null && Math.abs(rc) >= 3;
               return (
                 <div
                   key={person.id}
@@ -101,19 +116,19 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle }: 
                           <PopoverContent
                             side="top"
                             align="start"
-                            className="w-[220px] p-3"
+                            className="w-[230px] p-3"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <p className="font-semibold text-xs mb-2">Why {person.name.split(" ")[0]} is moving</p>
                             <div className="space-y-1.5 text-[11px]">
                               <div className="flex items-center justify-between gap-2">
                                 <span className="text-muted-foreground flex items-center gap-1">
-                                  {(person.change24h ?? 0) >= 0
+                                  {isUp
                                     ? <TrendingUp className="h-3 w-3 text-emerald-400" />
                                     : <TrendingDown className="h-3 w-3 text-red-400" />}
                                   24h Change
                                 </span>
-                                <span className={`font-mono font-medium ${(person.change24h ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                <span className={`font-mono font-medium ${isUp ? "text-emerald-400" : "text-red-400"}`}>
                                   {formatDelta(person.change24h)}
                                 </span>
                               </div>
@@ -124,6 +139,19 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle }: 
                                 </span>
                                 <span className="font-mono font-medium">#{person.rank}</span>
                               </div>
+                              {showRankChange && (
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-muted-foreground flex items-center gap-1">
+                                    {rc! > 0
+                                      ? <ArrowUpRight className="h-3 w-3 text-emerald-400" />
+                                      : <ArrowDownRight className="h-3 w-3 text-red-400" />}
+                                    Rank move
+                                  </span>
+                                  <span className={`font-mono font-medium ${rc! > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                    {rc! > 0 ? `\u2191${rc} spots` : `\u2193${Math.abs(rc!)} spots`}
+                                  </span>
+                                </div>
+                              )}
                               {ctx?.primaryDriver && (
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="text-muted-foreground flex items-center gap-1">
@@ -133,21 +161,32 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle }: 
                                     {ctx.primaryDriver === "SOCIAL" && <MessageCircle className="h-3 w-3" />}
                                     Driver
                                   </span>
-                                  <span className="font-medium">{getDriverLabel(ctx.primaryDriver)}</span>
+                                  <UITooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="font-medium cursor-help border-b border-dotted border-muted-foreground/40" data-testid={`trending-now-driver-${person.id}`}>
+                                        {getDriverLabel(ctx.primaryDriver)}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-xs max-w-[200px]">
+                                      {getDriverExplanation(ctx.primaryDriver)}
+                                    </TooltipContent>
+                                  </UITooltip>
                                 </div>
                               )}
                             </div>
-                            <button
+                            <Button
+                              variant="secondary"
+                              size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onPersonClick(person.id);
                               }}
-                              className="mt-3 flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 transition-colors"
+                              className="mt-3 w-full gap-1.5 text-[11px]"
                               data-testid={`trending-now-details-${person.id}`}
                             >
                               View full details
                               <ArrowRight className="h-3 w-3" />
-                            </button>
+                            </Button>
                           </PopoverContent>
                         </Popover>
                       </div>

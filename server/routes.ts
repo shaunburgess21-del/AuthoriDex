@@ -522,7 +522,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         people = [...people].sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0)).slice(0, 10);
       }
 
-      res.json(people);
+      const prevRanks = await getSnapshotRankMap();
+      const enriched = people.map(p => ({
+        ...p,
+        rankChange: prevRanks.has(p.id) ? (prevRanks.get(p.id)! - p.rank) : null,
+      }));
+
+      res.json(enriched);
     } catch (error) {
       console.error("Error fetching movers:", error);
       res.status(500).json({ error: "Failed to fetch movers data" });
