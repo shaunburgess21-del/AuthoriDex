@@ -44,6 +44,8 @@ import {
   X,
   CheckCircle,
   XCircle,
+  BarChart3,
+  Megaphone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,7 +75,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { TrendingPoll } from "@shared/schema";
 
-type AdminSection = "overview" | "celebrities" | "cms" | "moderation" | "settlement" | "users" | "tools";
+type AdminSection = "overview" | "celebrities" | "predictions" | "voting" | "moderation" | "settlement" | "users" | "tools";
 
 interface AdminStats {
   totalUsers: number;
@@ -440,7 +442,7 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error("Failed to fetch markets");
       return res.json();
     },
-    enabled: isAdmin && (activeSection === "cms" || activeSection === "settlement"),
+    enabled: isAdmin && (activeSection === "predictions" || activeSection === "settlement"),
   });
 
   // Fetch traffic stats - only when admin and on overview section
@@ -496,7 +498,7 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error("Failed to fetch face-offs");
       return res.json();
     },
-    enabled: isAdmin && activeSection === "cms",
+    enabled: isAdmin && activeSection === "voting",
   });
 
   const { data: trendingPollsList, isLoading: pollsLoading } = useQuery<TrendingPoll[]>({
@@ -506,7 +508,7 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error("Failed to fetch trending polls");
       return res.json();
     },
-    enabled: isAdmin && activeSection === "cms",
+    enabled: isAdmin && activeSection === "voting",
   });
 
   // Fetch insights for moderation
@@ -1028,7 +1030,8 @@ export default function AdminDashboard() {
   const sidebarItems = [
     { id: "overview" as const, label: "Overview", icon: LayoutDashboard },
     { id: "celebrities" as const, label: "Celebrities", icon: Star },
-    { id: "cms" as const, label: "Game CMS", icon: Gamepad2 },
+    { id: "predictions" as const, label: "Prediction CMS", icon: BarChart3 },
+    { id: "voting" as const, label: "Voting CMS", icon: Megaphone },
     { id: "moderation" as const, label: "Moderation", icon: Shield },
     { id: "settlement" as const, label: "Settlement", icon: Gavel },
     { id: "users" as const, label: "Users", icon: Users },
@@ -1437,11 +1440,19 @@ export default function AdminDashboard() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => setActiveSection("cms")}
-                  data-testid="quick-action-cms"
+                  onClick={() => setActiveSection("predictions")}
+                  data-testid="quick-action-predictions"
                 >
-                  <Gamepad2 className="h-4 w-4 mr-2" />
-                  Game CMS
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Prediction CMS
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setActiveSection("voting")}
+                  data-testid="quick-action-voting"
+                >
+                  <Megaphone className="h-4 w-4 mr-2" />
+                  Voting CMS
                 </Button>
               </CardContent>
             </Card>
@@ -1632,13 +1643,13 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Game CMS Section */}
-        {activeSection === "cms" && (
+        {/* Prediction CMS Section */}
+        {activeSection === "predictions" && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-bold">Game CMS</h2>
-                <p className="text-muted-foreground">Manage prediction markets and voting content</p>
+                <h2 className="text-2xl font-bold">Prediction CMS</h2>
+                <p className="text-muted-foreground">Manage prediction markets</p>
               </div>
               <Button data-testid="button-create-market">
                 <Plus className="h-4 w-4 mr-2" />
@@ -1646,26 +1657,29 @@ export default function AdminDashboard() {
               </Button>
             </div>
 
-            <Tabs defaultValue="markets" className="w-full">
-              <TabsList>
-                <TabsTrigger value="markets" data-testid="tab-markets">
-                  Prediction Markets
+            <Tabs defaultValue="real-world" className="w-full">
+              <TabsList className="flex-wrap">
+                <TabsTrigger value="real-world" data-testid="tab-real-world-markets">
+                  Real-World Markets
                 </TabsTrigger>
-                <TabsTrigger value="faceoffs" data-testid="tab-faceoffs">
-                  Face-Offs
+                <TabsTrigger value="weekly-jackpot" data-testid="tab-weekly-jackpot">
+                  Weekly Jackpot
                 </TabsTrigger>
-                <TabsTrigger value="polls" data-testid="tab-polls">
-                  Trending Polls
+                <TabsTrigger value="weekly-updown" data-testid="tab-weekly-updown">
+                  Weekly Up/Down
                 </TabsTrigger>
-                <TabsTrigger value="induction" data-testid="tab-induction">
-                  Induction Queue
+                <TabsTrigger value="head-to-head" data-testid="tab-head-to-head">
+                  Head-to-Head Battles
+                </TabsTrigger>
+                <TabsTrigger value="top-gainer" data-testid="tab-top-gainer">
+                  Top Gainer Predictions
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="markets" className="mt-4">
+              <TabsContent value="real-world" className="mt-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Prediction Markets</CardTitle>
+                    <CardTitle>Real-World Markets</CardTitle>
                     <CardDescription>Create and manage prediction markets</CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -1722,95 +1736,97 @@ export default function AdminDashboard() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="faceoffs" className="mt-4">
+              <TabsContent value="weekly-jackpot" className="mt-4">
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                      <CardTitle>Face-Off Queue</CardTitle>
-                      <CardDescription>Manage Face-Off voting questions</CardDescription>
-                    </div>
-                    <Button 
-                      size="sm"
-                      onClick={() => {
-                        setEditingFaceOff(null);
-                        setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", isActive: true });
-                        setShowFaceOffModal(true);
-                      }}
-                      data-testid="button-add-faceoff"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Face-Off
-                    </Button>
+                  <CardHeader>
+                    <CardTitle>Weekly Jackpot</CardTitle>
+                    <CardDescription>Predict exact fame scores for weekly prizes</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {faceOffsLoading ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : faceOffs && faceOffs.length > 0 ? (
-                      <div className="space-y-3" data-testid="faceoff-list">
-                        {faceOffs.map((faceOff) => (
-                          <div
-                            key={faceOff.id}
-                            className="flex items-center justify-between p-3 rounded-lg border"
-                            data-testid={`faceoff-row-${faceOff.id}`}
-                          >
-                            <div className="flex-1">
-                              <p className="font-medium">{faceOff.title}</p>
-                              <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                                <Badge variant="outline" className="text-xs">{faceOff.category}</Badge>
-                                <span>{faceOff.optionAText} vs {faceOff.optionBText}</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <Badge variant={faceOff.isActive ? "default" : "secondary"}>
-                                {faceOff.isActive ? "Active" : "Inactive"}
-                              </Badge>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openEditFaceOff(faceOff)}
-                                data-testid={`button-edit-faceoff-${faceOff.id}`}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => {
-                                  setDeleteTarget({ type: "faceoff", id: faceOff.id, name: faceOff.title });
-                                  setShowDeleteConfirm(true);
-                                }}
-                                data-testid={`button-delete-faceoff-${faceOff.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <ArrowUpDown className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p>No face-offs yet</p>
-                        <Button 
-                          className="mt-4" 
-                          onClick={() => {
-                            setEditingFaceOff(null);
-                            setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", isActive: true });
-                            setShowFaceOffModal(true);
-                          }}
-                          data-testid="button-create-first-faceoff"
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Create First Face-Off
-                        </Button>
-                      </div>
-                    )}
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Trophy className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>Weekly Jackpot predictions coming soon</p>
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
+
+              <TabsContent value="weekly-updown" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Weekly Up/Down</CardTitle>
+                    <CardDescription>Will a celebrity's fame score go up or down this week?</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center py-8 text-muted-foreground">
+                      <ArrowUpDown className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>Weekly Up/Down predictions coming soon</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="head-to-head" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Head-to-Head Battles</CardTitle>
+                    <CardDescription>Predict which celebrity will have a higher fame score</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center py-8 text-muted-foreground">
+                      <ArrowUpDown className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>Head-to-Head Battle predictions coming soon</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="top-gainer" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Top Gainer Predictions</CardTitle>
+                    <CardDescription>Predict which celebrity will gain the most fame this week</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center py-8 text-muted-foreground">
+                      <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>Top Gainer predictions coming soon</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+        )}
+
+        {/* Voting CMS Section */}
+        {activeSection === "voting" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold">Voting CMS</h2>
+                <p className="text-muted-foreground">Manage voting content</p>
+              </div>
+            </div>
+
+            <Tabs defaultValue="polls" className="w-full">
+              <TabsList className="flex-wrap">
+                <TabsTrigger value="polls" data-testid="tab-polls">
+                  Trending Polls
+                </TabsTrigger>
+                <TabsTrigger value="faceoffs" data-testid="tab-faceoffs">
+                  Face-Offs
+                </TabsTrigger>
+                <TabsTrigger value="underrated-overrated" data-testid="tab-underrated-overrated">
+                  Underrated / Overrated
+                </TabsTrigger>
+                <TabsTrigger value="induction" data-testid="tab-induction">
+                  Induction Queue
+                </TabsTrigger>
+                <TabsTrigger value="curate-profile" data-testid="tab-curate-profile">
+                  Curate Profile
+                </TabsTrigger>
+              </TabsList>
 
               <TabsContent value="polls" className="mt-4">
                 <Card>
@@ -1977,6 +1993,111 @@ export default function AdminDashboard() {
                 </Card>
               </TabsContent>
 
+              <TabsContent value="faceoffs" className="mt-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle>Face-Off Queue</CardTitle>
+                      <CardDescription>Manage Face-Off voting questions</CardDescription>
+                    </div>
+                    <Button 
+                      size="sm"
+                      onClick={() => {
+                        setEditingFaceOff(null);
+                        setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", isActive: true });
+                        setShowFaceOffModal(true);
+                      }}
+                      data-testid="button-add-faceoff"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Face-Off
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {faceOffsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : faceOffs && faceOffs.length > 0 ? (
+                      <div className="space-y-3" data-testid="faceoff-list">
+                        {faceOffs.map((faceOff) => (
+                          <div
+                            key={faceOff.id}
+                            className="flex items-center justify-between p-3 rounded-lg border"
+                            data-testid={`faceoff-row-${faceOff.id}`}
+                          >
+                            <div className="flex-1">
+                              <p className="font-medium">{faceOff.title}</p>
+                              <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                                <Badge variant="outline" className="text-xs">{faceOff.category}</Badge>
+                                <span>{faceOff.optionAText} vs {faceOff.optionBText}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Badge variant={faceOff.isActive ? "default" : "secondary"}>
+                                {faceOff.isActive ? "Active" : "Inactive"}
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openEditFaceOff(faceOff)}
+                                data-testid={`button-edit-faceoff-${faceOff.id}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => {
+                                  setDeleteTarget({ type: "faceoff", id: faceOff.id, name: faceOff.title });
+                                  setShowDeleteConfirm(true);
+                                }}
+                                data-testid={`button-delete-faceoff-${faceOff.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <ArrowUpDown className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p>No face-offs yet</p>
+                        <Button 
+                          className="mt-4" 
+                          onClick={() => {
+                            setEditingFaceOff(null);
+                            setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", isActive: true });
+                            setShowFaceOffModal(true);
+                          }}
+                          data-testid="button-create-first-faceoff"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create First Face-Off
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="underrated-overrated" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Underrated / Overrated</CardTitle>
+                    <CardDescription>Manage approval rating voting options</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center py-8 text-muted-foreground">
+                      <ThumbsUp className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>Underrated/Overrated voting management coming soon</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
               <TabsContent value="induction" className="mt-4">
                 <Card>
                   <CardHeader>
@@ -1987,6 +2108,21 @@ export default function AdminDashboard() {
                     <div className="text-center py-8 text-muted-foreground">
                       <UserCheck className="h-12 w-12 mx-auto mb-3 opacity-50" />
                       <p>No pending induction candidates</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="curate-profile" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Curate Profile</CardTitle>
+                    <CardDescription>Manage celebrity profile curation and data quality</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Star className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>Profile curation tools coming soon</p>
                     </div>
                   </CardContent>
                 </Card>
