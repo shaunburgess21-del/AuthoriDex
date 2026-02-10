@@ -519,7 +519,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (type === 'droppers') {
         people = [...people].sort((a, b) => (a.change7d ?? 0) - (b.change7d ?? 0)).slice(0, 10);
       } else if (type === 'daily') {
-        people = [...people].sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0)).slice(0, 10);
+        const prevRanks = await getSnapshotRankMap();
+        const withRankChange = people.map(p => ({
+          ...p,
+          rankChange: prevRanks.has(p.id) ? (prevRanks.get(p.id)! - p.rank) : null,
+        }));
+        const byDelta = [...withRankChange].sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0)).slice(0, 15);
+        const byRank = [...withRankChange].sort((a, b) => Math.abs(b.rankChange ?? 0) - Math.abs(a.rankChange ?? 0)).slice(0, 15);
+        const seen = new Set<string>();
+        const merged: typeof withRankChange = [];
+        for (const p of [...byDelta, ...byRank]) {
+          if (!seen.has(p.id)) {
+            seen.add(p.id);
+            merged.push(p);
+          }
+        }
+        merged.sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0));
+        res.json(merged);
+        return;
       }
 
       const prevRanks = await getSnapshotRankMap();
