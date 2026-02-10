@@ -1,0 +1,26 @@
+I now want to allocate focus to upgrading the FameDex Admin Portal/Panel for administrators to seamlessly manage the frontend efficiently, accurately and with confidence that all is setup correctly.
+3.	Game CMS
+-	Arrangement:
+o	Predictions and Vote sections are currently consolidated on the same panel when “Game CMS” is selected – with a dedicated toggle for the following: (Prediction Markets, Face-Offs, Trending Polls, Induction Queue).  Game CMS has the following sub-title: “Manage prediction markets and voting content”
+o	I would first like to separate the two - Prediction Sections from Vote sections – which should each have their own panel (navigated via the main side panel on the left where Game CMS is located) – and then sub toggles for each section within Predictions or Votes – to manage separately. 
+o	Instead of the heading in side panel “Game CMS” we can maybe have two separate headings 
+	1. “Prediction Markets” (Or Prediction CMS – or whichever you suggest) with sub-title: “Manage prediction markets”
+	2. “Voting” (Or Voting CMS – or whichever you suggest) with sub-title: “Manage Voting”
+
+Prediction Markets section:
+-	This section should be the cockpit for managing the predictions sections. There are two main sections in Predictions  1 Open Market Predictions – “Real-World Markets” and 2. FameDex Specific predictions (relative to the leaderboard celebrities and their trend scores) – “Weekly Jackpot”, “Weekly Up/Down Predictions”,  “Head-to-Head Battles”, and “Top Gainer Predictions”. 
+-	Open Markets is the main heading - “Real-World Markets” is the prediction section under Open Markets and are predictions based on any topic (not native/relevant to FameDex Trend Score) and should allow more detail when adding prediction cards on any specific topic.  “Real-World Markets”  are basically exactly the same as what Polymarket or Kalshi would provide for users to predict on.
+-	“Predict The Fame Score” is the main heading for FameDex Specific predictions and comprises the following predictions: “Weekly Jackpot”, “Weekly Up/Down Predictions”,  “Head-to-Head Battles”, and “Top Gainer Predictions”.
+-	This panel (main panel comprising both “Open Markets” and “Predict the Fame Score” Predictions should display multiple toggles – each toggle addressing each Prediction Market that exists on our frontend - namely: Real-World Markets, Weekly Jackpot, Weekly Up/Down,  Head-to-Head Battles, Top Gainer Predictions. 
+o	Under each toggle can have the same setup as you already have on the existing panel (e.g. “Trending Polls” which lists all polls in order with sorting/filter functionality at the top + edit functionality in each row etc) (FYI - the existing “Prediction Markets” placeholder is empty and I am also unable to select the button “Add Prediction Market” as it is inactive and not currently linked to a modal to submit the details of a market.)
+-	The Real-World Markets Toggle:
+o	This toggle section must have the same format as others – but since Real-World Markets are similar to Polymarket type predictions – we need to ensure the backend has added functionality to accommodate variations in the type of prediction. 
+Prediction Options:
+1. one prediction type may just require 2 options such as "Yes" or "No" - e.g.:
+- Tech: Will SpaceX achieve full reusability of Starship before the end of 2027
+- Sports: Which sports team will a particular game
+- Tech: Who will land something on the moon first - Blue Origin or SpaceX
+2. Another prediction type may require many options - e.g.:
+Politics: Who will be the next presidential nominee of the Republican Party which would then list 5, 10, 15, 20 candidates for users to bet on.- Sports: Which rudgy team will win the next Rugby World Cup- Sports: Who will wing the 100m final in the Olympics 2027
+3.	Another prediction Market type may require "Up/Down" options as opposed to "Yes/No" options. e.g. will BTC go up or down (above or below a certain value) by a certain date.
+Regarding: " Voting CMS page UX At top: tabs for: - “Trending Polls” "Face-Offs", "Underrated / Overrated", Induction Queue”, and  "Curate Profile" Keep existing list/table patterns." 

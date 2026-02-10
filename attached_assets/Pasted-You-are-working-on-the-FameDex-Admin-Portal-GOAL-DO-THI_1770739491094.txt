@@ -1,0 +1,72 @@
+You are working on the FameDex Admin Portal.
+
+GOAL (DO THIS BUILD ONLY):
+Split the current “Game CMS” admin section into TWO separate left-nav sections:
+1) Prediction CMS (manage prediction markets only)
+2) Voting CMS (manage voting only)
+
+IMPORTANT SCOPE RULES
+- This build is an IA/routing/UI refactor ONLY.
+- Do NOT change database schemas.
+- Do NOT change public-facing site pages.
+- Do NOT change business logic for create/edit/delete of existing items.
+- Do NOT mix Predictions and Voting concepts. Keep them cleanly separated.
+- Preserve existing list/table patterns, filters, modals, and row actions—just move them into the correct new sections.
+
+CURRENT STATE (what exists now)
+Left nav: “Game CMS”
+Within it, tabs/toggles include:
+- Prediction Markets
+- Face-Offs
+- Trending Polls
+- Induction Queue
+(There may be more vote tools visible on the full page.)
+
+TARGET STATE (new left nav)
+Replace “Game CMS” with TWO left-nav items:
+
+A) “Prediction CMS” (or “Prediction Markets CMS” — choose best label)
+Subtitle: “Manage prediction markets”
+Route: /admin/predictions
+
+B) “Voting CMS” (or “Voting” — choose best label)
+Subtitle: “Manage voting”
+Route: /admin/voting
+
+PREDICTION CMS PAGE UX
+At the top of /admin/predictions, show tabs/segmented control for prediction sections ONLY:
+- Real-World Markets (Open Markets)
+- Weekly Jackpot
+- Weekly Up/Down
+- Head-to-Head Battles
+- Top Gainer Predictions
+
+For this build:
+- If some of these are placeholders today, still show the tabs and mount the existing components where available.
+- Do NOT build new prediction functionality yet. Just reorganize the admin.
+
+VOTING CMS PAGE UX
+At the top of /admin/voting, show tabs/segmented control for voting tools:
+- Trending Polls
+- Face-Offs
+- Underrated / Overrated
+- Curate Profile
+- Induction Queue
+
+For each tab:
+- Keep the current list/table layout, filters, and row actions as-is.
+- Move the existing components/screens into the correct section with minimal code churn.
+
+IMPLEMENTATION REQUIREMENTS
+1) Add new left-nav items and routes.
+2) Move or wrap existing “Game CMS” tab content into the new routes.
+3) Ensure auth/permissions still apply the same way.
+4) Ensure no “Rendered more hooks than previous render” errors (React hooks must not be conditional).
+5) Regression test:
+   - Each tab renders
+   - Existing create/edit flows still work
+   - No broken imports/routes
+   - Browser console clean
+
+DELIVERABLE
+A PR that cleanly separates Prediction CMS and Voting CMS, removes or retires “Game CMS” from the nav, and keeps all existing tools functional.
