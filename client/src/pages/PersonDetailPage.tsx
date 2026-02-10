@@ -461,29 +461,18 @@ export default function PersonDetailPage() {
     enabled: !!params?.id,
   });
 
-  const { data: allPeople = [] } = useQuery<TrendingPerson[]>({
-    queryKey: ['/api/trending', 'hot-mover-check'],
-    queryFn: async () => {
-      const res = await fetch('/api/trending');
-      if (!res.ok) return [];
-      const json = await res.json();
-      return Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [];
-    },
+  const { data: dailyMovers = [] } = useQuery<(TrendingPerson & { rankChange?: number | null })[]>({
+    queryKey: ['/api/trending/movers/daily'],
   });
 
   const isHotMover = useMemo(() => {
-    if (!person || !Array.isArray(allPeople) || allPeople.length === 0) return false;
-    const withRankChange = allPeople.map((p, _i, arr) => ({
-      ...p,
-      rankChange: (p as any).rankChange ?? null,
-    }));
-    const thresholds = computePercentileThresholds(withRankChange as any);
-    const indicator = getExceptionalIndicator(
-      { ...person, rankChange: (person as any).rankChange ?? null } as any,
-      thresholds
-    );
+    if (!person || !Array.isArray(dailyMovers) || dailyMovers.length === 0) return false;
+    const thresholds = computePercentileThresholds(dailyMovers as any);
+    const match = dailyMovers.find(p => p.id === person.id);
+    if (!match) return false;
+    const indicator = getExceptionalIndicator(match as any, thresholds);
     return indicator !== null;
-  }, [person, allPeople]);
+  }, [person, dailyMovers]);
 
   // Check if person is favorited
   useEffect(() => {
