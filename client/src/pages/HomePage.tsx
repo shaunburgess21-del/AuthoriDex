@@ -13,7 +13,7 @@ import { TrendingNowFeed } from "@/components/TrendingNowFeed";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Flame, Snowflake } from "lucide-react";
+import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Rocket, Snowflake } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
@@ -951,7 +951,7 @@ export default function HomePage() {
                   {leaderboardTab === "fame" && percentileThresholds && (
                     <div className="px-4 sm:px-6 py-2.5 border-b bg-muted/20 flex items-center gap-4 flex-wrap text-[11px] text-muted-foreground" data-testid="indicator-legend">
                       <span className="inline-flex items-center gap-1">
-                        <Flame className="h-3 w-3 text-orange-400" />
+                        <Rocket className="h-3 w-3 text-orange-400" />
                         Breakout
                       </span>
                       <span className="inline-flex items-center gap-1">
@@ -959,7 +959,7 @@ export default function HomePage() {
                         Spiking
                       </span>
                       <span className="inline-flex items-center gap-1">
-                        <Flame className="h-3 w-3 text-orange-400" />
+                        <TrendingUp className="h-3 w-3 text-emerald-400" />
                         Rising
                       </span>
                       <span className="inline-flex items-center gap-1">

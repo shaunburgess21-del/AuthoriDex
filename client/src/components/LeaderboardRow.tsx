@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useEffect, useRef } from "react";
 import { compactNumber, formatDelta, compactVotes } from "@/lib/formatNumber";
-import { ThumbsUp, Flame, Snowflake, Zap } from "lucide-react";
+import { ThumbsUp, Rocket, Snowflake, Zap, TrendingUp } from "lucide-react";
 
 const SEGMENT_COLORS_5 = [
   '#FF0000',
@@ -73,7 +73,7 @@ function computePercentileThresholds(people: ExtendedPerson[]): PercentileThresh
 function getExceptionalIndicator(
   person: ExtendedPerson,
   thresholds?: PercentileThresholds
-): { icon: typeof Flame; color: string; label: string; description: string } | null {
+): { icon: typeof Rocket; color: string; label: string; description: string } | null {
   const delta = person.change24h;
   const rankChange = person.rankChange;
 
@@ -85,13 +85,13 @@ function getExceptionalIndicator(
   const metrics = `24h: ${delta != null ? fmtDelta(delta) : '—'} · Rank: ${rankChange != null ? fmtRank(rankChange) : '—'}`;
 
   if (rankChange != null && rankChange >= thresholds.rankChangeP90 && delta != null && delta >= thresholds.deltaP90) {
-    return { icon: Flame, color: "text-orange-400", label: "Breakout", description: `Big surge + big rank jump\n${metrics}` };
+    return { icon: Rocket, color: "text-orange-400", label: "Breakout", description: `Big surge + big rank jump\n${metrics}` };
   }
   if (delta != null && delta >= thresholds.deltaP90) {
     return { icon: Zap, color: "text-yellow-400", label: "Spiking", description: `Big score surge\n${metrics}` };
   }
   if (rankChange != null && rankChange >= thresholds.rankChangeP90) {
-    return { icon: Flame, color: "text-orange-400", label: "Rising", description: `Climbing the board\n${metrics}` };
+    return { icon: TrendingUp, color: "text-emerald-400", label: "Rising", description: `Climbing the board\n${metrics}` };
   }
   if (rankChange != null && rankChange <= thresholds.negRankChangeP10 && delta != null && delta <= thresholds.negDeltaP10) {
     return { icon: Snowflake, color: "text-blue-400", label: "Cooling", description: `Fast drop-off\n${metrics}` };

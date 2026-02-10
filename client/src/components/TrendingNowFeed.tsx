@@ -59,8 +59,8 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle }: 
             <Flame className="h-4 w-4 text-orange-400" />
           </div>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-slate-100">Trending Now</h3>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider">24h Hot Movers</p>
+            <h3 className="text-sm font-semibold text-slate-100">Hot Movers</h3>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Top % gainers · 24h</p>
           </div>
           <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
             <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
