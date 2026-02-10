@@ -110,11 +110,46 @@ interface UserProfile {
 interface PredictionMarket {
   id: string;
   marketType: string;
+  openMarketType: string | null;
   status: string;
   title: string;
+  slug: string;
+  teaser: string | null;
   summary: string | null;
+  description: string | null;
+  category: string | null;
+  tags: string[] | null;
+  coverImageUrl: string | null;
+  sourceUrl: string | null;
+  featured: boolean | null;
+  timezone: string | null;
+  resolutionCriteria: string[] | null;
+  resolutionSources: { label: string; url?: string }[] | null;
+  resolutionNotes: string | null;
+  resolveMethod: string | null;
+  seedParticipants: number | null;
+  seedVolume: string | null;
+  underlying: string | null;
+  metric: string | null;
+  strike: string | null;
+  unit: string | null;
+  closeAt: string | null;
   endAt: string;
+  startAt: string;
   createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+  settledBy: string | null;
+  resolvedAt: string | null;
+  voidReason: string | null;
+  rules: string | null;
+  metadata: any;
+}
+
+interface MarketEntryForm {
+  label: string;
+  description: string;
+  seedCount: number;
 }
 
 interface AuditLogEntry {
@@ -335,6 +370,470 @@ function CopyDebugSummaryButton({ scoreBreakdown }: { scoreBreakdown: ScoreBreak
   );
 }
 
+function CreateMarketModal({ open, onClose, onSubmit, isPending }: { 
+  open: boolean; 
+  onClose: () => void; 
+  onSubmit: (data: any) => void;
+  isPending: boolean;
+}) {
+  const [title, setTitle] = useState("");
+  const [slug, setSlug] = useState("");
+  const [openMarketType, setOpenMarketType] = useState<"binary" | "multi" | "updown">("binary");
+  const [teaser, setTeaser] = useState("");
+  const [summary, setSummary] = useState("");
+  const [category, setCategory] = useState("misc");
+  const [endAt, setEndAt] = useState("");
+  const [closeAt, setCloseAt] = useState("");
+  const [featured, setFeatured] = useState(false);
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [resolveMethod, setResolveMethod] = useState("admin_manual");
+  const [resolutionCriteria, setResolutionCriteria] = useState<string[]>([""]);
+  const [underlying, setUnderlying] = useState("");
+  const [metric, setMetric] = useState("");
+  const [strike, setStrike] = useState("");
+  const [unit, setUnit] = useState("$");
+  const [entries, setEntries] = useState<MarketEntryForm[]>([
+    { label: "Yes", description: "", seedCount: 0 },
+    { label: "No", description: "", seedCount: 0 },
+  ]);
+
+  useEffect(() => {
+    const generated = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+    setSlug(generated);
+  }, [title]);
+
+  useEffect(() => {
+    if (openMarketType === "binary") {
+      setEntries([
+        { label: "Yes", description: "", seedCount: 0 },
+        { label: "No", description: "", seedCount: 0 },
+      ]);
+    } else if (openMarketType === "updown") {
+      setEntries([
+        { label: "Above", description: "", seedCount: 0 },
+        { label: "Below", description: "", seedCount: 0 },
+      ]);
+    } else {
+      setEntries([
+        { label: "", description: "", seedCount: 0 },
+        { label: "", description: "", seedCount: 0 },
+        { label: "", description: "", seedCount: 0 },
+      ]);
+    }
+  }, [openMarketType]);
+
+  const addEntry = () => {
+    if (entries.length < 20) {
+      setEntries([...entries, { label: "", description: "", seedCount: 0 }]);
+    }
+  };
+
+  const removeEntry = (idx: number) => {
+    if (entries.length > 3) {
+      setEntries(entries.filter((_, i) => i !== idx));
+    }
+  };
+
+  const updateEntry = (idx: number, field: keyof MarketEntryForm, value: string | number) => {
+    const updated = [...entries];
+    (updated[idx] as any)[field] = value;
+    setEntries(updated);
+  };
+
+  const canSubmit = () => {
+    if (!title.trim() || !slug.trim() || !endAt) return false;
+    if (openMarketType === "updown" && (!underlying.trim() || !strike.trim())) return false;
+    if (openMarketType === "multi" && entries.some(e => !e.label.trim())) return false;
+    return true;
+  };
+
+  const handleSubmit = () => {
+    onSubmit({
+      title,
+      slug,
+      openMarketType,
+      teaser: teaser || undefined,
+      summary: summary || undefined,
+      category,
+      endAt: new Date(endAt).toISOString(),
+      closeAt: closeAt ? new Date(closeAt).toISOString() : undefined,
+      featured,
+      sourceUrl: sourceUrl || undefined,
+      resolveMethod,
+      resolutionCriteria: resolutionCriteria.filter(c => c.trim()),
+      underlying: openMarketType === "updown" ? underlying : undefined,
+      metric: openMarketType === "updown" ? metric : undefined,
+      strike: openMarketType === "updown" ? strike : undefined,
+      unit: openMarketType === "updown" ? unit : undefined,
+      entries: entries.map((e, i) => ({
+        label: e.label,
+        description: e.description || undefined,
+        displayOrder: i,
+        seedCount: e.seedCount,
+      })),
+    });
+  };
+
+  const CATEGORIES = [
+    { value: "politics", label: "Politics" },
+    { value: "tech", label: "Tech" },
+    { value: "entertainment", label: "Entertainment" },
+    { value: "sports", label: "Sports" },
+    { value: "business", label: "Business" },
+    { value: "creator", label: "Creator" },
+    { value: "misc", label: "Misc" },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Create Real-World Market</DialogTitle>
+          <DialogDescription>Create a new prediction market for real-world events</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6 py-4">
+          <div className="space-y-2">
+            <Label>Market Type</Label>
+            <Select value={openMarketType} onValueChange={(v) => setOpenMarketType(v as any)}>
+              <SelectTrigger data-testid="select-market-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="binary">Binary (Yes / No)</SelectItem>
+                <SelectItem value="multi">Multi-Option (3-20 choices)</SelectItem>
+                <SelectItem value="updown">Up/Down (Above / Below strike)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <div className="space-y-2">
+              <Label>Title / Question</Label>
+              <Input 
+                value={title} 
+                onChange={(e) => setTitle(e.target.value)} 
+                placeholder="Will Bitcoin reach $100k by end of 2026?"
+                data-testid="input-market-title"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Slug</Label>
+              <Input 
+                value={slug} 
+                onChange={(e) => setSlug(e.target.value)} 
+                placeholder="bitcoin-100k-2026"
+                data-testid="input-market-slug"
+              />
+              <p className="text-xs text-muted-foreground">/markets/{slug}</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Teaser (short tagline for card)</Label>
+            <Input 
+              value={teaser} 
+              onChange={(e) => setTeaser(e.target.value)} 
+              placeholder="Bitcoin nears all-time high..."
+              data-testid="input-market-teaser"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Summary</Label>
+            <Textarea 
+              value={summary} 
+              onChange={(e) => setSummary(e.target.value)} 
+              placeholder="Additional context about this market..."
+              className="resize-none"
+              data-testid="input-market-summary"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger data-testid="select-market-category">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map(c => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Featured</Label>
+              <div className="flex items-center gap-2 h-9">
+                <Switch checked={featured} onCheckedChange={setFeatured} data-testid="switch-market-featured" />
+                <span className="text-sm text-muted-foreground">{featured ? "Yes" : "No"}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Resolution Date</Label>
+              <Input 
+                type="datetime-local" 
+                value={endAt} 
+                onChange={(e) => setEndAt(e.target.value)} 
+                data-testid="input-market-end-at"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Betting Closes (optional)</Label>
+              <Input 
+                type="datetime-local" 
+                value={closeAt} 
+                onChange={(e) => setCloseAt(e.target.value)} 
+                data-testid="input-market-close-at"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Source URL (optional)</Label>
+            <Input 
+              value={sourceUrl} 
+              onChange={(e) => setSourceUrl(e.target.value)} 
+              placeholder="https://..."
+              data-testid="input-market-source-url"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Resolution Method</Label>
+            <Select value={resolveMethod} onValueChange={setResolveMethod}>
+              <SelectTrigger data-testid="select-resolve-method">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="admin_manual">Admin Manual</SelectItem>
+                <SelectItem value="oracle">Oracle / External</SelectItem>
+                <SelectItem value="api">API Automated</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Resolution Criteria</Label>
+            {resolutionCriteria.map((criterion, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <Input 
+                  value={criterion}
+                  onChange={(e) => {
+                    const updated = [...resolutionCriteria];
+                    updated[idx] = e.target.value;
+                    setResolutionCriteria(updated);
+                  }}
+                  placeholder={`Criterion ${idx + 1}`}
+                  data-testid={`input-criterion-${idx}`}
+                />
+                {resolutionCriteria.length > 1 && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => setResolutionCriteria(resolutionCriteria.filter((_, i) => i !== idx))}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            ))}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setResolutionCriteria([...resolutionCriteria, ""])}
+              data-testid="button-add-criterion"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add Criterion
+            </Button>
+          </div>
+
+          {openMarketType === "updown" && (
+            <div className="space-y-4 p-4 rounded-lg border border-violet-500/20 bg-violet-500/5">
+              <h4 className="font-semibold text-sm flex items-center gap-2">
+                <ArrowUpDown className="h-4 w-4 text-violet-500" />
+                Strike Configuration
+              </h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Underlying Asset</Label>
+                  <Input 
+                    value={underlying} 
+                    onChange={(e) => setUnderlying(e.target.value)} 
+                    placeholder="Bitcoin"
+                    data-testid="input-underlying"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Metric</Label>
+                  <Input 
+                    value={metric} 
+                    onChange={(e) => setMetric(e.target.value)} 
+                    placeholder="price"
+                    data-testid="input-metric"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Strike Value</Label>
+                  <Input 
+                    type="number"
+                    value={strike} 
+                    onChange={(e) => setStrike(e.target.value)} 
+                    placeholder="100000"
+                    data-testid="input-strike"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Unit</Label>
+                  <Input 
+                    value={unit} 
+                    onChange={(e) => setUnit(e.target.value)} 
+                    placeholder="$"
+                    data-testid="input-unit"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label>Outcomes</Label>
+              {openMarketType === "multi" && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={addEntry}
+                  disabled={entries.length >= 20}
+                  data-testid="button-add-entry"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Option
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {openMarketType === "binary" ? "Binary markets always have exactly 2 outcomes (Yes/No)." :
+               openMarketType === "updown" ? "Up/Down markets always have exactly 2 outcomes (Above/Below)." :
+               `Multi-option: ${entries.length} of 3-20 outcomes.`}
+            </p>
+            {entries.map((entry, idx) => (
+              <div key={idx} className="flex items-center gap-2 p-3 rounded-lg border">
+                <div className="flex-1 space-y-2">
+                  <Input
+                    value={entry.label}
+                    onChange={(e) => updateEntry(idx, "label", e.target.value)}
+                    placeholder={`Option ${idx + 1}`}
+                    disabled={openMarketType === "binary" || openMarketType === "updown"}
+                    data-testid={`input-entry-label-${idx}`}
+                  />
+                </div>
+                <div className="w-24 space-y-1">
+                  <Input
+                    type="number"
+                    value={entry.seedCount}
+                    onChange={(e) => updateEntry(idx, "seedCount", parseInt(e.target.value) || 0)}
+                    placeholder="Seed"
+                    data-testid={`input-entry-seed-${idx}`}
+                  />
+                  <p className="text-[10px] text-muted-foreground text-center">seed</p>
+                </div>
+                {openMarketType === "multi" && entries.length > 3 && (
+                  <Button variant="ghost" size="icon" onClick={() => removeEntry(idx)} data-testid={`button-remove-entry-${idx}`}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button 
+            onClick={handleSubmit} 
+            disabled={!canSubmit() || isPending}
+            data-testid="button-submit-market"
+          >
+            {isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+            Create Market
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SettleMarketModal({ market, entries, open, onClose, onSettle, isPending }: {
+  market: PredictionMarket | null;
+  entries: { id: string; label: string; totalStake: number }[];
+  open: boolean;
+  onClose: () => void;
+  onSettle: (winnerEntryId: string, notes: string) => void;
+  isPending: boolean;
+}) {
+  const [winnerId, setWinnerId] = useState("");
+  const [notes, setNotes] = useState("");
+
+  if (!market) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Settle Market</DialogTitle>
+          <DialogDescription>Select the winning outcome for: {market.title}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label>Winning Outcome</Label>
+            {entries.map(entry => (
+              <div 
+                key={entry.id}
+                className={cn(
+                  "flex items-center justify-between gap-2 p-3 rounded-lg border cursor-pointer transition-colors",
+                  winnerId === entry.id ? "border-green-500 bg-green-500/10" : "hover-elevate"
+                )}
+                onClick={() => setWinnerId(entry.id)}
+                data-testid={`settle-entry-${entry.id}`}
+              >
+                <span className="font-medium">{entry.label}</span>
+                <Badge variant="outline">{entry.totalStake} staked</Badge>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-2">
+            <Label>Resolution Notes (optional)</Label>
+            <Textarea 
+              value={notes} 
+              onChange={(e) => setNotes(e.target.value)} 
+              placeholder="Why was this outcome selected?"
+              className="resize-none"
+              data-testid="input-settle-notes"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button 
+            onClick={() => onSettle(winnerId, notes)}
+            disabled={!winnerId || isPending}
+            data-testid="button-confirm-settle"
+          >
+            {isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+            Settle Market
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function AdminDashboard() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -405,6 +904,11 @@ export default function AdminDashboard() {
   const [entityDiagResults, setEntityDiagResults] = useState<any[] | null>(null);
   const [entityDiagLoading, setEntityDiagLoading] = useState(false);
   const [entityDiagFilter, setEntityDiagFilter] = useState<string>("all");
+
+  const [createMarketOpen, setCreateMarketOpen] = useState(false);
+  const [editMarketId, setEditMarketId] = useState<string | null>(null);
+  const [settleMarketId, setSettleMarketId] = useState<string | null>(null);
+  const [voidMarketId, setVoidMarketId] = useState<string | null>(null);
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS (React rules of hooks)
   
@@ -531,6 +1035,87 @@ export default function AdminDashboard() {
       return res.json();
     },
     enabled: isAdmin && activeSection === "moderation",
+  });
+
+  const settleMarket = settleMarketId ? markets?.find(m => m.id === settleMarketId) : null;
+  const { data: settleMarketDetail } = useQuery<{ entries: { id: string; label: string; totalStake: number }[] }>({
+    queryKey: ["/api/open-markets", settleMarket?.slug],
+    queryFn: async () => {
+      if (!settleMarket?.slug) return { entries: [] };
+      const res = await fetch(`/api/open-markets/${settleMarket.slug}`);
+      if (!res.ok) return { entries: [] };
+      return res.json();
+    },
+    enabled: !!settleMarket?.slug,
+  });
+
+  const createMarketMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await fetchWithAuth("/api/admin/open-markets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to create market");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+      setCreateMarketOpen(false);
+      toast({ title: "Market Created", description: "Real-world market created successfully." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const settleMarketMutation = useMutation({
+    mutationFn: async ({ id, winnerEntryId, resolutionNotes }: { id: string; winnerEntryId: string; resolutionNotes?: string }) => {
+      const res = await fetchWithAuth(`/api/admin/open-markets/${id}/settle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ winnerEntryId, resolutionNotes }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to settle market");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+      setSettleMarketId(null);
+      toast({ title: "Market Settled", description: "Market has been resolved." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const voidMarketMutation = useMutation({
+    mutationFn: async ({ id, voidReason }: { id: string; voidReason: string }) => {
+      const res = await fetchWithAuth(`/api/admin/open-markets/${id}/void`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voidReason }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to void market");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+      setVoidMarketId(null);
+      toast({ title: "Market Voided", description: "Market has been voided." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
   });
 
   // System tool mutations
@@ -1651,7 +2236,7 @@ export default function AdminDashboard() {
                 <h2 className="text-2xl font-bold">Prediction CMS</h2>
                 <p className="text-muted-foreground">Manage prediction markets</p>
               </div>
-              <Button data-testid="button-create-market">
+              <Button onClick={() => setCreateMarketOpen(true)} data-testid="button-create-market">
                 <Plus className="h-4 w-4 mr-2" />
                 New Market
               </Button>
@@ -1678,60 +2263,100 @@ export default function AdminDashboard() {
 
               <TabsContent value="real-world" className="mt-4">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Real-World Markets</CardTitle>
-                    <CardDescription>Create and manage prediction markets</CardDescription>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2">
+                    <div>
+                      <CardTitle>Real-World Markets</CardTitle>
+                      <CardDescription>Community prediction markets for real-world events</CardDescription>
+                    </div>
+                    <Button onClick={() => setCreateMarketOpen(true)} size="sm" data-testid="button-create-rw-market">
+                      <Plus className="h-4 w-4 mr-1" />
+                      Create
+                    </Button>
                   </CardHeader>
                   <CardContent>
                     {marketsLoading ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                       </div>
-                    ) : markets && markets.length > 0 ? (
-                      <div className="space-y-3">
-                        {markets.map((market) => (
-                          <div
-                            key={market.id}
-                            className="flex items-center justify-between p-3 rounded-lg border"
-                          >
-                            <div>
-                              <p className="font-medium">{market.title}</p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <Badge variant="outline">{market.marketType}</Badge>
-                                <Badge
-                                  variant={
-                                    market.status === "OPEN"
-                                      ? "default"
-                                      : market.status === "RESOLVED"
-                                      ? "secondary"
-                                      : "destructive"
-                                  }
-                                >
-                                  {market.status}
-                                </Badge>
+                    ) : (() => {
+                      const rwMarkets = (markets || []).filter(m => m.marketType === "community");
+                      return rwMarkets.length > 0 ? (
+                        <div className="space-y-3">
+                          {rwMarkets.map((market) => (
+                            <div
+                              key={market.id}
+                              className="flex items-center justify-between p-3 rounded-lg border gap-3"
+                              data-testid={`market-row-${market.id}`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium truncate">{market.title}</p>
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                  {market.openMarketType && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {market.openMarketType === "binary" ? "Yes/No" : 
+                                       market.openMarketType === "multi" ? "Multi" : "Up/Down"}
+                                    </Badge>
+                                  )}
+                                  <Badge
+                                    variant={
+                                      market.status === "OPEN" ? "default" :
+                                      market.status === "RESOLVED" ? "secondary" : "destructive"
+                                    }
+                                  >
+                                    {market.status}
+                                  </Badge>
+                                  {market.category && (
+                                    <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>
+                                  )}
+                                  {market.featured && (
+                                    <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500">
+                                      <Star className="h-3 w-3 mr-1" />
+                                      Featured
+                                    </Badge>
+                                  )}
+                                  <span className="text-xs text-muted-foreground">
+                                    Ends: {new Date(market.endAt).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {market.status === "OPEN" && (
+                                  <>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon"
+                                      onClick={() => {
+                                        setSettleMarketId(market.id);
+                                      }}
+                                      data-testid={`button-settle-${market.id}`}
+                                    >
+                                      <Gavel className="h-4 w-4" />
+                                    </Button>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon"
+                                      onClick={() => setVoidMarketId(market.id)}
+                                      data-testid={`button-void-${market.id}`}
+                                    >
+                                      <XCircle className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </>
+                                )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Button variant="ghost" size="icon">
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <Gamepad2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p>No prediction markets yet</p>
-                        <Button className="mt-4" data-testid="button-create-first-market">
-                          <Plus className="h-4 w-4 mr-2" />
-                          Create First Market
-                        </Button>
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Gamepad2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                          <p>No real-world markets yet</p>
+                          <Button className="mt-4" onClick={() => setCreateMarketOpen(true)} data-testid="button-create-first-market">
+                            <Plus className="h-4 w-4 mr-2" />
+                            Create First Market
+                          </Button>
+                        </div>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -3644,6 +4269,61 @@ export default function AdminDashboard() {
               ) : (
                 editingPoll ? "Update Poll" : "Create Poll"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <CreateMarketModal
+        open={createMarketOpen}
+        onClose={() => setCreateMarketOpen(false)}
+        onSubmit={(data) => createMarketMutation.mutate(data)}
+        isPending={createMarketMutation.isPending}
+      />
+
+      <SettleMarketModal
+        market={settleMarket || null}
+        entries={settleMarketDetail?.entries || []}
+        open={!!settleMarketId}
+        onClose={() => setSettleMarketId(null)}
+        onSettle={(winnerEntryId, notes) => {
+          if (settleMarketId) {
+            settleMarketMutation.mutate({ id: settleMarketId, winnerEntryId, resolutionNotes: notes || undefined });
+          }
+        }}
+        isPending={settleMarketMutation.isPending}
+      />
+
+      <Dialog open={!!voidMarketId} onOpenChange={(isOpen) => !isOpen && setVoidMarketId(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Void Market</DialogTitle>
+            <DialogDescription>This will void the market and refund all bets. This action cannot be undone.</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label>Reason for voiding</Label>
+            <Textarea 
+              id="void-reason"
+              placeholder="Explain why this market is being voided..."
+              className="mt-2 resize-none"
+              data-testid="input-void-reason"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVoidMarketId(null)}>Cancel</Button>
+            <Button 
+              variant="destructive"
+              onClick={() => {
+                const reason = (document.getElementById("void-reason") as HTMLTextAreaElement)?.value || "Voided by admin";
+                if (voidMarketId) {
+                  voidMarketMutation.mutate({ id: voidMarketId, voidReason: reason });
+                }
+              }}
+              disabled={voidMarketMutation.isPending}
+              data-testid="button-confirm-void"
+            >
+              {voidMarketMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <XCircle className="h-4 w-4 mr-2" />}
+              Void Market
             </Button>
           </DialogFooter>
         </DialogContent>

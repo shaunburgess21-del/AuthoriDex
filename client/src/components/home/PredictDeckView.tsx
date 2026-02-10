@@ -14,6 +14,7 @@ import { TrendingPerson } from "@shared/schema";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -38,11 +39,9 @@ import {
   MOCK_MARKETS,
   HEAD_TO_HEAD_MARKETS,
   TOP_GAINER_MARKETS,
-  COMMUNITY_MARKETS,
   type PredictionMarket,
   type HeadToHeadMarket,
   type TopGainerMarket,
-  type CommunityMarket,
 } from "@/data/predict";
 import { getFilterCategories } from "@shared/constants";
 
@@ -245,84 +244,82 @@ function CommunityCard({
   market,
   onPredict,
 }: {
-  market: CommunityMarket;
-  onPredict: (marketId: string, optionId: string, optionText: string) => void;
+  market: any;
+  onPredict: (slug: string) => void;
 }) {
-  // Use options data if available, otherwise calculate from seed
-  const yesOption = market.options.find(o => o.id === 'yes' || o.text.toLowerCase() === 'yes');
-  const noOption = market.options.find(o => o.id === 'no' || o.text.toLowerCase() === 'no');
-  const yesPercent = yesOption?.percent ?? 50;
-  const noPercent = noOption?.percent ?? 50;
-  const yesOdds = (100 / yesPercent).toFixed(2);
-  const noOdds = (100 / noPercent).toFixed(2);
+  const entries = market.entries || [];
+  const totalStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0), 0);
+  const totalPool = totalStake + Number(market.seedVolume || 0);
+  const participants = (market.betCount || 0) + (market.seedParticipants || 0);
+  
+  const entry1 = entries[0];
+  const entry2 = entries[1];
+  const stake1 = (entry1?.totalStake || 0) + (entry1?.seedCount || 0);
+  const stake2 = (entry2?.totalStake || 0) + (entry2?.seedCount || 0);
+  const total = stake1 + stake2 || 1;
+  const pct1 = Math.round((stake1 / total) * 100);
+  const pct2 = 100 - pct1;
   
   return (
-    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20" style={{ minHeight: '340px' }}>
+    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20" style={{ minHeight: '280px' }}>
       <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-cyan-500/5 rounded-lg" />
-      
       <div className="relative p-4">
         <div className="flex items-center justify-between mb-3">
           <Badge variant="outline" className="text-xs">
             <Clock className="h-3 w-3 mr-1" />
-            3d left
+            {market.openMarketType === "updown" ? "Strike" : market.openMarketType === "multi" ? `${entries.length} options` : "Yes / No"}
           </Badge>
-          <CategoryPill category={market.category} />
+          {market.category && <CategoryPill category={market.category} />}
         </div>
         
-        <div className="flex flex-col items-center text-center mb-3">
-          <PersonAvatar name={market.personName} avatar={market.personAvatar} size="xl" />
-          <span className="text-sm font-medium mt-2">{market.personName}</span>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Users className="h-3 w-3" />
-            <span>{market.participants} participants</span>
-          </div>
+        <p className="text-sm font-semibold mb-3 line-clamp-2 text-center">{market.title}</p>
+        
+        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground mb-3">
+          <Users className="h-3 w-3" />
+          <span>{participants} participants</span>
         </div>
         
-        <p className="text-sm font-semibold mb-3 line-clamp-2 text-center">{market.question}</p>
+        {entries.length === 2 && (
+          <div className="mb-3">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="text-green-500 font-semibold">{entry1?.label} {pct1}%</span>
+              <span className="text-red-500 font-semibold">{entry2?.label} {pct2}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-red-500/20 overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${pct1}%` }} />
+            </div>
+          </div>
+        )}
         
-        <div className="mb-3">
-          <div className="flex items-center justify-between text-xs mb-1.5">
-            <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
-            <span className="text-red-500 font-semibold">No {noPercent}%</span>
+        {entries.length > 2 && (
+          <div className="space-y-1 mb-3">
+            {entries.slice(0, 3).map((entry: any) => {
+              const entryStake = (entry.totalStake || 0) + (entry.seedCount || 0);
+              const totalAll = entries.reduce((s: number, e: any) => s + (e.totalStake || 0) + (e.seedCount || 0), 0) || 1;
+              const pct = Math.round((entryStake / totalAll) * 100);
+              return (
+                <div key={entry.id} className="flex items-center gap-2 text-xs">
+                  <span className="truncate flex-1">{entry.label}</span>
+                  <span className="text-muted-foreground">{pct}%</span>
+                </div>
+              );
+            })}
           </div>
-          <div className="h-2 rounded-full bg-red-500/20 overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
-              style={{ width: `${yesPercent}%` }}
-            />
-          </div>
-          <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-1">
-            <span>{yesOdds}x return</span>
-            <span>{noOdds}x return</span>
-          </div>
-        </div>
+        )}
         
         <div className="flex items-center justify-center mb-3">
-          <span className="text-sm font-semibold text-violet-500">
-            Pool: {market.totalPool.toLocaleString()}
-          </span>
+          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
         </div>
         
-        <div className="grid grid-cols-2 gap-2">
-          <Button 
-            size="sm" 
-            variant="outline"
-            className="border-green-500/30 text-green-500 hover:bg-green-500/10"
-            onClick={() => onPredict(market.id, 'yes', 'Yes')}
-            data-testid={`button-community-yes-${market.id}`}
-          >
-            Yes
-          </Button>
-          <Button 
-            size="sm" 
-            variant="outline"
-            className="border-red-500/30 text-red-500 hover:bg-red-500/10"
-            onClick={() => onPredict(market.id, 'no', 'No')}
-            data-testid={`button-community-no-${market.id}`}
-          >
-            No
-          </Button>
-        </div>
+        <Button 
+          size="sm" 
+          variant="outline"
+          className="w-full border-violet-500/30 text-violet-500"
+          onClick={() => onPredict(market.slug)}
+          data-testid={`button-predict-${market.slug}`}
+        >
+          Predict
+        </Button>
       </div>
     </Card>
   );
@@ -500,6 +497,11 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
   const [communityInteracted, setCommunityInteracted] = useState(false);
   const [pendingPrediction, setPendingPrediction] = useState<string | null>(null);
 
+  const { data: openMarketsData } = useQuery<any[]>({
+    queryKey: ['/api/open-markets'],
+  });
+  const openMarkets = openMarketsData || [];
+
   const filteredUpDown = useMemo(() =>
     MOCK_MARKETS.filter(m => {
       const matchesCategory = categoryFilter === "all" || m.category === categoryFilter;
@@ -524,13 +526,12 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
   );
 
   const filteredCommunity = useMemo(() =>
-    COMMUNITY_MARKETS.filter(m => {
+    openMarkets.filter((m: any) => {
       const matchesCategory = categoryFilter === "all" || m.category === categoryFilter;
-      const matchesSearch = !searchQuery || m.question.toLowerCase().includes(searchQuery.toLowerCase());
-      const notPredicted = !predictions.has(m.id);
-      return matchesCategory && matchesSearch && notPredicted;
+      const matchesSearch = !searchQuery || m.title?.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
     }),
-    [categoryFilter, searchQuery, predictions]
+    [categoryFilter, searchQuery, openMarkets]
   );
 
   const filteredGainer = useMemo(() =>
@@ -569,20 +570,6 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
       onConfirm: () => {
         setPendingPrediction(marketId);
         setH2hInteracted(true);
-      },
-    });
-  }, []);
-
-  const handleCommunityPredict = useCallback((marketId: string, optionId: string, optionText: string) => {
-    setStakeModal({
-      isOpen: true,
-      type: 'community',
-      marketId,
-      selection: optionText,
-      personName: optionText,
-      onConfirm: () => {
-        setPendingPrediction(marketId);
-        setCommunityInteracted(true);
       },
     });
   }, []);
@@ -685,31 +672,27 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
         ))}
       </div>
 
-      {showRealWorld && filteredCommunity.length > 0 && (
+      {showRealWorld && (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <MessageSquare className="h-4 w-4 text-cyan-400" />
             <h3 className="text-sm font-semibold">Real-World Markets</h3>
           </div>
-          <CardDeckContainer
-            items={filteredCommunity}
-            viewType="predict"
-            hasInteracted={communityInteracted}
-            onAdvance={() => {
-              if (pendingPrediction) {
-                setPredictions(prev => new Set(prev).add(pendingPrediction));
-                setPendingPrediction(null);
-              }
-              setCommunityInteracted(false);
-            }}
-            renderCard={(market) => (
-              <CommunityCard
-                market={market}
-                onPredict={(id, optId, optText) => handleCommunityPredict(id, optId, optText)}
-              />
-            )}
-            emptyMessage="No real-world markets match your filters"
-          />
+          {openMarkets.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredCommunity.slice(0, activeSection === "Real-World" ? 20 : 3).map((market: any) => (
+                <CommunityCard
+                  key={market.id}
+                  market={market}
+                  onPredict={(slug) => setLocation(`/markets/${slug}`)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-4 text-muted-foreground text-sm">
+              No real-world markets available yet
+            </div>
+          )}
         </div>
       )}
 

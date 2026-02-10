@@ -3,8 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
-import { eq, desc, and, gt, sql, count, gte, ilike, SQL } from "drizzle-orm";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { eq, desc, and, gt, sql, count, gte, ilike, SQL, or, inArray, asc, lt, ne } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
@@ -4736,6 +4736,637 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     } catch (error: any) {
       console.error("[Approval Leaders] Error:", error);
       res.status(500).json({ error: "Failed to fetch approval leaders" });
+    }
+  });
+
+  // ============ REAL-WORLD MARKETS (Open Markets) API ============
+
+  app.get("/api/open-markets", async (req, res) => {
+    try {
+      const { category, featured, limit } = req.query;
+
+      const conditions = [
+        eq(predictionMarkets.marketType, "community"),
+        eq(predictionMarkets.status, "OPEN"),
+      ];
+
+      if (category && typeof category === "string") {
+        conditions.push(eq(predictionMarkets.category, category));
+      }
+
+      if (featured === "true") {
+        conditions.push(eq(predictionMarkets.featured, true));
+      }
+
+      const markets = await db
+        .select()
+        .from(predictionMarkets)
+        .where(and(...conditions))
+        .orderBy(desc(predictionMarkets.featured), desc(predictionMarkets.createdAt))
+        .limit(limit && typeof limit === "string" ? parseInt(limit, 10) || 50 : 50);
+
+      const marketIds = markets.map((m) => m.id);
+      let entries: any[] = [];
+      if (marketIds.length > 0) {
+        entries = await db
+          .select()
+          .from(marketEntries)
+          .where(inArray(marketEntries.marketId, marketIds))
+          .orderBy(asc(marketEntries.displayOrder));
+      }
+
+      const entriesByMarket = new Map<string, typeof entries>();
+      for (const entry of entries) {
+        const list = entriesByMarket.get(entry.marketId) || [];
+        list.push(entry);
+        entriesByMarket.set(entry.marketId, list);
+      }
+
+      const result = markets.map((m) => ({
+        ...m,
+        entries: entriesByMarket.get(m.id) || [],
+      }));
+
+      res.json(result);
+    } catch (error) {
+      console.error("[Open Markets] List error:", error);
+      res.status(500).json({ error: "Failed to fetch open markets" });
+    }
+  });
+
+  app.get("/api/open-markets/:slug", async (req, res) => {
+    try {
+      const { slug } = req.params;
+
+      const [market] = await db
+        .select()
+        .from(predictionMarkets)
+        .where(
+          and(
+            eq(predictionMarkets.slug, slug),
+            eq(predictionMarkets.marketType, "community")
+          )
+        )
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+
+      const entries = await db
+        .select()
+        .from(marketEntries)
+        .where(eq(marketEntries.marketId, market.id))
+        .orderBy(asc(marketEntries.displayOrder));
+
+      const betCounts = await db
+        .select({
+          entryId: marketBets.entryId,
+          betCount: count(),
+        })
+        .from(marketBets)
+        .where(eq(marketBets.marketId, market.id))
+        .groupBy(marketBets.entryId);
+
+      const betCountMap = new Map<string, number>();
+      for (const bc of betCounts) {
+        betCountMap.set(bc.entryId, Number(bc.betCount));
+      }
+
+      const entriesWithCounts = entries.map((e) => ({
+        ...e,
+        betCount: betCountMap.get(e.id) || 0,
+      }));
+
+      const comments = await db
+        .select()
+        .from(openMarketComments)
+        .where(eq(openMarketComments.marketId, market.id))
+        .orderBy(desc(openMarketComments.createdAt))
+        .limit(50);
+
+      const [participantResult] = await db
+        .select({
+          uniqueParticipants: sql<number>`COUNT(DISTINCT ${marketBets.userId})`,
+        })
+        .from(marketBets)
+        .where(eq(marketBets.marketId, market.id));
+
+      res.json({
+        ...market,
+        entries: entriesWithCounts,
+        comments,
+        totalParticipants: Number(participantResult?.uniqueParticipants || 0),
+      });
+    } catch (error) {
+      console.error("[Open Markets] Detail error:", error);
+      res.status(500).json({ error: "Failed to fetch market details" });
+    }
+  });
+
+  app.post("/api/admin/open-markets", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      const {
+        title, slug, openMarketType, teaser, summary, description, category,
+        tags, coverImageUrl, sourceUrl, featured, timezone, startAt, endAt,
+        closeAt, resolutionCriteria, resolutionSources, resolveMethod, rules,
+        seedParticipants, seedVolume, underlying, metric, strike, unit,
+        entries: entryList,
+      } = req.body;
+
+      if (!openMarketType || !["binary", "multi", "updown"].includes(openMarketType)) {
+        return res.status(400).json({ error: "openMarketType must be binary, multi, or updown" });
+      }
+
+      if (!title || !slug || !endAt) {
+        return res.status(400).json({ error: "title, slug, and endAt are required" });
+      }
+
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+        return res.status(400).json({ error: "slug must be URL-safe (lowercase letters, numbers, dashes)" });
+      }
+
+      if (!Array.isArray(entryList) || entryList.length === 0) {
+        return res.status(400).json({ error: "entries array is required" });
+      }
+
+      if (openMarketType === "binary" && entryList.length !== 2) {
+        return res.status(400).json({ error: "Binary markets must have exactly 2 entries" });
+      }
+
+      if (openMarketType === "multi" && (entryList.length < 3 || entryList.length > 20)) {
+        return res.status(400).json({ error: "Multi markets must have 3-20 entries" });
+      }
+
+      if (openMarketType === "updown") {
+        if (entryList.length !== 2) {
+          return res.status(400).json({ error: "Up/Down markets must have exactly 2 entries" });
+        }
+        if (!underlying || !metric || !strike || !unit) {
+          return res.status(400).json({ error: "Up/Down markets require underlying, metric, strike, and unit" });
+        }
+      }
+
+      const [createdMarket] = await db
+        .insert(predictionMarkets)
+        .values({
+          marketType: "community",
+          title,
+          slug,
+          openMarketType,
+          teaser: teaser || null,
+          summary: summary || null,
+          description: description || null,
+          category: category || null,
+          tags: tags || null,
+          coverImageUrl: coverImageUrl || null,
+          sourceUrl: sourceUrl || null,
+          featured: featured || false,
+          timezone: timezone || "UTC",
+          startAt: startAt ? new Date(startAt) : new Date(),
+          endAt: new Date(endAt),
+          closeAt: closeAt ? new Date(closeAt) : null,
+          resolutionCriteria: resolutionCriteria || null,
+          resolutionSources: resolutionSources || null,
+          resolveMethod: resolveMethod || null,
+          rules: rules || null,
+          seedParticipants: seedParticipants || 0,
+          seedVolume: seedVolume ? String(seedVolume) : "0",
+          underlying: underlying || null,
+          metric: metric || null,
+          strike: strike ? String(strike) : null,
+          unit: unit || null,
+          createdBy: authReq.userId,
+          status: "OPEN",
+        })
+        .returning();
+
+      const createdEntries = await db
+        .insert(marketEntries)
+        .values(
+          entryList.map((e: any, i: number) => ({
+            marketId: createdMarket.id,
+            entryType: "custom" as const,
+            label: e.label,
+            description: e.description || null,
+            displayOrder: e.displayOrder ?? i,
+            seedCount: e.seedCount || 0,
+          }))
+        )
+        .returning();
+
+      res.json({ ...createdMarket, entries: createdEntries });
+    } catch (error: any) {
+      console.error("[Open Markets] Create error:", error);
+      if (error?.code === "23505") {
+        return res.status(409).json({ error: "A market with this slug already exists" });
+      }
+      res.status(500).json({ error: "Failed to create market" });
+    }
+  });
+
+  app.patch("/api/admin/open-markets/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const [existing] = await db
+        .select()
+        .from(predictionMarkets)
+        .where(
+          and(
+            eq(predictionMarkets.id, id),
+            eq(predictionMarkets.marketType, "community")
+          )
+        )
+        .limit(1);
+
+      if (!existing) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+
+      if (existing.status !== "OPEN") {
+        return res.status(400).json({ error: "Can only update markets with OPEN status" });
+      }
+
+      const {
+        title, teaser, summary, description, category, tags, coverImageUrl,
+        sourceUrl, featured, timezone, startAt, endAt, closeAt,
+        resolutionCriteria, resolutionSources, resolveMethod, rules,
+        seedParticipants, seedVolume, underlying, metric, strike, unit,
+        openMarketType,
+      } = req.body;
+
+      const updates: Record<string, any> = { updatedAt: new Date() };
+      if (title !== undefined) updates.title = title;
+      if (teaser !== undefined) updates.teaser = teaser;
+      if (summary !== undefined) updates.summary = summary;
+      if (description !== undefined) updates.description = description;
+      if (category !== undefined) updates.category = category;
+      if (tags !== undefined) updates.tags = tags;
+      if (coverImageUrl !== undefined) updates.coverImageUrl = coverImageUrl;
+      if (sourceUrl !== undefined) updates.sourceUrl = sourceUrl;
+      if (featured !== undefined) updates.featured = featured;
+      if (timezone !== undefined) updates.timezone = timezone;
+      if (startAt !== undefined) updates.startAt = new Date(startAt);
+      if (endAt !== undefined) updates.endAt = new Date(endAt);
+      if (closeAt !== undefined) updates.closeAt = closeAt ? new Date(closeAt) : null;
+      if (resolutionCriteria !== undefined) updates.resolutionCriteria = resolutionCriteria;
+      if (resolutionSources !== undefined) updates.resolutionSources = resolutionSources;
+      if (resolveMethod !== undefined) updates.resolveMethod = resolveMethod;
+      if (rules !== undefined) updates.rules = rules;
+      if (seedParticipants !== undefined) updates.seedParticipants = seedParticipants;
+      if (seedVolume !== undefined) updates.seedVolume = String(seedVolume);
+      if (underlying !== undefined) updates.underlying = underlying;
+      if (metric !== undefined) updates.metric = metric;
+      if (strike !== undefined) updates.strike = strike ? String(strike) : null;
+      if (unit !== undefined) updates.unit = unit;
+      if (openMarketType !== undefined) updates.openMarketType = openMarketType;
+
+      const [updated] = await db
+        .update(predictionMarkets)
+        .set(updates)
+        .where(eq(predictionMarkets.id, id))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("[Open Markets] Update error:", error);
+      res.status(500).json({ error: "Failed to update market" });
+    }
+  });
+
+  app.post("/api/admin/open-markets/:id/settle", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      const { id } = req.params;
+      const { winnerEntryId, resolutionNotes } = req.body;
+
+      if (!winnerEntryId) {
+        return res.status(400).json({ error: "winnerEntryId is required" });
+      }
+
+      const [market] = await db
+        .select()
+        .from(predictionMarkets)
+        .where(
+          and(
+            eq(predictionMarkets.id, id),
+            eq(predictionMarkets.marketType, "community")
+          )
+        )
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+
+      if (market.status !== "OPEN") {
+        return res.status(400).json({ error: "Market is not OPEN" });
+      }
+
+      const [winnerEntry] = await db
+        .select()
+        .from(marketEntries)
+        .where(
+          and(
+            eq(marketEntries.id, winnerEntryId),
+            eq(marketEntries.marketId, id)
+          )
+        )
+        .limit(1);
+
+      if (!winnerEntry) {
+        return res.status(400).json({ error: "Winner entry not found in this market" });
+      }
+
+      const [updatedMarket] = await db
+        .update(predictionMarkets)
+        .set({
+          status: "RESOLVED",
+          resolvedAt: new Date(),
+          settledBy: authReq.userId,
+          resolutionNotes: resolutionNotes || null,
+          updatedAt: new Date(),
+        })
+        .where(eq(predictionMarkets.id, id))
+        .returning();
+
+      await db
+        .update(marketEntries)
+        .set({ resolutionStatus: "winner" })
+        .where(eq(marketEntries.id, winnerEntryId));
+
+      await db
+        .update(marketEntries)
+        .set({ resolutionStatus: "loser" })
+        .where(
+          and(
+            eq(marketEntries.marketId, id),
+            ne(marketEntries.id, winnerEntryId)
+          )
+        );
+
+      await db
+        .update(marketBets)
+        .set({ status: "won", settledAt: new Date() })
+        .where(
+          and(
+            eq(marketBets.marketId, id),
+            eq(marketBets.entryId, winnerEntryId)
+          )
+        );
+
+      await db
+        .update(marketBets)
+        .set({ status: "lost", settledAt: new Date() })
+        .where(
+          and(
+            eq(marketBets.marketId, id),
+            ne(marketBets.entryId, winnerEntryId)
+          )
+        );
+
+      res.json(updatedMarket);
+    } catch (error) {
+      console.error("[Open Markets] Settle error:", error);
+      res.status(500).json({ error: "Failed to settle market" });
+    }
+  });
+
+  app.post("/api/admin/open-markets/:id/void", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { voidReason } = req.body;
+
+      if (!voidReason) {
+        return res.status(400).json({ error: "voidReason is required" });
+      }
+
+      const [market] = await db
+        .select()
+        .from(predictionMarkets)
+        .where(
+          and(
+            eq(predictionMarkets.id, id),
+            eq(predictionMarkets.marketType, "community")
+          )
+        )
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+
+      const [updatedMarket] = await db
+        .update(predictionMarkets)
+        .set({
+          status: "VOID",
+          voidReason,
+          updatedAt: new Date(),
+        })
+        .where(eq(predictionMarkets.id, id))
+        .returning();
+
+      await db
+        .update(marketEntries)
+        .set({ resolutionStatus: "void" })
+        .where(eq(marketEntries.marketId, id));
+
+      await db
+        .update(marketBets)
+        .set({ status: "void", settledAt: new Date() })
+        .where(eq(marketBets.marketId, id));
+
+      res.json(updatedMarket);
+    } catch (error) {
+      console.error("[Open Markets] Void error:", error);
+      res.status(500).json({ error: "Failed to void market" });
+    }
+  });
+
+  app.post("/api/open-markets/:slug/comments", requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      const { slug } = req.params;
+      const { body, parentId } = req.body;
+
+      if (!body || typeof body !== "string" || body.trim().length === 0) {
+        return res.status(400).json({ error: "Comment body is required" });
+      }
+
+      const [market] = await db
+        .select()
+        .from(predictionMarkets)
+        .where(
+          and(
+            eq(predictionMarkets.slug, slug),
+            eq(predictionMarkets.marketType, "community")
+          )
+        )
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+
+      const [profile] = await db
+        .select({ username: profiles.username, avatarUrl: profiles.avatarUrl })
+        .from(profiles)
+        .where(eq(profiles.id, authReq.userId!))
+        .limit(1);
+
+      const [created] = await db
+        .insert(openMarketComments)
+        .values({
+          marketId: market.id,
+          userId: authReq.userId!,
+          username: profile?.username || null,
+          avatarUrl: profile?.avatarUrl || null,
+          body: body.trim(),
+          parentId: parentId || null,
+        })
+        .returning();
+
+      res.json(created);
+    } catch (error) {
+      console.error("[Open Markets] Comment error:", error);
+      res.status(500).json({ error: "Failed to add comment" });
+    }
+  });
+
+  app.get("/api/open-markets/:slug/comments", async (req, res) => {
+    try {
+      const { slug } = req.params;
+
+      const [market] = await db
+        .select({ id: predictionMarkets.id })
+        .from(predictionMarkets)
+        .where(
+          and(
+            eq(predictionMarkets.slug, slug),
+            eq(predictionMarkets.marketType, "community")
+          )
+        )
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+
+      const comments = await db
+        .select()
+        .from(openMarketComments)
+        .where(eq(openMarketComments.marketId, market.id))
+        .orderBy(desc(openMarketComments.createdAt))
+        .limit(50);
+
+      res.json(comments);
+    } catch (error) {
+      console.error("[Open Markets] Comments list error:", error);
+      res.status(500).json({ error: "Failed to fetch comments" });
+    }
+  });
+
+  app.post("/api/open-markets/:slug/bet", requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      const { slug } = req.params;
+      const { entryId, stakeAmount } = req.body;
+
+      if (!entryId || !stakeAmount || typeof stakeAmount !== "number" || stakeAmount <= 0) {
+        return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
+      }
+
+      const [market] = await db
+        .select()
+        .from(predictionMarkets)
+        .where(
+          and(
+            eq(predictionMarkets.slug, slug),
+            eq(predictionMarkets.marketType, "community"),
+            eq(predictionMarkets.status, "OPEN")
+          )
+        )
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({ error: "Market not found or not open" });
+      }
+
+      if (market.closeAt && new Date(market.closeAt) < new Date()) {
+        return res.status(400).json({ error: "Betting is closed for this market" });
+      }
+
+      const [entry] = await db
+        .select()
+        .from(marketEntries)
+        .where(
+          and(
+            eq(marketEntries.id, entryId),
+            eq(marketEntries.marketId, market.id)
+          )
+        )
+        .limit(1);
+
+      if (!entry) {
+        return res.status(400).json({ error: "Entry not found in this market" });
+      }
+
+      const [profile] = await db
+        .select({ predictCredits: profiles.predictCredits })
+        .from(profiles)
+        .where(eq(profiles.id, authReq.userId!))
+        .limit(1);
+
+      if (!profile) {
+        return res.status(400).json({ error: "User profile not found" });
+      }
+
+      if (profile.predictCredits < stakeAmount) {
+        return res.status(400).json({ error: "Insufficient credits" });
+      }
+
+      const allEntries = await db
+        .select({ totalStake: marketEntries.totalStake })
+        .from(marketEntries)
+        .where(eq(marketEntries.marketId, market.id));
+
+      const totalPool = allEntries.reduce((sum, e) => sum + e.totalStake, 0) + stakeAmount;
+      const entryPool = entry.totalStake + stakeAmount;
+      const entryShare = entryPool / totalPool;
+      const potentialPayout = Math.round(stakeAmount / Math.max(entryShare, 0.01));
+
+      await db
+        .update(profiles)
+        .set({ predictCredits: profile.predictCredits - stakeAmount })
+        .where(eq(profiles.id, authReq.userId!));
+
+      const [bet] = await db
+        .insert(marketBets)
+        .values({
+          marketId: market.id,
+          entryId,
+          userId: authReq.userId!,
+          stakeAmount,
+          potentialPayout,
+          status: "active",
+        })
+        .returning();
+
+      await db
+        .update(marketEntries)
+        .set({ totalStake: entry.totalStake + stakeAmount })
+        .where(eq(marketEntries.id, entryId));
+
+      res.json({
+        ...bet,
+        potentialPayout,
+        remainingCredits: profile.predictCredits - stakeAmount,
+      });
+    } catch (error) {
+      console.error("[Open Markets] Bet error:", error);
+      res.status(500).json({ error: "Failed to place bet" });
     }
   });
 

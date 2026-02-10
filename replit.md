@@ -41,7 +41,8 @@ Preferred communication style: Simple, everyday language.
 - **Database**: Supabase-backed PostgreSQL with Drizzle ORM.
 - **Core Schemas**: `users`, `tracked_people`, `trending_people`, `trend_snapshots`, `api_cache`, `celebrity_profiles`.
 - **Gamification Schemas**: `xp_ledger`, `credit_ledger`, `xp_actions`, `ranks`, `votes`, `induction_candidates`, `celebrity_images`, `face_offs`, `profiles`.
-- **Prediction Markets Schemas**: `prediction_markets`, `market_entries`, `market_bets`.
+- **Prediction Markets Schemas**: `prediction_markets`, `market_entries`, `market_bets`, `open_market_comments`.
+- **Real-World Markets (Feb 2026)**: Polymarket-inspired prediction markets for any real-world topic. Uses `marketType='community'` + `openMarketType` (binary/multi/updown). Admin CMS for CRUD, settlement, voiding. API: `/api/open-markets` (list/create/get/update/settle/bet/comments). Frontend: 3 card variants (BinaryMarketCard, MultiMarketCard, UpDownMarketCard), dedicated `/markets/:slug` detail page. Seed data (seedParticipants/seedVolume) for social proof. Resolution rules with criteria and sources.
 - **Community Schemas**: `community_insights`, `insight_votes`, `insight_comments`, `platform_insights`, `insight_items`, `user_votes`, `user_favourites`.
 - **Value Voting**: `celebrity_value_votes`, `celebrity_metrics` for approval/value aggregation.
 - **AI-Generated Celebrity Profiles**: Cached biographical data (bios, known for, origin, location, net worth) to minimize API calls.

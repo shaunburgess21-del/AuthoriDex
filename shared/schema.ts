@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, pgEnum, text, varchar, integer, real, timestamp, unique, jsonb, serial, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, text, varchar, integer, real, timestamp, unique, jsonb, serial, boolean, index, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -702,6 +702,26 @@ export const predictionMarkets = pgTable("prediction_markets", {
   settledBy: varchar("settled_by"), // Admin who settled it
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  openMarketType: text("open_market_type"), // 'binary' | 'multi' | 'updown' — only when marketType='community'
+  teaser: text("teaser"), // Short tagline for card display
+  description: text("description"), // Longer rich description for detail page
+  category: text("category"), // 'politics', 'tech', 'entertainment', 'sports', 'business', 'creator', 'misc'
+  tags: text("tags").array(), // Freeform tags for filtering
+  coverImageUrl: text("cover_image_url"),
+  sourceUrl: text("source_url"), // Link to source article/event
+  featured: boolean("featured").default(false),
+  timezone: text("timezone").default("UTC"),
+  resolutionCriteria: text("resolution_criteria").array(), // Array of criteria strings
+  resolutionSources: jsonb("resolution_sources"), // [{label, url?}]
+  resolutionNotes: text("resolution_notes"), // Admin notes on how it was resolved
+  resolveMethod: text("resolve_method"), // 'admin_manual' | 'oracle' | 'api'
+  seedParticipants: integer("seed_participants").default(0), // Display seed for social proof
+  seedVolume: numeric("seed_volume").default("0"), // Display seed for pool volume
+  underlying: text("underlying"), // For updown: e.g. "Bitcoin", "S&P 500"
+  metric: text("metric"), // For updown: e.g. "price", "market cap"
+  strike: numeric("strike"), // For updown: the strike value
+  unit: text("unit"), // For updown: e.g. "$", "pts"
+  closeAt: timestamp("close_at"), // When betting closes (can differ from endAt/resolution)
 });
 
 export const insertPredictionMarketSchema = createInsertSchema(predictionMarkets).omit({
@@ -726,6 +746,7 @@ export const marketEntries = pgTable("market_entries", {
   resolutionStatus: text("resolution_status").notNull().default("pending"), // 'pending', 'winner', 'loser', 'void'
   resolutionNotes: text("resolution_notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  seedCount: integer("seed_count").default(0), // Display seed for social proof on this entry
 });
 
 export const insertMarketEntrySchema = createInsertSchema(marketEntries).omit({
@@ -787,6 +808,41 @@ export const marketBetsRelations = relations(marketBets, ({ one }) => ({
   entry: one(marketEntries, {
     fields: [marketBets.entryId],
     references: [marketEntries.id],
+  }),
+}));
+
+// Open Market Comments - Discussion on Real-World Markets (marketType='community')
+export const openMarketComments = pgTable("open_market_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  marketId: varchar("market_id").notNull().references(() => predictionMarkets.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  username: text("username"),
+  avatarUrl: text("avatar_url"),
+  body: text("body").notNull(),
+  parentId: varchar("parent_id"),
+  upvotes: integer("upvotes").notNull().default(0),
+  downvotes: integer("downvotes").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  marketIdx: index("open_market_comments_market_idx").on(table.marketId),
+}));
+
+export const insertOpenMarketCommentSchema = createInsertSchema(openMarketComments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  upvotes: true,
+  downvotes: true,
+});
+
+export type OpenMarketComment = typeof openMarketComments.$inferSelect;
+export type InsertOpenMarketComment = z.infer<typeof insertOpenMarketCommentSchema>;
+
+export const openMarketCommentsRelations = relations(openMarketComments, ({ one }) => ({
+  market: one(predictionMarkets, {
+    fields: [openMarketComments.marketId],
+    references: [predictionMarkets.id],
   }),
 }));
 
