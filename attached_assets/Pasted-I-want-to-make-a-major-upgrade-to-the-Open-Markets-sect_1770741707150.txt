@@ -1,0 +1,51 @@
+I want to make a major upgrade to the Open Markets section "Real-World Markets" on FameDex. Open Markets is the main heading - “Real-World Markets” is the prediction section under Open Markets and are predictions based on any topic (not native/relevant to FameDex Trend Score) and should allow more detail when adding prediction cards on any specific topic.  “Real-World Markets”  are basically exactly the same as what Polymarket or Kalshi would provide for users to predict on.  The problem: Our existing "Real-World Markets" cards have a single design which addresses "Yes" or "No" predictions (see attached screenshot).  I have also attached screenshot of the main page on Polymarket which shoes all the cards grouped together side-by-side - however - depending on the prediction type - the card UI is different.  The difference in design is essential to accomodate the type of predictions to predict on. 
+
+Prediction Options: 
+1. one prediction type may just require 2 options such as "Yes" or "No" - e.g.: 
+- Tech: Will SpaceX achieve full reusability of Starship before the end of 2027
+- Sports: Which sports team will a particular game
+- Tech: Who will land something on the moon first - Blue Origin or SpaceX
+
+2. Another prediction type may require many options - e.g.:
+- Politics: Who will be the next presidential nominee of the Republican Party which would then list 5, 10, 15, 20 candidates for users to bet on.
+- Sports: Which rudgy team will win the next Rugby World Cup
+- Sports: Who will wing the 100m final in the Olympics 2027
+
+3. Another prediction Market type may require "Up/Down" options as opposed to "Yes/No" options. e.g. will BTC go up or down (above or below a certain value) by a certain date. 
+
+With that said - we need to add another card design option variation to our "Real-World Markets" card board - to accommodate multiple options for people to predict on. 
+
+Additionally - N.B. Polymarket has the option to open a card in it's own URL by clicking the main heading on the card.  (N.B. I have attached multiple screenshots from Polymarket to show you the format of the dedicated urls for various types of predictions on Polymarket). Once you click the main heading of the card - the screen redirects to a new url which is dedicated url for that particular prediction - expanding on information relating to that prediction and also includes a dedicated chat section at the bottom for users to chat on that specific topic/prediction).  Currrently - we only have a modal that opens up after a user selects "Yes" or "No" to then confirm their prediction.  We do think Polymarkets UI is somewhat complicated and we like our simplicity - however, we do think their is a need to have a dedicated url for each prediction.  So if a user selects a Prediction card (N.B. only "Open Market" (Real-World) Prediction) on FameDex - the page should then redirect to a new url dedicated for that particular prediction which further expands on information relating to that prediction.  We can still retain the simplicity of our design - but importantly - we do not want to leave out important information that would be essential for user experience and system functionality. such as: What your dedicated Prediction URL should include (must-haves)
+1) Clear “What is this market?” header
+Title (the question)
+Category + tags
+Status badge: Open / Closed / Resolved
+End/close date + timezone (or “No end date”)
+Share button (copy link)
+2) The “rules that decide the winner” (critical)
+This is the most important part to avoid arguments later.
+
+Resolution criteria (1–5 bullet points, plain language)
+Resolution source(s) (links or named sources you’ll accept: e.g., SpaceX official post, NASA, major newswire, official election commission, etc.)
+Edge cases (short: “If delayed but announced, does it count?”)
+Polymarket calls this “Rules / Market context”. You can call it “How this resolves”.
+3) Market state (simple, but informative)
+Even if you don’t use an order book UI, users need to understand “where the crowd is.”
+
+Current probabilities (Yes/No OR multiple options)
+Total participants / predictions count
+Total volume (optional at first, but great later)
+Last updated / last trade time (optional)
+4) Activity + discussion (keeps users engaged)
+Comments/chat thread for that specific market
+Sort: Top / New
+Basic moderation actions (report, delete if admin)
+5) Your own position (so users feel “locked in”)
+“Your prediction” (what they picked)
+Ability to change prediction only if your rules allow it (or lock after submit)
+6) Related markets (lightweight discovery)
+3–6 related predictions (same tag/topic)
+Helps retention and makes the page feel “alive”
+
+Do you think we can submit the 1. dedicated URL build and the 2. new second card design variation to accomodate multiple option predictions as well the 3rd card design variations that allows users to bet Up/Down (for example - will BTC go up or down (above or below a certain value) by a certain date. 
+ 

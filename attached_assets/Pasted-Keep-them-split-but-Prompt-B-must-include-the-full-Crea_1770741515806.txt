@@ -1,0 +1,128 @@
+Keep them split, but Prompt B must include the full “Create/Edit Market” spec (which it already mostly does). I’d just tighten it further by listing the exact fields you need, grouped into:
+
+Common fields (always shown)
+
+Type-specific fields (binary / multi / updown)
+
+Resolution & settlement fields (critical)
+
+Display/UX fields (optional but useful)
+
+Seeding/initial stats fields (optional)
+
+Here’s the field checklist I recommend adding to Prompt B (copy/paste into it under “Create/Edit modal fields”):
+
+Admin “Add Real-World Market” fields (final spec)
+A) Common fields (all market types)
+
+Title (required)
+
+Short subtitle / teaser (optional, 1 line for card)
+
+Description / context (optional, longer)
+
+Category (required; single select)
+
+Tags (optional; multi)
+
+Type (required: binary | multi | updown)
+
+Status (required: draft | live | closed | resolved | archived)
+
+Close date/time (optional) + Timezone (required default “UTC”)
+
+Cover image (optional: url or uploaded)
+
+Source link (optional: canonical URL users can read)
+
+Featured flag (optional: pin to top / boost)
+
+B) Outcomes (required for all types)
+
+Store outcomes as rows; outcome editor differs by type:
+
+Binary
+
+Exactly 2 outcomes (labels required)
+
+Examples: Yes/No, Team A/Team B, SpaceX/Blue Origin
+
+Multi
+
+3–20 outcomes (labels required; allow add/remove/reorder)
+
+Optional per-outcome image (nice-to-have)
+
+Up/Down
+
+Exactly 2 outcomes default labels: Above / Below (editable)
+
+Plus strike fields below.
+
+C) Up/Down strike fields (required only for type=updown)
+
+Underlying (required; e.g., BTC, ETH, S&P500)
+
+Metric (optional; e.g., “price”)
+
+Strike price (required numeric)
+
+Currency/unit (required; e.g., USD)
+
+Comparator (implicitly Above/Below; keep simple)
+
+(Later you can expand to ranges, but don’t do that now.)
+
+D) Resolution rules (required for ALL markets)
+
+These are non-negotiable for trust.
+
+How this resolves (criteria bullets) (required; 1–5 bullets)
+
+Accepted resolution sources (required; 1+ entries: label + url or label only)
+
+Edge cases / notes (optional text)
+
+Resolve method (required enum):
+
+manual_admin (admin sets outcome on resolve)
+
+(future: oracle/api)
+
+E) Seeding fields (optional but helpful for early UX)
+
+Seed vote counts per outcome (optional ints)
+
+Seed “participants” count (optional, if you want fake social proof)
+
+Seed volume (optional; for later)
+
+F) Guardrails / validation
+
+Title required; slug unique
+
+Draft markets can be incomplete except they must still have valid outcome counts for their type (so the UI never breaks)
+
+Live markets must have:
+
+CloseAt (optional allowed)
+
+Resolution criteria + at least one resolution source
+
+Multi outcomes: enforce 3–20 in admin UI (DB can allow >20 later)
+
+Why this solves your concern
+
+Because once you give Replit this list, it can:
+
+Design the DB tables to hold every field
+
+Implement admin form + type-specific conditional inputs
+
+Enforce validation properly
+
+Ensure your 3 card types can render without missing data
+
+What NOT to do
+
+Don’t let Replit build a generic “market” table first and “we’ll add fields later” — that’s how you end up with migrations churn + broken UI + backfilling pain.

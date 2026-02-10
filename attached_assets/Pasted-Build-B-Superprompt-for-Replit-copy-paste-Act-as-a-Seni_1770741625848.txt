@@ -1,0 +1,252 @@
+Build B Superprompt for Replit (copy/paste)
+
+Act as a Senior Full-Stack Engineer + Data Architect.
+
+Context / Constraints (must follow)
+
+Production Supabase project.
+
+Non-breaking changes only: no drops, no truncates, no destructive migrations.
+
+Drizzle ORM (Drizzle + drizzle-zod). Schema lives in shared/schema.ts.
+
+Push schema using expect scripts/db-push-safe.exp (do not run npm run db:push directly).
+
+Do not change unrelated UI/components.
+
+Goal is: Real-World Markets must become DB-driven, support 3 market types, and have a dedicated URL per market.
+
+Goal
+
+Upgrade Prediction CMS → Real-World Markets and the frontend Open Markets → Real-World Markets to support:
+
+3 market types
+
+Binary (exactly 2 outcomes e.g. Yes/No, Team A/Team B)
+
+Multi-option (3–20 outcomes)
+
+Up/Down (Above/Below a strike by a deadline)
+
+Dedicated URL page per market (Polymarket-style, but keep FameDex simple):
+
+Route: /markets/:slug (or /open-markets/:slug if you prefer—pick one and use it consistently)
+
+Clicking the card title from the Real-World Markets grid navigates to this page.
+
+Keep the existing “confirm prediction” flow, but:
+
+On the dedicated page, user can pick an outcome and submit (same backend)
+
+The homepage card can either keep the modal confirm OR navigate to page first (choose the simplest; but dedicated URL must exist).
+
+IMPORTANT: Admin Create/Edit Fields = Source of Truth
+
+Design your DB schema + validation directly from these fields.
+
+A) Common fields (all market types)
+
+title (required)
+
+slug (required, unique; auto-generated from title but editable)
+
+teaser (optional 1-line subtitle)
+
+description (optional longer context)
+
+category (required; single select)
+
+tags (optional; array of strings)
+
+type (required: binary | multi | updown)
+
+status (required: draft | live | closed | resolved | archived)
+
+draft not visible on frontend
+
+live visible and open for predictions
+
+closed not accepting new predictions (waiting settlement)
+
+resolved settled with winner
+
+archived hidden but retained
+
+closeAt (optional timestamp)
+
+timezone (required; default “UTC”)
+
+coverImageUrl (optional)
+
+sourceUrl (optional)
+
+featured (optional boolean)
+
+B) Outcomes (required for ALL types)
+
+Outcomes must be stored as rows in a separate table.
+
+Binary: exactly 2 outcomes (labels required)
+
+Multi: 3–20 outcomes (labels required; add/remove/reorder)
+
+Up/Down: exactly 2 outcomes default labels Above / Below (editable)
+
+C) Up/Down strike fields (required only when type=updown)
+
+underlying (required) (e.g., BTC, ETH, S&P500)
+
+metric (optional; e.g. “price”)
+
+strike (required numeric)
+
+unit (required) (e.g., USD)
+(Keep comparator implicit: Above vs Below)
+
+D) Resolution rules (required for ALL markets — critical)
+
+resolutionCriteria (required) (1–5 bullet points stored as array or newline text)
+
+resolutionSources (required) (1+ entries; store as array of {label, url?} or two arrays)
+
+resolutionNotes (optional edge cases)
+
+resolveMethod (required enum): manual_admin (future: oracle/api)
+
+E) Seeding fields (optional but recommended for early UX)
+
+seedParticipants (optional int)
+
+seedVolume (optional numeric)
+
+seedOutcomeCounts (optional per outcome: store on outcomes table as seedCount)
+
+Backend / Data Model Requirements
+
+Implement schema changes NON-DESTRUCTIVELY.
+
+Tables
+
+open_markets (or reuse existing predictionMarkets if already present—but do not break existing markets)
+
+Must support all common fields + strike fields + resolution fields
+
+Ensure a marketType or equivalent can distinguish Real-World Markets cleanly if needed.
+
+open_market_outcomes
+
+id, marketId FK, label, displayOrder
+
+seedCount default 0
+
+resolvedWinner boolean OR store winner outcome id on market table
+
+open_market_predictions (real user predictions only)
+
+id, marketId, outcomeId, userId, timestamps
+
+Unique constraint: (userId, marketId) (one prediction per user per market)
+
+(Optional now, but required for dedicated page discussion)
+
+open_market_comments
+
+id, marketId, userId, body, timestamps
+
+Add basic moderation hooks later (report/delete admin)
+
+Settlement
+
+Admin must be able to set the winning outcome once:
+
+Set status → resolved
+
+Persist winningOutcomeId (or mark outcome winner)
+
+Lock further predictions (server-side)
+
+Admin UX Requirements (Prediction CMS → Real-World Markets)
+
+In AdminDashboard:
+
+Real-World Markets list table:
+
+filters: status, category, type, featured
+
+actions: edit, archive, delete (soft if possible), “Settle”
+
+“Add Market” button must open working modal.
+
+Create/Edit modal:
+
+Shows common fields always
+
+Shows Outcomes editor for all types
+
+Shows strike fields only when type=updown
+
+Shows resolution fields always
+
+Validations:
+
+draft: allow incomplete text fields, BUT outcome count rules must still hold per type
+
+live: require resolutionCriteria + at least 1 resolutionSource
+
+enforce multi outcomes 3–20 in UI
+
+Frontend Requirements (Open Markets → Real-World Markets)
+1) Make the board DB-driven
+
+Replace any placeholder/hardcoded Real-World Markets with DB fetch.
+
+Only show status=live on frontend.
+
+2) Card variants (3)
+
+Binary card: show top 2 outcomes + quick predict CTA
+
+Multi card: show “Leader + pack” preview (top 1–3 outcomes) + “View all options”
+
+Up/Down card: show strike prominently + Above/Below CTA
+
+3) Dedicated URL page
+
+Route /markets/:slug:
+Must include:
+
+Title, category/tags, status badge, closeAt + timezone, share link
+
+Resolution section (“How this resolves” + sources + notes)
+
+Outcomes list with current %/counts (seed+real)
+
+“Your prediction” section (shows user’s current selection)
+
+Simple comments section (Top/New)
+
+Related markets (same category/tag; 3–6)
+
+Keep layout clean (progressive disclosure/collapsible sections ok).
+
+Deliverables / Acceptance checks
+
+After implementation:
+
+Admin can create:
+
+binary market, multi market, up/down market
+
+Frontend Real-World Markets page shows DB markets correctly with correct card type
+
+Clicking card title goes to /markets/:slug
+
+Dedicated page renders rules, outcomes, and allows prediction submission
+
+Settlement works: resolved market locks predictions + shows winning outcome
+
+All pushes use expect scripts/db-push-safe.exp
+
+No unrelated UI changes
+
+If anything in existing schema conflicts, stop and report before making breaking changes; propose the smallest safe adaptation.
