@@ -1,0 +1,494 @@
+Yep — your instinct is right: as-is, that “i” tooltip is high risk for confusion because it’s basically (1) a rough keyword tag + (2) the first raw GDELT headline, which can be irrelevant or even the wrong person.
+
+Replit’s explanation is useful because it tells us exactly what’s happening… and why it sometimes feels nonsensical.
+
+Here’s what I’d do next (and what I’d send back to Replit / use to guide ChatGPT + Claude).
+
+What the tooltip is right now (in plain English)
+
+The label (“In The News”, “Music”, “Legal News”, etc.) = keyword matching across cached headlines → best match wins → otherwise fallback.
+
+The italic quote = literally headlines[0] from GDELT cache (no ranking, no filtering, no entity disambiguation).
+
+No guarantee it’s:
+
+about the correct person
+
+the most relevant headline
+
+even recent
+
+So your user sees: “In The News — ‘Reach in Ashley Love Box…’” and thinks: “??? how is this related?”
+
+The core UX issue
+
+You’re using the tooltip as “explanation,” but the data is not explanation-quality. It’s “raw ingest output.”
+
+If users can’t click through to verify context, it feels like random noise and reduces trust in the whole leaderboard.
+
+The fix: Make “i” mean “Why is this moving?” (not “random headline”)
+Option A (best ROI, minimal scope): show metrics + driver, and make headlines secondary
+
+In the tooltip (or popover), show:
+
+Primary reason (always correct):
+
+24h: +51.5%
+
+Rank: ↑13
+
+Driver: News (or Search / Wiki / Social) — whatever your engine already knows
+
+Supporting evidence (only if it’s solid):
+
+“Top headline” with source + timestamp
+
+If headline confidence is low → don’t show it; show “News coverage increased” instead.
+
+This way, even if the news text is weird, the user still understands why the person is in Hot Movers.
+
+Option B (still light, but better trust): show top 2 headlines + clickable “Open”
+
+Instead of quoting one raw headline:
+
+show two headlines (deduped, cleaned), each:
+
+source domain
+
+time (e.g., “6h ago”)
+
+clickable link (opens in new tab)
+
+Even if one is wrong, the other may be right, and users can verify.
+
+Option C (higher quality, still cheap): quick AI “why trending” summary only for Hot Movers
+
+Use a tiny model to generate:
+
+“Trending because: spike in news mentions after X…”
+but only when:
+
+you have ≥3 headlines, or
+
+you have clear driver + keywords.
+
+This doesn’t need to be perfect — just more coherent than random headlines.
+
+Critical engineering improvement: stop “wrong person” headlines
+
+This is the real killer.
+
+GDELT can easily return headlines for a different person with the same name. You can mitigate fast:
+
+Include extra query constraints using your stored metadata:
+
+add category keywords (e.g., “Lewis Hamilton F1” not just “Lewis Hamilton”)
+
+add disambiguation terms based on known “type” (athlete/actor/politician)
+
+Basic filtering:
+
+drop headlines that don’t contain the full name (or contain conflicting terms)
+
+drop clearly irrelevant sources or very old items
+
+If confidence is low, don’t show a quote—show a generic reason.
+
+A generic reason is better than a wrong headline.
+
+Best UX tweak: make the “i” actionable (not just informative)
+
+Right now the user hovers, sees confusing text, and hits a dead end.
+
+Do this:
+
+Tooltip becomes a popover with:
+
+“Why this is moving” (metrics + driver)
+
+“Top coverage” (headlines)
+
+A “View details” link that opens the profile or a “Why trending” detail sheet.
+
+Even on mobile, tapping an “i” and getting a mini panel feels natural.
+
+What I’d ask Replit to change (copy/paste)
+
+If you want to send a clean instruction:
+
+Replace the current tooltip content with:
+
+24h % change + rank change
+
+primary driver (News/Search/Wiki/Social)
+
+Only show headlines if:
+
+they pass basic relevance checks, AND include source + time
+
+Make tooltip/popover clickable:
+
+“View details” → goes to person profile (or opens a small detail sheet)
+
+If headlines are low confidence:
+
+show “News coverage increased” (no quote)
+
+Small extra: fix the label taxonomy
+
+“In The News” is a weak default. Consider:
+
+If driver = News but no category match → label as “News surge”
+
+If driver = Search → “Search spiking”
+
+Wiki → “Wiki views up”
+
+Social → “Social buzz”
+
+Those labels match user mental models immediately.
+
+If you paste one or two sample tooltip payloads (the driver fields you already store + the headlines array structure), I can draft the exact tooltip text rules so it always stays “trustworthy and scannable.”
+
+Claude's response to the same question:
+
+ChatGPT nailed the diagnosis—this is a trust problem masquerading as a data problem. Here's my take:
+
+Why This Matters More Than You Think 🚨
+Looking at your screenshot: "Logan - Spiking - 'Reach in Ashley Love Box for a Chance to Win!'"
+
+That headline is clearly wrong (or about a different Logan). If I'm a first-time user and I see this, I think:
+
+"Is this data even real?"
+
+"Can I trust this leaderboard?"
+
+"Is this site just aggregating random spam?"
+
+One bad tooltip destroys credibility for the entire product.
+
+The Core Problem: You're Mixing Precision & Noise
+Your Fame Score engine: Sophisticated (log scaling, percentile normalization, EMA smoothing, auto-catchup)
+Your Hot Movers tooltip: headlines[0] from GDELT (literally "whatever came back first")
+
+This is like: Building a Rolex and attaching a random sticker to explain how it works.
+
+ChatGPT's Options: Ranked by ROI
+Option A: Metrics + Driver (No Headlines) ⭐⭐⭐
+ChatGPT's best suggestion, and I agree:
+
+text
+Reed Hastings - Spiking
+
+[i] → Tooltip shows:
+24h: +51.5%
+Rank: ↑8
+Driver: News
+
+[View Details →]
+Why this wins:
+
+✅ Always accurate (you already have these numbers)
+
+✅ Explains "why" (the numbers show it's real movement)
+
+✅ Actionable (View Details links to profile)
+
+✅ No risk (no wrong headlines)
+
+This is the safest, cleanest fix.
+
+Option B: Show 2-3 Headlines (Filtered & Linked) ⭐⭐
+text
+Logan - Spiking
+
+[i] → Popover shows:
+Top Coverage:
+• "Logan Paul announces boxing return" 
+  ESPN · 3h ago [↗]
+• "YouTube star confirms match date"
+  TMZ · 5h ago [↗]
+
+24h: +45% | Driver: News
+Why this could work:
+
+Users can click to verify
+
+Multiple headlines reduce "wrong person" risk
+
+Source + timestamp add credibility
+
+Why it's risky:
+
+Requires headline deduplication (GDELT repeats a lot)
+
+Requires entity disambiguation (filter out wrong Logans)
+
+Requires quality filtering (no spam sites)
+
+Effort: 3-4 hours to do properly
+Payoff: Higher trust IF done well, catastrophic IF headlines are still wrong
+
+Option C: AI Summary ⭐
+ChatGPT suggested a tiny model for "why trending" summaries.
+
+My take: This is over-engineering. You already have AI summaries on profile pages (the "Why They're Trending" section you built with me). Don't duplicate that work in a tooltip.
+
+Better: Make the tooltip link to the profile where the full AI summary lives.
+
+My Recommended Solution (Combines Best Parts)
+Phase 1: Immediate Fix (30 mins) ⭐⭐⭐
+Replace the current tooltip with data-driven context:
+
+typescript
+// Hot Movers tooltip content:
+<div className="space-y-2">
+  <div className="font-semibold">Why Trending</div>
+  
+  <div className="text-sm space-y-1">
+    <div>24h Change: <span className="text-emerald-400">+51.5%</span></div>
+    <div>Rank Jump: <span className="text-emerald-400">↑8 spots</span></div>
+    <div>Primary Driver: <span className="text-blue-400">News</span></div>
+  </div>
+  
+  <button 
+    onClick={() => navigate(/profile/${person.id})}
+    className="text-xs text-blue-400 hover:underline"
+  >
+    View full details →
+  </button>
+</div>
+What you're showing:
+
+Metrics (always accurate)
+
+Driver (you already compute this)
+
+Link to profile (where full "Why Trending" AI summary lives)
+
+What you're NOT showing:
+
+Raw headlines (too risky)
+
+This solves the problem with zero new backend work.
+
+Phase 2: Enhanced (If You Want Headlines) (2-3 hours) ⭐⭐
+Only show headlines if they pass quality checks:
+
+typescript
+// Headline quality filter:
+const isHeadlineRelevant = (headline: string, person: Person) => {
+  const nameParts = person.name.toLowerCase().split(' ');
+  const headlineLower = headline.toLowerCase();
+  
+  // Must contain full name or last name
+  const hasName = nameParts.every(part => headlineLower.includes(part)) ||
+                  headlineLower.includes(nameParts[nameParts.length - 1]);
+  
+  // Reject spam patterns
+  const isSpam = /win|prize|contest|click here|free/i.test(headline);
+  
+  // Reject if too old (show only <24h headlines)
+  const isRecent = headline.timestamp > Date.now() - 24 * 60 * 60 * 1000;
+  
+  return hasName && !isSpam && isRecent;
+};
+
+// In tooltip:
+const relevantHeadlines = person.headlines
+  .filter(h => isHeadlineRelevant(h, person))
+  .slice(0, 2);
+
+{relevantHeadlines.length > 0 ? (
+  <div className="mt-2 border-t pt-2">
+    <div className="text-xs text-muted-foreground mb-1">Top Coverage:</div>
+    {relevantHeadlines.map(h => (
+      <a 
+        href={h.url} 
+        target="_blank"
+        className="block text-xs hover:underline mb-1"
+      >
+        "{h.title}" <span className="text-muted-foreground">· {h.source}</span>
+      </a>
+    ))}
+  </div>
+) : (
+  <div className="mt-2 text-xs text-muted-foreground">
+    News coverage increased significantly
+  </div>
+)}
+This adds headlines ONLY when confident, otherwise shows generic message.
+
+Critical Backend Improvement (Regardless of Which Option)
+Fix GDELT Queries to Reduce "Wrong Person" Results
+Current (presumably):
+
+typescript
+const query = person.name; // "Logan Paul"
+Problem: Returns results for any Logan, any Paul, and spam.
+
+Better:
+
+typescript
+const query = "${person.name}" ${getDisambiguationTerms(person)};
+
+function getDisambiguationTerms(person: Person) {
+  const terms = [person.name]; // full name in quotes
+  
+  if (person.category === 'Sports') {
+    terms.push(person.sport || 'athlete'); // "Logan Paul" boxing
+  } else if (person.category === 'Entertainment') {
+    terms.push('actor OR singer OR celebrity');
+  } else if (person.category === 'Politics') {
+    terms.push('politician OR government');
+  }
+  
+  return terms.join(' ');
+}
+Example: "Logan Paul" boxing returns far fewer false positives than just Logan Paul.
+
+What I'd Send to Replit (Copy/Paste)
+Hot Movers tooltip is showing unreliable headlines that hurt trust. Here's the fix:
+
+Phase 1 (do now - 30 mins):
+Replace tooltip content with:
+
+24h change %
+
+Rank jump (#)
+
+Primary driver (News/Search/Wiki/Social)
+
+"View details →" link to profile
+
+Remove raw headlines from tooltip entirely (too risky for trust).
+
+Phase 2 (optional - later):
+If we add headlines back, implement quality filters:
+
+Must contain person's full name
+
+Must be <24h old
+
+Reject spam patterns (win/prize/click here/free)
+
+Show 2-3 headlines with source + link
+
+If 0 pass filters → show "News coverage increased" instead
+
+Backend improvement (30 mins):
+Enhance GDELT queries with disambiguation:
+
+Wrap names in quotes: "Logan Paul"
+
+Add category keywords: "Logan Paul" boxing or "Taylor Swift" music
+
+This dramatically reduces "wrong person" results
+
+Why Phase 1 (Metrics Only) Is The Right Call
+You already have a perfect place for headlines: The profile page "Why They're Trending" section (which uses AI + top headlines).
+
+The Hot Movers tooltip should be: A tease that drives users to click through.
+
+text
+Hot Movers Tooltip:
+"Logan is spiking! +45% in 24h from news coverage"
+[View why →]
+
+Profile Page:
+Full AI summary + filtered headlines + trend chart
+This pattern:
+
+Keeps tooltips simple (low cognitive load)
+
+Drives engagement (users click to learn more)
+
+Concentrates quality control in one place (profile page)
+
+Bottom Line
+ChatGPT's Option A is correct: Show metrics + driver, skip headlines in tooltip.
+
+The headlines belong on profile pages where you have space for:
+
+Quality filtering
+
+Multiple sources
+
+Full AI summaries
+
+User verification
+
+Mixing raw GDELT headlines into tooltips is like: Putting unfiltered Twitter mentions on a Bloomberg terminal. It breaks the trust model.
+
+Claude’s take is very good here, and I’d adopt ~90% of it.
+
+The big thing Claude adds (that’s worth including)
+
+Treat it as a trust problem, not a “tooltip copy” problem.
+That framing is correct: one bad/irrelevant headline makes users doubt the whole scoreboard.
+
+Where Claude + my view strongly align
+
+Phase 1 (do now): remove raw headlines from the Hot Movers tooltip.
+Make the tooltip always truthful and always explainable:
+
+24h change %
+
+rank jump
+
+primary driver (News / Search / Wiki / Social)
+
+“View details →” (takes them to profile/detail where you can do richer context)
+
+This is the highest ROI + lowest risk fix. And it uses data you already trust.
+
+Where Claude’s extra detail is useful
+
+If you really want headlines in tooltips later, Claude’s suggested guardrails are legit:
+
+Quoted full name (reduces false positives)
+
+Spam pattern rejection (win/prize/click/free etc.)
+
+Recency gate (<24h)
+
+Require name match (full name or last name at minimum)
+
+If nothing passes → show a generic “News coverage increased” line
+
+That’s a sane “Phase 2” path.
+
+One tweak I’d make to Claude’s Phase 2
+
+The name-match rule should be stricter for ambiguous names:
+
+If the name is short/common (“Logan”, “John”, “Kim”) → require full name match, not last-name-only.
+
+Otherwise you’ll still get wrong-person headlines.
+
+Claude’s “don’t do AI summary in tooltip” point
+
+I mostly agree. Tooltips should be low cognitive load.
+If you already have a richer “Why Trending” section on the profile page, then the tooltip’s job is to tease + route.
+
+If you ever add AI here, keep it minimal:
+
+1 short sentence max
+
+Only for Hot Movers
+
+Only when confidence is high
+
+What I’d send Replit (tight, practical)
+
+Ask them to change the Hot Movers “i” tooltip to:
+
+Metrics + driver always
+
+A “View why →” link
+
+No headlines in tooltip (for now)
+
+Then optionally add a “Top coverage” section on the profile page (not tooltip), where you can safely show multiple filtered headlines + links.
+
+If you want, paste your current tooltip fields (what the Hot Movers item object contains: whyTag, driver, headlines[], timestamps, URLs, etc.) and I’ll write the exact tooltip content rules so it never shows “nonsense” again.
