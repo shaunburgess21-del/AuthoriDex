@@ -1,8 +1,11 @@
 import { TrendingPerson } from "@shared/schema";
 import { formatDelta } from "@/lib/formatNumber";
-import { Flame, ChevronDown } from "lucide-react";
+import { Flame, ChevronDown, Info } from "lucide-react";
 import { useState } from "react";
 import { PersonAvatar } from "./PersonAvatar";
+import { useTrendContextBatch } from "@/hooks/useTrendContext";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
 
 interface TrendingNowFeedProps {
   people: TrendingPerson[];
@@ -33,10 +36,13 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle }: 
     .sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0))
     .slice(0, 8);
 
-  if (hotMovers.length === 0) return null;
-
   const visibleMovers = showAll ? hotMovers : hotMovers.slice(0, DEFAULT_VISIBLE);
   const hasMore = hotMovers.length > DEFAULT_VISIBLE;
+
+  const visibleIds = !collapsed ? visibleMovers.map(p => p.id) : [];
+  const { data: trendContexts } = useTrendContextBatch(visibleIds);
+
+  if (hotMovers.length === 0) return null;
 
   return (
     <div
@@ -67,6 +73,7 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle }: 
               const delta = formatDelta(person.change24h);
               const isUp = (person.change24h ?? 0) > 0;
               const driver = getDriverTag(person);
+              const ctx = trendContexts?.[person.id];
               return (
                 <div
                   key={person.id}
@@ -79,7 +86,33 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle }: 
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-xs truncate text-slate-200">{person.name}</p>
                     {driver && (
-                      <p className={`text-[10px] ${driver.color}`}>{driver.label}</p>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[10px] ${driver.color}`}>{driver.label}</span>
+                        {ctx?.reasonTag && ctx.reasonTag !== "Unknown" && (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center justify-center min-w-[28px] min-h-[28px] rounded-md p-1 -m-1"
+                                data-testid={`trending-now-why-${person.id}`}
+                              >
+                                <Info className="h-3 w-3 text-slate-500" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              side="top"
+                              align="start"
+                              className="w-auto max-w-[260px] p-3"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <p className="font-semibold text-xs">{ctx.reasonTag}</p>
+                              {ctx.headlineSnippet && (
+                                <p className="text-[11px] text-muted-foreground mt-1 italic">"{ctx.headlineSnippet}"</p>
+                              )}
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                      </div>
                     )}
                   </div>
                   {delta && (

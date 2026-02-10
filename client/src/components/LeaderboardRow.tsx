@@ -80,19 +80,21 @@ function getExceptionalIndicator(
   if (!thresholds) return null;
 
   const fmtDelta = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v)}%`;
-  const fmtRank = (v: number) => `${v > 0 ? '+' : ''}${v} ranks`;
+  const fmtRank = (v: number) => `${v > 0 ? '+' : ''}${v}`;
+
+  const metrics = `24h: ${delta != null ? fmtDelta(delta) : '—'} · Rank: ${rankChange != null ? fmtRank(rankChange) : '—'}`;
 
   if (rankChange != null && rankChange >= thresholds.rankChangeP90 && delta != null && delta >= thresholds.deltaP90) {
-    return { icon: Flame, color: "text-orange-400", label: "Breakout", description: `${fmtDelta(delta)} score and ${fmtRank(rankChange)} in 24h` };
+    return { icon: Flame, color: "text-orange-400", label: "Breakout", description: `Big surge + big rank jump\n${metrics}` };
   }
   if (delta != null && delta >= thresholds.deltaP90) {
-    return { icon: Zap, color: "text-yellow-400", label: "Spiking", description: `Fame score ${fmtDelta(delta)} in 24h` };
+    return { icon: Zap, color: "text-yellow-400", label: "Spiking", description: `Big score surge\n${metrics}` };
   }
   if (rankChange != null && rankChange >= thresholds.rankChangeP90) {
-    return { icon: Flame, color: "text-orange-400", label: "Rising", description: `Climbed ${fmtRank(rankChange)} in 24h` };
+    return { icon: Flame, color: "text-orange-400", label: "Rising", description: `Climbing the board\n${metrics}` };
   }
   if (rankChange != null && rankChange <= thresholds.negRankChangeP10 && delta != null && delta <= thresholds.negDeltaP10) {
-    return { icon: Snowflake, color: "text-blue-400", label: "Cooling", description: `${fmtDelta(delta)} score and ${fmtRank(rankChange)} in 24h` };
+    return { icon: Snowflake, color: "text-blue-400", label: "Cooling", description: `Fast drop-off\n${metrics}` };
   }
 
   return null;
@@ -212,8 +214,10 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-[220px] text-center">
-                  <p className="font-semibold text-xs">{exceptional.label}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{exceptional.description}</p>
+                  <p className="font-semibold text-xs">{exceptional.label} — {exceptional.description.split('\n')[0]}</p>
+                  {exceptional.description.includes('\n') && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">{exceptional.description.split('\n')[1]}</p>
+                  )}
                 </TooltipContent>
               </Tooltip>
             )}

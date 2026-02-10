@@ -977,7 +977,8 @@ export default function HomePage() {
                       </div>
                       <Button
                         variant="ghost"
-                        className="shrink-0 text-muted-foreground/60 min-h-0 p-1"
+                        size="icon"
+                        className="shrink-0 text-muted-foreground/60"
                         onClick={(e) => {
                           e.stopPropagation();
                           setShowVoteTip(false);
