@@ -209,7 +209,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             {exceptional && ExceptionalIcon && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="inline-flex cursor-help" data-testid={`indicator-${person.id}`}>
+                  <span className="inline-flex cursor-help" data-testid={`indicator-${exceptional.label.toLowerCase()}-${person.id}`}>
                     <ExceptionalIcon className={`h-3.5 w-3.5 shrink-0 ${exceptional.color}`} />
                   </span>
                 </TooltipTrigger>

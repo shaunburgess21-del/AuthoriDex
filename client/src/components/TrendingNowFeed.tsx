@@ -18,21 +18,6 @@ interface TrendingNowFeedProps {
   thresholds?: PercentileThresholds;
 }
 
-function getMovementTag(
-  person: EnrichedPerson,
-  thresholds?: PercentileThresholds
-): { label: string; color: string } {
-  if (thresholds) {
-    const indicator = getExceptionalIndicator(person as any, thresholds);
-    if (indicator) {
-      return { label: indicator.label, color: indicator.color };
-    }
-  }
-
-  const delta = person.change24h ?? 0;
-  if (delta > 0) return { label: "Up", color: "text-emerald-400" };
-  return { label: "Down", color: "text-red-400" };
-}
 
 function getDriverExplanation(driver: TrendDriver): string {
   switch (driver) {
@@ -50,7 +35,11 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle, th
   const [showAll, setShowAll] = useState(false);
 
   const hotMovers = people
-    .filter(p => p.change24h != null && Math.abs(p.change24h) >= 5)
+    .filter(p => {
+      if (p.change24h == null) return false;
+      const indicator = thresholds ? getExceptionalIndicator(p as any, thresholds) : null;
+      return indicator !== null;
+    })
     .sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0))
     .slice(0, 8);
 
@@ -59,8 +48,6 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle, th
 
   const visibleIds = !collapsed ? visibleMovers.map(p => p.id) : [];
   const { data: trendContexts } = useTrendContextBatch(visibleIds);
-
-  if (hotMovers.length === 0) return null;
 
   return (
     <div
@@ -78,19 +65,27 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle, th
           </div>
           <div className="flex-1">
             <h3 className="text-sm font-semibold text-slate-100">Hot Movers</h3>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Top % gainers · 24h</p>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Exceptional 24h movement</p>
           </div>
           <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
             <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
           </div>
         </div>
 
-        {!collapsed && (
+        {!collapsed && hotMovers.length === 0 && (
+          <div className="text-center py-6 mt-4" data-testid="trending-now-empty">
+            <p className="text-xs text-slate-500">No exceptional movement right now</p>
+            <p className="text-[10px] text-slate-600 mt-1">Check back later or explore the full leaderboard</p>
+          </div>
+        )}
+
+        {!collapsed && hotMovers.length > 0 && (
           <div className="space-y-1.5 mt-4">
             {visibleMovers.map((person, idx) => {
               const delta = formatDelta(person.change24h);
               const isUp = (person.change24h ?? 0) > 0;
-              const tag = getMovementTag(person, thresholds);
+              const tag = thresholds ? getExceptionalIndicator(person as any, thresholds) : null;
+              if (!tag) return null;
               const ctx = trendContexts?.[person.id];
               const rc = person.rankChange ?? null;
               const showRankChange = rc !== null && Math.abs(rc) >= 3;
