@@ -13,6 +13,7 @@ import { TrendingNowFeed } from "@/components/TrendingNowFeed";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip as UITooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Rocket, Snowflake } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
@@ -950,22 +951,50 @@ export default function HomePage() {
                   </div>
                   {leaderboardTab === "fame" && percentileThresholds && (
                     <div className="px-4 sm:px-6 py-2.5 border-b bg-muted/20 flex items-center gap-4 flex-wrap text-[11px] text-muted-foreground" data-testid="indicator-legend">
-                      <span className="inline-flex items-center gap-1">
-                        <Rocket className="h-3 w-3 text-orange-400" />
-                        Breakout
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Zap className="h-3 w-3 text-yellow-400" />
-                        Spiking
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <TrendingUp className="h-3 w-3 text-emerald-400" />
-                        Rising
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Snowflake className="h-3 w-3 text-blue-400" />
-                        Cooling
-                      </span>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-breakout">
+                            <Rocket className="h-3 w-3 text-orange-400" />
+                            Breakout
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                          Big score surge combined with a major rank jump
+                        </TooltipContent>
+                      </UITooltip>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-spiking">
+                            <Zap className="h-3 w-3 text-yellow-400" />
+                            Spiking
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                          Large score increase in the last 24 hours
+                        </TooltipContent>
+                      </UITooltip>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-rising">
+                            <TrendingUp className="h-3 w-3 text-emerald-400" />
+                            Rising
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                          Climbing the rankings rapidly
+                        </TooltipContent>
+                      </UITooltip>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-cooling">
+                            <Snowflake className="h-3 w-3 text-blue-400" />
+                            Cooling
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                          Significant drop in score and rank
+                        </TooltipContent>
+                      </UITooltip>
                     </div>
                   )}
                   {showVoteTip && (
