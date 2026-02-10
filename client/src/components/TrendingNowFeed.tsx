@@ -1,7 +1,6 @@
 import { TrendingPerson } from "@shared/schema";
 import { formatDelta } from "@/lib/formatNumber";
 import { Flame, ChevronDown, Info, TrendingUp, TrendingDown, Newspaper, Search, Globe, MessageCircle, ArrowRight, ArrowUpRight, ArrowDownRight } from "lucide-react";
-import { useState } from "react";
 import { PersonAvatar } from "./PersonAvatar";
 import { useTrendContextBatch, getDriverLabel, TrendDriver } from "@/hooks/useTrendContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -29,11 +28,7 @@ function getDriverExplanation(driver: TrendDriver): string {
   }
 }
 
-const DEFAULT_VISIBLE = 3;
-
 export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle, thresholds }: TrendingNowFeedProps) {
-  const [showAll, setShowAll] = useState(false);
-
   const hotMovers = people
     .filter(p => {
       if (p.change24h == null) return false;
@@ -43,10 +38,7 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle, th
     .sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0))
     .slice(0, 8);
 
-  const visibleMovers = showAll ? hotMovers : hotMovers.slice(0, DEFAULT_VISIBLE);
-  const hasMore = hotMovers.length > DEFAULT_VISIBLE;
-
-  const visibleIds = !collapsed ? visibleMovers.map(p => p.id) : [];
+  const visibleIds = !collapsed ? hotMovers.map(p => p.id) : [];
   const { data: trendContexts } = useTrendContextBatch(visibleIds);
 
   return (
@@ -81,7 +73,7 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle, th
 
         {!collapsed && hotMovers.length > 0 && (
           <div className="space-y-1.5 mt-4">
-            {visibleMovers.map((person, idx) => {
+            {hotMovers.map((person, idx) => {
               const delta = formatDelta(person.change24h);
               const isUp = (person.change24h ?? 0) > 0;
               const tag = thresholds ? getExceptionalIndicator(person as any, thresholds) : null;
@@ -213,18 +205,6 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle, th
                 </div>
               );
             })}
-            {hasMore && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowAll(!showAll);
-                }}
-                className="w-full text-center text-xs text-slate-500 hover:text-slate-300 py-1.5 transition-colors"
-                data-testid="trending-now-show-more"
-              >
-                {showAll ? "Show less" : `Show ${hotMovers.length - DEFAULT_VISIBLE} more`}
-              </button>
-            )}
           </div>
         )}
       </div>
