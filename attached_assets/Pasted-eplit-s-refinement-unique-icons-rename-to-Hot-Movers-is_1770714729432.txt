@@ -1,0 +1,126 @@
+eplit’s refinement (unique icons + rename to “Hot Movers”) is exactly the right fix. ✅ That removes the semantic collision without deleting useful signal from the row badges.
+
+Where things went sideways is the empty leaderboard. Replit’s explanation (“table got emptied, ingestion will repopulate”) might be true, but it’s a brittle pattern—you don’t want the UX to depend on a long-running job finishing cleanly every time.
+
+Here’s what I’d send Replit as “do this next” feedback.
+
+1) Fix the root cause: never show 0 rows because ingestion is mid-run
+The likely cause
+
+Your pipeline probably does something like:
+
+DELETE/TRUNCATE trending_people
+
+fetch external APIs
+
+compute scores
+
+insert rows
+
+If the server restarts, GDELT hangs, rate limits, or two ingestions overlap, you end up stuck with an empty table (or partially written data).
+
+The correct pattern (atomic publish)
+
+Have ingestion write to a staging table, then swap in one step:
+
+Option A: staging table + swap
+
+Write to trending_people_next
+
+When finished, in a transaction:
+
+TRUNCATE trending_people
+
+INSERT INTO trending_people SELECT * FROM trending_people_next
+
+(or rename tables if your DB setup supports it cleanly)
+
+If ingestion fails, the current trending_people stays intact.
+
+Option B: upsert in-place
+
+Don’t delete first.
+
+Upsert (INSERT ... ON CONFLICT DO UPDATE) the 100 people.
+
+Then mark anything not updated in this run as stale (or delete after success).
+
+Option C: “last_good_run” pointer
+
+Store leaderboard results keyed by run_id
+
+App reads the most recent “successful” run_id only
+
+Any of these prevents the “0 results” state.
+
+2) Add a guardrail: never allow overlapping ingestion runs
+
+Your earlier logs showed concurrent runs at one point. That can absolutely cause table wipes + half-writes.
+
+Tell Replit to add a simple lock:
+
+DB advisory lock (best)
+
+Or a ingestion_runs row with status=running and a TTL
+
+If a run is active, skip the next trigger
+
+3) Add a UI fallback so the app never looks broken
+
+Even with atomic publish, sometimes data genuinely won’t be available (fresh DB, first day, etc.). So:
+
+If leaderboard query returns 0:
+
+Show a friendly empty-state panel:
+
+“Leaderboard is updating…”
+
+“Last updated: <timestamp>”
+
+A “Retry” button that refetches
+
+If you have any cached last result in memory or localStorage, show it with a “stale” label.
+
+This turns “blank app” into “live system currently updating.”
+
+4) Quick sanity checks Replit should do immediately
+
+These are fast and will pinpoint where it broke:
+
+Does trend_snapshots still have recent rows?
+If yes, ingestion is at least writing snapshots.
+
+Is trending_people empty because of a truncate?
+If yes, confirm ingestion “publish” step happens only at end.
+
+Is ingestion failing before it reaches publish?
+Common culprits: GDELT timeouts, rate limiting, server restarting (dev hot reload), or cron auth.
+
+Are you in dev mode while running ingestion?
+HMR restarts can interrupt long jobs. In dev, ingestion should be triggered in a separate worker process or disabled.
+
+5) The icon/copy changes: one small extra improvement
+
+Now that you’ve separated meanings:
+
+Keep the flame only on Hot Movers
+
+And consider adding a tiny label under Hot Movers like:
+
+“Biggest % gainers (24h)”
+
+That makes it impossible to misinterpret.
+
+What I’d message Replit (copy/paste)
+
+“Icon collision fix is perfect.”
+
+“But we can’t ever show an empty leaderboard because ingestion is running.”
+
+“Please make ingestion publish atomic: write to staging, then swap in one transaction (or upsert).”
+
+“Add a DB lock to prevent overlapping ingestions.”
+
+“Add UI empty-state fallback if 0 rows.”
+
+“Confirm why trending_people got cleared (truncate-at-start pattern).”
