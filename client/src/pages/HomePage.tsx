@@ -993,7 +993,7 @@ export default function HomePage() {
                   <div>
                     {displayPeople.length === 0 && !isLoading && (
                       <div className="p-8 text-center text-muted-foreground">
-                        No results found
+                        {searchQuery ? "No results found" : "No results found for current filters"}
                       </div>
                     )}
                     {displayPeople.map((person) => (
@@ -1038,11 +1038,17 @@ export default function HomePage() {
                   
                   {allPeople.length === 0 && !isLoading && (
                     <div className="p-12 text-center">
-                      <p className="text-muted-foreground">
-                        {searchQuery || category !== "all" 
-                          ? "No results found matching your filters" 
-                          : "No trending people available"}
-                      </p>
+                      {searchQuery || category !== "all" ? (
+                        <p className="text-muted-foreground">
+                          No results found matching your filters
+                        </p>
+                      ) : (
+                        <div className="space-y-3">
+                          <RefreshCw className="h-6 w-6 text-muted-foreground/50 mx-auto animate-spin" />
+                          <p className="text-muted-foreground font-medium">Leaderboard is updating...</p>
+                          <p className="text-xs text-muted-foreground/60">Data refreshes automatically every hour. Check back shortly.</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </CardContent>

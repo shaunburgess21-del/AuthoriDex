@@ -670,14 +670,11 @@ export async function runDataIngestion(): Promise<IngestResult> {
       }
       console.log(`[Ingest] Acquired advisory lock for trending_people writes`);
       
-      await tx.delete(trendingPeople);
-      console.log(`[Ingest] Cleared trending_people table (in transaction)`);
-
+      const upsertedIds: string[] = [];
       let insertedCount = 0;
       for (let i = 0; i < scoreResults.length; i++) {
         const { person, score } = scoreResults[i];
         
-        // Use celebrity_images primary image, fallback to tracked_people avatar
         const avatarUrl = primaryImageMap.get(person.id) || person.avatar;
 
         await tx.insert(trendingPeople).values({
@@ -705,10 +702,16 @@ export async function runDataIngestion(): Promise<IngestResult> {
             category: person.category,
           },
         });
+        upsertedIds.push(person.id);
         insertedCount++;
       }
+
+      if (upsertedIds.length > 0) {
+        const deleteResult = await tx.delete(trendingPeople)
+          .where(sql`${trendingPeople.id} NOT IN (${sql.join(upsertedIds.map(id => sql`${id}`), sql`, `)})`);
+        console.log(`[Ingest] Cleaned up stale rows not in current batch`);
+      }
       
-      // ROW COUNT VALIDATION: Query actual DB row count to verify inserts succeeded
       const countResult = await tx.execute(sql`SELECT COUNT(*) as count FROM trending_people`);
       const countRows = Array.isArray(countResult) ? countResult : (countResult as any).rows ?? [];
       const actualDbCount = parseInt(countRows[0]?.count || '0', 10);
