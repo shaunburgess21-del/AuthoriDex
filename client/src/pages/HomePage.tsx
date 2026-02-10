@@ -847,6 +847,7 @@ export default function HomePage() {
                 onPersonClick={handleVisitProfile}
                 collapsed={trendingNowCollapsed}
                 onToggle={handleTrendingNowToggle}
+                thresholds={percentileThresholds}
               />
 
               <Card id="leaderboard">
