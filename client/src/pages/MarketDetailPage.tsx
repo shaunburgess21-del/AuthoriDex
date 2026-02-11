@@ -136,11 +136,15 @@ function useCountdown(endDate: string | null) {
 }
 
 function getEntryPercentages(entries: MarketEntry[]) {
-  const totalStake = entries.reduce((sum, e) => sum + (e.totalStake || 0), 0);
-  return entries.map((e) => ({
-    ...e,
-    percentage: totalStake > 0 ? Math.round(((e.totalStake || 0) / totalStake) * 100) : Math.round(100 / entries.length),
-  }));
+  const totalWeight = entries.reduce((sum, e) => sum + (e.totalStake || 0) + (e.seedCount || 0), 0);
+  return entries.map((e) => {
+    const weight = (e.totalStake || 0) + (e.seedCount || 0);
+    return {
+      ...e,
+      percentage: totalWeight > 0 ? Math.round((weight / totalWeight) * 100) : Math.round(100 / entries.length),
+      displayStake: weight,
+    };
+  });
 }
 
 function formatNumber(n: number): string {
@@ -181,7 +185,7 @@ function BinaryOutcomes({
   onSelect,
   disabled,
 }: {
-  entries: (MarketEntry & { percentage: number })[];
+  entries: (MarketEntry & { percentage: number; displayStake: number })[];
   selectedEntry: string | null;
   onSelect: (id: string) => void;
   disabled: boolean;
@@ -209,7 +213,7 @@ function BinaryOutcomes({
           </div>
           <div className="text-3xl font-bold text-green-400 font-mono">{yesEntry.percentage}%</div>
           <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-            <span>{formatNumber(yesEntry.totalStake)} staked</span>
+            <span>{formatNumber(yesEntry.displayStake)} staked</span>
             <span>{yesEntry.betCount} bets</span>
           </div>
         </button>
@@ -231,7 +235,7 @@ function BinaryOutcomes({
           </div>
           <div className="text-3xl font-bold text-red-400 font-mono">{noEntry.percentage}%</div>
           <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-            <span>{formatNumber(noEntry.totalStake)} staked</span>
+            <span>{formatNumber(noEntry.displayStake)} staked</span>
             <span>{noEntry.betCount} bets</span>
           </div>
         </button>
@@ -246,7 +250,7 @@ function MultiOutcomes({
   onSelect,
   disabled,
 }: {
-  entries: (MarketEntry & { percentage: number })[];
+  entries: (MarketEntry & { percentage: number; displayStake: number })[];
   selectedEntry: string | null;
   onSelect: (id: string) => void;
   disabled: boolean;
@@ -285,7 +289,7 @@ function MultiOutcomes({
             />
           </div>
           <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
-            <span>{formatNumber(entry.totalStake)} staked</span>
+            <span>{formatNumber(entry.displayStake)} staked</span>
             <span>{entry.betCount} bets</span>
           </div>
         </button>
@@ -304,7 +308,7 @@ function UpDownOutcomes({
   strike,
   unit,
 }: {
-  entries: (MarketEntry & { percentage: number })[];
+  entries: (MarketEntry & { percentage: number; displayStake: number })[];
   selectedEntry: string | null;
   onSelect: (id: string) => void;
   disabled: boolean;
@@ -359,7 +363,7 @@ function UpDownOutcomes({
                 {entry.percentage}%
               </div>
               <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                <span>{formatNumber(entry.totalStake)} staked</span>
+                <span>{formatNumber(entry.displayStake)} staked</span>
                 <span>{entry.betCount} bets</span>
               </div>
             </button>
@@ -377,9 +381,12 @@ export default function MarketDetailPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const pickParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("pick") : null;
+
   const [selectedEntry, setSelectedEntry] = useState<string | null>(null);
   const [stakeAmount, setStakeAmount] = useState("");
   const [commentBody, setCommentBody] = useState("");
+  const [pickApplied, setPickApplied] = useState(false);
 
   const { data: market, isLoading, error } = useQuery<MarketData>({
     queryKey: ["/api/open-markets", params.slug],
@@ -422,6 +429,20 @@ export default function MarketDetailPage() {
     },
   });
 
+  useEffect(() => {
+    if (pickParam && market?.entries && !pickApplied) {
+      const pickLower = pickParam.toLowerCase();
+      const matched = market.entries.find((e) =>
+        e.label.toLowerCase() === pickLower ||
+        e.label.toLowerCase().includes(pickLower)
+      );
+      if (matched) {
+        setSelectedEntry(matched.id);
+      }
+      setPickApplied(true);
+    }
+  }, [pickParam, market?.entries, pickApplied]);
+
   const timeLeft = useCountdown(market?.closeAt || market?.endAt || null);
 
   const entriesWithPercentages = useMemo(() => {
@@ -431,8 +452,8 @@ export default function MarketDetailPage() {
 
   const totalPool = useMemo(() => {
     if (!market) return 0;
-    const entryStakes = (market.entries || []).reduce((sum, e) => sum + (e.totalStake || 0), 0);
-    return entryStakes + Number(market.seedVolume || 0);
+    const entryWeights = (market.entries || []).reduce((sum, e) => sum + (e.totalStake || 0) + (e.seedCount || 0), 0);
+    return entryWeights;
   }, [market]);
 
   const totalParticipants = useMemo(() => {
@@ -516,7 +537,6 @@ export default function MarketDetailPage() {
 
   const statusConfig = STATUS_CONFIG[market.status] || STATUS_CONFIG.OPEN;
   const isOpen = market.status === "OPEN";
-  const selectedEntryLabel = entriesWithPercentages.find((e) => e.id === selectedEntry)?.label;
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
@@ -548,7 +568,7 @@ export default function MarketDetailPage() {
             <Badge variant="outline" className={statusConfig.className} data-testid="badge-status">
               {statusConfig.label}
             </Badge>
-            <CategoryPill category={market.category} data-testid="badge-category" />
+            {market.category && <CategoryPill category={market.category} data-testid="badge-category" />}
             {market.featured && (
               <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30" data-testid="badge-featured">
                 <Star className="h-3 w-3 mr-1" />
@@ -733,25 +753,34 @@ export default function MarketDetailPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {selectedEntry ? (
-                  <div className="flex items-center gap-2 p-2 rounded-lg bg-violet-500/10 border border-violet-500/20">
-                    <CheckCircle2 className="h-4 w-4 text-violet-500" />
-                    <span className="text-sm">
-                      Selected: <strong>{selectedEntryLabel}</strong>
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedEntry(null)}
-                      className="ml-auto text-xs"
-                      data-testid="button-change-selection"
-                    >
-                      Change
-                    </Button>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Your Pick</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {entriesWithPercentages.sort((a, b) => a.displayOrder - b.displayOrder).map((entry) => {
+                      const isSelected = selectedEntry === entry.id;
+                      const isYesLike = entry.label.toLowerCase() === "yes" || entry.label.toLowerCase() === "above" || entry.displayOrder === 0;
+                      return (
+                        <Button
+                          key={entry.id}
+                          size="sm"
+                          variant={isSelected ? "default" : "outline"}
+                          className={isSelected
+                            ? isYesLike
+                              ? "bg-green-600 text-white border-green-600"
+                              : "bg-red-600 text-white border-red-600"
+                            : isYesLike
+                              ? "border-green-500/30 text-green-500"
+                              : "border-red-500/30 text-red-500"
+                          }
+                          onClick={() => setSelectedEntry(entry.id)}
+                          data-testid={`button-pick-${entry.label.toLowerCase()}`}
+                        >
+                          {entry.label} ({entry.percentage}%)
+                        </Button>
+                      );
+                    })}
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Select an outcome above to place your prediction</p>
-                )}
+                </div>
 
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Stake Amount</label>
@@ -775,7 +804,7 @@ export default function MarketDetailPage() {
 
                 <Button
                   className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-                  disabled={!selectedEntry || !stakeAmount || betMutation.isPending}
+                  disabled={!selectedEntry || !stakeAmount || Number(stakeAmount) <= 0 || betMutation.isPending}
                   onClick={handlePlaceBet}
                   data-testid="button-submit-prediction"
                 >
@@ -784,7 +813,13 @@ export default function MarketDetailPage() {
                   ) : (
                     <Zap className="h-4 w-4 mr-2" />
                   )}
-                  {betMutation.isPending ? "Placing..." : "Place Prediction"}
+                  {betMutation.isPending
+                    ? "Placing..."
+                    : !selectedEntry
+                      ? "Select an outcome"
+                      : !stakeAmount || Number(stakeAmount) <= 0
+                        ? "Enter stake amount"
+                        : "Place Prediction"}
                 </Button>
               </div>
             )}

@@ -242,15 +242,14 @@ function H2HCard({
 
 function CommunityCard({
   market,
-  onPredict,
+  onNavigate,
 }: {
   market: any;
-  onPredict: (slug: string) => void;
+  onNavigate: (slug: string, pick?: string) => void;
 }) {
   const entries = market.entries || [];
-  const totalStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0), 0);
-  const totalPool = totalStake + Number(market.seedVolume || 0);
-  const participants = (market.betCount || 0) + (market.seedParticipants || 0);
+  const totalPool = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0) + (e.seedCount || 0), 0);
+  const participants = (market.totalParticipants || 0) + (market.seedParticipants || 0);
   
   const entry1 = entries[0];
   const entry2 = entries[1];
@@ -263,7 +262,7 @@ function CommunityCard({
   return (
     <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20" style={{ minHeight: '280px' }}>
       <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-cyan-500/5 rounded-lg" />
-      <div className="relative p-4">
+      <div className="relative p-4 flex flex-col" style={{ minHeight: '264px' }}>
         <div className="flex items-center justify-between mb-3">
           <Badge variant="outline" className="text-xs">
             <Clock className="h-3 w-3 mr-1" />
@@ -272,12 +271,16 @@ function CommunityCard({
           {market.category && <CategoryPill category={market.category} />}
         </div>
         
-        <p className="text-sm font-semibold mb-3 line-clamp-2 text-center">{market.title}</p>
+        <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); onNavigate(market.slug); }} className="cursor-pointer">
+          <p className="text-sm font-semibold mb-3 line-clamp-2 text-center hover:text-violet-400 transition-colors">{market.title}</p>
+        </a>
         
         <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground mb-3">
           <Users className="h-3 w-3" />
           <span>{participants} participants</span>
         </div>
+        
+        <div className="flex-1" />
         
         {entries.length === 2 && (
           <div className="mb-3">
@@ -304,6 +307,7 @@ function CommunityCard({
                 </div>
               );
             })}
+            {entries.length > 3 && <p className="text-xs text-muted-foreground text-center">+{entries.length - 3} more</p>}
           </div>
         )}
         
@@ -315,10 +319,10 @@ function CommunityCard({
           size="sm" 
           variant="outline"
           className="w-full border-violet-500/30 text-violet-500"
-          onClick={() => onPredict(market.slug)}
+          onClick={() => onNavigate(market.slug)}
           data-testid={`button-predict-${market.slug}`}
         >
-          Predict
+          View Market
         </Button>
       </div>
     </Card>
@@ -684,7 +688,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
                 <CommunityCard
                   key={market.id}
                   market={market}
-                  onPredict={(slug) => setLocation(`/markets/${slug}`)}
+                  onNavigate={(slug, pick) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}` : ''}`)}
                 />
               ))}
             </div>
