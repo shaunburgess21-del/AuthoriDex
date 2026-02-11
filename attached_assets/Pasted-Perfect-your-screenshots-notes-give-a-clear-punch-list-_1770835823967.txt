@@ -1,0 +1,309 @@
+Perfect — your screenshots + notes give a clear punch list. I’m going to translate everything into exact fixes + how they should behave, so you can paste this to Replit and they implement without “interpretation drift”.
+
+A) Dedicated market page issues (/markets/:slug)
+1) Outcomes show 50/50 instead of your seed split
+
+Likely cause: the detail page is calculating percentages from bets only (which are 0), or it’s defaulting to equal split when totals are 0, instead of using seeded values.
+
+Fix required (core logic):
+
+Each outcome needs a “base liquidity” value (your seed).
+
+Percent/probability displayed should be based on:
+
+displayAmount = seedVolume + userVolume
+
+So the displayed probability becomes:
+
+pct = displayAmount / SUM(all outcomes displayAmount)
+
+Acceptance test: If Yes seed=135 and No seed=49 and there are no user bets, the page shows ~73% / 27% (exact rounding can be 73/27 or 73.4/26.6).
+
+2) Total Pool shows 0 but should show seeded pool
+
+Fix required:
+
+Pool should be:
+
+TotalPool = SUM(seedVolume) + SUM(userStakes)
+
+If you seed 135 + 49, total pool should show 184 (or whatever unit you use: credits).
+
+3) Participants show 0 but should include seed participants
+
+Right now “Participants” is probably counting distinct bettors only (0).
+
+Two good options (pick one):
+
+Option A (recommended): Show two values:
+
+“Participants: 0” (real users)
+
+“Seed participants: X” (from admin seedCount)
+This avoids misleading users.
+
+Option B: Show combined:
+
+“Participants: seedCount + uniqueBettors”
+But this implies seed are “real” participants, which may be slightly misleading.
+
+Your ask implies B, but I’d still recommend A for honesty + clarity.
+
+Acceptance test: if seedCount=10 total, show Seed participants: 10 (even if real users are 0).
+
+4) Closing date is wrong (shows Feb 10 2026 instead of Jun 30 2026)
+
+Likely cause: the UI is using the wrong field:
+
+using bettingClosesAt instead of closeDate
+
+or using createdAt
+
+or timezone parsing bug (less likely given it’s months off)
+
+Fix required:
+
+Define and consistently use:
+
+closeDate / resolutionDate (the date the market resolves)
+
+bettingClosesAt (optional earlier cutoff)
+
+The badge “Ended” should be based on:
+
+if market status is resolved/closed, OR
+
+if bettingClosesAt passed (then “Betting Closed”), OR
+
+if closeDate passed (then “Ended” only if you want automatic close)
+
+Acceptance test: Selecting Jun 30 2026 in admin must render Jun 30, 2026 on page and card, and not show “Ended”.
+
+5) Place Your Prediction container issues
+
+You have three separate bugs here:
+
+5.1 Selected outcome defaults to Yes even if you clicked No on the card
+
+Fix: When user clicks a card button to open the detail page, pass a query param:
+
+/markets/:slug?pick=no
+
+Then the detail page:
+
+reads pick
+
+sets selected outcome accordingly
+
+5.2 “Change” doesn’t let you reselect Yes/No
+
+Fix: “Change” should toggle the outcome selector UI back on.
+Simplest: the selector (Yes/No buttons) should always be visible on the detail page above Stake Amount.
+
+5.3 “Place Prediction” button disabled / unclickable
+
+This is usually because:
+
+stake is required and empty
+
+user auth required (not logged in)
+
+market ended/closed
+
+validation failing silently
+
+Fix required:
+
+Show explicit disabled-state reasons:
+
+“Enter stake amount”
+
+“Sign in to place prediction”
+
+“Market closed”
+
+If market is open and stake is valid and user is logged in, button must enable.
+
+Acceptance test: Logged in user enters stake → button enables → places prediction (or shows expected confirmation).
+
+6) Opening the URL only works by clicking Yes/No
+
+You’re right — the heading should open the market.
+
+Best UX (mobile-safe):
+
+Make Title + Avatar + “Make Prediction” / “View Details” clickable to /markets/:slug
+
+Do NOT make the entire card background clickable (people scroll/brush cards on mobile)
+
+Add a clear CTA:
+
+Replace the bottom “Make Prediction” (on multi) with a consistent:
+
+“View Market” (opens /markets/:slug)
+
+Keep outcome buttons as prediction actions
+
+This avoids accidental navigation.
+
+7) Card heights inconsistent across types
+
+This is a common one, and you don’t want to solve it with a hard fixed px that truncates badly.
+
+Recommended approach (best-looking + scalable):
+
+Standardize the card into sections with consistent heights:
+
+Header block: fixed height (title + teaser clamp)
+
+Body block: flexible but bounded
+
+Footer block: fixed height (pool + CTA/buttons)
+
+Use line clamping for teaser:
+
+Title: clamp to 2 lines
+
+Teaser: clamp to 2 lines (wrap, don’t cut mid-line)
+
+Multi-option card:
+
+Show top 3 options by default + “+N more”
+
+Keep the list container a fixed max height so it doesn’t stretch the card
+
+Acceptance test: In a row of mixed cards, the bottoms align and the layout looks tidy.
+
+B) Admin Portal issues
+1) No edit option after creating
+
+Fix: Add an Edit icon/button per row (same pattern as “Trending Polls”).
+
+Expected:
+
+Edit opens the same modal prefilled
+
+Save updates market + outcomes + seed data
+
+Acceptance test: You can edit title, teaser, dates, featured, outcomes, seed, and save; frontend reflects changes.
+
+2) Avatar system: return avatar beside heading + image selection rules
+
+You want two image concepts:
+
+B2.1 Market main avatar (on card + detail page)
+
+For a market itself (e.g., USA flag, Bitcoin logo, etc.)
+
+Add to market:
+
+marketAvatarType: 'celebrity' | 'upload' | 'preset' (preset optional)
+
+marketAvatarCelebrityId (nullable)
+
+marketAvatarUrl (nullable)
+
+Rules:
+
+If celebrity chosen → use that celeb’s existing FameDex image everywhere
+
+Else upload → use uploaded image
+
+For generic markets, upload flag/logo etc.
+
+B2.2 Outcome-level avatars (especially for multi-option)
+
+Each option (Trump, JD Vance, Rubio) should show an avatar.
+
+Add to market_entries:
+
+linkedCelebrityId (nullable)
+
+optionAvatarUrl (nullable)
+
+Admin UX:
+
+When typing an option label, show “Matched celebrity?” suggestions.
+
+If matched and selected → lock to celebrity avatar (no upload needed)
+
+If not matched → require upload for that option (or allow fallback placeholder, but you asked “required”)
+
+Important nuance you added:
+
+Multi-choice market main avatar can be something else (USA flag), while each option uses celebrity avatars.
+
+That’s exactly why market avatar and entry avatar must be separate.
+
+Acceptance tests:
+
+“Donald Trump” option auto links to Trump celebrity ID → shows Trump avatar.
+
+A non-leaderboard option requires upload → shows uploaded avatar.
+
+Market avatar can be USA flag while options show candidate faces.
+
+Copy/paste message to Replit (use this verbatim)
+
+Subject: Fix Pack: Real-World Market detail page + seeding logic + edit + avatars (market + options)
+
+Message:
+
+Seed must drive displayed probabilities + pool + participants
+
+Outcomes % must be calculated from seedVolume + userVolume, not equal split.
+
+Total Pool must include seed: SUM(seedVolume) + SUM(userStakes).
+
+Participants must include seedCount either as separate “Seed participants” or combined (confirm which).
+
+Acceptance: if Yes seed=135 and No seed=49, show ~73/27, pool=184, seed participants visible.
+
+Dates are wrong (market shows ended + wrong close date)
+
+Ensure detail page + card display the correct field: closeDate/resolutionDate from admin.
+
+“Ended” should only show when market status is closed/resolved OR close date passed by rule.
+
+Acceptance: selecting Jun 30 2026 in admin must render Jun 30 2026 and not show “Ended”.
+
+Prediction UI on detail page
+
+If user clicks “No” on the card to open the market, pass /markets/:slug?pick=no and preselect No on the page.
+
+“Change” must allow switching between Yes/No (selector visible or toggled).
+
+Place Prediction button must enable when: market open + stake valid + user logged in; otherwise show clear reason (enter stake / sign in / market closed).
+
+Navigation
+
+Clicking card title (and avatar) must open /markets/:slug.
+
+Do NOT make whole card clickable (mobile accidental taps). Keep outcome buttons as prediction actions.
+
+Add a clear “View Market” CTA if needed.
+
+Card layout
+
+Standardize heights using header/body/footer structure + line clamp (title/teaser wrap).
+
+Multi-option card: show top 3 options + “+N more” to keep height consistent.
+
+Admin: add Edit
+
+Add Edit button per Real-World Market row to reopen modal and update market + entries.
+
+Avatars (bring back)
+We need both:
+
+Market main avatar (beside heading on card + detail page): choose celebrity OR upload.
+
+Outcome avatars (per option): auto-link to existing FameDex celebrity if matched/selected; otherwise require upload for that option.
+Multi markets: market avatar can be generic (e.g., USA flag) while options use candidate avatars.
+
+Add necessary fields:
+
+On market: marketAvatarType, marketAvatarCelebrityId, marketAvatarUrl
+
+On entries: linkedCelebrityId, optionAvatarUrl
+With validation: celebrity link disables upload and vice versa.
