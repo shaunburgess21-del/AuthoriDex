@@ -1,0 +1,107 @@
+Replit’s response is mostly reasonable, and the direction of the build (a real, explicit engine-health endpoint + admin banner) is exactly what you want. But there are still a couple of important “gotchas” in how they’re framing things.
+
+Where Replit is right (and it matters)
+
+“14 snapshots + 13-hour gap” wasn’t impossible, just ambiguous
+If your system backfills missed hours (writing multiple “hour buckets” in one wall-clock hour), then you can have “14 snapshots in last 24h” while also having a long period where the server was down. That’s fine—but the health report must explicitly distinguish:
+
+wall-clock downtime vs
+
+backfilled hour-buckets written later
+
+“Ingestion running but last snapshot is old” can be normal
+If snapshots only get written at the end of the ingestion cycle, then “ingest started 10:26” + “last snapshot 20:00 yesterday” can happen if the run hasn’t completed yet. That’s a legit design, but the health panel should show ingestion stage + ETA-ish signals (progress per source, last source completed, etc.) so it doesn’t look broken.
+
+The admin “freshness banner” is a big practical win
+Just being able to see “Last successful snapshot / last successful ingestion / last errors” saves you hours.
+
+Where Replit is still hand-waving a bit
+1) “Dev env caused the offline gap, so it’s not a real problem”
+
+It’s true that dev servers go down. But the system still needs to behave predictably when it happens (and dev is where you find these edge cases).
+So: not a “production flaw,” but absolutely worth treating as a resilience test.
+
+2) “No evidence of concurrent runs”
+
+You’ve already seen behavior consistent with overlapping ingests (timeouts, restarts, “two concurrent runs”, empty tables during rebuild, etc.). Even if the 200–300 snapshot hours were intended catch-up, you still want a hard guarantee that two full ingestions can’t run at once.
+
+My view: add a lock anyway. It’s cheap insurance. If you never need it, great. If you do, it prevents the worst failure mode (partial writes, empty trending_people, inconsistent “current run”).
+
+3) “You can’t do spot checks because EMA / history”
+
+You can’t recompute the final score from a single snapshot, agreed.
+
+But you can do useful spot checks without re-running the whole historical chain, for example:
+
+verify component normalization outputs are within expected ranges (per source z-scores / percentiles)
+
+verify score monotonicity with respect to components (if wiki/news/search increases materially, score should usually not decrease absent smoothing quirks)
+
+verify EMA state exists and isn’t reset (e.g., confirm the “state tables” or persisted rolling baselines are being updated and are non-null / recent)
+
+So Replit’s point is fair, but it shouldn’t be used to dismiss validation—just choose validations that match the architecture.
+
+Thoughts on the build itself (engine-health endpoint + UI)
+
+This is the right move if the endpoint reports the right primitives clearly:
+
+Make sure the endpoint exposes these fields (non-negotiable)
+
+Last successful ingestion finish time (not just “running”)
+
+Last snapshot created time
+
+Last time leaderboard was populated (trending_people count + last_update)
+
+Gap + backfill separation
+
+max_wall_clock_gap_minutes
+
+backfilled_hours_last_24h
+
+hours_missing_before_backfill (if you track it)
+
+Overlapping run detection
+
+runs_started_last_24h
+
+overlaps_detected_last_24h
+
+lock_acquire_failures
+
+Source health
+
+last success per source
+
+last error per source
+
+rate-limit counts (esp. GDELT)
+
+cache hit rate if relevant
+
+One concern: “it’s solid but we can’t test it”
+
+If the endpoint is admin-auth-only (good), you still want a minimal internal test harness:
+
+a server-side test (unit/integration) that hits the endpoint with a mocked auth context, OR
+
+a CLI script that can run with service role credentials in dev
+
+Otherwise you’ll keep shipping blind and “it compiles” will be mistaken for “it works.”
+
+What I’d do next (very small, very high impact)
+
+Add an ingestion_runs table (or log record)
+Store: run_id, started_at, finished_at, status, error_summary, snapshots_written, people_processed, per-source timings.
+This makes health checks factual instead of inferential.
+
+Add a DB-backed lock for ingestion
+Even if you believe it never overlaps—this prevents “empty trending_people during rebuild” type incidents.
+
+Show 3 simple red/yellow/green badges in admin
+
+“Freshness” (last snapshot age)
+
+“Continuity” (max gap / backfill count)
+
+“Integrity” (people count = 100, rank integrity, null checks)
