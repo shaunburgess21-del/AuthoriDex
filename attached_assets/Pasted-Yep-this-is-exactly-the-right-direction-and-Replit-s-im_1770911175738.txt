@@ -1,0 +1,42 @@
+Yep — this is exactly the right direction, and Replit’s implementation sounds correct (including catching the Express route-shadowing issue).
+
+What Replit did right ✅
+
+1) Server becomes the single source of truth
+Moving Hot Movers eligibility into /api/trending/hot-movers is the cleanest “no-regression” fix. The client can no longer accidentally re-include Cooling if someone later changes UI logic.
+
+2) Pre-decorated response
+Returning people already decorated with {label, color, description} is ideal. It keeps the client dumb and consistent.
+
+3) Correct separation of concerns
+
+Leaderboard can keep its richer badge system (including Cooling) because it’s a diagnostic surface.
+
+Hot Movers stays strictly “hot” (Breakout/Surging only).
+
+4) Route ordering fix
+The Express “/api/trending/:id catches hot-movers” issue is real and common. Moving the explicit route above the param route is the right fix.
+
+Two things I’d sanity-check (quickly) so you don’t get surprised later
+
+A) Threshold parity
+Make sure the server endpoint computes thresholds from the same “full set” as the leaderboard does (all 100), not from a filtered movers list. If it’s truly scanning the full leaderboard dataset, great.
+
+B) Badge inflation
+Because Hot Movers is now “exceptional-only”, you want it to rarely be empty but never be noisy. Your earlier rule of thumb (≈5–15% of the list having badges) is a good target. If Hot Movers is empty too often, loosen percentile slightly; if it’s always full, tighten.
+
+Small UX polish that pairs perfectly with this change
+
+Since Hot Movers can now be empty on quiet days, make sure the empty state is crisp:
+
+“No exceptional movement right now”
+
+A button: View full leaderboard
+
+Optional: “Last updated: 12:02” (builds trust)
+
+Bottom line
+
+Replit’s Option A build is the “bulletproof” architecture you want. The app will feel more consistent, and you’ve eliminated an entire category of UI mismatch bugs.
+
+If you want, paste the JSON shape returned by /api/trending/hot-movers (a single example item) and I’ll tell you if it’s missing any fields that will matter later (timestamps, driver source, link targets, etc.).
