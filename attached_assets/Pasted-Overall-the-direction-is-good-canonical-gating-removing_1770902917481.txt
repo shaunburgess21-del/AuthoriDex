@@ -1,0 +1,136 @@
+Overall: the direction is good (canonical gating + removing Cooling from Hot Movers), but I’d be a bit careful about merging the badges and deleting Cooling globally the way Replit implemented it.
+
+Here’s my take, point by point.
+
+✅ #1 Canonical “Why Trending” fix — excellent
+
+Replit did the right fix: stop depending on /movers/daily to decide whether the profile should show the Why Trending card.
+
+Two key wins:
+
+Same dataset + same thresholds as the homepage/leaderboard → no more “badge on board but no card on profile”.
+
+Using the same TanStack Query cache key for the “thresholds-full” leaderboard dataset is smart (fast + consistent).
+
+One extra thing I’d still ask them to confirm:
+
+If the AI summary is “generated on demand”, make sure it doesn’t silently fail when the person is eligible but the summary hasn’t been generated yet. Ideally you want:
+
+Loading state
+
+Retry
+
+Friendly fallback (“Generating summary… check back in a few seconds”)
+
+But conceptually: this fix is correct and scalable.
+
+✅ #2 Cooling removed from Hot Movers — agree
+
+This is consistent with your product language.
+
+Hot Movers should be about:
+
+“something is happening”
+
+“gaining attention”
+
+“opportunity to explore why”
+
+Cooling is the opposite.
+
+So removing Cooling from Hot Movers eligibility and from the “Why Trending” trigger makes sense.
+
+However…
+
+⚠️ I wouldn’t necessarily delete Cooling everywhere
+
+Replit’s implementation sounds like they removed Cooling from the badge system entirely (“no badge or trigger the card”). That might be too blunt.
+
+Cooling can still be useful on the main leaderboard as a subtle indicator (not “hot”), because:
+
+it provides contrast and “story”
+
+it makes the system feel alive (things go up and down)
+
+it’s still informative for power users
+
+The clean compromise:
+
+Cooling stays as a leaderboard badge (optional/subtle)
+
+Cooling does NOT appear in Hot Movers
+
+Cooling does NOT trigger Why Trending
+
+That preserves signal without breaking your “Hot Movers” promise.
+
+⚠️ #3 Merging Spiking + Rising into Surging — good UX, but check for “loss of meaning”
+
+I agree with the motivation: users won’t naturally internalize three similar labels.
+
+But there’s a risk:
+
+“Surging” becomes a bucket that includes two very different realities:
+
+Score spike (true attention surge)
+
+Rank jump (relative movement)
+
+Replit says they’ll show “driver shown in tooltip” — that helps. But I’d insist on one extra tweak:
+
+Make “Surging” visibly two subtypes (without adding new badges)
+
+You can keep one label, but add a tiny cue:
+
+Surging · Score (or a small ⚡ icon)
+
+Surging · Rank (or a small ↗ icon)
+
+Even if it’s only inside the tooltip (or as a mini pill), it prevents “Surging” from feeling vague.
+
+Also: merging should not change the underlying logic in a way that suddenly makes too many people qualify. Watch for badge inflation. If half the board is “Surging”, the badge loses value.
+
+Big potential issue: they changed the legend and the system, not just Hot Movers
+
+From your paste, it sounds like Replit:
+
+changed getExceptionalIndicator globally,
+
+updated the homepage legend,
+
+removed Cooling globally.
+
+That’s a product decision, not just a “Hot Movers cleanup”.
+
+If your goal was specifically: Hot Movers should correlate perfectly with leaderboard badges and Why Trending should always show when it should…
+…then the minimal change would have been:
+
+Fix #1 canonical gating ✅
+
+Remove Cooling only from Hot Movers ✅
+
+Leave the rest alone until you decide.
+
+So: if you’re happy with a simpler 2-badge system, fine — but recognize that you’ve just changed your product vocabulary everywhere, not just in one widget.
+
+What I’d do next (quick sanity checklist)
+
+Confirm correlation:
+
+If someone appears in Hot Movers, they must have the same badge on the leaderboard (still true).
+
+Badge distribution check:
+
+What % of the top 100 now show “Surging”?
+
+If it’s >15–20% consistently, thresholds might be too loose.
+
+Cooling decision:
+
+Decide explicitly: do you want Cooling on leaderboard or not?
+
+If yes: keep it there, just exclude it from Hot Movers + Why Trending triggers.
+
+Why Trending loading fallback:
+
+Ensure summary generation failures are visible and recoverable.
