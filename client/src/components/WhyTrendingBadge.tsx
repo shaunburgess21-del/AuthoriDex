@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { type TrendContext } from "@/hooks/useTrendContext";
 import { AlertCircle, Circle, CheckCircle2 } from "lucide-react";
 
@@ -119,31 +119,30 @@ export function WhyTrendingBadge({
   const sizeClass = size === "sm" ? "text-[10px] px-1.5 py-0.5" : "text-xs";
   
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex cursor-help" data-testid="tooltip-trigger-why-trending">
-          <Badge 
-            variant="outline" 
-            className={`${sizeClass} whitespace-nowrap ${getBadgeStyle()} ${
-              staleStatus.hasStale && staleStatus.staleSources.length >= 3 ? "opacity-80" : ""
-            }`}
-            data-testid="badge-why-trending"
-          >
-            <span className="flex items-center gap-1">
-              {badgeContent}
-              {staleStatus.hasStale && staleStatus.staleSources.length >= 3 && (
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
-                </span>
-              )}
-            </span>
-          </Badge>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-xs">
-        {tooltipContent}
-      </TooltipContent>
-    </Tooltip>
+    <TouchTooltip
+      content={tooltipContent}
+      side="top"
+      className="max-w-xs"
+    >
+      <span className="inline-flex cursor-help" data-testid="tooltip-trigger-why-trending">
+        <Badge 
+          variant="outline" 
+          className={`${sizeClass} whitespace-nowrap ${getBadgeStyle()} ${
+            staleStatus.hasStale && staleStatus.staleSources.length >= 3 ? "opacity-80" : ""
+          }`}
+          data-testid="badge-why-trending"
+        >
+          <span className="flex items-center gap-1">
+            {badgeContent}
+            {staleStatus.hasStale && staleStatus.staleSources.length >= 3 && (
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
+              </span>
+            )}
+          </span>
+        </Badge>
+      </span>
+    </TouchTooltip>
   );
 }

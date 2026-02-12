@@ -2,7 +2,7 @@ import { TrendingPerson } from "@shared/schema";
 import { PersonAvatar } from "./PersonAvatar";
 import { RankBadge } from "./RankBadge";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { useState, useEffect, useRef } from "react";
 import { compactNumber, formatDelta, compactVotes } from "@/lib/formatNumber";
 import { ThumbsUp, Rocket, Zap, TrendingUp, TrendingDown, Flame } from "lucide-react";
@@ -208,19 +208,22 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               {person.name}
             </h3>
             {exceptional && ExceptionalIcon && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex cursor-help" data-testid={`indicator-${exceptional.label.toLowerCase()}-${person.id}`}>
-                    <ExceptionalIcon className={`h-3.5 w-3.5 shrink-0 ${exceptional.color}`} />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-[220px] text-center">
-                  <p className="font-semibold text-xs">{exceptional.label} — {exceptional.description.split('\n')[0]}</p>
-                  {exceptional.description.includes('\n') && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">{exceptional.description.split('\n')[1]}</p>
-                  )}
-                </TooltipContent>
-              </Tooltip>
+              <TouchTooltip
+                content={
+                  <>
+                    <p className="font-semibold text-xs">{exceptional.label} — {exceptional.description.split('\n')[0]}</p>
+                    {exceptional.description.includes('\n') && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">{exceptional.description.split('\n')[1]}</p>
+                    )}
+                  </>
+                }
+                side="top"
+                className="max-w-[220px] text-center"
+              >
+                <span className="inline-flex cursor-help" data-testid={`indicator-${exceptional.label.toLowerCase()}-${person.id}`}>
+                  <ExceptionalIcon className={`h-3.5 w-3.5 shrink-0 ${exceptional.color}`} />
+                </span>
+              </TouchTooltip>
             )}
           </div>
           {person.category && (
@@ -284,30 +287,26 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               </div>
             )}
             <div className="hidden md:block text-center min-w-[80px]">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <p className="font-mono font-semibold text-lg cursor-help" data-testid={`sentiment-score-${person.id}`}>
-                    {person.approvalPct != null ? (
-                      <>
-                        <span
-                          className="text-[22px]"
-                          style={{ color: getApprovalColor(person.approvalPct) }}
-                        >
-                          {Math.round(person.approvalPct)}
-                        </span>
-                        <span className="text-muted-foreground text-[22px] translate-y-[0.5px]">%</span>
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </p>
-                </TooltipTrigger>
-                {person.approvalPct != null && (
-                  <TooltipContent>
-                    {person.name} has a {Math.round(person.approvalPct)}% approval rating from community votes
-                  </TooltipContent>
-                )}
-              </Tooltip>
+              <TouchTooltip
+                content={person.approvalPct != null ? `${person.name} has a ${Math.round(person.approvalPct)}% approval rating from community votes` : "No votes yet"}
+                side="top"
+              >
+                <p className="font-mono font-semibold text-lg cursor-help" data-testid={`sentiment-score-${person.id}`}>
+                  {person.approvalPct != null ? (
+                    <>
+                      <span
+                        className="text-[22px]"
+                        style={{ color: getApprovalColor(person.approvalPct) }}
+                      >
+                        {Math.round(person.approvalPct)}
+                      </span>
+                      <span className="text-muted-foreground text-[22px] translate-y-[0.5px]">%</span>
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </p>
+              </TouchTooltip>
               <p className="text-xs text-muted-foreground uppercase tracking-wide translate-y-[0.5px]">
                 Approval Rating
               </p>
@@ -344,28 +343,26 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
         {activeTab === "approval" && (
           <>
             <div className="text-right hidden sm:block">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <p className="font-mono font-semibold text-lg cursor-help">
-                    {person.approvalPct != null ? (
-                      <>
-                        <span
-                          className="font-bold text-[22px]"
-                          style={{ color: getApprovalColor(person.approvalPct) }}
-                        >
-                          {Math.round(person.approvalPct)}
-                        </span>
-                        <span className="text-muted-foreground text-[22px]">%</span>
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </p>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {person.name}'s approval rating from community votes
-                </TooltipContent>
-              </Tooltip>
+              <TouchTooltip
+                content={`${person.name}'s approval rating from community votes`}
+                side="top"
+              >
+                <p className="font-mono font-semibold text-lg cursor-help">
+                  {person.approvalPct != null ? (
+                    <>
+                      <span
+                        className="font-bold text-[22px]"
+                        style={{ color: getApprovalColor(person.approvalPct) }}
+                      >
+                        {Math.round(person.approvalPct)}
+                      </span>
+                      <span className="text-muted-foreground text-[22px]">%</span>
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </p>
+              </TouchTooltip>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">
                 Approval Rating
               </p>

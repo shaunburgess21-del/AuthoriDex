@@ -13,7 +13,7 @@ import { TrendingNowFeed } from "@/components/TrendingNowFeed";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip as UITooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Rocket, Flame } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
@@ -864,29 +864,27 @@ export default function HomePage() {
                     <div className="flex-1">
                       <CardTitle className="text-2xl font-serif">Leaderboards</CardTitle>
                       <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap" data-testid="text-leaderboard-freshness">
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-1 cursor-help">
-                              <Zap className="h-3 w-3 text-green-400" />
-                              <span>Live: {systemFreshness?.liveUpdatedAtFormatted || "pending"}</span>
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="text-xs max-w-[240px]">
-                            <p>Fast-lane updates every 10 min using votes and profile views (no external API calls).</p>
-                          </TooltipContent>
-                        </UITooltip>
+                        <TouchTooltip
+                          content={<p>Fast-lane updates every 10 min using votes and profile views (no external API calls).</p>}
+                          side="bottom"
+                          className="text-xs max-w-[240px]"
+                        >
+                          <span className="inline-flex items-center gap-1 cursor-help">
+                            <Zap className="h-3 w-3 text-green-400" />
+                            <span>Live: {systemFreshness?.liveUpdatedAtFormatted || "pending"}</span>
+                          </span>
+                        </TouchTooltip>
                         <span className="text-muted-foreground/40">|</span>
-                        <UITooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-1 cursor-help">
-                              <RefreshCw className="h-3 w-3" />
-                              <span>Full: {systemFreshness?.fullRefreshAtFormatted || systemFreshness?.lastScoredAtFormatted || "recently"}</span>
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="text-xs max-w-[240px]">
-                            <p>Full data refresh from Wikipedia, GDELT, and Google using external APIs.</p>
-                          </TooltipContent>
-                        </UITooltip>
+                        <TouchTooltip
+                          content={<p>Full data refresh from Wikipedia, GDELT, and Google using external APIs.</p>}
+                          side="bottom"
+                          className="text-xs max-w-[240px]"
+                        >
+                          <span className="inline-flex items-center gap-1 cursor-help">
+                            <RefreshCw className="h-3 w-3" />
+                            <span>Full: {systemFreshness?.fullRefreshAtFormatted || systemFreshness?.lastScoredAtFormatted || "recently"}</span>
+                          </span>
+                        </TouchTooltip>
                       </div>
                     </div>
                     <div className="flex gap-2 flex-wrap">
@@ -984,39 +982,24 @@ export default function HomePage() {
                   </div>
                   {leaderboardTab === "fame" && percentileThresholds && (
                     <div className="px-4 sm:px-6 py-2.5 border-b bg-muted/20 flex items-center gap-4 flex-wrap text-[11px] text-muted-foreground" data-testid="indicator-legend">
-                      <UITooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-breakout">
-                            <Rocket className="h-3 w-3 text-orange-400" />
-                            Breakout
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs max-w-[200px]">
-                          Big score surge combined with a major rank jump
-                        </TooltipContent>
-                      </UITooltip>
-                      <UITooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-surging">
-                            <Flame className="h-3 w-3 text-yellow-400" />
-                            Surging
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs max-w-[200px]">
-                          Top percentile score spike or rank jump in the last 24 hours
-                        </TooltipContent>
-                      </UITooltip>
-                      <UITooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex items-center gap-1 cursor-help opacity-80" data-testid="legend-cooling">
-                            <TrendingDown className="h-3 w-3 text-blue-400/60" />
-                            Cooling
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs max-w-[200px]">
-                          Fading momentum or dropping in rank
-                        </TooltipContent>
-                      </UITooltip>
+                      <TouchTooltip content="Big score surge combined with a major rank jump" side="bottom" className="text-xs max-w-[200px]">
+                        <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-breakout">
+                          <Rocket className="h-3 w-3 text-orange-400" />
+                          Breakout
+                        </span>
+                      </TouchTooltip>
+                      <TouchTooltip content="Top percentile score spike or rank jump in the last 24 hours" side="bottom" className="text-xs max-w-[200px]">
+                        <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-surging">
+                          <Flame className="h-3 w-3 text-yellow-400" />
+                          Surging
+                        </span>
+                      </TouchTooltip>
+                      <TouchTooltip content="Fading momentum or dropping in rank" side="bottom" className="text-xs max-w-[200px]">
+                        <span className="inline-flex items-center gap-1 cursor-help opacity-80" data-testid="legend-cooling">
+                          <TrendingDown className="h-3 w-3 text-blue-400/60" />
+                          Cooling
+                        </span>
+                      </TouchTooltip>
                     </div>
                   )}
                   {showVoteTip && (
