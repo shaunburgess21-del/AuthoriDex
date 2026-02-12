@@ -3125,6 +3125,206 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   };
   
+  // Engine Health Diagnostics - comprehensive snapshot/ingestion health check
+  app.get("/api/admin/engine-health", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const now = new Date();
+      const h48Ago = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+      // 1. Snapshot cadence: hourly buckets for last 48h
+      const hourlyBuckets = await db.execute(sql`
+        SELECT 
+          date_trunc('hour', timestamp) as hour,
+          COUNT(*)::int as count,
+          COUNT(DISTINCT person_id)::int as unique_people,
+          MAX(snapshot_origin) as origin
+        FROM trend_snapshots
+        WHERE timestamp > ${h48Ago}
+        GROUP BY date_trunc('hour', timestamp)
+        ORDER BY hour DESC
+      `);
+
+      // 2. Latest snapshot and gap detection
+      const latestSnapshotRow = await db.execute(sql`
+        SELECT MAX(timestamp) as latest FROM trend_snapshots
+      `);
+      const latestSnapshot = latestSnapshotRow.rows?.[0]?.latest as string | null;
+
+      // 3. People coverage
+      const coverageRow = await db.execute(sql`
+        SELECT 
+          (SELECT COUNT(*)::int FROM tracked_people) as tracked,
+          (SELECT COUNT(*)::int FROM trending_people) as trending,
+          (SELECT COUNT(*)::int FROM trending_people WHERE fame_index > 0) as with_score
+      `);
+      const coverage = coverageRow.rows?.[0] || { tracked: 0, trending: 0, with_score: 0 };
+
+      // 4. Fame score distribution
+      const distRow = await db.execute(sql`
+        SELECT 
+          MIN(fame_index)::int as min_fame,
+          MAX(fame_index)::int as max_fame,
+          ROUND(AVG(fame_index))::int as avg_fame,
+          ROUND(STDDEV(fame_index))::int as stddev_fame,
+          ROUND(PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY fame_index))::int as median_fame
+        FROM trending_people
+        WHERE fame_index > 0
+      `);
+      const distribution = distRow.rows?.[0] || {};
+
+      // 5. Signal quality for latest snapshot batch
+      const signalRow = await db.execute(sql`
+        SELECT 
+          SUM(CASE WHEN wiki_pageviews = 0 OR wiki_pageviews IS NULL THEN 1 ELSE 0 END)::int as zero_wiki,
+          SUM(CASE WHEN news_count = 0 OR news_count IS NULL THEN 1 ELSE 0 END)::int as zero_news,
+          SUM(CASE WHEN search_volume = 0 OR search_volume IS NULL THEN 1 ELSE 0 END)::int as zero_search,
+          ROUND(AVG(confidence)::numeric, 2) as avg_confidence,
+          COUNT(*)::int as batch_size
+        FROM trend_snapshots
+        WHERE timestamp = (SELECT MAX(timestamp) FROM trend_snapshots)
+      `);
+      const signals = signalRow.rows?.[0] || {};
+
+      // 6. Source stats reference freshness
+      const refRow = await db.execute(sql`
+        SELECT fetched_at, expires_at
+        FROM api_cache 
+        WHERE cache_key = 'system:source_stats_reference'
+        LIMIT 1
+      `);
+      const sourceStatsRef = (refRow.rows?.[0] as { fetched_at: string; expires_at: string } | undefined) || null;
+
+      // 7. Spot-check: verify rank ordering matches fame_index (pick 5 random)
+      const spotCheckRows = await db.execute(sql`
+        SELECT name, fame_index, rank
+        FROM trending_people
+        ORDER BY RANDOM()
+        LIMIT 5
+      `);
+      const allRanked = await db.execute(sql`
+        SELECT name, fame_index, rank
+        FROM trending_people
+        ORDER BY fame_index DESC NULLS LAST
+      `);
+      
+      // Verify rank ordering is consistent
+      let rankOrderCorrect = true;
+      let rankIssues: string[] = [];
+      const rankedPeople = allRanked.rows || [];
+      for (let i = 0; i < rankedPeople.length; i++) {
+        const expectedRank = i + 1;
+        if (Number(rankedPeople[i].rank) !== expectedRank) {
+          rankOrderCorrect = false;
+          rankIssues.push(`${rankedPeople[i].name}: has rank ${rankedPeople[i].rank}, expected ${expectedRank}`);
+        }
+      }
+
+      // 8. Compute gaps from hourly buckets
+      const buckets = (hourlyBuckets.rows || []).map((r: any) => new Date(r.hour).getTime()).sort((a: number, b: number) => a - b);
+      let maxGapMinutes = 0;
+      let gapsOver2h = 0;
+      const gapDetails: { from: string; to: string; gapMinutes: number }[] = [];
+      for (let i = 1; i < buckets.length; i++) {
+        const gap = (buckets[i] - buckets[i - 1]) / (1000 * 60);
+        if (gap > maxGapMinutes) maxGapMinutes = gap;
+        if (gap > 120) {
+          gapsOver2h++;
+          gapDetails.push({
+            from: new Date(buckets[i - 1]).toISOString(),
+            to: new Date(buckets[i]).toISOString(),
+            gapMinutes: Math.round(gap),
+          });
+        }
+      }
+
+      // 9. Detect backfilled hours (hours with >100 snapshots for 100 people)
+      const backfilledHours = (hourlyBuckets.rows || [])
+        .filter((r: any) => Number(r.count) > Number(coverage.tracked || 100))
+        .map((r: any) => ({
+          hour: new Date(r.hour).toISOString(),
+          count: Number(r.count),
+          expectedCount: Number(coverage.tracked || 100),
+        }));
+
+      // 10. Minutes since last snapshot
+      const minutesSinceLastSnapshot = latestSnapshot 
+        ? Math.round((now.getTime() - new Date(latestSnapshot).getTime()) / (1000 * 60))
+        : null;
+
+      res.json({
+        timestamp: now.toISOString(),
+        window: {
+          start: h48Ago.toISOString(),
+          end: now.toISOString(),
+          timezone: "UTC",
+        },
+        ingestion: {
+          lastSnapshotAt: latestSnapshot ? new Date(latestSnapshot).toISOString() : null,
+          minutesSinceLastSnapshot,
+          status: minutesSinceLastSnapshot !== null 
+            ? minutesSinceLastSnapshot < 90 ? "fresh" 
+            : minutesSinceLastSnapshot < 180 ? "aging" 
+            : "stale"
+            : "unknown",
+          totalHoursWithData: buckets.length,
+        },
+        coverage: {
+          trackedPeople: Number(coverage.tracked),
+          trendingPeople: Number(coverage.trending),
+          withFameScore: Number(coverage.with_score),
+          allHaveScores: Number(coverage.trending) === Number(coverage.with_score),
+        },
+        gaps: {
+          maxGapMinutes: Math.round(maxGapMinutes),
+          gapsOver2hCount: gapsOver2h,
+          gapDetails: gapDetails.slice(0, 5),
+        },
+        backfill: {
+          backfilledHoursCount: backfilledHours.length,
+          backfilledHours: backfilledHours.slice(0, 5),
+        },
+        fameDistribution: {
+          min: Number(distribution.min_fame || 0),
+          max: Number(distribution.max_fame || 0),
+          average: Number(distribution.avg_fame || 0),
+          median: Number(distribution.median_fame || 0),
+          stddev: Number(distribution.stddev_fame || 0),
+        },
+        signalQuality: {
+          batchSize: Number(signals.batch_size || 0),
+          zeroWiki: Number(signals.zero_wiki || 0),
+          zeroNews: Number(signals.zero_news || 0),
+          zeroSearch: Number(signals.zero_search || 0),
+          avgConfidence: Number(signals.avg_confidence || 0),
+        },
+        sourceStatsReference: sourceStatsRef ? {
+          lastComputed: new Date(sourceStatsRef.fetched_at).toISOString(),
+          expiresAt: new Date(sourceStatsRef.expires_at).toISOString(),
+          minutesSinceComputed: Math.round((now.getTime() - new Date(sourceStatsRef.fetched_at).getTime()) / (1000 * 60)),
+        } : null,
+        rankIntegrity: {
+          isCorrect: rankOrderCorrect,
+          issueCount: rankIssues.length,
+          issues: rankIssues.slice(0, 5),
+        },
+        spotCheck: (spotCheckRows.rows || []).map((r: any) => ({
+          name: r.name,
+          fameIndex: Number(r.fame_index),
+          rank: Number(r.rank),
+        })),
+        hourlyBreakdown: (hourlyBuckets.rows || []).slice(0, 24).map((r: any) => ({
+          hour: new Date(r.hour).toISOString(),
+          snapshotCount: Number(r.count),
+          uniquePeople: Number(r.unique_people),
+          origin: r.origin,
+        })),
+      });
+    } catch (error: any) {
+      console.error("Error fetching engine health:", error.message);
+      res.status(500).json({ error: "Failed to fetch engine health diagnostics" });
+    }
+  });
+
   // Get admin stats
   app.get("/api/admin/stats", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {

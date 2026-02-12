@@ -1037,6 +1037,18 @@ export default function AdminDashboard() {
     enabled: isAdmin && activeSection === "moderation",
   });
 
+  // Fetch engine health diagnostics - only on tools section
+  const { data: engineHealth, isLoading: engineHealthLoading, refetch: refetchEngineHealth } = useQuery<any>({
+    queryKey: ["/api/admin/engine-health"],
+    queryFn: async () => {
+      const res = await fetchWithAuth("/api/admin/engine-health");
+      if (!res.ok) throw new Error("Failed to fetch engine health");
+      return res.json();
+    },
+    enabled: isAdmin && activeSection === "tools",
+    refetchInterval: 60000,
+  });
+
   const settleMarket = settleMarketId ? markets?.find(m => m.id === settleMarketId) : null;
   const { data: settleMarketDetail } = useQuery<{ entries: { id: string; label: string; totalStake: number }[] }>({
     queryKey: ["/api/open-markets", settleMarket?.slug],
@@ -3027,10 +3039,247 @@ export default function AdminDashboard() {
         {/* System Tools Section */}
         {activeSection === "tools" && (
           <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold">System Tools</h2>
-              <p className="text-muted-foreground">Control data pipelines and scoring engine</p>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h2 className="text-2xl font-bold">System Tools</h2>
+                <p className="text-muted-foreground">Control data pipelines and scoring engine</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetchEngineHealth()}
+                disabled={engineHealthLoading}
+                data-testid="button-refresh-engine-health"
+              >
+                {engineHealthLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                Refresh Health
+              </Button>
             </div>
+
+            {engineHealth && (
+              <Card data-testid="card-engine-health">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-cyan-500" />
+                    Engine Health Dashboard
+                  </CardTitle>
+                  <CardDescription>Real-time trend score engine diagnostics</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="p-3 rounded-lg border">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className={cn("h-2.5 w-2.5 rounded-full", 
+                          engineHealth.ingestion?.status === "fresh" ? "bg-green-500" :
+                          engineHealth.ingestion?.status === "aging" ? "bg-yellow-500" :
+                          engineHealth.ingestion?.status === "stale" ? "bg-red-500" : "bg-gray-500"
+                        )} />
+                        <span className="text-xs font-medium text-muted-foreground">Last Snapshot</span>
+                      </div>
+                      <div className="text-lg font-bold" data-testid="text-last-snapshot">
+                        {engineHealth.ingestion?.minutesSinceLastSnapshot != null
+                          ? engineHealth.ingestion.minutesSinceLastSnapshot < 60
+                            ? `${engineHealth.ingestion.minutesSinceLastSnapshot}m ago`
+                            : `${Math.round(engineHealth.ingestion.minutesSinceLastSnapshot / 60)}h ago`
+                          : "N/A"}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {engineHealth.ingestion?.lastSnapshotAt
+                          ? new Date(engineHealth.ingestion.lastSnapshotAt).toLocaleString()
+                          : "Unknown"}
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-lg border">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className={cn("h-2.5 w-2.5 rounded-full",
+                          engineHealth.coverage?.allHaveScores ? "bg-green-500" : "bg-yellow-500"
+                        )} />
+                        <span className="text-xs font-medium text-muted-foreground">People Coverage</span>
+                      </div>
+                      <div className="text-lg font-bold" data-testid="text-people-coverage">
+                        {engineHealth.coverage?.withFameScore || 0}/{engineHealth.coverage?.trackedPeople || 0}
+                      </div>
+                      <p className="text-xs text-muted-foreground">with fame scores</p>
+                    </div>
+
+                    <div className="p-3 rounded-lg border">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className={cn("h-2.5 w-2.5 rounded-full",
+                          engineHealth.gaps?.gapsOver2hCount === 0 ? "bg-green-500" :
+                          engineHealth.gaps?.gapsOver2hCount <= 2 ? "bg-yellow-500" : "bg-red-500"
+                        )} />
+                        <span className="text-xs font-medium text-muted-foreground">Snapshot Gaps</span>
+                      </div>
+                      <div className="text-lg font-bold" data-testid="text-gap-count">
+                        {engineHealth.gaps?.gapsOver2hCount || 0}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        gaps &gt;2h (max: {engineHealth.gaps?.maxGapMinutes ? `${Math.round(engineHealth.gaps.maxGapMinutes / 60)}h` : "0h"})
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-lg border">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className={cn("h-2.5 w-2.5 rounded-full",
+                          engineHealth.rankIntegrity?.isCorrect ? "bg-green-500" : "bg-red-500"
+                        )} />
+                        <span className="text-xs font-medium text-muted-foreground">Rank Integrity</span>
+                      </div>
+                      <div className="text-lg font-bold" data-testid="text-rank-integrity">
+                        {engineHealth.rankIntegrity?.isCorrect ? "Valid" : `${engineHealth.rankIntegrity?.issueCount} issues`}
+                      </div>
+                      <p className="text-xs text-muted-foreground">fame_index vs rank order</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="p-3 rounded-lg border">
+                      <span className="text-xs font-medium text-muted-foreground">Signal Quality (latest batch)</span>
+                      <div className="mt-2 space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span>Batch size</span>
+                          <span className="font-medium">{engineHealth.signalQuality?.batchSize || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Zero wiki</span>
+                          <span className={cn("font-medium", (engineHealth.signalQuality?.zeroWiki || 0) > 0 ? "text-yellow-500" : "text-green-500")}>
+                            {engineHealth.signalQuality?.zeroWiki || 0}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Zero news</span>
+                          <span className={cn("font-medium", (engineHealth.signalQuality?.zeroNews || 0) > 20 ? "text-red-500" : (engineHealth.signalQuality?.zeroNews || 0) > 10 ? "text-yellow-500" : "text-muted-foreground")}>
+                            {engineHealth.signalQuality?.zeroNews || 0}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Zero search</span>
+                          <span className={cn("font-medium", (engineHealth.signalQuality?.zeroSearch || 0) > 0 ? "text-yellow-500" : "text-green-500")}>
+                            {engineHealth.signalQuality?.zeroSearch || 0}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Avg confidence</span>
+                          <span className={cn("font-medium", (engineHealth.signalQuality?.avgConfidence || 0) >= 0.8 ? "text-green-500" : "text-yellow-500")}>
+                            {engineHealth.signalQuality?.avgConfidence || 0}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-lg border">
+                      <span className="text-xs font-medium text-muted-foreground">Fame Distribution</span>
+                      <div className="mt-2 space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span>Range</span>
+                          <span className="font-medium">{(engineHealth.fameDistribution?.min || 0).toLocaleString()} - {(engineHealth.fameDistribution?.max || 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Average</span>
+                          <span className="font-medium">{(engineHealth.fameDistribution?.average || 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Median</span>
+                          <span className="font-medium">{(engineHealth.fameDistribution?.median || 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Std Dev</span>
+                          <span className="font-medium">{(engineHealth.fameDistribution?.stddev || 0).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-lg border">
+                      <span className="text-xs font-medium text-muted-foreground">Reference Stats</span>
+                      <div className="mt-2 space-y-1 text-sm">
+                        {engineHealth.sourceStatsReference ? (
+                          <>
+                            <div className="flex justify-between">
+                              <span>Last computed</span>
+                              <span className="font-medium">
+                                {engineHealth.sourceStatsReference.minutesSinceComputed < 60
+                                  ? `${engineHealth.sourceStatsReference.minutesSinceComputed}m ago`
+                                  : `${Math.round(engineHealth.sourceStatsReference.minutesSinceComputed / 60)}h ago`}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Status</span>
+                              <Badge variant="outline" className="text-xs">
+                                {engineHealth.sourceStatsReference.minutesSinceComputed < 1440 ? "Current" : "Stale"}
+                              </Badge>
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No reference data found</p>
+                        )}
+                        {engineHealth.backfill?.backfilledHoursCount > 0 && (
+                          <div className="flex justify-between">
+                            <span>Backfilled hours</span>
+                            <Badge variant="outline" className="text-xs text-yellow-500">
+                              {engineHealth.backfill.backfilledHoursCount}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {engineHealth.gaps?.gapDetails?.length > 0 && (
+                    <div className="p-3 rounded-lg border border-yellow-500/30">
+                      <span className="text-xs font-medium text-yellow-500">Detected Gaps (&gt;2 hours)</span>
+                      <div className="mt-2 space-y-1">
+                        {engineHealth.gaps.gapDetails.map((gap: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">
+                              {new Date(gap.from).toLocaleString()} to {new Date(gap.to).toLocaleString()}
+                            </span>
+                            <Badge variant="outline" className="text-xs">{Math.round(gap.gapMinutes / 60)}h gap</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {!engineHealth.rankIntegrity?.isCorrect && engineHealth.rankIntegrity?.issues?.length > 0 && (
+                    <div className="p-3 rounded-lg border border-red-500/30">
+                      <span className="text-xs font-medium text-red-500">Rank Integrity Issues</span>
+                      <div className="mt-2 space-y-1">
+                        {engineHealth.rankIntegrity.issues.map((issue: string, i: number) => (
+                          <p key={i} className="text-xs text-muted-foreground">{issue}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-3 rounded-lg border">
+                    <span className="text-xs font-medium text-muted-foreground">Spot Check (random sample)</span>
+                    <div className="mt-2 space-y-1">
+                      {engineHealth.spotCheck?.map((person: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span>{person.name}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-muted-foreground">Fame: {person.fameIndex?.toLocaleString()}</span>
+                            <Badge variant="outline" className="text-xs">Rank #{person.rank}</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {engineHealthLoading && !engineHealth && (
+              <Card>
+                <CardContent className="py-8">
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    <span className="text-muted-foreground">Loading engine diagnostics...</span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Card>
