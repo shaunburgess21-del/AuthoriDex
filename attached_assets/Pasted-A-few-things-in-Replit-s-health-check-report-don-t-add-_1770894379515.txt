@@ -1,0 +1,124 @@
+A few things in Replit’s “health check report” don’t add up, and that’s worth fixing before you trust the conclusions.
+
+What looks inconsistent / suspicious in Replit’s report
+1) “Last 24 hours” + “13-hour gap” + “exactly 14 snapshots per person”
+
+Those three statements can’t all be true at the same time unless you’re doing catch-up snapshot backfilling (writing multiple “hourly” snapshots after the fact), or you’re counting a rolling 24h window that isn’t actually 24h of wall-clock time.
+
+If there truly was a 21:00 → 10:00 (~13h) gap, then “every person has exactly 14 snapshots in the last 24 hours” implies either:
+
+catch-up created snapshots for the missing hours, or
+
+snapshots are not hourly / window is miscomputed, or
+
+the “gap” claim is wrong.
+
+2) “Current ingestion started 10:26” but “everyone’s last snapshot is at 20:00 Feb 11”
+
+If ingestion is running Feb 12, you’d expect fresh snapshots around that time (unless snapshots are written only at the end, or disabled, or the run hasn’t completed). But Replit also says “it’s running right now.” Those need to be reconciled.
+
+3) “Some hours show 200–300 snapshots instead of expected 100”
+
+That strongly suggests concurrent runs or catch-up batching. Either is fine if intentional, but it also matches the earlier issue you saw: multiple ingests colliding / restarts interrupting.
+
+4) “CatchUp mode is OFF with exitStreak=0”
+
+Yet they describe catch-up behavior (200–300 snapshots in an hour). That could be a terminology mismatch (they’re inferring catch-up from counts) or the system is doing catch-up implicitly without flipping the flag.
+
+Bottom line: the system may be “working,” but the report is mixing signals. You want a health check that produces internally consistent facts.
+
+What I’d ask Replit to change in the health check (high ROI)
+A) Define a single “source of truth” for snapshot cadence
+
+Have the health check compute, for the last 48h:
+
+expected cadence (hourly? every N minutes?)
+
+actual cadence per hour bucket
+
+gap detection (largest gap, number of gaps > 2× cadence)
+
+whether missing periods were backfilled
+
+Key metric: max_gap_minutes and gaps_over_2x_cadence_count.
+
+B) Verify “latest snapshot time” vs “latest ingestion completion time”
+
+Add two timestamps:
+
+last_successful_ingestion_finished_at
+
+last_snapshot_created_at (max timestamp in trend_snapshots)
+
+And explicitly flag if:
+
+ingestion finished after last_snapshot_created_at (bad)
+
+ingestion is running but snapshots haven’t advanced for >X minutes (warn)
+
+C) Detect duplicate/concurrent ingestion
+
+You’ve already seen “two concurrent runs.” Put a hard guard:
+
+a DB-backed lock (advisory lock) or a single-row “job lock” table
+
+health check should show ingestion_lock_contention_events / overlapping_runs_last_24h
+
+D) Make windowing explicit (timezone + window definition)
+
+When they say “last 24 hours,” print:
+
+window start/end timestamps (with timezone)
+
+count of snapshots within that window
+
+count of distinct snapshot hours
+
+count of distinct people per hour
+
+This prevents “hand-wavy 24h” claims.
+
+What you should do next (practical, doesn’t require product changes)
+1) Fix the “server offline overnight” problem
+
+If the app server going down kills snapshots, the engine will always look flaky.
+
+run ingestion + snapshots from a separate scheduled worker (not the dev server / HMR)
+
+ensure the scheduler is reliable (cron on a real host, managed scheduler, etc.)
+
+2) Confirm snapshot writing strategy
+
+Decide one:
+
+Strict hourly snapshots: one per person per hour, no exceptions
+
+Event-driven snapshots: every ingestion writes snapshots; cadence may vary
+
+Then enforce it with:
+
+unique constraint that matches your intent
+(e.g. person_id + hour_bucket_timestamp) rather than person_id + exact timestamp
+
+3) Add a “data freshness banner” (internal-only)
+
+In your admin/dev view show:
+
+“Last snapshot: X minutes ago”
+
+“Last ingestion success: X minutes ago”
+
+“GDELT rate limited: yes/no, last error”
+This catches issues instantly without digging.
+
+About the “scores correct / nothing out of place” claim
+
+Replit’s “distribution looks healthy” is a weak proxy. A better correctness check is:
+
+recompute spot-check: pick 5 random people, recompute fame score from stored raw signals for the latest snapshot, compare to stored fame_index (within tolerance)
+
+rank stability sanity: confirm rank ordering matches fame_index ordering (no ties/NaNs/incorrect sort)
+
+driver sanity: if they claim “primary driver,” confirm driver corresponds to the largest normalized component for that person.
+
+If you want, paste (or screenshot) the actual queries / code Replit added for this “health check” and I’ll point out exactly where the inconsistencies are coming from and what to change.
