@@ -1,0 +1,78 @@
+This is a very good response + fix from Replit. They didn’t hand-wave it — they confirmed your two biggest real risks and then implemented the two correct structural remedies:
+
+What Replit just did right ✅
+1) Race-safe lock
+
+They moved from “check then insert” (race-prone) to a database-enforced guarantee via a unique partial index on status='running'.
+
+That’s one of the cleanest patterns because it’s:
+
+atomic (DB enforces it)
+
+simple to reason about
+
+resilient even if multiple processes start at the same millisecond
+
+As long as the code treats the unique-violation as “lock not acquired” (which they say it does), you’re protected.
+
+2) Heartbeat-based staleness
+
+This is the other big one. They replaced “30 minutes since start” with:
+
+heartbeat_at updated every 2 minutes
+
+stale only if no heartbeat for 10 minutes
+
+That’s the correct approach because it distinguishes:
+
+long ingest (slow but alive) ✅
+
+crashed/hung ingest ❌
+
+Also good: “scoped per run ID” prevents old timers from updating the wrong row.
+
+Two small follow-ups I’d still sanity-check (quick, but important)
+A) Make sure heartbeat updates cannot silently fail
+
+If the DB call fails intermittently, you don’t want a healthy run being marked stale 10 minutes later. Two easy mitigations:
+
+log heartbeat failures with runId (even just warn-level)
+
+treat “heartbeat failed” as a signal to retry immediately
+
+Not a blocker, just robustness.
+
+B) Stale run cleanup: avoid killing a still-running process
+
+Marking a run as stale in the DB doesn’t stop the process. So ensure the code doesn’t do something like:
+
+“if I see a stale running row, I will start a new ingestion immediately”
+…without also ensuring the old process is really dead.
+
+With heartbeat, this is mostly solved, but you still want the logic to be:
+
+if heartbeat is fresh → do not start a new run
+
+if heartbeat is stale → allow new run, and mark the old run as stale_abandoned (or similar)
+
+Overall verdict
+
+Replit’s fix is exactly what you want for production readiness.
+
+The lock is now correct by construction
+
+Long ingests won’t be “accidentally unlocked”
+
+Your admin dashboard health metrics become trustworthy
+
+If you want one more “trust but verify” step: do a simple forced test in dev:
+
+Start ingestion
+
+While it’s running, trigger ingestion again
+
+Confirm second attempt records “lock not acquired” and does not write snapshots
+
+If that works, you’re in very good shape.
+
+If you want, paste the lock acquire snippet (just the function) and I’ll sanity-check the exact failure-handling path (unique constraint vs other DB errors) in 30 seconds.

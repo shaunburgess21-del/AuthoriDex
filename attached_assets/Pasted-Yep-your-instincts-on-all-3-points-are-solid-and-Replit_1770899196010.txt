@@ -1,0 +1,101 @@
+Yep — your instincts on all 3 points are solid, and Replit’s diagnosis on #1 is very likely the root cause.
+
+1) “Why they’re trending” not showing on profiles
+
+This is almost certainly a gating / eligibility mismatch, not “AI not working”.
+
+What’s happening (based on what you pasted):
+
+Leaderboard shows an indicator because it’s using one classification + thresholds (percentiles computed from the full leaderboard set).
+
+The profile page’s WhyTrendingCard is only shown if the person is either:
+
+Top 10 by rank, OR
+
+in /api/trending/movers/daily and passes that page’s idea of “hot mover”.
+
+That is fragile because:
+
+/movers/daily is a different dataset / filter, so someone can be “exceptional” on the leaderboard and still not be present there.
+
+Even worse: thresholds can diverge if computed from different inputs or at different times.
+
+Best fix (clean + permanent): make one canonical source of truth.
+
+Put the “exceptional indicator” classification in one shared function (server-side preferred).
+
+Have every surface use the same output:
+
+leaderboard row badge
+
+hot movers label
+
+profile “Why trending” gating
+
+Concretely, I’d tell Replit:
+
+Stop using “is this person in /movers/daily” as the condition to show the card.
+
+Instead: compute exceptionalIndicator once (e.g., breakout|spiking|rising|cooling|null) and pass it down or return it from the API for that person.
+
+Then: if exceptionalIndicator !== null, always show Why Trending (and fetch/generate the summary on-demand).
+
+Even better: make the profile page request the summary directly (don’t hide the entire card just because some upstream list didn’t include them). If the summary doesn’t exist yet, generate it when the profile loads.
+
+2) “Cooling” doesn’t belong in Hot Movers
+
+Agree with you from a product-language standpoint.
+
+If the widget is literally called Hot Movers, then “Cooling” is conceptually off-brand. It also creates a weird mental model: “Why is someone losing momentum inside the ‘hot’ box?”
+
+Two good options:
+
+Remove Cooling from Hot Movers (my preference given your positioning).
+
+Keep Cooling as a badge on the main leaderboard if you still want it as a signal.
+
+Split it into a separate mini-widget later: “Cooling Off · 24h” (only if you want the “losers” view).
+
+But with your current UX direction (trust + clarity), #1 is the cleanest.
+
+3) Breakout vs Rising vs Spiking: are they too similar?
+
+There is a real distinction mathematically, but the question is whether users care.
+
+Current meaning (as Replit described):
+
+Breakout = big % surge and big rank jump (strongest “something is happening”)
+
+Spiking = big % surge (rank jump not as big)
+
+Rising = big rank jump (but % surge not as dramatic)
+
+My take:
+
+Breakout is a keeper. It’s the most legible and “fun”.
+
+The confusion is between Spiking vs Rising — users won’t naturally understand “rank jumped but score didn’t surge” unless they’re already power users.
+
+So if you want to simplify without losing the “wow” factor:
+
+Keep Breakout
+
+Merge Spiking + Rising into one umbrella label like “Surging” (or “Hot”)
+
+Tooltip can still explain why: “Surging due to % jump” vs “Surging due to rank jump”.
+
+That preserves signal, reduces cognitive load, and keeps personality.
+
+One caution: if you merge too aggressively, you lose the ability to quickly tell what kind of movement it is — but you can recover that in the tooltip with a simple line like:
+
+“Driver metric: Score spike” or “Driver metric: Rank jump”.
+
+What I’d do next (in order)
+
+Fix #1 properly: canonical indicator + consistent thresholds + profile card shows whenever indicator qualifies (and summary fetched/generated on-demand).
+
+Remove Cooling from Hot Movers (or rename the widget if you insist on keeping Cooling).
+
+Only then decide whether to merge Spiking/Rising — and if you do, keep Breakout separate.
+
+If you want, paste (or screenshot) what the profile page currently shows when you click someone with a badge — especially any console/API error — and I’ll tell you the quickest surgical change that guarantees the “Why Trending” section always appears when expected
