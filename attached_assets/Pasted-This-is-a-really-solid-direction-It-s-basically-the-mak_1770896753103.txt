@@ -1,0 +1,123 @@
+This is a really solid direction. It’s basically the “make health checks factual, not vibes” upgrade you want.
+
+That said, there are 4 things I’d sanity-check in what Replit built, because these are the classic places this kind of implementation quietly fails.
+
+1) The “DB-backed lock” — make sure it’s a real lock
+
+Replit describes it as “row-level advisory lock using the ingestion_runs table itself — check for any running row before starting”.
+
+That pattern can work, but only if it’s done in a way that’s atomic. If it’s just:
+
+SELECT … WHERE status='running'
+
+if none, INSERT status='running'
+
+…then two ingests can still start if they race.
+
+What you want instead (any one of these):
+
+Postgres advisory lock (pg_try_advisory_lock) — simplest & robust.
+
+Or transactional lock via unique constraint, e.g. a singleton lock row:
+
+a table with one row keyed like lock_name='ingestion', and update it with SELECT … FOR UPDATE.
+
+Or an insert that cannot race, e.g. a unique partial index on “running”:
+
+CREATE UNIQUE INDEX … WHERE status='running' (then only one can be running).
+
+✅ Action: Ask Replit (or check code) whether lock acquire is done with advisory lock or a unique/transactional construct. If it’s just “check then insert”, it’s not safe.
+
+2) “Stale locks older than 30 minutes are cleaned up” — careful
+
+This is good if your ingestion is always <30 min. But you’ve already seen GDELT and rate limits make runs longer sometimes.
+
+If a real ingestion takes 35–50 minutes, a “cleanup stale lock at 30 minutes” can:
+
+mark the lock stale,
+
+allow a second ingestion to start,
+
+and you’re back in overlap land.
+
+✅ Better:
+
+Store heartbeat_at and update it every N minutes during ingestion.
+
+Only consider stale if now - heartbeat_at > X.
+
+If they didn’t add a heartbeat, I’d raise this right away.
+
+3) Run tracking is only useful if it records failures reliably
+
+Big question: do they update ingestion_runs.status in a finally block no matter what?
+
+You want to always capture:
+
+status: success | failed | aborted | stale_killed
+
+error_summary
+
+duration_ms
+
+snapshots_written
+
+per-source timings even if a later source fails
+
+If runs are dying due to restarts/HMR/dev environment quirks, it’s extra important to record “aborted” clearly, otherwise the dashboard will mislead you.
+
+✅ Quick validation in the UI you should see:
+
+a list of runs with some failures/aborts if you’ve had issues recently
+
+not “all green always”, which usually means it isn’t recording the hard cases.
+
+4) Engine-health endpoint should separate “continuity” vs “backfill”
+
+This is the part that confused everyone earlier. The endpoint should show both:
+
+Wall-clock gap: “nothing was written between 21:00 and 10:00”
+
+Backfilled hours: “we later wrote snapshots for 22:00–08:00 during catch-up”
+
+If they combined those into one metric (“snapshots in last 24h”), you’ll keep getting misleading green lights.
+
+✅ What I’d want visible:
+
+last_snapshot_at
+
+max_wall_clock_gap_minutes (last 24h / 48h)
+
+backfilled_hours_count (last 24h)
+
+catchup_mode_active
+
+runs_started / runs_completed / overlaps_prevented
+
+The schema push timeout + “create table via SQL”
+
+Totally fine in practice. The only thing: make sure the table definition is also captured in whatever schema/migrations system you’ll actually use long-term, otherwise it’ll drift. But as a dev fix, ✅.
+
+What I’d do right now (5-minute verification checklist)
+
+Open your new admin health panel and check:
+
+Does it show an ingestion run entry for the last run?
+With start time, end time, status.
+
+Does it show “currently running” accurately when an ingest is running?
+
+Trigger ingestion twice quickly (if you can)
+Confirm second attempt shows “lock prevented” or “skipped”, and creates a lock-failure record.
+
+If ingestion exceeds 30 minutes, does it stay locked?
+If not, you need heartbeat or longer stale window.
+
+Continuity section: does it explicitly show both gaps and backfill counts?
+
+My overall take
+
+✅ The move to ingestion_runs + health UI badges is exactly the right layer of maturity.
+⚠️ The only real risk is the lock implementation and the “stale after 30 min” heuristic. If those aren’t rock-solid, you’ll still get intermittent “empty leaderboard / missing deltas / weirdness” during heavy runs.
+
+If you paste the lock snippet (even just the pseudocode) or the ingestion_runs fields they created, I can tell you immediately whether it’s race-safe and whether the stale cleanup can bite you.
