@@ -1,0 +1,71 @@
+This is a really strong implementation from Replit — it’s basically the “gold standard” fix for the Hot Movers thrash.
+
+What Replit did right (and why it solves your exact symptom)
+
+1) Snapshots now belong to an ingestion run (run_id)
+That’s the key unlock. It turns “a fuzzy set of timestamps” into “a single authoritative batch.” Hot Movers can now compare run-to-run, not “nearest timestamp,” which is what was causing the list to reshuffle.
+
+2) Baseline selection is deterministic
+Picking “the closest completed ingestion run to ~24h ago” is exactly how you want to do it. This is stable even if snapshots inside a run have slightly different timestamps.
+
+3) Baseline pinning
+This is also correct: once you pick a baseline, don’t let it slide until something meaningful changes (new run completes / hour boundary / whatever rule you choose). That prevents “micro drift” between full refreshes.
+
+4) Graceful fallback for old data
+Totally fine that older snapshots can’t be matched to runs (because the runs table didn’t exist). Having a fallback to hour-bucketing is sensible.
+
+Bottom line: this approach is the “never think about it again” solution, and it directly addresses your “changing every refresh” problem.
+
+Two quick things I’d sanity-check (small, but important)
+A) Baseline selection window + “closest run” behavior
+
+If you choose “closest run to 24h ago” with no constraints, weird things can happen on a day with gaps:
+
+If the server was off for 12 hours, the “closest run to 24h ago” might be 30–36h ago (or 18h ago) depending on data.
+
+That could make “24h change” feel wrong.
+
+Fix/guardrail: when selecting the baseline run, enforce something like:
+
+“must be between 20h and 28h ago” (or similar window)
+
+otherwise fall back to “previous completed run” or “hour-bucketed nearest”
+
+Even if they already do this, it’s worth confirming.
+
+B) Pin invalidation trigger
+
+Replit said it invalidates when:
+
+a new run completes or
+
+clock crosses an hour boundary
+
+That’s probably fine, but you could also simplify further:
+
+invalidate only when a new full ingest completes
+That would make Hot Movers rock-solid between hourly refreshes (which matches your external API cadence).
+
+Hour-boundary invalidation is okay, but it can cause the baseline to swap once per hour even without new ingest (depending on how it’s implemented). It shouldn’t “thrash” anymore, but it might still “step” on the hour. Decide which behavior you want.
+
+Performance niceties (optional, but nice)
+
+If you haven’t already, adding indexes will keep this fast as you scale snapshots:
+
+trend_snapshots(run_id, person_id)
+
+trend_snapshots(person_id, timestamp)
+
+ingestion_runs(status, finished_at) (or whatever “completed” fields exist)
+
+My verdict
+
+✅ This is the right fix, and it’s aligned with how you’d build this in a production analytics system.
+
+If you want one extra polish pass, I’d only ask Replit to:
+
+confirm baseline run selection has a sensible time window, and
+
+consider pinning solely to “new run completes” (to match the “APIs refresh hourly” mental model).
+
+If you want, paste Replit’s new getSnapshotRankMap() baseline selection logic (the part that picks the run and pins it), and I’ll point out any edge cases in 60 seconds.
