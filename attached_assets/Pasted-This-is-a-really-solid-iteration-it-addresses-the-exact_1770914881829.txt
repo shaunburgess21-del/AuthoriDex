@@ -1,0 +1,112 @@
+This is a really solid iteration — it addresses the exact weak points we flagged, and it’s the right kind of “boring engineering” that prevents trust leaks later.
+
+A few thoughts / caveats (mostly about production hardening):
+
+What’s genuinely good here ✅
+1) View dedupe + bot filtering + rate limiting
+
+That combo is the right triangle:
+
+dedupe stops accidental refresh spam
+
+bot filtering stops crawlers skewing rankings
+
+rate limiting stops obvious abuse
+
+2) Freshness contract now matches UI expectations
+
+This removes a whole class of “Updated: —” weirdness and silent fallback bugs.
+
+3) Dampening decay is the right direction
+
++0.1 per tick toward 1.0 is intuitive. At 10-minute ticks, recovering from 0.5 → 1.0 takes 5 ticks (~50 min), which feels reasonable.
+
+4) Write optimization is excellent
+
+Skipping writes when nothing changes is exactly what you want. It keeps DB load low and avoids “we’re hammering storage for aesthetics.”
+
+The biggest “production reality” issue ⚠️: in-memory dedupe
+
+Replit implemented dedupe with an in-memory cache in routes.ts.
+
+That’s fine for:
+
+single server
+
+dev / early stage
+
+one instance only
+
+But it breaks when you have:
+
+multiple instances
+
+server restarts
+
+serverless / autoscaling
+
+even just a redeploy
+
+Because the dedupe memory resets and isn’t shared. So you’ll suddenly see view inflation again under scale.
+
+The smallest production-safe upgrade:
+
+Store dedupe keys in Redis (ideal), or
+
+Store in DB with a TTL-ish approach (less ideal), or
+
+Use a signed cookie/session ID + short DB table keyed by (person_id, session_id, 10min_bucket).
+
+If you want very simple: keep the in-memory cache for now, but plan to swap it to Redis once you deploy to multiple instances.
+
+IP-based dedupe can be misleading behind proxies
+
+If your app sits behind a load balancer / Cloudflare, the request IP might be:
+
+the proxy IP (same for everyone), or
+
+something inconsistent unless you’re reading X-Forwarded-For correctly.
+
+So make sure the code:
+
+trusts proxy headers only when appropriate (app.set('trust proxy', 1) in Express setups), and
+
+uses the correct header order.
+
+Otherwise you can accidentally dedupe everyone into one user or fail to dedupe at all.
+
+Bot filtering is good — but avoid “too clever”
+
+User-agent heuristics are fine, but they’ll always have false positives/negatives.
+
+Two practical additions:
+
+Don’t block normal mobile Safari weird UAs
+
+Consider ignoring views from HEAD/prefetch-like requests if those exist in your stack.
+
+Rate limit storage question
+
+If the rate limit counter is also in-memory, it has the same scaling problem as dedupe.
+Again: okay for now, but plan to move to a shared store when you scale.
+
+The “0 rows written” log is a feature, not a bug
+
+This is actually great — it means:
+
+no fake movement
+
+no unnecessary writes
+
+the system only moves when it has signal (votes/views or dampening recovery)
+
+If you still want “aesthetic liveliness” even on totally dead traffic days, you can add a tiny deterministic drift that never changes rank (e.g., micro score animation client-side only). But don’t force DB rank changes without signal.
+
+My recommendation: ship this, with one small tweak
+
+Add a session identifier (cookie) and include it in the dedupe key:
+
+(personId + sessionId + 10minBucket)
+This alone makes your dedupe far more fair than IP-only and reduces proxy weirdness.
+
+You can keep IP as a backup dimension, but session-based is the big win.
