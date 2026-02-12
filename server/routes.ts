@@ -97,36 +97,46 @@ function shouldCountView(req: Request, personId: string): boolean {
 // Cached snapshot rank lookup (shared between /api/trending and /api/leaderboard)
 let _cachedPrevRanks: Map<string, number> | null = null;
 let _cachedPrevRanksAt = 0;
-const RANK_CACHE_TTL = 60_000; // 1 minute
+let _cachedPrevRanksHour: string | null = null;
+const RANK_CACHE_TTL = 30 * 60_000; // 30 minutes
 
 async function getSnapshotRankMap(): Promise<Map<string, number>> {
   const now = Date.now();
-  if (_cachedPrevRanks && now - _cachedPrevRanksAt < RANK_CACHE_TTL) {
+  const currentHour = new Date(now).toISOString().slice(0, 13);
+  if (_cachedPrevRanks && _cachedPrevRanks.size > 0 && now - _cachedPrevRanksAt < RANK_CACHE_TTL && _cachedPrevRanksHour === currentHour) {
     return _cachedPrevRanks;
   }
 
   const map = new Map<string, number>();
   try {
     const t24hAgo = new Date(now - 24 * 60 * 60 * 1000);
-    const tLow = new Date(now - 28 * 60 * 60 * 1000);
-    const tHigh = new Date(now - 20 * 60 * 60 * 1000);
+    const targetHour = new Date(t24hAgo);
+    targetHour.setMinutes(0, 0, 0);
 
-    const [nearestTs] = await db
-      .select({ ts: trendSnapshots.timestamp })
+    const tLow = new Date(targetHour.getTime() - 4 * 60 * 60 * 1000);
+    const tHigh = new Date(targetHour.getTime() + 4 * 60 * 60 * 1000);
+
+    const nearestHourRow = await db
+      .select({ hour: sql<string>`date_trunc('hour', ${trendSnapshots.timestamp})` })
       .from(trendSnapshots)
       .where(sql`${trendSnapshots.timestamp} BETWEEN ${tLow} AND ${tHigh}`)
-      .orderBy(sql`ABS(EXTRACT(EPOCH FROM ${trendSnapshots.timestamp} - ${t24hAgo}::timestamp))`)
+      .groupBy(sql`date_trunc('hour', ${trendSnapshots.timestamp})`)
+      .orderBy(sql`ABS(EXTRACT(EPOCH FROM date_trunc('hour', ${trendSnapshots.timestamp}) - ${targetHour}::timestamp))`)
       .limit(1);
 
-    if (nearestTs) {
+    if (nearestHourRow.length > 0) {
+      const snapshotHour = new Date(nearestHourRow[0].hour);
+      const snapshotHourEnd = new Date(snapshotHour.getTime() + 60 * 60 * 1000);
+
       const prevSnapshot = await db
         .select({
           personId: trendSnapshots.personId,
-          fameIndex: trendSnapshots.fameIndex,
+          fameIndex: sql<number>`MAX(${trendSnapshots.fameIndex})`,
         })
         .from(trendSnapshots)
-        .where(eq(trendSnapshots.timestamp, nearestTs.ts))
-        .orderBy(sql`${trendSnapshots.fameIndex} DESC NULLS LAST`);
+        .where(sql`${trendSnapshots.timestamp} >= ${snapshotHour} AND ${trendSnapshots.timestamp} < ${snapshotHourEnd}`)
+        .groupBy(trendSnapshots.personId)
+        .orderBy(sql`MAX(${trendSnapshots.fameIndex}) DESC NULLS LAST`);
 
       prevSnapshot.forEach((s, i) => {
         map.set(s.personId, i + 1);
@@ -139,6 +149,7 @@ async function getSnapshotRankMap(): Promise<Map<string, number>> {
   if (map.size > 0) {
     _cachedPrevRanks = map;
     _cachedPrevRanksAt = now;
+    _cachedPrevRanksHour = currentHour;
   }
   return map;
 }
