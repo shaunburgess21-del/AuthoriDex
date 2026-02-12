@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useEffect, useRef } from "react";
 import { compactNumber, formatDelta, compactVotes } from "@/lib/formatNumber";
-import { ThumbsUp, Rocket, Zap, TrendingUp, Flame } from "lucide-react";
+import { ThumbsUp, Rocket, Zap, TrendingUp, TrendingDown, Flame } from "lucide-react";
 
 const SEGMENT_COLORS_5 = [
   '#FF0000',
@@ -73,7 +73,7 @@ function computePercentileThresholds(people: ExtendedPerson[]): PercentileThresh
 function getExceptionalIndicator(
   person: ExtendedPerson,
   thresholds?: PercentileThresholds
-): { icon: typeof Rocket; color: string; label: string; description: string } | null {
+): { icon: typeof Rocket; color: string; label: string; description: string; triggersHotMover: boolean } | null {
   const delta = person.change24h;
   const rankChange = person.rankChange;
 
@@ -85,13 +85,19 @@ function getExceptionalIndicator(
   const metrics = `24h: ${delta != null ? fmtDelta(delta) : '—'} · Rank: ${rankChange != null ? fmtRank(rankChange) : '—'}`;
 
   if (rankChange != null && rankChange >= thresholds.rankChangeP90 && delta != null && delta >= thresholds.deltaP90) {
-    return { icon: Rocket, color: "text-orange-400", label: "Breakout", description: `Big surge + big rank jump\n${metrics}` };
+    return { icon: Rocket, color: "text-orange-400", label: "Breakout", description: `Big surge + big rank jump\n${metrics}`, triggersHotMover: true };
   }
   if (delta != null && delta >= thresholds.deltaP90) {
-    return { icon: Flame, color: "text-yellow-400", label: "Surging", description: `Driver: Score spike\n${metrics}` };
+    return { icon: Flame, color: "text-yellow-400", label: "Surging", description: `Driver: Score spike\n${metrics}`, triggersHotMover: true };
   }
   if (rankChange != null && rankChange >= thresholds.rankChangeP90) {
-    return { icon: Flame, color: "text-yellow-400", label: "Surging", description: `Driver: Rank jump\n${metrics}` };
+    return { icon: Flame, color: "text-yellow-400", label: "Surging", description: `Driver: Rank jump\n${metrics}`, triggersHotMover: true };
+  }
+  if (delta != null && delta <= thresholds.negDeltaP10) {
+    return { icon: TrendingDown, color: "text-muted-foreground/60", label: "Cooling", description: `Fading momentum\n${metrics}`, triggersHotMover: false };
+  }
+  if (rankChange != null && rankChange <= thresholds.negRankChangeP10) {
+    return { icon: TrendingDown, color: "text-muted-foreground/60", label: "Cooling", description: `Dropping in rank\n${metrics}`, triggersHotMover: false };
   }
 
   return null;

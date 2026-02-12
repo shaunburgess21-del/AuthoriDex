@@ -645,7 +645,10 @@ export default function HomePage() {
   const exceptionalIds = useMemo(() => {
     if (!percentileThresholds) return new Set<string>();
     const candidates = displayPeople
-      .filter(p => getExceptionalIndicator(p as any, percentileThresholds) !== null)
+      .filter(p => {
+        const ind = getExceptionalIndicator(p as any, percentileThresholds);
+        return ind?.triggersHotMover === true;
+      })
       .map(p => p.id);
     return new Set(candidates);
   }, [displayPeople, percentileThresholds]);
@@ -975,6 +978,17 @@ export default function HomePage() {
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="text-xs max-w-[200px]">
                           Top percentile score spike or rank jump in the last 24 hours
+                        </TooltipContent>
+                      </UITooltip>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center gap-1 cursor-help opacity-60" data-testid="legend-cooling">
+                            <TrendingDown className="h-3 w-3 text-muted-foreground" />
+                            Cooling
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                          Fading momentum or dropping in rank
                         </TooltipContent>
                       </UITooltip>
                     </div>

@@ -480,7 +480,7 @@ export default function PersonDetailPage() {
     const match = leaderboardForThresholds.data.find(p => p.id === person.id);
     if (!match) return { isHotMover: false, exceptionalIndicator: null };
     const indicator = getExceptionalIndicator(match as any, thresholds);
-    return { isHotMover: indicator !== null, exceptionalIndicator: indicator };
+    return { isHotMover: indicator?.triggersHotMover === true, exceptionalIndicator: indicator };
   }, [person, leaderboardForThresholds]);
 
   // Check if person is favorited

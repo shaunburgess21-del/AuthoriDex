@@ -1,8 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, ExternalLink, Clock, Newspaper, Sparkles } from "lucide-react";
+import { TrendingUp, ExternalLink, Clock, Newspaper, Sparkles, RefreshCw, AlertCircle } from "lucide-react";
 
 interface WhyTrendingData {
   personId: string;
@@ -48,15 +49,23 @@ const categoryColors: Record<string, string> = {
 };
 
 export function WhyTrendingCard({ personId, personName, hotMover }: WhyTrendingCardProps) {
+  const queryClient = useQueryClient();
   const url = hotMover ? `/api/why-trending/${personId}?hotMover=true` : `/api/why-trending/${personId}`;
-  const { data, isLoading, error } = useQuery<WhyTrendingData>({
-    queryKey: ['/api/why-trending', personId, hotMover ? 'hot' : 'default'],
+  const queryKey = ['/api/why-trending', personId, hotMover ? 'hot' : 'default'];
+  const { data, isLoading, error, isFetching } = useQuery<WhyTrendingData>({
+    queryKey,
     queryFn: async () => {
       const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch');
       return res.json();
     },
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
   });
+
+  const handleRetry = () => {
+    queryClient.invalidateQueries({ queryKey });
+  };
 
   if (isLoading) {
     return (
@@ -64,23 +73,78 @@ export function WhyTrendingCard({ personId, personName, hotMover }: WhyTrendingC
         <CardHeader className="pb-2">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-primary" />
-            <Skeleton className="h-5 w-32" />
+            <CardTitle className="text-base font-medium">Why They're Trending</CardTitle>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-3/4" />
-          <div className="flex gap-2">
-            <Skeleton className="h-6 w-20" />
-            <Skeleton className="h-6 w-16" />
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Sparkles className="h-3 w-3 animate-pulse" />
+            <span>Generating AI summary...</span>
           </div>
         </CardContent>
       </Card>
     );
   }
 
-  if (error || !data || !data.hasContext) {
-    return null;
+  if (error) {
+    return (
+      <Card className="border-border/50 bg-card/50 backdrop-blur-sm" data-testid="card-why-trending-error">
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-primary" />
+            <CardTitle className="text-base font-medium">Why They're Trending</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>Couldn't load the trending summary right now.</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRetry}
+              disabled={isFetching}
+              data-testid="button-retry-why-trending"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data || !data.hasContext) {
+    return (
+      <Card className="border-border/50 bg-card/50 backdrop-blur-sm" data-testid="card-why-trending-pending">
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-primary" />
+            <CardTitle className="text-base font-medium">Why They're Trending</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Summary is being prepared — check back shortly.
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRetry}
+              disabled={isFetching}
+              data-testid="button-refresh-why-trending"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   const categoryClass = categoryColors[data.category || "In The News"] || categoryColors["In The News"];
