@@ -1,0 +1,110 @@
+This is a big step up. If I had to score it: 9/10 directionally, with a couple of small “tighten the bolts” notes.
+
+What Replit did that’s genuinely correct
+1) triggersHotMover flag is the right architectural move ✅
+
+This is the cleanest way to solve your earlier confusion:
+
+A badge can exist (Cooling on leaderboard)
+
+Without implying “Hot Movers” eligibility
+
+Without triggering “Why Trending”
+
+That separates UI signal from widget membership, which is exactly what you want long-term.
+
+2) Cooling restored as leaderboard-only ✅
+
+This matches your product language:
+
+“Hot Movers” = upward attention / curiosity / clickworthy
+
+“Cooling” = informative, but not “hot”
+Keeping it subtle (muted) is the right call.
+
+3) Badge inflation check ✅
+
+If the distribution really is ~8% total (Breakout/Surging/Cooling), you’re in a safe range.
+That means:
+
+badges feel special
+
+Hot Movers won’t be cluttered
+
+users learn to trust the signal
+
+4) WhyTrendingCard states ✅✅
+
+This is the polish that makes the product feel “real”:
+
+Loading state
+
+Pending state
+
+Error state + retry
+
+Crucially: it no longer silently disappears, which kills user trust.
+
+The only parts I’d still sanity-check
+A) “Pending” vs “Loading” semantics
+
+Make sure “Pending” is a real state, not just “we got nothing back.”
+
+A good rule:
+
+Loading: request in-flight
+
+Pending: backend says “not ready yet” (e.g., status=queued|generating)
+
+Error: failure
+
+Empty: truly not eligible / no data
+
+If “Pending” is triggered just by missing data, it can become a confusing catch-all.
+
+B) Cooling criteria clarity
+
+Replit says: “score or rank dropping significantly.”
+That’s fine, but ensure it doesn’t feel arbitrary:
+
+If Cooling is rank-drop only but 24h % isn’t negative, users might go “why cooling?”
+
+If Cooling is % drop only, it’s intuitive.
+
+If you want it to be bulletproof, make Cooling require negative 24h change (and optionally rank drop), not rank drop alone.
+
+C) Surging driver cue decision
+
+Replit’s logic (“the tooltip already says Score spike vs Rank jump”) is mostly fine.
+
+But your users will often not hover. On mobile, many won’t open tooltips either.
+
+So the best compromise is tiny and non-invasive:
+
+Keep the single “Surging” badge
+
+Add a very small sublabel in Hot Movers rows only:
+
+Surging · Score or Surging · Rank
+This avoids cluttering the leaderboard while making the Hot Movers widget instantly understandable.
+
+Not mandatory, but it’s high leverage.
+
+Net: This is the right version to ship
+
+You’ve now got:
+
+Hot Movers = curated “exceptional up-movers” (Breakout/Surging that trigger hot mover)
+
+Leaderboard = richer story (includes subtle Cooling)
+
+Profiles = consistent “Why Trending” visibility with proper UX states
+
+No more icon/label mismatch = trust restored
+
+If you want, share one more screenshot of:
+
+a Cooling badge on the leaderboard, and
+
+the corresponding person’s 24h %
+…and I’ll tell you instantly if Cooling’s current rule will feel intuitive to normal users.
