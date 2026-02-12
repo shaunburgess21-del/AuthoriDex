@@ -846,11 +846,9 @@ export default function HomePage() {
               </div>
 
               <TrendingNowFeed
-                people={dailyMovers}
                 onPersonClick={handleVisitProfile}
                 collapsed={trendingNowCollapsed}
                 onToggle={handleTrendingNowToggle}
-                thresholds={percentileThresholds}
               />
 
               <Card id="leaderboard">

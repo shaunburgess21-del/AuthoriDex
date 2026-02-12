@@ -305,6 +305,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/trending/hot-movers", async (req, res) => {
+    try {
+      let people = await storage.getTrendingPeople();
+      if (people.length === 0) {
+        res.json([]);
+        return;
+      }
+
+      const prevRanks = await getSnapshotRankMap();
+      const enriched = people.map(p => ({
+        ...p,
+        rankChange: prevRanks.has(p.id) ? (prevRanks.get(p.id)! - p.rank) : null,
+      }));
+
+      const rankChanges = enriched.filter(p => p.rankChange != null).map(p => p.rankChange!);
+      const deltas = enriched.filter(p => p.change24h != null).map(p => p.change24h!);
+
+      const positiveRC = rankChanges.filter(v => v > 0).sort((a, b) => b - a);
+      const positiveDeltas = deltas.filter(v => v > 0).sort((a, b) => b - a);
+
+      const p5Index = (arr: number[]) => Math.max(0, Math.ceil(arr.length * 0.05) - 1);
+
+      const thresholds = {
+        rankChangeP90: positiveRC.length > 0 ? positiveRC[p5Index(positiveRC)] : 999,
+        deltaP90: positiveDeltas.length > 0 ? positiveDeltas[p5Index(positiveDeltas)] : 999,
+      };
+
+      const hotMovers: Array<{
+        id: string;
+        name: string;
+        avatar: string | null;
+        category: string | null;
+        rank: number;
+        fameIndex: number | null;
+        change24h: number | null;
+        rankChange: number | null;
+        badge: { label: string; color: string; description: string };
+      }> = [];
+
+      for (const p of enriched) {
+        const delta = p.change24h;
+        const rc = p.rankChange;
+
+        const fmtDelta = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v)}%`;
+        const fmtRank = (v: number) => `${v > 0 ? '+' : ''}${v}`;
+        const metrics = `24h: ${delta != null ? fmtDelta(delta) : '—'} · Rank: ${rc != null ? fmtRank(rc) : '—'}`;
+
+        let badge: { label: string; color: string; description: string } | null = null;
+
+        if (rc != null && rc >= thresholds.rankChangeP90 && delta != null && delta >= thresholds.deltaP90) {
+          badge = { label: "Breakout", color: "text-orange-400", description: `Big surge + big rank jump\n${metrics}` };
+        } else if (delta != null && delta >= thresholds.deltaP90) {
+          badge = { label: "Surging", color: "text-yellow-400", description: `Driver: Score spike\n${metrics}` };
+        } else if (rc != null && rc >= thresholds.rankChangeP90) {
+          badge = { label: "Surging", color: "text-yellow-400", description: `Driver: Rank jump\n${metrics}` };
+        }
+
+        if (badge) {
+          hotMovers.push({
+            id: p.id,
+            name: p.name,
+            avatar: p.avatar,
+            category: p.category,
+            rank: p.rank,
+            fameIndex: p.fameIndex,
+            change24h: p.change24h,
+            rankChange: p.rankChange,
+            badge,
+          });
+        }
+      }
+
+      hotMovers.sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0));
+      res.json(hotMovers.slice(0, 8));
+    } catch (error) {
+      console.error("Error fetching hot movers:", error);
+      res.status(500).json({ error: "Failed to fetch hot movers" });
+    }
+  });
+
   // Get single person details
   app.get("/api/trending/:id", async (req, res) => {
     try {
@@ -500,7 +580,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get top movers (gainers/droppers)
   app.get("/api/trending/movers/:type", async (req, res) => {
     try {
       const { type } = req.params;

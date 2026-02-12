@@ -1,20 +1,27 @@
-import { TrendingPerson } from "@shared/schema";
 import { formatDelta } from "@/lib/formatNumber";
 import { Flame, ChevronDown, Info, TrendingUp, TrendingDown, Newspaper, Search, Globe, MessageCircle, ArrowRight, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { PersonAvatar } from "./PersonAvatar";
 import { useTrendContextBatch, getDriverLabel, TrendDriver } from "@/hooks/useTrendContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { getExceptionalIndicator, type PercentileThresholds } from "./LeaderboardRow";
+import { useQuery } from "@tanstack/react-query";
 
-type EnrichedPerson = TrendingPerson & { rankChange?: number | null };
+interface HotMover {
+  id: string;
+  name: string;
+  avatar: string | null;
+  category: string | null;
+  rank: number;
+  fameIndex: number | null;
+  change24h: number | null;
+  rankChange: number | null;
+  badge: { label: string; color: string; description: string };
+}
 
 interface TrendingNowFeedProps {
-  people: EnrichedPerson[];
   onPersonClick: (id: string) => void;
   collapsed: boolean;
   onToggle: () => void;
-  thresholds?: PercentileThresholds;
 }
 
 
@@ -28,15 +35,11 @@ function getDriverExplanation(driver: TrendDriver): string {
   }
 }
 
-export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle, thresholds }: TrendingNowFeedProps) {
-  const hotMovers = people
-    .filter(p => {
-      if (p.change24h == null) return false;
-      const indicator = thresholds ? getExceptionalIndicator(p as any, thresholds) : null;
-      return indicator?.triggersHotMover === true;
-    })
-    .sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0))
-    .slice(0, 8);
+export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: TrendingNowFeedProps) {
+  const { data: hotMovers = [] } = useQuery<HotMover[]>({
+    queryKey: ['/api/trending/hot-movers'],
+    refetchInterval: 60_000,
+  });
 
   const visibleIds = !collapsed ? hotMovers.map(p => p.id) : [];
   const { data: trendContexts } = useTrendContextBatch(visibleIds);
@@ -76,8 +79,7 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle, th
             {hotMovers.map((person, idx) => {
               const delta = formatDelta(person.change24h);
               const isUp = (person.change24h ?? 0) > 0;
-              const tag = thresholds ? getExceptionalIndicator(person as any, thresholds) : null;
-              if (!tag) return null;
+              const tag = person.badge;
               const ctx = trendContexts?.[person.id];
               const rc = person.rankChange ?? null;
               const showRankChange = rc !== null && Math.abs(rc) >= 3;
