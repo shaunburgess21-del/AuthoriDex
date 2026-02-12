@@ -95,11 +95,10 @@ function shouldCountView(req: Request, personId: string): boolean {
 }
 
 // Cached snapshot rank lookup (shared between /api/trending and /api/leaderboard)
-// Pinned baseline: only re-selects when a new ingestion run completes or hour boundary crosses
+// Pinned baseline: only re-selects when a new completed ingestion run is detected.
+// This matches the "APIs refresh hourly" mental model — Hot Movers only changes
+// when genuinely new data arrives, never due to time passing.
 let _cachedPrevRanks: Map<string, number> | null = null;
-let _cachedPrevRanksAt = 0;
-let _cachedBaselineRunId: string | null = null;
-let _cachedBaselineHour: string | null = null;
 let _lastCompletedRunId: string | null = null;
 
 async function getLatestCompletedRunId(): Promise<string | null> {
@@ -118,13 +117,11 @@ async function getLatestCompletedRunId(): Promise<string | null> {
 
 async function getSnapshotRankMap(): Promise<Map<string, number>> {
   const now = Date.now();
-  const currentHour = new Date(now).toISOString().slice(0, 13);
 
   const newestRunId = await getLatestCompletedRunId();
   const newRunCompleted = newestRunId && newestRunId !== _lastCompletedRunId;
-  const hourChanged = currentHour !== _cachedBaselineHour;
 
-  if (_cachedPrevRanks && _cachedPrevRanks.size > 0 && !newRunCompleted && !hourChanged) {
+  if (_cachedPrevRanks && _cachedPrevRanks.size > 0 && !newRunCompleted) {
     return _cachedPrevRanks;
   }
 
@@ -162,7 +159,6 @@ async function getSnapshotRankMap(): Promise<Map<string, number>> {
       prevSnapshot.forEach((s, i) => {
         map.set(s.personId, i + 1);
       });
-      _cachedBaselineRunId = baselineRun.id;
     } else {
       // Strategy 2: Fallback to hour-bucketed timestamps for older snapshots without run_id
       const targetHour = new Date(t24hAgo);
@@ -203,8 +199,6 @@ async function getSnapshotRankMap(): Promise<Map<string, number>> {
 
   if (map.size > 0) {
     _cachedPrevRanks = map;
-    _cachedPrevRanksAt = now;
-    _cachedBaselineHour = currentHour;
   }
   return map;
 }
