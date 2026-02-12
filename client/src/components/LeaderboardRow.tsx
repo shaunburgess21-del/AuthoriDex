@@ -174,7 +174,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
     };
   }, [person.id]);
 
-  const fameScore = person.fameIndex ?? Math.round(person.trendScore / 100);
+  const fameScore = (person as any).fameIndexLive ?? person.fameIndex ?? Math.round(person.trendScore / 100);
   const delta24h = formatDelta(person.change24h);
   const showDelta = person.change24h != null && Math.abs(person.change24h) >= 2;
   const exceptional = showExceptional ? getExceptionalIndicator(person, thresholds) : null;
@@ -200,7 +200,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
         onClick={onVisitProfile}
         data-testid={`row-person-${person.id}`}
       >
-        <RankBadge rank={person.leaderboardRank ?? person.rank} rankChange={person.rankChange} />
+        <RankBadge rank={person.leaderboardRank ?? (person as any).liveRank ?? person.rank} rankChange={person.rankChange} />
         <PersonAvatar name={person.name} avatar={person.avatar} size="md" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">

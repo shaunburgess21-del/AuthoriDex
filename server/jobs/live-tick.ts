@@ -1,0 +1,251 @@
+import { db } from "../db";
+import { trendingPeople, votes, celebrityValueVotes } from "@shared/schema";
+import { sql, eq, gte, and } from "drizzle-orm";
+
+const LIVE_WEIGHT = 0.12;
+const MAX_RANK_DELTA = 3;
+const VOTE_BOOST_POINTS = 150;
+const VIEW_BOOST_POINTS = 30;
+const TICK_INTERVAL_MS = 10 * 60 * 1000;
+
+let _lastFullRefreshAt: Date | null = null;
+
+export function setLastFullRefreshAt(date: Date) {
+  _lastFullRefreshAt = date;
+}
+
+export function getLastFullRefreshAt(): Date | null {
+  return _lastFullRefreshAt;
+}
+
+async function getRecentVoteCounts(sinceMinutes: number): Promise<Map<string, number>> {
+  const since = new Date(Date.now() - sinceMinutes * 60 * 1000);
+  const counts = new Map<string, number>();
+
+  try {
+    const recentVotes = await db
+      .select({
+        targetId: votes.targetId,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(votes)
+      .where(and(
+        gte(votes.votedAt, since),
+        sql`${votes.targetType} = 'celebrity'`
+      ))
+      .groupBy(votes.targetId);
+
+    for (const row of recentVotes) {
+      counts.set(row.targetId, Number(row.count));
+    }
+  } catch (e) {
+    // votes table might be empty or not have recent entries
+  }
+
+  try {
+    const recentValueVotes = await db
+      .select({
+        celebrityId: celebrityValueVotes.celebrityId,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(celebrityValueVotes)
+      .where(gte(celebrityValueVotes.updatedAt, since))
+      .groupBy(celebrityValueVotes.celebrityId);
+
+    for (const row of recentValueVotes) {
+      const existing = counts.get(row.celebrityId) || 0;
+      counts.set(row.celebrityId, existing + Number(row.count));
+    }
+  } catch (e) {
+    // value votes table might be empty
+  }
+
+  return counts;
+}
+
+export async function runLiveTick(): Promise<{ processed: number; moved: number }> {
+  const now = new Date();
+
+  const people = await db
+    .select({
+      id: trendingPeople.id,
+      fameIndex: trendingPeople.fameIndex,
+      rank: trendingPeople.rank,
+      liveRank: trendingPeople.liveRank,
+      liveDampen: trendingPeople.liveDampen,
+      profileViews10m: trendingPeople.profileViews10m,
+    })
+    .from(trendingPeople)
+    .orderBy(sql`${trendingPeople.fameIndex} DESC NULLS LAST`);
+
+  if (people.length === 0) return { processed: 0, moved: 0 };
+
+  const voteCounts = await getRecentVoteCounts(10);
+
+  const liveScores: Array<{
+    id: string;
+    canonical: number;
+    liveScore: number;
+    dampen: number;
+    views: number;
+    voteCount: number;
+  }> = [];
+
+  for (const p of people) {
+    const canonical = p.fameIndex ?? 0;
+    const dampen = p.liveDampen ?? 1.0;
+    const views = p.profileViews10m ?? 0;
+    const voteCount = voteCounts.get(p.id) ?? 0;
+
+    const voteBoost = voteCount * VOTE_BOOST_POINTS;
+    const viewBoost = views * VIEW_BOOST_POINTS;
+    const totalBoost = voteBoost + viewBoost;
+
+    const weight = LIVE_WEIGHT * dampen;
+    const liveScore = Math.round(canonical + totalBoost * weight);
+
+    liveScores.push({
+      id: p.id,
+      canonical,
+      liveScore,
+      dampen,
+      views,
+      voteCount,
+    });
+  }
+
+  liveScores.sort((a, b) => b.liveScore - a.liveScore);
+
+  const canonicalRankMap = new Map<string, number>();
+  for (const p of people) {
+    canonicalRankMap.set(p.id, p.rank);
+  }
+
+  let moved = 0;
+  const updates: Array<{ id: string; fameIndexLive: number; liveRank: number }> = [];
+
+  for (let i = 0; i < liveScores.length; i++) {
+    const item = liveScores[i];
+    const newLiveRank = i + 1;
+    const canonicalRank = canonicalRankMap.get(item.id) ?? newLiveRank;
+
+    let finalRank = newLiveRank;
+    const rankDelta = Math.abs(newLiveRank - canonicalRank);
+    if (rankDelta > MAX_RANK_DELTA) {
+      finalRank = canonicalRank + (newLiveRank > canonicalRank ? MAX_RANK_DELTA : -MAX_RANK_DELTA);
+    }
+
+    if (finalRank !== canonicalRank) moved++;
+
+    updates.push({
+      id: item.id,
+      fameIndexLive: item.liveScore,
+      liveRank: finalRank,
+    });
+  }
+
+  for (const u of updates) {
+    await db.update(trendingPeople)
+      .set({
+        fameIndexLive: u.fameIndexLive,
+        liveRank: u.liveRank,
+        liveUpdatedAt: now,
+        profileViews10m: 0,
+      })
+      .where(eq(trendingPeople.id, u.id));
+  }
+
+  if (!_lastFullRefreshAt) {
+    try {
+      const [latest] = await db
+        .select({ ts: sql<Date>`MAX(${trendingPeople.liveUpdatedAt})` })
+        .from(trendingPeople);
+      if (latest?.ts) {
+        _lastFullRefreshAt = new Date(latest.ts);
+      }
+    } catch (e) {}
+  }
+
+  console.log(`[LiveTick] Processed ${updates.length} people, ${moved} rank changes, ${voteCounts.size} with recent votes`);
+  return { processed: updates.length, moved };
+}
+
+export async function applySnapBackDampening(): Promise<number> {
+  const people = await db
+    .select({
+      id: trendingPeople.id,
+      rank: trendingPeople.rank,
+      liveRank: trendingPeople.liveRank,
+      liveDampen: trendingPeople.liveDampen,
+    })
+    .from(trendingPeople);
+
+  let dampened = 0;
+
+  for (const p of people) {
+    const hourlyRank = p.rank;
+    const liveRank = p.liveRank ?? hourlyRank;
+    const diff = Math.abs(hourlyRank - liveRank);
+
+    let newDampen = 1.0;
+    if (diff > 5) {
+      newDampen = 0.5;
+      dampened++;
+    }
+
+    if (newDampen !== (p.liveDampen ?? 1.0)) {
+      await db.update(trendingPeople)
+        .set({ liveDampen: newDampen })
+        .where(eq(trendingPeople.id, p.id));
+    }
+  }
+
+  if (dampened > 0) {
+    console.log(`[LiveTick] Dampened ${dampened} people due to snap-back risk`);
+  }
+
+  return dampened;
+}
+
+let _tickTimer: ReturnType<typeof setInterval> | null = null;
+
+export function startLiveTickScheduler() {
+  console.log(`[LiveTick] Starting scheduler (every ${TICK_INTERVAL_MS / 60000} min)`);
+
+  setTimeout(() => {
+    runLiveTick().catch(e => console.error("[LiveTick] Error:", e));
+  }, 15000);
+
+  function scheduleNext() {
+    const now = new Date();
+    const nextTick = new Date(now);
+    const currentMinute = now.getMinutes();
+    const nextTickMinute = Math.ceil(currentMinute / 10) * 10;
+    if (nextTickMinute === currentMinute && now.getSeconds() > 5) {
+      nextTick.setMinutes(currentMinute + 10, 0, 0);
+    } else {
+      nextTick.setMinutes(nextTickMinute === 60 ? 0 : nextTickMinute, 0, 0);
+      if (nextTickMinute >= 60) nextTick.setHours(nextTick.getHours() + 1);
+    }
+    const ms = nextTick.getTime() - now.getTime();
+    console.log(`[LiveTick] Next tick at ${nextTick.toISOString()} (in ${Math.round(ms / 1000)}s)`);
+    _tickTimer = setTimeout(async () => {
+      try {
+        await runLiveTick();
+      } catch (e) {
+        console.error("[LiveTick] Error:", e);
+      }
+      scheduleNext();
+    }, ms);
+  }
+
+  scheduleNext();
+}
+
+export function stopLiveTickScheduler() {
+  if (_tickTimer) {
+    clearTimeout(_tickTimer);
+    _tickTimer = null;
+    console.log("[LiveTick] Scheduler stopped");
+  }
+}

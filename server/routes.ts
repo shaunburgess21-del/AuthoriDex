@@ -30,6 +30,7 @@ import {
   hasAnyDegradedSource,
   getHealthSummary,
 } from "./scoring/sourceHealth";
+import { getLastFullRefreshAt } from "./jobs/live-tick";
 
 // Cached snapshot rank lookup (shared between /api/trending and /api/leaderboard)
 let _cachedPrevRanks: Map<string, number> | null = null;
@@ -396,6 +397,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Person not found" });
       }
 
+      db.update(trendingPeople)
+        .set({ profileViews10m: sql`COALESCE(${trendingPeople.profileViews10m}, 0) + 1` })
+        .where(eq(trendingPeople.id, id))
+        .execute()
+        .catch(() => {});
+
       res.json(person);
     } catch (error) {
       console.error("Error fetching person:", error);
@@ -570,9 +577,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       }
       
+      const fullRefresh = getLastFullRefreshAt();
+
+      let liveUpdatedAt: Date | null = null;
+      try {
+        const [liveTs] = await db
+          .select({ ts: sql<Date>`MAX(${trendingPeople.liveUpdatedAt})` })
+          .from(trendingPeople);
+        if (liveTs?.ts) liveUpdatedAt = new Date(liveTs.ts);
+      } catch (e) {}
+
       res.json({
         freshness,
         systemStatus: Object.values(freshness).every(f => f.status !== "stale") ? "healthy" : "degraded",
+        liveUpdatedAt: liveUpdatedAt?.toISOString() || null,
+        liveUpdatedAtFormatted: formatRelativeTime(liveUpdatedAt),
+        fullRefreshAt: fullRefresh?.toISOString() || null,
+        fullRefreshAtFormatted: formatRelativeTime(fullRefresh),
       });
     } catch (error) {
       console.error("Error fetching system freshness:", error);
@@ -1468,6 +1489,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fameIndex: trendingPeople.fameIndex,
           change24h: trendingPeople.change24h,
           change7d: trendingPeople.change7d,
+          liveRank: trendingPeople.liveRank,
+          fameIndexLive: trendingPeople.fameIndexLive,
+          liveUpdatedAt: trendingPeople.liveUpdatedAt,
           // Metrics
           approvalPct: celebrityMetrics.approvalPct,
           approvalVotesCount: celebrityMetrics.approvalVotesCount,
@@ -1484,7 +1508,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Determine sort column based on tab
-      let orderByColumn;
+      let orderByColumn: any;
       switch (tab) {
         case 'approval':
           orderByColumn = celebrityMetrics.approvalPct;
@@ -1494,7 +1518,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           break;
         case 'fame':
         default:
-          orderByColumn = trendingPeople.fameIndex;
+          orderByColumn = sql`COALESCE(${trendingPeople.fameIndexLive}, ${trendingPeople.fameIndex})`;
           break;
       }
 

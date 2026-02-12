@@ -653,7 +653,14 @@ export default function HomePage() {
     return new Set(candidates);
   }, [displayPeople, percentileThresholds]);
 
-  const { data: systemFreshness } = useQuery<{ lastScoredAt: string; lastScoredAtFormatted: string }>({
+  const { data: systemFreshness } = useQuery<{
+    lastScoredAt: string;
+    lastScoredAtFormatted: string;
+    liveUpdatedAt: string | null;
+    liveUpdatedAtFormatted: string | null;
+    fullRefreshAt: string | null;
+    fullRefreshAtFormatted: string | null;
+  }>({
     queryKey: ['/api/system/freshness'],
     refetchInterval: 30 * 1000,
   });
@@ -856,9 +863,30 @@ export default function HomePage() {
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                     <div className="flex-1">
                       <CardTitle className="text-2xl font-serif">Leaderboards</CardTitle>
-                      <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60" data-testid="text-leaderboard-freshness">
-                        <RefreshCw className="h-3 w-3" />
-                        <span>Updated {systemFreshness?.lastScoredAtFormatted || "recently"}</span>
+                      <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap" data-testid="text-leaderboard-freshness">
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help">
+                              <Zap className="h-3 w-3 text-green-400" />
+                              <span>Live: {systemFreshness?.liveUpdatedAtFormatted || "pending"}</span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs max-w-[240px]">
+                            <p>Fast-lane updates every 10 min using votes and profile views (no external API calls).</p>
+                          </TooltipContent>
+                        </UITooltip>
+                        <span className="text-muted-foreground/40">|</span>
+                        <UITooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help">
+                              <RefreshCw className="h-3 w-3" />
+                              <span>Full: {systemFreshness?.fullRefreshAtFormatted || systemFreshness?.lastScoredAtFormatted || "recently"}</span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs max-w-[240px]">
+                            <p>Full data refresh from Wikipedia, GDELT, and Google using external APIs.</p>
+                          </TooltipContent>
+                        </UITooltip>
                       </div>
                     </div>
                     <div className="flex gap-2 flex-wrap">

@@ -4,6 +4,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startSnapshotScheduler } from "./jobs/snapshot-scheduler";
 import { runDataIngestion } from "./jobs/ingest";
+import { startLiveTickScheduler, setLastFullRefreshAt, applySnapBackDampening } from "./jobs/live-tick";
 import { pool } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
 
@@ -58,6 +59,8 @@ async function scheduledIngestion() {
   try {
     const result = await runDataIngestion();
     log(`[Ingestion Scheduler] Complete: ${result.processed} processed, ${result.errors} errors, ${result.duration}ms`);
+    setLastFullRefreshAt(new Date());
+    applySnapBackDampening().catch(e => log(`[Ingestion Scheduler] Dampening error: ${e}`));
   } catch (error) {
     log(`[Ingestion Scheduler] Error during ingestion: ${error}`);
   }
@@ -172,5 +175,10 @@ app.use((req, res, next) => {
     
     // Start data ingestion scheduler (fetches fresh API data every 8 hours)
     startIngestionScheduler();
+
+    // Start live tick scheduler (re-ranks every 10 min using internal signals)
+    if (!SERVERLESS_MODE) {
+      startLiveTickScheduler();
+    }
   });
 })();

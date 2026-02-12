@@ -34,6 +34,7 @@ Preferred communication style: Simple, everyday language.
     - **Search & Wiki Improvements**: Composite Search Activity Score, Cache Validity Gate for Serper results, Search Query Override for disambiguation, and Wiki Velocity Smoothing using 7-day rolling averages.
     - **Snapshot Diagnostics**: `diagnostics` JSONB column in `trend_snapshots` stores versioned debug data per snapshot.
     - **Entity Resolution Diagnostics**: Admin tools to verify Serper search results match intended celebrities.
+    - **Two-Speed Leaderboard Pipeline (Feb 2026)**: Hourly full refresh from external APIs (Wikipedia/GDELT/Serper) + fast-lane 10-minute ticks using internal signals (votes, profile views). Live tick applies 10-15% weight with ±3 rank cap and snap-back dampening (halves live weight when hourly disagrees by >5 ranks). DB columns: `fame_index_live`, `live_rank`, `live_updated_at`, `live_dampen`, `profile_views_10m`. Leaderboard sorts by `COALESCE(fame_index_live, fame_index)`. UI shows dual timestamps: "Live: Xm ago | Full: Ym ago" with info tooltips. Job file: `server/jobs/live-tick.ts`.
 
 ### Serverless Architecture
 - **Design**: Stateless, using Supabase Database for all state management.

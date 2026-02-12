@@ -133,9 +133,14 @@ export const trendingPeople = pgTable("trending_people", {
   rank: integer("rank").notNull(),
   trendScore: real("trend_score").notNull(),
   fameIndex: integer("fame_index").default(0), // 0-10,000 normalized score (primary UI number)
+  fameIndexLive: integer("fame_index_live"), // live-ticked score (blended: canonical + internal signals)
+  liveRank: integer("live_rank"), // rank based on fame_index_live
+  liveUpdatedAt: timestamp("live_updated_at"), // when fast-lane last ticked this person
+  liveDampen: real("live_dampen").default(1.0), // dampening factor (0.5 if snap-back detected)
   change24h: real("change_24h"),
   change7d: real("change_7d"),
   category: text("category"),
+  profileViews10m: integer("profile_views_10m").default(0), // view counter reset each tick
 });
 
 export type TrendingPerson = typeof trendingPeople.$inferSelect;
