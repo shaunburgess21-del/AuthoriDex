@@ -2255,7 +2255,7 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
   //   C) Provenance: store model, promptVersion, headlinesUsed in cached payload
   //   D) Rate limit: max 1 OpenAI generation per person per 30 minutes
 
-  const WHY_TRENDING_PROMPT_VERSION = 2;
+  const WHY_TRENDING_PROMPT_VERSION = 4;
   const WHY_TRENDING_CACHE_TTL_HOURS = 6;
   const WHY_TRENDING_RATE_LIMIT_MINUTES = 30;
 
@@ -2452,7 +2452,8 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       if (cached) {
         try {
           const previousResult = JSON.parse(cached.responseData);
-          if (previousResult.inputHash === currentInputHash && previousResult.hasContext) {
+          const cachedPromptVersion = previousResult.provenance?.promptVersion ?? 0;
+          if (previousResult.inputHash === currentInputHash && previousResult.hasContext && cachedPromptVersion >= WHY_TRENDING_PROMPT_VERSION) {
             console.log(`[WhyTrending] Input hash unchanged for ${person.name}, extending TTL (skipping OpenAI)`);
             const extendNow = new Date();
             const extendExpiresAt = new Date(extendNow.getTime() + WHY_TRENDING_CACHE_TTL_HOURS * 60 * 60 * 1000);
@@ -2512,15 +2513,26 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       });
       
       const headlinesText = newsContext.sources.map(s => s.title).join('\n');
-      const prompt = `Based on these recent news headlines about ${person.name}, write a brief 1-2 sentence summary explaining why they are currently trending or in the news.
+      const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+      const systemPrompt = `You are a neutral news summarizer. Today's date is ${todayStr}. Use the headlines provided to determine what is currently happening. Treat all information in the headlines as current events happening right now.
+
+CRITICAL RULES:
+- Do NOT add titles like "former", "ex-", or "President" to anyone's name unless that exact title appears in the headlines.
+- If the headlines simply say a person's name without a title, use just their name — do NOT infer or add titles from your training data.
+- Never call someone "former President" or "former CEO" unless the headline explicitly uses that phrase.
+- When in doubt, just use the person's name without any title prefix.`;
+
+      const userPrompt = `Based on these recent news headlines about ${person.name}, write a brief 1-2 sentence summary explaining why they are currently trending or in the news.
 
 IMPORTANT GUIDELINES:
-- Be strictly neutral and objective - do not express opinions or take sides
+- Be strictly neutral and objective — do not express opinions or take sides
 - Focus only on factual events and actions, not interpretations or judgments
 - Avoid loaded, biased, or emotionally charged language
 - Do not use words like "controversial", "criticized", "scandal", "backlash" unless directly quoting a headline
 - Present information as a neutral news reporter would
 - For political figures, be especially careful to remain impartial and balanced
+- Use titles and roles as implied by the headlines, not from your training data
 
 Headlines:
 ${headlinesText}
@@ -2535,7 +2547,10 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
         response_format: { type: "json_object" },
         max_tokens: 200,
       });
