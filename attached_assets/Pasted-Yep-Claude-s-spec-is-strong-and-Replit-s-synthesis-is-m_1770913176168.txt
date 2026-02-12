@@ -1,0 +1,148 @@
+Yep — Claude’s spec is strong, and Replit’s synthesis is mostly sensible. I’d tighten a few things so you get the “alive” feel without accidentally making the leaderboard feel gamed or jittery.
+
+The real decision: “alive” vs “credible”
+
+You can absolutely do a fast lane, but you must avoid two failure modes:
+
+Nothing changes → boring
+
+Things change for the wrong reasons → feels fake
+
+So your fast lane should be:
+
+driven by real signals you own
+
+visibly active but bounded
+
+transparent in UI
+
+My take on Claude vs Replit
+1) Claude is right: decay alone is weak
+
+Pure “velocity decay” makes everything slide together. It won’t reshuffle ranks much. On its own it won’t create the 10 minutes later something moved effect.
+
+✅ Use decay only as a minor stabilizer, not the engine of motion.
+
+2) Replit is right to start with votes-only — but only if you have enough vote volume
+
+Votes are the best internal signal… if you’ll actually get votes every 10 minutes.
+
+If your site is still early and traffic is low, votes-only could mean:
+
+board barely moves → you don’t get the aesthetic win
+
+So: votes-only is fine for V1, but you need a fallback that produces small movement even when votes are quiet.
+
+Best low-effort fallback (doesn’t need analytics infra)
+
+profile page views per person (simple server-side counter; not full analytics)
+
+or “watchlist clicks” if you add watchlists later
+This is easy and gives you enough activity to make it breathe.
+
+3) Weight: Claude’s 20% might be too strong unless you cap movement hard
+
+Claude’s point that 5–10% can be invisible is legit.
+
+But 20% can also create:
+
+“why is this guy suddenly moving?” moments
+
+manipulation incentives (people spam votes)
+
+✅ The right combo is:
+
+weight in the 10–20% range
+
+hard cap on rank movement per cycle (±2 or ±3)
+
+rate-limit / anti-spam on votes
+
+If you don’t have anti-spam yet, stay closer to 10–15%.
+
+4) Dampening logic is a good idea — but don’t overcomplicate V1
+
+I agree with the concept, but you can implement a simpler version:
+
+After hourly ingest, compute diff = |hourlyRank - liveRank|
+
+If diff > 5, then for the next hour:
+
+reduce live weight globally (or for that person) by 50%
+
+That’s enough.
+
+5) UI flash animation: yes, but subtle
+
+This is one of the highest ROI “alive” hacks.
+Just don’t make it look like gambling lights.
+
+What I would ship (clean V1 spec)
+Fast lane (every 10 minutes)
+
+Compute a live adjustment from:
+
+votes in last 10 min (strong)
+
+lightweight views (if feasible) OR tiny decay (weak fallback)
+
+Then:
+
+fame_live = fame_hourly + live_adjustment * live_weight
+
+cap rank movement to ±2 or ±3 per cycle
+
+persist fame_live + live_updated_at
+
+Hourly lane (canonical)
+
+do your normal ingest
+
+write fame_hourly + full_refresh_at
+
+reconcile by re-anchoring live to canonical
+
+UI
+
+show: Live updated Xm ago + Full refresh Ym ago
+
+tiny info tooltip explaining the difference
+
+highlight rows that moved since last live tick
+
+Two important product cautions
+A) Don’t call the fast lane “Fame Index” if it’s vote-influenced
+
+If Fame Index is supposed to represent “public interest in the world,” and now it’s partially “your users voting,” you should label it clearly:
+
+“Live Rank” (blended)
+
+“Fame Index” (hourly, external refresh)
+
+Otherwise users will accuse you of “making it up.”
+
+B) Protect against vote spam early
+
+Even basic protections help:
+
+one vote per account per person per X time
+
+IP throttling
+
+require login for votes that influence live rank
+
+Quick answer to your original question
+
+Could one API update more frequently for aesthetics and others catch up hourly?
+
+Technically yes, but practically it won’t deliver:
+
+Wikipedia won’t change enough at 10 min
+
+GDELT is noisy + rate-limited
+
+Serper costs money
+
+So the smooth solution is what you’re already converging on:
+✅ fast lane = cached/internal signals
+✅ slow lane = hourly authoritative refresh

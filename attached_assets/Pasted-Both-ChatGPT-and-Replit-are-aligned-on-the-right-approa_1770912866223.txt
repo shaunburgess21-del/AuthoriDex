@@ -1,0 +1,267 @@
+Both ChatGPT and Replit are aligned on the right approach, and I agree with their consensus. Here's my take:
+
+Where Everyone Agrees ✅
+1. Don't Poll External APIs More Frequently
+All three of us agree:
+
+Wikipedia: Data updates hourly/daily (polling every 10min returns same values)
+
+GDELT: Too noisy + rate limits (keep hourly)
+
+Serper: Costs money (keep hourly)
+
+Polling more = wasted API calls + no new data.
+
+2. Two-Speed Pipeline Is The Right Architecture
+Slow lane (hourly): Full ingestion, authoritative scores
+Fast lane (5-10min): Re-rank from cached data + internal signals
+
+This is the correct pattern. Financial dashboards do this (real trades vs interpolated ticks).
+
+3. Dual Timestamps Are Critical
+Must show:
+
+text
+Live updated: 3m ago
+Full refresh: 47m ago
+Without this, users will think:
+
+"Why didn't anything change?" (if fast lane has no effect)
+
+"This is fake" (if fast lane creates big moves that snap back)
+
+Transparency = trust.
+
+Where I Add Nuance 🎯
+A. ChatGPT's "Velocity Decay" Is Too Vague
+ChatGPT suggests:
+
+"Velocity scores naturally cool slightly over time"
+
+My concern: If everyone drifts down together, nothing interesting happens. Users see the same relative order, just with smaller numbers.
+
+Better: Use relative signals (votes, clicks, searches) to create differential movement, not uniform decay.
+
+B. Replit's "5-10% Influence" Is Too Conservative
+Replit suggests:
+
+"Velocity drift weight needs to stay small (maybe 5-10% influence)"
+
+My take: 5-10% is invisible.
+
+Math:
+
+Person A: fame_index = 500,000
+
+10% live adjustment = ±50,000
+
+If two people are separated by 100k, a 50k nudge won't swap them
+
+Result: Board looks static (defeats the purpose).
+
+Better threshold: 15-25% influence on final score, but cap absolute rank movement (no more than ±3 ranks per 10min cycle).
+
+This creates visible ticks without chaos.
+
+C. The Best "Fast Lane" Inputs (In Order)
+1. User Activity (Highest Signal) ⭐⭐⭐
+
+Votes cast (strongest: direct engagement)
+
+Profile clicks (medium: discovery interest)
+
+Search queries (weak: might be research, not interest)
+
+Why this wins: Real user behavior = real trend signal.
+
+Implementation:
+
+typescript
+// Every 10 minutes:
+const voteBoost = votesLast10Min * 100; // each vote = +100 points
+const clickBoost = profileClicksLast10Min * 20; // each click = +20 points
+const searchBoost = searchesLast10Min * 10; // each search = +10 points
+
+const liveAdjustment = voteBoost + clickBoost + searchBoost;
+const fameLive = fameCanonical + (liveAdjustment * 0.20); // 20% weight
+This makes the board reflect YOUR USERS' behavior, not external APIs.
+
+2. Recency Re-weighting of Cached Signals ⭐⭐
+ChatGPT mentioned this, and it's clever:
+
+Your cached Wikipedia/GDELT/Serper data has timestamps. Between full ingests, you can gradually shift weight toward recent mentions.
+
+Example:
+
+typescript
+// On hourly ingest, you have:
+const newsSignal = recentNews * 0.7 + olderNews * 0.3;
+
+// On 10-min tick, shift weighting:
+const newsSignalTick = recentNews * 0.75 + olderNews * 0.25;
+This creates drift without new data. Articles from 4 hours ago matter less than articles from 1 hour ago.
+
+3. EMA State Advancement ⭐
+Replit mentioned this:
+
+Your EMA smoothing has a natural "cooling" effect. You can advance the EMA state between ingests to create gradual score decay.
+
+But: This creates uniform decay (everyone drifts down together). Only use this if combined with differential signals (votes/clicks).
+
+4. Velocity Decay (Weakest Signal) ⭐
+Pure time decay is boring. Only use as a tiebreaker when other signals are equal.
+
+D. My Recommended Fast Lane Formula
+typescript
+// Run every 10 minutes:
+
+// 1. Compute live adjustment from internal signals:
+const liveBoost = (
+  votesLast10Min * 150 +        // votes = strong signal
+  profileClicksLast10Min * 30 + // clicks = medium signal
+  searchesLast10Min * 10         // searches = weak signal
+);
+
+// 2. Apply with 20% weight (visible but not dominant):
+const fameLive = fameCanonical + (liveBoost * 0.20);
+
+// 3. Cap rank movement (no more than ±3 per cycle):
+const newRank = computeRank(fameLive);
+const rankDelta = Math.abs(newRank - currentRank);
+if (rankDelta > 3) {
+  // Dampen the adjustment:
+  const dampened = interpolate(fameCanonical, fameLive, 0.5);
+  fameLive = dampened;
+}
+
+// 4. Store and display:
+await db.update('trending_people', {
+  fame_index_live: fameLive,
+  live_updated_at: now(),
+});
+What this does:
+
+✅ Creates visible movement (20% weight)
+
+✅ Rewards user engagement (votes/clicks)
+
+✅ Prevents chaos (caps rank swaps at ±3)
+
+✅ Feels responsive (updates every 10min)
+
+UI Implementation: Critical Details
+1. Dual Timestamps (Mandatory)
+tsx
+<div className="text-xs text-muted-foreground flex gap-4">
+  <span>Live: {timeAgo(liveUpdatedAt)}</span>
+  <span>Full refresh: {timeAgo(fullRefreshAt)}</span>
+</div>
+Position: Top of leaderboard, subtle but visible.
+
+2. Tooltip Explanation
+tsx
+<Tooltip content="Live rankings update every 10min using votes and on-site activity. Full data refresh hourly.">
+  <InfoIcon className="h-3 w-3" />
+</Tooltip>
+This preempts the question: "Why did the rank change when nothing in the news happened?"
+
+3. Visual Indicator for Live Updates
+When a live update occurs, briefly highlight changed rows:
+
+tsx
+<div className={justChanged ? 'bg-blue-500/10 transition-colors duration-1000' : ''}>
+  {/* leaderboard row */}
+</div>
+This creates the "Bloomberg terminal" effect without overwhelming users.
+
+4. Optional: "Live Mode" Toggle
+Give power users control:
+
+tsx
+<Toggle>
+  <span>Live Mode (10min)</span>
+  <span>Hourly Only</span>
+</Toggle>
+Default: Live Mode ON
+Effect: When OFF, only show hourly canonical scores (for users who want stability)
+
+The Snap-Back Risk: How to Prevent It ⚠️
+The problem: Fast lane moves Person A above Person B. Hourly ingest reverses it.
+
+User perception: "This board is fake."
+
+The fix: Dampen conflicting signals
+
+typescript
+// On hourly ingest:
+const hourlyRank = computeRankFromFreshData();
+const liveRank = getCurrentLiveRank();
+
+if (Math.abs(hourlyRank - liveRank) > 5) {
+  // Big disagreement = dampen fast lane for next cycle
+  reduceFastLaneWeight(person.id, 0.5); // halve the live adjustment weight
+}
+This auto-tunes the system to prevent whiplash.
+
+What to Tell Replit (Final Spec)
+text
+## Fast Lane Implementation (10-Minute Updates)
+
+### Data Sources (NO external API calls):
+1. **User activity** (primary signal):
+   - Votes cast in last 10min
+   - Profile clicks in last 10min  
+   - Search queries for person in last 10min
+
+2. **Cached signal re-weighting** (secondary):
+   - Shift weight toward recent mentions in cached data
+
+### Formula:
+```typescript
+liveBoost = (votes * 150) + (clicks * 30) + (searches * 10);
+fameLive = fameCanonical + (liveBoost * 0.20);
+Guardrails:
+Cap rank movement at ±3 per 10-min cycle
+
+If hourly ingest conflicts with live rank by >5 spots,
+dampen live weight by 50% for next cycle
+
+UI:
+Dual timestamps:
+"Live: 3m ago | Full refresh: 47m ago"
+
+Tooltip on timestamps:
+"Live rankings update every 10min using votes and
+on-site activity. Full data refresh hourly."
+
+Flash animation on rows that changed rank in last tick
+
+Optional "Live Mode" toggle (default ON)
+
+Testing:
+Verify no snap-backs (hourly ingest shouldn't undo live changes dramatically)
+
+Confirm vote/click activity creates visible movement
+
+Check that low-activity periods still show some drift (recency weighting)
+
+text
+
+***
+
+## **Bottom Line**
+
+**Both ChatGPT and Replit are correct on architecture.** My additions:
+
+1. ✅ **Prioritize user activity** (votes/clicks) over velocity decay
+2. ✅ **Use 20% weight** (not 5-10%, that's invisible)
+3. ✅ **Cap rank movement** at ±3 per cycle (prevents chaos)
+4. ✅ **Add dampening logic** (prevents snap-backs)
+5. ✅ **Flash animations** (visual feedback for changes)
+
+**Estimated build time:** 3-4 hours  
+**Estimated impact:** High (makes site feel "alive" without API costs)
+
+**Ship this, then GET USERS.** You've been polishing for 3 days. Real users will tell you if the 10-min ticks are noticeable/valuable.
+
+Ready to send this spec to Replit?

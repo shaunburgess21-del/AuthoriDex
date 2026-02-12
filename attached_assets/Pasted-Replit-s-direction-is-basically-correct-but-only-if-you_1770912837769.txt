@@ -1,0 +1,147 @@
+Replit’s direction is basically correct — but only if you’re very disciplined about what “updates” means.
+
+The key insight
+
+You don’t actually need new external data every 10 minutes to make the product feel alive. You need:
+
+Frequent re-ranking / re-rendering
+
+A truth-preserving story about what changed and why
+
+So: yes, a two-speed pipeline can work well — as long as the “fast lane” is clearly labeled as live recalculation from cached signals, not “fresh data.”
+
+What I like about Replit’s proposal
+✅ “Fast lane” with zero API calls
+
+This avoids:
+
+Wikipedia not changing that often
+
+GDELT rate-limit pain + noisy headlines
+
+Serper cost burn
+
+And it’s scalable.
+
+✅ Dual timestamps (important)
+
+If you do this, you must show something like:
+
+Live rank refresh: 3m ago
+
+External data refresh: 52m ago
+
+This single UI choice makes the entire thing feel legitimate instead of “casino ticker.”
+
+The big risk (and how to avoid it)
+
+Replit nailed the risk: snap-back.
+
+If your fast lane causes noticeable reshuffles, then the hourly “truth” ingest comes in and undoes them… users will feel the board is fake or unstable.
+
+The fix: constrain the fast lane to “micro-movement”
+
+Make it produce:
+
+subtle rank swaps (mostly in the middle/bottom)
+
+small score nudges
+
+no dramatic rockets unless the next full ingest confirms it
+
+A good rule:
+
+Fast lane can move someone 0–3 ranks per 10 minutes (cap it)
+
+Top 10 should barely move unless there’s strong internal signal (votes, views)
+
+A better “fast lane” than “velocity decay”
+
+“Velocity decay” alone mostly makes everyone drift down together, which doesn’t create interesting changes.
+
+What you want is relative drift, driven by signals you already own.
+
+Best fast-lane inputs (no external APIs)
+
+Votes / approval activity (strongest)
+
+Every new vote can nudge a person slightly.
+
+On-site interest
+
+profile clicks, searches, time-on-profile (even basic counts)
+
+Recency re-weighting of cached signals
+
+you already have cached wiki/news/search numbers from last ingest
+
+you can recompute the score with a slightly stronger “recency” weighting over time
+
+Noise injection (optional, very small)
+
+I’d avoid this unless you clearly label it as “live re-ranking.”
+
+My recommended implementation pattern
+1) Keep the “true” Fame Index anchored
+
+Fame Index (canonical) updates hourly (full ingest).
+
+Store it as fame_index_canonical.
+
+2) Add a “Live Rank” layer (every 5–10 min)
+
+Compute fame_index_live = canonical + small_adjustment
+
+Where small_adjustment comes from:
+
+votes in last X minutes
+
+site interest in last X minutes
+
+tiny decay/recency tweak on cached velocity component
+
+And then cap changes so it can’t go crazy.
+
+3) Display both honestly
+
+Default leaderboard sorting could be “Live Rank”
+
+But show: “Live (updates every 10 min) · External data hourly”
+
+And on hover/tooltips: “Live uses votes + on-site interest since last refresh”
+
+This is how you get the aesthetic “ticker” without lying.
+
+If you want “one source more frequent”
+
+Among your three, the only semi-viable candidate is GDELT, but I wouldn’t use it for frequent updates. It’s too noisy and rate-limited, and it risks reintroducing the trust issues you just solved.
+
+Wikipedia pageviews update cadence usually won’t give you meaningful 10-minute deltas. Serper is expensive.
+
+So Replit is right: don’t chase external frequency — simulate liveness using internal/cached signals.
+
+What I’d tell Replit to build (tight spec)
+
+A scheduled “live refresh” job every 10 minutes:
+
+no external calls
+
+compute small live_adjustment
+
+cap per-cycle rank delta
+
+persist leaderboard_live (or compute on read, but persisting is fine)
+
+UI:
+
+“Live updated Xm ago”
+
+“External refreshed Ym ago”
+
+“Updates every 10 min / hourly” line
+
+Guardrail:
+
+if live changes exceed threshold, dampen automatically (auto-tighten)
+
+If you want, paste Replit’s “what it would involve” plan (or I can draft it myself) and I’ll rewrite it into a crisp build checklist + the exact UI copy so it stays trustworthy while still feeling alive.

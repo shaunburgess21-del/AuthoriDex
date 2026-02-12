@@ -1,0 +1,158 @@
+I want our leaderboard to update more often than once every hour, even just for aesthetics. Our users will visit our site and then come back let's say 10 min later and if the baord is still the same that might be boring. I know we are limited with our 3 API's. But I was wondering if one of the 3 API's, perhaps one that is more robust and can handle more frequency, could update more frequently, just for appearance that our board is tickingalong, and then the others play catch up on the hour? Could that be handeled smoothly?
+
+Yes — you can make it “tick along” every 5–10 minutes without blowing up cost or trust, as long as you structure it as a two-speed pipeline (fast lane + slow lane) and you’re honest about what’s “live” vs “fully refreshed”.
+
+Here’s the clean way to do it.
+
+The two-speed model (works smoothly)
+1) Slow lane (authoritative) — every 60 min
+
+This is your current full ingestion:
+
+Wikipedia pageviews
+
+GDELT headlines/mentions
+
+Serper search
+
+Recompute full fame score, write snapshots, update ranks.
+
+This remains the source of truth.
+
+2) Fast lane (cosmetic + lightweight signal) — every 5–10 min
+
+Between full ingests, you run a much smaller job that:
+
+updates only the “velocity” portion of the score (small weight)
+
+or updates a “live momentum” overlay used for ordering/animation but not the core score
+
+uses only the source(s) that can handle frequent calls + your cached data
+
+This gives the site that “Bloomberg terminal” feel, without pretending you have full fresh data every 10 minutes.
+
+Which of your 3 APIs should be the fast lane?
+Best candidate: Wikipedia pageviews
+
+It’s robust and free-ish (public API).
+
+You can hit it more often without cost anxiety.
+
+Important gotcha: Wikipedia pageviews data is usually not real-time; it updates on an hourly/daily cadence depending on endpoint. So polling every 10 minutes might often return the same value.
+
+Still useful if you treat it as a stabilizing background signal and only let it nudge things.
+
+GDELT
+
+Can be spiky, rate-limited, and sometimes noisy.
+
+Frequent polling increases false positives (“wrong person” issues) unless your disambiguation is strong.
+
+I’d keep it hourly or maybe every 30 min if you have strong caching + query hygiene.
+
+Serper
+
+This is usually the one you don’t want to call frequently (cost + quotas).
+
+Keep it hourly (or even less frequent for long-tail celebs).
+
+So: If you must pick one to “update more frequently”, pick Wikipedia, but don’t expect it to change every 10 minutes. Use it as the fast lane input plus local signals (below).
+
+The trick that makes it feel live even when APIs are static
+Add “live dynamics” that don’t require new API calls
+
+You already have signals that can update continuously:
+
+user voting / approval events
+
+your internal “rankChange” logic from snapshots
+
+EMA smoothing state (you can “advance” it)
+
+cached API responses (you can re-score with new weights or time decay)
+
+So the fast lane job can do:
+
+time decay / momentum drift: slight re-ranking based on last-known velocity
+
+micro-updates: recompute the displayed ordering from cached data + drift
+
+small “velocity-only” adjustments (like ±0.1–0.5% score moves)
+
+This creates motion without lying.
+
+How I’d implement it (simple + safe)
+A) Split your score into two components
+
+Mass (slow): your big stable score from full ingestion
+
+Velocity (fast): short-term momentum score updated every 5–10 min
+
+Final score = mass_score + (velocity_score * v_weight)
+
+Where v_weight is small (e.g., 0.10–0.25).
+So the board moves a bit, but doesn’t whiplash.
+
+B) Fast lane uses:
+
+Latest cached signals from last full ingest
+
+Optional: Wikipedia refresh (if changed)
+
+A decay model: velocity slowly cools unless reinforced
+
+C) Slow lane “re-anchors”
+
+Every hour the full ingest recalculates mass + velocity properly and overwrites drift.
+
+UI/UX: make it feel alive and trustworthy
+
+Do both labels:
+
+“Live ticks every ~10 min” (fast lane)
+
+“Full refresh about hourly” (slow lane)
+
+And show two timestamps:
+
+Live updated: “2m ago”
+
+Full refresh: “47m ago”
+
+This instantly prevents “you said it updates, but nothing changed” complaints.
+
+What I’d tell Replit to build next
+
+Add a fast-lane scheduler (every 10 min) that:
+
+does no Serper
+
+does optional Wikipedia refresh
+
+recalculates only velocity overlay (small weight)
+
+writes a lightweight live_tick timestamp + maybe live_rank
+
+Keep hourly ingest as-is.
+
+Update UI:
+
+“Live updated Xm ago”
+
+“Full refresh Xm ago”
+
+(optional) a subtle “ticker flash” when live ranks update
+
+One warning (so you don’t hurt trust)
+
+If your fast lane causes visible reshuffles that later “snap back” on the hourly run, users will feel it’s fake.
+
+That’s why:
+
+keep fast-lane weight small,
+
+keep drift smooth,
+
+and don’t let fast lane make massive jumps.
+
+If you want, paste your current weighting (velocity vs mass) and how you compute “score surge” vs “rank jump” today, and I’ll propose a concrete fast-lane formula + schedule (e.g., every 10 minutes) that will look lively but stay stable.
