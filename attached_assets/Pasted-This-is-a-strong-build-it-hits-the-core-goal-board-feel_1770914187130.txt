@@ -1,0 +1,67 @@
+This is a strong build — it hits the core goal (board feels alive every ~10 min) without burning API calls, and it adds the transparency layer (dual timestamps) that keeps trust intact.
+That said, there are a few “gotchas” that can quietly bite you. Here are my thoughts, ranked by importance.
+________________________________________
+What Replit nailed ✅
+1) Two-speed pipeline is implemented end-to-end
+•	Live tick every 10 min
+•	Hourly canonical refresh
+•	Leaderboard sorts by COALESCE(fame_index_live, fame_index)
+•	UI shows Live updated vs Full refresh
+That’s exactly the right shape.
+2) Weight + cap combo is sane for V1
+•	12% live weight + ±3 rank cap is a good starting point (safer than 20% without anti-spam).
+•	It creates movement without “casino board” chaos.
+3) The “fallback signal” exists (profile views)
+This is the key to avoiding the “votes-only = dead board” problem early on.
+________________________________________
+The biggest risks ⚠️ (and easy fixes)
+A) Profile views will get botted / inflated (even accidentally)
+Incrementing profile_views on /api/trending/:id means:
+•	refresh spam
+•	bots
+•	prefetching/crawlers
+•	people opening in multiple tabs
+That can start moving ranks in ways that feel fake, even if you didn’t intend it.
+Low-effort guardrails:
+1.	Deduplicate views per person per session/time window
+e.g. only count one view per personId per sessionId per 10 minutes.
+2.	Exclude obvious bots/crawlers (basic user-agent checks help a lot)
+3.	IP rate limit the view increment route (even light throttling)
+If you do only one thing here: dedupe.
+________________________________________
+
+B) Live tick scheduler in server startup is fragile in production
+In dev it’s fine. In production, if your instance sleeps/restarts, you can miss ticks.
+Best practice: move the live tick to the same robust mechanism you’ve been building for ingestion (cron endpoint / worker).
+Not urgent today, but keep it in mind.
+________________________________________
+One “quiet bug” I noticed from Replit’s own notes 🐛
+They mention the UI type expected fields like lastScoredAtFormatted that may not exist from /api/system/freshness.
+That’s the kind of mismatch that causes:
+•	“undefined” timestamps
+•	weird “Updated —” displays
+•	fragile UI fallbacks
+Fix: make the freshness contract strict:
+•	return exactly what UI needs
+•	update type definitions to match
+•	remove dead fields
+________________________________________
+Snap-back dampening: good idea, but verify one thing
+They said: “if hourly rank disagrees with live rank by >5, halve live weight for that person.”
+That’s good — but you need to ensure you’re storing this somewhere:
+•	per-person dampening factor
+•	with an expiry (e.g., resets after 1 hour or gradually returns to baseline)
+Otherwise you risk a person getting “stuck dampened” forever.
+Simple approach: store live_weight_multiplier per person that decays back to 1.0 over time.
+________________________________________
+Performance + DB write load
+Updating all 100 rows every 10 minutes is probably fine, but you can optimize later by:
+•	only writing rows whose live score changed
+•	or only updating top N + movers
+Not urgent.
+________________________________________
+What I’d ask Replit to do next (short checklist)
+1.	View dedupe: count 1 view/person/session/10min (or IP+cookie window).
+2.	Bot filtering on view increments (basic UA + rate limit).
+3.	Make freshness API contract consistent (remove phantom fields).
+4.	Confirm dampening persistence & expiry (avoid permanent penalties).
