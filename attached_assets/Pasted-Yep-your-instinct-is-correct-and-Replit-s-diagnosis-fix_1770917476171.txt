@@ -1,0 +1,88 @@
+Yep — your instinct is correct, and Replit’s diagnosis/fix is also correct.
+
+Why Hot Movers was “thrashing” even without new API data
+
+Even if the inputs only change hourly, Hot Movers can still reshuffle if the baseline it compares against keeps moving.
+
+What was happening (as Replit described) is a classic moving reference point bug:
+
+You weren’t comparing “now vs exactly last hour yesterday” in a stable way.
+
+You were comparing “now vs the nearest snapshot to 24h ago”
+
+But because snapshots weren’t truly a single timestamp (each person had a slightly different timestamp during ingestion), “nearest” could land on a different micro-timestamp each time the cache expired.
+
+So the “24h reference snapshot” kept changing → rankChange kept changing → Hot Movers list kept changing.
+
+That’s why it felt like “fake movement.”
+
+Replit’s fix is the right shape ✅
+
+Two key improvements they made are exactly what you want:
+
+Hour-bucketing (date_trunc('hour', ...))
+
+This makes the baseline “yesterday’s 14:00 snapshot hour” instead of “yesterday’s 14:03:12.415 snapshot of some person”.
+
+That alone kills the jitter.
+
+Longer cache TTL
+
+Prevents the system from re-selecting a new reference baseline every minute.
+
+Makes behavior match user expectations: “the board updates when the system updates.”
+
+Their re-test (“identical after 70 seconds”) is a good sanity check.
+
+Two extra upgrades I’d consider (small, but makes this bulletproof)
+1) Create a real “ingestion_id” / “batch_id”
+
+Hour-bucketing is great, but the cleanest model is:
+
+Each ingestion run has a run_id
+
+Every snapshot row writes that run_id
+
+“Reference snapshot” becomes: “the ingestion run closest to 24h ago”
+
+Then you always compare run-to-run, not timestamp heuristics.
+
+This eliminates all ambiguity forever (and it also makes audits/debugging way easier).
+
+2) Make the baseline selection deterministic and pinned until next full refresh
+
+Even with hour bucketing, you can go one step further:
+
+Pick a baseline hour (or baseline run) once
+
+Store it in cache/state alongside “last_full_refresh_at”
+
+Only update the baseline when:
+
+a new full ingest completes, or
+
+you cross a defined boundary (e.g., new hour/day)
+
+That guarantees the Hot Movers list doesn’t subtly drift just because “time passed.”
+
+Quick rule of thumb
+
+If users see a list changing but you didn’t actually ingest new external data or meaningful internal signals, they will assume:
+
+it’s buggy, or
+
+it’s “animated/faked.”
+
+So you absolutely want:
+
+stable baseline
+
+stable cache
+
+clear timestamps (“Live” vs “Full”)
+
+Bottom line
+
+Replit’s fix (hour-bucket + longer TTL) is a legit, correct fix for the exact symptom you described, and it matches the mental model you want your users to build.
+
+If you want the “never think about this again” version, add ingestion_run_id to snapshots and select baselines by run, not timestamp.
