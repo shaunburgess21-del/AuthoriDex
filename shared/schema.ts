@@ -81,8 +81,10 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   drivers: text("drivers").array(),
   snapshotOrigin: text("snapshot_origin").default("ingest"),
   diagnostics: jsonb("diagnostics"),
+  runId: varchar("run_id"),
 }, (table) => ({
   uniquePersonTimestamp: unique().on(table.personId, table.timestamp),
+  runIdIdx: index("trend_snapshots_run_id_idx").on(table.runId),
 }));
 
 // API Cache - stores raw API responses to prevent redundant calls

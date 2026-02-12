@@ -700,6 +700,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
           drivers: scoreResult.drivers,
           snapshotOrigin: 'ingest',
           diagnostics: diagnosticsData,
+          runId: runId,
         };
         await db.insert(trendSnapshots).values(snapshotValues)
           .onConflictDoUpdate({
@@ -722,6 +723,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
               drivers: snapshotValues.drivers,
               snapshotOrigin: snapshotValues.snapshotOrigin,
               diagnostics: snapshotValues.diagnostics,
+              runId: snapshotValues.runId,
             },
           });
 
