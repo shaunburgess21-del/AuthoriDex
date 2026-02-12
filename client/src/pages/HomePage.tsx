@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip as UITooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Rocket, Snowflake } from "lucide-react";
+import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Rocket, Flame } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
@@ -63,7 +63,7 @@ function MarketPulseCard({
       iconColor: "text-red-400",
       cardClass: "pulse-card-red",
       iconBgClass: "pulse-icon-red",
-      subtitle: "Cooling \u00B7 7d",
+      subtitle: "Dropping \u00B7 7d",
     },
   };
   
@@ -968,35 +968,13 @@ export default function HomePage() {
                       </UITooltip>
                       <UITooltip>
                         <TooltipTrigger asChild>
-                          <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-spiking">
-                            <Zap className="h-3 w-3 text-yellow-400" />
-                            Spiking
+                          <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-surging">
+                            <Flame className="h-3 w-3 text-yellow-400" />
+                            Surging
                           </span>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="text-xs max-w-[200px]">
-                          Large score increase in the last 24 hours
-                        </TooltipContent>
-                      </UITooltip>
-                      <UITooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-rising">
-                            <TrendingUp className="h-3 w-3 text-emerald-400" />
-                            Rising
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs max-w-[200px]">
-                          Climbing the rankings rapidly
-                        </TooltipContent>
-                      </UITooltip>
-                      <UITooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-cooling">
-                            <Snowflake className="h-3 w-3 text-blue-400" />
-                            Cooling
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs max-w-[200px]">
-                          Significant drop in score and rank
+                          Top percentile score spike or rank jump in the last 24 hours
                         </TooltipContent>
                       </UITooltip>
                     </div>

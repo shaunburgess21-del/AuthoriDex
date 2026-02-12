@@ -461,18 +461,27 @@ export default function PersonDetailPage() {
     enabled: !!params?.id,
   });
 
-  const { data: dailyMovers = [] } = useQuery<(TrendingPerson & { rankChange?: number | null })[]>({
-    queryKey: ['/api/trending/movers/daily'],
+  const { data: leaderboardForThresholds } = useQuery<{ data: (TrendingPerson & { rankChange?: number | null })[] }>({
+    queryKey: ['/api/leaderboard', 'thresholds-full'],
+    queryFn: async () => {
+      const response = await fetch(`/api/leaderboard?limit=100&offset=0&tab=fame&sortDir=desc`);
+      if (!response.ok) throw new Error('Failed to fetch');
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
   });
 
-  const isHotMover = useMemo(() => {
-    if (!person || !Array.isArray(dailyMovers) || dailyMovers.length === 0) return false;
-    const thresholds = computePercentileThresholds(dailyMovers as any);
-    const match = dailyMovers.find(p => p.id === person.id);
-    if (!match) return false;
+  const { isHotMover, exceptionalIndicator } = useMemo(() => {
+    if (!person || !leaderboardForThresholds?.data || leaderboardForThresholds.data.length === 0) {
+      return { isHotMover: false, exceptionalIndicator: null };
+    }
+    const thresholds = computePercentileThresholds(leaderboardForThresholds.data as any);
+    const match = leaderboardForThresholds.data.find(p => p.id === person.id);
+    if (!match) return { isHotMover: false, exceptionalIndicator: null };
     const indicator = getExceptionalIndicator(match as any, thresholds);
-    return indicator !== null;
-  }, [person, dailyMovers]);
+    return { isHotMover: indicator !== null, exceptionalIndicator: indicator };
+  }, [person, leaderboardForThresholds]);
 
   // Check if person is favorited
   useEffect(() => {

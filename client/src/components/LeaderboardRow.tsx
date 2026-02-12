@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useEffect, useRef } from "react";
 import { compactNumber, formatDelta, compactVotes } from "@/lib/formatNumber";
-import { ThumbsUp, Rocket, Snowflake, Zap, TrendingUp } from "lucide-react";
+import { ThumbsUp, Rocket, Zap, TrendingUp, Flame } from "lucide-react";
 
 const SEGMENT_COLORS_5 = [
   '#FF0000',
@@ -88,13 +88,10 @@ function getExceptionalIndicator(
     return { icon: Rocket, color: "text-orange-400", label: "Breakout", description: `Big surge + big rank jump\n${metrics}` };
   }
   if (delta != null && delta >= thresholds.deltaP90) {
-    return { icon: Zap, color: "text-yellow-400", label: "Spiking", description: `Big score surge\n${metrics}` };
+    return { icon: Flame, color: "text-yellow-400", label: "Surging", description: `Driver: Score spike\n${metrics}` };
   }
   if (rankChange != null && rankChange >= thresholds.rankChangeP90) {
-    return { icon: TrendingUp, color: "text-emerald-400", label: "Rising", description: `Climbing the board\n${metrics}` };
-  }
-  if (rankChange != null && rankChange <= thresholds.negRankChangeP10 && delta != null && delta <= thresholds.negDeltaP10) {
-    return { icon: Snowflake, color: "text-blue-400", label: "Cooling", description: `Fast drop-off\n${metrics}` };
+    return { icon: Flame, color: "text-yellow-400", label: "Surging", description: `Driver: Rank jump\n${metrics}` };
   }
 
   return null;
