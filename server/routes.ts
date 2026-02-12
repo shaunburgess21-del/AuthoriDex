@@ -32,6 +32,44 @@ import {
 } from "./scoring/sourceHealth";
 import { getLastFullRefreshAt } from "./jobs/live-tick";
 
+const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
+const VIEW_IP_RATE_LIMIT = 30;
+const BOT_UA_PATTERNS = /bot|crawl|spider|slurp|wget|curl|fetch|headless|phantom|puppet|selenium|lighthouse|preview|embed|scrape/i;
+
+const _viewDedupe = new Map<string, number>();
+const _viewIpCounts = new Map<string, { count: number; resetAt: number }>();
+
+function cleanViewDedupe() {
+  const now = Date.now();
+  Array.from(_viewDedupe.entries()).forEach(([key, ts]) => {
+    if (now - ts > VIEW_DEDUPE_WINDOW_MS) _viewDedupe.delete(key);
+  });
+  Array.from(_viewIpCounts.entries()).forEach(([ip, bucket]) => {
+    if (now > bucket.resetAt) _viewIpCounts.delete(ip);
+  });
+}
+setInterval(cleanViewDedupe, 5 * 60 * 1000);
+
+function shouldCountView(ip: string, personId: string, userAgent: string): boolean {
+  if (BOT_UA_PATTERNS.test(userAgent)) return false;
+
+  const now = Date.now();
+  const dedupeKey = `${ip}:${personId}`;
+  const lastSeen = _viewDedupe.get(dedupeKey);
+  if (lastSeen && now - lastSeen < VIEW_DEDUPE_WINDOW_MS) return false;
+
+  const bucket = _viewIpCounts.get(ip);
+  if (bucket && now < bucket.resetAt) {
+    if (bucket.count >= VIEW_IP_RATE_LIMIT) return false;
+    bucket.count++;
+  } else {
+    _viewIpCounts.set(ip, { count: 1, resetAt: now + VIEW_DEDUPE_WINDOW_MS });
+  }
+
+  _viewDedupe.set(dedupeKey, now);
+  return true;
+}
+
 // Cached snapshot rank lookup (shared between /api/trending and /api/leaderboard)
 let _cachedPrevRanks: Map<string, number> | null = null;
 let _cachedPrevRanksAt = 0;
@@ -397,11 +435,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Person not found" });
       }
 
-      db.update(trendingPeople)
-        .set({ profileViews10m: sql`COALESCE(${trendingPeople.profileViews10m}, 0) + 1` })
-        .where(eq(trendingPeople.id, id))
-        .execute()
-        .catch(() => {});
+      const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
+      const ua = req.headers['user-agent'] || '';
+      if (shouldCountView(clientIp, id, ua)) {
+        db.update(trendingPeople)
+          .set({ profileViews10m: sql`COALESCE(${trendingPeople.profileViews10m}, 0) + 1` })
+          .where(eq(trendingPeople.id, id))
+          .execute()
+          .catch(() => {});
+      }
 
       res.json(person);
     } catch (error) {
@@ -587,9 +629,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (liveTs?.ts) liveUpdatedAt = new Date(liveTs.ts);
       } catch (e) {}
 
+      const lastScoredAt = fullRefresh || liveUpdatedAt;
+
       res.json({
         freshness,
         systemStatus: Object.values(freshness).every(f => f.status !== "stale") ? "healthy" : "degraded",
+        lastScoredAt: lastScoredAt?.toISOString() || null,
+        lastScoredAtFormatted: formatRelativeTime(lastScoredAt),
         liveUpdatedAt: liveUpdatedAt?.toISOString() || null,
         liveUpdatedAtFormatted: formatRelativeTime(liveUpdatedAt),
         fullRefreshAt: fullRefresh?.toISOString() || null,

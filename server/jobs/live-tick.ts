@@ -7,6 +7,7 @@ const MAX_RANK_DELTA = 3;
 const VOTE_BOOST_POINTS = 150;
 const VIEW_BOOST_POINTS = 30;
 const TICK_INTERVAL_MS = 10 * 60 * 1000;
+const DAMPEN_DECAY_STEP = 0.1;
 
 let _lastFullRefreshAt: Date | null = null;
 
@@ -70,6 +71,7 @@ export async function runLiveTick(): Promise<{ processed: number; moved: number 
     .select({
       id: trendingPeople.id,
       fameIndex: trendingPeople.fameIndex,
+      fameIndexLive: trendingPeople.fameIndexLive,
       rank: trendingPeople.rank,
       liveRank: trendingPeople.liveRank,
       liveDampen: trendingPeople.liveDampen,
@@ -93,7 +95,10 @@ export async function runLiveTick(): Promise<{ processed: number; moved: number 
 
   for (const p of people) {
     const canonical = p.fameIndex ?? 0;
-    const dampen = p.liveDampen ?? 1.0;
+    let dampen = p.liveDampen ?? 1.0;
+    if (dampen < 1.0) {
+      dampen = Math.min(1.0, dampen + DAMPEN_DECAY_STEP);
+    }
     const views = p.profileViews10m ?? 0;
     const voteCount = voteCounts.get(p.id) ?? 0;
 
@@ -121,8 +126,17 @@ export async function runLiveTick(): Promise<{ processed: number; moved: number 
     canonicalRankMap.set(p.id, p.rank);
   }
 
+  const prevLiveMap = new Map<string, { fameIndexLive: number | null; liveRank: number | null; liveDampen: number | null }>();
+  for (const p of people) {
+    prevLiveMap.set(p.id, {
+      fameIndexLive: p.fameIndexLive ?? null,
+      liveRank: p.liveRank,
+      liveDampen: p.liveDampen,
+    });
+  }
+
   let moved = 0;
-  const updates: Array<{ id: string; fameIndexLive: number; liveRank: number }> = [];
+  let written = 0;
 
   for (let i = 0; i < liveScores.length; i++) {
     const item = liveScores[i];
@@ -137,22 +151,24 @@ export async function runLiveTick(): Promise<{ processed: number; moved: number 
 
     if (finalRank !== canonicalRank) moved++;
 
-    updates.push({
-      id: item.id,
-      fameIndexLive: item.liveScore,
-      liveRank: finalRank,
-    });
-  }
+    const prev = prevLiveMap.get(item.id);
+    const scoreChanged = !prev || prev.fameIndexLive !== item.liveScore;
+    const rankChanged = !prev || prev.liveRank !== finalRank;
+    const dampenChanged = !prev || Math.abs((prev.liveDampen ?? 1.0) - item.dampen) > 0.001;
+    const viewsNeedReset = item.views > 0;
 
-  for (const u of updates) {
-    await db.update(trendingPeople)
-      .set({
-        fameIndexLive: u.fameIndexLive,
-        liveRank: u.liveRank,
-        liveUpdatedAt: now,
-        profileViews10m: 0,
-      })
-      .where(eq(trendingPeople.id, u.id));
+    if (scoreChanged || rankChanged || dampenChanged || viewsNeedReset) {
+      await db.update(trendingPeople)
+        .set({
+          fameIndexLive: item.liveScore,
+          liveRank: finalRank,
+          liveDampen: item.dampen,
+          liveUpdatedAt: now,
+          profileViews10m: 0,
+        })
+        .where(eq(trendingPeople.id, item.id));
+      written++;
+    }
   }
 
   if (!_lastFullRefreshAt) {
@@ -166,8 +182,8 @@ export async function runLiveTick(): Promise<{ processed: number; moved: number 
     } catch (e) {}
   }
 
-  console.log(`[LiveTick] Processed ${updates.length} people, ${moved} rank changes, ${voteCounts.size} with recent votes`);
-  return { processed: updates.length, moved };
+  console.log(`[LiveTick] Processed ${liveScores.length} people, ${written} rows written, ${moved} rank changes, ${voteCounts.size} with recent votes`);
+  return { processed: liveScores.length, moved };
 }
 
 export async function applySnapBackDampening(): Promise<number> {
