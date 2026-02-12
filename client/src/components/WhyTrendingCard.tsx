@@ -150,7 +150,21 @@ export function WhyTrendingCard({ personId, personName, hotMover }: WhyTrendingC
         </Card>
       );
     }
-    return null;
+    return (
+      <Card className="border-border/50 bg-card/50 backdrop-blur-sm" data-testid="card-why-trending-empty">
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-primary" />
+            <CardTitle className="text-base font-medium">Why They're Trending</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground" data-testid="text-no-driver">
+            No clear driver found in the last 24h.
+          </p>
+        </CardContent>
+      </Card>
+    );
   }
 
   const categoryClass = categoryColors[data.category || "In The News"] || categoryColors["In The News"];
