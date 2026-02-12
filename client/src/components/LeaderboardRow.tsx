@@ -94,10 +94,8 @@ function getExceptionalIndicator(
     return { icon: Flame, color: "text-yellow-400", label: "Surging", description: `Driver: Rank jump\n${metrics}`, triggersHotMover: true };
   }
   if (delta != null && delta <= thresholds.negDeltaP10) {
-    return { icon: TrendingDown, color: "text-muted-foreground/60", label: "Cooling", description: `Fading momentum\n${metrics}`, triggersHotMover: false };
-  }
-  if (rankChange != null && rankChange <= thresholds.negRankChangeP10) {
-    return { icon: TrendingDown, color: "text-muted-foreground/60", label: "Cooling", description: `Dropping in rank\n${metrics}`, triggersHotMover: false };
+    const hasRankDrop = rankChange != null && rankChange <= thresholds.negRankChangeP10;
+    return { icon: TrendingDown, color: "text-muted-foreground/60", label: "Cooling", description: `${hasRankDrop ? 'Fading momentum + rank drop' : 'Fading momentum'}\n${metrics}`, triggersHotMover: false };
   }
 
   return null;

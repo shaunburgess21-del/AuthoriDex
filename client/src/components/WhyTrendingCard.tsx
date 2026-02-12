@@ -15,6 +15,7 @@ interface WhyTrendingData {
   sources?: Array<{ title: string; link: string; date?: string }>;
   fetchedAt: string;
   message?: string;
+  cacheStatus?: string;
 }
 
 interface WhyTrendingCardProps {
@@ -119,32 +120,37 @@ export function WhyTrendingCard({ personId, personName, hotMover }: WhyTrendingC
   }
 
   if (!data || !data.hasContext) {
-    return (
-      <Card className="border-border/50 bg-card/50 backdrop-blur-sm" data-testid="card-why-trending-pending">
-        <CardHeader className="pb-2">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-primary" />
-            <CardTitle className="text-base font-medium">Why They're Trending</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              Summary is being prepared — check back shortly.
-            </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRetry}
-              disabled={isFetching}
-              data-testid="button-refresh-why-trending"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
+    const isGenerating = data?.cacheStatus === "LOCKED_COLD";
+    if (isGenerating) {
+      return (
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm" data-testid="card-why-trending-pending">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              <CardTitle className="text-base font-medium">Why They're Trending</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Sparkles className="h-3.5 w-3.5 animate-pulse" />
+                <span>Generating summary — check back in a few seconds.</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRetry}
+                disabled={isFetching}
+                data-testid="button-refresh-why-trending"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+    return null;
   }
 
   const categoryClass = categoryColors[data.category || "In The News"] || categoryColors["In The News"];
