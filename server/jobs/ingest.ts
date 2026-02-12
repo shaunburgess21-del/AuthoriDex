@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { trackedPeople, trendSnapshots, trendingPeople, celebrityImages } from "@shared/schema";
+import { trackedPeople, trendSnapshots, trendingPeople, celebrityImages, ingestionRuns } from "@shared/schema";
 import { desc, eq, sql, gte, and } from "drizzle-orm";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
 import { fetchBatchGdeltNews } from "../providers/gdelt";
@@ -50,18 +50,95 @@ export interface IngestResult {
   processed: number;
   errors: number;
   duration: number;
+  runId?: string;
+  lockedOut?: boolean;
+}
+
+const STALE_LOCK_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes - if a run has been "running" this long, it's stale
+
+async function acquireIngestionLock(): Promise<{ acquired: boolean; runId?: string; existingRunId?: string }> {
+  const staleThreshold = new Date(Date.now() - STALE_LOCK_TIMEOUT_MS);
+  
+  const existingRuns = await db.select()
+    .from(ingestionRuns)
+    .where(eq(ingestionRuns.status, "running"));
+  
+  for (const run of existingRuns) {
+    if (run.startedAt < staleThreshold) {
+      console.warn(`[Ingest Lock] Found stale running lock (id=${run.id}, started=${run.startedAt.toISOString()}). Marking as failed.`);
+      await db.update(ingestionRuns)
+        .set({ status: "failed", finishedAt: new Date(), errorSummary: "Stale lock auto-cleaned (exceeded 30min timeout)" })
+        .where(eq(ingestionRuns.id, run.id));
+    } else {
+      console.warn(`[Ingest Lock] Another ingestion is currently running (id=${run.id}, started=${run.startedAt.toISOString()})`);
+      return { acquired: false, existingRunId: run.id };
+    }
+  }
+  
+  const [newRun] = await db.insert(ingestionRuns)
+    .values({ status: "running", lockAcquiredAt: new Date() })
+    .returning({ id: ingestionRuns.id });
+  
+  console.log(`[Ingest Lock] Acquired lock, run ID: ${newRun.id}`);
+  return { acquired: true, runId: newRun.id };
+}
+
+async function releaseIngestionLock(
+  runId: string,
+  status: "completed" | "failed",
+  details: {
+    snapshotsWritten?: number;
+    peopleProcessed?: number;
+    errorCount?: number;
+    errorSummary?: string;
+    sourceTimings?: Record<string, number>;
+    sourceStatuses?: Record<string, string>;
+    healthSummary?: Record<string, any>;
+    hourBucket?: Date;
+  }
+) {
+  await db.update(ingestionRuns)
+    .set({
+      status,
+      finishedAt: new Date(),
+      lockReleasedAt: new Date(),
+      snapshotsWritten: details.snapshotsWritten ?? 0,
+      peopleProcessed: details.peopleProcessed ?? 0,
+      errorCount: details.errorCount ?? 0,
+      errorSummary: details.errorSummary ?? null,
+      sourceTimings: details.sourceTimings ?? null,
+      sourceStatuses: details.sourceStatuses ?? null,
+      healthSummary: details.healthSummary ?? null,
+      hourBucket: details.hourBucket ?? null,
+    })
+    .where(eq(ingestionRuns.id, runId));
+  
+  console.log(`[Ingest Lock] Released lock, run ${runId} => ${status}`);
 }
 
 export async function runDataIngestion(): Promise<IngestResult> {
+  const lockResult = await acquireIngestionLock();
+  
+  if (!lockResult.acquired) {
+    console.warn(`[Ingest] SKIPPED: Another ingestion is running (${lockResult.existingRunId}). Cannot overlap.`);
+    await db.insert(ingestionRuns)
+      .values({ status: "locked_out", errorSummary: `Blocked by existing run ${lockResult.existingRunId}`, finishedAt: new Date() });
+    return { processed: 0, errors: 0, duration: 0, lockedOut: true };
+  }
+  
+  const runId = lockResult.runId!;
   const startTime = Date.now();
   let processed = 0;
   let errors = 0;
+  const sourceTimings: Record<string, number> = {};
+  const sourceStatuses: Record<string, string> = {};
 
   if (process.env.REQUIRE_DB_GUARDRAILS === 'true') {
     const { dbGuardrailsVerified } = await import('../guardrails');
     if (!dbGuardrailsVerified) {
       console.error(`[Ingest] ABORT: REQUIRE_DB_GUARDRAILS=true but DB constraints are missing. Refusing to write to prevent data corruption.`);
-      return { processed: 0, errors: 1, duration: Date.now() - startTime };
+      await releaseIngestionLock(runId, "failed", { errorSummary: "DB guardrails not verified" });
+      return { processed: 0, errors: 1, duration: Date.now() - startTime, runId };
     }
   }
 
@@ -85,24 +162,28 @@ export async function runDataIngestion(): Promise<IngestResult> {
     const people = await db.select().from(trackedPeople);
     console.log(`[Ingest] Found ${people.length} tracked people`);
 
+    let wikiStart = Date.now();
     const wikiData = await fetchBatchWikiPageviews(
       people.map(p => ({ id: p.id, wikiSlug: p.wikiSlug }))
     );
+    sourceTimings.wiki = Date.now() - wikiStart;
+    sourceStatuses.wiki = wikiData.size > 0 ? "OK" : "FAILED";
 
-    // GDELT has SSL certificate issues (Dec 2024) - wrap with timeout and fallback
-    // STABILITY FIX: Increased timeout from 120s to 180s to accommodate improved retry logic
+    let gdeltStart = Date.now();
     let gdeltData = new Map<string, any>();
     try {
       const gdeltPromise = fetchBatchGdeltNews(
         people.map(p => ({ id: p.id, name: p.name }))
       );
       const timeoutPromise = new Promise<Map<string, any>>((_, reject) => 
-        setTimeout(() => reject(new Error('GDELT timeout')), 180000) // 3 minutes for 100 people with jittered delays
+        setTimeout(() => reject(new Error('GDELT timeout')), 180000)
       );
       gdeltData = await Promise.race([gdeltPromise, timeoutPromise]);
     } catch (err) {
       console.log('[Ingest] GDELT fetch failed (certificate/timeout), continuing with other sources');
+      sourceStatuses.gdelt = "FAILED";
     }
+    sourceTimings.gdelt = Date.now() - gdeltStart;
 
     // COVERAGE GATE: If GDELT returns fresh data for <70% of celebrities, treat as degraded
     // and use previous values for EVERYONE to ensure population consistency.
@@ -113,22 +194,27 @@ export async function runDataIngestion(): Promise<IngestResult> {
     if (gdeltData.size > 0 && gdeltCoverage < COVERAGE_THRESHOLD) {
       console.log(`[Coverage Gate] GDELT partial failure: ${gdeltData.size}/${people.length} (${(gdeltCoverage * 100).toFixed(0)}%) < ${COVERAGE_THRESHOLD * 100}% threshold`);
       console.log(`[Coverage Gate] Treating NEWS as degraded for entire run - using previous values for all celebrities`);
-      gdeltData.clear(); // Clear so everyone uses fallback consistently
+      gdeltData.clear();
+      sourceStatuses.gdelt = "DEGRADED";
     }
+    if (!sourceStatuses.gdelt) sourceStatuses.gdelt = gdeltData.size > 0 ? "OK" : "DEGRADED";
 
+    let serperStart = Date.now();
     let serperData = await fetchSerperBatch(
       people.map(p => ({ id: p.id, name: p.name, searchQueryOverride: p.searchQueryOverride })),
       2,
       1000
     );
+    sourceTimings.serper = Date.now() - serperStart;
 
-    // COVERAGE GATE: Apply same logic to Serper for consistency
     const serperCoverage = serperData.size / people.length;
     if (serperData.size > 0 && serperCoverage < COVERAGE_THRESHOLD) {
       console.log(`[Coverage Gate] Serper partial failure: ${serperData.size}/${people.length} (${(serperCoverage * 100).toFixed(0)}%) < ${COVERAGE_THRESHOLD * 100}% threshold`);
       console.log(`[Coverage Gate] Treating SEARCH as degraded for entire run - using previous values for all celebrities`);
-      serperData = new Map(); // Clear so everyone uses fallback consistently
+      serperData = new Map();
+      sourceStatuses.serper = "DEGRADED";
     }
+    if (!sourceStatuses.serper) sourceStatuses.serper = serperData.size > 0 ? "OK" : "DEGRADED";
 
     // NOTE (Jan 2026): X API disabled for trend scoring - kept for Platform Insights
     // const xHandles = people.filter(p => p.xHandle).map(p => p.xHandle!);
@@ -870,17 +956,40 @@ export async function runDataIngestion(): Promise<IngestResult> {
     }
 
     console.log(`[HEALTH SUMMARY] ${JSON.stringify(healthSummary)}`);
-    // ═══════════════════════════════════════════════════════════════════════════
+
+    const successDuration = Date.now() - startTime;
+    sourceTimings.total = successDuration;
+    await releaseIngestionLock(runId, errors > 0 ? "failed" : "completed", {
+      snapshotsWritten: processed,
+      peopleProcessed: processed,
+      errorCount: errors,
+      sourceTimings,
+      sourceStatuses,
+      hourBucket: hourTimestamp,
+      healthSummary,
+    });
 
   } catch (error) {
     console.error("[Ingest] Fatal error:", error);
     errors++;
+    sourceTimings.total = Date.now() - startTime;
+    await releaseIngestionLock(runId, "failed", {
+      snapshotsWritten: processed,
+      peopleProcessed: processed,
+      errorCount: errors,
+      errorSummary: String(error),
+      sourceTimings,
+      sourceStatuses,
+      hourBucket: undefined,
+    });
+    const duration = Date.now() - startTime;
+    return { processed, errors, duration, runId };
   }
 
   const duration = Date.now() - startTime;
   console.log(`[Ingest] Complete: ${processed} processed, ${errors} errors, ${duration}ms`);
 
-  return { processed, errors, duration };
+  return { processed, errors, duration, runId };
 }
 
 export async function getLastIngestionTime(): Promise<Date | null> {

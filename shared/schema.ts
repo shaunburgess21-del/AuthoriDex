@@ -1011,3 +1011,36 @@ export const insertTier1OverrideSchema = createInsertSchema(tier1Overrides).omit
 
 export type Tier1Override = typeof tier1Overrides.$inferSelect;
 export type InsertTier1Override = z.infer<typeof insertTier1OverrideSchema>;
+
+// ============================================================================
+// INGESTION RUNS - Tracks every data ingestion execution for health monitoring
+// ============================================================================
+
+export const ingestionRunStatusEnum = pgEnum("ingestion_run_status", ["running", "completed", "failed", "locked_out"]);
+
+export const ingestionRuns = pgTable("ingestion_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  finishedAt: timestamp("finished_at"),
+  status: ingestionRunStatusEnum("status").notNull().default("running"),
+  hourBucket: timestamp("hour_bucket"),
+  snapshotsWritten: integer("snapshots_written").default(0),
+  peopleProcessed: integer("people_processed").default(0),
+  errorCount: integer("error_count").default(0),
+  errorSummary: text("error_summary"),
+  sourceTimings: jsonb("source_timings"),
+  sourceStatuses: jsonb("source_statuses"),
+  healthSummary: jsonb("health_summary"),
+  lockAcquiredAt: timestamp("lock_acquired_at"),
+  lockReleasedAt: timestamp("lock_released_at"),
+}, (table) => ({
+  startedAtIdx: index("ingestion_runs_started_at_idx").on(table.startedAt),
+  statusIdx: index("ingestion_runs_status_idx").on(table.status),
+}));
+
+export const insertIngestionRunSchema = createInsertSchema(ingestionRuns).omit({
+  id: true,
+});
+
+export type IngestionRun = typeof ingestionRuns.$inferSelect;
+export type InsertIngestionRun = z.infer<typeof insertIngestionRunSchema>;

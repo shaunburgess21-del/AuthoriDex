@@ -3130,8 +3130,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     try {
       const now = new Date();
       const h48Ago = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+      const h24Ago = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-      // 1. Snapshot cadence: hourly buckets for last 48h
       const hourlyBuckets = await db.execute(sql`
         SELECT 
           date_trunc('hour', timestamp) as hour,
@@ -3144,13 +3144,11 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         ORDER BY hour DESC
       `);
 
-      // 2. Latest snapshot and gap detection
       const latestSnapshotRow = await db.execute(sql`
         SELECT MAX(timestamp) as latest FROM trend_snapshots
       `);
       const latestSnapshot = latestSnapshotRow.rows?.[0]?.latest as string | null;
 
-      // 3. People coverage
       const coverageRow = await db.execute(sql`
         SELECT 
           (SELECT COUNT(*)::int FROM tracked_people) as tracked,
@@ -3159,7 +3157,6 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       `);
       const coverage = coverageRow.rows?.[0] || { tracked: 0, trending: 0, with_score: 0 };
 
-      // 4. Fame score distribution
       const distRow = await db.execute(sql`
         SELECT 
           MIN(fame_index)::int as min_fame,
@@ -3172,7 +3169,6 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       `);
       const distribution = distRow.rows?.[0] || {};
 
-      // 5. Signal quality for latest snapshot batch
       const signalRow = await db.execute(sql`
         SELECT 
           SUM(CASE WHEN wiki_pageviews = 0 OR wiki_pageviews IS NULL THEN 1 ELSE 0 END)::int as zero_wiki,
@@ -3185,7 +3181,6 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       `);
       const signals = signalRow.rows?.[0] || {};
 
-      // 6. Source stats reference freshness
       const refRow = await db.execute(sql`
         SELECT fetched_at, expires_at
         FROM api_cache 
@@ -3194,7 +3189,6 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       `);
       const sourceStatsRef = (refRow.rows?.[0] as { fetched_at: string; expires_at: string } | undefined) || null;
 
-      // 7. Spot-check: verify rank ordering matches fame_index (pick 5 random)
       const spotCheckRows = await db.execute(sql`
         SELECT name, fame_index, rank
         FROM trending_people
@@ -3207,7 +3201,6 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         ORDER BY fame_index DESC NULLS LAST
       `);
       
-      // Verify rank ordering is consistent
       let rankOrderCorrect = true;
       let rankIssues: string[] = [];
       const rankedPeople = allRanked.rows || [];
@@ -3219,7 +3212,6 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         }
       }
 
-      // 8. Compute gaps from hourly buckets
       const buckets = (hourlyBuckets.rows || []).map((r: any) => new Date(r.hour).getTime()).sort((a: number, b: number) => a - b);
       let maxGapMinutes = 0;
       let gapsOver2h = 0;
@@ -3237,7 +3229,6 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         }
       }
 
-      // 9. Detect backfilled hours (hours with >100 snapshots for 100 people)
       const backfilledHours = (hourlyBuckets.rows || [])
         .filter((r: any) => Number(r.count) > Number(coverage.tracked || 100))
         .map((r: any) => ({
@@ -3246,10 +3237,56 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           expectedCount: Number(coverage.tracked || 100),
         }));
 
-      // 10. Minutes since last snapshot
       const minutesSinceLastSnapshot = latestSnapshot 
         ? Math.round((now.getTime() - new Date(latestSnapshot).getTime()) / (1000 * 60))
         : null;
+
+      // === INGESTION RUNS DATA (from ingestion_runs table) ===
+      const recentRunsResult = await db.execute(sql`
+        SELECT id, started_at, finished_at, status, hour_bucket,
+               snapshots_written, people_processed, error_count, error_summary,
+               source_timings, source_statuses, health_summary,
+               lock_acquired_at, lock_released_at
+        FROM ingestion_runs
+        ORDER BY started_at DESC
+        LIMIT 20
+      `);
+      const recentRuns = (recentRunsResult.rows || []).map((r: any) => ({
+        id: r.id,
+        startedAt: r.started_at ? new Date(r.started_at).toISOString() : null,
+        finishedAt: r.finished_at ? new Date(r.finished_at).toISOString() : null,
+        status: r.status,
+        hourBucket: r.hour_bucket ? new Date(r.hour_bucket).toISOString() : null,
+        snapshotsWritten: Number(r.snapshots_written || 0),
+        peopleProcessed: Number(r.people_processed || 0),
+        errorCount: Number(r.error_count || 0),
+        errorSummary: r.error_summary,
+        sourceTimings: r.source_timings,
+        sourceStatuses: r.source_statuses,
+        healthSummary: r.health_summary,
+        durationMs: r.started_at && r.finished_at 
+          ? new Date(r.finished_at).getTime() - new Date(r.started_at).getTime() 
+          : null,
+      }));
+
+      const lastSuccessfulRun = recentRuns.find((r: any) => r.status === "completed");
+      const currentlyRunning = recentRuns.find((r: any) => r.status === "running");
+
+      const runs24hResult = await db.execute(sql`
+        SELECT 
+          COUNT(*)::int as total_runs,
+          COUNT(CASE WHEN status = 'completed' THEN 1 END)::int as completed,
+          COUNT(CASE WHEN status = 'failed' THEN 1 END)::int as failed,
+          COUNT(CASE WHEN status = 'locked_out' THEN 1 END)::int as locked_out,
+          COUNT(CASE WHEN status = 'running' THEN 1 END)::int as currently_running
+        FROM ingestion_runs
+        WHERE started_at > ${h24Ago}
+      `);
+      const runs24h = runs24hResult.rows?.[0] || { total_runs: 0, completed: 0, failed: 0, locked_out: 0, currently_running: 0 };
+
+      // Source health from the latest successful run
+      const latestSourceTimings = lastSuccessfulRun?.sourceTimings || null;
+      const latestSourceStatuses = lastSuccessfulRun?.sourceStatuses || null;
 
       res.json({
         timestamp: now.toISOString(),
@@ -3267,6 +3304,25 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
             : "stale"
             : "unknown",
           totalHoursWithData: buckets.length,
+          lastSuccessfulFinish: lastSuccessfulRun?.finishedAt || null,
+          lastSuccessfulDurationMs: lastSuccessfulRun?.durationMs || null,
+          currentlyRunning: !!currentlyRunning,
+          currentRunStartedAt: currentlyRunning?.startedAt || null,
+        },
+        ingestionRuns: {
+          last24h: {
+            totalRuns: Number(runs24h.total_runs),
+            completed: Number(runs24h.completed),
+            failed: Number(runs24h.failed),
+            lockedOut: Number(runs24h.locked_out),
+            currentlyRunning: Number(runs24h.currently_running),
+          },
+          recentRuns: recentRuns.slice(0, 10),
+        },
+        sourceHealth: {
+          timings: latestSourceTimings,
+          statuses: latestSourceStatuses,
+          lastRunHealthSummary: lastSuccessfulRun?.healthSummary || null,
         },
         coverage: {
           trackedPeople: Number(coverage.tracked),

@@ -46,6 +46,7 @@ import {
   XCircle,
   BarChart3,
   Megaphone,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -3066,72 +3067,167 @@ export default function AdminDashboard() {
                   <CardDescription>Real-time trend score engine diagnostics</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="p-3 rounded-lg border">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className={cn("h-2.5 w-2.5 rounded-full", 
-                          engineHealth.ingestion?.status === "fresh" ? "bg-green-500" :
-                          engineHealth.ingestion?.status === "aging" ? "bg-yellow-500" :
-                          engineHealth.ingestion?.status === "stale" ? "bg-red-500" : "bg-gray-500"
-                        )} />
-                        <span className="text-xs font-medium text-muted-foreground">Last Snapshot</span>
-                      </div>
-                      <div className="text-lg font-bold" data-testid="text-last-snapshot">
-                        {engineHealth.ingestion?.minutesSinceLastSnapshot != null
-                          ? engineHealth.ingestion.minutesSinceLastSnapshot < 60
-                            ? `${engineHealth.ingestion.minutesSinceLastSnapshot}m ago`
-                            : `${Math.round(engineHealth.ingestion.minutesSinceLastSnapshot / 60)}h ago`
-                          : "N/A"}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {engineHealth.ingestion?.lastSnapshotAt
-                          ? new Date(engineHealth.ingestion.lastSnapshotAt).toLocaleString()
-                          : "Unknown"}
-                      </p>
-                    </div>
+                  {(() => {
+                    const freshnessOk = engineHealth.ingestion?.status === "fresh";
+                    const freshnessWarn = engineHealth.ingestion?.status === "aging";
+                    const continuityOk = (engineHealth.gaps?.gapsOver2hCount || 0) === 0;
+                    const continuityWarn = (engineHealth.gaps?.gapsOver2hCount || 0) <= 2 && !continuityOk;
+                    const integrityOk = engineHealth.rankIntegrity?.isCorrect && engineHealth.coverage?.allHaveScores;
+                    const integrityWarn = engineHealth.rankIntegrity?.isCorrect && !engineHealth.coverage?.allHaveScores;
+                    return (
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className={cn("p-4 rounded-lg border-2 text-center",
+                          freshnessOk ? "border-green-500/40" : freshnessWarn ? "border-yellow-500/40" : "border-red-500/40"
+                        )}>
+                          <div className={cn("inline-flex items-center justify-center h-10 w-10 rounded-full mb-2",
+                            freshnessOk ? "bg-green-500/10 text-green-500" : freshnessWarn ? "bg-yellow-500/10 text-yellow-500" : "bg-red-500/10 text-red-500"
+                          )}>
+                            {freshnessOk ? <CheckCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+                          </div>
+                          <div className="text-sm font-bold" data-testid="badge-freshness">FRESHNESS</div>
+                          <div className="text-lg font-bold" data-testid="text-last-snapshot">
+                            {engineHealth.ingestion?.minutesSinceLastSnapshot != null
+                              ? engineHealth.ingestion.minutesSinceLastSnapshot < 60
+                                ? `${engineHealth.ingestion.minutesSinceLastSnapshot}m ago`
+                                : `${Math.round(engineHealth.ingestion.minutesSinceLastSnapshot / 60)}h ago`
+                              : "N/A"}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {engineHealth.ingestion?.currentlyRunning ? (
+                              <span className="text-cyan-500 font-medium">Ingestion running now</span>
+                            ) : engineHealth.ingestion?.lastSuccessfulFinish ? (
+                              <>Last success: {new Date(engineHealth.ingestion.lastSuccessfulFinish).toLocaleTimeString()}</>
+                            ) : (
+                              "No successful runs recorded"
+                            )}
+                          </p>
+                          {engineHealth.ingestion?.lastSuccessfulDurationMs && (
+                            <p className="text-xs text-muted-foreground">
+                              Duration: {Math.round(engineHealth.ingestion.lastSuccessfulDurationMs / 1000)}s
+                            </p>
+                          )}
+                        </div>
 
-                    <div className="p-3 rounded-lg border">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className={cn("h-2.5 w-2.5 rounded-full",
-                          engineHealth.coverage?.allHaveScores ? "bg-green-500" : "bg-yellow-500"
-                        )} />
-                        <span className="text-xs font-medium text-muted-foreground">People Coverage</span>
-                      </div>
-                      <div className="text-lg font-bold" data-testid="text-people-coverage">
-                        {engineHealth.coverage?.withFameScore || 0}/{engineHealth.coverage?.trackedPeople || 0}
-                      </div>
-                      <p className="text-xs text-muted-foreground">with fame scores</p>
-                    </div>
+                        <div className={cn("p-4 rounded-lg border-2 text-center",
+                          continuityOk ? "border-green-500/40" : continuityWarn ? "border-yellow-500/40" : "border-red-500/40"
+                        )}>
+                          <div className={cn("inline-flex items-center justify-center h-10 w-10 rounded-full mb-2",
+                            continuityOk ? "bg-green-500/10 text-green-500" : continuityWarn ? "bg-yellow-500/10 text-yellow-500" : "bg-red-500/10 text-red-500"
+                          )}>
+                            {continuityOk ? <CheckCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+                          </div>
+                          <div className="text-sm font-bold" data-testid="badge-continuity">CONTINUITY</div>
+                          <div className="text-lg font-bold" data-testid="text-gap-count">
+                            {(engineHealth.gaps?.gapsOver2hCount || 0) === 0 ? "No gaps" : `${engineHealth.gaps.gapsOver2hCount} gap${engineHealth.gaps.gapsOver2hCount > 1 ? 's' : ''}`}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Max gap: {engineHealth.gaps?.maxGapMinutes ? `${Math.round(engineHealth.gaps.maxGapMinutes / 60)}h ${engineHealth.gaps.maxGapMinutes % 60}m` : "0m"}
+                          </p>
+                          {(engineHealth.backfill?.backfilledHoursCount || 0) > 0 && (
+                            <p className="text-xs text-yellow-500 mt-1">
+                              {engineHealth.backfill.backfilledHoursCount} backfilled hours detected
+                            </p>
+                          )}
+                        </div>
 
-                    <div className="p-3 rounded-lg border">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className={cn("h-2.5 w-2.5 rounded-full",
-                          engineHealth.gaps?.gapsOver2hCount === 0 ? "bg-green-500" :
-                          engineHealth.gaps?.gapsOver2hCount <= 2 ? "bg-yellow-500" : "bg-red-500"
-                        )} />
-                        <span className="text-xs font-medium text-muted-foreground">Snapshot Gaps</span>
+                        <div className={cn("p-4 rounded-lg border-2 text-center",
+                          integrityOk ? "border-green-500/40" : integrityWarn ? "border-yellow-500/40" : "border-red-500/40"
+                        )}>
+                          <div className={cn("inline-flex items-center justify-center h-10 w-10 rounded-full mb-2",
+                            integrityOk ? "bg-green-500/10 text-green-500" : integrityWarn ? "bg-yellow-500/10 text-yellow-500" : "bg-red-500/10 text-red-500"
+                          )}>
+                            {integrityOk ? <CheckCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+                          </div>
+                          <div className="text-sm font-bold" data-testid="badge-integrity">INTEGRITY</div>
+                          <div className="text-lg font-bold" data-testid="text-rank-integrity">
+                            {engineHealth.rankIntegrity?.isCorrect ? "Valid" : `${engineHealth.rankIntegrity?.issueCount} issues`}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1" data-testid="text-people-coverage">
+                            {engineHealth.coverage?.withFameScore || 0}/{engineHealth.coverage?.trackedPeople || 0} with scores
+                          </p>
+                        </div>
                       </div>
-                      <div className="text-lg font-bold" data-testid="text-gap-count">
-                        {engineHealth.gaps?.gapsOver2hCount || 0}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        gaps &gt;2h (max: {engineHealth.gaps?.maxGapMinutes ? `${Math.round(engineHealth.gaps.maxGapMinutes / 60)}h` : "0h"})
-                      </p>
-                    </div>
+                    );
+                  })()}
 
+                  {engineHealth.ingestionRuns && (
                     <div className="p-3 rounded-lg border">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className={cn("h-2.5 w-2.5 rounded-full",
-                          engineHealth.rankIntegrity?.isCorrect ? "bg-green-500" : "bg-red-500"
-                        )} />
-                        <span className="text-xs font-medium text-muted-foreground">Rank Integrity</span>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-muted-foreground">Ingestion Runs (last 24h)</span>
+                        <div className="flex items-center gap-2 text-xs">
+                          <Badge variant="outline" className="text-green-500">{engineHealth.ingestionRuns.last24h?.completed || 0} ok</Badge>
+                          {(engineHealth.ingestionRuns.last24h?.failed || 0) > 0 && (
+                            <Badge variant="outline" className="text-red-500">{engineHealth.ingestionRuns.last24h.failed} failed</Badge>
+                          )}
+                          {(engineHealth.ingestionRuns.last24h?.lockedOut || 0) > 0 && (
+                            <Badge variant="outline" className="text-yellow-500">{engineHealth.ingestionRuns.last24h.lockedOut} locked out</Badge>
+                          )}
+                          {(engineHealth.ingestionRuns.last24h?.currentlyRunning || 0) > 0 && (
+                            <Badge variant="outline" className="text-cyan-500">1 running</Badge>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-lg font-bold" data-testid="text-rank-integrity">
-                        {engineHealth.rankIntegrity?.isCorrect ? "Valid" : `${engineHealth.rankIntegrity?.issueCount} issues`}
-                      </div>
-                      <p className="text-xs text-muted-foreground">fame_index vs rank order</p>
+                      {engineHealth.ingestionRuns.recentRuns?.length > 0 && (
+                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                          {engineHealth.ingestionRuns.recentRuns.map((run: any) => (
+                            <div key={run.id} className="flex items-center justify-between text-xs py-1 border-b border-border/50 last:border-0">
+                              <div className="flex items-center gap-2">
+                                <div className={cn("h-2 w-2 rounded-full",
+                                  run.status === "completed" ? "bg-green-500" :
+                                  run.status === "failed" ? "bg-red-500" :
+                                  run.status === "running" ? "bg-cyan-500 animate-pulse" :
+                                  "bg-yellow-500"
+                                )} />
+                                <span className="text-muted-foreground">
+                                  {run.startedAt ? new Date(run.startedAt).toLocaleTimeString() : "?"}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {run.durationMs && <span className="text-muted-foreground">{Math.round(run.durationMs / 1000)}s</span>}
+                                <span className="font-medium">{run.snapshotsWritten || 0} snap</span>
+                                {run.sourceStatuses && (
+                                  <div className="flex items-center gap-1">
+                                    <span className={cn("text-[10px]", run.sourceStatuses.wiki === "OK" ? "text-green-500" : "text-red-500")}>W</span>
+                                    <span className={cn("text-[10px]", run.sourceStatuses.gdelt === "OK" ? "text-green-500" : run.sourceStatuses.gdelt === "DEGRADED" ? "text-yellow-500" : "text-red-500")}>G</span>
+                                    <span className={cn("text-[10px]", run.sourceStatuses.serper === "OK" ? "text-green-500" : run.sourceStatuses.serper === "DEGRADED" ? "text-yellow-500" : "text-red-500")}>S</span>
+                                  </div>
+                                )}
+                                {run.status === "locked_out" && <Badge variant="outline" className="text-[10px] text-yellow-500 py-0">locked</Badge>}
+                                {run.status === "failed" && <Badge variant="outline" className="text-[10px] text-red-500 py-0">failed</Badge>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {(!engineHealth.ingestionRuns.recentRuns || engineHealth.ingestionRuns.recentRuns.length === 0) && (
+                        <p className="text-xs text-muted-foreground text-center py-2">No ingestion runs recorded yet. Runs will appear after the next ingestion cycle.</p>
+                      )}
                     </div>
-                  </div>
+                  )}
+
+                  {engineHealth.sourceHealth?.statuses && (
+                    <div className="p-3 rounded-lg border">
+                      <span className="text-xs font-medium text-muted-foreground">Source Health (from last successful run)</span>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                        {Object.entries(engineHealth.sourceHealth.statuses as Record<string, string>).map(([source, status]) => (
+                          <div key={source} className="flex items-center justify-between text-sm p-2 rounded border">
+                            <span className="font-medium capitalize">{source === "gdelt" ? "News (GDELT)" : source === "serper" ? "Search (Serper)" : "Wikipedia"}</span>
+                            <div className="flex items-center gap-2">
+                              <div className={cn("h-2 w-2 rounded-full",
+                                status === "OK" ? "bg-green-500" : status === "DEGRADED" ? "bg-yellow-500" : "bg-red-500"
+                              )} />
+                              <span className={cn("text-xs",
+                                status === "OK" ? "text-green-500" : status === "DEGRADED" ? "text-yellow-500" : "text-red-500"
+                              )}>{status}</span>
+                              {engineHealth.sourceHealth.timings?.[source] && (
+                                <span className="text-xs text-muted-foreground">({Math.round(engineHealth.sourceHealth.timings[source] / 1000)}s)</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     <div className="p-3 rounded-lg border">
@@ -3212,14 +3308,6 @@ export default function AdminDashboard() {
                           </>
                         ) : (
                           <p className="text-xs text-muted-foreground">No reference data found</p>
-                        )}
-                        {engineHealth.backfill?.backfilledHoursCount > 0 && (
-                          <div className="flex justify-between">
-                            <span>Backfilled hours</span>
-                            <Badge variant="outline" className="text-xs text-yellow-500">
-                              {engineHealth.backfill.backfilledHoursCount}
-                            </Badge>
-                          </div>
                         )}
                       </div>
                     </div>
