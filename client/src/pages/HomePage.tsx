@@ -982,8 +982,8 @@ export default function HomePage() {
                       </UITooltip>
                       <UITooltip>
                         <TooltipTrigger asChild>
-                          <span className="inline-flex items-center gap-1 cursor-help opacity-60" data-testid="legend-cooling">
-                            <TrendingDown className="h-3 w-3 text-muted-foreground" />
+                          <span className="inline-flex items-center gap-1 cursor-help opacity-80" data-testid="legend-cooling">
+                            <TrendingDown className="h-3 w-3 text-blue-400/60" />
                             Cooling
                           </span>
                         </TooltipTrigger>

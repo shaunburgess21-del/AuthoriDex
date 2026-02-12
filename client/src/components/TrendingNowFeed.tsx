@@ -33,7 +33,7 @@ export function TrendingNowFeed({ people, onPersonClick, collapsed, onToggle, th
     .filter(p => {
       if (p.change24h == null) return false;
       const indicator = thresholds ? getExceptionalIndicator(p as any, thresholds) : null;
-      return indicator !== null;
+      return indicator?.triggersHotMover === true;
     })
     .sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0))
     .slice(0, 8);
