@@ -1,0 +1,50 @@
+Yep — that’s a clean, correct refinement. This is the kind of “small change, huge trust improvement” work that compounds.
+
+A) Pending vs Loading semantics — ✅ correct
+
+Using a backend signal like cacheStatus=LOCKED_COLD (or any explicit “generating” flag) to drive the Generating/Pending UI is exactly right.
+
+The key win: you’re no longer telling users “it’s being prepared” when the truth is “there’s nothing relevant”. That’s credibility.
+
+Only thing I’d keep an eye on:
+
+If the card disappears entirely for “truly empty”, the user may wonder if the feature is broken unless they’re not expecting it for everyone.
+A good middle ground is:
+
+For non-eligible people: hide the card (fine)
+
+For eligible people (badge / top-10) but no context: show a tiny neutral line like “No clear driver found in the last 24h” (no AI, no claims) + keep the “View details” area.
+This prevents the “it vanished” feeling on people who should have it.
+
+If you want it minimalist, you can do this only on desktop, or only when the user explicitly opens the card area.
+
+B) Cooling criteria tightened — ✅ strongly agree
+
+Requiring negative 24h score change makes Cooling instantly self-explanatory because the user sees the red %.
+
+That change also solves your earlier philosophical issue: Cooling becomes informational (board feels alive) but not “hot”.
+
+One nuance to consider (optional):
+
+Use bottom percentile + minimum magnitude, e.g. < -2% or < -3%, so you don’t label tiny dips as “Cooling” on low-vol days even if they’re technically bottom percentile.
+
+C) Badge distribution changed — looks healthy
+
+Going from 3 Cooling → 1 Cooling is fine. In fact it’s better: Cooling should be rarer than Surging, otherwise it starts to feel like noise.
+
+One thing I’d verify quickly
+
+Make sure the profile card logic still behaves well for:
+
+Top-10 person + no context → what happens now?
+
+Surging/Breakout person + no context → what happens now?
+
+If the card disappears for those, you may want the “neutral fallback” I mentioned (not “pending”, just “no clear driver”).
+
+If you can paste a sample of the why-trending API response for:
+
+generating, and
+
+no-context-empty,
+I can tell you if your frontend mapping is bulletproof or if there’s one more edge case worth covering.
