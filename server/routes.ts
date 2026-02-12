@@ -3246,7 +3246,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         SELECT id, started_at, finished_at, status, hour_bucket,
                snapshots_written, people_processed, error_count, error_summary,
                source_timings, source_statuses, health_summary,
-               lock_acquired_at, lock_released_at
+               lock_acquired_at, lock_released_at, heartbeat_at
         FROM ingestion_runs
         ORDER BY started_at DESC
         LIMIT 20
@@ -3264,6 +3264,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         sourceTimings: r.source_timings,
         sourceStatuses: r.source_statuses,
         healthSummary: r.health_summary,
+        heartbeatAt: r.heartbeat_at ? new Date(r.heartbeat_at).toISOString() : null,
         durationMs: r.started_at && r.finished_at 
           ? new Date(r.finished_at).getTime() - new Date(r.started_at).getTime() 
           : null,
@@ -3308,6 +3309,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           lastSuccessfulDurationMs: lastSuccessfulRun?.durationMs || null,
           currentlyRunning: !!currentlyRunning,
           currentRunStartedAt: currentlyRunning?.startedAt || null,
+          currentRunHeartbeatAt: currentlyRunning?.heartbeatAt || null,
         },
         ingestionRuns: {
           last24h: {

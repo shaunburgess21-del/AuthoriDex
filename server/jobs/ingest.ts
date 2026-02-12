@@ -54,33 +54,78 @@ export interface IngestResult {
   lockedOut?: boolean;
 }
 
-const STALE_LOCK_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes - if a run has been "running" this long, it's stale
+const HEARTBEAT_STALE_MS = 10 * 60 * 1000; // 10 minutes without heartbeat = stale
+const HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000; // update heartbeat every 2 minutes
+
+const heartbeatTimers = new Map<string, ReturnType<typeof setInterval>>();
+
+function startHeartbeat(runId: string) {
+  stopHeartbeat(runId);
+  const timer = setInterval(async () => {
+    try {
+      await db.update(ingestionRuns)
+        .set({ heartbeatAt: new Date() })
+        .where(eq(ingestionRuns.id, runId));
+    } catch (e) {
+      console.error(`[Ingest Heartbeat] Failed to update heartbeat for run ${runId}:`, e);
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+  heartbeatTimers.set(runId, timer);
+}
+
+function stopHeartbeat(runId?: string) {
+  if (runId) {
+    const timer = heartbeatTimers.get(runId);
+    if (timer) {
+      clearInterval(timer);
+      heartbeatTimers.delete(runId);
+    }
+  } else {
+    heartbeatTimers.forEach((timer) => clearInterval(timer));
+    heartbeatTimers.clear();
+  }
+}
 
 async function acquireIngestionLock(): Promise<{ acquired: boolean; runId?: string; existingRunId?: string }> {
-  const staleThreshold = new Date(Date.now() - STALE_LOCK_TIMEOUT_MS);
-  
+  const now = new Date();
+  const staleThreshold = new Date(now.getTime() - HEARTBEAT_STALE_MS);
+
   const existingRuns = await db.select()
     .from(ingestionRuns)
     .where(eq(ingestionRuns.status, "running"));
-  
+
   for (const run of existingRuns) {
-    if (run.startedAt < staleThreshold) {
-      console.warn(`[Ingest Lock] Found stale running lock (id=${run.id}, started=${run.startedAt.toISOString()}). Marking as failed.`);
+    const lastSignOfLife = run.heartbeatAt ?? run.startedAt;
+    if (lastSignOfLife < staleThreshold) {
+      console.warn(`[Ingest Lock] Found stale running lock (id=${run.id}, lastHeartbeat=${lastSignOfLife.toISOString()}). Marking as failed.`);
       await db.update(ingestionRuns)
-        .set({ status: "failed", finishedAt: new Date(), errorSummary: "Stale lock auto-cleaned (exceeded 30min timeout)" })
+        .set({ status: "failed", finishedAt: now, errorSummary: `Stale lock auto-cleaned (no heartbeat for >${HEARTBEAT_STALE_MS / 60000}min)` })
         .where(eq(ingestionRuns.id, run.id));
     } else {
-      console.warn(`[Ingest Lock] Another ingestion is currently running (id=${run.id}, started=${run.startedAt.toISOString()})`);
+      console.warn(`[Ingest Lock] Another ingestion is currently running (id=${run.id}, started=${run.startedAt.toISOString()}, lastHeartbeat=${lastSignOfLife.toISOString()})`);
       return { acquired: false, existingRunId: run.id };
     }
   }
-  
-  const [newRun] = await db.insert(ingestionRuns)
-    .values({ status: "running", lockAcquiredAt: new Date() })
-    .returning({ id: ingestionRuns.id });
-  
-  console.log(`[Ingest Lock] Acquired lock, run ID: ${newRun.id}`);
-  return { acquired: true, runId: newRun.id };
+
+  try {
+    const [newRun] = await db.insert(ingestionRuns)
+      .values({ status: "running", lockAcquiredAt: now, heartbeatAt: now })
+      .returning({ id: ingestionRuns.id });
+
+    console.log(`[Ingest Lock] Acquired lock, run ID: ${newRun.id}`);
+    startHeartbeat(newRun.id);
+    return { acquired: true, runId: newRun.id };
+  } catch (err: any) {
+    if (err?.code === '23505' && err?.constraint?.includes('running')) {
+      console.warn(`[Ingest Lock] Race detected: unique index prevented duplicate running row.`);
+      const [existing] = await db.select({ id: ingestionRuns.id })
+        .from(ingestionRuns)
+        .where(eq(ingestionRuns.status, "running"))
+        .limit(1);
+      return { acquired: false, existingRunId: existing?.id ?? 'unknown' };
+    }
+    throw err;
+  }
 }
 
 async function releaseIngestionLock(
@@ -97,6 +142,7 @@ async function releaseIngestionLock(
     hourBucket?: Date;
   }
 ) {
+  stopHeartbeat(runId);
   await db.update(ingestionRuns)
     .set({
       status,

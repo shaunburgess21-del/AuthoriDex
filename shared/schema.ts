@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, pgEnum, text, varchar, integer, real, timestamp, unique, jsonb, serial, boolean, index, numeric } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, text, varchar, integer, real, timestamp, unique, uniqueIndex, jsonb, serial, boolean, index, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -1033,9 +1033,13 @@ export const ingestionRuns = pgTable("ingestion_runs", {
   healthSummary: jsonb("health_summary"),
   lockAcquiredAt: timestamp("lock_acquired_at"),
   lockReleasedAt: timestamp("lock_released_at"),
+  heartbeatAt: timestamp("heartbeat_at"),
 }, (table) => ({
   startedAtIdx: index("ingestion_runs_started_at_idx").on(table.startedAt),
   statusIdx: index("ingestion_runs_status_idx").on(table.status),
+  singleRunningIdx: uniqueIndex("ingestion_runs_single_running_idx")
+    .on(table.status)
+    .where(sql`status = 'running'`),
 }));
 
 export const insertIngestionRunSchema = createInsertSchema(ingestionRuns).omit({
