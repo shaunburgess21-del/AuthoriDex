@@ -1,5 +1,5 @@
 import { formatDelta } from "@/lib/formatNumber";
-import { Flame, ChevronDown, Info, TrendingUp, TrendingDown, Newspaper, Search, Globe, MessageCircle, ArrowRight, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Flame, ChevronDown, Info, TrendingUp, TrendingDown, Newspaper, Search, Globe, MessageCircle, ArrowRight, ArrowUpRight, ArrowDownRight, Clock } from "lucide-react";
 import { PersonAvatar } from "./PersonAvatar";
 import { useTrendContextBatch, getDriverLabel, TrendDriver } from "@/hooks/useTrendContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -35,14 +35,31 @@ function getDriverExplanation(driver: TrendDriver): string {
   }
 }
 
+function formatUpdatedAgo(timestamp: number | undefined): string {
+  if (!timestamp) return "";
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
+}
+
 export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: TrendingNowFeedProps) {
-  const { data: hotMovers = [] } = useQuery<HotMover[]>({
+  const { data: hotMovers = [], dataUpdatedAt } = useQuery<HotMover[]>({
     queryKey: ['/api/trending/hot-movers'],
     refetchInterval: 60_000,
   });
 
   const visibleIds = !collapsed ? hotMovers.map(p => p.id) : [];
   const { data: trendContexts } = useTrendContextBatch(visibleIds);
+
+  const updatedAgo = formatUpdatedAgo(dataUpdatedAt);
+
+  const scrollToLeaderboard = () => {
+    const el = document.getElementById("leaderboard");
+    if (el) el.scrollIntoView({ behavior: "smooth" });
+  };
 
   return (
     <div
@@ -59,7 +76,15 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
             <Flame className="h-4 w-4 text-orange-400" />
           </div>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-slate-100">Hot Movers</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-slate-100">Hot Movers</h3>
+              {updatedAgo && (
+                <span className="flex items-center gap-1 text-[10px] text-slate-500" data-testid="text-hot-movers-updated">
+                  <Clock className="h-2.5 w-2.5" />
+                  {updatedAgo}
+                </span>
+              )}
+            </div>
             <p className="text-[10px] text-slate-500 uppercase tracking-wider">Exceptional 24h movement</p>
           </div>
           <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
@@ -70,7 +95,17 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
         {!collapsed && hotMovers.length === 0 && (
           <div className="text-center py-6 mt-4" data-testid="trending-now-empty">
             <p className="text-xs text-slate-500">No exceptional movement right now</p>
-            <p className="text-[10px] text-slate-600 mt-1">Check back later or explore the full leaderboard</p>
+            <p className="text-[10px] text-slate-600 mt-1">Updates every hour</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={scrollToLeaderboard}
+              className="mt-3 gap-1.5 text-[11px] border-slate-600/50 text-slate-400"
+              data-testid="button-view-leaderboard"
+            >
+              View full leaderboard
+              <ArrowRight className="h-3 w-3" />
+            </Button>
           </div>
         )}
 
