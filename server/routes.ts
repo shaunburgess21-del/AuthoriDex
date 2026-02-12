@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateMockPlatformInsights } from "./api-integrations";
@@ -9,7 +9,7 @@ import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { gamificationService } from "./services/gamification";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext } from "./providers/serper";
@@ -35,6 +35,8 @@ import { getLastFullRefreshAt } from "./jobs/live-tick";
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
 const BOT_UA_PATTERNS = /bot|crawl|spider|slurp|wget|curl|fetch|headless|phantom|puppet|selenium|lighthouse|preview|embed|scrape/i;
+const PREFETCH_HEADERS = ['purpose', 'sec-purpose', 'x-purpose'];
+const SESSION_COOKIE_NAME = 'fdx_sid';
 
 const _viewDedupe = new Map<string, number>();
 const _viewIpCounts = new Map<string, { count: number; resetAt: number }>();
@@ -50,20 +52,42 @@ function cleanViewDedupe() {
 }
 setInterval(cleanViewDedupe, 5 * 60 * 1000);
 
-function shouldCountView(ip: string, personId: string, userAgent: string): boolean {
-  if (BOT_UA_PATTERNS.test(userAgent)) return false;
+function getSessionId(req: Request): string {
+  const cookieHeader = req.headers.cookie || '';
+  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`));
+  if (match && match[1] && match[1].length > 8) return match[1];
+  return '';
+}
+
+function isPrefetch(req: Request): boolean {
+  for (const h of PREFETCH_HEADERS) {
+    const val = req.headers[h];
+    if (val && /prefetch/i.test(String(val))) return true;
+  }
+  return false;
+}
+
+function shouldCountView(req: Request, personId: string): boolean {
+  if (req.method !== 'GET') return false;
+  if (isPrefetch(req)) return false;
+
+  const ua = req.headers['user-agent'] || '';
+  if (BOT_UA_PATTERNS.test(ua)) return false;
 
   const now = Date.now();
-  const dedupeKey = `${ip}:${personId}`;
+  const sessionId = getSessionId(req);
+  const clientIp = req.ip || 'unknown';
+  const identity = sessionId || clientIp;
+  const dedupeKey = `${identity}:${personId}`;
   const lastSeen = _viewDedupe.get(dedupeKey);
   if (lastSeen && now - lastSeen < VIEW_DEDUPE_WINDOW_MS) return false;
 
-  const bucket = _viewIpCounts.get(ip);
+  const bucket = _viewIpCounts.get(clientIp);
   if (bucket && now < bucket.resetAt) {
     if (bucket.count >= VIEW_IP_RATE_LIMIT) return false;
     bucket.count++;
   } else {
-    _viewIpCounts.set(ip, { count: 1, resetAt: now + VIEW_DEDUPE_WINDOW_MS });
+    _viewIpCounts.set(clientIp, { count: 1, resetAt: now + VIEW_DEDUPE_WINDOW_MS });
   }
 
   _viewDedupe.set(dedupeKey, now);
@@ -435,9 +459,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Person not found" });
       }
 
-      const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
-      const ua = req.headers['user-agent'] || '';
-      if (shouldCountView(clientIp, id, ua)) {
+      if (!getSessionId(req)) {
+        const newSid = randomUUID();
+        res.cookie(SESSION_COOKIE_NAME, newSid, {
+          httpOnly: true,
+          sameSite: 'lax',
+          maxAge: 365 * 24 * 60 * 60 * 1000,
+          path: '/',
+        });
+      }
+      if (shouldCountView(req, id)) {
         db.update(trendingPeople)
           .set({ profileViews10m: sql`COALESCE(${trendingPeople.profileViews10m}, 0) + 1` })
           .where(eq(trendingPeople.id, id))
