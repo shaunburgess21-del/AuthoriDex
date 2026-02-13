@@ -268,47 +268,42 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
 
         {activeTab === "fame" && (
           <>
-            <div className="text-right hidden sm:block">
-              <p className={`font-mono font-bold text-2xl ${scoreFlash ? 'number-flash' : ''}`} data-testid={`text-score-${person.id}`}>
+            <div className="text-right hidden sm:block w-[120px] shrink-0">
+              <p className={`font-mono font-bold text-2xl tabular-nums ${scoreFlash ? 'number-flash' : ''}`} data-testid={`text-score-${person.id}`}>
                 {fameScore.toLocaleString()}
               </p>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide lg:hidden">
                 Fame Score
               </p>
             </div>
-            {showDelta && (
-              <div className="hidden lg:block text-right min-w-[60px]" data-testid={`text-delta-desktop-${person.id}`}>
-                <p className={`font-mono font-semibold text-sm tabular-nums ${person.change24h! > 0 ? "text-emerald-400" : "text-red-400"}`}>
-                  {delta24h}
-                </p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                  24h
-                </p>
-              </div>
-            )}
-            <div className="hidden md:block text-center min-w-[80px]">
+            <div className="hidden lg:block text-right w-[72px] shrink-0" data-testid={`text-delta-desktop-${person.id}`}>
+              <p className={`font-mono font-semibold text-sm tabular-nums ${
+                person.change24h == null || Math.abs(person.change24h) < 0.05
+                  ? "text-muted-foreground"
+                  : person.change24h > 0
+                    ? "text-emerald-400"
+                    : "text-red-400"
+              }`}>
+                {person.change24h != null ? delta24h : '—'}
+              </p>
+            </div>
+            <div className="hidden md:block text-right w-[72px] shrink-0">
               <TouchTooltip
                 content={person.approvalPct != null ? `${person.name} has a ${Math.round(person.approvalPct)}% approval rating from community votes` : "No votes yet"}
                 side="top"
               >
-                <p className="font-mono font-semibold text-lg cursor-help" data-testid={`sentiment-score-${person.id}`}>
+                <p className="font-mono font-semibold text-lg tabular-nums cursor-help" data-testid={`sentiment-score-${person.id}`}>
                   {person.approvalPct != null ? (
-                    <>
-                      <span
-                        className="text-[22px]"
-                        style={{ color: getApprovalColor(person.approvalPct) }}
-                      >
-                        {Math.round(person.approvalPct)}
-                      </span>
-                      <span className="text-muted-foreground text-[22px] translate-y-[0.5px]">%</span>
-                    </>
+                    <span style={{ color: getApprovalColor(person.approvalPct) }}>
+                      {Math.round(person.approvalPct)}%
+                    </span>
                   ) : (
                     '—'
                   )}
                 </p>
               </TouchTooltip>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide translate-y-[0.5px]">
-                Approval Rating
+              <p className="text-xs text-muted-foreground uppercase tracking-wide lg:hidden">
+                Approval
               </p>
             </div>
             <Button
@@ -342,36 +337,30 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
 
         {activeTab === "approval" && (
           <>
-            <div className="text-right hidden sm:block">
+            <div className="text-right hidden sm:block w-[120px] shrink-0">
               <TouchTooltip
                 content={`${person.name}'s approval rating from community votes`}
                 side="top"
               >
-                <p className="font-mono font-semibold text-lg cursor-help">
+                <p className="font-mono font-bold text-2xl tabular-nums cursor-help">
                   {person.approvalPct != null ? (
-                    <>
-                      <span
-                        className="font-bold text-[22px]"
-                        style={{ color: getApprovalColor(person.approvalPct) }}
-                      >
-                        {Math.round(person.approvalPct)}
-                      </span>
-                      <span className="text-muted-foreground text-[22px]">%</span>
-                    </>
+                    <span style={{ color: getApprovalColor(person.approvalPct) }}>
+                      {Math.round(person.approvalPct)}%
+                    </span>
                   ) : (
                     '—'
                   )}
                 </p>
               </TouchTooltip>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                Approval Rating
+              <p className="text-xs text-muted-foreground uppercase tracking-wide lg:hidden">
+                Approval
               </p>
             </div>
-            <div className="hidden md:block text-center min-w-[80px]">
-              <p className="font-mono font-bold text-xl text-muted-foreground">
+            <div className="hidden md:block text-right w-[120px] shrink-0">
+              <p className="font-mono font-bold text-xl tabular-nums text-muted-foreground">
                 {fameScore.toLocaleString()}
               </p>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide lg:hidden">
                 Fame Score
               </p>
             </div>
