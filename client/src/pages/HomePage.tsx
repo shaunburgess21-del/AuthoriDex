@@ -923,7 +923,7 @@ export default function HomePage() {
                       onClick={() => handleTabClick("approval")}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                         leaderboardTab === "approval"
-                          ? "bg-violet-500/20 text-violet-400 border border-violet-500/30"
+                          ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
                           : "text-muted-foreground hover:bg-muted/50 border border-transparent"
                       }`}
                       data-testid="tab-leaderboard-approval"
