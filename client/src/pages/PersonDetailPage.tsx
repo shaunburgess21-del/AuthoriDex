@@ -692,13 +692,13 @@ export default function PersonDetailPage() {
                 <h1 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-person-name">
                   {person.name}
                 </h1>
-                <div className="flex items-center gap-x-2 gap-y-1 mb-4 flex-wrap">
+                <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
                   <p className="text-lg text-muted-foreground">{person.category}</p>
                   <CelebrityInfoModal personId={person.id} personName={person.name} />
-                  <span className="ml-auto shrink-0 text-sm font-mono font-semibold text-muted-foreground" data-testid="text-header-rank">
-                    #{person.rank}
-                  </span>
                 </div>
+                <p className="text-sm font-mono font-semibold text-muted-foreground mb-4" data-testid="text-header-rank">
+                  Rank #{person.rank}
+                </p>
                 {person.bio && (
                   <p className="text-sm text-muted-foreground leading-relaxed mb-4" data-testid="text-person-bio">
                     {person.bio}
