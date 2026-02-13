@@ -452,19 +452,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      let prevRanks = await getSnapshotRankMap();
-
-      // Fallback: estimate previous ranks from change24h if snapshot lookup returned empty
-      if (prevRanks.size === 0) {
-        prevRanks = new Map<string, number>();
-        const prevScores = people.map(p => {
-          const fi = p.fameIndex ?? Math.round(p.trendScore / 100);
-          const delta = p.change24h ?? 0;
-          const prevFi = delta !== 0 ? fi / (1 + delta / 100) : fi;
-          return { id: p.id, prevFi };
-        }).sort((a, b) => b.prevFi - a.prevFi);
-        prevScores.forEach((s, i) => prevRanks.set(s.id, i + 1));
-      }
+      const prevRanks = await getSnapshotRankMap();
+      const baselineStatus = prevRanks.size > 0 ? "normal" : "degraded";
 
       const enriched = people.map(p => ({
         ...p,
@@ -534,6 +523,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (debug) {
         const sorted = [...hotMovers];
         res.json({
+          baselineStatus,
           thresholds,
           totalQualified: sorted.length,
           cap: 8,
@@ -1739,29 +1729,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Compute rank changes from actual trend_snapshots ~24h ago (cached)
-      let prevRankLookup = await getSnapshotRankMap();
-
-      // Fallback: estimate from change24h if snapshot lookup returned empty
-      if (prevRankLookup.size === 0) {
-        prevRankLookup = new Map<string, number>();
-        const allForRank = await db
-          .select({
-            id: trendingPeople.id,
-            rank: trendingPeople.rank,
-            fameIndex: trendingPeople.fameIndex,
-            trendScore: trendingPeople.trendScore,
-            change24h: trendingPeople.change24h,
-          })
-          .from(trendingPeople)
-          .orderBy(sql`${trendingPeople.fameIndex} DESC NULLS LAST`);
-
-        const prevScores = allForRank.map(p => {
-          const fi = p.fameIndex ?? Math.round(p.trendScore / 100);
-          const d = p.change24h ?? 0;
-          return { id: p.id, prevFi: d !== 0 ? fi / (1 + d / 100) : fi };
-        }).sort((a, b) => b.prevFi - a.prevFi);
-        prevScores.forEach((s, i) => prevRankLookup.set(s.id, i + 1));
-      }
+      const prevRankLookup = await getSnapshotRankMap();
+      const baselineStatus = prevRankLookup.size > 0 ? "normal" : "degraded";
 
       // Compute canonical percentile thresholds from FULL dataset (not filtered/paginated)
       const allPeopleForThresholds = await db
@@ -1811,6 +1780,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalCount,
         data: leaderboard,
         thresholds: canonicalThresholds,
+        baselineStatus,
       });
     } catch (error: any) {
       console.error("[leaderboard] Error:", error);
