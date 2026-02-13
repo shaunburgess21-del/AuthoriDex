@@ -1,0 +1,92 @@
+Home Toggle Header Component (reusable)
+
+Create a component like:
+
+<HomeSectionHeader theme="vote|predict" title="" subtitle="" onHelp={} viewAllHref="" />
+
+Theme behavior
+
+Vote theme:
+
+border/gradient accent: #62E9F9-ish
+
+icon tint: same hue
+
+Predict theme:
+
+accent: #A78BFA-ish
+
+Layout
+
+48–64px tall header strip
+
+Rounded corners (same radius as cards)
+
+Subtle background gradient (5–10% opacity)
+
+Title font: larger + bolder than current
+
+Subtitle: muted, smaller, max 1 line
+
+Actions: icon button for (?) + “View all” link
+
+Help modal behavior
+
+Keep it lightweight:
+
+Title: “How Face-Offs works”
+
+3 bullets max
+
+You can reuse the same modal component as dedicated pages.
+
+Subtitle suggestions (quick defaults)
+Vote
+
+Face-Offs: “Vote on A vs B matchups.”
+
+Trending Polls: “Weigh in on current topics.”
+
+Induction Queue: “Vote who joins the leaderboard next.”
+
+Curate the Profile: “Pick the best profile photo set.”
+
+Predict
+
+Real-World Markets: “Predict outcomes of verifiable events.”
+
+Weekly Jackpot: “Closest prediction wins the pot.”
+
+Up/Down Predictions: “Will their Fame Score rise or fall?”
+
+Head-to-Head Battles: “Who gains more this week?”
+
+Top Gainer Predictions: “Pick the biggest mover in 7 days.”
+
+Small but important UX upgrades you’ll get “for free”
+
+The “View all” link solves discoverability (Home becomes a gateway)
+
+(?) makes Home self-explanatory like the dedicated pages
+
+Consistent themed accents improves brand cohesion
+
+Copy/paste instruction to Replit
+
+If you want to send one clean instruction:
+
+Home page section headings upgrade (Vote/Predict toggles only):
+
+Replace the small left-aligned text headings above each module with a reusable “Mini-Section Header” strip component.
+
+The strip must include: icon + title + 1-line subtitle (left), and on right: (?) How it works modal + “View all →” link.
+
+Vote theme uses the blue accent (like dedicated Vote page). Predict theme uses the purple accent (like dedicated Predict page).
+
+Keep dedicated Vote and Predict pages unchanged.
+
+Apply to these Home modules:
+
+Vote: Face-Offs, Trending Polls, Induction Queue, Curate the Profile
+
+Predict: Real-World Markets, Weekly Jackpot, Up/Down Predictions, Head-to-Head battles, Top Gainer Predictions
