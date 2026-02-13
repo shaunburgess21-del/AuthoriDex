@@ -37,7 +37,13 @@ export default function VotesPage() {
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => setLocation("/me")}
+            onClick={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                setLocation("/me");
+              }
+            }}
             data-testid="button-back"
           >
             <ArrowLeft className="h-5 w-5" />

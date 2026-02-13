@@ -1855,7 +1855,13 @@ export default function VotePage() {
             <Button 
               variant="ghost" 
               size="icon"
-              onClick={() => setLocation("/")}
+              onClick={() => {
+                if (window.history.length > 1) {
+                  window.history.back();
+                } else {
+                  setLocation("/");
+                }
+              }}
               className="md:hidden"
               data-testid="button-back"
             >

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BottomNav } from "@/components/BottomNav";
+import { ScrollToTop } from "@/components/ScrollToTop";
 import HomePage from "@/pages/HomePage";
 import PersonDetailPage from "@/pages/PersonDetailPage";
 import LoginPage from "@/pages/LoginPage";
@@ -48,6 +49,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
+          <ScrollToTop />
           <Toaster />
           <Router />
           <BottomNav />

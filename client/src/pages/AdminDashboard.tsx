@@ -1853,7 +1853,13 @@ export default function AdminDashboard() {
           <Button
             variant="outline"
             className="w-full"
-            onClick={() => setLocation("/")}
+            onClick={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                setLocation("/");
+              }
+            }}
             data-testid="button-back-to-site"
           >
             Back to Site
