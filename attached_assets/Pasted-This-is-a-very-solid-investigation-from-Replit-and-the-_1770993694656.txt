@@ -1,0 +1,86 @@
+This is a very solid investigation from Replit, and the fix direction is correct — but there’s one important red-flag in the middle that you should tighten up now so it doesn’t bite you later.
+
+What Replit did right ✅
+1) They proved the mismatch with real numbers
+
+Leaderboard thresholds: rankChangeP90 = 9, deltaP90 = 6.5
+
+Netanyahu: change24h = 0.8 (doesn’t qualify by delta) and rankChange = 9 (qualifies by rank)
+
+Hot-movers endpoint: was returning rankChange: null for him → so he never qualified there.
+
+That’s exactly the kind of “same badge, different eligibility pipeline” bug you were seeing.
+
+2) They found the real cause
+
+Hot movers relied on getSnapshotRankMap() output, and when that map was empty (baseline missing), it set rankChange to null — whereas leaderboard had a fallback path.
+
+3) They fixed the inconsistency by sharing fallback logic
+
+Copying the leaderboard fallback into hot movers is the right short-term move because it restores “same criteria everywhere.”
+
+The one part I don’t like (and you should challenge) ⚠️
+
+Replit says the leaderboard fallback is:
+
+“if prevRankLookup.size === 0, it estimates from change24h.”
+
+That is… dangerous.
+
+Because:
+
+rankChange and change24h are not the same thing.
+
+Using change24h to infer rankChange creates circular logic:
+
+You can end up granting “Surging (rank)” to someone based on % change, even when rank movement is actually unknown.
+
+It also makes your “rank-based” badges less trustworthy and more “made up” when snapshots are missing.
+
+So yes, it fixes the mismatch, but it may be “fixing it by hallucinating rank movement.”
+
+The better fix (keep what you have, but make it honest)
+
+You already have a robust mechanism now with run_id on snapshots and deterministic baselines. So when snapshots are missing, I’d strongly prefer:
+
+Preferred fallback hierarchy
+
+Use run-based baseline (best)
+
+If missing, use hour-bucketed baseline (your earlier fix)
+
+If still missing → mark rankChange = null and do NOT award rank-based eligibility
+
+i.e., allow only delta-based Surging in that degraded mode
+
+and add a tiny “Data gap” note in debug/admin
+
+If you absolutely want something user-facing:
+
+Keep the badge as Surging (score) only when baseline missing
+
+Don’t pretend rank moved.
+
+Hot Movers “keeps changing often”
+
+Replit didn’t address this in the snippet you pasted, but now that thresholds are server-computed, you should still pin/caches Hot Movers:
+
+Cache the /api/trending/hot-movers response for 10–15 minutes OR
+
+Tie it to the latest completed ingestion run_id so it only changes when a new run completes (cleanest).
+
+Otherwise you’ll still get “refresh roulette” if your canonical leaderboard values are shifting via live tick or minor recalcs.
+
+What I’d tell Replit next (copy/paste)
+
+Nice catch — the mismatch is fixed. One concern: the fallback “estimate rankChange from change24h” feels like circular logic and could award rank-based Surging when rank movement is actually unknown (snapshot baseline missing).
+
+Can we adjust fallback so that when snapshot rank map is empty we:
+
+keep rankChange = null
+
+only allow delta-based Surging/Breakout eligibility (score-based), and
+
+surface a baselineStatus: "degraded" in debug/admin?
+
+Also, to stop Hot Movers flickering: please pin/caches /api/trending/hot-movers (e.g., cache 10–15 minutes or recompute only on new completed ingestion run_id).
