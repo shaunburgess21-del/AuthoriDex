@@ -886,6 +886,12 @@ export default function HomePage() {
                     </div>
                   </div>
                   
+                  <div className="flex items-center justify-between gap-2" data-testid="text-mode-microcopy">
+                    <p className="text-[11px] text-muted-foreground/50">
+                      {leaderboardTab === "fame" ? "Ranked by real-world trending data" : "Ranked by community votes"}
+                    </p>
+                    <FilterDropdown value={category} onChange={setCategory} />
+                  </div>
                   <div className="flex items-center gap-2 border-b border-border pb-2">
                     <button
                       onClick={() => handleTabClick("fame")}
@@ -919,12 +925,6 @@ export default function HomePage() {
                         <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                       )}
                     </button>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 -mt-1" data-testid="text-mode-microcopy">
-                    <p className="text-[11px] text-muted-foreground/50">
-                      {leaderboardTab === "fame" ? "Ranked by real-world trending data" : "Ranked by community votes"}
-                    </p>
-                    <FilterDropdown value={category} onChange={setCategory} />
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
