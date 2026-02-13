@@ -153,24 +153,9 @@ export function CurateSection({
               cycleNumber={cycleNumber}
             />
             
-            <div className="flex justify-center gap-1 mt-2">
-              {Array.from({ length: Math.min(5, total) }).map((_, i) => {
-                const isActive = i === (currentIndex % Math.min(5, total));
-                return (
-                  <div
-                    key={i}
-                    className={`h-1.5 rounded-full transition-all ${
-                      isActive 
-                        ? 'w-4 bg-cyan-500' 
-                        : 'w-1.5 bg-slate-600'
-                    }`}
-                  />
-                );
-              })}
-              {total > 5 && (
-                <span className="text-xs text-muted-foreground ml-1">+{total - 5}</span>
-              )}
-            </div>
+            <p className="text-center text-xs font-mono text-muted-foreground mt-2" data-testid="text-curate-carousel-counter">
+              {currentIndex + 1} &ndash; {total}
+            </p>
           </>
         ) : null}
         

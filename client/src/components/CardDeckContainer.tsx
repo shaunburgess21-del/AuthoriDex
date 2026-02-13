@@ -112,21 +112,9 @@ export function CardDeckContainer<T>({
         </div>
       )}
       
-      <div className="flex justify-center mt-2 gap-1">
-        {items.slice(0, Math.min(items.length, 5)).map((_, idx) => (
-          <div
-            key={idx}
-            className={`h-1 w-6 rounded-full transition-colors ${
-              idx === currentIndex % Math.min(items.length, 5)
-                ? "bg-cyan-400"
-                : "bg-muted"
-            }`}
-          />
-        ))}
-        {items.length > 5 && (
-          <span className="text-xs text-muted-foreground ml-1">+{items.length - 5}</span>
-        )}
-      </div>
+      <p className="text-center text-xs font-mono text-muted-foreground mt-2" data-testid="text-carousel-counter">
+        {currentIndex + 1} &ndash; {items.length}
+      </p>
     </div>
   );
 }
