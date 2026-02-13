@@ -852,7 +852,7 @@ export default function HomePage() {
                 />
               </div>
 
-              <div className="mb-[12px]">
+              <div className="mb-[22px]">
                 <TrendingNowFeed
                   onPersonClick={handleVisitProfile}
                   collapsed={trendingNowCollapsed}
