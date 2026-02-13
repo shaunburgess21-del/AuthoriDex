@@ -44,6 +44,7 @@ import {
   type TopGainerMarket,
 } from "@/data/predict";
 import { getFilterCategories } from "@shared/constants";
+import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 
 type CategoryFilter = "all" | "favorites" | "tech" | "politics" | "business" | "entertainment" | "sports" | "creator";
 
@@ -678,10 +679,14 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
 
       {showRealWorld && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold">Real-World Markets</h3>
-          </div>
+          <HomeSectionHeader
+            theme="predict"
+            icon={MessageSquare}
+            title="Real-World Markets"
+            subtitle="Predict outcomes of verifiable events."
+            help={{ title: "How Real-World Markets Work", bullets: ["Bet on outcomes of real-world events using credits.", "Markets resolve based on verifiable results and trusted sources.", "Win credits proportional to the odds when you predicted."] }}
+            onViewAll={onExplore}
+          />
           {openMarkets.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredCommunity.slice(0, activeSection === "Real-World" ? 20 : 3).map((market: any) => (
@@ -704,10 +709,14 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
 
       {showJackpot && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Trophy className="h-4 w-4 text-amber-400" />
-            <h3 className="text-sm font-semibold">Weekly Jackpot</h3>
-          </div>
+          <HomeSectionHeader
+            theme="predict"
+            icon={Trophy}
+            title="Weekly Jackpot"
+            subtitle="Closest prediction wins the pot."
+            help={{ title: "How Weekly Jackpot Works", bullets: ["Predict which celebrity will be the top gainer this week.", "The closest prediction to the actual result wins the jackpot.", "Entry costs credits; the pot grows as more players join."] }}
+            onViewAll={onExplore}
+          />
           <WeeklyJackpotCard
             onEnterJackpot={onExplore}
             isMarketClosed={marketState.status === "CLOSED"}
@@ -723,10 +732,14 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
 
       {showUpDown && filteredUpDown.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-violet-400" />
-            <h3 className="text-sm font-semibold">Up/Down Markets</h3>
-          </div>
+          <HomeSectionHeader
+            theme="predict"
+            icon={TrendingUp}
+            title="Up/Down Predictions"
+            subtitle="Will their Fame Score rise or fall?"
+            help={{ title: "How Up/Down Predictions Work", bullets: ["Predict whether a celebrity's Fame Score will go up or down.", "Higher multipliers mean bigger risk and bigger rewards.", "Markets resolve at the end of each weekly cycle."] }}
+            onViewAll={onExplore}
+          />
           <CardDeckContainer
             items={filteredUpDown}
             viewType="predict"
@@ -751,10 +764,14 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
 
       {showH2H && filteredH2H.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Swords className="h-4 w-4 text-violet-400" />
-            <h3 className="text-sm font-semibold">Head-to-Head</h3>
-          </div>
+          <HomeSectionHeader
+            theme="predict"
+            icon={Swords}
+            title="Head-to-Head Battles"
+            subtitle="Who gains more this week?"
+            help={{ title: "How Head-to-Head Works", bullets: ["Pick which celebrity will gain more fame this week.", "Two celebrities go head-to-head; choose your winner.", "Results resolve at the end of the weekly prediction cycle."] }}
+            onViewAll={onExplore}
+          />
           <CardDeckContainer
             items={filteredH2H}
             viewType="predict"
@@ -779,10 +796,14 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
 
       {showGainer && filteredGainer.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-green-400" />
-            <h3 className="text-sm font-semibold">Top Gainer Predictions</h3>
-          </div>
+          <HomeSectionHeader
+            theme="predict"
+            icon={TrendingUp}
+            title="Top Gainer Predictions"
+            subtitle="Pick the biggest mover in 7 days."
+            help={{ title: "How Top Gainer Predictions Work", bullets: ["Predict which celebrity will have the biggest Fame Score increase.", "Choose from trending celebrities across all categories.", "The closest prediction to the actual top gainer wins."] }}
+            onViewAll={onExplore}
+          />
           <CardDeckContainer
             items={filteredGainer}
             viewType="predict"

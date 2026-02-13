@@ -42,6 +42,7 @@ import {
   type InductionCandidate,
 } from "@/data/vote";
 import { CurateSection } from "@/components/curate";
+import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import { getFilterCategories, type FilterCategory } from "@shared/constants";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -637,10 +638,14 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
 
       {showFaceOffs && filteredFaceOffs.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Swords className="h-4 w-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold">Face-Offs</h3>
-          </div>
+          <HomeSectionHeader
+            theme="vote"
+            icon={Swords}
+            title="Face-Offs"
+            subtitle="Vote on A vs B matchups."
+            help={{ title: "How Face-Offs Work", bullets: ["Pick your side in head-to-head matchups between celebrities.", "Each vote earns XP and contributes to the community consensus.", "Results update in real time as the community weighs in."] }}
+            onViewAll={onExplore}
+          />
           <CardDeckContainer
             items={filteredFaceOffs}
             viewType="vote"
@@ -663,10 +668,14 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
 
       {showPolls && filteredPolls.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold">Trending Polls</h3>
-          </div>
+          <HomeSectionHeader
+            theme="vote"
+            icon={MessageSquare}
+            title="Trending Polls"
+            subtitle="Weigh in on current topics."
+            help={{ title: "How Trending Polls Work", bullets: ["The ultimate community pulse check on current events.", "Evergreen polls remain open; timed polls resolve at a deadline.", "Your vote updates the results in real time."] }}
+            onViewAll={onExplore}
+          />
           <CardDeckContainer
             items={filteredPolls}
             viewType="vote"
@@ -689,10 +698,14 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
 
       {showValue && filteredValue.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold">Underrated / Overrated</h3>
-          </div>
+          <HomeSectionHeader
+            theme="vote"
+            icon={BarChart3}
+            title="Underrated / Overrated"
+            subtitle="Rate public perception vs reality."
+            help={{ title: "How It Works", bullets: ["Vote Underrated if you think they deserve more recognition.", "Vote Overrated if you think they get more attention than deserved.", "Compare your view with the community results in real time."] }}
+            onViewAll={onExplore}
+          />
           <CardDeckContainer
             items={filteredValue}
             viewType="vote"
@@ -716,10 +729,14 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
 
       {showInduction && filteredInduction.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <UserPlus className="h-4 w-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold">Induction Queue</h3>
-          </div>
+          <HomeSectionHeader
+            theme="vote"
+            icon={UserPlus}
+            title="Induction Queue"
+            subtitle="Vote who joins the leaderboard next."
+            help={{ title: "Induction Queue Rules", bullets: ["Candidates with the most votes at end of cycle join the main leaderboard.", "Your vote helps shape who defines the future of fame.", "Each vote earns XP toward your profile rank."] }}
+            onViewAll={onExplore}
+          />
           <CardDeckContainer
             items={filteredInduction}
             viewType="vote"
@@ -742,10 +759,14 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
 
       {showCurate && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <ImageIcon className="h-4 w-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold">Curate The Profile</h3>
-          </div>
+          <HomeSectionHeader
+            theme="vote"
+            icon={ImageIcon}
+            title="Curate The Profile"
+            subtitle="Pick the best profile photo set."
+            help={{ title: "Curate Profile Rules", bullets: ["Choose which image best represents each celebrity.", "The winning look becomes the primary profile image platform-wide.", "Only the highest quality looks make it to the index."] }}
+            onViewAll={onExplore}
+          />
           <CurateSection categoryFilter={categoryFilter} compact />
         </div>
       )}
