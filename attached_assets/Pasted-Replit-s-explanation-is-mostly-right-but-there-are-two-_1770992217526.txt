@@ -1,0 +1,68 @@
+Replit’s explanation is mostly right, but there are two concrete problems hiding inside it:
+
+1) “Leaderboard calculates thresholds client-side across the visible filtered/sorted set”
+
+If that’s true, it’s a bug, not just a nuance.
+
+Percentile thresholds must be computed over a fixed, canonical population (your full ~100 tracked people, same dataset every time). If the leaderboard recomputes thresholds on whatever subset is currently visible (search/filter/category/virtualized rows), you’ll guarantee mismatch vs Hot Movers.
+
+What to tell Replit:
+
+“Do not compute percentile thresholds from the visible list or filtered set. Compute once from the full canonical dataset and reuse everywhere.”
+
+“Either: (a) server returns thresholds in one place and both leaderboard + hot-movers use them, OR (b) leaderboard uses the same ‘thresholds-full’ query result as the server endpoint does.”
+
+Acceptance check: Pick one person (Netanyahu). If they show Surging on leaderboard, then qualifiesHotMover=true should be true in the same moment on the server too (even if not displayed due to top-8 cap).
+
+2) Netanyahu “Surging” but not in Hot Movers can be totally valid because of the top-8 cap
+
+Even if he qualifies, Hot Movers might be:
+
+limited to 8, and
+
+sorted by abs(change24h) (or some other order),
+so he can get bumped by 8 bigger movers.
+
+What to ask Replit to do (so you can verify quickly):
+Add debug fields to /api/trending/hot-movers response (temporarily, or behind ?debug=1):
+
+qualifies: boolean (based on triggersHotMover)
+
+reason: "score" | "rank" | "both"
+
+rankInQualifiedByChange24h (where he sits among qualified movers)
+
+excludedBecause: "cap" | null
+
+Then you’ll know in 10 seconds whether:
+
+he didn’t qualify (threshold mismatch), OR
+
+he qualified but got bumped by the top-8 cap.
+
+3) “Hot movers changes very often” — you should not be recalculating every request
+
+Even with percentiles, it shouldn’t feel like a slot machine.
+
+Best fix is pinning the Hot Movers list to a stable update cadence:
+
+Recompute Hot Movers only when a new full ingestion run completes (hourly), or at most every X minutes, but deterministic.
+
+Cache the final list for a fixed TTL (e.g., 10–15 min) so refreshes don’t reshuffle.
+
+Even better (cleanest):
+Store the computed Hot Movers list with computed_at and run_id in DB (or in api_cache) and serve that until the next run completes. That eliminates flicker.
+
+Copy/paste message to Replit
+
+Here’s a tight message you can send:
+
+Two issues to fix/verify:
+
+If the leaderboard is computing percentile thresholds client-side from the visible/filtered list, that’s the source of badge mismatch. Thresholds must be computed from the full canonical ~100 dataset (same as server). Please make leaderboard use the same canonical thresholds as the server (either return thresholds from server and reuse, or share the same full-dataset query everywhere).
+
+Netanyahu shows Surging on leaderboard but not in Hot Movers. This might be valid due to the top-8 cap. Please add a temporary ?debug=1 to /api/trending/hot-movers that returns for each candidate: qualifies, reason (score|rank|both), and if excluded: excludedBecause: "cap" + rankInQualifiedByChange24h. Then we can confirm whether he qualifies but gets bumped, or if thresholds are mismatching.
+
+Also Hot Movers is still changing too often. Please cache/pin the hot-movers result (e.g., recompute only on ingestion completion or TTL 10–15 minutes) so refreshes don’t reshuffle.
+
+If you want, paste me Replit’s reply + (if possible) the debug output for Netanyahu, and I’ll tell you exactly which branch of the problem you’re in and the cleanest fix.
