@@ -113,16 +113,6 @@ export function CurateSection({
   return (
     <>
       <div className="space-y-3">
-        {/* Counter at top */}
-        {!isLoading && filteredCelebrities.length > 0 && !isComplete && (
-          <div className="text-center text-xs text-muted-foreground">
-            {progress} of {total}
-            {cycleNumber > 0 && (
-              <span className="ml-2 text-cyan-400">(Round {cycleNumber + 1})</span>
-            )}
-          </div>
-        )}
-
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
