@@ -1,0 +1,90 @@
+My brother sent me this:
+
+"Leaderboard looks very messy like this - 24h change should either be on left of score or beside (right)" of "celebrity name" on Desktop"
+
+What should we suggest to replit to make it look better?
+
+Your brother’s right: on desktop the 24h % floating “in the middle of the numeric cluster” makes the row feel messy because your eye has to decode (score → tiny label → % → tiny label → approval) all in one block.
+
+Here are 3 clean layout options you can suggest to Replit (ranked), plus an exact “send to Replit” spec.
+
+Best option (cleanest + most standard): Make 24h a proper column
+
+Desktop (≥1024px): turn the right side into a 3–4 column grid with fixed widths and right alignment.
+
+Layout
+
+Left: Avatar + Name + Category (unchanged)
+
+Right columns (aligned):
+
+Fame Score (big number)
+
+24h (the % change, color-coded)
+
+Approval (percent)
+
+(Optional) Vote button
+
+Why it works
+
+Scannable like a finance table.
+
+The % is no longer “stuck between” elements; it has its own lane.
+
+Rows align perfectly → instantly feels more “premium”.
+
+Micro detail that matters
+
+Put the small labels (“FAME SCORE”, “24H”, “APPROVAL”) in the header row once, not repeated under each number on desktop. Repeating per-row makes it noisy.
+
+Option 2 (most “product-y”): Put 24h next to the name
+
+Desktop: show the 24h change as a small pill/badge next to the person’s name.
+
+Example:
+Jake Paul -10.2% (24h)
+
+Score stays on the right as the main metric.
+
+Why it works
+
+You read identity + movement together (makes sense conceptually).
+
+Frees up the numeric block on the right for “Score + Approval” only.
+
+Looks modern, like a “ticker” badge.
+
+Option 3 (minimal change): Keep it on the right, but reorder + group
+
+If Replit wants least code churn:
+
+Make the right block read left-to-right as: 24h → Score → Approval
+
+Or Score → 24h → Approval but with more spacing and clear alignment.
+
+Remove the tiny “24H / FAME SCORE / APPROVAL RATING” labels under each number on desktop (use a header row).
+
+This fixes 80% of the mess without redesigning the whole row.
+
+What I’d tell Replit (copy/paste)
+
+Send this:
+
+Desktop leaderboard layout feels messy because 24h % sits inside the numeric cluster. Can we restructure the row to be more table-like on desktop?
+
+Preferred fix (desktop only):
+
+Use a grid on the right with fixed columns:
+
+Fame Score (right-aligned, largest)
+
+24h (right-aligned, color-coded)
+
+Approval (right-aligned)
+
+vote button at far right
+
+Add a single header row above the list for labels (“Fame Score / 24h / Approval”) and remove repeated per-row labels on desktop.
+
+Mobile stays as-is (stacked labels are fine there).
