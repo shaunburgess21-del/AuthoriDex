@@ -101,6 +101,11 @@ function shouldCountView(req: Request, personId: string): boolean {
 let _cachedPrevRanks: Map<string, number> | null = null;
 let _lastCompletedRunId: string | null = null;
 
+let _cachedHotMovers: any[] | null = null;
+let _hotMoversCachedAt: number = 0;
+let _hotMoversCachedRunId: string | null = null;
+const HOT_MOVERS_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
 async function getLatestCompletedRunId(): Promise<string | null> {
   try {
     const [row] = await db
@@ -430,13 +435,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/trending/hot-movers", async (req, res) => {
     try {
+      const debug = req.query.debug === '1';
+      const now = Date.now();
+
+      if (!debug && _cachedHotMovers && (now - _hotMoversCachedAt < HOT_MOVERS_TTL_MS)) {
+        const currentRunId = await getLatestCompletedRunId();
+        if (currentRunId === _hotMoversCachedRunId) {
+          res.json(_cachedHotMovers);
+          return;
+        }
+      }
+
       let people = await storage.getTrendingPeople();
       if (people.length === 0) {
         res.json([]);
         return;
       }
 
-      const prevRanks = await getSnapshotRankMap();
+      let prevRanks = await getSnapshotRankMap();
+
+      // Fallback: estimate previous ranks from change24h if snapshot lookup returned empty
+      if (prevRanks.size === 0) {
+        prevRanks = new Map<string, number>();
+        const prevScores = people.map(p => {
+          const fi = p.fameIndex ?? Math.round(p.trendScore / 100);
+          const delta = p.change24h ?? 0;
+          const prevFi = delta !== 0 ? fi / (1 + delta / 100) : fi;
+          return { id: p.id, prevFi };
+        }).sort((a, b) => b.prevFi - a.prevFi);
+        prevScores.forEach((s, i) => prevRanks.set(s.id, i + 1));
+      }
+
       const enriched = people.map(p => ({
         ...p,
         rankChange: prevRanks.has(p.id) ? (prevRanks.get(p.id)! - p.rank) : null,
@@ -501,7 +530,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       hotMovers.sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0));
-      res.json(hotMovers.slice(0, 8));
+
+      if (debug) {
+        const sorted = [...hotMovers];
+        res.json({
+          thresholds,
+          totalQualified: sorted.length,
+          cap: 8,
+          candidates: sorted.map((c, i) => ({
+            ...c,
+            qualifies: true,
+            reason: (c.rankChange != null && c.rankChange >= thresholds.rankChangeP90 && c.change24h != null && c.change24h >= thresholds.deltaP90)
+              ? 'both'
+              : (c.change24h != null && c.change24h >= thresholds.deltaP90)
+                ? 'score'
+                : 'rank',
+            rankAmongQualified: i + 1,
+            excludedBecause: i >= 8 ? 'cap' : null,
+          })),
+        });
+        return;
+      }
+
+      const result = hotMovers.slice(0, 8);
+      _cachedHotMovers = result;
+      _hotMoversCachedAt = Date.now();
+      _hotMoversCachedRunId = await getLatestCompletedRunId();
+      res.json(result);
     } catch (error) {
       console.error("Error fetching hot movers:", error);
       res.status(500).json({ error: "Failed to fetch hot movers" });
@@ -1708,6 +1763,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         prevScores.forEach((s, i) => prevRankLookup.set(s.id, i + 1));
       }
 
+      // Compute canonical percentile thresholds from FULL dataset (not filtered/paginated)
+      const allPeopleForThresholds = await db
+        .select({
+          id: trendingPeople.id,
+          rank: trendingPeople.rank,
+          change24h: trendingPeople.change24h,
+        })
+        .from(trendingPeople);
+
+      const allRankChanges = allPeopleForThresholds
+        .map(p => (prevRankLookup.get(p.id) ?? p.rank) - p.rank)
+        .filter(v => v !== 0);
+      const allDeltas = allPeopleForThresholds
+        .map(p => p.change24h)
+        .filter((v): v is number => v != null && v !== 0);
+
+      const positiveRC = allRankChanges.filter(v => v > 0).sort((a, b) => b - a);
+      const positiveDeltas = allDeltas.filter(v => v > 0).sort((a, b) => b - a);
+      const negativeRC = allRankChanges.filter(v => v < 0).sort((a, b) => a - b);
+      const negativeDeltas = allDeltas.filter(v => v < 0).sort((a, b) => a - b);
+
+      const p5Idx = (arr: number[]) => Math.max(0, Math.ceil(arr.length * 0.05) - 1);
+
+      const canonicalThresholds = {
+        rankChangeP90: positiveRC.length > 0 ? positiveRC[p5Idx(positiveRC)] : 999,
+        deltaP90: positiveDeltas.length > 0 ? positiveDeltas[p5Idx(positiveDeltas)] : 999,
+        negRankChangeP10: negativeRC.length > 0 ? negativeRC[p5Idx(negativeRC)] : -999,
+        negDeltaP10: negativeDeltas.length > 0 ? negativeDeltas[p5Idx(negativeDeltas)] : -999,
+      };
+
       // Map results with user vote state + rank change
       const leaderboard = results.map((person, index) => {
         const prevRank = prevRankLookup.get(person.id) ?? person.rank;
@@ -1725,6 +1810,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         total: leaderboard.length,
         totalCount,
         data: leaderboard,
+        thresholds: canonicalThresholds,
       });
     } catch (error: any) {
       console.error("[leaderboard] Error:", error);

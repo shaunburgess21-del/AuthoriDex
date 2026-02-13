@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatNumber";
 import { OverratedUnderratedWidget } from "@/components/OverratedUnderratedWidget";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
-import { getExceptionalIndicator, computePercentileThresholds } from "@/components/LeaderboardRow";
+import { getExceptionalIndicator } from "@/components/LeaderboardRow";
 
 interface CurateProfilePoll {
   id: string;
@@ -461,7 +461,10 @@ export default function PersonDetailPage() {
     enabled: !!params?.id,
   });
 
-  const { data: leaderboardForThresholds } = useQuery<{ data: (TrendingPerson & { rankChange?: number | null })[] }>({
+  const { data: leaderboardForThresholds } = useQuery<{
+    data: (TrendingPerson & { rankChange?: number | null })[];
+    thresholds?: { rankChangeP90: number; deltaP90: number; negRankChangeP10: number; negDeltaP10: number };
+  }>({
     queryKey: ['/api/leaderboard', 'thresholds-full'],
     queryFn: async () => {
       const response = await fetch(`/api/leaderboard?limit=100&offset=0&tab=fame&sortDir=desc`);
@@ -473,11 +476,11 @@ export default function PersonDetailPage() {
   });
 
   const { isHotMover, exceptionalIndicator } = useMemo(() => {
-    if (!person || !leaderboardForThresholds?.data || leaderboardForThresholds.data.length === 0) {
+    if (!person || !leaderboardForThresholds?.thresholds) {
       return { isHotMover: false, exceptionalIndicator: null };
     }
-    const thresholds = computePercentileThresholds(leaderboardForThresholds.data as any);
-    const match = leaderboardForThresholds.data.find(p => p.id === person.id);
+    const thresholds = leaderboardForThresholds.thresholds;
+    const match = leaderboardForThresholds.data?.find(p => p.id === person.id);
     if (!match) return { isHotMover: false, exceptionalIndicator: null };
     const indicator = getExceptionalIndicator(match as any, thresholds);
     return { isHotMover: indicator?.triggersHotMover === true, exceptionalIndicator: indicator };

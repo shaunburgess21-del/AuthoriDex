@@ -1,6 +1,6 @@
 import { HeroSection } from "@/components/HeroSection";
 import { SearchBar } from "@/components/SearchBar";
-import { LeaderboardRow, getExceptionalIndicator, computePercentileThresholds } from "@/components/LeaderboardRow";
+import { LeaderboardRow, getExceptionalIndicator } from "@/components/LeaderboardRow";
 import type { PercentileThresholds } from "@/components/LeaderboardRow";
 import { VotingModal } from "@/components/VotingModal";
 import { UserMenu } from "@/components/UserMenu";
@@ -470,6 +470,12 @@ interface TrendingResponse {
   data: TrendingPerson[];
   totalCount: number;
   hasMore: boolean;
+  thresholds?: {
+    rankChangeP90: number;
+    deltaP90: number;
+    negRankChangeP10: number;
+    negDeltaP10: number;
+  };
 }
 
 type LeaderboardTab = "fame" | "approval";
@@ -625,22 +631,11 @@ export default function HomePage() {
     return allPeople;
   }, [allPeople]);
 
-  const { data: fullLeaderboardForThresholds } = useQuery<TrendingResponse>({
-    queryKey: ['/api/leaderboard', 'thresholds-full'],
-    queryFn: async () => {
-      const response = await fetch(`/api/leaderboard?limit=100&offset=0&tab=fame&sortDir=desc`);
-      if (!response.ok) throw new Error('Failed to fetch');
-      return response.json();
-    },
-    staleTime: 5 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
-  });
-
   const percentileThresholds = useMemo(() => {
-    const thresholdPeople = fullLeaderboardForThresholds?.data;
-    if (!thresholdPeople || thresholdPeople.length === 0) return undefined;
-    return computePercentileThresholds(thresholdPeople as any);
-  }, [fullLeaderboardForThresholds]);
+    const thresholds = data?.pages[0]?.thresholds;
+    if (!thresholds) return undefined;
+    return thresholds as PercentileThresholds;
+  }, [data]);
 
   const exceptionalIds = useMemo(() => {
     if (!percentileThresholds) return new Set<string>();
