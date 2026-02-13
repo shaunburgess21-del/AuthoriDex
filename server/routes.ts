@@ -581,7 +581,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .catch(() => {});
       }
 
-      res.json(person);
+      const metrics = await db
+        .select({
+          approvalPct: celebrityMetrics.approvalPct,
+          approvalVotesCount: celebrityMetrics.approvalVotesCount,
+        })
+        .from(celebrityMetrics)
+        .where(eq(celebrityMetrics.celebrityId, id))
+        .limit(1);
+
+      const m = metrics[0];
+
+      res.json({
+        ...person,
+        approvalPct: m?.approvalPct ?? null,
+        approvalVotesCount: m?.approvalVotesCount ?? 0,
+      });
     } catch (error) {
       console.error("Error fetching person:", error);
       res.status(500).json({ error: "Failed to fetch person data" });

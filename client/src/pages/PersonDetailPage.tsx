@@ -30,6 +30,14 @@ import { OverratedUnderratedWidget } from "@/components/OverratedUnderratedWidge
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { getExceptionalIndicator } from "@/components/LeaderboardRow";
 
+const APPROVAL_COLORS = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
+const getApprovalColor = (approvalPct: number): string => {
+  const normalizedPct = approvalPct <= 1 ? approvalPct * 100 : approvalPct;
+  const rating = Math.round((normalizedPct / 100) * 4) + 1;
+  const clampedRating = Math.max(1, Math.min(5, rating));
+  return APPROVAL_COLORS[clampedRating - 1];
+};
+
 interface CurateProfilePoll {
   id: string;
   personId: number | string;
@@ -684,9 +692,12 @@ export default function PersonDetailPage() {
                 <h1 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-person-name">
                   {person.name}
                 </h1>
-                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <div className="flex items-center gap-x-2 gap-y-1 mb-4 flex-wrap">
                   <p className="text-lg text-muted-foreground">{person.category}</p>
                   <CelebrityInfoModal personId={person.id} personName={person.name} />
+                  <span className="ml-auto shrink-0 text-sm font-mono font-semibold text-muted-foreground" data-testid="text-header-rank">
+                    #{person.rank}
+                  </span>
                 </div>
                 {person.bio && (
                   <p className="text-sm text-muted-foreground leading-relaxed mb-4" data-testid="text-person-bio">
@@ -763,11 +774,17 @@ export default function PersonDetailPage() {
           </Card>
           <Card className="text-center p-4">
             <p className="text-sm text-muted-foreground uppercase tracking-wide mb-1">
-              Rank
+              Approval
             </p>
-            <p className="text-3xl font-mono font-bold">
-              #{person.rank}
-            </p>
+            {(person as any).approvalPct != null ? (
+              <p className="text-3xl font-mono font-bold" style={{ color: getApprovalColor((person as any).approvalPct) }} data-testid="text-approval-pct">
+                {Math.round((person as any).approvalPct)}%
+              </p>
+            ) : (
+              <p className="text-xl font-mono text-muted-foreground mt-1" data-testid="text-approval-pct">
+                --
+              </p>
+            )}
           </Card>
         </div>
 
