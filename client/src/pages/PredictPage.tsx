@@ -335,7 +335,7 @@ const FIRST_VISIT_KEY = "famedex_predict_first_visit";
 
 const PREDICTION_TYPES: { id: PredictionType; label: string; mobileLabel: string; icon: React.ReactNode }[] = [
   { id: "all", label: "All Markets", mobileLabel: "All", icon: <Sparkles className="h-4 w-4" /> },
-  { id: "community", label: "Market Predictions", mobileLabel: "Markets", icon: <Globe className="h-4 w-4" /> },
+  { id: "community", label: "Real-World", mobileLabel: "Markets", icon: <Globe className="h-4 w-4" /> },
   { id: "jackpot", label: "Weekly Jackpot", mobileLabel: "Jackpot", icon: <Crown className="h-4 w-4" /> },
   { id: "updown", label: "Up/Down", mobileLabel: "Up/Down", icon: <TrendingUp className="h-4 w-4" /> },
   { id: "h2h", label: "Head-to-Head", mobileLabel: "H2H", icon: <Swords className="h-4 w-4" /> },
