@@ -681,7 +681,6 @@ export default function PersonDetailPage() {
           </div>
         </div>
       </header>
-
       <div className="container mx-auto px-4 py-12 max-w-6xl">
         {/* 1. Header: Name + Category */}
         <div className="mb-8">
@@ -696,7 +695,7 @@ export default function PersonDetailPage() {
                   <p className="text-lg text-muted-foreground">{person.category}</p>
                   <CelebrityInfoModal personId={person.id} personName={person.name} />
                 </div>
-                <p className="text-sm font-mono font-semibold text-muted-foreground mb-4" data-testid="text-header-rank">
+                <p className="text-sm font-mono font-semibold mb-4 text-[#F9FAFA]" data-testid="text-header-rank">
                   Rank #{person.rank}
                 </p>
                 {person.bio && (
