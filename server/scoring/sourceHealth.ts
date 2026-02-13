@@ -197,16 +197,16 @@ export function updateSourceHealth(
  * Get staleness decay factor based on how long data has been stale.
  * Returns a multiplier (0.0 to 1.0) for fill-forward values.
  * 
- * Decay curve:
+ * Decay curve (gentler to handle overnight gaps):
  * - 0-2 hours stale: 100% (no decay)
- * - 2-4 hours stale: 90% → 70%
- * - 4-6 hours stale: 70% → 50%
- * - 6-12 hours stale: 50% → 20%
- * - >12 hours stale: 20% (floor)
+ * - 2-4 hours stale: 100% → 80%
+ * - 4-8 hours stale: 80% → 65%
+ * - 8-16 hours stale: 65% → 50%
+ * - >16 hours stale: 50% (floor — preserves half the signal)
  */
 export function getStalenessDecayFactor(lastHealthyTimestamp: Date | null): number {
   if (!lastHealthyTimestamp) {
-    return 0.2; // Very stale, minimal weight
+    return 0.5; // No timestamp — use generous floor to prevent signal collapse
   }
   
   const now = new Date();
@@ -215,13 +215,13 @@ export function getStalenessDecayFactor(lastHealthyTimestamp: Date | null): numb
   if (staleHours <= 2) {
     return 1.0;
   } else if (staleHours <= 4) {
-    return 1.0 - ((staleHours - 2) / 2) * 0.3; // 1.0 → 0.7
-  } else if (staleHours <= 6) {
-    return 0.7 - ((staleHours - 4) / 2) * 0.2; // 0.7 → 0.5
-  } else if (staleHours <= 12) {
-    return 0.5 - ((staleHours - 6) / 6) * 0.3; // 0.5 → 0.2
+    return 1.0 - ((staleHours - 2) / 2) * 0.2; // 1.0 → 0.8
+  } else if (staleHours <= 8) {
+    return 0.8 - ((staleHours - 4) / 4) * 0.15; // 0.8 → 0.65
+  } else if (staleHours <= 16) {
+    return 0.65 - ((staleHours - 8) / 8) * 0.15; // 0.65 → 0.5
   } else {
-    return 0.2; // Floor - minimal contribution
+    return 0.5; // Floor — preserve 50% of last-known signal during extended outages
   }
 }
 

@@ -353,16 +353,16 @@ export async function runDataIngestion(): Promise<IngestResult> {
         }
       }
       
-      // Keep closest snapshot to 24h ago (within 4 hour window to survive gaps)
-      if (diff24h < 4 * 60 * 60 * 1000) {
+      // Keep closest snapshot to 24h ago (within 8 hour window to survive overnight gaps)
+      if (diff24h < 8 * 60 * 60 * 1000) {
         const existing = snapshot24hMap.get(snap.personId);
         if (!existing || diff24h < Math.abs(new Date(existing.timestamp!).getTime() - time24hAgo.getTime())) {
           snapshot24hMap.set(snap.personId, { trendScore: snap.trendScore, fameIndex: snap.fameIndex, timestamp: snap.timestamp });
         }
       }
       
-      // Keep closest snapshot to 7d ago (within 12 hour window)
-      if (diff7d < 12 * 60 * 60 * 1000) {
+      // Keep closest snapshot to 7d ago (within 18 hour window to survive gaps)
+      if (diff7d < 18 * 60 * 60 * 1000) {
         const existing = snapshot7dMap.get(snap.personId);
         if (!existing) {
           snapshot7dMap.set(snap.personId, { trendScore: snap.trendScore, fameIndex: snap.fameIndex });
@@ -523,10 +523,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
               fallbackNewsDelta = lastNonZero.newsDelta;
               const staleHours = (now.getTime() - lastNonZero.timestamp.getTime()) / (1000 * 60 * 60);
               if (staleHours <= 2) fallbackDecay = 1.0;
-              else if (staleHours <= 4) fallbackDecay = 1.0 - ((staleHours - 2) / 2) * 0.3;
-              else if (staleHours <= 6) fallbackDecay = 0.7 - ((staleHours - 4) / 2) * 0.2;
-              else if (staleHours <= 12) fallbackDecay = 0.5 - ((staleHours - 6) / 6) * 0.3;
-              else fallbackDecay = 0.2;
+              else if (staleHours <= 4) fallbackDecay = 1.0 - ((staleHours - 2) / 2) * 0.2;
+              else if (staleHours <= 8) fallbackDecay = 0.8 - ((staleHours - 4) / 4) * 0.15;
+              else if (staleHours <= 16) fallbackDecay = 0.65 - ((staleHours - 8) / 8) * 0.15;
+              else fallbackDecay = 0.5;
             }
           }
 
@@ -557,10 +557,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
               fallbackSearchDelta = lastNonZero.searchDelta;
               const staleHours = (now.getTime() - lastNonZero.timestamp.getTime()) / (1000 * 60 * 60);
               if (staleHours <= 2) fallbackDecay = 1.0;
-              else if (staleHours <= 4) fallbackDecay = 1.0 - ((staleHours - 2) / 2) * 0.3;
-              else if (staleHours <= 6) fallbackDecay = 0.7 - ((staleHours - 4) / 2) * 0.2;
-              else if (staleHours <= 12) fallbackDecay = 0.5 - ((staleHours - 6) / 6) * 0.3;
-              else fallbackDecay = 0.2;
+              else if (staleHours <= 4) fallbackDecay = 1.0 - ((staleHours - 2) / 2) * 0.2;
+              else if (staleHours <= 8) fallbackDecay = 0.8 - ((staleHours - 4) / 4) * 0.15;
+              else if (staleHours <= 16) fallbackDecay = 0.65 - ((staleHours - 8) / 8) * 0.15;
+              else fallbackDecay = 0.5;
             }
           }
 
@@ -624,10 +624,12 @@ export async function runDataIngestion(): Promise<IngestResult> {
         
         const scoreResult = computeTrendScore(
           inputs,
-          prev24h?.trendScore,  // previousScore for change24h calculation
-          prev7d?.trendScore,   // previousScore7d for change7d calculation
+          prev24h?.trendScore,  // previousScore for change24h calculation (legacy fallback)
+          prev7d?.trendScore,   // previousScore7d for change7d calculation (legacy fallback)
           previousFameIndex,    // Most recent fameIndex for EMA smoothing
-          sourceStats           // 7-day stats for normalization
+          sourceStats,          // 7-day stats for normalization
+          prev24h?.fameIndex ?? undefined,  // 24h-ago fameIndex for stable change_24h
+          prev7d?.fameIndex ?? undefined,   // 7d-ago fameIndex for stable change_7d
         );
 
         // Track stabilization stats using pre-stabilization rawFameIndex

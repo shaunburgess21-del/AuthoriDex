@@ -100,6 +100,8 @@ export function computeTrendScore(
   previousScore7d?: number,
   previousFameIndex?: number,
   sourceStats?: AllSourceStats,
+  previousFameIndex24h?: number,
+  previousFameIndex7d?: number,
 ): TrendScoreResult {
   // Use provided stats or defaults
   const stats = sourceStats || DEFAULT_SOURCE_STATS;
@@ -372,13 +374,17 @@ export function computeTrendScore(
   // 9. CALCULATE CHANGES (no random fallback!)
   // =========================================================================
   
-  const change24h = previousScore 
-    ? ((trendScore - previousScore) / previousScore) * 100
-    : null;
+  const change24h = previousFameIndex24h && previousFameIndex24h > 0
+    ? ((fameIndex - previousFameIndex24h) / previousFameIndex24h) * 100
+    : (previousScore 
+      ? ((trendScore - previousScore) / previousScore) * 100
+      : null);
   
-  const change7d = previousScore7d
-    ? ((trendScore - previousScore7d) / previousScore7d) * 100
-    : null;
+  const change7d = previousFameIndex7d && previousFameIndex7d > 0
+    ? ((fameIndex - previousFameIndex7d) / previousFameIndex7d) * 100
+    : (previousScore7d
+      ? ((trendScore - previousScore7d) / previousScore7d) * 100
+      : null);
   
   // =========================================================================
   // 10. RETURN RESULT

@@ -310,20 +310,21 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
   const time24hAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const time7dAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   
-  // Build lookup maps for historical scores
+  // Build lookup maps for historical scores (using fameIndex for stable % changes)
   const historicalSnapshots = await db.select({
     personId: trendSnapshots.personId,
     timestamp: trendSnapshots.timestamp,
     trendScore: trendSnapshots.trendScore,
+    fameIndex: trendSnapshots.fameIndex,
   }).from(trendSnapshots).where(
     gte(trendSnapshots.timestamp, time7dAgo)
   );
   
   // Create maps for 24h and 7d lookups (find closest snapshot to target time)
-  const snapshot24hMap = new Map<string, { score: number; diff: number }>();
-  const snapshot7dMap = new Map<string, { score: number; diff: number }>();
+  const snapshot24hMap = new Map<string, { score: number; fameIndex: number | null; diff: number }>();
+  const snapshot7dMap = new Map<string, { score: number; fameIndex: number | null; diff: number }>();
   
-  const MAX_24H_WINDOW = 6 * 60 * 60 * 1000; // 6 hours window for 24h lookup
+  const MAX_24H_WINDOW = 8 * 60 * 60 * 1000; // 8 hours window for 24h lookup (survives overnight gaps)
   const MAX_7D_WINDOW = 24 * 60 * 60 * 1000; // 24 hours window for 7d lookup
   
   for (const snap of historicalSnapshots) {
@@ -335,7 +336,7 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
     if (diff24h < MAX_24H_WINDOW) {
       const existing = snapshot24hMap.get(snap.personId);
       if (!existing || diff24h < existing.diff) {
-        snapshot24hMap.set(snap.personId, { score: snap.trendScore, diff: diff24h });
+        snapshot24hMap.set(snap.personId, { score: snap.trendScore, fameIndex: snap.fameIndex, diff: diff24h });
       }
     }
     
@@ -343,7 +344,7 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
     if (diff7d < MAX_7D_WINDOW) {
       const existing = snapshot7dMap.get(snap.personId);
       if (!existing || diff7d < existing.diff) {
-        snapshot7dMap.set(snap.personId, { score: snap.trendScore, diff: diff7d });
+        snapshot7dMap.set(snap.personId, { score: snap.trendScore, fameIndex: snap.fameIndex, diff: diff7d });
       }
     }
   }
@@ -359,16 +360,21 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
     
     if (!dbPerson || !celeb) continue;
     
-    // Calculate actual percentage changes from historical snapshots
+    // Calculate actual percentage changes from historical fameIndex (EMA-smoothed, stable)
     const prev24h = snapshot24hMap.get(dbPerson.id);
     const prev7d = snapshot7dMap.get(dbPerson.id);
+    const currentFameIndex = Math.round(celeb.trendScore / 100);
     
-    const change24h = prev24h 
-      ? ((celeb.trendScore - prev24h.score) / prev24h.score) * 100 
-      : null;
-    const change7d = prev7d 
-      ? ((celeb.trendScore - prev7d.score) / prev7d.score) * 100 
-      : null;
+    const change24h = prev24h?.fameIndex && prev24h.fameIndex > 0
+      ? ((currentFameIndex - prev24h.fameIndex) / prev24h.fameIndex) * 100
+      : (prev24h 
+        ? ((celeb.trendScore - prev24h.score) / prev24h.score) * 100 
+        : null);
+    const change7d = prev7d?.fameIndex && prev7d.fameIndex > 0
+      ? ((currentFameIndex - prev7d.fameIndex) / prev7d.fameIndex) * 100
+      : (prev7d 
+        ? ((celeb.trendScore - prev7d.score) / prev7d.score) * 100 
+        : null);
     
     trendingPeople.push({
       id: dbPerson.id,
@@ -377,7 +383,7 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
       bio: dbPerson.bio,
       rank: index + 1,
       trendScore: celeb.trendScore,
-      fameIndex: Math.round(celeb.trendScore / 100), // 0-10,000 scale
+      fameIndex: currentFameIndex,
       change24h: change24h !== null ? Math.round(change24h * 10) / 10 : null,
       change7d: change7d !== null ? Math.round(change7d * 10) / 10 : null,
       category: celeb.category,

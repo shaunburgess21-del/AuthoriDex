@@ -163,8 +163,8 @@ async function getSnapshotRankMap(): Promise<Map<string, number>> {
       // Strategy 2: Fallback to hour-bucketed timestamps for older snapshots without run_id
       const targetHour = new Date(t24hAgo);
       targetHour.setMinutes(0, 0, 0);
-      const tLow = new Date(targetHour.getTime() - 4 * 60 * 60 * 1000);
-      const tHigh = new Date(targetHour.getTime() + 4 * 60 * 60 * 1000);
+      const tLow = new Date(targetHour.getTime() - 8 * 60 * 60 * 1000);
+      const tHigh = new Date(targetHour.getTime() + 8 * 60 * 60 * 1000);
 
       const nearestHourRow = await db
         .select({ hour: sql<string>`date_trunc('hour', ${trendSnapshots.timestamp})` })
