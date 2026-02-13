@@ -686,7 +686,7 @@ export default function PersonDetailPage() {
         <div className="mb-8">
           <div className="flex gap-6">
             <PersonAvatar name={person.name} avatar={person.avatar} size="xl" />
-            <div className="flex-1 flex flex-col justify-between h-48">
+            <div className="flex-1 flex flex-col justify-between h-32 sm:h-48">
               <div>
                 <h1 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-person-name">
                   {person.name}

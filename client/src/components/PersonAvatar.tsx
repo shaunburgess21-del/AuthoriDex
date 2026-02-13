@@ -11,7 +11,7 @@ export function PersonAvatar({ name, avatar, size = "md" }: PersonAvatarProps) {
     size === "xs" ? "h-6 w-6" :
     size === "sm" ? "h-10 w-10" : 
     size === "lg" ? "h-16 w-16" :
-    size === "xl" ? "h-48 w-48" :
+    size === "xl" ? "h-32 w-32 sm:h-48 sm:w-48" :
     "h-12 w-12";
 
   const initials = name
