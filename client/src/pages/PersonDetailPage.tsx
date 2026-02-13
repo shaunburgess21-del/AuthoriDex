@@ -695,7 +695,7 @@ export default function PersonDetailPage() {
                   <p className="text-lg text-muted-foreground">{person.category}</p>
                   <CelebrityInfoModal personId={person.id} personName={person.name} />
                 </div>
-                <p className="text-sm font-mono font-semibold mb-4 text-[#F9FAFA]" data-testid="text-header-rank">
+                <p className="text-sm font-mono font-semibold text-[#F9FAFA] mt-[9px] mb-[9px]" data-testid="text-header-rank">
                   Rank #{person.rank}
                 </p>
                 {person.bio && (
