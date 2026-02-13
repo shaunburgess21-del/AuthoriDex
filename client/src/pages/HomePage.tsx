@@ -822,7 +822,7 @@ export default function HomePage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
             >
-                            <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-1 mb-2 md:grid md:grid-cols-3 md:overflow-visible" data-testid="market-pulse-row">
+                            <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2 mb-4 md:grid md:grid-cols-3 md:overflow-visible" data-testid="market-pulse-row">
                 <MarketPulseCard 
                   title="Daily Movers" 
                   icon={Activity} 
@@ -852,7 +852,7 @@ export default function HomePage() {
                 />
               </div>
 
-              <div className="mb-[6px]">
+              <div className="mb-[12px]">
                 <TrendingNowFeed
                   onPersonClick={handleVisitProfile}
                   collapsed={trendingNowCollapsed}
