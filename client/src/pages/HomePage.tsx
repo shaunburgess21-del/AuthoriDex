@@ -884,9 +884,6 @@ export default function HomePage() {
                         </TouchTooltip>
                       </div>
                     </div>
-                    <div className="flex gap-2 flex-wrap">
-                      <FilterDropdown value={category} onChange={setCategory} />
-                    </div>
                   </div>
                   
                   <div className="flex items-center gap-2 border-b border-border pb-2">
@@ -923,9 +920,12 @@ export default function HomePage() {
                       )}
                     </button>
                   </div>
-                  <p className="text-[11px] text-muted-foreground/50 -mt-1" data-testid="text-mode-microcopy">
-                    {leaderboardTab === "fame" ? "Ranked by real-world trending data" : "Ranked by community votes"}
-                  </p>
+                  <div className="flex items-center justify-between gap-2 -mt-1" data-testid="text-mode-microcopy">
+                    <p className="text-[11px] text-muted-foreground/50">
+                      {leaderboardTab === "fame" ? "Ranked by real-world trending data" : "Ranked by community votes"}
+                    </p>
+                    <FilterDropdown value={category} onChange={setCategory} />
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="px-6 py-4 border-b bg-muted/30">
