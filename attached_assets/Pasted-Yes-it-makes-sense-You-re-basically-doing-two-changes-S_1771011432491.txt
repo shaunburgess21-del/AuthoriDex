@@ -1,0 +1,84 @@
+Yes — it makes sense. You’re basically doing two changes:
+
+Swap the right-side “RANK #” card → “APPROVAL” card
+
+Card label becomes APPROVAL
+
+The big value becomes the celebrity’s approval rating (pulled from the same field you already show elsewhere on that profile, so it always matches the current person).
+
+Move “#Rank” into the header area under the name + category
+
+Visually: Bad Bunny (name) on top, then a row with Entertainment + (i) and #Rank nearby.
+
+The mobile behavior you described
+
+Also makes sense: on small widths, “Entertainment” + the info icon may wrap, so you want #Rank to shift left when the icon drops onto the next line, instead of overlapping or looking cramped.
+
+The clean way to achieve that is to treat that whole “category + info + rank” area as a wrapping flex row with gaps, so it reflows naturally.
+
+Recommended layout rule (so it behaves exactly as you want)
+
+Put these three items in one wrapper row under the name:
+
+Category pill/text (e.g., “Entertainment”)
+
+Info icon (the “i”)
+
+#Rank (e.g., “#1”)
+
+And make the wrapper:
+
+display: flex
+
+flex-wrap: wrap
+
+align-items: center
+
+gap: ...
+
+Then ensure:
+
+The rank item is allowed to “push to the right” on desktop, but falls into place on mobile without overlapping.
+
+If the info icon wraps, it will naturally land on the next line, and the remaining items (including rank) will occupy the available space on the first line (which is what you want).
+
+In Tailwind terms, the pattern looks like:
+
+<div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+  <span className="text-sm text-muted-foreground">Entertainment</span>
+  <InfoIcon className="h-4 w-4" />
+  <span className="ml-auto text-sm font-semibold">#1</span>
+</div>
+
+One important tweak for your exact “shift left” expectation
+
+ml-auto pushes rank to the far right only when there’s space.
+When wrapping happens, rank won’t fight for space — it’ll slide left because the layout no longer has enough width to keep it pinned right. That matches what you described.
+
+If you want rank to be slightly separated but never go under the info icon, you can also give the rank a “don’t shrink too small” rule:
+
+<span className="ml-auto shrink-0 text-sm font-semibold">#1</span>
+
+Approval card replacement (right-side tile)
+
+Title: APPROVAL
+
+Value: the approval rating (whatever your canonical field is, e.g. approvalPercent or approvalScore)
+
+Common display options:
+
+Percent: 87%
+
+Score: 4.6 / 5
+
+Net approval: +32
+
+Whatever you choose, keep it consistent with the “approval rating displayed elsewhere” (same units + formatting).
+
+Quick sanity checklist
+
+Desktop: category + (i) stays inline; rank sits on the same line, right-aligned.
+
+Mobile: if “Entertainment” causes wrap, the icon drops; rank shifts left to fill the remaining line space.
+
+Approval tile always reflects the currently viewed profile’s approval value.
