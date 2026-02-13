@@ -695,14 +695,27 @@ export default function PersonDetailPage() {
                 )}
               </div>
               <div className="flex gap-2 flex-wrap">
-                <Button variant="outline" size="sm" className="gap-2" data-testid="button-share">
+                <Button variant="outline" size="icon" className="sm:hidden" data-testid="button-share-mobile">
+                  <Share2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant={isFavorited ? "default" : "outline"}
+                  size="icon"
+                  className="sm:hidden"
+                  onClick={handleToggleFavorite}
+                  disabled={favoriteLoading}
+                  data-testid="button-favorite-mobile"
+                >
+                  <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
+                </Button>
+                <Button variant="outline" size="sm" className="hidden sm:inline-flex gap-2" data-testid="button-share">
                   <Share2 className="h-4 w-4" />
                   Share
                 </Button>
                 <Button
                   variant={isFavorited ? "default" : "outline"}
                   size="sm"
-                  className="gap-2"
+                  className="hidden sm:inline-flex gap-2"
                   onClick={handleToggleFavorite}
                   disabled={favoriteLoading}
                   data-testid="button-favorite"
