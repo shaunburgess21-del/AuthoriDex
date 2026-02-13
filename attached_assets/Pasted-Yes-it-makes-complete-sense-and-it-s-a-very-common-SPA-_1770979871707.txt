@@ -1,0 +1,88 @@
+Yes, it makes complete sense — and it’s a very common SPA routing bug.
+
+You want two different scroll behaviors depending on how navigation happened:
+
+Top-of-page on normal nav clicks (Leaderboard → Vote / Predict / etc.)
+
+Restore previous scroll on “Back” (Profile → Back → Leaderboard at the same spot)
+
+That’s exactly how users expect it to work.
+
+What’s causing it
+
+In React SPAs, if you don’t manage scroll explicitly:
+
+the browser may keep the previous scroll position when routes change (so Vote opens “mid-page”)
+
+and your “Back” button might be doing navigate("/leaderboard") (new navigation), which resets scroll to top instead of using real history.
+
+The correct implementation (clean, reliable)
+A) Normal navigation should always scroll to top
+
+When a user clicks main nav links (Leaderboard/Vote/Predict):
+
+on route change, run window.scrollTo(0,0) unless it was a POP (back/forward).
+
+In React Router v6+, you can do this with a ScrollToTop component that checks navigation type.
+
+Behavior rule:
+
+PUSH or REPLACE → scroll to top
+
+POP (browser back/forward) → do nothing (browser should restore)
+
+B) “Back” button must use history back, not navigate to a route
+
+On profile pages, your back arrow should do:
+
+navigate(-1)
+
+Not navigate("/") or navigate("/leaderboard").
+
+That single change is usually the difference between:
+
+returning to the exact scroll position ✅
+
+or always returning to top ❌
+
+If there are cases where the user lands directly on a profile page (no history), then:
+
+fallback: navigate("/") (or leaderboard) and scroll top.
+
+Copy/paste instruction to Replit (exact)
+
+Scroll & Back Behavior Fix (must match spec)
+
+Normal nav clicks must land at top
+
+When user clicks main nav links (Leaderboard/Vote/Predict), the new page must start at the top.
+
+Implement a global ScrollToTop handler:
+
+On route change, if navigation type is PUSH or REPLACE, call window.scrollTo({ top: 0, left: 0, behavior: "auto" }).
+
+If navigation type is POP (back/forward), do not scroll; allow browser to restore position.
+
+Back button must restore previous scroll
+
+On Profile page back arrow, use navigate(-1) so the previous page restores its scroll position.
+
+If history length is not sufficient (direct entry), fallback to navigate("/").
+
+Acceptance tests:
+
+Scroll down Leaderboard → click Vote → Vote opens at top (desktop + mobile).
+
+Scroll down Leaderboard → open Elon profile → click back arrow → Leaderboard returns with Elon still in view (not top).
+
+Browser back/forward behaves naturally.
+
+Optional “belt-and-suspenders” improvement (if browser restore isn’t reliable)
+
+If you find some mobile browsers still don’t restore correctly, you can store scroll positions per route key:
+
+save window.scrollY on route change/unmount
+
+restore on POP
+
+But in most cases, ScrollToTop + navigate(-1) fixes it cleanly.
