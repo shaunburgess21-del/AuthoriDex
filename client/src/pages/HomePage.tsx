@@ -783,7 +783,7 @@ export default function HomePage() {
           </div>
         </div>
       </header>
-      <HeroSection onCastVoteClick={handleHeroCastVote} />
+      <HeroSection onCastVoteClick={handleHeroCastVote} onPredictClick={() => setLocation("/predict")} />
       <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-blue-500/5 via-background/95 to-blue-500/5 backdrop-blur-xl" data-toggle-bar>
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-center gap-2 py-3">

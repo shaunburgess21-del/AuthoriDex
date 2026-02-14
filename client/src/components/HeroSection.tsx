@@ -1,12 +1,13 @@
 import { Button } from "@/components/ui/button";
-import { TrendingUp, CheckSquare } from "lucide-react";
+import { TrendingUp, CheckSquare, LineChart } from "lucide-react";
 import heroImage from "@assets/generated_images/Hero_background_network_visualization_1293b14e.png";
 
 interface HeroSectionProps {
   onCastVoteClick?: () => void;
+  onPredictClick?: () => void;
 }
 
-export function HeroSection({ onCastVoteClick }: HeroSectionProps) {
+export function HeroSection({ onCastVoteClick, onPredictClick }: HeroSectionProps) {
   return (
     <div className="relative h-96 md:h-[500px] w-full overflow-hidden">
       <div
@@ -33,13 +34,21 @@ export function HeroSection({ onCastVoteClick }: HeroSectionProps) {
           </Button>
           <Button 
             size="lg" 
-            variant="outline" 
-            className="gap-2 backdrop-blur-sm bg-background/50"
+            className="gap-2 bg-gradient-to-r from-cyan-600 to-teal-500 text-white font-semibold shadow-lg shadow-cyan-500/20"
             onClick={onCastVoteClick}
             data-testid="button-cast-vote"
           >
             <CheckSquare className="h-5 w-5" />
             Cast Your Vote
+          </Button>
+          <Button 
+            size="lg" 
+            className="gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-semibold shadow-lg shadow-violet-500/20"
+            onClick={onPredictClick}
+            data-testid="button-prediction-markets"
+          >
+            <LineChart className="h-5 w-5" />
+            Prediction Markets
           </Button>
         </div>
       </div>
