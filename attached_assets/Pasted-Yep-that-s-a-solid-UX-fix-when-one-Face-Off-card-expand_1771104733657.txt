@@ -1,0 +1,80 @@
+Yep — that’s a solid UX fix: when one Face-Off card expands (after voting), the other cards in that row look “unfinished” because their extra height becomes dead space. Filling that space with a pre-vote prompt is a good move.
+
+Here’s the cleanest way to implement it without making the UI feel noisy.
+
+Recommended behavior
+1) Add an optional “Pre-Vote Prompt” field in Admin (Face-Off create/edit)
+
+Field name: Prompt Text (or Pre-Vote Heading)
+
+Example defaults:
+
+“Who do you prefer?”
+
+“Pick your side”
+
+“Which one wins?”
+
+2) Card UI rules
+
+If the user has NOT voted on that face-off:
+
+show the prompt in the empty space (centered, subtle)
+
+keep existing “Tap an image to pick your side”
+
+If the user HAS voted:
+
+hide the prompt
+
+show results UI (as it does now)
+
+3) Fallback if admin leaves it blank
+
+Use a default string: “Who do you prefer?”
+
+Design suggestion (so it looks premium, not cluttered)
+
+Place the prompt in the “results area” space but style it as an onboarding cue:
+
+Medium-weight text (not huge)
+
+Theme-colored accent icon (same as vote accent)
+
+Optional micro-subtitle:
+
+“Tap a photo to vote”
+
+This way the expanded height looks intentional.
+
+Copy/paste prompt to Replit
+
+Face-Off cards: fill empty space on unvoted cards
+
+When a Face-Off card has been voted on, it expands vertically to show results. Cards beside it in the same row remain tall but have empty space, which looks unfinished.
+
+Please implement a “Pre-Vote Prompt” that displays ONLY on Face-Off cards the user has not voted on:
+
+In Admin (Face-Off create/edit), add an optional field:
+
+promptText (string) e.g. “Who do you prefer?”
+
+On the Face-Off card UI:
+
+If user has NOT voted → show promptText in the results area / empty space (centered, subtle).
+
+Once the user votes → hide promptText and show the results UI as normal.
+
+If promptText is empty/null → default to “Who do you prefer?”
+
+Acceptance:
+
+Unvoted cards show prompt (fills empty space)
+
+Voted cards show results and prompt disappears
+
+Works consistently on desktop + mobile.
+
+One extra improvement (optional)
+
+If you want it even cleaner: keep row heights consistent by making all face-off cards always reserve the results area, and swap content (prompt vs results). That avoids layout jumpiness.
