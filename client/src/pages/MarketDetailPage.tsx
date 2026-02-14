@@ -573,6 +573,62 @@ export default function MarketDetailPage() {
       </header>
 
       <div className="container mx-auto px-4 py-6 max-w-3xl">
+        <div className="mb-6">
+          <div className="flex items-center gap-2 flex-wrap mb-3">
+            <Badge variant="outline" className={statusConfig.className} data-testid="badge-status">
+              {statusConfig.label}
+            </Badge>
+            {market.category && <CategoryPill category={market.category} data-testid="badge-category" />}
+            {market.featured && (
+              <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30" data-testid="badge-featured">
+                <Star className="h-3 w-3 mr-1" />
+                Featured
+              </Badge>
+            )}
+          </div>
+
+          <h1 className="text-2xl sm:text-3xl font-serif font-bold mb-2" data-testid="text-market-title">
+            {market.title}
+          </h1>
+
+          {market.teaser && (
+            <p className="text-muted-foreground text-sm sm:text-base mb-3" data-testid="text-market-teaser">
+              {market.teaser}
+            </p>
+          )}
+
+          <div className="flex items-center gap-4 flex-wrap text-xs text-muted-foreground">
+            {timeLeft && (
+              <div className="flex items-center gap-1.5" data-testid="text-time-remaining">
+                <Clock className="h-3.5 w-3.5" />
+                <span>{timeLeft}</span>
+              </div>
+            )}
+            {market.sourceUrl && (
+              <a
+                href={market.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-violet-400 hover:text-violet-300 transition-colors"
+                data-testid="link-source"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                <span>Source</span>
+              </a>
+            )}
+          </div>
+
+          {market.tags && market.tags.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap mt-3">
+              {market.tags.map((tag) => (
+                <Badge key={tag} variant="secondary" className="text-xs" data-testid={`badge-tag-${tag}`}>
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
+
         {isOpen && !isInactive && (
           <Card className="p-5 mb-6 border-violet-500/20 bg-violet-500/5" data-testid="section-place-prediction">
             <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
@@ -661,62 +717,6 @@ export default function MarketDetailPage() {
             )}
           </Card>
         )}
-
-        <div className="mb-6">
-          <div className="flex items-center gap-2 flex-wrap mb-3">
-            <Badge variant="outline" className={statusConfig.className} data-testid="badge-status">
-              {statusConfig.label}
-            </Badge>
-            {market.category && <CategoryPill category={market.category} data-testid="badge-category" />}
-            {market.featured && (
-              <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30" data-testid="badge-featured">
-                <Star className="h-3 w-3 mr-1" />
-                Featured
-              </Badge>
-            )}
-          </div>
-
-          <h1 className="text-2xl sm:text-3xl font-serif font-bold mb-2" data-testid="text-market-title">
-            {market.title}
-          </h1>
-
-          {market.teaser && (
-            <p className="text-muted-foreground text-sm sm:text-base mb-3" data-testid="text-market-teaser">
-              {market.teaser}
-            </p>
-          )}
-
-          <div className="flex items-center gap-4 flex-wrap text-xs text-muted-foreground">
-            {timeLeft && (
-              <div className="flex items-center gap-1.5" data-testid="text-time-remaining">
-                <Clock className="h-3.5 w-3.5" />
-                <span>{timeLeft}</span>
-              </div>
-            )}
-            {market.sourceUrl && (
-              <a
-                href={market.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-violet-400 hover:text-violet-300 transition-colors"
-                data-testid="link-source"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                <span>Source</span>
-              </a>
-            )}
-          </div>
-
-          {market.tags && market.tags.length > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap mt-3">
-              {market.tags.map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-xs" data-testid={`badge-tag-${tag}`}>
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          )}
-        </div>
 
         <Card className="p-5 mb-6" data-testid="section-outcomes">
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
