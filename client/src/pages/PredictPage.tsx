@@ -1074,7 +1074,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
   const noPercent = 100 - yesPercent;
   
   return (
-    <PredictCard testId={`card-market-${market.slug}`} className={isMarketClosed && !isInactive ? 'opacity-75' : ''} inactive={isInactive} inactiveMessage={inactiveMessage}>
+    <PredictCard testId={`card-market-${market.slug}`} className={`min-h-[300px] ${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
@@ -1136,7 +1136,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
   const totalEntryStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0) + (e.seedCount || 0), 0) || 1;
   
   return (
-    <PredictCard testId={`card-market-${market.slug}`} className={isMarketClosed && !isInactive ? 'opacity-75' : ''} inactive={isInactive} inactiveMessage={inactiveMessage}>
+    <PredictCard testId={`card-market-${market.slug}`} className={`min-h-[300px] ${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
@@ -1205,7 +1205,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
   const belowPercent = 100 - abovePercent;
   
   return (
-    <PredictCard testId={`card-market-${market.slug}`} className={isMarketClosed && !isInactive ? 'opacity-75' : ''} inactive={isInactive} inactiveMessage={inactiveMessage}>
+    <PredictCard testId={`card-market-${market.slug}`} className={`min-h-[300px] ${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
