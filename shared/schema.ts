@@ -756,6 +756,7 @@ export const marketEntries = pgTable("market_entries", {
   resolutionNotes: text("resolution_notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   seedCount: integer("seed_count").default(0), // Display seed for social proof on this entry
+  imageUrl: text("image_url"), // Avatar/image for this entry (manual URL or resolved from linked person)
 });
 
 export const insertMarketEntrySchema = createInsertSchema(marketEntries).omit({

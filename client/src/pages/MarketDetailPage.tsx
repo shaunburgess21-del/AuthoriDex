@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest } from "@/lib/queryClient";
@@ -272,11 +272,19 @@ function MultiOutcomes({
           } ${disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
           data-testid={`button-outcome-${entry.id}`}
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className={`font-medium text-sm ${entry.percentage === maxPercentage ? "text-violet-400" : ""}`}>
-              {entry.label}
-            </span>
-            <span className="font-mono font-bold text-sm">{entry.percentage}%</span>
+          <div className="flex items-center justify-between mb-2 gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              {(entry as any).imageUrl && (
+                <Avatar className="h-6 w-6 shrink-0">
+                  <AvatarImage src={(entry as any).imageUrl} alt={entry.label} />
+                  <AvatarFallback className="text-[9px]">{entry.label[0]}</AvatarFallback>
+                </Avatar>
+              )}
+              <span className={`font-medium text-sm truncate ${entry.percentage === maxPercentage ? "text-violet-400" : ""}`}>
+                {entry.label}
+              </span>
+            </div>
+            <span className="font-mono font-bold text-sm shrink-0">{entry.percentage}%</span>
           </div>
           <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
             <div

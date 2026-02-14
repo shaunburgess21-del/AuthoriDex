@@ -5547,11 +5547,13 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         .values(
           entryList.map((e: any, i: number) => ({
             marketId: createdMarket.id,
-            entryType: "custom" as const,
+            entryType: e.personId ? "person" : "custom" as const,
+            personId: e.personId || null,
             label: e.label,
             description: e.description || null,
             displayOrder: e.displayOrder ?? i,
             seedCount: e.seedCount || 0,
+            imageUrl: e.imageUrl || null,
           }))
         )
         .returning();
@@ -5594,7 +5596,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         sourceUrl, featured, timezone, startAt, endAt, closeAt,
         resolutionCriteria, resolutionSources, resolveMethod, rules,
         seedParticipants, seedVolume, underlying, metric, strike, unit,
-        openMarketType, personId, isLive,
+        openMarketType, personId, isLive, entries: entryList,
       } = req.body;
 
       const updates: Record<string, any> = { updatedAt: new Date() };
@@ -5631,7 +5633,58 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         .where(eq(predictionMarkets.id, id))
         .returning();
 
-      res.json(updated);
+      if (entryList && Array.isArray(entryList)) {
+        const existingEntries = await db
+          .select()
+          .from(marketEntries)
+          .where(eq(marketEntries.marketId, id))
+          .orderBy(asc(marketEntries.displayOrder));
+
+        for (let i = 0; i < entryList.length; i++) {
+          const e = entryList[i];
+          if (i < existingEntries.length) {
+            await db
+              .update(marketEntries)
+              .set({
+                label: e.label,
+                description: e.description || null,
+                displayOrder: e.displayOrder ?? i,
+                seedCount: e.seedCount || 0,
+                imageUrl: e.imageUrl || null,
+                personId: e.personId || null,
+                entryType: e.personId ? "person" : "custom",
+              })
+              .where(eq(marketEntries.id, existingEntries[i].id));
+          } else {
+            await db
+              .insert(marketEntries)
+              .values({
+                marketId: id,
+                entryType: e.personId ? "person" : "custom",
+                personId: e.personId || null,
+                label: e.label,
+                description: e.description || null,
+                displayOrder: e.displayOrder ?? i,
+                seedCount: e.seedCount || 0,
+                imageUrl: e.imageUrl || null,
+              });
+          }
+        }
+        if (existingEntries.length > entryList.length) {
+          const idsToRemove = existingEntries.slice(entryList.length).map(e => e.id);
+          if (idsToRemove.length > 0) {
+            await db.delete(marketEntries).where(inArray(marketEntries.id, idsToRemove));
+          }
+        }
+      }
+
+      const finalEntries = await db
+        .select()
+        .from(marketEntries)
+        .where(eq(marketEntries.marketId, id))
+        .orderBy(asc(marketEntries.displayOrder));
+
+      res.json({ ...updated, entries: finalEntries });
     } catch (error) {
       console.error("[Open Markets] Update error:", error);
       res.status(500).json({ error: "Failed to update market" });

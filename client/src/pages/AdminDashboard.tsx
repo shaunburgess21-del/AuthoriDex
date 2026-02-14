@@ -48,6 +48,9 @@ import {
   Megaphone,
   AlertTriangle,
   Pencil,
+  ImagePlus,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,6 +66,7 @@ import {
   DialogTitle 
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { 
   Select,
@@ -152,6 +156,9 @@ interface MarketEntryForm {
   label: string;
   description: string;
   seedCount: number;
+  imageUrl: string;
+  entryPersonId: string;
+  entryPersonName: string;
 }
 
 interface AuditLogEntry {
@@ -396,8 +403,8 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
   const [strike, setStrike] = useState("");
   const [unit, setUnit] = useState("$");
   const [entries, setEntries] = useState<MarketEntryForm[]>([
-    { label: "Yes", description: "", seedCount: 0 },
-    { label: "No", description: "", seedCount: 0 },
+    { label: "Yes", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
+    { label: "No", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
   ]);
   const [isLive, setIsLive] = useState(true);
   const [personId, setPersonId] = useState("");
@@ -406,6 +413,10 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
   const [marketCelebResults, setMarketCelebResults] = useState<any[]>([]);
   const [showMarketCelebDropdown, setShowMarketCelebDropdown] = useState(false);
   const [selectedMarketCelebName, setSelectedMarketCelebName] = useState("");
+  const [expandedEntryImage, setExpandedEntryImage] = useState<number | null>(null);
+  const [entrySearches, setEntrySearches] = useState<Record<number, string>>({});
+  const [entrySearchResults, setEntrySearchResults] = useState<Record<number, any[]>>({});
+  const [showEntryDropdown, setShowEntryDropdown] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     const generated = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
@@ -416,19 +427,19 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
     if (editMarket) return;
     if (openMarketType === "binary") {
       setEntries([
-        { label: "Yes", description: "", seedCount: 0 },
-        { label: "No", description: "", seedCount: 0 },
+        { label: "Yes", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        { label: "No", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
       ]);
     } else if (openMarketType === "updown") {
       setEntries([
-        { label: "Above", description: "", seedCount: 0 },
-        { label: "Below", description: "", seedCount: 0 },
+        { label: "Above", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        { label: "Below", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
       ]);
     } else {
       setEntries([
-        { label: "", description: "", seedCount: 0 },
-        { label: "", description: "", seedCount: 0 },
-        { label: "", description: "", seedCount: 0 },
+        { label: "", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        { label: "", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        { label: "", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
       ]);
     }
   }, [openMarketType]);
@@ -480,6 +491,9 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
           label: e.label || "",
           description: e.description || "",
           seedCount: e.seedCount || 0,
+          imageUrl: e.imageUrl || "",
+          entryPersonId: e.personId || "",
+          entryPersonName: "",
         })));
       }
     } else {
@@ -506,15 +520,15 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
       setMarketCelebSearch("");
       setMarketCelebResults([]);
       setEntries([
-        { label: "Yes", description: "", seedCount: 0 },
-        { label: "No", description: "", seedCount: 0 },
+        { label: "Yes", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        { label: "No", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
       ]);
     }
   }, [editMarket, open]);
 
   const addEntry = () => {
     if (entries.length < 20) {
-      setEntries([...entries, { label: "", description: "", seedCount: 0 }]);
+      setEntries([...entries, { label: "", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" }]);
     }
   };
 
@@ -573,6 +587,46 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
     setMarketCelebResults([]);
   };
 
+  const entrySearchTimer = useRef<any>(null);
+  const searchEntryCelebrities = async (idx: number, query: string) => {
+    setEntrySearches(prev => ({ ...prev, [idx]: query }));
+    if (!query || query.length < 2) {
+      setEntrySearchResults(prev => ({ ...prev, [idx]: [] }));
+      setShowEntryDropdown(prev => ({ ...prev, [idx]: false }));
+      return;
+    }
+    if (entrySearchTimer.current) clearTimeout(entrySearchTimer.current);
+    entrySearchTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/trending?search=${encodeURIComponent(query)}`);
+        if (res.ok) {
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : data.data || [];
+          setEntrySearchResults(prev => ({ ...prev, [idx]: list.slice(0, 6) }));
+          setShowEntryDropdown(prev => ({ ...prev, [idx]: true }));
+        }
+      } catch {}
+    }, 300);
+  };
+
+  const selectEntryCeleb = (idx: number, celeb: any) => {
+    const updated = [...entries];
+    updated[idx] = { ...updated[idx], entryPersonId: celeb.id, entryPersonName: celeb.name, imageUrl: celeb.avatar || "" };
+    setEntries(updated);
+    setEntrySearches(prev => ({ ...prev, [idx]: celeb.name }));
+    setEntrySearchResults(prev => ({ ...prev, [idx]: [] }));
+    setShowEntryDropdown(prev => ({ ...prev, [idx]: false }));
+  };
+
+  const clearEntryCeleb = (idx: number) => {
+    const updated = [...entries];
+    updated[idx] = { ...updated[idx], entryPersonId: "", entryPersonName: "" };
+    setEntries(updated);
+    setEntrySearches(prev => ({ ...prev, [idx]: "" }));
+    setEntrySearchResults(prev => ({ ...prev, [idx]: [] }));
+    setShowEntryDropdown(prev => ({ ...prev, [idx]: false }));
+  };
+
   const canSubmit = () => {
     if (!title.trim() || !slug.trim() || !endAt) return false;
     if (openMarketType === "updown" && (!underlying.trim() || !strike.trim())) return false;
@@ -606,6 +660,8 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
         description: e.description || undefined,
         displayOrder: i,
         seedCount: e.seedCount,
+        imageUrl: e.imageUrl || undefined,
+        personId: e.entryPersonId || undefined,
       })),
     });
   };
@@ -947,30 +1003,113 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
                `Multi-option: ${entries.length} of 3-20 outcomes.`}
             </p>
             {entries.map((entry, idx) => (
-              <div key={idx} className="flex items-center gap-2 p-3 rounded-lg border">
-                <div className="flex-1 space-y-2">
-                  <Input
-                    value={entry.label}
-                    onChange={(e) => updateEntry(idx, "label", e.target.value)}
-                    placeholder={`Option ${idx + 1}`}
-                    disabled={openMarketType === "binary" || openMarketType === "updown"}
-                    data-testid={`input-entry-label-${idx}`}
-                  />
+              <div key={idx} className="space-y-0">
+                <div className="flex items-center gap-2 p-3 rounded-lg border">
+                  {openMarketType === "multi" && (
+                    <button
+                      type="button"
+                      onClick={() => setExpandedEntryImage(expandedEntryImage === idx ? null : idx)}
+                      className="shrink-0 cursor-pointer"
+                      data-testid={`button-entry-image-${idx}`}
+                    >
+                      {entry.imageUrl ? (
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={entry.imageUrl} alt={entry.label} />
+                          <AvatarFallback className="text-[10px]">{(entry.label || "?")[0]}</AvatarFallback>
+                        </Avatar>
+                      ) : (
+                        <div className="h-8 w-8 rounded-full border border-dashed border-muted-foreground/40 flex items-center justify-center">
+                          <ImagePlus className="h-3.5 w-3.5 text-muted-foreground/60" />
+                        </div>
+                      )}
+                    </button>
+                  )}
+                  <div className="flex-1 space-y-2">
+                    <Input
+                      value={entry.label}
+                      onChange={(e) => updateEntry(idx, "label", e.target.value)}
+                      placeholder={`Option ${idx + 1}`}
+                      disabled={openMarketType === "binary" || openMarketType === "updown"}
+                      data-testid={`input-entry-label-${idx}`}
+                    />
+                  </div>
+                  <div className="w-24 space-y-1">
+                    <Input
+                      type="number"
+                      value={entry.seedCount}
+                      onChange={(e) => updateEntry(idx, "seedCount", parseInt(e.target.value) || 0)}
+                      placeholder="Seed"
+                      data-testid={`input-entry-seed-${idx}`}
+                    />
+                    <p className="text-[10px] text-muted-foreground text-center">seed</p>
+                  </div>
+                  {openMarketType === "multi" && entries.length > 3 && (
+                    <Button variant="ghost" size="icon" onClick={() => removeEntry(idx)} data-testid={`button-remove-entry-${idx}`}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  )}
                 </div>
-                <div className="w-24 space-y-1">
-                  <Input
-                    type="number"
-                    value={entry.seedCount}
-                    onChange={(e) => updateEntry(idx, "seedCount", parseInt(e.target.value) || 0)}
-                    placeholder="Seed"
-                    data-testid={`input-entry-seed-${idx}`}
-                  />
-                  <p className="text-[10px] text-muted-foreground text-center">seed</p>
-                </div>
-                {openMarketType === "multi" && entries.length > 3 && (
-                  <Button variant="ghost" size="icon" onClick={() => removeEntry(idx)} data-testid={`button-remove-entry-${idx}`}>
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+                {openMarketType === "multi" && expandedEntryImage === idx && (
+                  <div className="ml-4 mr-4 p-3 border border-t-0 rounded-b-lg bg-muted/30 space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Image for "{entry.label || `Option ${idx + 1}`}"</p>
+                    <div className="relative">
+                      <Input
+                        value={entrySearches[idx] || entry.entryPersonName || ""}
+                        onChange={(e) => searchEntryCelebrities(idx, e.target.value)}
+                        placeholder="Search celebrity on leaderboard..."
+                        className="text-xs"
+                        data-testid={`input-entry-celeb-search-${idx}`}
+                      />
+                      {entry.entryPersonId && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                          onClick={() => clearEntryCeleb(idx)}
+                          data-testid={`button-clear-entry-celeb-${idx}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      )}
+                      {showEntryDropdown[idx] && (entrySearchResults[idx] || []).length > 0 && (
+                        <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                          {entrySearchResults[idx].map((celeb: any) => (
+                            <button
+                              key={celeb.id}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-xs hover-elevate flex items-center gap-2"
+                              onClick={() => selectEntryCeleb(idx, celeb)}
+                              data-testid={`entry-celeb-option-${idx}-${celeb.id}`}
+                            >
+                              {celeb.avatar && (
+                                <Avatar className="h-5 w-5">
+                                  <AvatarImage src={celeb.avatar} alt={celeb.name} />
+                                  <AvatarFallback className="text-[8px]">{celeb.name?.[0]}</AvatarFallback>
+                                </Avatar>
+                              )}
+                              <span>{celeb.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <Input
+                      value={entry.imageUrl}
+                      onChange={(e) => updateEntry(idx, "imageUrl", e.target.value)}
+                      placeholder="Or paste image URL manually..."
+                      className="text-xs"
+                      data-testid={`input-entry-image-url-${idx}`}
+                    />
+                    {entry.imageUrl && (
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-6 w-6">
+                          <AvatarImage src={entry.imageUrl} alt="preview" />
+                          <AvatarFallback className="text-[8px]">?</AvatarFallback>
+                        </Avatar>
+                        <span className="text-[10px] text-muted-foreground truncate">{entry.imageUrl.slice(0, 50)}...</span>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             ))}

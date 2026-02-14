@@ -1099,6 +1099,12 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
           const pct = Math.round((entryStake / totalEntryStake) * 100);
           return (
             <div key={entry.id} className="flex items-center gap-2">
+              {entry.imageUrl && (
+                <Avatar className="h-4 w-4 shrink-0">
+                  <AvatarImage src={entry.imageUrl} alt={entry.label} />
+                  <AvatarFallback className="text-[7px]">{entry.label?.[0]}</AvatarFallback>
+                </Avatar>
+              )}
               <span className="text-xs truncate flex-1 min-w-0">{entry.label}</span>
               <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
                 <div className="h-full bg-violet-500 transition-all" style={{ width: `${pct}%` }} />
