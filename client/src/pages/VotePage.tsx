@@ -328,11 +328,7 @@ function VersusCard({
         
         <div className="mt-3 px-4">
           {hasVoted ? (
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: 'easeOut' }}
-            >
+            <div>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">
                   <span className={`text-lg font-bold ${leadingA ? 'text-cyan-400' : 'text-slate-400'}`}>
@@ -356,24 +352,20 @@ function VersusCard({
                 </div>
               </div>
               <div className="h-2.5 rounded-full bg-slate-700/50 overflow-hidden flex">
-                <motion.div 
+                <div 
                   className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400"
-                  initial={{ width: '50%' }}
-                  animate={{ width: `${faceOff.optionAPercent}%` }}
-                  transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
+                  style={{ width: `${faceOff.optionAPercent}%` }}
                 />
-                <motion.div 
+                <div 
                   className="h-full bg-gradient-to-r from-teal-400 to-teal-500"
-                  initial={{ width: '50%' }}
-                  animate={{ width: `${faceOff.optionBPercent}%` }}
-                  transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
+                  style={{ width: `${faceOff.optionBPercent}%` }}
                 />
               </div>
               <div className="flex items-center justify-between mt-1.5">
                 <span className="text-[11px] text-slate-500 font-medium">{faceOff.optionAText}</span>
                 <span className="text-[11px] text-slate-500 font-medium">{faceOff.optionBText}</span>
               </div>
-            </motion.div>
+            </div>
           ) : (
             <div className="flex items-center justify-center gap-2 py-1.5 text-xs text-slate-400">
               <Swords className="h-3.5 w-3.5 text-cyan-400/70" />
@@ -1714,7 +1706,6 @@ export default function VotePage() {
       return response.json();
     },
     onSuccess: (data, variables) => {
-      setLocalFaceOffVotes((prev: Record<string, string>) => ({ ...prev, [variables.faceOffId]: variables.option }));
       queryClient.invalidateQueries({ queryKey: ['/api/face-offs'] });
       queryClient.invalidateQueries({ queryKey: ['/api/face-offs/user-votes'] });
       toast({
@@ -1722,7 +1713,12 @@ export default function VotePage() {
         description: "Your Face-Off vote has been counted.",
       });
     },
-    onError: (error: any) => {
+    onError: (error: any, variables) => {
+      setLocalFaceOffVotes((prev: Record<string, string>) => {
+        const next = { ...prev };
+        delete next[variables.faceOffId];
+        return next;
+      });
       toast({
         title: "Error",
         description: error.message || "Failed to submit vote",
@@ -1732,6 +1728,7 @@ export default function VotePage() {
   });
   
   const handleFaceOffVote = (faceOffId: string, option: 'option_a' | 'option_b', event?: React.MouseEvent) => {
+    setLocalFaceOffVotes((prev: Record<string, string>) => ({ ...prev, [faceOffId]: option }));
     faceOffVoteMutation.mutate({ faceOffId, option });
     if (event) {
       addXP(5, event);
@@ -2104,7 +2101,7 @@ export default function VotePage() {
           {faceOffsLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {[1, 2, 3].map(i => (
-                <Card key={i} className="h-40 bg-slate-800/30 animate-pulse" />
+                <Card key={i} className="bg-slate-800/30 animate-pulse" style={{ minHeight: '380px' }} />
               ))}
             </div>
           ) : (
