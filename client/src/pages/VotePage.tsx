@@ -257,7 +257,7 @@ function VersusCard({
           <CategoryPill category={faceOff.category} data-testid={`badge-faceoff-${faceOff.id}`} />
         </div>
         
-        <div className="flex items-stretch gap-3">
+        <div className="flex items-stretch gap-[10px] relative">
           <button
             onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_a', e)}
             disabled={hasVoted}
@@ -268,7 +268,7 @@ function VersusCard({
                   : 'border-slate-700/30 opacity-60'
                 : 'border-slate-700/50 hover:border-cyan-500/50 cursor-pointer'
             }`}
-            style={{ minHeight: '140px' }}
+            style={{ minHeight: '300px' }}
             data-testid={`button-vote-a-${faceOff.id}`}
           >
             {faceOff.optionAImage ? (
@@ -293,7 +293,7 @@ function VersusCard({
             </div>
           </button>
           
-          <div className="flex items-center justify-center w-12 shrink-0">
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-12 shrink-0 pointer-events-none">
             <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
               <span className="text-xs font-bold text-slate-200">VS</span>
             </div>
@@ -309,7 +309,7 @@ function VersusCard({
                   : 'border-slate-700/30 opacity-60'
                 : 'border-slate-700/50 hover:border-teal-500/50 cursor-pointer'
             }`}
-            style={{ minHeight: '140px' }}
+            style={{ minHeight: '300px' }}
             data-testid={`button-vote-b-${faceOff.id}`}
           >
             {faceOff.optionBImage ? (
