@@ -916,7 +916,7 @@ export default function HomePage() {
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                         leaderboardTab === "approval"
                           ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
-                          : "text-muted-foreground hover:bg-muted/50 border border-transparent"
+                          : "text-muted-foreground hover:bg-muted/50 border border-cyan-500/30"
                       }`}
                       data-testid="tab-leaderboard-approval"
                       title="Sort by community approval rating"
