@@ -1178,7 +1178,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
       </div>
       
       <div className="mt-auto">
-        <div className="flex items-center justify-end mb-1.5">
+        <div className="flex items-center justify-center mb-1.5">
           <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
         </div>
         
