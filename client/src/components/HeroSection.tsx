@@ -32,24 +32,24 @@ export function HeroSection({ onCastVoteClick, onPredictClick }: HeroSectionProp
             <TrendingUp className="h-5 w-5" />
             Explore Leaderboard
           </Button>
-          <Button 
-            size="lg" 
-            className="gap-2 bg-gradient-to-r from-cyan-600 to-teal-500 text-white font-semibold shadow-lg shadow-cyan-500/20"
+          <button
             onClick={onCastVoteClick}
+            className="group relative inline-flex items-center justify-center gap-2 rounded-md px-8 min-h-10 text-sm font-semibold border border-white/60 text-white transition-all duration-300 overflow-hidden no-default-hover-elevate no-default-active-elevate"
             data-testid="button-cast-vote"
           >
-            <CheckSquare className="h-5 w-5" />
-            Cast Your Vote
-          </Button>
-          <Button 
-            size="lg" 
-            className="gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-semibold shadow-lg shadow-violet-500/20"
+            <span className="absolute inset-0 bg-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <CheckSquare className="h-5 w-5 relative z-10" />
+            <span className="relative z-10">Cast Your Vote</span>
+          </button>
+          <button
             onClick={onPredictClick}
+            className="group relative inline-flex items-center justify-center gap-2 rounded-md px-8 min-h-10 text-sm font-semibold border border-white/60 text-white transition-all duration-300 overflow-hidden no-default-hover-elevate no-default-active-elevate"
             data-testid="button-prediction-markets"
           >
-            <LineChart className="h-5 w-5" />
-            Prediction Markets
-          </Button>
+            <span className="absolute inset-0 bg-gradient-to-r from-violet-600 to-fuchsia-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <LineChart className="h-5 w-5 relative z-10" />
+            <span className="relative z-10">Prediction Markets</span>
+          </button>
         </div>
       </div>
     </div>
