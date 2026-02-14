@@ -1148,8 +1148,14 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
       </a>
       {market.teaser && <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{market.teaser}</p>}
       
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+        <Users className="h-3.5 w-3.5" />
+        <span>{participants} participants</span>
+        <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
+      </div>
+      
       <div className="space-y-2 mb-2">
-        {sortedEntries.slice(0, 1).map((entry: any) => {
+        {sortedEntries.slice(0, 2).map((entry: any) => {
           const entryStake = (entry.totalStake || 0) + (entry.seedCount || 0);
           const pct = Math.round((entryStake / totalEntryStake) * 100);
           return (
@@ -1168,17 +1174,11 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
             </div>
           );
         })}
-        {entries.length > 1 && <p className="text-xs text-muted-foreground text-center font-medium">+{entries.length - 1} more</p>}
+        {entries.length > 2 && <p className="text-xs text-muted-foreground text-center font-medium">+{entries.length - 2} more</p>}
       </div>
       
       <div className="mt-auto">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-          <Users className="h-3.5 w-3.5" />
-          <span>{participants} participants</span>
-          <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
-        </div>
-        
-        <div className="flex items-center justify-center mb-1.5">
+        <div className="flex items-center justify-end mb-1.5">
           <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
         </div>
         
