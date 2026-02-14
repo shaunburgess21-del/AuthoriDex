@@ -741,13 +741,6 @@ export default function PersonDetailPage() {
           </div>
         </div>
 
-        {/* Why They're Trending - AI-powered news summary (top 10 + Hot Movers) */}
-        {((person.rank && person.rank <= 10) || isHotMover) && (
-          <div className="mb-8">
-            <WhyTrendingCard personId={person.id} personName={person.name} hotMover={isHotMover && !(person.rank && person.rank <= 10)} />
-          </div>
-        )}
-
         {/* 2. Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card className="text-center p-4">
@@ -789,6 +782,13 @@ export default function PersonDetailPage() {
             )}
           </Card>
         </div>
+
+        {/* Why They're Trending - AI-powered news summary (top 10 + Hot Movers) */}
+        {((person.rank && person.rank <= 10) || isHotMover) && (
+          <div className="mb-8">
+            <WhyTrendingCard personId={person.id} personName={person.name} hotMover={isHotMover && !(person.rank && person.rank <= 10)} />
+          </div>
+        )}
 
         {/* Profile Tabs Section */}
         <div id="profile-tabs-section">
