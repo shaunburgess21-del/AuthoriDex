@@ -729,6 +729,8 @@ export const predictionMarkets = pgTable("prediction_markets", {
   strike: numeric("strike"), // For updown: the strike value
   unit: text("unit"), // For updown: e.g. "$", "pts"
   closeAt: timestamp("close_at"), // When betting closes (can differ from endAt/resolution)
+  personId: varchar("person_id"), // Linked celebrity (optional)
+  isLive: boolean("is_live").default(true), // Controls public visibility
 });
 
 export const insertPredictionMarketSchema = createInsertSchema(predictionMarkets).omit({

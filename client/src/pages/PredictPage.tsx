@@ -55,6 +55,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLocation, Link } from "wouter";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+
+function MarketAvatar({ market }: { market: any }) {
+  const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
+  if (!imgUrl) return null;
+  return (
+    <Avatar className="h-7 w-7 shrink-0">
+      <AvatarImage src={imgUrl} alt={market.title} />
+      <AvatarFallback className="text-[10px]">{(market.title || "?")[0]}</AvatarFallback>
+    </Avatar>
+  );
+}
 
 // Prediction Type definitions
 type PredictionType = "all" | "jackpot" | "updown" | "h2h" | "gainer" | "community";
@@ -1008,7 +1020,10 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
       </div>
       
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); onNavigate(market.slug); }} className="cursor-pointer">
-        <p className="text-sm font-semibold mb-2 line-clamp-2 hover:text-violet-400 transition-colors">{market.title}</p>
+        <div className="flex items-center gap-2 mb-2">
+          <MarketAvatar market={market} />
+          <p className="text-sm font-semibold line-clamp-2 hover:text-violet-400 transition-colors">{market.title}</p>
+        </div>
       </a>
       {market.teaser && <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{market.teaser}</p>}
       
@@ -1065,7 +1080,10 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
       </div>
       
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); onNavigate(market.slug); }} className="cursor-pointer">
-        <p className="text-sm font-semibold mb-2 line-clamp-2 hover:text-violet-400 transition-colors">{market.title}</p>
+        <div className="flex items-center gap-2 mb-2">
+          <MarketAvatar market={market} />
+          <p className="text-sm font-semibold line-clamp-2 hover:text-violet-400 transition-colors">{market.title}</p>
+        </div>
       </a>
       {market.teaser && <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{market.teaser}</p>}
       
@@ -1123,7 +1141,10 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
       </div>
       
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); onNavigate(market.slug); }} className="cursor-pointer">
-        <p className="text-sm font-semibold mb-2 line-clamp-2 hover:text-violet-400 transition-colors">{market.title}</p>
+        <div className="flex items-center gap-2 mb-2">
+          <MarketAvatar market={market} />
+          <p className="text-sm font-semibold line-clamp-2 hover:text-violet-400 transition-colors">{market.title}</p>
+        </div>
       </a>
       
       {market.underlying && (

@@ -47,6 +47,7 @@ import {
   BarChart3,
   Megaphone,
   AlertTriangle,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -371,11 +372,12 @@ function CopyDebugSummaryButton({ scoreBreakdown }: { scoreBreakdown: ScoreBreak
   );
 }
 
-function CreateMarketModal({ open, onClose, onSubmit, isPending }: { 
+function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: { 
   open: boolean; 
   onClose: () => void; 
   onSubmit: (data: any) => void;
   isPending: boolean;
+  editMarket?: any;
 }) {
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
@@ -397,6 +399,13 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending }: {
     { label: "Yes", description: "", seedCount: 0 },
     { label: "No", description: "", seedCount: 0 },
   ]);
+  const [isLive, setIsLive] = useState(true);
+  const [personId, setPersonId] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [marketCelebSearch, setMarketCelebSearch] = useState("");
+  const [marketCelebResults, setMarketCelebResults] = useState<any[]>([]);
+  const [showMarketCelebDropdown, setShowMarketCelebDropdown] = useState(false);
+  const [selectedMarketCelebName, setSelectedMarketCelebName] = useState("");
 
   useEffect(() => {
     const generated = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
@@ -404,6 +413,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending }: {
   }, [title]);
 
   useEffect(() => {
+    if (editMarket) return;
     if (openMarketType === "binary") {
       setEntries([
         { label: "Yes", description: "", seedCount: 0 },
@@ -423,6 +433,85 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending }: {
     }
   }, [openMarketType]);
 
+  useEffect(() => {
+    if (editMarket) {
+      setTitle(editMarket.title || "");
+      setSlug(editMarket.slug || "");
+      setOpenMarketType(editMarket.openMarketType || "binary");
+      setTeaser(editMarket.teaser || "");
+      setSummary(editMarket.summary || "");
+      setCategory(editMarket.category || "misc");
+      setEndAt(editMarket.endAt ? new Date(editMarket.endAt).toISOString().slice(0, 16) : "");
+      setCloseAt(editMarket.closeAt ? new Date(editMarket.closeAt).toISOString().slice(0, 16) : "");
+      setFeatured(editMarket.featured || false);
+      setSourceUrl(editMarket.sourceUrl || "");
+      setResolveMethod(editMarket.resolveMethod || "admin_manual");
+      setResolutionCriteria(editMarket.resolutionCriteria?.length ? editMarket.resolutionCriteria : [""]);
+      setUnderlying(editMarket.underlying || "");
+      setMetric(editMarket.metric || "");
+      setStrike(editMarket.strike ? String(editMarket.strike) : "");
+      setUnit(editMarket.unit || "$");
+      setIsLive(editMarket.isLive !== false);
+      setPersonId(editMarket.personId || "");
+      setImageUrl(editMarket.coverImageUrl || "");
+      if (editMarket.personId) {
+        setSelectedMarketCelebName("Loading...");
+        setMarketCelebSearch("Loading...");
+        fetch(`/api/trending`).then(r => r.ok ? r.json() : { data: [] }).then((resp) => {
+          const list = Array.isArray(resp) ? resp : resp.data || [];
+          const found = list.find((c: any) => c.id === editMarket.personId);
+          if (found) {
+            setSelectedMarketCelebName(found.name);
+            setMarketCelebSearch(found.name);
+          } else {
+            setSelectedMarketCelebName(editMarket.personId.slice(0, 8) + "...");
+            setMarketCelebSearch(editMarket.personId.slice(0, 8) + "...");
+          }
+        }).catch(() => {
+          setSelectedMarketCelebName(editMarket.personId.slice(0, 8) + "...");
+          setMarketCelebSearch(editMarket.personId.slice(0, 8) + "...");
+        });
+      } else {
+        setSelectedMarketCelebName("");
+        setMarketCelebSearch("");
+      }
+      if (editMarket.entries?.length) {
+        setEntries(editMarket.entries.map((e: any) => ({
+          label: e.label || "",
+          description: e.description || "",
+          seedCount: e.seedCount || 0,
+        })));
+      }
+    } else {
+      setTitle("");
+      setSlug("");
+      setOpenMarketType("binary");
+      setTeaser("");
+      setSummary("");
+      setCategory("misc");
+      setEndAt("");
+      setCloseAt("");
+      setFeatured(false);
+      setSourceUrl("");
+      setResolveMethod("admin_manual");
+      setResolutionCriteria([""]);
+      setUnderlying("");
+      setMetric("");
+      setStrike("");
+      setUnit("$");
+      setIsLive(true);
+      setPersonId("");
+      setImageUrl("");
+      setSelectedMarketCelebName("");
+      setMarketCelebSearch("");
+      setMarketCelebResults([]);
+      setEntries([
+        { label: "Yes", description: "", seedCount: 0 },
+        { label: "No", description: "", seedCount: 0 },
+      ]);
+    }
+  }, [editMarket, open]);
+
   const addEntry = () => {
     if (entries.length < 20) {
       setEntries([...entries, { label: "", description: "", seedCount: 0 }]);
@@ -439,6 +528,49 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending }: {
     const updated = [...entries];
     (updated[idx] as any)[field] = value;
     setEntries(updated);
+  };
+
+  const searchMarketCelebrities = async (query: string) => {
+    if (!query || query.length < 2) {
+      setMarketCelebResults([]);
+      setShowMarketCelebDropdown(false);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/trending?search=${encodeURIComponent(query)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : data.data || [];
+        setMarketCelebResults(list.slice(0, 8));
+        setShowMarketCelebDropdown(true);
+      }
+    } catch {}
+  };
+
+  const marketCelebTimer = useRef<any>(null);
+  const handleMarketCelebSearch = (value: string) => {
+    setMarketCelebSearch(value);
+    if (marketCelebTimer.current) clearTimeout(marketCelebTimer.current);
+    marketCelebTimer.current = setTimeout(() => searchMarketCelebrities(value), 300);
+  };
+
+  const selectMarketCeleb = (celeb: any) => {
+    setPersonId(celeb.id);
+    setSelectedMarketCelebName(celeb.name);
+    setMarketCelebSearch(celeb.name);
+    setShowMarketCelebDropdown(false);
+    setMarketCelebResults([]);
+    if (!imageUrl) {
+      setImageUrl(celeb.avatar || "");
+    }
+  };
+
+  const clearMarketCeleb = () => {
+    setPersonId("");
+    setSelectedMarketCelebName("");
+    setMarketCelebSearch("");
+    setShowMarketCelebDropdown(false);
+    setMarketCelebResults([]);
   };
 
   const canSubmit = () => {
@@ -466,6 +598,9 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending }: {
       metric: openMarketType === "updown" ? metric : undefined,
       strike: openMarketType === "updown" ? strike : undefined,
       unit: openMarketType === "updown" ? unit : undefined,
+      isLive,
+      personId: personId || undefined,
+      coverImageUrl: imageUrl || undefined,
       entries: entries.map((e, i) => ({
         label: e.label,
         description: e.description || undefined,
@@ -482,15 +617,31 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending }: {
     { value: "sports", label: "Sports" },
     { value: "business", label: "Business" },
     { value: "creator", label: "Creator" },
-    { value: "misc", label: "Misc" },
+    { value: "misc", label: "Custom Topic" },
   ];
+
+  const titlePlaceholders: Record<string, string> = {
+    binary: "Will the Save America Act require voter ID by Dec 2026?",
+    multi: "Who will be the Republican nominee for the next presidential election?",
+    updown: "Will Bitcoin be above or below $100,000 by 31 Jul 2026?",
+  };
+  const slugPlaceholders: Record<string, string> = {
+    binary: "save-america-act-voter-id-2026",
+    multi: "republican-nominee-next-presidential-election",
+    updown: "bitcoin-above-below-100000-jul-2026",
+  };
+  const teaserPlaceholders: Record<string, string> = {
+    binary: "A simple yes/no on a verifiable outcome.",
+    multi: "Pick from multiple outcomes (3–20).",
+    updown: "Predict above/below a strike level by the deadline.",
+  };
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Real-World Market</DialogTitle>
-          <DialogDescription>Create a new prediction market for real-world events</DialogDescription>
+          <DialogTitle>{editMarket ? "Edit Real-World Market" : "Create Real-World Market"}</DialogTitle>
+          <DialogDescription>{editMarket ? "Update an existing prediction market" : "Create a new prediction market for real-world events"}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
@@ -514,7 +665,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending }: {
               <Input 
                 value={title} 
                 onChange={(e) => setTitle(e.target.value)} 
-                placeholder="Will Bitcoin reach $100k by end of 2026?"
+                placeholder={titlePlaceholders[openMarketType]}
                 data-testid="input-market-title"
               />
             </div>
@@ -523,7 +674,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending }: {
               <Input 
                 value={slug} 
                 onChange={(e) => setSlug(e.target.value)} 
-                placeholder="bitcoin-100k-2026"
+                placeholder={slugPlaceholders[openMarketType]}
                 data-testid="input-market-slug"
               />
               <p className="text-xs text-muted-foreground">/markets/{slug}</p>
@@ -535,7 +686,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending }: {
             <Input 
               value={teaser} 
               onChange={(e) => setTeaser(e.target.value)} 
-              placeholder="Bitcoin nears all-time high..."
+              placeholder={teaserPlaceholders[openMarketType]}
               data-testid="input-market-teaser"
             />
           </div>
@@ -570,6 +721,78 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending }: {
                 <Switch checked={featured} onCheckedChange={setFeatured} data-testid="switch-market-featured" />
                 <span className="text-sm text-muted-foreground">{featured ? "Yes" : "No"}</span>
               </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Live</Label>
+              <div className="flex items-center gap-2 h-9">
+                <Switch checked={isLive} onCheckedChange={setIsLive} data-testid="switch-market-live" />
+                <span className="text-sm text-muted-foreground">{isLive ? "Visible on frontend" : "Hidden from public"}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2 relative">
+              <Label>Linked Celebrity (optional)</Label>
+              {personId && selectedMarketCelebName ? (
+                <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/30">
+                  <span className="text-sm flex-1 truncate">{selectedMarketCelebName}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={clearMarketCeleb}
+                    data-testid="button-clear-market-celebrity"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Input
+                  value={marketCelebSearch}
+                  onChange={(e) => handleMarketCelebSearch(e.target.value)}
+                  onFocus={() => { if (marketCelebResults.length > 0) setShowMarketCelebDropdown(true); }}
+                  onBlur={() => { setTimeout(() => setShowMarketCelebDropdown(false), 200); }}
+                  placeholder="Search by name..."
+                  autoComplete="off"
+                  data-testid="input-market-celebrity-search"
+                />
+              )}
+              {showMarketCelebDropdown && marketCelebResults.length > 0 && (
+                <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                  {marketCelebResults.map((celeb: any) => (
+                    <button
+                      key={celeb.id}
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-sm hover-elevate flex items-center gap-2"
+                      onMouseDown={(e) => { e.preventDefault(); selectMarketCeleb(celeb); }}
+                      data-testid={`market-celeb-option-${celeb.id}`}
+                    >
+                      {celeb.avatar && <img src={celeb.avatar} alt="" className="h-6 w-6 rounded object-cover" />}
+                      <span>{celeb.name}</span>
+                      <span className="text-xs text-muted-foreground ml-auto">{celeb.category}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {personId ? `ID: ${personId.slice(0, 8)}...` : "Search and select a celebrity"}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Image URL (optional)</Label>
+              <Input
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="Custom image URL (overrides celebrity avatar)"
+                data-testid="input-market-image-url"
+              />
+              <p className="text-xs text-muted-foreground">
+                {personId && !imageUrl ? "Will use celebrity avatar" : imageUrl ? "Custom image set" : "No image"}
+              </p>
             </div>
           </div>
 
@@ -761,8 +984,8 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending }: {
             disabled={!canSubmit() || isPending}
             data-testid="button-submit-market"
           >
-            {isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
-            Create Market
+            {isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : editMarket ? <CheckCircle className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+            {editMarket ? "Update Market" : "Create Market"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1079,6 +1302,29 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
       setCreateMarketOpen(false);
       toast({ title: "Market Created", description: "Real-world market created successfully." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateMarketMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const res = await fetchWithAuth(`/api/admin/open-markets/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to update market");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+      setEditMarketId(null);
+      toast({ title: "Market Updated", description: "Real-world market updated successfully." });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -2333,12 +2579,25 @@ export default function AdminDashboard() {
                                       Featured
                                     </Badge>
                                   )}
+                                  {!(market as any).isLive && (
+                                    <Badge variant="outline" className="text-xs border-red-500/30 text-red-500">
+                                      Hidden
+                                    </Badge>
+                                  )}
                                   <span className="text-xs text-muted-foreground">
                                     Ends: {new Date(market.endAt).toLocaleDateString()}
                                   </span>
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 shrink-0">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => setEditMarketId(market.id)}
+                                  data-testid={`button-edit-market-${market.id}`}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
                                 {market.status === "OPEN" && (
                                   <>
                                     <Button 
@@ -4618,10 +4877,21 @@ export default function AdminDashboard() {
       </Dialog>
 
       <CreateMarketModal
-        open={createMarketOpen}
-        onClose={() => setCreateMarketOpen(false)}
-        onSubmit={(data) => createMarketMutation.mutate(data)}
-        isPending={createMarketMutation.isPending}
+        open={createMarketOpen || !!editMarketId}
+        onClose={() => { setCreateMarketOpen(false); setEditMarketId(null); }}
+        onSubmit={(data) => {
+          if (editMarketId) {
+            updateMarketMutation.mutate({ id: editMarketId, data });
+          } else {
+            createMarketMutation.mutate(data);
+          }
+        }}
+        isPending={createMarketMutation.isPending || updateMarketMutation.isPending}
+        editMarket={editMarketId ? (() => {
+          const m = (markets || []).find((mk: any) => mk.id === editMarketId);
+          if (!m) return undefined;
+          return m;
+        })() : undefined}
       />
 
       <SettleMarketModal

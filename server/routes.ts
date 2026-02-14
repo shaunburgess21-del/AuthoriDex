@@ -5332,6 +5332,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const conditions = [
         eq(predictionMarkets.marketType, "community"),
         eq(predictionMarkets.status, "OPEN"),
+        eq(predictionMarkets.isLive, true),
       ];
 
       if (category && typeof category === "string") {
@@ -5366,9 +5367,22 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         entriesByMarket.set(entry.marketId, list);
       }
 
+      const personIds = markets.map(m => m.personId).filter(Boolean) as string[];
+      let personAvatars = new Map<string, string>();
+      if (personIds.length > 0) {
+        const people = await db
+          .select({ id: trendingPeople.id, avatar: trendingPeople.avatar, name: trendingPeople.name })
+          .from(trendingPeople)
+          .where(inArray(trendingPeople.id, personIds));
+        for (const p of people) {
+          if (p.avatar) personAvatars.set(p.id, p.avatar);
+        }
+      }
+
       const result = markets.map((m) => ({
         ...m,
         entries: entriesByMarket.get(m.id) || [],
+        linkedPersonAvatar: m.personId ? personAvatars.get(m.personId) || null : null,
       }));
 
       res.json(result);
@@ -5456,7 +5470,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         tags, coverImageUrl, sourceUrl, featured, timezone, startAt, endAt,
         closeAt, resolutionCriteria, resolutionSources, resolveMethod, rules,
         seedParticipants, seedVolume, underlying, metric, strike, unit,
-        entries: entryList,
+        entries: entryList, personId, isLive,
       } = req.body;
 
       if (!openMarketType || !["binary", "multi", "updown"].includes(openMarketType)) {
@@ -5523,6 +5537,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           unit: unit || null,
           createdBy: authReq.userId,
           status: "OPEN",
+          personId: personId || null,
+          isLive: isLive !== false,
         })
         .returning();
 
@@ -5578,7 +5594,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         sourceUrl, featured, timezone, startAt, endAt, closeAt,
         resolutionCriteria, resolutionSources, resolveMethod, rules,
         seedParticipants, seedVolume, underlying, metric, strike, unit,
-        openMarketType,
+        openMarketType, personId, isLive,
       } = req.body;
 
       const updates: Record<string, any> = { updatedAt: new Date() };
@@ -5606,6 +5622,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       if (strike !== undefined) updates.strike = strike ? String(strike) : null;
       if (unit !== undefined) updates.unit = unit;
       if (openMarketType !== undefined) updates.openMarketType = openMarketType;
+      if (personId !== undefined) updates.personId = personId || null;
+      if (isLive !== undefined) updates.isLive = isLive;
 
       const [updated] = await db
         .update(predictionMarkets)
