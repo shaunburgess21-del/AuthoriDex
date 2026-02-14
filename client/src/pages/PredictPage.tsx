@@ -771,17 +771,21 @@ function WeeklyUpDownCard({
         Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span>'s Trend Score be higher or lower than start-of-week by close?
       </p>
       
-      <div className="h-2 rounded-full bg-muted mb-3 overflow-hidden">
-        <div 
-          className="h-full bg-gradient-to-r from-green-500 to-green-400"
-          style={{ width: `${market.upPoolPercent}%` }}
-        />
+      <div className="mb-3">
+        <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
+            style={{ width: `${market.upPoolPercent}%` }}
+          />
+        </div>
+        <div className="flex items-center justify-between text-xs mt-1.5">
+          <span className="text-green-500 font-semibold">Up {market.upMultiplier}x</span>
+          <span className="text-red-500 font-semibold">Down {market.downMultiplier}x</span>
+        </div>
       </div>
       
-      <div className="flex items-center justify-between text-xs mb-3">
-        <span className="text-green-500">Up {market.upMultiplier}x</span>
-        <span className="text-muted-foreground">Pool: {market.totalPool.toLocaleString()}</span>
-        <span className="text-red-500">Down {market.downMultiplier}x</span>
+      <div className="flex items-center justify-center mb-3">
+        <span className="text-sm font-semibold text-violet-500">Pool: {market.totalPool.toLocaleString()}</span>
       </div>
       
       <div className="mt-auto">
@@ -1083,12 +1087,12 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
       </div>
       
       <div className="mb-3">
-        <div className="flex items-center justify-between text-xs mb-1.5">
-          <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
-          <span className="text-red-500 font-semibold">No {noPercent}%</span>
-        </div>
         <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
           <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
+        </div>
+        <div className="flex items-center justify-between text-xs mt-1.5">
+          <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
+          <span className="text-red-500 font-semibold">No {noPercent}%</span>
         </div>
       </div>
       
@@ -1223,12 +1227,12 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
       </div>
       
       <div className="mb-3">
-        <div className="flex items-center justify-between text-xs mb-1.5">
-          <span className="text-green-500 font-semibold">Above {abovePercent}%</span>
-          <span className="text-red-500 font-semibold">Below {belowPercent}%</span>
-        </div>
         <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
           <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${abovePercent}%` }} />
+        </div>
+        <div className="flex items-center justify-between text-xs mt-1.5">
+          <span className="text-green-500 font-semibold">Above {abovePercent}%</span>
+          <span className="text-red-500 font-semibold">Below {belowPercent}%</span>
         </div>
       </div>
       
