@@ -260,35 +260,34 @@ function VersusCard({
         </div>
         
         <div className="flex items-stretch gap-[2px] relative px-[2px]">
-          <button
-            onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_a', e)}
-            disabled={hasVoted}
-            className={`flex-1 rounded-lg border transition-all duration-300 overflow-hidden relative ${
-              hasVoted
-                ? votedA
-                  ? 'border-cyan-500/50 ring-2 ring-cyan-500/30'
-                  : 'border-slate-700/30 opacity-60'
-                : 'border-slate-700/50 hover:border-cyan-500/50 cursor-pointer'
-            }`}
-            style={{ minHeight: '262px' }}
-            data-testid={`button-vote-a-${faceOff.id}`}
-          >
-            {faceOff.optionAImage ? (
-              <div className="absolute inset-0">
-                <img 
-                  src={faceOff.optionAImage} 
-                  alt={faceOff.optionAText}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-              </div>
-            ) : (
-              <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedA ? 'from-cyan-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
-            )}
-            <div className="relative h-full flex flex-col items-center justify-end p-3">
-              <span className="font-semibold text-sm text-center text-white drop-shadow-lg">{faceOff.optionAText}</span>
-            </div>
-          </button>
+          <div className="flex-1 flex flex-col">
+            <button
+              onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_a', e)}
+              disabled={hasVoted}
+              className={`rounded-lg border transition-all duration-300 overflow-hidden relative ${
+                hasVoted
+                  ? votedA
+                    ? 'border-cyan-500/50 ring-2 ring-cyan-500/30'
+                    : 'border-slate-700/30 opacity-60'
+                  : 'border-slate-700/50 hover:border-cyan-500/50 cursor-pointer'
+              }`}
+              style={{ minHeight: '222px' }}
+              data-testid={`button-vote-a-${faceOff.id}`}
+            >
+              {faceOff.optionAImage ? (
+                <div className="absolute inset-0">
+                  <img 
+                    src={faceOff.optionAImage} 
+                    alt={faceOff.optionAText}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedA ? 'from-cyan-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
+              )}
+            </button>
+            <span className="font-semibold text-sm text-center mt-2 px-1 truncate">{faceOff.optionAText}</span>
+          </div>
           
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
             <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
@@ -296,35 +295,34 @@ function VersusCard({
             </div>
           </div>
           
-          <button
-            onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_b', e)}
-            disabled={hasVoted}
-            className={`flex-1 rounded-lg border transition-all duration-300 overflow-hidden relative ${
-              hasVoted
-                ? votedB
-                  ? 'border-teal-500/50 ring-2 ring-teal-500/30'
-                  : 'border-slate-700/30 opacity-60'
-                : 'border-slate-700/50 hover:border-teal-500/50 cursor-pointer'
-            }`}
-            style={{ minHeight: '262px' }}
-            data-testid={`button-vote-b-${faceOff.id}`}
-          >
-            {faceOff.optionBImage ? (
-              <div className="absolute inset-0">
-                <img 
-                  src={faceOff.optionBImage} 
-                  alt={faceOff.optionBText}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-              </div>
-            ) : (
-              <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? 'from-teal-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
-            )}
-            <div className="relative h-full flex flex-col items-center justify-end p-3">
-              <span className="font-semibold text-sm text-center text-white drop-shadow-lg">{faceOff.optionBText}</span>
-            </div>
-          </button>
+          <div className="flex-1 flex flex-col">
+            <button
+              onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_b', e)}
+              disabled={hasVoted}
+              className={`rounded-lg border transition-all duration-300 overflow-hidden relative ${
+                hasVoted
+                  ? votedB
+                    ? 'border-teal-500/50 ring-2 ring-teal-500/30'
+                    : 'border-slate-700/30 opacity-60'
+                  : 'border-slate-700/50 hover:border-teal-500/50 cursor-pointer'
+              }`}
+              style={{ minHeight: '222px' }}
+              data-testid={`button-vote-b-${faceOff.id}`}
+            >
+              {faceOff.optionBImage ? (
+                <div className="absolute inset-0">
+                  <img 
+                    src={faceOff.optionBImage} 
+                    alt={faceOff.optionBText}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? 'from-teal-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
+              )}
+            </button>
+            <span className="font-semibold text-sm text-center mt-2 px-1 truncate">{faceOff.optionBText}</span>
+          </div>
         </div>
         
         <div className="mt-3 px-4">
