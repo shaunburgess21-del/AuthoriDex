@@ -1099,10 +1099,10 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
           </Button>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" className="border-green-500/30 text-green-500" onClick={() => onNavigate(market.slug, 'yes')} data-testid={`button-yes-${market.slug}`}>
+            <Button className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853]" onClick={() => onNavigate(market.slug, 'yes')} data-testid={`button-yes-${market.slug}`}>
               Yes {yesPercent}%
             </Button>
-            <Button variant="outline" className="border-red-500/30 text-red-500" onClick={() => onNavigate(market.slug, 'no')} data-testid={`button-no-${market.slug}`}>
+            <Button className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000]" onClick={() => onNavigate(market.slug, 'no')} data-testid={`button-no-${market.slug}`}>
               No {noPercent}%
             </Button>
           </div>
@@ -1239,10 +1239,10 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
           </Button>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" className="border-green-500/30 text-green-500" onClick={() => onNavigate(market.slug, 'above')} data-testid={`button-above-${market.slug}`}>
+            <Button className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853]" onClick={() => onNavigate(market.slug, 'above')} data-testid={`button-above-${market.slug}`}>
               Above {abovePercent}%
             </Button>
-            <Button variant="outline" className="border-red-500/30 text-red-500" onClick={() => onNavigate(market.slug, 'below')} data-testid={`button-below-${market.slug}`}>
+            <Button className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000]" onClick={() => onNavigate(market.slug, 'below')} data-testid={`button-below-${market.slug}`}>
               Below {belowPercent}%
             </Button>
           </div>
