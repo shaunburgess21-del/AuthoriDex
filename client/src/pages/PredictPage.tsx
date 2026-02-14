@@ -746,8 +746,8 @@ function WeeklyUpDownCard({
   onSelect?: (choice: "up" | "down") => void;
 }) {
   return (
-    <PredictCard testId={`card-weekly-${market.id}`} className={`min-h-[340px] ${isMarketClosed ? 'opacity-75' : ''}`}>
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
+    <PredictCard testId={`card-weekly-${market.id}`} className={`min-h-[300px] ${isMarketClosed ? 'opacity-75' : ''}`}>
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
         <Badge 
           variant="outline" 
           className={market.change7d >= 0 ? "text-green-500 border-green-500/30" : "text-red-500 border-red-500/30"}
@@ -767,16 +767,16 @@ function WeeklyUpDownCard({
         </div>
       </div>
       
-      <p className="text-xs text-muted-foreground mb-3">
+      <p className="text-xs text-muted-foreground mb-2">
         Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span>'s Trend Score be higher or lower than start-of-week by close?
       </p>
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
         <Users className="h-3.5 w-3.5" />
         <span>{market.totalPool > 0 ? Math.ceil(market.totalPool / 100) : 0} participants</span>
       </div>
       
-      <div className="mb-3">
+      <div className="mb-2">
         <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
           <div 
             className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
@@ -789,7 +789,7 @@ function WeeklyUpDownCard({
         </div>
       </div>
       
-      <div className="flex items-center justify-center mb-3">
+      <div className="flex items-center justify-center mb-1.5">
         <span className="text-sm font-semibold text-violet-500">Pool: {market.totalPool.toLocaleString()}</span>
       </div>
       
@@ -1084,14 +1084,14 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
           <p className={`text-sm font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
-      {market.teaser && <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{market.teaser}</p>}
+      {market.teaser && <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{market.teaser}</p>}
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
         <Users className="h-3.5 w-3.5" />
         <span>{participants} participants</span>
       </div>
       
-      <div className="mb-3">
+      <div className="mb-2">
         <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
           <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
         </div>
@@ -1101,7 +1101,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
       </div>
       
-      <div className="flex items-center justify-center mb-3">
+      <div className="flex items-center justify-center mb-1.5">
         <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
       </div>
       
@@ -1146,15 +1146,15 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
           <p className={`text-sm font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
-      {market.teaser && <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{market.teaser}</p>}
+      {market.teaser && <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{market.teaser}</p>}
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
         <Users className="h-3.5 w-3.5" />
         <span>{participants} participants</span>
         <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
       </div>
       
-      <div className="space-y-3 mb-3">
+      <div className="space-y-2 mb-2">
         {sortedEntries.slice(0, 1).map((entry: any) => {
           const entryStake = (entry.totalStake || 0) + (entry.seedCount || 0);
           const pct = Math.round((entryStake / totalEntryStake) * 100);
@@ -1177,7 +1177,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
         {entries.length > 1 && <p className="text-xs text-muted-foreground text-center font-medium">+{entries.length - 1} more</p>}
       </div>
       
-      <div className="flex items-center justify-center mb-3">
+      <div className="flex items-center justify-center mb-1.5">
         <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
       </div>
       
@@ -1226,12 +1226,12 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
       )}
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
         <Users className="h-3.5 w-3.5" />
         <span>{participants} participants</span>
       </div>
       
-      <div className="mb-3">
+      <div className="mb-2">
         <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
           <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${abovePercent}%` }} />
         </div>
@@ -1241,7 +1241,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
       </div>
       
-      <div className="flex items-center justify-center mb-3">
+      <div className="flex items-center justify-center mb-1.5">
         <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
       </div>
       
