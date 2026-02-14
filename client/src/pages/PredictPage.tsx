@@ -1086,26 +1086,26 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
       </a>
       {market.teaser && <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{market.teaser}</p>}
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-        <Users className="h-3.5 w-3.5" />
-        <span>{participants} participants</span>
-      </div>
-      
-      <div className="mb-2">
-        <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
-        </div>
-        <div className="flex items-center justify-between text-xs mt-1.5">
-          <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
-          <span className="text-red-500 font-semibold">No {noPercent}%</span>
-        </div>
-      </div>
-      
-      <div className="flex items-center justify-center mb-1.5">
-        <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
-      </div>
-      
       <div className="mt-auto">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+          <Users className="h-3.5 w-3.5" />
+          <span>{participants} participants</span>
+        </div>
+        
+        <div className="mb-2">
+          <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
+          </div>
+          <div className="flex items-center justify-between text-xs mt-1.5">
+            <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
+            <span className="text-red-500 font-semibold">No {noPercent}%</span>
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-center mb-1.5">
+          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
+        </div>
+        
         {isMarketClosed ? (
           <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
             <Lock className="h-4 w-4 mr-2" />
@@ -1148,40 +1148,40 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
       </a>
       {market.teaser && <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{market.teaser}</p>}
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-        <Users className="h-3.5 w-3.5" />
-        <span>{participants} participants</span>
-        <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
-      </div>
-      
-      <div className="space-y-2 mb-2">
-        {sortedEntries.slice(0, 1).map((entry: any) => {
-          const entryStake = (entry.totalStake || 0) + (entry.seedCount || 0);
-          const pct = Math.round((entryStake / totalEntryStake) * 100);
-          return (
-            <div key={entry.id} className="flex items-center gap-3">
-              {entry.imageUrl && (
-                <Avatar className="h-8 w-8 shrink-0 rounded-md">
-                  <AvatarImage src={entry.imageUrl} alt={entry.label} className="object-cover" />
-                  <AvatarFallback className="text-[10px] rounded-md">{entry.label?.[0]}</AvatarFallback>
-                </Avatar>
-              )}
-              <span className="text-sm font-medium truncate flex-1 min-w-0">{entry.label}</span>
-              <div className="w-24 h-2.5 rounded-full bg-muted overflow-hidden">
-                <div className="h-full bg-violet-500 transition-all" style={{ width: `${pct}%` }} />
-              </div>
-              <span className="text-sm font-semibold text-muted-foreground w-10 text-right">{pct}%</span>
-            </div>
-          );
-        })}
-        {entries.length > 1 && <p className="text-xs text-muted-foreground text-center font-medium">+{entries.length - 1} more</p>}
-      </div>
-      
-      <div className="flex items-center justify-center mb-1.5">
-        <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
-      </div>
-      
       <div className="mt-auto">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+          <Users className="h-3.5 w-3.5" />
+          <span>{participants} participants</span>
+          <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
+        </div>
+        
+        <div className="space-y-2 mb-2">
+          {sortedEntries.slice(0, 1).map((entry: any) => {
+            const entryStake = (entry.totalStake || 0) + (entry.seedCount || 0);
+            const pct = Math.round((entryStake / totalEntryStake) * 100);
+            return (
+              <div key={entry.id} className="flex items-center gap-3">
+                {entry.imageUrl && (
+                  <Avatar className="h-8 w-8 shrink-0 rounded-md">
+                    <AvatarImage src={entry.imageUrl} alt={entry.label} className="object-cover" />
+                    <AvatarFallback className="text-[10px] rounded-md">{entry.label?.[0]}</AvatarFallback>
+                  </Avatar>
+                )}
+                <span className="text-sm font-medium truncate flex-1 min-w-0">{entry.label}</span>
+                <div className="w-24 h-2.5 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full bg-violet-500 transition-all" style={{ width: `${pct}%` }} />
+                </div>
+                <span className="text-sm font-semibold text-muted-foreground w-10 text-right">{pct}%</span>
+              </div>
+            );
+          })}
+          {entries.length > 1 && <p className="text-xs text-muted-foreground text-center font-medium">+{entries.length - 1} more</p>}
+        </div>
+        
+        <div className="flex items-center justify-center mb-1.5">
+          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
+        </div>
+        
         <Button className="w-full bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED]" onClick={() => onNavigate(market.slug)} disabled={isMarketClosed} data-testid={`button-predict-${market.slug}`}>
           {isMarketClosed ? "Closed" : "Make Prediction"}
         </Button>
@@ -1226,26 +1226,26 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
       )}
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-        <Users className="h-3.5 w-3.5" />
-        <span>{participants} participants</span>
-      </div>
-      
-      <div className="mb-2">
-        <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${abovePercent}%` }} />
-        </div>
-        <div className="flex items-center justify-between text-xs mt-1.5">
-          <span className="text-green-500 font-semibold">Above {abovePercent}%</span>
-          <span className="text-red-500 font-semibold">Below {belowPercent}%</span>
-        </div>
-      </div>
-      
-      <div className="flex items-center justify-center mb-1.5">
-        <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
-      </div>
-      
       <div className="mt-auto">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+          <Users className="h-3.5 w-3.5" />
+          <span>{participants} participants</span>
+        </div>
+        
+        <div className="mb-2">
+          <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${abovePercent}%` }} />
+          </div>
+          <div className="flex items-center justify-between text-xs mt-1.5">
+            <span className="text-green-500 font-semibold">Above {abovePercent}%</span>
+            <span className="text-red-500 font-semibold">Below {belowPercent}%</span>
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-center mb-1.5">
+          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
+        </div>
+        
         {isMarketClosed ? (
           <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
             <Lock className="h-4 w-4 mr-2" />
