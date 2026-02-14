@@ -699,10 +699,10 @@ function PredictCard({
       data-testid={testId}
     >
       <div 
-        className={`absolute -inset-[1px] rounded-xl bg-gradient-to-br from-violet-500/80 via-purple-500/30 to-transparent transition-opacity ${
+        className={`absolute -inset-[1px] rounded-xl border border-violet-500/60 transition-opacity pointer-events-none ${
           inactive 
             ? 'opacity-0' 
-            : `opacity-0 group-hover:opacity-100 ${selected ? 'opacity-100 from-violet-500 via-violet-400/50' : ''}`
+            : `opacity-0 group-hover:opacity-100 ${selected ? 'opacity-100 border-violet-500' : ''}`
         }`}
       />
       <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all h-full flex flex-col ${
