@@ -66,6 +66,7 @@ import type { TrendingPerson } from "@shared/schema";
 import { CurateSection } from "@/components/curate";
 import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
 import { CardSection } from "@/components/CardSection";
+import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
 
 const mockCelebrityList = [
   "Taylor Swift", "Elon Musk", "Keanu Reeves", "Beyoncé", "Dwayne Johnson",
@@ -1980,9 +1981,7 @@ export default function VotePage() {
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
               data-testid="button-logo-home"
             >
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold font-serif text-lg">F</span>
-              </div>
+              <AuthoriDexLogo size={32} />
               <span className="font-serif font-bold text-xl">AuthoriDex</span>
             </button>
           </div>

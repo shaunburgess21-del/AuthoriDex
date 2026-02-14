@@ -24,6 +24,7 @@ import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { Loader2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
+import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
 import { motion, AnimatePresence } from "framer-motion";
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -745,9 +746,7 @@ export default function HomePage() {
             className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             data-testid="button-logo-home"
           >
-            <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
-              <span className="text-white font-bold font-serif text-lg">F</span>
-            </div>
+            <AuthoriDexLogo size={32} />
             <span className="font-serif font-bold text-xl">AuthoriDex</span>
           </button>
           <div className="flex items-center gap-3">

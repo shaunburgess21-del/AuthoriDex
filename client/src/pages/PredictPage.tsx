@@ -59,6 +59,7 @@ import { useLocation, Link } from "wouter";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CardSection } from "@/components/CardSection";
+import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
 
 function MarketAvatar({ market }: { market: any }) {
   const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
@@ -2193,9 +2194,7 @@ export default function PredictPage() {
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
               data-testid="button-logo-home"
             >
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
-                <span className="text-white font-bold font-serif text-lg">F</span>
-              </div>
+              <AuthoriDexLogo size={32} />
               <span className="font-serif font-bold text-xl hidden sm:block">AuthoriDex</span>
             </button>
           </div>

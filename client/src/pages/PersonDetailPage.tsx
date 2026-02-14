@@ -29,6 +29,7 @@ import { formatNumber } from "@/lib/formatNumber";
 import { OverratedUnderratedWidget } from "@/components/OverratedUnderratedWidget";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { getExceptionalIndicator } from "@/components/LeaderboardRow";
+import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
 
 const APPROVAL_COLORS = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
 const getApprovalColor = (approvalPct: number): string => {
@@ -659,9 +660,7 @@ export default function PersonDetailPage() {
               onClick={() => setLocation("/")}
               data-testid="link-logo-home"
             >
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold font-serif text-lg">F</span>
-              </div>
+              <AuthoriDexLogo size={32} />
               <span className="font-serif font-bold text-xl">AuthoriDex</span>
             </div>
           </div>

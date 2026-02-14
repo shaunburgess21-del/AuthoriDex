@@ -6,6 +6,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Sparkles, Eye, Lock } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
+import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
 
 function RankBadge({ rank }: { rank: string }) {
   const badgeConfig: Record<string, { color: string; icon: typeof Shield }> = {
@@ -61,9 +62,7 @@ export default function MePage() {
               onClick={() => setLocation("/")}
               data-testid="link-logo-home"
             >
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold font-serif text-lg">F</span>
-              </div>
+              <AuthoriDexLogo size={32} />
               <span className="font-serif font-bold text-xl">AuthoriDex</span>
             </div>
           </div>
