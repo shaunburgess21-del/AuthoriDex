@@ -545,6 +545,7 @@ export default function MarketDetailPage() {
 
   const statusConfig = STATUS_CONFIG[market.status] || STATUS_CONFIG.OPEN;
   const isOpen = market.status === "OPEN";
+  const isInactive = (market as any).visibility === "inactive";
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
@@ -745,7 +746,19 @@ export default function MarketDetailPage() {
           </Card>
         )}
 
-        {isOpen && (
+        {isInactive && (
+          <Card className="p-5 mb-6 border-amber-500/20 bg-amber-500/5" data-testid="section-inactive-market">
+            <div className="text-center py-4">
+              <Clock className="h-8 w-8 text-amber-500 mx-auto mb-3" />
+              <h2 className="text-lg font-serif font-bold mb-2">{(market as any).inactiveMessage || "Coming Soon"}</h2>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                This market is not yet open for predictions. Check back soon for when it goes live.
+              </p>
+            </div>
+          </Card>
+        )}
+
+        {isOpen && !isInactive && (
           <Card className="p-5 mb-6 border-violet-500/20 bg-violet-500/5" data-testid="section-place-prediction">
             <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
               <Trophy className="h-5 w-5 text-violet-500" />

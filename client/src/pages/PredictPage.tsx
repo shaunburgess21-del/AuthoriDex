@@ -668,28 +668,63 @@ function PredictCard({
   className = "", 
   testId,
   onClick,
-  selected = false
+  selected = false,
+  inactive = false,
+  inactiveMessage,
 }: { 
   children: React.ReactNode; 
   className?: string; 
   testId?: string;
   onClick?: () => void;
   selected?: boolean;
+  inactive?: boolean;
+  inactiveMessage?: string;
 }) {
-  return (
+  const cardContent = (
     <div 
-      className={`relative group ${onClick ? 'cursor-pointer' : ''}`}
-      onClick={onClick}
+      className={`relative group ${onClick && !inactive ? 'cursor-pointer' : ''} ${inactive ? 'cursor-default' : ''}`}
+      onClick={inactive ? undefined : onClick}
       data-testid={testId}
     >
       <div 
-        className={`absolute -inset-[1px] rounded-xl bg-gradient-to-br from-violet-500/80 via-purple-500/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity ${selected ? 'opacity-100 from-violet-500 via-violet-400/50' : ''}`}
+        className={`absolute -inset-[1px] rounded-xl bg-gradient-to-br from-violet-500/80 via-purple-500/30 to-transparent transition-opacity ${
+          inactive 
+            ? 'opacity-0' 
+            : `opacity-0 group-hover:opacity-100 ${selected ? 'opacity-100 from-violet-500 via-violet-400/50' : ''}`
+        }`}
       />
-      <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all group-hover:shadow-lg group-hover:shadow-violet-500/20 ${selected ? 'shadow-lg shadow-violet-500/30' : ''} ${className}`}>
+      <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all ${
+        inactive 
+          ? 'opacity-50 grayscale-[40%]' 
+          : `group-hover:shadow-lg group-hover:shadow-violet-500/20 ${selected ? 'shadow-lg shadow-violet-500/30' : ''}`
+      } ${className}`}>
+        {inactive && (
+          <div className="absolute top-3 right-3 z-10">
+            <Badge variant="outline" className="text-xs border-amber-500/40 text-amber-500 bg-amber-500/10">
+              <Clock className="h-3 w-3 mr-1" />
+              {inactiveMessage || "Coming Soon"}
+            </Badge>
+          </div>
+        )}
         {children}
       </Card>
     </div>
   );
+
+  if (inactive) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {cardContent}
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[200px]">
+          <p className="text-xs">{inactiveMessage || "This market is coming soon. Stay tuned!"}</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return cardContent;
 }
 
 function WeeklyUpDownCard({ 
@@ -985,6 +1020,7 @@ function OpenMarketCard({ market, onNavigate, isMarketClosed = false }: { market
   const totalStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0), 0);
   const totalPool = totalStake + Number(market.seedVolume || 0);
   const participants = (market.betCount || 0) + (market.seedParticipants || 0);
+  const isInactive = market.visibility === "inactive";
   
   const endDate = market.endAt ? new Date(market.endAt) : null;
   const now = new Date();
@@ -992,15 +1028,15 @@ function OpenMarketCard({ market, onNavigate, isMarketClosed = false }: { market
   const timeLabel = daysLeft > 1 ? `${daysLeft}d left` : daysLeft === 1 ? "1d left" : "Closing soon";
 
   if (market.openMarketType === "updown") {
-    return <UpDownMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed} />;
+    return <UpDownMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} />;
   }
   if (market.openMarketType === "multi") {
-    return <MultiMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed} />;
+    return <MultiMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} />;
   }
-  return <BinaryMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed} />;
+  return <BinaryMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} />;
 }
 
-function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string) => void; isMarketClosed: boolean }) {
+function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string }) {
   const yesEntry = entries.find((e: any) => e.label === "Yes") || entries[0];
   const noEntry = entries.find((e: any) => e.label === "No") || entries[1];
   const yesStake = (yesEntry?.totalStake || 0) + (yesEntry?.seedCount || 0);
@@ -1010,8 +1046,8 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
   const noPercent = 100 - yesPercent;
   
   return (
-    <PredictCard testId={`card-market-${market.slug}`} className={isMarketClosed ? 'opacity-75' : ''}>
-      <div className="flex items-center justify-between mb-3">
+    <PredictCard testId={`card-market-${market.slug}`} className={isMarketClosed && !isInactive ? 'opacity-75' : ''} inactive={isInactive} inactiveMessage={inactiveMessage}>
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
           {timeLabel}
@@ -1019,10 +1055,10 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
         {market.category && <CategoryPill category={market.category} />}
       </div>
       
-      <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); onNavigate(market.slug); }} className="cursor-pointer">
+      <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
         <div className="flex items-center gap-2 mb-2">
           <MarketAvatar market={market} />
-          <p className="text-sm font-semibold line-clamp-2 hover:text-violet-400 transition-colors">{market.title}</p>
+          <p className={`text-sm font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
       {market.teaser && <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{market.teaser}</p>}
@@ -1065,13 +1101,13 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
   );
 }
 
-function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string) => void; isMarketClosed: boolean }) {
+function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string }) {
   const sortedEntries = [...entries].sort((a: any, b: any) => (a.displayOrder || 0) - (b.displayOrder || 0));
   const totalEntryStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0) + (e.seedCount || 0), 0) || 1;
   
   return (
-    <PredictCard testId={`card-market-${market.slug}`} className={isMarketClosed ? 'opacity-75' : ''}>
-      <div className="flex items-center justify-between mb-3">
+    <PredictCard testId={`card-market-${market.slug}`} className={isMarketClosed && !isInactive ? 'opacity-75' : ''} inactive={isInactive} inactiveMessage={inactiveMessage}>
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
           {timeLabel}
@@ -1079,10 +1115,10 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
         {market.category && <CategoryPill category={market.category} />}
       </div>
       
-      <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); onNavigate(market.slug); }} className="cursor-pointer">
+      <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
         <div className="flex items-center gap-2 mb-2">
           <MarketAvatar market={market} />
-          <p className="text-sm font-semibold line-clamp-2 hover:text-violet-400 transition-colors">{market.title}</p>
+          <p className={`text-sm font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
       {market.teaser && <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{market.teaser}</p>}
@@ -1127,7 +1163,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
   );
 }
 
-function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string) => void; isMarketClosed: boolean }) {
+function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string }) {
   const aboveEntry = entries.find((e: any) => e.label === "Above") || entries[0];
   const belowEntry = entries.find((e: any) => e.label === "Below") || entries[1];
   const aboveStake = (aboveEntry?.totalStake || 0) + (aboveEntry?.seedCount || 0);
@@ -1137,8 +1173,8 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
   const belowPercent = 100 - abovePercent;
   
   return (
-    <PredictCard testId={`card-market-${market.slug}`} className={isMarketClosed ? 'opacity-75' : ''}>
-      <div className="flex items-center justify-between mb-3">
+    <PredictCard testId={`card-market-${market.slug}`} className={isMarketClosed && !isInactive ? 'opacity-75' : ''} inactive={isInactive} inactiveMessage={inactiveMessage}>
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
           {timeLabel}
@@ -1146,10 +1182,10 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
         {market.category && <CategoryPill category={market.category} />}
       </div>
       
-      <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); onNavigate(market.slug); }} className="cursor-pointer">
+      <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
         <div className="flex items-center gap-2 mb-2">
           <MarketAvatar market={market} />
-          <p className="text-sm font-semibold line-clamp-2 hover:text-violet-400 transition-colors">{market.title}</p>
+          <p className={`text-sm font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
       

@@ -406,7 +406,8 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
     { label: "Yes", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
     { label: "No", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
   ]);
-  const [isLive, setIsLive] = useState(true);
+  const [visibility, setVisibility] = useState<"draft" | "live" | "inactive" | "archived">("live");
+  const [inactiveMessage, setInactiveMessage] = useState("");
   const [personId, setPersonId] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [marketCelebSearch, setMarketCelebSearch] = useState("");
@@ -462,7 +463,9 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
       setMetric(editMarket.metric || "");
       setStrike(editMarket.strike ? String(editMarket.strike) : "");
       setUnit(editMarket.unit || "$");
-      setIsLive(editMarket.isLive !== false);
+      const vis = editMarket.visibility || (editMarket.isLive === false ? "draft" : "live");
+      setVisibility(vis as any);
+      setInactiveMessage(editMarket.inactiveMessage || "");
       setPersonId(editMarket.personId || "");
       setImageUrl(editMarket.coverImageUrl || "");
       if (editMarket.personId) {
@@ -513,7 +516,8 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
       setMetric("");
       setStrike("");
       setUnit("$");
-      setIsLive(true);
+      setVisibility("live");
+      setInactiveMessage("");
       setPersonId("");
       setImageUrl("");
       setSelectedMarketCelebName("");
@@ -652,7 +656,8 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
       metric: openMarketType === "updown" ? metric : undefined,
       strike: openMarketType === "updown" ? strike : undefined,
       unit: openMarketType === "updown" ? unit : undefined,
-      isLive,
+      visibility,
+      inactiveMessage: visibility === "inactive" ? inactiveMessage : undefined,
       personId: personId || undefined,
       coverImageUrl: imageUrl || undefined,
       entries: entries.map((e, i) => ({
@@ -782,12 +787,30 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Live</Label>
-              <div className="flex items-center gap-2 h-9">
-                <Switch checked={isLive} onCheckedChange={setIsLive} data-testid="switch-market-live" />
-                <span className="text-sm text-muted-foreground">{isLive ? "Visible on frontend" : "Hidden from public"}</span>
-              </div>
+              <Label>Visibility</Label>
+              <Select value={visibility} onValueChange={(v) => setVisibility(v as any)} data-testid="select-market-visibility">
+                <SelectTrigger data-testid="select-market-visibility-trigger">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Draft (Admin only)</SelectItem>
+                  <SelectItem value="live">Live (Active)</SelectItem>
+                  <SelectItem value="inactive">Inactive (Visible but dimmed)</SelectItem>
+                  <SelectItem value="archived">Archived (Hidden)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            {visibility === "inactive" && (
+              <div className="space-y-2">
+                <Label>Inactive Message</Label>
+                <Input
+                  value={inactiveMessage}
+                  onChange={(e) => setInactiveMessage(e.target.value)}
+                  placeholder="Coming Soon"
+                  data-testid="input-inactive-message"
+                />
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -2718,9 +2741,19 @@ export default function AdminDashboard() {
                                       Featured
                                     </Badge>
                                   )}
-                                  {!(market as any).isLive && (
+                                  {((market as any).visibility === "draft") && (
+                                    <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500">
+                                      Draft
+                                    </Badge>
+                                  )}
+                                  {((market as any).visibility === "inactive") && (
+                                    <Badge variant="outline" className="text-xs border-orange-500/30 text-orange-500">
+                                      Inactive
+                                    </Badge>
+                                  )}
+                                  {((market as any).visibility === "archived") && (
                                     <Badge variant="outline" className="text-xs border-red-500/30 text-red-500">
-                                      Hidden
+                                      Archived
                                     </Badge>
                                   )}
                                   <span className="text-xs text-muted-foreground">

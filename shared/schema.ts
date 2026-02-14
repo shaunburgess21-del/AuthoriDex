@@ -730,7 +730,9 @@ export const predictionMarkets = pgTable("prediction_markets", {
   unit: text("unit"), // For updown: e.g. "$", "pts"
   closeAt: timestamp("close_at"), // When betting closes (can differ from endAt/resolution)
   personId: varchar("person_id"), // Linked celebrity (optional)
-  isLive: boolean("is_live").default(true), // Controls public visibility
+  isLive: boolean("is_live").default(true), // Legacy - use visibility instead
+  visibility: text("visibility").default("live"), // draft | live | inactive | archived
+  inactiveMessage: text("inactive_message"), // Custom message shown on inactive cards (e.g. "Coming Soon")
 });
 
 export const insertPredictionMarketSchema = createInsertSchema(predictionMarkets).omit({

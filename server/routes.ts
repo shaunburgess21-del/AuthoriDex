@@ -5332,7 +5332,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const conditions = [
         eq(predictionMarkets.marketType, "community"),
         eq(predictionMarkets.status, "OPEN"),
-        eq(predictionMarkets.isLive, true),
+        inArray(predictionMarkets.visibility, ["live", "inactive"]),
       ];
 
       if (category && typeof category === "string") {
@@ -5470,7 +5470,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         tags, coverImageUrl, sourceUrl, featured, timezone, startAt, endAt,
         closeAt, resolutionCriteria, resolutionSources, resolveMethod, rules,
         seedParticipants, seedVolume, underlying, metric, strike, unit,
-        entries: entryList, personId, isLive,
+        entries: entryList, personId, isLive, visibility, inactiveMessage,
       } = req.body;
 
       if (!openMarketType || !["binary", "multi", "updown"].includes(openMarketType)) {
@@ -5539,6 +5539,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           status: "OPEN",
           personId: personId || null,
           isLive: isLive !== false,
+          visibility: ["draft", "live", "inactive", "archived"].includes(visibility) ? visibility : "live",
+          inactiveMessage: inactiveMessage || null,
         })
         .returning();
 
@@ -5596,7 +5598,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         sourceUrl, featured, timezone, startAt, endAt, closeAt,
         resolutionCriteria, resolutionSources, resolveMethod, rules,
         seedParticipants, seedVolume, underlying, metric, strike, unit,
-        openMarketType, personId, isLive, entries: entryList,
+        openMarketType, personId, isLive, visibility, inactiveMessage, entries: entryList,
       } = req.body;
 
       const updates: Record<string, any> = { updatedAt: new Date() };
@@ -5626,6 +5628,11 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       if (openMarketType !== undefined) updates.openMarketType = openMarketType;
       if (personId !== undefined) updates.personId = personId || null;
       if (isLive !== undefined) updates.isLive = isLive;
+      if (visibility !== undefined && ["draft", "live", "inactive", "archived"].includes(visibility)) {
+        updates.visibility = visibility;
+        updates.isLive = visibility === "live" || visibility === "inactive";
+      }
+      if (inactiveMessage !== undefined) updates.inactiveMessage = inactiveMessage || null;
 
       const [updated] = await db
         .update(predictionMarkets)
