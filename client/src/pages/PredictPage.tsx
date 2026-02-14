@@ -57,6 +57,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useLocation, Link } from "wouter";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { CardSection } from "@/components/CardSection";
 
 function MarketAvatar({ market }: { market: any }) {
   const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
@@ -2367,8 +2368,8 @@ export default function PredictPage() {
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : filteredCommunity.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredCommunity.slice(0, 6).map((market: any) => (
+              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-community">
+                {filteredCommunity.map((market: any) => (
                   <OpenMarketCard 
                     key={market.id} 
                     market={market} 
@@ -2376,7 +2377,7 @@ export default function PredictPage() {
                     isMarketClosed={market.status !== 'OPEN'}
                   />
                 ))}
-              </div>
+              </CardSection>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 No markets available yet
@@ -2455,8 +2456,8 @@ export default function PredictPage() {
               onAuthRequired={() => setLocation("/login")}
             />
             {filteredUpDown.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredUpDown.slice(0, 3).map((market) => (
+              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-updown">
+                {filteredUpDown.map((market) => (
                   <WeeklyUpDownCard 
                     key={market.id} 
                     market={market} 
@@ -2464,7 +2465,7 @@ export default function PredictPage() {
                     onSelect={(choice) => handleUpDownSelect(market, choice)}
                   />
                 ))}
-              </div>
+              </CardSection>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 No markets match your filters
@@ -2492,8 +2493,8 @@ export default function PredictPage() {
               onAuthRequired={() => setLocation("/login")}
             />
             {filteredH2H.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredH2H.slice(0, 3).map((market) => (
+              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-h2h">
+                {filteredH2H.map((market) => (
                   <HeadToHeadCard 
                     key={market.id} 
                     market={market} 
@@ -2501,7 +2502,7 @@ export default function PredictPage() {
                     onSelect={(person) => handleH2HSelect(market, person)}
                   />
                 ))}
-              </div>
+              </CardSection>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 No matchups match your filters
@@ -2529,8 +2530,8 @@ export default function PredictPage() {
               onAuthRequired={() => setLocation("/login")}
             />
             {filteredGainers.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredGainers.slice(0, 3).map((market) => (
+              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-gainer">
+                {filteredGainers.map((market) => (
                   <TopGainerCard 
                     key={market.id} 
                     market={market} 
@@ -2540,7 +2541,7 @@ export default function PredictPage() {
                     isShimmering={shimmeringMarket === market.id}
                   />
                 ))}
-              </div>
+              </CardSection>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 No gainers match your filters
