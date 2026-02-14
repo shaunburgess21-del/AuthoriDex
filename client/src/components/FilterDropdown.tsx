@@ -19,12 +19,13 @@ export function FilterDropdown({ value, onChange }: FilterDropdownProps) {
   const categories = [
     { value: "all", label: "All Categories" },
     { value: "favorites", label: "Favorites" },
-    { value: "Entertainment", label: "Entertainment" },
-    { value: "Sports", label: "Sports" },
+    { value: "trending", label: "Trending" },
     { value: "Tech", label: "Tech" },
-    { value: "Creator", label: "Creator" },
     { value: "Politics", label: "Politics" },
     { value: "Business", label: "Business" },
+    { value: "Entertainment", label: "Entertainment" },
+    { value: "Sports", label: "Sports" },
+    { value: "Creator", label: "Creator" },
   ];
 
   return (

@@ -1,6 +1,7 @@
 export const BASE_FILTER_CATEGORIES = [
   "All",
   "Favorites",
+  "Trending",
   "Tech",
   "Politics",
   "Business",
@@ -12,6 +13,7 @@ export const BASE_FILTER_CATEGORIES = [
 export const FILTER_CATEGORIES_WITH_CUSTOM = [
   "All",
   "Favorites",
+  "Trending",
   "Tech",
   "Politics",
   "Business",
@@ -28,6 +30,7 @@ export type FilterCategory = (typeof FILTER_CATEGORIES_WITH_CUSTOM)[number];
 export const BASE_CATEGORY_FILTER_OPTIONS: { id: FilterCategory; label: string }[] = [
   { id: "All", label: "All" },
   { id: "Favorites", label: "Favorites" },
+  { id: "Trending", label: "Trending" },
   { id: "Tech", label: "Tech" },
   { id: "Politics", label: "Politics" },
   { id: "Business", label: "Business" },

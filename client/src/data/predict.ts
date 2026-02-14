@@ -1,4 +1,4 @@
-export type CategoryFilter = "all" | "favorites" | "tech" | "politics" | "business" | "entertainment" | "sports" | "creator";
+export type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "entertainment" | "sports" | "creator";
 
 export interface PredictionMarket {
   id: string;
@@ -258,6 +258,7 @@ export const COMMUNITY_MARKETS: CommunityMarket[] = [
 export const CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "favorites", label: "Favorites" },
+  { id: "trending", label: "Trending" },
   { id: "tech", label: "Tech" },
   { id: "politics", label: "Politics" },
   { id: "business", label: "Business" },

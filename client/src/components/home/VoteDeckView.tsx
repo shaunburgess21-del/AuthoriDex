@@ -449,33 +449,33 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
 
   const filteredFaceOffs = useMemo(() => 
     faceOffsData.filter(fo => {
-      const matchesCategory = categoryFilter === "All" || fo.category === categoryFilter;
+      const matchesCategory = categoryFilter === "All" || categoryFilter === "Trending" || fo.category === categoryFilter;
       const matchesSearch = !searchQuery || 
         fo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         fo.optionAText.toLowerCase().includes(searchQuery.toLowerCase()) ||
         fo.optionBText.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    }),
+    }).sort((a: any, b: any) => categoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0),
     [categoryFilter, searchQuery]
   );
 
   const filteredPolls = useMemo(() =>
     DISCOURSE_TOPICS.filter(t => {
-      const matchesCategory = categoryFilter === "All" || t.category === categoryFilter;
+      const matchesCategory = categoryFilter === "All" || categoryFilter === "Trending" || t.category === categoryFilter;
       const matchesSearch = !searchQuery ||
         t.headline.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.description.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    }),
+    }).sort((a: any, b: any) => categoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0),
     [categoryFilter, searchQuery]
   );
 
   const filteredInduction = useMemo(() =>
     INDUCTION_CANDIDATES.filter(c => {
-      const matchesCategory = categoryFilter === "All" || c.category === categoryFilter;
+      const matchesCategory = categoryFilter === "All" || categoryFilter === "Trending" || c.category === categoryFilter;
       const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    }),
+    }).sort((a: any, b: any) => categoryFilter === "Trending" ? ((b.votes ?? 0) - (a.votes ?? 0)) : 0),
     [categoryFilter, searchQuery]
   );
 
@@ -495,10 +495,10 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
 
   const filteredValue = useMemo(() =>
     valueCelebrities.filter((c: ValueVotePerson) => {
-      const matchesCategory = categoryFilter === "All" || c.category?.toLowerCase() === categoryFilter.toLowerCase();
+      const matchesCategory = categoryFilter === "All" || categoryFilter === "Trending" || c.category?.toLowerCase() === categoryFilter.toLowerCase();
       const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    }),
+    }).sort((a: any, b: any) => categoryFilter === "Trending" ? ((b.approvalScore ?? 0) - (a.approvalScore ?? 0)) : 0),
     [valueCelebrities, categoryFilter, searchQuery]
   );
 

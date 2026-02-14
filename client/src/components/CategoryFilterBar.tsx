@@ -1,4 +1,4 @@
-import { Star, Sparkles } from "lucide-react";
+import { Star, Sparkles, Flame } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
 import { getFilterCategories, type FilterCategory } from "@shared/constants";
@@ -118,6 +118,23 @@ export function CategoryFilterBar({
               >
                 <Star className="h-3.5 w-3.5" />
                 <span className="hidden md:inline">Favorites</span>
+              </button>
+            );
+          }
+
+          if (cat === "Trending") {
+            return (
+              <button
+                key={cat}
+                onClick={() => handleCategoryClick("Trending")}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 ${
+                  activeFilter === "Trending" ? styles.active : styles.inactive
+                }`}
+                data-testid={`${testIdPrefix}-trending`}
+                aria-label="Trending"
+              >
+                <Flame className="h-3.5 w-3.5" />
+                <span className="hidden md:inline">Trending</span>
               </button>
             );
           }

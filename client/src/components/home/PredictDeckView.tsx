@@ -47,7 +47,7 @@ import {
 import { getFilterCategories } from "@shared/constants";
 import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 
-type CategoryFilter = "all" | "favorites" | "tech" | "politics" | "business" | "entertainment" | "sports" | "creator";
+type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "entertainment" | "sports" | "creator";
 
 const PREDICT_CATEGORY_FILTERS = getFilterCategories(false).map(cat => ({
   id: cat.toLowerCase() as CategoryFilter,
@@ -511,44 +511,44 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
 
   const filteredUpDown = useMemo(() =>
     MOCK_MARKETS.filter(m => {
-      const matchesCategory = categoryFilter === "all" || m.category === categoryFilter;
+      const matchesCategory = categoryFilter === "all" || categoryFilter === "trending" || m.category === categoryFilter;
       const matchesSearch = !searchQuery || m.personName.toLowerCase().includes(searchQuery.toLowerCase());
       const notPredicted = !predictions.has(m.id);
       return matchesCategory && matchesSearch && notPredicted;
-    }),
+    }).sort((a: any, b: any) => categoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0),
     [categoryFilter, searchQuery, predictions]
   );
 
   const filteredH2H = useMemo(() =>
     HEAD_TO_HEAD_MARKETS.filter(m => {
-      const matchesCategory = categoryFilter === "all" || m.category === categoryFilter;
+      const matchesCategory = categoryFilter === "all" || categoryFilter === "trending" || m.category === categoryFilter;
       const matchesSearch = !searchQuery || 
         m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         m.person1.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         m.person2.name.toLowerCase().includes(searchQuery.toLowerCase());
       const notPredicted = !predictions.has(m.id);
       return matchesCategory && matchesSearch && notPredicted;
-    }),
+    }).sort((a: any, b: any) => categoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0),
     [categoryFilter, searchQuery, predictions]
   );
 
   const filteredCommunity = useMemo(() =>
     openMarkets.filter((m: any) => {
-      const matchesCategory = categoryFilter === "all" || m.category === categoryFilter;
+      const matchesCategory = categoryFilter === "all" || categoryFilter === "trending" || m.category === categoryFilter;
       const matchesSearch = !searchQuery || m.title?.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    }),
+    }).sort((a: any, b: any) => categoryFilter === "trending" ? ((b.seedVolume ?? 0) - (a.seedVolume ?? 0)) : 0),
     [categoryFilter, searchQuery, openMarkets]
   );
 
   const filteredGainer = useMemo(() =>
     TOP_GAINER_MARKETS.filter(m => {
-      const matchesCategory = categoryFilter === "all" || m.category === categoryFilter;
+      const matchesCategory = categoryFilter === "all" || categoryFilter === "trending" || m.category === categoryFilter;
       const matchesSearch = !searchQuery || 
         m.leaders.some(l => l.name.toLowerCase().includes(searchQuery.toLowerCase()));
       const notPredicted = !predictions.has(m.id);
       return matchesCategory && matchesSearch && notPredicted;
-    }),
+    }).sort((a: any, b: any) => categoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0),
     [categoryFilter, searchQuery, predictions]
   );
 

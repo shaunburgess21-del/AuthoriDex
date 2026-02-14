@@ -46,6 +46,7 @@ import {
   Trophy,
   Video,
   LayoutGrid,
+  Flame,
   type LucideIcon
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -1472,6 +1473,7 @@ function ContenderSelector({
 const VOTE_CATEGORY_ICONS: Record<string, LucideIcon> = {
   All: LayoutGrid,
   Favorites: Star,
+  Trending: Flame,
   Tech: Cpu,
   Politics: Landmark,
   Business: Briefcase,
@@ -1634,7 +1636,7 @@ export default function VotePage() {
   }));
   
   const filteredCandidates = enrichedCandidates.filter(c => {
-    const matchesCategory = inductionCategoryFilter === "All" || c.category === inductionCategoryFilter;
+    const matchesCategory = inductionCategoryFilter === "All" || inductionCategoryFilter === "Trending" || c.category === inductionCategoryFilter;
     const matchesSearch = c.name.toLowerCase().includes(inductionSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   }).sort((a, b) => b.votes - a.votes);
@@ -1649,11 +1651,11 @@ export default function VotePage() {
   });
 
   const filteredTopics = dbPolls.filter((t: any) => {
-    const matchesCategory = topicsCategoryFilter === "All" || t.category === topicsCategoryFilter;
+    const matchesCategory = topicsCategoryFilter === "All" || topicsCategoryFilter === "Trending" || t.category === topicsCategoryFilter;
     const matchesSearch = t.headline.toLowerCase().includes(topicsSearchQuery.toLowerCase()) ||
                          (t.description || '').toLowerCase().includes(topicsSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
-  });
+  }).sort((a: any, b: any) => topicsCategoryFilter === "Trending" ? (b.totalVotes ?? 0) - (a.totalVotes ?? 0) : 0);
 
   const { data: detailImages = [] } = useQuery<CelebrityImage[]>({
     queryKey: ['/api/people', selectedCuratePerson?.personId, 'images'],
@@ -1697,10 +1699,10 @@ export default function VotePage() {
   const valueCelebrities = valueCelebritiesData?.data || [];
   
   const filteredValueCelebrities = valueCelebrities.filter(c => {
-    const matchesCategory = valuePerceptionCategoryFilter === "All" || c.category === valuePerceptionCategoryFilter;
+    const matchesCategory = valuePerceptionCategoryFilter === "All" || valuePerceptionCategoryFilter === "Trending" || c.category === valuePerceptionCategoryFilter;
     const matchesSearch = !valuePerceptionSearchQuery || c.name.toLowerCase().includes(valuePerceptionSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
-  });
+  }).sort((a: any, b: any) => valuePerceptionCategoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
   
   const [localFaceOffVotes, setLocalFaceOffVotes] = useState<Record<string, string>>({});
   
@@ -1737,12 +1739,12 @@ export default function VotePage() {
   };
   
   const filteredFaceOffs = faceOffs.filter(f => {
-    const matchesCategory = faceOffsCategoryFilter === "All" || f.category === faceOffsCategoryFilter;
+    const matchesCategory = faceOffsCategoryFilter === "All" || faceOffsCategoryFilter === "Trending" || f.category === faceOffsCategoryFilter;
     const matchesSearch = f.title.toLowerCase().includes(faceOffsSearchQuery.toLowerCase()) ||
                          f.optionAText.toLowerCase().includes(faceOffsSearchQuery.toLowerCase()) ||
                          f.optionBText.toLowerCase().includes(faceOffsSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch && f.isActive;
-  });
+  }).sort((a: any, b: any) => faceOffsCategoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
 
   useEffect(() => {
     if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen || faceOffsOverlayOpen || inductionSuggestOpen || faceOffSuggestOpen || valuePerceptionOverlayOpen) {

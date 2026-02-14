@@ -164,12 +164,12 @@ export function CurateViewAllOverlay({
 
   const filteredCelebrities = useMemo(() => {
     return celebrities.filter(person => {
-      const matchesCategory = categoryFilter === "All" || 
+      const matchesCategory = categoryFilter === "All" || categoryFilter === "Trending" ||
         person.category?.toLowerCase() === categoryFilter.toLowerCase();
       const matchesSearch = !searchQuery || 
         person.name?.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
-    });
+    }).sort((a: any, b: any) => categoryFilter === "Trending" ? ((b.fameScore ?? b.score ?? 0) - (a.fameScore ?? a.score ?? 0)) : 0);
   }, [celebrities, categoryFilter, searchQuery]);
 
   const handleCategoryClick = (cat: string) => {

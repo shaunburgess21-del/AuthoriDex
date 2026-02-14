@@ -47,6 +47,7 @@ export function CurateSection({
 
   const filteredCelebrities = useMemo(() => {
     if (categoryFilter === "All") return allCelebrities;
+    if (categoryFilter === "Trending") return [...allCelebrities].sort((a: any, b: any) => ((b.fameScore ?? b.score ?? 0) - (a.fameScore ?? a.score ?? 0)));
     if (categoryFilter === "Favorites") return allCelebrities;
     return allCelebrities.filter(
       person => person.category?.toLowerCase() === categoryFilter.toLowerCase()

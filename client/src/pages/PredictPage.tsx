@@ -48,6 +48,7 @@ import {
   Clapperboard,
   Video,
   LayoutGrid,
+  Flame,
   type LucideIcon
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -72,7 +73,7 @@ function MarketAvatar({ market }: { market: any }) {
 
 // Prediction Type definitions
 type PredictionType = "all" | "jackpot" | "updown" | "h2h" | "gainer" | "community";
-type CategoryFilter = "all" | "favorites" | "tech" | "politics" | "business" | "entertainment" | "sports" | "creator" | "misc";
+type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "entertainment" | "sports" | "creator" | "misc";
 
 interface PredictionMarket {
   id: string;
@@ -575,6 +576,7 @@ function RulesModal({
 const BASE_CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "favorites", label: "Favorites" },
+  { id: "trending", label: "Trending" },
   { id: "tech", label: "Tech" },
   { id: "politics", label: "Politics" },
   { id: "business", label: "Business" },
@@ -586,6 +588,7 @@ const BASE_CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
 const CATEGORY_ICONS: Record<CategoryFilter, LucideIcon> = {
   all: LayoutGrid,
   favorites: Star,
+  trending: Flame,
   tech: Cpu,
   politics: Landmark,
   business: Briefcase,
@@ -2138,27 +2141,27 @@ export default function PredictPage() {
 
   // Section-specific filtering logic
   const filteredUpDown = hydratedMarkets.filter(m => 
-    (updownCategory === "all" || m.category === updownCategory) &&
+    (updownCategory === "all" || updownCategory === "trending" || m.category === updownCategory) &&
     (!updownSearch || m.personName.toLowerCase().includes(updownSearch.toLowerCase()))
-  );
+  ).sort((a: any, b: any) => updownCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
   const filteredH2H = hydratedH2H.filter(m => 
-    (h2hCategory === "all" || m.category === h2hCategory) &&
+    (h2hCategory === "all" || h2hCategory === "trending" || m.category === h2hCategory) &&
     (!h2hSearch || m.title.toLowerCase().includes(h2hSearch.toLowerCase()) || 
      m.person1.name.toLowerCase().includes(h2hSearch.toLowerCase()) ||
      m.person2.name.toLowerCase().includes(h2hSearch.toLowerCase()))
-  );
+  ).sort((a: any, b: any) => h2hCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
   const filteredGainers = hydratedGainers.filter(m => 
-    (gainerCategory === "all" || m.category === gainerCategory) &&
+    (gainerCategory === "all" || gainerCategory === "trending" || m.category === gainerCategory) &&
     (!gainerSearch || m.category.toLowerCase().includes(gainerSearch.toLowerCase()) ||
      m.leaders.some(l => l.name.toLowerCase().includes(gainerSearch.toLowerCase())))
-  );
+  ).sort((a: any, b: any) => gainerCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
   const filteredCommunity = openMarkets.filter((m: any) => 
-    (communityCategory === "all" || m.category === communityCategory) &&
+    (communityCategory === "all" || communityCategory === "trending" || m.category === communityCategory) &&
     (!communitySearch || m.title?.toLowerCase().includes(communitySearch.toLowerCase()))
-  );
+  ).sort((a: any, b: any) => communityCategory === "trending" ? ((b.seedVolume ?? 0) - (a.seedVolume ?? 0)) : 0);
 
   const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
 
@@ -2578,9 +2581,10 @@ export default function PredictPage() {
       >
         {hydratedMarkets
           .filter(m => 
-            (overlayCategoryFilter === "all" || m.category === overlayCategoryFilter) &&
+            (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" || m.category === overlayCategoryFilter) &&
             (!overlaySearchQuery || m.personName.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
           )
+          .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0)
           .map((market) => (
             <WeeklyUpDownCard 
               key={market.id} 
@@ -2603,9 +2607,10 @@ export default function PredictPage() {
       >
         {hydratedH2H
           .filter(m => 
-            (overlayCategoryFilter === "all" || m.category === overlayCategoryFilter) &&
+            (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" || m.category === overlayCategoryFilter) &&
             (!overlaySearchQuery || m.title.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
           )
+          .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0)
           .map((market) => (
             <HeadToHeadCard 
               key={market.id} 
@@ -2628,7 +2633,7 @@ export default function PredictPage() {
       >
         {hydratedGainers
           .filter(m => 
-            (overlayCategoryFilter === "all" || m.category === overlayCategoryFilter) &&
+            (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" || m.category === overlayCategoryFilter) &&
             (!overlaySearchQuery || m.category.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
           )
           .map((market) => (
@@ -2655,9 +2660,10 @@ export default function PredictPage() {
       >
         {openMarkets
           .filter((m: any) => 
-            (overlayCategoryFilter === "all" || m.category === overlayCategoryFilter) &&
+            (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" || m.category === overlayCategoryFilter) &&
             (!overlaySearchQuery || m.title?.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
           )
+          .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.seedVolume ?? 0) - (a.seedVolume ?? 0)) : 0)
           .map((market: any) => (
             <OpenMarketCard 
               key={market.id} 

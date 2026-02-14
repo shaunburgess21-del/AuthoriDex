@@ -183,5 +183,5 @@ export const CURATE_PROFILE_POLLS: CurateProfilePoll[] = [
   },
 ];
 
-export const FILTER_CATEGORIES = ["All", "Favorites", "Tech", "Entertainment", "Sports", "Creator", "Business", "Politics"] as const;
+export const FILTER_CATEGORIES = ["All", "Favorites", "Trending", "Tech", "Entertainment", "Sports", "Creator", "Business", "Politics"] as const;
 export type FilterCategory = typeof FILTER_CATEGORIES[number];
