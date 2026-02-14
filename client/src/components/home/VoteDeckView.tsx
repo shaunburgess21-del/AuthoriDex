@@ -38,7 +38,7 @@ import {
 import {
   DISCOURSE_TOPICS,
   INDUCTION_CANDIDATES,
-  type FaceOffData,
+  type MatchupData,
   type DiscourseTopicData,
   type InductionCandidate,
 } from "@/data/vote";
@@ -50,23 +50,23 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { ValueVotePerson } from "@/components/UnderratedOverratedCard";
 
-type VoteSection = "All" | "Face-Offs" | "Trending Polls" | "Underrated / Overrated" | "Induction Queue" | "Curate Profile";
-const SECTION_TOGGLES: VoteSection[] = ["All", "Face-Offs", "Trending Polls", "Underrated / Overrated", "Induction Queue", "Curate Profile"];
+type VoteSection = "All" | "Matchups" | "Trending Polls" | "Underrated / Overrated" | "Induction Queue" | "Curate Profile";
+const SECTION_TOGGLES: VoteSection[] = ["All", "Matchups", "Trending Polls", "Underrated / Overrated", "Induction Queue", "Curate Profile"];
 
 interface VoteDeckViewProps {
   onExplore: () => void;
 }
 
 function VersusCard({ 
-  faceOff, 
+  matchup, 
   userVote, 
   onVote,
   onRemoveVote 
 }: { 
-  faceOff: FaceOffData; 
+  matchup: MatchupData; 
   userVote: string | null;
-  onVote: (faceOffId: string, option: 'option_a' | 'option_b') => void;
-  onRemoveVote?: (faceOffId: string) => void;
+  onVote: (matchupId: string, option: 'option_a' | 'option_b') => void;
+  onRemoveVote?: (matchupId: string) => void;
 }) {
   const hasVoted = userVote !== null;
   const votedA = userVote === 'option_a';
@@ -80,15 +80,15 @@ function VersusCard({
         <div className="flex items-center justify-between mb-4 gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5 text-cyan-400" />
-            <span>{faceOff.totalVotes.toLocaleString()} votes</span>
+            <span>{matchup.totalVotes.toLocaleString()} votes</span>
           </div>
-          <CategoryPill category={faceOff.category} />
+          <CategoryPill category={matchup.category} />
         </div>
         
         {!hasVoted && (
           <div className="flex flex-col items-center justify-center gap-1 mb-3" style={{ minHeight: '40px' }}>
             <span className="text-sm font-semibold text-slate-300">
-              {faceOff.promptText || "Who do you prefer?"}
+              {matchup.promptText || "Who do you prefer?"}
             </span>
             <span className="text-[11px] text-slate-500">Tap an image to pick your side</span>
           </div>
@@ -96,7 +96,7 @@ function VersusCard({
         
         <div className="flex items-stretch gap-3">
           <button
-            onClick={() => !hasVoted && onVote(faceOff.id, 'option_a')}
+            onClick={() => !hasVoted && onVote(matchup.id, 'option_a')}
             disabled={hasVoted}
             className={`flex-1 rounded-lg border transition-all overflow-hidden relative ${
               hasVoted
@@ -106,13 +106,13 @@ function VersusCard({
                 : 'border-slate-700/50 hover:border-cyan-500/50 cursor-pointer'
             }`}
             style={{ minHeight: '260px' }}
-            data-testid={`button-vote-a-${faceOff.id}`}
+            data-testid={`button-vote-a-${matchup.id}`}
           >
-            {faceOff.optionAImage ? (
+            {matchup.optionAImage ? (
               <div className="absolute inset-0">
                 <img 
-                  src={faceOff.optionAImage} 
-                  alt={faceOff.optionAText}
+                  src={matchup.optionAImage} 
+                  alt={matchup.optionAText}
                   className="w-full h-full object-cover object-center"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
@@ -121,10 +121,10 @@ function VersusCard({
               <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedA ? 'from-cyan-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
             )}
             <div className="relative h-full flex flex-col items-center justify-end p-3">
-              <span className="font-semibold text-sm text-center text-white drop-shadow-lg">{faceOff.optionAText}</span>
+              <span className="font-semibold text-sm text-center text-white drop-shadow-lg">{matchup.optionAText}</span>
               {hasVoted && (
                 <span className={`text-xl font-bold mt-1 ${votedA ? 'text-cyan-400' : 'text-slate-300'}`}>
-                  {faceOff.optionAPercent}%
+                  {matchup.optionAPercent}%
                 </span>
               )}
             </div>
@@ -137,7 +137,7 @@ function VersusCard({
           </div>
           
           <button
-            onClick={() => !hasVoted && onVote(faceOff.id, 'option_b')}
+            onClick={() => !hasVoted && onVote(matchup.id, 'option_b')}
             disabled={hasVoted}
             className={`flex-1 rounded-lg border transition-all overflow-hidden relative ${
               hasVoted
@@ -147,13 +147,13 @@ function VersusCard({
                 : 'border-slate-700/50 hover:border-teal-500/50 cursor-pointer'
             }`}
             style={{ minHeight: '260px' }}
-            data-testid={`button-vote-b-${faceOff.id}`}
+            data-testid={`button-vote-b-${matchup.id}`}
           >
-            {faceOff.optionBImage ? (
+            {matchup.optionBImage ? (
               <div className="absolute inset-0">
                 <img 
-                  src={faceOff.optionBImage} 
-                  alt={faceOff.optionBText}
+                  src={matchup.optionBImage} 
+                  alt={matchup.optionBText}
                   className="w-full h-full object-cover object-center"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
@@ -162,10 +162,10 @@ function VersusCard({
               <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? 'from-teal-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
             )}
             <div className="relative h-full flex flex-col items-center justify-end p-3">
-              <span className="font-semibold text-sm text-center text-white drop-shadow-lg">{faceOff.optionBText}</span>
+              <span className="font-semibold text-sm text-center text-white drop-shadow-lg">{matchup.optionBText}</span>
               {hasVoted && (
                 <span className={`text-xl font-bold mt-1 ${votedB ? 'text-teal-400' : 'text-slate-300'}`}>
-                  {faceOff.optionBPercent}%
+                  {matchup.optionBPercent}%
                 </span>
               )}
             </div>
@@ -177,11 +177,11 @@ function VersusCard({
             <div className="h-2 rounded-full bg-slate-700/50 overflow-hidden flex">
               <div 
                 className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-500"
-                style={{ width: `${faceOff.optionAPercent}%` }}
+                style={{ width: `${matchup.optionAPercent}%` }}
               />
               <div 
                 className="h-full bg-gradient-to-r from-teal-400 to-teal-500 transition-all duration-500"
-                style={{ width: `${faceOff.optionBPercent}%` }}
+                style={{ width: `${matchup.optionBPercent}%` }}
               />
             </div>
           </div>
@@ -442,24 +442,24 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("All");
   
-  const [faceOffVotes, setFaceOffVotes] = useState<Record<string, string>>({});
+  const [matchupVotes, setMatchupVotes] = useState<Record<string, string>>({});
   const [pollVotes, setPollVotes] = useState<Record<string, string>>({});
   const [inductionVotes, setInductionVotes] = useState<Set<string>>(new Set());
   const [valueVotes, setValueVotes] = useState<Record<string, 'underrated' | 'overrated'>>({});
   
-  const [faceOffInteracted, setFaceOffInteracted] = useState(false);
+  const [matchupInteracted, setMatchupInteracted] = useState(false);
   const [pollInteracted, setPollInteracted] = useState(false);
   const [inductionInteracted, setInductionInteracted] = useState(false);
   const [valueInteracted, setValueInteracted] = useState(false);
 
-  // Fetch face-offs from API to get real images
-  const { data: faceOffsData = [] } = useQuery<FaceOffData[]>({
-    queryKey: ['/api/face-offs'],
+  // Fetch matchups from API to get real images
+  const { data: matchupsData = [] } = useQuery<MatchupData[]>({
+    queryKey: ['/api/matchups'],
     staleTime: 60 * 1000,
   });
 
-  const filteredFaceOffs = useMemo(() => 
-    faceOffsData.filter(fo => {
+  const filteredMatchups = useMemo(() => 
+    matchupsData.filter(fo => {
       const matchesCategory = categoryFilter === "All" || categoryFilter === "Trending" || fo.category === categoryFilter;
       const matchesSearch = !searchQuery || 
         fo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -539,8 +539,8 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
     },
   });
 
-  const handleFaceOffVote = (id: string, option: 'option_a' | 'option_b') => {
-    setFaceOffVotes(prev => ({ ...prev, [id]: option }));
+  const handleMatchupVote = (id: string, option: 'option_a' | 'option_b') => {
+    setMatchupVotes(prev => ({ ...prev, [id]: option }));
   };
 
   const handlePollVote = (id: string, choice: 'support' | 'neutral' | 'oppose') => {
@@ -572,7 +572,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   const dragScrollRef1 = useDragScroll<HTMLDivElement>();
   const dragScrollRef2 = useDragScroll<HTMLDivElement>();
 
-  const showFaceOffs = activeSection === "All" || activeSection === "Face-Offs";
+  const showMatchups = activeSection === "All" || activeSection === "Matchups";
   const showPolls = activeSection === "All" || activeSection === "Trending Polls";
   const showInduction = activeSection === "All" || activeSection === "Induction Queue";
   const showCurate = activeSection === "All" || activeSection === "Curate Profile";
@@ -597,7 +597,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
             }`}
             data-testid={`toggle-vote-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
           >
-            {section === "Face-Offs" && <Swords className="h-3 w-3" />}
+            {section === "Matchups" && <Swords className="h-3 w-3" />}
             {section === "Trending Polls" && <MessageSquare className="h-3 w-3" />}
             {section === "Induction Queue" && <UserPlus className="h-3 w-3" />}
             {section === "Curate Profile" && <ImageIcon className="h-3 w-3" />}
@@ -651,32 +651,32 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
         ))}
       </div>
 
-      {showFaceOffs && filteredFaceOffs.length > 0 && (
+      {showMatchups && filteredMatchups.length > 0 && (
         <div className="space-y-2">
           <HomeSectionHeader
             theme="vote"
             icon={Swords}
-            title="Face-Offs"
+            title="Matchups"
             subtitle="Vote on A vs B matchups."
-            help={{ title: "How Face-Offs Work", bullets: ["Pick your side in head-to-head matchups between celebrities.", "Each vote earns XP and contributes to the community consensus.", "Results update in real time as the community weighs in."] }}
+            help={{ title: "How Matchups Work", bullets: ["Pick your side in head-to-head matchups between celebrities.", "Each vote earns XP and contributes to the community consensus.", "Results update in real time as the community weighs in."] }}
             onViewAll={onExplore}
           />
           <CardDeckContainer
-            items={filteredFaceOffs}
+            items={filteredMatchups}
             viewType="vote"
-            hasInteracted={faceOffInteracted}
-            onAdvance={() => setFaceOffInteracted(false)}
+            hasInteracted={matchupInteracted}
+            onAdvance={() => setMatchupInteracted(false)}
             renderCard={(fo) => (
               <VersusCard
-                faceOff={fo}
-                userVote={faceOffVotes[fo.id] || null}
+                matchup={fo}
+                userVote={matchupVotes[fo.id] || null}
                 onVote={(id, opt) => {
-                  handleFaceOffVote(id, opt);
-                  setFaceOffInteracted(true);
+                  handleMatchupVote(id, opt);
+                  setMatchupInteracted(true);
                 }}
               />
             )}
-            emptyMessage="No face-offs match your filters"
+            emptyMessage="No matchups match your filters"
           />
         </div>
       )}

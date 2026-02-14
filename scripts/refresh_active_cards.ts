@@ -1,21 +1,21 @@
 /**
  * Avatar Hydration Script
  * 
- * Updates face-offs and other active game data with fresh avatar URLs from tracked_people.
+ * Updates matchups and other active game data with fresh avatar URLs from tracked_people.
  * This fixes stale/empty avatar URLs in snapshot columns.
  * 
  * Usage: npx tsx scripts/refresh_active_cards.ts
  */
 
 import { db } from "../server/db";
-import { trackedPeople, faceOffs } from "../shared/schema";
+import { trackedPeople, matchups } from "../shared/schema";
 import { eq, sql } from "drizzle-orm";
 
 async function refreshActiveCards() {
   console.log("🔄 Starting Avatar Hydration...\n");
 
-  let updatedFaceOffs = 0;
-  let skippedFaceOffs = 0;
+  let updatedMatchups = 0;
+  let skippedMatchups = 0;
 
   try {
     // Step 1: Get all celebrities with their fresh avatars
@@ -32,47 +32,47 @@ async function refreshActiveCards() {
     
     console.log(`📋 Loaded ${celebrities.length} celebrity avatars\n`);
 
-    // Step 2: Update Face-Offs
-    console.log("🎭 Updating Face-Offs...");
-    const allFaceOffs = await db.select().from(faceOffs);
+    // Step 2: Update Matchups
+    console.log("🎭 Updating Matchups...");
+    const allMatchups = await db.select().from(matchups);
 
-    for (const faceOff of allFaceOffs) {
+    for (const matchup of allMatchups) {
       let needsUpdate = false;
-      let newOptionAImage = faceOff.optionAImage;
-      let newOptionBImage = faceOff.optionBImage;
+      let newOptionAImage = matchup.optionAImage;
+      let newOptionBImage = matchup.optionBImage;
 
       // Try to match option A text to a celebrity name
-      const optionAKey = faceOff.optionAText.toLowerCase();
-      if (avatarMap[optionAKey] && avatarMap[optionAKey] !== faceOff.optionAImage) {
+      const optionAKey = matchup.optionAText.toLowerCase();
+      if (avatarMap[optionAKey] && avatarMap[optionAKey] !== matchup.optionAImage) {
         newOptionAImage = avatarMap[optionAKey];
         needsUpdate = true;
       }
 
       // Try to match option B text to a celebrity name
-      const optionBKey = faceOff.optionBText.toLowerCase();
-      if (avatarMap[optionBKey] && avatarMap[optionBKey] !== faceOff.optionBImage) {
+      const optionBKey = matchup.optionBText.toLowerCase();
+      if (avatarMap[optionBKey] && avatarMap[optionBKey] !== matchup.optionBImage) {
         newOptionBImage = avatarMap[optionBKey];
         needsUpdate = true;
       }
 
       if (needsUpdate) {
-        await db.update(faceOffs)
+        await db.update(matchups)
           .set({
             optionAImage: newOptionAImage,
             optionBImage: newOptionBImage,
           })
-          .where(eq(faceOffs.id, faceOff.id));
+          .where(eq(matchups.id, matchup.id));
 
-        console.log(`  ✅ Updated: "${faceOff.title}" (${faceOff.optionAText} vs ${faceOff.optionBText})`);
-        updatedFaceOffs++;
+        console.log(`  ✅ Updated: "${matchup.title}" (${matchup.optionAText} vs ${matchup.optionBText})`);
+        updatedMatchups++;
       } else {
-        skippedFaceOffs++;
+        skippedMatchups++;
       }
     }
 
-    console.log(`\n📊 Face-Off Summary:`);
-    console.log(`   ✅ Updated: ${updatedFaceOffs}`);
-    console.log(`   ⏭️  Skipped: ${skippedFaceOffs} (no matching celebrity or already up-to-date)`);
+    console.log(`\n📊 Matchup Summary:`);
+    console.log(`   ✅ Updated: ${updatedMatchups}`);
+    console.log(`   ⏭️  Skipped: ${skippedMatchups} (no matching celebrity or already up-to-date)`);
 
     console.log("\n🎉 Avatar Hydration Complete!");
 

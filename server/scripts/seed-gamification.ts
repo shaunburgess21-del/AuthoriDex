@@ -8,7 +8,7 @@ async function seedXpActions() {
   const actions = [
     // Voting Actions
     { actionKey: 'vote_sentiment', displayName: 'Sentiment Vote', xpValue: 25, dailyCap: 20, description: 'Vote on celebrity sentiment (1-10 scale)' },
-    { actionKey: 'vote_face_off', displayName: 'Face-Off Vote', xpValue: 15, dailyCap: 25, description: 'Vote in a Face-Off matchup' },
+    { actionKey: 'vote_face_off', displayName: 'Matchup Vote', xpValue: 15, dailyCap: 25, description: 'Vote in a Matchup' },
     { actionKey: 'vote_induction', displayName: 'Induction Vote', xpValue: 30, dailyCap: 10, description: 'Vote on candidate for main leaderboard' },
     { actionKey: 'vote_curation', displayName: 'Image Curation Vote', xpValue: 20, dailyCap: 30, description: 'Vote on profile images (hot-or-not)' },
     

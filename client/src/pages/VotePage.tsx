@@ -171,14 +171,14 @@ const curateProfilePolls: CurateProfilePoll[] = [
 ];
 
 
-const SECTION_TOGGLES = ["All", "Face-Offs", "Trending Polls", "Induction Queue", "Curate Profile"] as const;
+const SECTION_TOGGLES = ["All", "Matchups", "Trending Polls", "Induction Queue", "Curate Profile"] as const;
 type SectionToggle = typeof SECTION_TOGGLES[number];
 
 const isGovernanceSection = (section: SectionToggle) => 
   section === "Induction Queue" || section === "Curate Profile";
 
 const isPublicOpinionSection = (section: SectionToggle) =>
-  section === "Face-Offs" || section === "Trending Polls";
+  section === "Matchups" || section === "Trending Polls";
 
 const SECTION_RULES = {
   induction: {
@@ -189,8 +189,8 @@ const SECTION_RULES = {
     title: "Curate Profile Rules",
     content: "Which image best represents this celebrity? The winning look becomes the primary profile image across the entire platform. Only the highest quality looks make it to the index."
   },
-  faceoffs: {
-    title: "Face-Offs Rules",
+  matchups: {
+    title: "Matchups Rules",
     content: "Pick your side in head-to-head matchups! Vote for your favorite in classic A vs B showdowns. Each vote earns XP and contributes to the community consensus."
   },
   voice: {
@@ -217,7 +217,7 @@ interface XPFloater {
   amount: number;
 }
 
-interface FaceOffData {
+interface MatchupData {
   id: string;
   category: string;
   title: string;
@@ -236,20 +236,20 @@ interface FaceOffData {
 }
 
 function VersusCard({ 
-  faceOff, 
+  matchup, 
   userVote, 
   onVote,
   onRemoveVote 
 }: { 
-  faceOff: FaceOffData; 
+  matchup: MatchupData; 
   userVote: string | null;
-  onVote: (faceOffId: string, option: 'option_a' | 'option_b', event?: React.MouseEvent) => void;
-  onRemoveVote: (faceOffId: string) => void;
+  onVote: (matchupId: string, option: 'option_a' | 'option_b', event?: React.MouseEvent) => void;
+  onRemoveVote: (matchupId: string) => void;
 }) {
   const hasVoted = userVote !== null;
   const votedA = userVote === 'option_a';
   const votedB = userVote === 'option_b';
-  const leadingA = faceOff.optionAPercent >= faceOff.optionBPercent;
+  const leadingA = matchup.optionAPercent >= matchup.optionBPercent;
   
   return (
     <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50 hover-elevate">
@@ -259,15 +259,15 @@ function VersusCard({
         <div className="flex items-center justify-between mb-3 gap-2 px-4">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5 text-cyan-400" />
-            <span>{faceOff.totalVotes.toLocaleString()} votes</span>
+            <span>{matchup.totalVotes.toLocaleString()} votes</span>
           </div>
-          <CategoryPill category={faceOff.category} data-testid={`badge-faceoff-${faceOff.id}`} />
+          <CategoryPill category={matchup.category} data-testid={`badge-matchup-${matchup.id}`} />
         </div>
         
         {!hasVoted && (
           <div className="flex flex-col items-center justify-center gap-1 px-4 mb-3" style={{ minHeight: '40px' }}>
             <span className="text-sm font-semibold text-slate-300">
-              {faceOff.promptText || "Who do you prefer?"}
+              {matchup.promptText || "Who do you prefer?"}
             </span>
             <div className="flex items-center gap-2 text-xs text-slate-400">
               <Swords className="h-3.5 w-3.5 text-cyan-400/70" />
@@ -280,7 +280,7 @@ function VersusCard({
           <div className="flex-1 flex flex-col">
             <button
               onClick={(e) => {
-                if (!hasVoted || votedB) onVote(faceOff.id, 'option_a', e);
+                if (!hasVoted || votedB) onVote(matchup.id, 'option_a', e);
               }}
               className={`rounded-lg border transition-all duration-300 overflow-hidden relative ${
                 hasVoted
@@ -290,13 +290,13 @@ function VersusCard({
                   : 'border-slate-700/50 hover:border-cyan-500/50 cursor-pointer'
               }`}
               style={{ minHeight: '222px' }}
-              data-testid={`button-vote-a-${faceOff.id}`}
+              data-testid={`button-vote-a-${matchup.id}`}
             >
-              {faceOff.optionAImage ? (
+              {matchup.optionAImage ? (
                 <div className="absolute inset-0">
                   <img 
-                    src={faceOff.optionAImage} 
-                    alt={faceOff.optionAText}
+                    src={matchup.optionAImage} 
+                    alt={matchup.optionAText}
                     className="w-full h-full object-cover"
                   />
                 </div>
@@ -304,7 +304,7 @@ function VersusCard({
                 <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedA ? 'from-cyan-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
               )}
             </button>
-            <span className="font-semibold text-sm text-center mt-2 px-1 truncate">{faceOff.optionAText}</span>
+            <span className="font-semibold text-sm text-center mt-2 px-1 truncate">{matchup.optionAText}</span>
           </div>
           
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
@@ -316,7 +316,7 @@ function VersusCard({
           <div className="flex-1 flex flex-col">
             <button
               onClick={(e) => {
-                if (!hasVoted || votedA) onVote(faceOff.id, 'option_b', e);
+                if (!hasVoted || votedA) onVote(matchup.id, 'option_b', e);
               }}
               className={`rounded-lg border transition-all duration-300 overflow-hidden relative ${
                 hasVoted
@@ -326,13 +326,13 @@ function VersusCard({
                   : 'border-slate-700/50 hover:border-teal-500/50 cursor-pointer'
               }`}
               style={{ minHeight: '222px' }}
-              data-testid={`button-vote-b-${faceOff.id}`}
+              data-testid={`button-vote-b-${matchup.id}`}
             >
-              {faceOff.optionBImage ? (
+              {matchup.optionBImage ? (
                 <div className="absolute inset-0">
                   <img 
-                    src={faceOff.optionBImage} 
-                    alt={faceOff.optionBText}
+                    src={matchup.optionBImage} 
+                    alt={matchup.optionBText}
                     className="w-full h-full object-cover"
                   />
                 </div>
@@ -340,7 +340,7 @@ function VersusCard({
                 <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? 'from-teal-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
               )}
             </button>
-            <span className="font-semibold text-sm text-center mt-2 px-1 truncate">{faceOff.optionBText}</span>
+            <span className="font-semibold text-sm text-center mt-2 px-1 truncate">{matchup.optionBText}</span>
           </div>
         </div>
         
@@ -350,7 +350,7 @@ function VersusCard({
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">
                   <span className={`text-lg font-bold ${leadingA ? 'text-cyan-400' : 'text-slate-400'}`}>
-                    {faceOff.optionAPercent}%
+                    {matchup.optionAPercent}%
                   </span>
                   {votedA && (
                     <Badge variant="outline" className="text-[10px] border-cyan-500/40 text-cyan-400 px-1.5 py-0">
@@ -365,31 +365,31 @@ function VersusCard({
                     </Badge>
                   )}
                   <span className={`text-lg font-bold ${!leadingA ? 'text-teal-400' : 'text-slate-400'}`}>
-                    {faceOff.optionBPercent}%
+                    {matchup.optionBPercent}%
                   </span>
                 </div>
               </div>
               <div className="h-2.5 rounded-full bg-slate-700/50 overflow-hidden flex">
                 <div 
                   className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400"
-                  style={{ width: `${faceOff.optionAPercent}%` }}
+                  style={{ width: `${matchup.optionAPercent}%` }}
                 />
                 <div 
                   className="h-full bg-gradient-to-r from-teal-400 to-teal-500"
-                  style={{ width: `${faceOff.optionBPercent}%` }}
+                  style={{ width: `${matchup.optionBPercent}%` }}
                 />
               </div>
               <div className="flex items-center justify-between mt-1.5">
-                <span className="text-[11px] text-slate-500 font-medium">{faceOff.optionAText}</span>
-                <span className="text-[11px] text-slate-500 font-medium">{faceOff.optionBText}</span>
+                <span className="text-[11px] text-slate-500 font-medium">{matchup.optionAText}</span>
+                <span className="text-[11px] text-slate-500 font-medium">{matchup.optionBText}</span>
               </div>
               <div className="flex items-center justify-center gap-2 mt-2">
                 <span className="text-[10px] text-slate-500/70">Tap the other image to change your vote</span>
                 <span className="text-[10px] text-slate-500/40">|</span>
                 <button
-                  onClick={() => onRemoveVote(faceOff.id)}
+                  onClick={() => onRemoveVote(matchup.id)}
                   className="text-[10px] text-slate-500/70 hover:text-red-400/80 transition-colors"
-                  data-testid={`button-remove-vote-${faceOff.id}`}
+                  data-testid={`button-remove-vote-${matchup.id}`}
                 >
                   Remove vote
                 </button>
@@ -1206,7 +1206,7 @@ function CelebrityAutocomplete({
   );
 }
 
-// Contender Selection for Face-Off modal - supports celebrities with auto-images and custom entries with uploads
+// Contender Selection for Matchup modal - supports celebrities with auto-images and custom entries with uploads
 type ContenderSelection = {
   type: 'celebrity' | 'custom' | null;
   name: string;
@@ -1570,7 +1570,7 @@ export default function VotePage() {
   };
   const [suggestModalOpen, setSuggestModalOpen] = useState(false);
   const [inductionSuggestOpen, setInductionSuggestOpen] = useState(false);
-  const [faceOffSuggestOpen, setFaceOffSuggestOpen] = useState(false);
+  const [matchupSuggestOpen, setMatchupSuggestOpen] = useState(false);
   const [curateSuggestOpen, setCurateSuggestOpen] = useState(false);
   const [curateCelebrity, setCurateCelebrity] = useState("");
   const [curateImageFile, setCurateImageFile] = useState<File | null>(null);
@@ -1579,10 +1579,10 @@ export default function VotePage() {
   const [suggestCategory, setSuggestCategory] = useState("");
   const [suggestReason, setSuggestReason] = useState("");
   const [suggestUrl, setSuggestUrl] = useState("");
-  const [faceOffHeadline, setFaceOffHeadline] = useState("");
-  const [faceOffContenderA, setFaceOffContenderA] = useState<ContenderSelection>({ type: null, name: '' });
-  const [faceOffContenderB, setFaceOffContenderB] = useState<ContenderSelection>({ type: null, name: '' });
-  const [faceOffCategory, setFaceOffCategory] = useState("");
+  const [matchupHeadline, setMatchupHeadline] = useState("");
+  const [matchupContenderA, setMatchupContenderA] = useState<ContenderSelection>({ type: null, name: '' });
+  const [matchupContenderB, setMatchupContenderB] = useState<ContenderSelection>({ type: null, name: '' });
+  const [matchupCategory, setMatchupCategory] = useState("");
   const [totalVotes] = useState(127843);
   const [countdown, setCountdown] = useState("2d 14h 32m");
   
@@ -1618,9 +1618,9 @@ export default function VotePage() {
   const [topicsOverlayOpen, setTopicsOverlayOpen] = useState(false);
   const [startPollModalOpen, setStartPollModalOpen] = useState(false);
   
-  const [faceOffsCategoryFilter, setFaceOffsCategoryFilter] = useState<FilterCategory>("All");
-  const [faceOffsSearchQuery, setFaceOffsSearchQuery] = useState("");
-  const [faceOffsOverlayOpen, setFaceOffsOverlayOpen] = useState(false);
+  const [matchupsCategoryFilter, setMatchupsCategoryFilter] = useState<FilterCategory>("All");
+  const [matchupsSearchQuery, setMatchupsSearchQuery] = useState("");
+  const [matchupsOverlayOpen, setMatchupsOverlayOpen] = useState(false);
   const [pollHeadline, setPollHeadline] = useState("");
   const [pollCategory, setPollCategory] = useState("");
   const [pollDescription, setPollDescription] = useState("");
@@ -1682,13 +1682,13 @@ export default function VotePage() {
     return detailImages.reduce((sum, img) => sum + img.votesUp + img.votesDown, 0);
   }, [detailImages]);
 
-  const { data: faceOffs = [], isLoading: faceOffsLoading } = useQuery<FaceOffData[]>({
-    queryKey: ['/api/face-offs'],
+  const { data: matchups = [], isLoading: matchupsLoading } = useQuery<MatchupData[]>({
+    queryKey: ['/api/matchups'],
     staleTime: 60 * 1000,
   });
   
-  const { data: existingFaceOffVotes = {} } = useQuery<Record<string, string>>({
-    queryKey: ['/api/face-offs/user-votes'],
+  const { data: existingMatchupVotes = {} } = useQuery<Record<string, string>>({
+    queryKey: ['/api/matchups/user-votes'],
     staleTime: 60 * 1000,
   });
   
@@ -1720,34 +1720,34 @@ export default function VotePage() {
     return matchesCategory && matchesSearch;
   }).sort((a: any, b: any) => valuePerceptionCategoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
   
-  const [localFaceOffVotes, setLocalFaceOffVotes] = useState<Record<string, string>>({});
+  const [localMatchupVotes, setLocalMatchupVotes] = useState<Record<string, string>>({});
   
-  const faceOffUserVotesMerged = { ...existingFaceOffVotes, ...localFaceOffVotes };
-  const faceOffUserVotes = Object.fromEntries(
-    Object.entries(faceOffUserVotesMerged).filter(([_, v]) => v !== '__removed__')
+  const matchupUserVotesMerged = { ...existingMatchupVotes, ...localMatchupVotes };
+  const matchupUserVotes = Object.fromEntries(
+    Object.entries(matchupUserVotesMerged).filter(([_, v]) => v !== '__removed__')
   );
   
-  const faceOffVoteMutation = useMutation({
-    mutationFn: async ({ faceOffId, option }: { faceOffId: string; option: 'option_a' | 'option_b'; previousVote?: string | null }) => {
-      const response = await apiRequest('POST', `/api/face-offs/${faceOffId}/vote`, { option });
+  const matchupVoteMutation = useMutation({
+    mutationFn: async ({ matchupId, option }: { matchupId: string; option: 'option_a' | 'option_b'; previousVote?: string | null }) => {
+      const response = await apiRequest('POST', `/api/matchups/${matchupId}/vote`, { option });
       return response.json();
     },
     onSuccess: (data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/face-offs'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/face-offs/user-votes'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
       const isChange = !!variables.previousVote;
       toast({
         title: isChange ? "Vote changed!" : "Vote recorded!",
-        description: isChange ? "Your Face-Off vote has been updated." : "Your Face-Off vote has been counted.",
+        description: isChange ? "Your Matchup vote has been updated." : "Your Matchup vote has been counted.",
       });
     },
     onError: (error: any, variables) => {
       if (variables.previousVote) {
-        setLocalFaceOffVotes((prev: Record<string, string>) => ({ ...prev, [variables.faceOffId]: variables.previousVote! }));
+        setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [variables.matchupId]: variables.previousVote! }));
       } else {
-        setLocalFaceOffVotes((prev: Record<string, string>) => {
+        setLocalMatchupVotes((prev: Record<string, string>) => {
           const next = { ...prev };
-          delete next[variables.faceOffId];
+          delete next[variables.matchupId];
           return next;
         });
       }
@@ -1759,21 +1759,21 @@ export default function VotePage() {
     },
   });
   
-  const faceOffRemoveVoteMutation = useMutation({
-    mutationFn: async ({ faceOffId }: { faceOffId: string; previousVote: string }) => {
-      const response = await apiRequest('POST', `/api/face-offs/${faceOffId}/vote`, { remove: true });
+  const matchupRemoveVoteMutation = useMutation({
+    mutationFn: async ({ matchupId }: { matchupId: string; previousVote: string }) => {
+      const response = await apiRequest('POST', `/api/matchups/${matchupId}/vote`, { remove: true });
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/face-offs'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/face-offs/user-votes'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
       toast({
         title: "Vote removed",
-        description: "Your Face-Off vote has been removed.",
+        description: "Your Matchup vote has been removed.",
       });
     },
     onError: (error: any, variables) => {
-      setLocalFaceOffVotes((prev: Record<string, string>) => ({ ...prev, [variables.faceOffId]: variables.previousVote }));
+      setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [variables.matchupId]: variables.previousVote }));
       toast({
         title: "Error",
         description: error.message || "Failed to remove vote",
@@ -1782,42 +1782,42 @@ export default function VotePage() {
     },
   });
 
-  const handleFaceOffVote = (faceOffId: string, option: 'option_a' | 'option_b', event?: React.MouseEvent) => {
-    const previousVote = faceOffUserVotes[faceOffId] || null;
-    setLocalFaceOffVotes((prev: Record<string, string>) => ({ ...prev, [faceOffId]: option }));
-    faceOffVoteMutation.mutate({ faceOffId, option, previousVote });
+  const handleMatchupVote = (matchupId: string, option: 'option_a' | 'option_b', event?: React.MouseEvent) => {
+    const previousVote = matchupUserVotes[matchupId] || null;
+    setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [matchupId]: option }));
+    matchupVoteMutation.mutate({ matchupId, option, previousVote });
     if (event && !previousVote) {
       addXP(5, event);
     }
   };
   
-  const handleFaceOffRemoveVote = (faceOffId: string) => {
-    const previousVote = faceOffUserVotes[faceOffId];
+  const handleMatchupRemoveVote = (matchupId: string) => {
+    const previousVote = matchupUserVotes[matchupId];
     if (!previousVote) return;
-    setLocalFaceOffVotes((prev: Record<string, string>) => {
+    setLocalMatchupVotes((prev: Record<string, string>) => {
       const next = { ...prev };
-      next[faceOffId] = '__removed__';
+      next[matchupId] = '__removed__';
       return next;
     });
-    faceOffRemoveVoteMutation.mutate({ faceOffId, previousVote });
+    matchupRemoveVoteMutation.mutate({ matchupId, previousVote });
   };
   
-  const filteredFaceOffs = faceOffs.filter(f => {
-    const matchesCategory = faceOffsCategoryFilter === "All" || faceOffsCategoryFilter === "Trending" || f.category === faceOffsCategoryFilter;
-    const matchesSearch = f.title.toLowerCase().includes(faceOffsSearchQuery.toLowerCase()) ||
-                         f.optionAText.toLowerCase().includes(faceOffsSearchQuery.toLowerCase()) ||
-                         f.optionBText.toLowerCase().includes(faceOffsSearchQuery.toLowerCase());
+  const filteredMatchups = matchups.filter(f => {
+    const matchesCategory = matchupsCategoryFilter === "All" || matchupsCategoryFilter === "Trending" || f.category === matchupsCategoryFilter;
+    const matchesSearch = f.title.toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
+                         f.optionAText.toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
+                         f.optionBText.toLowerCase().includes(matchupsSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch && f.isActive;
-  }).sort((a: any, b: any) => faceOffsCategoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
+  }).sort((a: any, b: any) => matchupsCategoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
 
   useEffect(() => {
-    if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen || faceOffsOverlayOpen || inductionSuggestOpen || faceOffSuggestOpen || valuePerceptionOverlayOpen) {
+    if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen || matchupsOverlayOpen || inductionSuggestOpen || matchupSuggestOpen || valuePerceptionOverlayOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen, faceOffsOverlayOpen, inductionSuggestOpen, faceOffSuggestOpen, valuePerceptionOverlayOpen]);
+  }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen, matchupsOverlayOpen, inductionSuggestOpen, matchupSuggestOpen, valuePerceptionOverlayOpen]);
 
   const addXP = (amount: number, event?: React.MouseEvent) => {
     setXp(prev => prev + amount);
@@ -1861,7 +1861,7 @@ export default function VotePage() {
 
   // Sync global category filter to all section filters
   useEffect(() => {
-    setFaceOffsCategoryFilter(globalCategoryFilter);
+    setMatchupsCategoryFilter(globalCategoryFilter);
     setTopicsCategoryFilter(globalCategoryFilter);
     setInductionCategoryFilter(globalCategoryFilter);
     setCurateCategoryFilter(globalCategoryFilter);
@@ -2020,7 +2020,7 @@ export default function VotePage() {
                 }`}
                 data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
               >
-                {section === "Face-Offs" && <Swords className="h-4 w-4" />}
+                {section === "Matchups" && <Swords className="h-4 w-4" />}
                 {section === "Trending Polls" && <MessageSquare className="h-4 w-4" />}
                 {section === "Induction Queue" && <UserPlus className="h-4 w-4" />}
                 {section === "Curate Profile" && <ImageIcon className="h-4 w-4" />}
@@ -2061,7 +2061,7 @@ export default function VotePage() {
         </div>
       </div>
       <div className="container mx-auto px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
-        {/* VOX POPULI HEADER - Above Face-Offs + Trending Polls */}
+        {/* VOX POPULI HEADER - Above Matchups + Trending Polls */}
         {(activeSection === "All" || isPublicOpinionSection(activeSection)) && (
         <div className="relative overflow-hidden mb-6">
           <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
@@ -2070,9 +2070,7 @@ export default function VotePage() {
               <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-voxpopuli-title">
                 The Voice of the People
               </h2>
-              <p className="text-muted-foreground max-w-2xl mx-auto mb-3">
-                Your votes capture what the world thinks — across rumors, ideas, and events.
-              </p>
+              <p className="text-muted-foreground max-w-2xl mx-auto mb-3">Your votes capture what the world thinks</p>
               <button
                 onClick={() => setInfoModalOpen("voxpopuli")}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/30 transition-all cursor-pointer"
@@ -2086,8 +2084,8 @@ export default function VotePage() {
         </div>
         )}
 
-        {/* ZONE 1: Public Opinion - Face-Offs Section (First) */}
-        {(activeSection === "All" || activeSection === "Face-Offs") && (
+        {/* ZONE 1: Public Opinion - Matchups Section (First) */}
+        {(activeSection === "All" || activeSection === "Matchups") && (
         <section className="mb-10">
           <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
             <div className="flex items-center justify-between">
@@ -2096,8 +2094,8 @@ export default function VotePage() {
                   <Swords className="h-5 w-5 text-cyan-400" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-serif font-bold">Face-Offs</h2>
-                  <p className="text-sm text-muted-foreground">Vote on A vs B matchups. Which do your prefer?</p>
+                  <h2 className="text-xl font-serif font-bold">Matchups</h2>
+                  <p className="text-sm text-muted-foreground">Vote on A vs B</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -2106,9 +2104,9 @@ export default function VotePage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => setRulesModalOpen("faceoffs")}
+                      onClick={() => setRulesModalOpen("matchups")}
                       className="text-cyan-400 hover:text-cyan-300"
-                      data-testid="button-rules-faceoffs"
+                      data-testid="button-rules-matchups"
                     >
                       <HelpCircle className="h-5 w-5" />
                     </Button>
@@ -2118,18 +2116,18 @@ export default function VotePage() {
                   </TooltipContent>
                 </Tooltip>
                 <Button
-                  onClick={() => setFaceOffSuggestOpen(true)}
+                  onClick={() => setMatchupSuggestOpen(true)}
                   className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
-                  data-testid="button-suggest-faceoff"
+                  data-testid="button-suggest-matchup"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Suggest
                 </Button>
                 <Button
                   size="icon"
-                  onClick={() => setFaceOffSuggestOpen(true)}
+                  onClick={() => setMatchupSuggestOpen(true)}
                   className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
-                  data-testid="button-suggest-faceoff-mobile"
+                  data-testid="button-suggest-matchup-mobile"
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
@@ -2143,9 +2141,9 @@ export default function VotePage() {
                 <FilterChip
                   key={cat}
                   category={cat}
-                  isActive={faceOffsCategoryFilter === cat}
-                  onClick={() => setFaceOffsCategoryFilter(cat as FilterCategory)}
-                  testIdPrefix="filter-faceoffs"
+                  isActive={matchupsCategoryFilter === cat}
+                  onClick={() => setMatchupsCategoryFilter(cat as FilterCategory)}
+                  testIdPrefix="filter-matchups"
                   user={user}
                   onAuthRequired={handleAuthRequired}
                 />
@@ -2155,46 +2153,46 @@ export default function VotePage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search matchups..."
-                value={faceOffsSearchQuery}
-                onChange={(e) => setFaceOffsSearchQuery(e.target.value)}
+                value={matchupsSearchQuery}
+                onChange={(e) => setMatchupsSearchQuery(e.target.value)}
                 className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
-                data-testid="input-faceoffs-search"
+                data-testid="input-matchups-search"
               />
             </div>
           </div>
           
-          {faceOffsLoading ? (
+          {matchupsLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {[1, 2, 3].map(i => (
                 <Card key={i} className="bg-slate-800/30 animate-pulse" style={{ minHeight: '380px' }} />
               ))}
             </div>
           ) : (
-            <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-faceoffs">
-              {filteredFaceOffs.map((faceOff) => (
+            <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-matchups">
+              {filteredMatchups.map((matchup) => (
                 <VersusCard 
-                  key={faceOff.id} 
-                  faceOff={faceOff} 
-                  userVote={faceOffUserVotes[faceOff.id] || null}
-                  onVote={handleFaceOffVote}
-                  onRemoveVote={handleFaceOffRemoveVote}
+                  key={matchup.id} 
+                  matchup={matchup} 
+                  userVote={matchupUserVotes[matchup.id] || null}
+                  onVote={handleMatchupVote}
+                  onRemoveVote={handleMatchupRemoveVote}
                 />
               ))}
             </CardSection>
           )}
 
-          {filteredFaceOffs.length === 0 && !faceOffsLoading && (
+          {filteredMatchups.length === 0 && !matchupsLoading && (
             <div className="text-center py-8 text-muted-foreground">
-              No face-offs match your filter criteria.
+              No matchups match your filter criteria.
             </div>
           )}
 
           <div className="text-center mt-6">
             <Button
               variant="ghost"
-              onClick={() => setFaceOffsOverlayOpen(true)}
+              onClick={() => setMatchupsOverlayOpen(true)}
               className="text-cyan-400 hover:text-cyan-300"
-              data-testid="button-view-all-faceoffs"
+              data-testid="button-view-all-matchups"
             >
               View all matchups
               <ChevronRight className="h-4 w-4 ml-1" />
@@ -2214,7 +2212,7 @@ export default function VotePage() {
                 </div>
                 <div>
                   <h2 className="text-xl font-serif font-bold">Trending Polls</h2>
-                  <p className="text-sm text-muted-foreground">Weigh in on current events and controversies.</p>
+                  <p className="text-sm text-muted-foreground">Weigh in on current events</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -2321,7 +2319,7 @@ export default function VotePage() {
                 </div>
                 <div>
                   <h2 className="text-xl font-serif font-bold">Underrated / Overrated</h2>
-                  <p className="text-sm text-muted-foreground">How does the public rate them — overhyped or underappreciated?</p>
+                  <p className="text-sm text-muted-foreground">overhyped or underappreciated?</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -2403,7 +2401,7 @@ export default function VotePage() {
 
         {/* GOVERNANCE HEADER DIVIDER - Shows between Zone 1 and Zone 3 */}
         {/* Show when: All, Induction Queue, or Curate Profile is selected */}
-        {/* Hide when: Face-Offs or Trending Polls is selected */}
+        {/* Hide when: Matchups or Trending Polls is selected */}
         {(activeSection === "All" || isGovernanceSection(activeSection)) && (
         <div className="relative overflow-hidden mb-6">
           <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
@@ -2412,9 +2410,7 @@ export default function VotePage() {
               <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-governance-title">
                 Shape the AuthoriDex
               </h2>
-              <p className="text-muted-foreground max-w-2xl mx-auto mb-3">
-                Vote on new inductees and curate profile images. Your opinion powers the index.
-              </p>
+              <p className="text-muted-foreground max-w-2xl mx-auto mb-3">Vote on new inductees and curate profile images</p>
               <button
                 onClick={() => setInfoModalOpen("governance")}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/30 transition-all cursor-pointer"
@@ -2792,12 +2788,12 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog open={faceOffSuggestOpen} onOpenChange={setFaceOffSuggestOpen}>
+      <Dialog open={matchupSuggestOpen} onOpenChange={setMatchupSuggestOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Swords className="h-5 w-5 text-cyan-400" />
-              Suggest a Face-Off
+              Suggest a Matchup
             </DialogTitle>
             <DialogDescription>
               Create an A vs B matchup for the community to vote on.
@@ -2807,35 +2803,35 @@ export default function VotePage() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-sm font-medium">Headline *</label>
-                <span className={`text-xs ${faceOffHeadline.length > 60 ? 'text-red-400' : 'text-muted-foreground'}`}>
-                  {faceOffHeadline.length}/60
+                <span className={`text-xs ${matchupHeadline.length > 60 ? 'text-red-400' : 'text-muted-foreground'}`}>
+                  {matchupHeadline.length}/60
                 </span>
               </div>
               <Input
-                value={faceOffHeadline}
-                onChange={(e) => setFaceOffHeadline(e.target.value.slice(0, 60))}
+                value={matchupHeadline}
+                onChange={(e) => setMatchupHeadline(e.target.value.slice(0, 60))}
                 placeholder="e.g. Battle of the Brands"
-                data-testid="input-faceoff-headline"
+                data-testid="input-matchup-headline"
               />
             </div>
             <ContenderSelector
-              value={faceOffContenderA}
-              onChange={setFaceOffContenderA}
+              value={matchupContenderA}
+              onChange={setMatchupContenderA}
               label="Contender A *"
               placeholder="Search celebrity or enter name..."
-              testIdPrefix="faceoff-contender-a"
+              testIdPrefix="matchup-contender-a"
             />
             <ContenderSelector
-              value={faceOffContenderB}
-              onChange={setFaceOffContenderB}
+              value={matchupContenderB}
+              onChange={setMatchupContenderB}
               label="Contender B *"
               placeholder="Search celebrity or enter name..."
-              testIdPrefix="faceoff-contender-b"
+              testIdPrefix="matchup-contender-b"
             />
             <div>
               <label className="text-sm font-medium mb-1 block">Category *</label>
-              <Select value={faceOffCategory} onValueChange={setFaceOffCategory}>
-                <SelectTrigger data-testid="select-faceoff-category">
+              <Select value={matchupCategory} onValueChange={setMatchupCategory}>
+                <SelectTrigger data-testid="select-matchup-category">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -2851,31 +2847,31 @@ export default function VotePage() {
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setFaceOffSuggestOpen(false)} data-testid="button-cancel-faceoff">Cancel</Button>
+            <Button variant="outline" onClick={() => setMatchupSuggestOpen(false)} data-testid="button-cancel-matchup">Cancel</Button>
             <Button 
               onClick={() => {
                 toast({
-                  title: "Face-Off Suggested!",
-                  description: `Your matchup "${faceOffContenderA.name} vs ${faceOffContenderB.name}" has been submitted for review.`,
+                  title: "Matchup Suggested!",
+                  description: `Your matchup "${matchupContenderA.name} vs ${matchupContenderB.name}" has been submitted for review.`,
                 });
-                setFaceOffHeadline("");
-                setFaceOffContenderA({ type: null, name: '' });
-                setFaceOffContenderB({ type: null, name: '' });
-                setFaceOffCategory("");
-                setFaceOffSuggestOpen(false);
+                setMatchupHeadline("");
+                setMatchupContenderA({ type: null, name: '' });
+                setMatchupContenderB({ type: null, name: '' });
+                setMatchupCategory("");
+                setMatchupSuggestOpen(false);
               }}
               disabled={
-                !faceOffHeadline || 
-                !faceOffCategory ||
-                !faceOffContenderA.type ||
-                !faceOffContenderB.type ||
-                (faceOffContenderA.type === 'custom' && !faceOffContenderA.uploadedPreview) ||
-                (faceOffContenderB.type === 'custom' && !faceOffContenderB.uploadedPreview)
+                !matchupHeadline || 
+                !matchupCategory ||
+                !matchupContenderA.type ||
+                !matchupContenderB.type ||
+                (matchupContenderA.type === 'custom' && !matchupContenderA.uploadedPreview) ||
+                (matchupContenderB.type === 'custom' && !matchupContenderB.uploadedPreview)
               }
               className="bg-cyan-500 text-white"
-              data-testid="button-submit-faceoff"
+              data-testid="button-submit-matchup"
             >
-              Submit Face-Off
+              Submit Matchup
             </Button>
           </div>
         </DialogContent>
@@ -3069,7 +3065,7 @@ export default function VotePage() {
               {rulesModalOpen === "induction" && "Induction Queue Rules"}
               {rulesModalOpen === "curate" && "Curate the Profile Rules"}
               {rulesModalOpen === "voice" && "Trending Polls Rules"}
-              {rulesModalOpen === "faceoffs" && "Face-Offs Rules"}
+              {rulesModalOpen === "matchups" && "Matchups Rules"}
               {rulesModalOpen === "value" && "How It Works"}
             </DialogTitle>
           </DialogHeader>
@@ -3143,7 +3139,7 @@ export default function VotePage() {
                 </div>
               </div>
             )}
-            {rulesModalOpen === "faceoffs" && (
+            {rulesModalOpen === "matchups" && (
               <div className="space-y-3">
                 <p className="text-muted-foreground">Pick a side in head-to-head matchups across anything and everything.</p>
                 <div className="space-y-2">
@@ -3157,7 +3153,7 @@ export default function VotePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <Zap className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-400 font-medium">+20 XP</span>: Get rewarded for every Face-Off vote you cast.</span>
+                    <span>Earn <span className="text-cyan-400 font-medium">+20 XP</span>: Get rewarded for every Matchup vote you cast.</span>
                   </div>
                   <div className="flex items-start gap-2">
                     <BarChart3 className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
@@ -3415,7 +3411,7 @@ export default function VotePage() {
         )}
       </AnimatePresence>
       <AnimatePresence>
-        {faceOffsOverlayOpen && (
+        {matchupsOverlayOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -3427,13 +3423,13 @@ export default function VotePage() {
                 <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
                   <Swords className="h-4 w-4 text-cyan-400" />
                 </div>
-                <h2 className="text-xl font-serif font-bold">All Face-Offs</h2>
+                <h2 className="text-xl font-serif font-bold">All Matchups</h2>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setFaceOffsOverlayOpen(false)}
-                data-testid="button-close-faceoffs-overlay"
+                onClick={() => setMatchupsOverlayOpen(false)}
+                data-testid="button-close-matchups-overlay"
               >
                 <X className="h-5 w-5" />
               </Button>
@@ -3445,9 +3441,9 @@ export default function VotePage() {
                   <FilterChip
                     key={cat}
                     category={cat}
-                    isActive={faceOffsCategoryFilter === cat}
-                    onClick={() => setFaceOffsCategoryFilter(cat as FilterCategory)}
-                    testIdPrefix="filter-overlay-faceoffs"
+                    isActive={matchupsCategoryFilter === cat}
+                    onClick={() => setMatchupsCategoryFilter(cat as FilterCategory)}
+                    testIdPrefix="filter-overlay-matchups"
                     user={user}
                     onAuthRequired={handleAuthRequired}
                   />
@@ -3457,10 +3453,10 @@ export default function VotePage() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       placeholder="Search matchups..."
-                      value={faceOffsSearchQuery}
-                      onChange={(e) => setFaceOffsSearchQuery(e.target.value)}
+                      value={matchupsSearchQuery}
+                      onChange={(e) => setMatchupsSearchQuery(e.target.value)}
                       className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
-                      data-testid="input-overlay-faceoffs-search"
+                      data-testid="input-overlay-matchups-search"
                     />
                   </div>
                 </div>
@@ -3469,19 +3465,19 @@ export default function VotePage() {
             
             <div className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
-                {filteredFaceOffs.map((faceOff) => (
+                {filteredMatchups.map((matchup) => (
                   <VersusCard 
-                    key={faceOff.id} 
-                    faceOff={faceOff} 
-                    userVote={faceOffUserVotes[faceOff.id] || null}
-                    onVote={handleFaceOffVote}
-                    onRemoveVote={handleFaceOffRemoveVote}
+                    key={matchup.id} 
+                    matchup={matchup} 
+                    userVote={matchupUserVotes[matchup.id] || null}
+                    onVote={handleMatchupVote}
+                    onRemoveVote={handleMatchupRemoveVote}
                   />
                 ))}
               </div>
-              {filteredFaceOffs.length === 0 && (
+              {filteredMatchups.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
-                  No face-offs match your filter criteria.
+                  No matchups match your filter criteria.
                 </div>
               )}
             </div>

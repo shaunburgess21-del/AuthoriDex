@@ -1,4 +1,4 @@
-export interface FaceOffData {
+export interface MatchupData {
   id: string;
   category: string;
   title: string;
@@ -16,7 +16,7 @@ export interface FaceOffData {
   optionBPercent: number;
 }
 
-export const FACE_OFF_DATA: FaceOffData[] = [
+export const MATCHUP_DATA: MatchupData[] = [
   {
     id: "fo-1",
     category: "Entertainment",

@@ -3,7 +3,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export type Capability = 
   | 'can_vote_sentiment'
-  | 'can_vote_face_off'
+  | 'can_vote_matchup'
   | 'can_vote_induction'
   | 'can_vote_curation'
   | 'can_post_insight'

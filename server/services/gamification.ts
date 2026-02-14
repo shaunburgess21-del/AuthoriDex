@@ -12,7 +12,7 @@ import { eq, and, sql, gte, desc } from "drizzle-orm";
 
 export type Capability = 
   | 'can_vote_sentiment'
-  | 'can_vote_face_off'
+  | 'can_vote_matchup'
   | 'can_vote_induction'
   | 'can_vote_curation'
   | 'can_post_insight'
@@ -297,7 +297,7 @@ class GamificationService {
 
     switch (capability) {
       case 'can_vote_sentiment':
-      case 'can_vote_face_off':
+      case 'can_vote_matchup':
       case 'can_predict':
         return true;
 
@@ -327,7 +327,7 @@ class GamificationService {
 
     const capabilities: Record<Capability, boolean> = {
       can_vote_sentiment: await this.checkPermission(userId, 'can_vote_sentiment'),
-      can_vote_face_off: await this.checkPermission(userId, 'can_vote_face_off'),
+      can_vote_matchup: await this.checkPermission(userId, 'can_vote_matchup'),
       can_vote_induction: await this.checkPermission(userId, 'can_vote_induction'),
       can_vote_curation: await this.checkPermission(userId, 'can_vote_curation'),
       can_post_insight: await this.checkPermission(userId, 'can_post_insight'),

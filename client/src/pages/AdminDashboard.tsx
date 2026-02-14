@@ -186,7 +186,7 @@ interface Celebrity {
   displayOrder: number;
 }
 
-interface FaceOff {
+interface Matchup {
   id: string;
   title: string;
   category: string;
@@ -1245,9 +1245,9 @@ export default function AdminDashboard() {
     searchQueryOverride: "",
   });
   
-  const [showFaceOffModal, setShowFaceOffModal] = useState(false);
-  const [editingFaceOff, setEditingFaceOff] = useState<FaceOff | null>(null);
-  const [faceOffForm, setFaceOffForm] = useState({
+  const [showMatchupModal, setShowMatchupModal] = useState(false);
+  const [editingMatchup, setEditingMatchup] = useState<Matchup | null>(null);
+  const [matchupForm, setMatchupForm] = useState({
     title: "",
     category: "Tech",
     optionAText: "",
@@ -1382,12 +1382,12 @@ export default function AdminDashboard() {
     enabled: isAdmin && showScoreBreakdown && !!scoreBreakdownCelebrity,
   });
 
-  // Fetch face-offs - only when admin and on cms section
-  const { data: faceOffs, isLoading: faceOffsLoading } = useQuery<FaceOff[]>({
-    queryKey: ["/api/admin/face-offs"],
+  // Fetch matchups - only when admin and on cms section
+  const { data: matchups, isLoading: matchupsLoading } = useQuery<Matchup[]>({
+    queryKey: ["/api/admin/matchups"],
     queryFn: async () => {
-      const res = await fetchWithAuth("/api/admin/face-offs");
-      if (!res.ok) throw new Error("Failed to fetch face-offs");
+      const res = await fetchWithAuth("/api/admin/matchups");
+      if (!res.ok) throw new Error("Failed to fetch matchups");
       return res.json();
     },
     enabled: isAdmin && activeSection === "voting",
@@ -1746,60 +1746,60 @@ export default function AdminDashboard() {
     },
   });
 
-  // Face-Off mutations
-  const createFaceOffMutation = useMutation({
-    mutationFn: async (data: typeof faceOffForm) => {
-      const res = await fetchWithAuth("/api/admin/face-offs", { 
+  // Matchup mutations
+  const createMatchupMutation = useMutation({
+    mutationFn: async (data: typeof matchupForm) => {
+      const res = await fetchWithAuth("/api/admin/matchups", { 
         method: "POST", 
         body: JSON.stringify(data) 
       });
-      if (!res.ok) throw new Error("Failed to create face-off");
+      if (!res.ok) throw new Error("Failed to create matchup");
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Face-Off Created", description: "New face-off added successfully" });
-      setShowFaceOffModal(false);
-      setEditingFaceOff(null);
-      setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/face-offs"] });
+      toast({ title: "Matchup Created", description: "New matchup added successfully" });
+      setShowMatchupModal(false);
+      setEditingMatchup(null);
+      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
     onError: (error: any) => {
       toast({ title: "Create Failed", description: error.message, variant: "destructive" });
     },
   });
 
-  const updateFaceOffMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: typeof faceOffForm }) => {
-      const res = await fetchWithAuth(`/api/admin/face-offs/${id}`, { 
+  const updateMatchupMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: typeof matchupForm }) => {
+      const res = await fetchWithAuth(`/api/admin/matchups/${id}`, { 
         method: "PATCH", 
         body: JSON.stringify(data) 
       });
-      if (!res.ok) throw new Error("Failed to update face-off");
+      if (!res.ok) throw new Error("Failed to update matchup");
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Face-Off Updated", description: "Face-off updated successfully" });
-      setShowFaceOffModal(false);
-      setEditingFaceOff(null);
-      setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/face-offs"] });
+      toast({ title: "Matchup Updated", description: "Matchup updated successfully" });
+      setShowMatchupModal(false);
+      setEditingMatchup(null);
+      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
     onError: (error: any) => {
       toast({ title: "Update Failed", description: error.message, variant: "destructive" });
     },
   });
 
-  const deleteFaceOffMutation = useMutation({
+  const deleteMatchupMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetchWithAuth(`/api/admin/face-offs/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete face-off");
+      const res = await fetchWithAuth(`/api/admin/matchups/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete matchup");
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Face-Off Deleted", description: "Face-off removed successfully" });
+      toast({ title: "Matchup Deleted", description: "Matchup removed successfully" });
       setShowDeleteConfirm(false);
       setDeleteTarget(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/face-offs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
     onError: (error: any) => {
       toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
@@ -2068,17 +2068,17 @@ export default function AdminDashboard() {
     setShowCelebrityModal(true);
   };
 
-  const openEditFaceOff = (faceOff: FaceOff) => {
-    setEditingFaceOff(faceOff);
-    setFaceOffForm({
-      title: faceOff.title,
-      category: faceOff.category,
-      optionAText: faceOff.optionAText,
-      optionBText: faceOff.optionBText,
-      promptText: faceOff.promptText || "",
-      isActive: faceOff.isActive,
+  const openEditMatchup = (matchup: Matchup) => {
+    setEditingMatchup(matchup);
+    setMatchupForm({
+      title: matchup.title,
+      category: matchup.category,
+      optionAText: matchup.optionAText,
+      optionBText: matchup.optionBText,
+      promptText: matchup.promptText || "",
+      isActive: matchup.isActive,
     });
-    setShowFaceOffModal(true);
+    setShowMatchupModal(true);
   };
 
   const handleSaveCelebrity = () => {
@@ -2089,11 +2089,11 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleSaveFaceOff = () => {
-    if (editingFaceOff) {
-      updateFaceOffMutation.mutate({ id: editingFaceOff.id, data: faceOffForm });
+  const handleSaveMatchup = () => {
+    if (editingMatchup) {
+      updateMatchupMutation.mutate({ id: editingMatchup.id, data: matchupForm });
     } else {
-      createFaceOffMutation.mutate(faceOffForm);
+      createMatchupMutation.mutate(matchupForm);
     }
   };
 
@@ -2208,8 +2208,8 @@ export default function AdminDashboard() {
     if (!deleteTarget) return;
     if (deleteTarget.type === "celebrity") {
       deleteCelebrityMutation.mutate(deleteTarget.id);
-    } else if (deleteTarget.type === "faceoff") {
-      deleteFaceOffMutation.mutate(deleteTarget.id);
+    } else if (deleteTarget.type === "matchup") {
+      deleteMatchupMutation.mutate(deleteTarget.id);
     } else if (deleteTarget.type === "insight") {
       deleteInsightMutation.mutate(deleteTarget.id);
     } else if (deleteTarget.type === "comment") {
@@ -2892,8 +2892,8 @@ export default function AdminDashboard() {
                 <TabsTrigger value="polls" data-testid="tab-polls">
                   Trending Polls
                 </TabsTrigger>
-                <TabsTrigger value="faceoffs" data-testid="tab-faceoffs">
-                  Face-Offs
+                <TabsTrigger value="matchups" data-testid="tab-matchups">
+                  Matchups
                 </TabsTrigger>
                 <TabsTrigger value="underrated-overrated" data-testid="tab-underrated-overrated">
                   Underrated / Overrated
@@ -3071,55 +3071,55 @@ export default function AdminDashboard() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="faceoffs" className="mt-4">
+              <TabsContent value="matchups" className="mt-4">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between">
                     <div>
-                      <CardTitle>Face-Off Queue</CardTitle>
-                      <CardDescription>Manage Face-Off voting questions</CardDescription>
+                      <CardTitle>Matchup Queue</CardTitle>
+                      <CardDescription>Manage Matchup voting questions</CardDescription>
                     </div>
                     <Button 
                       size="sm"
                       onClick={() => {
-                        setEditingFaceOff(null);
-                        setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
-                        setShowFaceOffModal(true);
+                        setEditingMatchup(null);
+                        setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
+                        setShowMatchupModal(true);
                       }}
-                      data-testid="button-add-faceoff"
+                      data-testid="button-add-matchup"
                     >
                       <Plus className="h-4 w-4 mr-2" />
-                      Add Face-Off
+                      Add Matchup
                     </Button>
                   </CardHeader>
                   <CardContent>
-                    {faceOffsLoading ? (
+                    {matchupsLoading ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                       </div>
-                    ) : faceOffs && faceOffs.length > 0 ? (
-                      <div className="space-y-3" data-testid="faceoff-list">
-                        {faceOffs.map((faceOff) => (
+                    ) : matchups && matchups.length > 0 ? (
+                      <div className="space-y-3" data-testid="matchup-list">
+                        {matchups.map((matchup) => (
                           <div
-                            key={faceOff.id}
+                            key={matchup.id}
                             className="flex items-center justify-between p-3 rounded-lg border"
-                            data-testid={`faceoff-row-${faceOff.id}`}
+                            data-testid={`matchup-row-${matchup.id}`}
                           >
                             <div className="flex-1">
-                              <p className="font-medium">{faceOff.title}</p>
+                              <p className="font-medium">{matchup.title}</p>
                               <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                                <Badge variant="outline" className="text-xs">{faceOff.category}</Badge>
-                                <span>{faceOff.optionAText} vs {faceOff.optionBText}</span>
+                                <Badge variant="outline" className="text-xs">{matchup.category}</Badge>
+                                <span>{matchup.optionAText} vs {matchup.optionBText}</span>
                               </div>
                             </div>
                             <div className="flex items-center gap-3">
-                              <Badge variant={faceOff.isActive ? "default" : "secondary"}>
-                                {faceOff.isActive ? "Active" : "Inactive"}
+                              <Badge variant={matchup.isActive ? "default" : "secondary"}>
+                                {matchup.isActive ? "Active" : "Inactive"}
                               </Badge>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => openEditFaceOff(faceOff)}
-                                data-testid={`button-edit-faceoff-${faceOff.id}`}
+                                onClick={() => openEditMatchup(matchup)}
+                                data-testid={`button-edit-matchup-${matchup.id}`}
                               >
                                 <Edit className="h-4 w-4" />
                               </Button>
@@ -3128,10 +3128,10 @@ export default function AdminDashboard() {
                                 size="icon"
                                 className="text-destructive hover:text-destructive"
                                 onClick={() => {
-                                  setDeleteTarget({ type: "faceoff", id: faceOff.id, name: faceOff.title });
+                                  setDeleteTarget({ type: "matchup", id: matchup.id, name: matchup.title });
                                   setShowDeleteConfirm(true);
                                 }}
-                                data-testid={`button-delete-faceoff-${faceOff.id}`}
+                                data-testid={`button-delete-matchup-${matchup.id}`}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -3142,18 +3142,18 @@ export default function AdminDashboard() {
                     ) : (
                       <div className="text-center py-8 text-muted-foreground">
                         <ArrowUpDown className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p>No face-offs yet</p>
+                        <p>No matchups yet</p>
                         <Button 
                           className="mt-4" 
                           onClick={() => {
-                            setEditingFaceOff(null);
-                            setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
-                            setShowFaceOffModal(true);
+                            setEditingMatchup(null);
+                            setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
+                            setShowMatchupModal(true);
                           }}
-                          data-testid="button-create-first-faceoff"
+                          data-testid="button-create-first-matchup"
                         >
                           <Plus className="h-4 w-4 mr-2" />
-                          Create First Face-Off
+                          Create First Matchup
                         </Button>
                       </div>
                     )}
@@ -4717,33 +4717,33 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Face-Off Modal */}
-      <Dialog open={showFaceOffModal} onOpenChange={setShowFaceOffModal}>
+      {/* Matchup Modal */}
+      <Dialog open={showMatchupModal} onOpenChange={setShowMatchupModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingFaceOff ? "Edit Face-Off" : "Create Face-Off"}</DialogTitle>
+            <DialogTitle>{editingMatchup ? "Edit Matchup" : "Create Matchup"}</DialogTitle>
             <DialogDescription>
-              {editingFaceOff ? "Update face-off details" : "Create a new face-off voting question"}
+              {editingMatchup ? "Update matchup details" : "Create a new matchup voting question"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="faceoff-title">Title</Label>
+              <Label htmlFor="matchup-title">Title</Label>
               <Input
-                id="faceoff-title"
-                value={faceOffForm.title}
-                onChange={(e) => setFaceOffForm({ ...faceOffForm, title: e.target.value })}
-                placeholder="Face-off title"
-                data-testid="input-faceoff-title"
+                id="matchup-title"
+                value={matchupForm.title}
+                onChange={(e) => setMatchupForm({ ...matchupForm, title: e.target.value })}
+                placeholder="Matchup title"
+                data-testid="input-matchup-title"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="faceoff-category">Category</Label>
+              <Label htmlFor="matchup-category">Category</Label>
               <Select 
-                value={faceOffForm.category} 
-                onValueChange={(value) => setFaceOffForm({ ...faceOffForm, category: value })}
+                value={matchupForm.category} 
+                onValueChange={(value) => setMatchupForm({ ...matchupForm, category: value })}
               >
-                <SelectTrigger data-testid="select-faceoff-category">
+                <SelectTrigger data-testid="select-matchup-category">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -4756,67 +4756,67 @@ export default function AdminDashboard() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="faceoff-option-a">Option A</Label>
+              <Label htmlFor="matchup-option-a">Option A</Label>
               <Input
-                id="faceoff-option-a"
-                value={faceOffForm.optionAText}
-                onChange={(e) => setFaceOffForm({ ...faceOffForm, optionAText: e.target.value })}
+                id="matchup-option-a"
+                value={matchupForm.optionAText}
+                onChange={(e) => setMatchupForm({ ...matchupForm, optionAText: e.target.value })}
                 placeholder="First option"
-                data-testid="input-faceoff-option-a"
+                data-testid="input-matchup-option-a"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="faceoff-option-b">Option B</Label>
+              <Label htmlFor="matchup-option-b">Option B</Label>
               <Input
-                id="faceoff-option-b"
-                value={faceOffForm.optionBText}
-                onChange={(e) => setFaceOffForm({ ...faceOffForm, optionBText: e.target.value })}
+                id="matchup-option-b"
+                value={matchupForm.optionBText}
+                onChange={(e) => setMatchupForm({ ...matchupForm, optionBText: e.target.value })}
                 placeholder="Second option"
-                data-testid="input-faceoff-option-b"
+                data-testid="input-matchup-option-b"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="faceoff-prompt">Pre-Vote Prompt</Label>
+              <Label htmlFor="matchup-prompt">Pre-Vote Prompt</Label>
               <Input
-                id="faceoff-prompt"
-                value={faceOffForm.promptText}
-                onChange={(e) => setFaceOffForm({ ...faceOffForm, promptText: e.target.value })}
+                id="matchup-prompt"
+                value={matchupForm.promptText}
+                onChange={(e) => setMatchupForm({ ...matchupForm, promptText: e.target.value })}
                 placeholder='e.g. "Who do you prefer?" (leave blank for default)'
-                data-testid="input-faceoff-prompt"
+                data-testid="input-matchup-prompt"
               />
             </div>
             <div className="flex items-center space-x-2">
               <Switch
-                id="faceoff-active"
-                checked={faceOffForm.isActive}
-                onCheckedChange={(checked) => setFaceOffForm({ ...faceOffForm, isActive: checked })}
-                data-testid="switch-faceoff-active"
+                id="matchup-active"
+                checked={matchupForm.isActive}
+                onCheckedChange={(checked) => setMatchupForm({ ...matchupForm, isActive: checked })}
+                data-testid="switch-matchup-active"
               />
-              <Label htmlFor="faceoff-active">Active</Label>
+              <Label htmlFor="matchup-active">Active</Label>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowFaceOffModal(false)}>
+            <Button variant="outline" onClick={() => setShowMatchupModal(false)}>
               Cancel
             </Button>
             <Button
-              onClick={handleSaveFaceOff}
+              onClick={handleSaveMatchup}
               disabled={
-                !faceOffForm.title || 
-                !faceOffForm.optionAText || 
-                !faceOffForm.optionBText || 
-                createFaceOffMutation.isPending || 
-                updateFaceOffMutation.isPending
+                !matchupForm.title || 
+                !matchupForm.optionAText || 
+                !matchupForm.optionBText || 
+                createMatchupMutation.isPending || 
+                updateMatchupMutation.isPending
               }
-              data-testid="button-save-faceoff"
+              data-testid="button-save-matchup"
             >
-              {(createFaceOffMutation.isPending || updateFaceOffMutation.isPending) ? (
+              {(createMatchupMutation.isPending || updateMatchupMutation.isPending) ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Saving...
                 </>
               ) : (
-                editingFaceOff ? "Update Face-Off" : "Create Face-Off"
+                editingMatchup ? "Update Matchup" : "Create Matchup"
               )}
             </Button>
           </DialogFooter>
@@ -5145,14 +5145,14 @@ export default function AdminDashboard() {
               onClick={handleDeleteConfirm}
               disabled={
                 deleteCelebrityMutation.isPending || 
-                deleteFaceOffMutation.isPending || 
+                deleteMatchupMutation.isPending || 
                 deletePollMutation.isPending ||
                 deleteInsightMutation.isPending || 
                 deleteCommentMutation.isPending
               }
               data-testid="button-confirm-delete"
             >
-              {(deleteCelebrityMutation.isPending || deleteFaceOffMutation.isPending || deletePollMutation.isPending || deleteInsightMutation.isPending || deleteCommentMutation.isPending) ? (
+              {(deleteCelebrityMutation.isPending || deleteMatchupMutation.isPending || deletePollMutation.isPending || deleteInsightMutation.isPending || deleteCommentMutation.isPending) ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Deleting...

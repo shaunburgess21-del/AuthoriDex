@@ -448,8 +448,8 @@ export const insertCelebrityImageSchema = createInsertSchema(celebrityImages).om
 export type CelebrityImage = typeof celebrityImages.$inferSelect;
 export type InsertCelebrityImage = z.infer<typeof insertCelebrityImageSchema>;
 
-// Face-Offs - A vs B binary choice voting questions
-export const faceOffs = pgTable("face_offs", {
+// Matchups - A vs B binary choice voting questions
+export const matchups = pgTable("face_offs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   category: text("category").notNull(),
   title: text("title").notNull(),
@@ -470,31 +470,31 @@ export const faceOffs = pgTable("face_offs", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-export const insertFaceOffSchema = createInsertSchema(faceOffs).omit({
+export const insertMatchupSchema = createInsertSchema(matchups).omit({
   id: true,
   createdAt: true,
 });
 
-export type FaceOff = typeof faceOffs.$inferSelect;
-export type InsertFaceOff = z.infer<typeof insertFaceOffSchema>;
+export type Matchup = typeof matchups.$inferSelect;
+export type InsertMatchup = z.infer<typeof insertMatchupSchema>;
 
-export const faceOffVotes = pgTable("face_off_votes", {
+export const matchupVotes = pgTable("face_off_votes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  faceOffId: varchar("face_off_id").notNull().references(() => faceOffs.id, { onDelete: "cascade" }),
+  matchupId: varchar("face_off_id").notNull().references(() => matchups.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull(),
   choice: text("choice").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
-  uniqueUserFaceOff: unique("face_off_votes_user_id_face_off_id_unique").on(table.userId, table.faceOffId),
+  uniqueUserMatchup: unique("face_off_votes_user_id_face_off_id_unique").on(table.userId, table.matchupId),
 }));
 
-export const insertFaceOffVoteSchema = createInsertSchema(faceOffVotes).omit({
+export const insertMatchupVoteSchema = createInsertSchema(matchupVotes).omit({
   id: true,
   createdAt: true,
 });
 
-export type FaceOffVote = typeof faceOffVotes.$inferSelect;
-export type InsertFaceOffVote = z.infer<typeof insertFaceOffVoteSchema>;
+export type MatchupVote = typeof matchupVotes.$inferSelect;
+export type InsertMatchupVote = z.infer<typeof insertMatchupVoteSchema>;
 
 // ============================================================================
 // TRENDING POLLS (Phase 1C) — "People's Voice" / Community Polls

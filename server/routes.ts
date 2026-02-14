@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, faceOffs, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type FaceOff, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { eq, desc, and, gt, sql, count, gte, ilike, SQL, or, inArray, asc, lt, ne } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -2818,24 +2818,24 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
 
-  // ==================== Face-Offs API ====================
+  // ==================== Matchups API ====================
   
-  // Get all face-offs with vote counts (with dynamic avatar lookup from tracked_people)
-  app.get("/api/face-offs", async (req, res) => {
+  // Get all matchups with vote counts (with dynamic avatar lookup from tracked_people)
+  app.get("/api/matchups", async (req, res) => {
     try {
       const { category, active } = req.query;
       
-      // Get all face-offs
-      let faceOffList = await db.select().from(faceOffs).orderBy(desc(faceOffs.createdAt));
+      // Get all matchups
+      let matchupList = await db.select().from(matchups).orderBy(desc(matchups.createdAt));
       
       // Filter by category if provided
       if (category && category !== 'All') {
-        faceOffList = faceOffList.filter(f => f.category === category);
+        matchupList = matchupList.filter(f => f.category === category);
       }
       
       // Filter by active status if provided
       if (active === 'true') {
-        faceOffList = faceOffList.filter(f => f.isActive);
+        matchupList = matchupList.filter(f => f.isActive);
       }
       
       // Build a lookup map for celebrity avatars (name -> avatar URL)
@@ -2849,8 +2849,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         avatarLookup[celeb.name.toLowerCase()] = celeb.avatar;
       }
       
-      // Get vote counts for each face-off and dynamically resolve avatars
-      const faceOffsWithVotes = await Promise.all(faceOffList.map(async (faceOff) => {
+      // Get vote counts for each matchup and dynamically resolve avatars
+      const matchupsWithVotes = await Promise.all(matchupList.map(async (matchup) => {
         const voteResults = await db.select({
           value: votes.value,
           count: count(),
@@ -2858,7 +2858,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         .from(votes)
         .where(and(
           eq(votes.voteType, 'face_off'),
-          eq(votes.targetId, faceOff.id)
+          eq(votes.targetId, matchup.id)
         ))
         .groupBy(votes.value);
         
@@ -2867,11 +2867,11 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         const totalVotes = Number(optionAVotes) + Number(optionBVotes);
         
         // Dynamically resolve avatars from tracked_people (fallback to snapshot)
-        const optionAImageResolved = avatarLookup[faceOff.optionAText.toLowerCase()] || faceOff.optionAImage;
-        const optionBImageResolved = avatarLookup[faceOff.optionBText.toLowerCase()] || faceOff.optionBImage;
+        const optionAImageResolved = avatarLookup[matchup.optionAText.toLowerCase()] || matchup.optionAImage;
+        const optionBImageResolved = avatarLookup[matchup.optionBText.toLowerCase()] || matchup.optionBImage;
         
         return {
-          ...faceOff,
+          ...matchup,
           optionAImage: optionAImageResolved,
           optionBImage: optionBImageResolved,
           optionAVotes: Number(optionAVotes),
@@ -2882,15 +2882,15 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         };
       }));
       
-      res.json(faceOffsWithVotes);
+      res.json(matchupsWithVotes);
     } catch (error: any) {
-      console.error("Error fetching face-offs:", error.message);
-      res.status(500).json({ error: "Failed to fetch face-offs" });
+      console.error("Error fetching matchups:", error.message);
+      res.status(500).json({ error: "Failed to fetch matchups" });
     }
   });
   
-  // Get user's votes on face-offs (supports anonymous via session ID)
-  app.get("/api/face-offs/user-votes", optionalAuth, async (req: AuthRequest, res) => {
+  // Get user's votes on matchups (supports anonymous via session ID)
+  app.get("/api/matchups/user-votes", optionalAuth, async (req: AuthRequest, res) => {
     try {
       // Use userId if logged in, otherwise use session ID
       const voterId = req.userId || req.sessionId;
@@ -2905,7 +2905,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           eq(votes.voteType, 'face_off')
         ));
       
-      // Convert to a map of faceOffId -> votedOption
+      // Convert to a map of matchupId -> votedOption
       const voteMap: Record<string, string> = {};
       userVotes.forEach(vote => {
         voteMap[vote.targetId] = vote.value;
@@ -2913,13 +2913,13 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       
       res.json(voteMap);
     } catch (error: any) {
-      console.error("Error fetching user face-off votes:", error.message);
+      console.error("Error fetching user matchup votes:", error.message);
       res.status(500).json({ error: "Failed to fetch user votes" });
     }
   });
   
-  // Submit a vote on a face-off (supports anonymous via session ID)
-  app.post("/api/face-offs/:id/vote", optionalAuth, async (req: AuthRequest, res) => {
+  // Submit a vote on a matchup (supports anonymous via session ID)
+  app.post("/api/matchups/:id/vote", optionalAuth, async (req: AuthRequest, res) => {
     try {
       // Use userId if logged in, otherwise use session ID for anonymous voting
       const voterId = req.userId || req.sessionId;
@@ -2930,10 +2930,10 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const { id } = req.params;
       const { option, remove } = req.body;
       
-      // Check if face-off exists
-      const [faceOff] = await db.select().from(faceOffs).where(eq(faceOffs.id, id));
-      if (!faceOff) {
-        return res.status(404).json({ error: "Face-off not found" });
+      // Check if matchup exists
+      const [matchup] = await db.select().from(matchups).where(eq(matchups.id, id));
+      if (!matchup) {
+        return res.status(404).json({ error: "Matchup not found" });
       }
       
       // Check if user/session already voted
@@ -3006,7 +3006,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
               req.userId,
               'vote_face_off',
               `face_off_${id}_${req.userId}`,
-              { faceOffId: id, votedOption: option }
+              { matchupId: id, votedOption: option }
             );
           } catch (xpError) {
             console.error("XP award failed:", xpError);
@@ -3041,7 +3041,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         xpAwarded: xpResult?.success ? xpResult.xpAwarded : 0,
       });
     } catch (error: any) {
-      console.error("Error submitting face-off vote:", error.message);
+      console.error("Error submitting matchup vote:", error.message);
       res.status(500).json({ error: "Failed to submit vote" });
     }
   });
@@ -4690,18 +4690,18 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
 
-  // Face-Offs CRUD
-  app.get("/api/admin/face-offs", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+  // Matchups CRUD
+  app.get("/api/admin/matchups", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const faceOffList = await db.select().from(faceOffs).orderBy(faceOffs.displayOrder, desc(faceOffs.createdAt));
-      res.json(faceOffList);
+      const matchupList = await db.select().from(matchups).orderBy(matchups.displayOrder, desc(matchups.createdAt));
+      res.json(matchupList);
     } catch (error: any) {
-      console.error("Error fetching face-offs:", error.message);
-      res.status(500).json({ error: "Failed to fetch face-offs" });
+      console.error("Error fetching matchups:", error.message);
+      res.status(500).json({ error: "Failed to fetch matchups" });
     }
   });
 
-  app.post("/api/admin/face-offs", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+  app.post("/api/admin/matchups", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive } = req.body;
       const adminId = req.userId!;
@@ -4711,10 +4711,10 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       }
       
       // Get next display order
-      const [maxOrder] = await db.select({ max: sql<number>`COALESCE(MAX(display_order), 0)` }).from(faceOffs);
+      const [maxOrder] = await db.select({ max: sql<number>`COALESCE(MAX(display_order), 0)` }).from(matchups);
       const nextOrder = (maxOrder?.max || 0) + 1;
       
-      const [created] = await db.insert(faceOffs).values({
+      const [created] = await db.insert(matchups).values({
         title,
         category: category || 'General',
         optionAText,
@@ -4737,20 +4737,20 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       
       res.json(created);
     } catch (error: any) {
-      console.error("Error creating face-off:", error.message);
-      res.status(500).json({ error: "Failed to create face-off" });
+      console.error("Error creating matchup:", error.message);
+      res.status(500).json({ error: "Failed to create matchup" });
     }
   });
 
-  app.patch("/api/admin/face-offs/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+  app.patch("/api/admin/matchups/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, displayOrder } = req.body;
       const adminId = req.userId!;
       
-      const [existing] = await db.select().from(faceOffs).where(eq(faceOffs.id, id));
+      const [existing] = await db.select().from(matchups).where(eq(matchups.id, id));
       if (!existing) {
-        return res.status(404).json({ error: "Face-off not found" });
+        return res.status(404).json({ error: "Matchup not found" });
       }
       
       const updates: any = {};
@@ -4763,7 +4763,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       if (isActive !== undefined) updates.isActive = isActive;
       if (displayOrder !== undefined) updates.displayOrder = displayOrder;
       
-      await db.update(faceOffs).set(updates).where(eq(faceOffs.id, id));
+      await db.update(matchups).set(updates).where(eq(matchups.id, id));
       
       // Audit log
       await db.insert(adminAuditLog).values({
@@ -4776,27 +4776,27 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         newData: updates,
       });
       
-      const [updated] = await db.select().from(faceOffs).where(eq(faceOffs.id, id));
+      const [updated] = await db.select().from(matchups).where(eq(matchups.id, id));
       res.json(updated);
     } catch (error: any) {
-      console.error("Error updating face-off:", error.message);
-      res.status(500).json({ error: "Failed to update face-off" });
+      console.error("Error updating matchup:", error.message);
+      res.status(500).json({ error: "Failed to update matchup" });
     }
   });
 
-  app.delete("/api/admin/face-offs/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+  app.delete("/api/admin/matchups/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const adminId = req.userId!;
       
-      const [existing] = await db.select().from(faceOffs).where(eq(faceOffs.id, id));
+      const [existing] = await db.select().from(matchups).where(eq(matchups.id, id));
       if (!existing) {
-        return res.status(404).json({ error: "Face-off not found" });
+        return res.status(404).json({ error: "Matchup not found" });
       }
       
       // Delete associated votes first
       await db.delete(votes).where(and(eq(votes.voteType, 'face_off'), eq(votes.targetId, id)));
-      await db.delete(faceOffs).where(eq(faceOffs.id, id));
+      await db.delete(matchups).where(eq(matchups.id, id));
       
       // Audit log
       await db.insert(adminAuditLog).values({
@@ -4810,13 +4810,13 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       
       res.json({ success: true });
     } catch (error: any) {
-      console.error("Error deleting face-off:", error.message);
-      res.status(500).json({ error: "Failed to delete face-off" });
+      console.error("Error deleting matchup:", error.message);
+      res.status(500).json({ error: "Failed to delete matchup" });
     }
   });
 
-  // Reorder face-offs
-  app.post("/api/admin/face-offs/reorder", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+  // Reorder matchups
+  app.post("/api/admin/matchups/reorder", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { orderedIds } = req.body;
       const adminId = req.userId!;
@@ -4825,9 +4825,9 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         return res.status(400).json({ error: "orderedIds must be an array" });
       }
       
-      // Update each face-off with its new order
+      // Update each matchup with its new order
       for (let i = 0; i < orderedIds.length; i++) {
-        await db.update(faceOffs).set({ displayOrder: i + 1 }).where(eq(faceOffs.id, orderedIds[i]));
+        await db.update(matchups).set({ displayOrder: i + 1 }).where(eq(matchups.id, orderedIds[i]));
       }
       
       // Audit log
@@ -4842,8 +4842,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       
       res.json({ success: true });
     } catch (error: any) {
-      console.error("Error reordering face-offs:", error.message);
-      res.status(500).json({ error: "Failed to reorder face-offs" });
+      console.error("Error reordering matchups:", error.message);
+      res.status(500).json({ error: "Failed to reorder matchups" });
     }
   });
 
