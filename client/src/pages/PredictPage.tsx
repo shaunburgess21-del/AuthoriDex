@@ -812,7 +812,7 @@ function WeeklyUpDownCard({
           <div className="grid grid-cols-2 gap-2">
             <Button 
               size="sm" 
-              className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853]"
+              className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
               onClick={() => onSelect?.("up")}
               data-testid={`button-up-${market.id}`}
             >
@@ -821,7 +821,7 @@ function WeeklyUpDownCard({
             </Button>
             <Button 
               size="sm" 
-              className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000]"
+              className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
               onClick={() => onSelect?.("down")}
               data-testid={`button-down-${market.id}`}
             >
@@ -1118,10 +1118,10 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
           </Button>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            <Button className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853]" onClick={() => onNavigate(market.slug, 'yes')} data-testid={`button-yes-${market.slug}`}>
+            <Button className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20" onClick={() => onNavigate(market.slug, 'yes')} data-testid={`button-yes-${market.slug}`}>
               Yes {yesPercent}%
             </Button>
-            <Button className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000]" onClick={() => onNavigate(market.slug, 'no')} data-testid={`button-no-${market.slug}`}>
+            <Button className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20" onClick={() => onNavigate(market.slug, 'no')} data-testid={`button-no-${market.slug}`}>
               No {noPercent}%
             </Button>
           </div>
@@ -1187,7 +1187,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
           <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
         </div>
         
-        <Button className="w-full bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED]" onClick={() => onNavigate(market.slug)} disabled={isMarketClosed} data-testid={`button-predict-${market.slug}`}>
+        <Button className="w-full bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20" onClick={() => onNavigate(market.slug)} disabled={isMarketClosed} data-testid={`button-predict-${market.slug}`}>
           {isMarketClosed ? "Closed" : "Make Prediction"}
         </Button>
       </div>
@@ -1258,10 +1258,10 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
           </Button>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            <Button className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853]" onClick={() => onNavigate(market.slug, 'above')} data-testid={`button-above-${market.slug}`}>
+            <Button className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20" onClick={() => onNavigate(market.slug, 'above')} data-testid={`button-above-${market.slug}`}>
               Above {abovePercent}%
             </Button>
-            <Button className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000]" onClick={() => onNavigate(market.slug, 'below')} data-testid={`button-below-${market.slug}`}>
+            <Button className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20" onClick={() => onNavigate(market.slug, 'below')} data-testid={`button-below-${market.slug}`}>
               Below {belowPercent}%
             </Button>
           </div>
