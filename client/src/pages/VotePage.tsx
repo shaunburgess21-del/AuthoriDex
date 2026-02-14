@@ -249,8 +249,8 @@ function VersusCard({
     <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50 hover-elevate">
       <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-teal-500/5 rounded-lg" />
       
-      <div className="relative p-4">
-        <div className="flex items-center justify-between mb-3 gap-2">
+      <div className="relative pt-4 pb-4">
+        <div className="flex items-center justify-between mb-3 gap-2 px-4">
           <CategoryPill category={faceOff.category} data-testid={`badge-faceoff-${faceOff.id}`} />
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5 text-cyan-400" />
@@ -258,7 +258,7 @@ function VersusCard({
           </div>
         </div>
         
-        <div className="flex items-stretch gap-[10px] relative">
+        <div className="flex items-stretch gap-[2px] relative px-[2px]">
           <button
             onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_a', e)}
             disabled={hasVoted}
@@ -326,7 +326,7 @@ function VersusCard({
           </button>
         </div>
         
-        <div className="mt-3">
+        <div className="mt-3 px-4">
           {hasVoted ? (
             <motion.div
               initial={{ opacity: 0, y: 6 }}
