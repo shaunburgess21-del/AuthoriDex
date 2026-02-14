@@ -251,11 +251,11 @@ function VersusCard({
       
       <div className="relative pt-4 pb-4">
         <div className="flex items-center justify-between mb-3 gap-2 px-4">
-          <CategoryPill category={faceOff.category} data-testid={`badge-faceoff-${faceOff.id}`} />
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5 text-cyan-400" />
             <span>{faceOff.totalVotes.toLocaleString()} votes</span>
           </div>
+          <CategoryPill category={faceOff.category} data-testid={`badge-faceoff-${faceOff.id}`} />
         </div>
         
         <div className="flex items-stretch gap-[2px] relative px-[2px]">
