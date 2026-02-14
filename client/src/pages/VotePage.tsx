@@ -64,6 +64,7 @@ import { getFilterCategories, type FilterCategory } from "@shared/constants";
 import type { TrendingPerson } from "@shared/schema";
 import { CurateSection } from "@/components/curate";
 import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
+import { CardSection } from "@/components/CardSection";
 
 const mockCelebrityList = [
   "Taylor Swift", "Elon Musk", "Keanu Reeves", "Beyoncé", "Dwayne Johnson",
@@ -2107,8 +2108,8 @@ export default function VotePage() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {filteredFaceOffs.slice(0, 3).map((faceOff) => (
+            <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-faceoffs">
+              {filteredFaceOffs.map((faceOff) => (
                 <VersusCard 
                   key={faceOff.id} 
                   faceOff={faceOff} 
@@ -2116,7 +2117,7 @@ export default function VotePage() {
                   onVote={handleFaceOffVote}
                 />
               ))}
-            </div>
+            </CardSection>
           )}
 
           {filteredFaceOffs.length === 0 && !faceOffsLoading && (
@@ -2216,15 +2217,15 @@ export default function VotePage() {
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredTopics.slice(0, 3).map((topic) => (
+          <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-topics">
+            {filteredTopics.map((topic) => (
               <DiscourseCard 
                 key={topic.id} 
                 topic={topic} 
                 onVote={(choice) => handleDiscourseVote(topic.id, choice)} 
               />
             ))}
-          </div>
+          </CardSection>
 
           {filteredTopics.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
@@ -2307,15 +2308,15 @@ export default function VotePage() {
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredValueCelebrities.slice(0, 3).map((person) => (
+          <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-value">
+            {filteredValueCelebrities.map((person) => (
               <UnderratedOverratedCard 
                 key={person.id} 
                 person={person}
                 onVisitProfile={() => setLocation(`/celebrity/${person.id}`)}
               />
             ))}
-          </div>
+          </CardSection>
 
           {filteredValueCelebrities.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
@@ -2452,8 +2453,8 @@ export default function VotePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            {filteredCandidates.slice(0, 3).map((candidate, index) => (
+          <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-induction">
+            {filteredCandidates.map((candidate, index) => (
               <InductionCandidateCard
                 key={candidate.id}
                 candidate={candidate}
@@ -2464,7 +2465,7 @@ export default function VotePage() {
                 onXPGain={handleInductionXP}
               />
             ))}
-          </div>
+          </CardSection>
 
           {filteredCandidates.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
