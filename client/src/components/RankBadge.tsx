@@ -13,7 +13,7 @@ export function RankBadge({ rank }: RankBadgeProps) {
     <Badge
       variant={isTop10 ? "default" : "secondary"}
       className={cn(
-        "font-mono font-bold text-sm justify-center whitespace-nowrap px-2 h-7 min-w-[32px]",
+        "font-mono font-bold text-sm justify-center whitespace-nowrap px-2 h-9 min-w-[40px]",
         isTop10 && "bg-primary text-primary-foreground"
       )}
       data-testid={`badge-rank-${rank}`}
