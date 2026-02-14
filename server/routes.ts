@@ -2949,32 +2949,36 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           eq(votes.targetId, id)
         ));
       
-      if (existingVote) {
-        return res.status(400).json({ error: "You have already voted on this face-off" });
-      }
-      
-      // Insert the vote
-      await db.insert(votes).values({
-        userId: voterId,
-        voteType: 'face_off',
-        targetType: 'face_off',
-        targetId: id,
-        value: option,
-        weight: 1.0,
-      });
-      
-      // Award XP for authenticated users only (not anonymous sessions)
       let xpResult = null;
-      if (req.userId) {
-        try {
-          xpResult = await gamificationService.awardXp(
-            req.userId,
-            'vote_face_off',
-            `face_off_${id}_${req.userId}`, // Unique idempotency key
-            { faceOffId: id, votedOption: option }
-          );
-        } catch (xpError) {
-          console.error("XP award failed:", xpError);
+      
+      if (existingVote) {
+        if (existingVote.value !== option) {
+          await db.update(votes)
+            .set({ value: option })
+            .where(eq(votes.id, existingVote.id));
+        }
+      } else {
+        await db.insert(votes).values({
+          userId: voterId,
+          voteType: 'face_off',
+          targetType: 'face_off',
+          targetId: id,
+          value: option,
+          weight: 1.0,
+        });
+        
+        // Award XP for authenticated users only on first vote (not vote changes)
+        if (req.userId) {
+          try {
+            xpResult = await gamificationService.awardXp(
+              req.userId,
+              'vote_face_off',
+              `face_off_${id}_${req.userId}`,
+              { faceOffId: id, votedOption: option }
+            );
+          } catch (xpError) {
+            console.error("XP award failed:", xpError);
+          }
         }
       }
       

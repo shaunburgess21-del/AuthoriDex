@@ -263,13 +263,14 @@ function VersusCard({
         <div className="flex items-stretch gap-[2px] relative px-[2px]">
           <div className="flex-1 flex flex-col">
             <button
-              onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_a', e)}
-              disabled={hasVoted}
+              onClick={(e) => {
+                if (!hasVoted || votedB) onVote(faceOff.id, 'option_a', e);
+              }}
               className={`rounded-lg border transition-all duration-300 overflow-hidden relative ${
                 hasVoted
                   ? votedA
                     ? 'border-cyan-500/50 ring-2 ring-cyan-500/30'
-                    : 'border-slate-700/30 opacity-60'
+                    : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-cyan-500/30 cursor-pointer'
                   : 'border-slate-700/50 hover:border-cyan-500/50 cursor-pointer'
               }`}
               style={{ minHeight: '222px' }}
@@ -298,13 +299,14 @@ function VersusCard({
           
           <div className="flex-1 flex flex-col">
             <button
-              onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_b', e)}
-              disabled={hasVoted}
+              onClick={(e) => {
+                if (!hasVoted || votedA) onVote(faceOff.id, 'option_b', e);
+              }}
               className={`rounded-lg border transition-all duration-300 overflow-hidden relative ${
                 hasVoted
                   ? votedB
                     ? 'border-teal-500/50 ring-2 ring-teal-500/30'
-                    : 'border-slate-700/30 opacity-60'
+                    : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-teal-500/30 cursor-pointer'
                   : 'border-slate-700/50 hover:border-teal-500/50 cursor-pointer'
               }`}
               style={{ minHeight: '222px' }}
@@ -364,6 +366,9 @@ function VersusCard({
               <div className="flex items-center justify-between mt-1.5">
                 <span className="text-[11px] text-slate-500 font-medium">{faceOff.optionAText}</span>
                 <span className="text-[11px] text-slate-500 font-medium">{faceOff.optionBText}</span>
+              </div>
+              <div className="flex items-center justify-center mt-2">
+                <span className="text-[10px] text-slate-500/70">Tap the other image to change your vote</span>
               </div>
             </div>
           ) : (
@@ -1701,24 +1706,29 @@ export default function VotePage() {
   const faceOffUserVotes = { ...existingFaceOffVotes, ...localFaceOffVotes };
   
   const faceOffVoteMutation = useMutation({
-    mutationFn: async ({ faceOffId, option }: { faceOffId: string; option: 'option_a' | 'option_b' }) => {
+    mutationFn: async ({ faceOffId, option }: { faceOffId: string; option: 'option_a' | 'option_b'; previousVote?: string | null }) => {
       const response = await apiRequest('POST', `/api/face-offs/${faceOffId}/vote`, { option });
       return response.json();
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/face-offs'] });
       queryClient.invalidateQueries({ queryKey: ['/api/face-offs/user-votes'] });
+      const isChange = !!variables.previousVote;
       toast({
-        title: "Vote recorded!",
-        description: "Your Face-Off vote has been counted.",
+        title: isChange ? "Vote changed!" : "Vote recorded!",
+        description: isChange ? "Your Face-Off vote has been updated." : "Your Face-Off vote has been counted.",
       });
     },
     onError: (error: any, variables) => {
-      setLocalFaceOffVotes((prev: Record<string, string>) => {
-        const next = { ...prev };
-        delete next[variables.faceOffId];
-        return next;
-      });
+      if (variables.previousVote) {
+        setLocalFaceOffVotes((prev: Record<string, string>) => ({ ...prev, [variables.faceOffId]: variables.previousVote! }));
+      } else {
+        setLocalFaceOffVotes((prev: Record<string, string>) => {
+          const next = { ...prev };
+          delete next[variables.faceOffId];
+          return next;
+        });
+      }
       toast({
         title: "Error",
         description: error.message || "Failed to submit vote",
@@ -1728,9 +1738,10 @@ export default function VotePage() {
   });
   
   const handleFaceOffVote = (faceOffId: string, option: 'option_a' | 'option_b', event?: React.MouseEvent) => {
+    const previousVote = faceOffUserVotes[faceOffId] || null;
     setLocalFaceOffVotes((prev: Record<string, string>) => ({ ...prev, [faceOffId]: option }));
-    faceOffVoteMutation.mutate({ faceOffId, option });
-    if (event) {
+    faceOffVoteMutation.mutate({ faceOffId, option, previousVote });
+    if (event && !previousVote) {
       addXP(5, event);
     }
   };
