@@ -236,11 +236,13 @@ interface FaceOffData {
 function VersusCard({ 
   faceOff, 
   userVote, 
-  onVote 
+  onVote,
+  onRemoveVote 
 }: { 
   faceOff: FaceOffData; 
   userVote: string | null;
   onVote: (faceOffId: string, option: 'option_a' | 'option_b', event?: React.MouseEvent) => void;
+  onRemoveVote: (faceOffId: string) => void;
 }) {
   const hasVoted = userVote !== null;
   const votedA = userVote === 'option_a';
@@ -367,8 +369,16 @@ function VersusCard({
                 <span className="text-[11px] text-slate-500 font-medium">{faceOff.optionAText}</span>
                 <span className="text-[11px] text-slate-500 font-medium">{faceOff.optionBText}</span>
               </div>
-              <div className="flex items-center justify-center mt-2">
+              <div className="flex items-center justify-center gap-2 mt-2">
                 <span className="text-[10px] text-slate-500/70">Tap the other image to change your vote</span>
+                <span className="text-[10px] text-slate-500/40">|</span>
+                <button
+                  onClick={() => onRemoveVote(faceOff.id)}
+                  className="text-[10px] text-slate-500/70 hover:text-red-400/80 transition-colors"
+                  data-testid={`button-remove-vote-${faceOff.id}`}
+                >
+                  Remove vote
+                </button>
               </div>
             </div>
           ) : (
@@ -1703,7 +1713,10 @@ export default function VotePage() {
   
   const [localFaceOffVotes, setLocalFaceOffVotes] = useState<Record<string, string>>({});
   
-  const faceOffUserVotes = { ...existingFaceOffVotes, ...localFaceOffVotes };
+  const faceOffUserVotesMerged = { ...existingFaceOffVotes, ...localFaceOffVotes };
+  const faceOffUserVotes = Object.fromEntries(
+    Object.entries(faceOffUserVotesMerged).filter(([_, v]) => v !== '__removed__')
+  );
   
   const faceOffVoteMutation = useMutation({
     mutationFn: async ({ faceOffId, option }: { faceOffId: string; option: 'option_a' | 'option_b'; previousVote?: string | null }) => {
@@ -1737,6 +1750,29 @@ export default function VotePage() {
     },
   });
   
+  const faceOffRemoveVoteMutation = useMutation({
+    mutationFn: async ({ faceOffId }: { faceOffId: string; previousVote: string }) => {
+      const response = await apiRequest('POST', `/api/face-offs/${faceOffId}/vote`, { remove: true });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/face-offs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/face-offs/user-votes'] });
+      toast({
+        title: "Vote removed",
+        description: "Your Face-Off vote has been removed.",
+      });
+    },
+    onError: (error: any, variables) => {
+      setLocalFaceOffVotes((prev: Record<string, string>) => ({ ...prev, [variables.faceOffId]: variables.previousVote }));
+      toast({
+        title: "Error",
+        description: error.message || "Failed to remove vote",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleFaceOffVote = (faceOffId: string, option: 'option_a' | 'option_b', event?: React.MouseEvent) => {
     const previousVote = faceOffUserVotes[faceOffId] || null;
     setLocalFaceOffVotes((prev: Record<string, string>) => ({ ...prev, [faceOffId]: option }));
@@ -1744,6 +1780,17 @@ export default function VotePage() {
     if (event && !previousVote) {
       addXP(5, event);
     }
+  };
+  
+  const handleFaceOffRemoveVote = (faceOffId: string) => {
+    const previousVote = faceOffUserVotes[faceOffId];
+    if (!previousVote) return;
+    setLocalFaceOffVotes((prev: Record<string, string>) => {
+      const next = { ...prev };
+      next[faceOffId] = '__removed__';
+      return next;
+    });
+    faceOffRemoveVoteMutation.mutate({ faceOffId, previousVote });
   };
   
   const filteredFaceOffs = faceOffs.filter(f => {
@@ -2123,6 +2170,7 @@ export default function VotePage() {
                   faceOff={faceOff} 
                   userVote={faceOffUserVotes[faceOff.id] || null}
                   onVote={handleFaceOffVote}
+                  onRemoveVote={handleFaceOffRemoveVote}
                 />
               ))}
             </CardSection>
@@ -3420,6 +3468,7 @@ export default function VotePage() {
                     faceOff={faceOff} 
                     userVote={faceOffUserVotes[faceOff.id] || null}
                     onVote={handleFaceOffVote}
+                    onRemoveVote={handleFaceOffRemoveVote}
                   />
                 ))}
               </div>

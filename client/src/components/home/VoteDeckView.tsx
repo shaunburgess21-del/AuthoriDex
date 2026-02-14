@@ -60,11 +60,13 @@ interface VoteDeckViewProps {
 function VersusCard({ 
   faceOff, 
   userVote, 
-  onVote 
+  onVote,
+  onRemoveVote 
 }: { 
   faceOff: FaceOffData; 
   userVote: string | null;
   onVote: (faceOffId: string, option: 'option_a' | 'option_b') => void;
+  onRemoveVote?: (faceOffId: string) => void;
 }) {
   const hasVoted = userVote !== null;
   const votedA = userVote === 'option_a';

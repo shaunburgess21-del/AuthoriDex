@@ -2928,11 +2928,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       }
       
       const { id } = req.params;
-      const { option } = req.body;
-      
-      if (!option || (option !== 'option_a' && option !== 'option_b')) {
-        return res.status(400).json({ error: "Invalid option. Must be 'option_a' or 'option_b'" });
-      }
+      const { option, remove } = req.body;
       
       // Check if face-off exists
       const [faceOff] = await db.select().from(faceOffs).where(eq(faceOffs.id, id));
@@ -2948,6 +2944,42 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           eq(votes.voteType, 'face_off'),
           eq(votes.targetId, id)
         ));
+      
+      // Handle vote removal
+      if (remove === true) {
+        if (existingVote) {
+          await db.delete(votes).where(eq(votes.id, existingVote.id));
+        }
+        const voteResults = await db.select({
+          value: votes.value,
+          count: count(),
+        })
+        .from(votes)
+        .where(and(
+          eq(votes.voteType, 'face_off'),
+          eq(votes.targetId, id)
+        ))
+        .groupBy(votes.value);
+        
+        const optionAVotes = voteResults.find(v => v.value === 'option_a')?.count || 0;
+        const optionBVotes = voteResults.find(v => v.value === 'option_b')?.count || 0;
+        const totalVotes = Number(optionAVotes) + Number(optionBVotes);
+        
+        return res.json({
+          success: true,
+          removed: true,
+          optionAVotes: Number(optionAVotes),
+          optionBVotes: Number(optionBVotes),
+          totalVotes,
+          optionAPercent: totalVotes > 0 ? Math.round((Number(optionAVotes) / totalVotes) * 100) : 50,
+          optionBPercent: totalVotes > 0 ? Math.round((Number(optionBVotes) / totalVotes) * 100) : 50,
+          votedOption: null,
+        });
+      }
+      
+      if (!option || (option !== 'option_a' && option !== 'option_b')) {
+        return res.status(400).json({ error: "Invalid option. Must be 'option_a' or 'option_b'" });
+      }
       
       let xpResult = null;
       
