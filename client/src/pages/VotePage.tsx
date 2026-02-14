@@ -1540,7 +1540,7 @@ function FilterChip({
   return (
     <button
       onClick={handleClick}
-      className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 ${
+      className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${
         isActive
           ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
           : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
@@ -2034,7 +2034,7 @@ export default function VotePage() {
       </div>
       <div className="container mx-auto px-4 py-4 max-w-7xl">
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative flex-1 max-w-[420px]">
+          <div className="relative w-full sm:w-[280px] sm:flex-none">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="text"
@@ -2139,7 +2139,7 @@ export default function VotePage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div ref={dragScrollRef3} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+            <div ref={dragScrollRef3} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:min-w-0 sm:flex-1">
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2152,7 +2152,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative flex-1 max-w-[420px]">
+            <div className="relative w-full sm:w-[280px] sm:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search matchups..."
@@ -2256,7 +2256,7 @@ export default function VotePage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div ref={dragScrollRef4} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+            <div ref={dragScrollRef4} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:min-w-0 sm:flex-1">
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2269,7 +2269,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative flex-1 max-w-[420px]">
+            <div className="relative w-full sm:w-[280px] sm:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search topics..."
@@ -2347,7 +2347,7 @@ export default function VotePage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div ref={dragScrollRef5} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+            <div ref={dragScrollRef5} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:min-w-0 sm:flex-1">
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2360,7 +2360,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative flex-1 max-w-[420px]">
+            <div className="relative w-full sm:w-[280px] sm:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search celebrities..."
@@ -2492,7 +2492,7 @@ export default function VotePage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div ref={dragScrollRef6} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+            <div ref={dragScrollRef6} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:min-w-0 sm:flex-1">
               {getFilterCategories(false).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2505,7 +2505,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative flex-1 max-w-[420px]">
+            <div className="relative w-full sm:w-[280px] sm:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search by name..."
@@ -2603,7 +2603,7 @@ export default function VotePage() {
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div ref={dragScrollRef7} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+            <div ref={dragScrollRef7} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:min-w-0 sm:flex-1">
               {getFilterCategories(false).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2616,7 +2616,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative flex-1 max-w-[420px]">
+            <div className="relative w-full sm:w-[280px] sm:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search celebrities..."
