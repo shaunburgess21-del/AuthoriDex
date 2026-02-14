@@ -1,0 +1,129 @@
+Prompt to Replit (copy/paste)
+
+Goal: Improve Admin Panel → Real-World Predictions (Open Markets) create/edit modal UX and completeness. Do not change public-facing Vote/Predict pages in this task—admin-only changes + ensure image shows on the Real-World Market cards.
+
+Context
+
+Real-World Predictions have 3 market types:
+
+Binary (Yes/No)
+
+Multi-Option (3–20 choices)
+
+Up/Down (Above/Below strike)
+
+Currently only the Outcomes section changes by market type (correct), but the placeholder text for several fields is incorrectly static and Up/Down-specific.
+
+A) Fix placeholders so they change by Market Type
+1) Title / Question field placeholder
+
+Current: “Will Bitcoin reach $100k by end of 2026?” (static)
+Fix: Placeholder must switch based on market type:
+
+Binary: “Will the Save America Act require voter ID by Dec 2026?”
+
+Multi-Option: “Who will be the Republican nominee for the next presidential election?”
+
+Up/Down: “Will Bitcoin be above or below $100,000 by 31 Jul 2026?”
+
+2) Slug field placeholder
+
+Current: Bitcoin $100k 2026 (static)
+Fix: Switch placeholder by market type:
+
+Binary: save-america-act-voter-id-2026
+
+Multi-Option: republican-nominee-next-presidential-election
+
+Up/Down: bitcoin-above-below-100000-jul-2026
+
+Slug generation should still auto-update from Title, but allow manual override.
+
+3) Teaser (card tagline) placeholder
+
+Current: “Bitcoin nears all-time high…” (static)
+Fix: Switch placeholder by market type:
+
+Binary: “A simple yes/no on a verifiable outcome.”
+
+Multi-Option: “Pick from multiple outcomes (3–20).”
+
+Up/Down: “Predict above/below a strike level by the deadline.”
+
+Acceptance: Placeholders must update instantly when market type changes.
+
+B) Category name fix
+
+In Category dropdown:
+
+Rename “Misc” → “Custom Topic” (label only; preserve underlying value if needed for DB compatibility).
+
+C) Add 3 critical fields (copy from Trending Polls modal)
+
+Add the following fields to Real-World Markets create/edit modal, reusing the exact UI + logic already implemented in Trending Polls:
+
+1) Live toggle (required)
+
+Add Live field (same behavior as Trending Polls).
+
+Live controls whether the market appears on the frontend listing (Predict page + Home module).
+
+If not live, it should remain admin-visible but not show publicly.
+
+2) Linked Celebrity (optional)
+
+Add Linked Celebrity selector with the same search/select behavior as Trending Polls.
+
+Placement: below Field 5 (“Additional Context…”)
+
+3) Image URL (optional)
+
+Add Image URL input (same behavior as Trending Polls).
+
+Placement: beside Linked Celebrity (two-column row)
+
+This image must render as the market avatar on the Real-World Market card (left of heading) and on the market detail page header area if present.
+
+Rules:
+
+If Linked Celebrity is selected and Image URL is empty, automatically use that celebrity’s existing profile image as the avatar.
+
+If Image URL is provided, it overrides the celebrity image for the market’s main avatar.
+
+If neither is provided, use a consistent placeholder icon.
+
+Acceptance:
+
+Create a market with Linked Celebrity only → card shows celebrity avatar.
+
+Create with custom Image URL only → card shows that image.
+
+Provide both → Image URL wins.
+
+Avatar appears left of the card title in Real-World Markets module.
+
+D) Ensure editing is supported (create + edit parity)
+
+Real-World Markets list rows must allow reopening modal to edit (same as other CMS sections).
+
+Edits update both market fields and outcomes appropriately without breaking validation rules.
+
+E) Keep existing type rules intact
+
+Continue enforcing market type outcome rules:
+
+Binary → exactly 2 outcomes
+
+Multi → 3–20 outcomes
+
+Up/Down → exactly 2 outcomes (Above/Below) and strike fields required (if applicable)
+
+Deliverables
+
+Dynamic placeholders for Title/Slug/Teaser based on market type
+
+Category label “Custom Topic” instead of “Misc”
+
+Live + Linked Celebrity + Image URL fields added (copied from Trending Polls)
+
+Card avatar displays on Real-World Markets cards
