@@ -798,8 +798,7 @@ function WeeklyUpDownCard({
           <div className="grid grid-cols-2 gap-2">
             <Button 
               size="sm" 
-              variant="outline" 
-              className="border-green-500/30 text-green-500"
+              className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853]"
               onClick={() => onSelect?.("up")}
               data-testid={`button-up-${market.id}`}
             >
@@ -808,8 +807,7 @@ function WeeklyUpDownCard({
             </Button>
             <Button 
               size="sm" 
-              variant="outline" 
-              className="border-red-500/30 text-red-500"
+              className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000]"
               onClick={() => onSelect?.("down")}
               data-testid={`button-down-${market.id}`}
             >
