@@ -7,6 +7,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { 
   ArrowLeft, 
   ArrowUp,
@@ -1541,6 +1542,14 @@ export default function VotePage() {
   const [xpFloaters, setXpFloaters] = useState<XPFloater[]>([]);
   const floaterIdRef = useRef(0);
   
+  const dragScrollRef1 = useDragScroll<HTMLDivElement>();
+  const dragScrollRef2 = useDragScroll<HTMLDivElement>();
+  const dragScrollRef3 = useDragScroll<HTMLDivElement>();
+  const dragScrollRef4 = useDragScroll<HTMLDivElement>();
+  const dragScrollRef5 = useDragScroll<HTMLDivElement>();
+  const dragScrollRef6 = useDragScroll<HTMLDivElement>();
+  const dragScrollRef7 = useDragScroll<HTMLDivElement>();
+
   const [currentCurateIndex, setCurrentCurateIndex] = useState(0);
   
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
@@ -1903,7 +1912,7 @@ export default function VotePage() {
         data-testid="section-toggles-container"
       >
         <div className="container mx-auto px-4 py-3 max-w-7xl">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 relative">
+          <div ref={dragScrollRef1} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 relative">
             <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none z-10 md:hidden" />
             {SECTION_TOGGLES.map((section) => (
               <button
@@ -1941,7 +1950,7 @@ export default function VotePage() {
             />
           </div>
           
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+          <div ref={dragScrollRef2} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
             {getFilterCategories(false).map((cat) => (
               <FilterChip
                 key={cat}
@@ -2034,7 +2043,7 @@ export default function VotePage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+            <div ref={dragScrollRef3} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2150,7 +2159,7 @@ export default function VotePage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+            <div ref={dragScrollRef4} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2241,7 +2250,7 @@ export default function VotePage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+            <div ref={dragScrollRef5} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2386,7 +2395,7 @@ export default function VotePage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+            <div ref={dragScrollRef6} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
               {getFilterCategories(false).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2497,7 +2506,7 @@ export default function VotePage() {
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+            <div ref={dragScrollRef7} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
               {getFilterCategories(false).map((cat) => (
                 <FilterChip
                   key={cat}

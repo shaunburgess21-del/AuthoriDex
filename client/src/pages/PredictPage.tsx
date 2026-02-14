@@ -14,6 +14,7 @@ import { TrendingPerson } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -356,6 +357,7 @@ const PREDICTION_TYPES: { id: PredictionType; label: string; mobileLabel: string
 
 function HorizontalScroll({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const dragScrollRef = useDragScroll<HTMLDivElement>();
   const [scrollState, setScrollState] = useState<"start" | "middle" | "end">("start");
   
   useEffect(() => {
@@ -385,7 +387,10 @@ function HorizontalScroll({ children, className = "" }: { children: React.ReactN
   
   return (
     <div 
-      ref={scrollRef}
+      ref={(node) => {
+        (scrollRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+        (dragScrollRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+      }}
       className={`flex gap-2 overflow-x-auto scrollbar-hide ${maskClass} ${className}`}
     >
       {children}
@@ -466,6 +471,8 @@ function SectionFilterBar({
   onAuthRequired?: () => void;
   includeCustomTopic?: boolean;
 }) {
+  const dragScrollRef = useDragScroll<HTMLDivElement>();
+
   const handleCategoryClick = (catId: CategoryFilter) => {
     if (catId === "favorites" && !user) {
       onAuthRequired?.();
@@ -478,7 +485,7 @@ function SectionFilterBar({
 
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
-      <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+      <div ref={dragScrollRef} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
         {filters.map((cat) => {
           const IconComponent = CATEGORY_ICONS[cat.id];
           const isIconOnly = cat.id === "favorites";
@@ -1291,6 +1298,8 @@ function FullScreenOverlay({
   user?: any;
   onAuthRequired?: () => void;
 }) {
+  const dragScrollRef = useDragScroll<HTMLDivElement>();
+
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden';
@@ -1326,7 +1335,7 @@ function FullScreenOverlay({
               />
             </div>
             
-            <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
+            <div ref={dragScrollRef} className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
               {CATEGORY_FILTERS.map((cat) => (
                 <button
                   key={cat.id}

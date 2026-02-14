@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from "react";
+import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -599,6 +600,9 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
     pendingCycleCallbackRef.current = null;
   };
 
+  const dragScrollRef1 = useDragScroll<HTMLDivElement>();
+  const dragScrollRef2 = useDragScroll<HTMLDivElement>();
+
   const showRealWorld = activeSection === "All" || activeSection === "Real-World";
   const showJackpot = activeSection === "All" || activeSection === "Weekly Jackpot";
   const showUpDown = activeSection === "All" || activeSection === "Up/Down";
@@ -612,7 +616,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
       exit={{ opacity: 0, y: -20 }}
       className="max-w-4xl mx-auto space-y-4"
     >
-      <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+      <div ref={dragScrollRef1} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
         {SECTION_TOGGLES.map((section) => (
           <button
             key={section}
@@ -646,7 +650,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
         />
       </div>
 
-      <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+      <div ref={dragScrollRef2} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
         {PREDICT_CATEGORY_FILTERS.map((cat) => (
           <button
             key={cat.id}

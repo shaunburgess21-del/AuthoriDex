@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Rocket, Flame } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { TrendingPerson } from "@shared/schema";
@@ -228,6 +229,7 @@ function TrendGraphOverlay({
   onClose: () => void;
   allPeople: TrendingPerson[];
 }) {
+  const dragScrollRef = useDragScroll<HTMLDivElement>();
   const [selectedCategory, setSelectedCategory] = useState<typeof CATEGORY_OPTIONS[number]>("All");
   const [selectedTimeRange, setSelectedTimeRange] = useState<typeof TIME_RANGE_OPTIONS[number]>(TIME_RANGE_OPTIONS[0]);
   const [visibleLines, setVisibleLines] = useState<Record<string, boolean>>({});
@@ -352,7 +354,7 @@ function TrendGraphOverlay({
             ))}
           </div>
           
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide flex-1">
+          <div ref={dragScrollRef} className="flex items-center gap-2 overflow-x-auto scrollbar-hide flex-1">
             {CATEGORY_OPTIONS.map(cat => (
               <button
                 key={cat}
