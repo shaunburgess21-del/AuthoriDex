@@ -801,7 +801,6 @@ function WeeklyUpDownCard({
       <div className="mt-auto">
         {isMarketClosed ? (
           <Button 
-            size="sm" 
             className="w-full bg-muted text-muted-foreground cursor-not-allowed"
             disabled
           >
@@ -811,7 +810,6 @@ function WeeklyUpDownCard({
         ) : (
           <div className="grid grid-cols-2 gap-2">
             <Button 
-              size="sm" 
               className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
               onClick={() => onSelect?.("up")}
               data-testid={`button-up-${market.id}`}
@@ -820,7 +818,6 @@ function WeeklyUpDownCard({
               Up
             </Button>
             <Button 
-              size="sm" 
               className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
               onClick={() => onSelect?.("down")}
               data-testid={`button-down-${market.id}`}
@@ -906,7 +903,6 @@ function HeadToHeadCard({
         <div className="mt-auto">
           {isMarketClosed ? (
             <Button 
-              size="sm" 
               className="w-full bg-muted text-muted-foreground cursor-not-allowed"
               disabled
             >
@@ -916,7 +912,6 @@ function HeadToHeadCard({
           ) : (
             <div className="grid grid-cols-2 gap-2">
               <Button 
-                size="sm" 
                 variant="outline" 
                 className="border-blue-500/30 text-blue-500"
                 onClick={() => onSelect?.(1)}
@@ -925,7 +920,6 @@ function HeadToHeadCard({
                 {market.person1.name.split(" ")[0]}
               </Button>
               <Button 
-                size="sm" 
                 variant="outline" 
                 className="border-purple-500/30 text-purple-500"
                 onClick={() => onSelect?.(2)}
