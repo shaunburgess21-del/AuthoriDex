@@ -250,7 +250,8 @@ function CommunityCard({
 }) {
   const entries = market.entries || [];
   const totalPool = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0) + (e.seedCount || 0), 0);
-  const participants = (market.totalParticipants || 0) + (market.seedParticipants || 0);
+  const entrySeedTotal = entries.reduce((sum: number, e: any) => sum + (e.seedCount || 0), 0);
+  const participants = (market.totalParticipants || 0) + entrySeedTotal;
   
   const entry1 = entries[0];
   const entry2 = entries[1];

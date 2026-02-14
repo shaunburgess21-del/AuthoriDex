@@ -466,7 +466,8 @@ export default function MarketDetailPage() {
 
   const totalParticipants = useMemo(() => {
     if (!market) return 0;
-    return (market.totalParticipants || 0) + (market.seedParticipants || 0);
+    const entrySeedTotal = (market.entries || []).reduce((sum: number, e: any) => sum + (e.seedCount || 0), 0);
+    return (market.totalParticipants || 0) + entrySeedTotal;
   }, [market]);
 
   const potentialPayout = useMemo(() => {

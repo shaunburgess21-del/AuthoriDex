@@ -1019,7 +1019,8 @@ function OpenMarketCard({ market, onNavigate, isMarketClosed = false }: { market
   const entries = market.entries || [];
   const totalStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0), 0);
   const totalPool = totalStake + Number(market.seedVolume || 0);
-  const participants = (market.betCount || 0) + (market.seedParticipants || 0);
+  const entrySeedTotal = entries.reduce((sum: number, e: any) => sum + (e.seedCount || 0), 0);
+  const participants = (market.betCount || 0) + entrySeedTotal;
   const isInactive = market.visibility === "inactive";
   
   const endDate = market.endAt ? new Date(market.endAt) : null;
