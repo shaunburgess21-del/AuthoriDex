@@ -1,7 +1,7 @@
 #!/usr/bin/env npx ts-node
 /**
  * Direct seed runner script - bypasses API auth
- * Uses the exact data from FameDex_Seed_Data_For_Replit.csv
+ * Uses the exact data from AuthoriDex_Seed_Data_For_Replit.csv
  * 
  * Run with: npx tsx scripts/run-seed-approval.ts
  */
@@ -10,8 +10,8 @@ import { seedApprovalDataDirect } from "../server/seed-approval-data";
 
 async function main() {
   console.log("=".repeat(60));
-  console.log("FameDex Approval Seed Runner (Direct Mode)");
-  console.log("Using data from FameDex_Seed_Data_For_Replit.csv");
+  console.log("AuthoriDex Approval Seed Runner (Direct Mode)");
+  console.log("Using data from AuthoriDex_Seed_Data_For_Replit.csv");
   console.log("=".repeat(60));
   console.log("");
 

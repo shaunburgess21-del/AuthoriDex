@@ -1,7 +1,7 @@
-# FameDex - Real-Time Fame Tracking Platform
+# AuthoriDex - Real-Time Authority Tracking Platform
 
 ## Overview
-FameDex is a real-time platform designed to track trending celebrities and influencers globally. It aggregates data from various sources to provide live trend rankings, unified trend scores, and percentage changes. The platform aims to be a leading tool for analyzing global fame, offering search, filter, sort, and detailed analytics capabilities, inspired by financial tracking and social trending interfaces. It includes features like prediction markets and gamified user interactions.
+AuthoriDex is a real-time platform designed to track trending celebrities and influencers globally. It aggregates data from various sources to provide live trend rankings, unified trend scores, and percentage changes. The platform aims to be a leading tool for analyzing global fame, offering search, filter, sort, and detailed analytics capabilities, inspired by financial tracking and social trending interfaces. It includes features like prediction markets and gamified user interactions.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

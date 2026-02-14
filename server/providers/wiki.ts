@@ -3,7 +3,7 @@ import { apiCache } from "@shared/schema";
 import { eq, and, gt } from "drizzle-orm";
 
 const WIKI_API_BASE = "https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article";
-const USER_AGENT = "FameDex/1.0 (https://famedex.com; contact@famedex.com)";
+const USER_AGENT = "AuthoriDex/1.0 (https://authoridex.com; contact@authoridex.com)";
 
 export interface WikiPageviewData {
   article: string;

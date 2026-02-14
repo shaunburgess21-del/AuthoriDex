@@ -139,7 +139,7 @@ const TIME_RANGE_OPTIONS = [
 ] as const;
 
 const MOMENTUM_COLORS = [
-  "#22D3EE", // Cyan - matches FameDex teal theme
+  "#22D3EE", // Cyan - matches AuthoriDex teal theme
   "#A855F7", // Violet - ties to Predict page purple
   "#10B981", // Emerald - growth, positivity
   "#F59E0B", // Amber - warm, distinct
@@ -494,14 +494,14 @@ export default function HomePage() {
   const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
   const [showVoteTip, setShowVoteTip] = useState(() => {
     try {
-      return localStorage.getItem("famedex-vote-tip-dismissed") !== "1" && localStorage.getItem("famedex-has-ever-voted") !== "1";
+      return localStorage.getItem("authoridex-vote-tip-dismissed") !== "1" && localStorage.getItem("authoridex-has-ever-voted") !== "1";
     } catch { return false; }
   });
 
   useEffect(() => {
     const handleEverVoted = () => setShowVoteTip(false);
-    window.addEventListener("famedex-ever-voted", handleEverVoted);
-    return () => window.removeEventListener("famedex-ever-voted", handleEverVoted);
+    window.addEventListener("authoridex-ever-voted", handleEverVoted);
+    return () => window.removeEventListener("authoridex-ever-voted", handleEverVoted);
   }, []);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [moversCollapsed, setMoversCollapsed] = useState(true);
@@ -748,7 +748,7 @@ export default function HomePage() {
             <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
               <span className="text-white font-bold font-serif text-lg">F</span>
             </div>
-            <span className="font-serif font-bold text-xl">FameDex</span>
+            <span className="font-serif font-bold text-xl">AuthoriDex</span>
           </button>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-1 mr-2">
@@ -1005,7 +1005,7 @@ export default function HomePage() {
                         onClick={(e) => {
                           e.stopPropagation();
                           setShowVoteTip(false);
-                          try { localStorage.setItem("famedex-vote-tip-dismissed", "1"); } catch {}
+                          try { localStorage.setItem("authoridex-vote-tip-dismissed", "1"); } catch {}
                         }}
                         aria-label="Dismiss tip"
                         data-testid="button-dismiss-vote-tip"
@@ -1116,7 +1116,7 @@ export default function HomePage() {
       <footer className="border-t mt-24 py-12">
         <div className="container mx-auto px-4 text-center">
           <p className="text-sm text-muted-foreground">
-            FameDex - Real-time celebrity trending tracker powered by live data APIs
+            AuthoriDex - Real-time celebrity trending tracker powered by live data APIs
           </p>
         </div>
       </footer>

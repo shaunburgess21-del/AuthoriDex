@@ -88,7 +88,7 @@ export default function LoginPage() {
             <div className="h-12 w-12 rounded-lg bg-primary flex items-center justify-center">
               <span className="text-primary-foreground font-bold font-serif text-2xl">F</span>
             </div>
-            <span className="font-serif font-bold text-3xl">FameDex</span>
+            <span className="font-serif font-bold text-3xl">AuthoriDex</span>
           </div>
           <p className="text-muted-foreground">Track fame, vote sentiment, discover trends</p>
         </div>
@@ -99,7 +99,7 @@ export default function LoginPage() {
             <CardDescription>
               {isLogin
                 ? "Sign in to access your profile and save votes"
-                : "Join FameDex to track your favorite celebrities"}
+                : "Join AuthoriDex to track your favorite celebrities"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

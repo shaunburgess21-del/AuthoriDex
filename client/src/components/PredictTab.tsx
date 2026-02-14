@@ -959,7 +959,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
           </h3>
           
           <p className="text-sm text-muted-foreground mb-4">
-            Guess the exact FameDex score at week's end. Closest prediction takes the entire pot!
+            Guess the exact AuthoriDex score at week's end. Closest prediction takes the entire pot!
           </p>
           
           <div className="flex flex-wrap items-center gap-4 mb-4">

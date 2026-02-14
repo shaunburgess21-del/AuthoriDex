@@ -104,7 +104,7 @@ function getExceptionalIndicator(
 export { getExceptionalIndicator, computePercentileThresholds };
 export type { PercentileThresholds };
 
-const EVER_VOTED_KEY = "famedex-has-ever-voted";
+const EVER_VOTED_KEY = "authoridex-has-ever-voted";
 
 function getHasEverVoted(): boolean {
   try {
@@ -117,7 +117,7 @@ function getHasEverVoted(): boolean {
 function markEverVoted() {
   try {
     localStorage.setItem(EVER_VOTED_KEY, "1");
-    window.dispatchEvent(new CustomEvent("famedex-ever-voted"));
+    window.dispatchEvent(new CustomEvent("authoridex-ever-voted"));
   } catch {}
 }
 
@@ -165,12 +165,12 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
 
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('sentiment-vote-updated', handleCustomUpdate);
-    window.addEventListener('famedex-ever-voted', handleEverVoted);
+    window.addEventListener('authoridex-ever-voted', handleEverVoted);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('sentiment-vote-updated', handleCustomUpdate);
-      window.removeEventListener('famedex-ever-voted', handleEverVoted);
+      window.removeEventListener('authoridex-ever-voted', handleEverVoted);
     };
   }, [person.id]);
 

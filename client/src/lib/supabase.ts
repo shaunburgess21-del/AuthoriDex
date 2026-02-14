@@ -14,7 +14,7 @@ async function createSupabaseClient(): Promise<SupabaseClient> {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      storageKey: 'famedex-auth',
+      storageKey: 'authoridex-auth',
     }
   });
 }

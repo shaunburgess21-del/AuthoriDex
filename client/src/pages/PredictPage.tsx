@@ -346,7 +346,7 @@ const topGainerMarkets: TopGainerMarket[] = [
 
 type MarketType = "JACKPOT_EXACT" | "BINARY_TREND" | "VERSUS" | "COMMUNITY" | "GAINER";
 
-const FIRST_VISIT_KEY = "famedex_predict_first_visit";
+const FIRST_VISIT_KEY = "authoridex_predict_first_visit";
 
 const PREDICTION_TYPES: { id: PredictionType; label: string; mobileLabel: string; icon: React.ReactNode }[] = [
   { id: "all", label: "All Markets", mobileLabel: "All", icon: <Sparkles className="h-4 w-4" /> },
@@ -2196,7 +2196,7 @@ export default function PredictPage() {
               <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
                 <span className="text-white font-bold font-serif text-lg">F</span>
               </div>
-              <span className="font-serif font-bold text-xl hidden sm:block">FameDex</span>
+              <span className="font-serif font-bold text-xl hidden sm:block">AuthoriDex</span>
             </button>
           </div>
           

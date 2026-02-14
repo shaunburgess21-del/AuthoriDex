@@ -155,7 +155,7 @@ function UserMenuContent({
           <div className="h-16 w-16 mx-auto rounded-full bg-muted flex items-center justify-center">
             <User className="h-8 w-8 text-muted-foreground" />
           </div>
-          <h3 className="font-semibold">Welcome to FameDex</h3>
+          <h3 className="font-semibold">Welcome to AuthoriDex</h3>
           <p className="text-sm text-muted-foreground">
             Sign in to track predictions, cast votes, and earn XP
           </p>

@@ -182,7 +182,7 @@ const isPublicOpinionSection = (section: SectionToggle) =>
 const SECTION_RULES = {
   induction: {
     title: "Induction Queue Rules",
-    content: "Voted candidates with the most support at the end of the cycle are officially inducted into the FameDex Main Leaderboard. Your vote helps shape who defines the future of fame."
+    content: "Voted candidates with the most support at the end of the cycle are officially inducted into the AuthoriDex Main Leaderboard. Your vote helps shape who defines the future of fame."
   },
   curate: {
     title: "Curate Profile Rules",
@@ -1343,7 +1343,7 @@ function ContenderSelector({
             <p className="font-medium truncate">{value.name}</p>
             <p className="text-xs text-muted-foreground">
               {value.type === 'celebrity' ? (
-                <span className="text-cyan-400">FameDex Celebrity</span>
+                <span className="text-cyan-400">AuthoriDex Celebrity</span>
               ) : (
                 <span className="text-violet-400">Custom Contender</span>
               )}
@@ -1439,7 +1439,7 @@ function ContenderSelector({
               {hasMatchingCelebrities ? (
                 <>
                   <div className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/30 border-b border-border">
-                    FameDex Celebrities
+                    AuthoriDex Celebrities
                   </div>
                   {filteredCelebrities.map((celebrity, index) => (
                     <button
@@ -1470,7 +1470,7 @@ function ContenderSelector({
                 </>
               ) : searchQuery.length === 0 ? (
                 <div className="px-4 py-3 text-sm text-muted-foreground text-center">
-                  Type to search FameDex celebrities or enter a custom name
+                  Type to search AuthoriDex celebrities or enter a custom name
                 </div>
               ) : searchQuery.length < 2 ? (
                 <div className="px-4 py-3 text-sm text-muted-foreground text-center">
@@ -1983,7 +1983,7 @@ export default function VotePage() {
               <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
                 <span className="text-primary-foreground font-bold font-serif text-lg">F</span>
               </div>
-              <span className="font-serif font-bold text-xl">FameDex</span>
+              <span className="font-serif font-bold text-xl">AuthoriDex</span>
             </button>
           </div>
           <div className="flex items-center gap-3">
@@ -2411,7 +2411,7 @@ export default function VotePage() {
           <div className="relative py-4">
             <div className="text-center">
               <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-governance-title">
-                Shape the FameDex
+                Shape the AuthoriDex
               </h2>
               <p className="text-muted-foreground max-w-2xl mx-auto mb-3">
                 Vote on new inductees and curate profile images. Your opinion powers the index.
@@ -2562,7 +2562,7 @@ export default function VotePage() {
                 </div>
                 <div>
                   <h2 className="text-xl font-serif font-bold">Curate the Profile</h2>
-                  <p className="text-sm text-muted-foreground">Winner becomes the default profile photo across FameDex.</p>
+                  <p className="text-sm text-muted-foreground">Winner becomes the default profile photo across AuthoriDex.</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -2889,7 +2889,7 @@ export default function VotePage() {
               Suggest a Candidate
             </DialogTitle>
             <DialogDescription>
-              Who are we missing? Suggest someone NEW to be added to FameDex.
+              Who are we missing? Suggest someone NEW to be added to AuthoriDex.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -2934,7 +2934,7 @@ export default function VotePage() {
               </Select>
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Why should they be on FameDex? (optional)</label>
+              <label className="text-sm font-medium mb-1 block">Why should they be on AuthoriDex? (optional)</label>
               <Input
                 value={suggestReason}
                 onChange={(e) => setSuggestReason(e.target.value)}
@@ -3077,7 +3077,7 @@ export default function VotePage() {
           <div className="space-y-4 py-4 text-sm">
             {rulesModalOpen === "induction" && (
               <div className="space-y-3">
-                <p className="text-muted-foreground">Vote for celebrities you want to see added to the FameDex leaderboard.</p>
+                <p className="text-muted-foreground">Vote for celebrities you want to see added to the AuthoriDex leaderboard.</p>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
                     <Vote className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
@@ -3100,7 +3100,7 @@ export default function VotePage() {
             )}
             {rulesModalOpen === "curate" && (
               <div className="space-y-3">
-                <p className="text-muted-foreground">Help choose the official profile photo displayed across FameDex.</p>
+                <p className="text-muted-foreground">Help choose the official profile photo displayed across AuthoriDex.</p>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
                     <Camera className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />

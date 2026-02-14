@@ -1,4 +1,4 @@
--- Sentiment Voting Enhancement for FameDex
+-- Sentiment Voting Enhancement for AuthoriDex
 -- Add sentiment_value column to votes table and create aggregation function
 
 -- Add sentiment_value column (1-10 scale)

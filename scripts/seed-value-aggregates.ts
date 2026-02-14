@@ -84,7 +84,7 @@ function generateTotalVotes(fameRank: number, totalCelebs: number): number {
 
 async function seedValueAggregates() {
   console.log("=".repeat(60));
-  console.log("FameDex Value Leaderboard Seed Script");
+  console.log("AuthoriDex Value Leaderboard Seed Script");
   console.log("Using Aggregate Method (No Fake Users)");
   console.log("=".repeat(60));
   console.log("");
