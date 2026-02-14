@@ -1168,7 +1168,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
       </div>
       
       <div className="mt-auto">
-        <Button variant="outline" className="w-full border-violet-500/30 text-violet-500" onClick={() => onNavigate(market.slug)} disabled={isMarketClosed} data-testid={`button-predict-${market.slug}`}>
+        <Button className="w-full bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED]" onClick={() => onNavigate(market.slug)} disabled={isMarketClosed} data-testid={`button-predict-${market.slug}`}>
           {isMarketClosed ? "Closed" : "Make Prediction"}
         </Button>
       </div>
