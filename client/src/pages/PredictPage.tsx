@@ -1140,27 +1140,27 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
         <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
       </div>
       
-      <div className="space-y-2 mb-3">
-        {sortedEntries.slice(0, 2).map((entry: any) => {
+      <div className="space-y-3 mb-3">
+        {sortedEntries.slice(0, 1).map((entry: any) => {
           const entryStake = (entry.totalStake || 0) + (entry.seedCount || 0);
           const pct = Math.round((entryStake / totalEntryStake) * 100);
           return (
-            <div key={entry.id} className="flex items-center gap-2">
+            <div key={entry.id} className="flex items-center gap-3">
               {entry.imageUrl && (
-                <Avatar className="h-6 w-6 shrink-0 rounded-md">
+                <Avatar className="h-8 w-8 shrink-0 rounded-md">
                   <AvatarImage src={entry.imageUrl} alt={entry.label} className="object-cover" />
-                  <AvatarFallback className="text-[8px] rounded-md">{entry.label?.[0]}</AvatarFallback>
+                  <AvatarFallback className="text-[10px] rounded-md">{entry.label?.[0]}</AvatarFallback>
                 </Avatar>
               )}
-              <span className="text-xs truncate flex-1 min-w-0">{entry.label}</span>
-              <div className="w-20 h-2 rounded-full bg-muted overflow-hidden">
+              <span className="text-sm font-medium truncate flex-1 min-w-0">{entry.label}</span>
+              <div className="w-24 h-2.5 rounded-full bg-muted overflow-hidden">
                 <div className="h-full bg-violet-500 transition-all" style={{ width: `${pct}%` }} />
               </div>
-              <span className="text-xs text-muted-foreground w-8 text-right">{pct}%</span>
+              <span className="text-sm font-semibold text-muted-foreground w-10 text-right">{pct}%</span>
             </div>
           );
         })}
-        {entries.length > 2 && <p className="text-xs text-muted-foreground text-center">+{entries.length - 2} more</p>}
+        {entries.length > 1 && <p className="text-xs text-muted-foreground text-center font-medium">+{entries.length - 1} more</p>}
       </div>
       
       <div className="flex items-center justify-center mb-3">

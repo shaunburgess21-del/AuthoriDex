@@ -297,19 +297,19 @@ function CommunityCard({
         )}
         
         {entries.length > 2 && (
-          <div className="space-y-1 mb-3">
-            {entries.slice(0, 2).map((entry: any) => {
+          <div className="space-y-2 mb-3">
+            {entries.slice(0, 1).map((entry: any) => {
               const entryStake = (entry.totalStake || 0) + (entry.seedCount || 0);
               const totalAll = entries.reduce((s: number, e: any) => s + (e.totalStake || 0) + (e.seedCount || 0), 0) || 1;
               const pct = Math.round((entryStake / totalAll) * 100);
               return (
-                <div key={entry.id} className="flex items-center gap-2 text-xs">
+                <div key={entry.id} className="flex items-center gap-2 text-sm font-medium">
                   <span className="truncate flex-1">{entry.label}</span>
-                  <span className="text-muted-foreground">{pct}%</span>
+                  <span className="text-muted-foreground font-semibold">{pct}%</span>
                 </div>
               );
             })}
-            {entries.length > 2 && <p className="text-xs text-muted-foreground text-center">+{entries.length - 2} more</p>}
+            {entries.length > 1 && <p className="text-xs text-muted-foreground text-center font-medium">+{entries.length - 1} more</p>}
           </div>
         )}
         
