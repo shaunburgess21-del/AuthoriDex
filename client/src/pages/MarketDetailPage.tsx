@@ -573,6 +573,95 @@ export default function MarketDetailPage() {
       </header>
 
       <div className="container mx-auto px-4 py-6 max-w-3xl">
+        {isOpen && !isInactive && (
+          <Card className="p-5 mb-6 border-violet-500/20 bg-violet-500/5" data-testid="section-place-prediction">
+            <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-violet-500" />
+              Place Your Prediction
+            </h2>
+            {!isLoggedIn ? (
+              <div className="text-center py-4">
+                <Lock className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground mb-3">Sign in to place predictions</p>
+                <Button onClick={() => setLocation("/login")} data-testid="button-login-to-predict">
+                  Sign In
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Your Pick</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {entriesWithPercentages.sort((a, b) => a.displayOrder - b.displayOrder).map((entry) => {
+                      const isSelected = selectedEntry === entry.id;
+                      const isYesLike = entry.label.toLowerCase() === "yes" || entry.label.toLowerCase() === "above" || entry.displayOrder === 0;
+                      return (
+                        <Button
+                          key={entry.id}
+                          size="sm"
+                          variant={isSelected ? "default" : "outline"}
+                          className={isSelected
+                            ? isYesLike
+                              ? "bg-green-600 text-white border-green-600"
+                              : "bg-red-600 text-white border-red-600"
+                            : isYesLike
+                              ? "border-green-500/30 text-green-500"
+                              : "border-red-500/30 text-red-500"
+                          }
+                          onClick={() => setSelectedEntry(entry.id)}
+                          data-testid={`button-pick-${entry.label.toLowerCase()}`}
+                        >
+                          {entry.label} ({entry.percentage}%)
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">Stake Amount</label>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Enter stake amount..."
+                    value={stakeAmount}
+                    onChange={(e) => setStakeAmount(e.target.value)}
+                    className="bg-background/50"
+                    data-testid="input-stake-amount"
+                  />
+                </div>
+
+                {potentialPayout !== null && (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-green-500/5 border border-green-500/20" data-testid="text-potential-payout">
+                    <span className="text-sm text-muted-foreground">Potential Payout</span>
+                    <span className="font-bold font-mono text-green-400">{formatNumber(potentialPayout)} credits</span>
+                  </div>
+                )}
+
+                <Button
+                  className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                  disabled={!selectedEntry || !stakeAmount || Number(stakeAmount) <= 0 || betMutation.isPending}
+                  onClick={handlePlaceBet}
+                  data-testid="button-submit-prediction"
+                >
+                  {betMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Zap className="h-4 w-4 mr-2" />
+                  )}
+                  {betMutation.isPending
+                    ? "Placing..."
+                    : !selectedEntry
+                      ? "Select an outcome"
+                      : !stakeAmount || Number(stakeAmount) <= 0
+                        ? "Enter stake amount"
+                        : "Place Prediction"}
+                </Button>
+              </div>
+            )}
+          </Card>
+        )}
+
         <div className="mb-6">
           <div className="flex items-center gap-2 flex-wrap mb-3">
             <Badge variant="outline" className={statusConfig.className} data-testid="badge-status">
@@ -756,95 +845,6 @@ export default function MarketDetailPage() {
                 This market is not yet open for predictions. Check back soon for when it goes live.
               </p>
             </div>
-          </Card>
-        )}
-
-        {isOpen && !isInactive && (
-          <Card className="p-5 mb-6 border-violet-500/20 bg-violet-500/5" data-testid="section-place-prediction">
-            <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-violet-500" />
-              Place Your Prediction
-            </h2>
-            {!isLoggedIn ? (
-              <div className="text-center py-4">
-                <Lock className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground mb-3">Sign in to place predictions</p>
-                <Button onClick={() => setLocation("/login")} data-testid="button-login-to-predict">
-                  Sign In
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Your Pick</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {entriesWithPercentages.sort((a, b) => a.displayOrder - b.displayOrder).map((entry) => {
-                      const isSelected = selectedEntry === entry.id;
-                      const isYesLike = entry.label.toLowerCase() === "yes" || entry.label.toLowerCase() === "above" || entry.displayOrder === 0;
-                      return (
-                        <Button
-                          key={entry.id}
-                          size="sm"
-                          variant={isSelected ? "default" : "outline"}
-                          className={isSelected
-                            ? isYesLike
-                              ? "bg-green-600 text-white border-green-600"
-                              : "bg-red-600 text-white border-red-600"
-                            : isYesLike
-                              ? "border-green-500/30 text-green-500"
-                              : "border-red-500/30 text-red-500"
-                          }
-                          onClick={() => setSelectedEntry(entry.id)}
-                          data-testid={`button-pick-${entry.label.toLowerCase()}`}
-                        >
-                          {entry.label} ({entry.percentage}%)
-                        </Button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">Stake Amount</label>
-                  <Input
-                    type="number"
-                    min="1"
-                    placeholder="Enter stake amount..."
-                    value={stakeAmount}
-                    onChange={(e) => setStakeAmount(e.target.value)}
-                    className="bg-background/50"
-                    data-testid="input-stake-amount"
-                  />
-                </div>
-
-                {potentialPayout !== null && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-green-500/5 border border-green-500/20" data-testid="text-potential-payout">
-                    <span className="text-sm text-muted-foreground">Potential Payout</span>
-                    <span className="font-bold font-mono text-green-400">{formatNumber(potentialPayout)} credits</span>
-                  </div>
-                )}
-
-                <Button
-                  className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-                  disabled={!selectedEntry || !stakeAmount || Number(stakeAmount) <= 0 || betMutation.isPending}
-                  onClick={handlePlaceBet}
-                  data-testid="button-submit-prediction"
-                >
-                  {betMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <Zap className="h-4 w-4 mr-2" />
-                  )}
-                  {betMutation.isPending
-                    ? "Placing..."
-                    : !selectedEntry
-                      ? "Select an outcome"
-                      : !stakeAmount || Number(stakeAmount) <= 0
-                        ? "Enter stake amount"
-                        : "Place Prediction"}
-                </Button>
-              </div>
-            )}
           </Card>
         )}
 
