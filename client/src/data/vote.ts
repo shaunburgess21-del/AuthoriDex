@@ -6,6 +6,7 @@ export interface FaceOffData {
   optionAImage: string | null;
   optionBText: string;
   optionBImage: string | null;
+  promptText?: string | null;
   isActive: boolean;
   createdAt: string;
   optionAVotes: number;

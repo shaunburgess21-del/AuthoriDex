@@ -194,6 +194,7 @@ interface FaceOff {
   optionAImage: string | null;
   optionBText: string;
   optionBImage: string | null;
+  promptText: string | null;
   isActive: boolean;
   displayOrder: number;
   createdAt: string;
@@ -1251,6 +1252,7 @@ export default function AdminDashboard() {
     category: "Tech",
     optionAText: "",
     optionBText: "",
+    promptText: "",
     isActive: true,
   });
   
@@ -1758,7 +1760,7 @@ export default function AdminDashboard() {
       toast({ title: "Face-Off Created", description: "New face-off added successfully" });
       setShowFaceOffModal(false);
       setEditingFaceOff(null);
-      setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", isActive: true });
+      setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/face-offs"] });
     },
     onError: (error: any) => {
@@ -1779,7 +1781,7 @@ export default function AdminDashboard() {
       toast({ title: "Face-Off Updated", description: "Face-off updated successfully" });
       setShowFaceOffModal(false);
       setEditingFaceOff(null);
-      setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", isActive: true });
+      setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/face-offs"] });
     },
     onError: (error: any) => {
@@ -2073,6 +2075,7 @@ export default function AdminDashboard() {
       category: faceOff.category,
       optionAText: faceOff.optionAText,
       optionBText: faceOff.optionBText,
+      promptText: faceOff.promptText || "",
       isActive: faceOff.isActive,
     });
     setShowFaceOffModal(true);
@@ -3079,7 +3082,7 @@ export default function AdminDashboard() {
                       size="sm"
                       onClick={() => {
                         setEditingFaceOff(null);
-                        setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", isActive: true });
+                        setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
                         setShowFaceOffModal(true);
                       }}
                       data-testid="button-add-faceoff"
@@ -3144,7 +3147,7 @@ export default function AdminDashboard() {
                           className="mt-4" 
                           onClick={() => {
                             setEditingFaceOff(null);
-                            setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", isActive: true });
+                            setFaceOffForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
                             setShowFaceOffModal(true);
                           }}
                           data-testid="button-create-first-faceoff"
@@ -4770,6 +4773,16 @@ export default function AdminDashboard() {
                 onChange={(e) => setFaceOffForm({ ...faceOffForm, optionBText: e.target.value })}
                 placeholder="Second option"
                 data-testid="input-faceoff-option-b"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="faceoff-prompt">Pre-Vote Prompt</Label>
+              <Input
+                id="faceoff-prompt"
+                value={faceOffForm.promptText}
+                onChange={(e) => setFaceOffForm({ ...faceOffForm, promptText: e.target.value })}
+                placeholder='e.g. "Who do you prefer?" (leave blank for default)'
+                data-testid="input-faceoff-prompt"
               />
             </div>
             <div className="flex items-center space-x-2">

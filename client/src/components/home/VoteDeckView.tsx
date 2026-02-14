@@ -163,7 +163,7 @@ function VersusCard({
           </button>
         </div>
         
-        {hasVoted && (
+        {hasVoted ? (
           <div className="mt-3">
             <div className="h-2 rounded-full bg-slate-700/50 overflow-hidden flex">
               <div 
@@ -175,6 +175,13 @@ function VersusCard({
                 style={{ width: `${faceOff.optionBPercent}%` }}
               />
             </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-1 mt-3">
+            <span className="text-sm font-semibold text-slate-300">
+              {faceOff.promptText || "Who do you prefer?"}
+            </span>
+            <span className="text-[11px] text-slate-500">Tap an image to pick your side</span>
           </div>
         )}
       </div>

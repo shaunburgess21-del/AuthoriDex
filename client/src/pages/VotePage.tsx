@@ -224,6 +224,7 @@ interface FaceOffData {
   optionAImage: string | null;
   optionBText: string;
   optionBImage: string | null;
+  promptText: string | null;
   isActive: boolean;
   createdAt: string;
   optionAVotes: number;
@@ -382,9 +383,14 @@ function VersusCard({
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center gap-2 py-1.5 text-xs text-slate-400">
-              <Swords className="h-3.5 w-3.5 text-cyan-400/70" />
-              <span className="font-medium">Tap an image to pick your side</span>
+            <div className="flex flex-col items-center justify-center gap-1.5 py-3">
+              <span className="text-sm font-semibold text-slate-300">
+                {faceOff.promptText || "Who do you prefer?"}
+              </span>
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <Swords className="h-3.5 w-3.5 text-cyan-400/70" />
+                <span className="font-medium">Tap an image to pick your side</span>
+              </div>
             </div>
           )}
         </div>
