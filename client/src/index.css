@@ -494,7 +494,7 @@
     z-index: 10;
   }
   
-  /* Ambient glow behind card - pseudo-element */
+  /* Ambient glow behind card - pseudo-element (renders BEHIND content) */
   .pulse-card-blue::after,
   .pulse-card-green::after,
   .pulse-card-red::after,
@@ -503,9 +503,18 @@
     position: absolute;
     inset: -1px;
     border-radius: inherit;
-    z-index: -1;
+    z-index: 1;
     opacity: 0;
     transition: opacity 0.3s ease;
+    pointer-events: none;
+  }
+
+  .pulse-card-blue > *,
+  .pulse-card-green > *,
+  .pulse-card-red > *,
+  .pulse-card-orange > * {
+    position: relative;
+    z-index: 2;
   }
 
   /* ===== BLUE (Daily Movers) ===== */
@@ -521,14 +530,14 @@
     background: linear-gradient(90deg, rgb(59, 130, 246) 0%, rgba(59, 130, 246, 0.3) 100%);
   }
   .pulse-card-blue::after {
-    background: radial-gradient(ellipse at top left, rgba(59, 130, 246, 0.3) 0%, transparent 60%);
+    background: radial-gradient(ellipse at top left, rgba(59, 130, 246, 0.21) 0%, transparent 60%);
   }
   .pulse-card-blue:hover {
     transform: translateY(-2px);
-    border-color: rgba(59, 130, 246, 0.4);
+    border-color: rgba(59, 130, 246, 0.28);
     box-shadow: 
-      0 8px 30px -4px rgba(59, 130, 246, 0.25),
-      0 0 50px -10px rgba(59, 130, 246, 0.2);
+      0 8px 30px -4px rgba(59, 130, 246, 0.175),
+      0 0 50px -10px rgba(59, 130, 246, 0.14);
   }
   .pulse-card-blue:hover::after {
     opacity: 1;
@@ -547,14 +556,14 @@
     background: linear-gradient(90deg, rgb(34, 197, 94) 0%, rgba(34, 197, 94, 0.3) 100%);
   }
   .pulse-card-green::after {
-    background: radial-gradient(ellipse at top left, rgba(34, 197, 94, 0.3) 0%, transparent 60%);
+    background: radial-gradient(ellipse at top left, rgba(34, 197, 94, 0.21) 0%, transparent 60%);
   }
   .pulse-card-green:hover {
     transform: translateY(-2px);
-    border-color: rgba(34, 197, 94, 0.4);
+    border-color: rgba(34, 197, 94, 0.28);
     box-shadow: 
-      0 8px 30px -4px rgba(34, 197, 94, 0.25),
-      0 0 50px -10px rgba(34, 197, 94, 0.2);
+      0 8px 30px -4px rgba(34, 197, 94, 0.175),
+      0 0 50px -10px rgba(34, 197, 94, 0.14);
   }
   .pulse-card-green:hover::after {
     opacity: 1;
@@ -573,14 +582,14 @@
     background: linear-gradient(90deg, rgb(239, 68, 68) 0%, rgba(239, 68, 68, 0.3) 100%);
   }
   .pulse-card-red::after {
-    background: radial-gradient(ellipse at top left, rgba(239, 68, 68, 0.3) 0%, transparent 60%);
+    background: radial-gradient(ellipse at top left, rgba(239, 68, 68, 0.21) 0%, transparent 60%);
   }
   .pulse-card-red:hover {
     transform: translateY(-2px);
-    border-color: rgba(239, 68, 68, 0.4);
+    border-color: rgba(239, 68, 68, 0.28);
     box-shadow: 
-      0 8px 30px -4px rgba(239, 68, 68, 0.25),
-      0 0 50px -10px rgba(239, 68, 68, 0.2);
+      0 8px 30px -4px rgba(239, 68, 68, 0.175),
+      0 0 50px -10px rgba(239, 68, 68, 0.14);
   }
   .pulse-card-red:hover::after {
     opacity: 1;
@@ -613,14 +622,14 @@
     background: linear-gradient(90deg, rgb(249, 115, 22) 0%, rgba(249, 115, 22, 0.3) 100%);
   }
   .pulse-card-orange::after {
-    background: radial-gradient(ellipse at top left, rgba(249, 115, 22, 0.3) 0%, transparent 60%);
+    background: radial-gradient(ellipse at top left, rgba(249, 115, 22, 0.21) 0%, transparent 60%);
   }
   .pulse-card-orange:hover {
     transform: translateY(-2px);
-    border-color: rgba(249, 115, 22, 0.4);
+    border-color: rgba(249, 115, 22, 0.28);
     box-shadow: 
-      0 8px 30px -4px rgba(249, 115, 22, 0.25),
-      0 0 50px -10px rgba(249, 115, 22, 0.2);
+      0 8px 30px -4px rgba(249, 115, 22, 0.175),
+      0 0 50px -10px rgba(249, 115, 22, 0.14);
   }
   .pulse-card-orange:hover::after {
     opacity: 1;
