@@ -298,7 +298,7 @@ function CommunityCard({
         
         {entries.length > 2 && (
           <div className="space-y-1 mb-3">
-            {entries.slice(0, 3).map((entry: any) => {
+            {entries.slice(0, 2).map((entry: any) => {
               const entryStake = (entry.totalStake || 0) + (entry.seedCount || 0);
               const totalAll = entries.reduce((s: number, e: any) => s + (e.totalStake || 0) + (e.seedCount || 0), 0) || 1;
               const pct = Math.round((entryStake / totalAll) * 100);
@@ -309,7 +309,7 @@ function CommunityCard({
                 </div>
               );
             })}
-            {entries.length > 3 && <p className="text-xs text-muted-foreground text-center">+{entries.length - 3} more</p>}
+            {entries.length > 2 && <p className="text-xs text-muted-foreground text-center">+{entries.length - 2} more</p>}
           </div>
         )}
         

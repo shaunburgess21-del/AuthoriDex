@@ -1056,7 +1056,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
   
   return (
     <PredictCard testId={`card-market-${market.slug}`} className={isMarketClosed && !isInactive ? 'opacity-75' : ''} inactive={isInactive} inactiveMessage={inactiveMessage}>
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-1">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
           {timeLabel}
@@ -1065,19 +1065,19 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
       </div>
       
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-3 mb-2">
           <MarketAvatar market={market} />
           <p className={`text-sm font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
-      {market.teaser && <p className="text-xs text-muted-foreground mb-4 line-clamp-2">{market.teaser}</p>}
+      {market.teaser && <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{market.teaser}</p>}
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
         <Users className="h-3.5 w-3.5" />
         <span>{participants} participants</span>
       </div>
       
-      <div className="mb-4">
+      <div className="mb-3">
         <div className="flex items-center justify-between text-xs mb-1.5">
           <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
           <span className="text-red-500 font-semibold">No {noPercent}%</span>
@@ -1087,7 +1087,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
       </div>
       
-      <div className="flex items-center justify-center mb-4">
+      <div className="flex items-center justify-center mb-3">
         <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
       </div>
       
@@ -1118,7 +1118,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
   
   return (
     <PredictCard testId={`card-market-${market.slug}`} className={isMarketClosed && !isInactive ? 'opacity-75' : ''} inactive={isInactive} inactiveMessage={inactiveMessage}>
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-1">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
           {timeLabel}
@@ -1127,21 +1127,21 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
       </div>
       
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-3 mb-2">
           <MarketAvatar market={market} />
           <p className={`text-sm font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
-      {market.teaser && <p className="text-xs text-muted-foreground mb-4 line-clamp-2">{market.teaser}</p>}
+      {market.teaser && <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{market.teaser}</p>}
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
         <Users className="h-3.5 w-3.5" />
         <span>{participants} participants</span>
         <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
       </div>
       
-      <div className="space-y-2 mb-4">
-        {sortedEntries.slice(0, 3).map((entry: any) => {
+      <div className="space-y-2 mb-3">
+        {sortedEntries.slice(0, 2).map((entry: any) => {
           const entryStake = (entry.totalStake || 0) + (entry.seedCount || 0);
           const pct = Math.round((entryStake / totalEntryStake) * 100);
           return (
@@ -1160,10 +1160,10 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
             </div>
           );
         })}
-        {entries.length > 3 && <p className="text-xs text-muted-foreground text-center">+{entries.length - 3} more</p>}
+        {entries.length > 2 && <p className="text-xs text-muted-foreground text-center">+{entries.length - 2} more</p>}
       </div>
       
-      <div className="flex items-center justify-center mb-4">
+      <div className="flex items-center justify-center mb-3">
         <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
       </div>
       
@@ -1187,7 +1187,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
   
   return (
     <PredictCard testId={`card-market-${market.slug}`} className={isMarketClosed && !isInactive ? 'opacity-75' : ''} inactive={isInactive} inactiveMessage={inactiveMessage}>
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-1">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
           {timeLabel}
@@ -1196,14 +1196,14 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
       </div>
       
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-3 mb-2">
           <MarketAvatar market={market} />
           <p className={`text-sm font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
       
       {market.underlying && (
-        <div className="flex items-center gap-2 mb-4 p-2 rounded-lg bg-violet-500/5 border border-violet-500/10">
+        <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-violet-500/5 border border-violet-500/10">
           <TrendingUp className="h-4 w-4 text-violet-500" />
           <div className="text-xs">
             <span className="text-muted-foreground">{market.underlying} {market.metric}: </span>
@@ -1212,12 +1212,12 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
       )}
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
         <Users className="h-3.5 w-3.5" />
         <span>{participants} participants</span>
       </div>
       
-      <div className="mb-4">
+      <div className="mb-3">
         <div className="flex items-center justify-between text-xs mb-1.5">
           <span className="text-green-500 font-semibold">Above {abovePercent}%</span>
           <span className="text-red-500 font-semibold">Below {belowPercent}%</span>
@@ -1227,7 +1227,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
       </div>
       
-      <div className="flex items-center justify-center mb-4">
+      <div className="flex items-center justify-center mb-3">
         <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
       </div>
       
