@@ -243,32 +243,33 @@ function VersusCard({
   const hasVoted = userVote !== null;
   const votedA = userVote === 'option_a';
   const votedB = userVote === 'option_b';
+  const leadingA = faceOff.optionAPercent >= faceOff.optionBPercent;
   
   return (
     <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50 hover-elevate">
       <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-teal-500/5 rounded-lg" />
       
       <div className="relative p-4">
-        <div className="flex items-center justify-between mb-4 gap-2">
+        <div className="flex items-center justify-between mb-3 gap-2">
+          <CategoryPill category={faceOff.category} data-testid={`badge-faceoff-${faceOff.id}`} />
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5 text-cyan-400" />
             <span>{faceOff.totalVotes.toLocaleString()} votes</span>
           </div>
-          <CategoryPill category={faceOff.category} data-testid={`badge-faceoff-${faceOff.id}`} />
         </div>
         
         <div className="flex items-stretch gap-[10px] relative">
           <button
             onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_a', e)}
             disabled={hasVoted}
-            className={`flex-1 rounded-lg border transition-all overflow-hidden relative ${
+            className={`flex-1 rounded-lg border transition-all duration-300 overflow-hidden relative ${
               hasVoted
                 ? votedA
                   ? 'border-cyan-500/50 ring-2 ring-cyan-500/30'
                   : 'border-slate-700/30 opacity-60'
                 : 'border-slate-700/50 hover:border-cyan-500/50 cursor-pointer'
             }`}
-            style={{ minHeight: '300px' }}
+            style={{ minHeight: '262px' }}
             data-testid={`button-vote-a-${faceOff.id}`}
           >
             {faceOff.optionAImage ? (
@@ -278,22 +279,17 @@ function VersusCard({
                   alt={faceOff.optionAText}
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
               </div>
             ) : (
               <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedA ? 'from-cyan-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
             )}
             <div className="relative h-full flex flex-col items-center justify-end p-3">
               <span className="font-semibold text-sm text-center text-white drop-shadow-lg">{faceOff.optionAText}</span>
-              {hasVoted && (
-                <span className={`text-xl font-bold mt-1 ${votedA ? 'text-cyan-400' : 'text-slate-300'}`}>
-                  {faceOff.optionAPercent}%
-                </span>
-              )}
             </div>
           </button>
           
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-12 shrink-0 pointer-events-none">
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
             <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
               <span className="text-xs font-bold text-slate-200">VS</span>
             </div>
@@ -302,14 +298,14 @@ function VersusCard({
           <button
             onClick={(e) => !hasVoted && onVote(faceOff.id, 'option_b', e)}
             disabled={hasVoted}
-            className={`flex-1 rounded-lg border transition-all overflow-hidden relative ${
+            className={`flex-1 rounded-lg border transition-all duration-300 overflow-hidden relative ${
               hasVoted
                 ? votedB
                   ? 'border-teal-500/50 ring-2 ring-teal-500/30'
                   : 'border-slate-700/30 opacity-60'
                 : 'border-slate-700/50 hover:border-teal-500/50 cursor-pointer'
             }`}
-            style={{ minHeight: '300px' }}
+            style={{ minHeight: '262px' }}
             data-testid={`button-vote-b-${faceOff.id}`}
           >
             {faceOff.optionBImage ? (
@@ -319,36 +315,72 @@ function VersusCard({
                   alt={faceOff.optionBText}
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
               </div>
             ) : (
               <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? 'from-teal-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
             )}
             <div className="relative h-full flex flex-col items-center justify-end p-3">
               <span className="font-semibold text-sm text-center text-white drop-shadow-lg">{faceOff.optionBText}</span>
-              {hasVoted && (
-                <span className={`text-xl font-bold mt-1 ${votedB ? 'text-teal-400' : 'text-slate-300'}`}>
-                  {faceOff.optionBPercent}%
-                </span>
-              )}
             </div>
           </button>
         </div>
         
-        {hasVoted && (
-          <div className="mt-3">
-            <div className="h-2 rounded-full bg-slate-700/50 overflow-hidden flex">
-              <div 
-                className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-500"
-                style={{ width: `${faceOff.optionAPercent}%` }}
-              />
-              <div 
-                className="h-full bg-gradient-to-r from-teal-400 to-teal-500 transition-all duration-500"
-                style={{ width: `${faceOff.optionBPercent}%` }}
-              />
+        <div className="mt-3">
+          {hasVoted ? (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-lg font-bold ${leadingA ? 'text-cyan-400' : 'text-slate-400'}`}>
+                    {faceOff.optionAPercent}%
+                  </span>
+                  {votedA && (
+                    <Badge variant="outline" className="text-[10px] border-cyan-500/40 text-cyan-400 px-1.5 py-0">
+                      Your pick
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {votedB && (
+                    <Badge variant="outline" className="text-[10px] border-teal-500/40 text-teal-400 px-1.5 py-0">
+                      Your pick
+                    </Badge>
+                  )}
+                  <span className={`text-lg font-bold ${!leadingA ? 'text-teal-400' : 'text-slate-400'}`}>
+                    {faceOff.optionBPercent}%
+                  </span>
+                </div>
+              </div>
+              <div className="h-2.5 rounded-full bg-slate-700/50 overflow-hidden flex">
+                <motion.div 
+                  className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400"
+                  initial={{ width: '50%' }}
+                  animate={{ width: `${faceOff.optionAPercent}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
+                />
+                <motion.div 
+                  className="h-full bg-gradient-to-r from-teal-400 to-teal-500"
+                  initial={{ width: '50%' }}
+                  animate={{ width: `${faceOff.optionBPercent}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
+                />
+              </div>
+              <div className="flex items-center justify-between mt-1.5">
+                <span className="text-[11px] text-slate-500 font-medium">{faceOff.optionAText}</span>
+                <span className="text-[11px] text-slate-500 font-medium">{faceOff.optionBText}</span>
+              </div>
+            </motion.div>
+          ) : (
+            <div className="flex items-center justify-center gap-2 py-1.5 text-xs text-slate-400">
+              <Swords className="h-3.5 w-3.5 text-cyan-400/70" />
+              <span className="font-medium">Tap an image to pick your side</span>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </Card>
   );
