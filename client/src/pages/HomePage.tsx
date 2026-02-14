@@ -784,6 +784,7 @@ export default function HomePage() {
         </div>
       </header>
       <HeroSection onCastVoteClick={handleHeroCastVote} onPredictClick={() => setLocation("/predict")} />
+      {/* PRESERVED: Sticky toggle bar (Leaderboard/Vote/Predict) - commented out for future re-enable
       <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-blue-500/5 via-background/95 to-blue-500/5 backdrop-blur-xl" data-toggle-bar>
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-center gap-2 py-3">
@@ -810,15 +811,8 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+      */}
       <div className="container mx-auto px-4 py-8 max-w-7xl" data-content-section>
-        <AnimatePresence mode="wait">
-          {activeView === "leaderboard" && (
-            <motion.div
-              key="leaderboard"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-            >
                             <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2 mb-4 md:grid md:grid-cols-3 md:overflow-visible" data-testid="market-pulse-row">
                 <MarketPulseCard 
                   title="Daily Movers" 
@@ -1101,12 +1095,10 @@ export default function HomePage() {
                   )}
                 </CardContent>
               </Card>
-            </motion.div>
-          )}
-
+          {/* PRESERVED: Vote and Predict toggle sections - commented out for future re-enable
           {activeView === "predict" && (
             <>
-                            <PredictDeckView 
+              <PredictDeckView 
                 trendingPeople={allPeople} 
                 isLoading={isLoading}
                 onExplore={() => setLocation("/predict")} 
@@ -1119,7 +1111,7 @@ export default function HomePage() {
               onExplore={() => setLocation("/vote")} 
             />
           )}
-        </AnimatePresence>
+          */}
       </div>
       <footer className="border-t mt-24 py-12">
         <div className="container mx-auto px-4 text-center">
