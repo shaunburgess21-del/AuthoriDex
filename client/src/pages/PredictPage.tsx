@@ -746,8 +746,8 @@ function WeeklyUpDownCard({
   onSelect?: (choice: "up" | "down") => void;
 }) {
   return (
-    <PredictCard testId={`card-weekly-${market.id}`} className={isMarketClosed ? 'opacity-75' : ''}>
-      <div className="flex items-center justify-between mb-3">
+    <PredictCard testId={`card-weekly-${market.id}`} className={`min-h-[340px] ${isMarketClosed ? 'opacity-75' : ''}`}>
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <Badge 
           variant="outline" 
           className={market.change7d >= 0 ? "text-green-500 border-green-500/30" : "text-red-500 border-red-500/30"}
@@ -757,7 +757,7 @@ function WeeklyUpDownCard({
         <CategoryPill category={market.category} />
       </div>
       
-      <div className="flex items-center gap-3 mb-3">
+      <div className="flex items-center gap-3 mb-2">
         <PersonAvatar name={market.personName} avatar={market.personAvatar} size="md" />
         <div>
           <p className="font-semibold text-sm">{market.personName}</p>
@@ -770,6 +770,11 @@ function WeeklyUpDownCard({
       <p className="text-xs text-muted-foreground mb-3">
         Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span>'s Trend Score be higher or lower than start-of-week by close?
       </p>
+      
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+        <Users className="h-3.5 w-3.5" />
+        <span>{market.totalPool > 0 ? Math.ceil(market.totalPool / 100) : 0} participants</span>
+      </div>
       
       <div className="mb-3">
         <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
