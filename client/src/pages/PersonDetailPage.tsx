@@ -694,16 +694,21 @@ export default function PersonDetailPage() {
                   <p className="text-lg text-muted-foreground">{person.category}</p>
                   <CelebrityInfoModal personId={person.id} personName={person.name} />
                 </div>
-                <p className="text-sm font-mono font-semibold text-[#F9FAFA] mt-[9px] mb-[9px]" data-testid="text-header-rank">
-                  Rank #{person.rank}
-                </p>
                 {person.bio && (
                   <p className="text-sm text-muted-foreground leading-relaxed mb-4" data-testid="text-person-bio">
                     {person.bio}
                   </p>
                 )}
               </div>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div
+                  className="inline-flex items-center gap-1.5 px-3 min-h-9 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono text-sm font-semibold"
+                  data-testid="text-header-rank"
+                >
+                  <Trophy className="h-3.5 w-3.5" />
+                  <span>Rank</span>
+                  <span>#{person.rank}</span>
+                </div>
                 <Button variant="outline" size="icon" className="sm:hidden" data-testid="button-share-mobile">
                   <Share2 className="h-4 w-4" />
                 </Button>
@@ -717,13 +722,12 @@ export default function PersonDetailPage() {
                 >
                   <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
                 </Button>
-                <Button variant="outline" size="sm" className="hidden sm:inline-flex gap-2" data-testid="button-share">
+                <Button variant="outline" className="hidden sm:inline-flex gap-2" data-testid="button-share">
                   <Share2 className="h-4 w-4" />
                   Share
                 </Button>
                 <Button
                   variant={isFavorited ? "default" : "outline"}
-                  size="sm"
                   className="hidden sm:inline-flex gap-2"
                   onClick={handleToggleFavorite}
                   disabled={favoriteLoading}
