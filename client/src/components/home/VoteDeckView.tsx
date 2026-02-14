@@ -85,6 +85,15 @@ function VersusCard({
           <CategoryPill category={faceOff.category} />
         </div>
         
+        {!hasVoted && (
+          <div className="flex flex-col items-center justify-center gap-1 mb-3" style={{ minHeight: '40px' }}>
+            <span className="text-sm font-semibold text-slate-300">
+              {faceOff.promptText || "Who do you prefer?"}
+            </span>
+            <span className="text-[11px] text-slate-500">Tap an image to pick your side</span>
+          </div>
+        )}
+        
         <div className="flex items-stretch gap-3">
           <button
             onClick={() => !hasVoted && onVote(faceOff.id, 'option_a')}
@@ -176,14 +185,7 @@ function VersusCard({
               />
             </div>
           </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center gap-1 mt-3">
-            <span className="text-sm font-semibold text-slate-300">
-              {faceOff.promptText || "Who do you prefer?"}
-            </span>
-            <span className="text-[11px] text-slate-500">Tap an image to pick your side</span>
-          </div>
-        )}
+        ) : null}
       </div>
     </Card>
   );
