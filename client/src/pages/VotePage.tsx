@@ -273,21 +273,20 @@ function VersusCard({
         )}
         
         <div className="flex items-stretch gap-[2px] relative px-[2px]">
-          <div className="flex-1 flex flex-col">
-            <button
-              onClick={(e) => {
-                if (!hasVoted || votedB) onVote(matchup.id, 'option_a', e);
-              }}
-              className={`rounded-lg border transition-all duration-300 overflow-hidden relative ${
-                hasVoted
-                  ? votedA
-                    ? 'border-cyan-500/50 ring-2 ring-cyan-500/30'
-                    : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-cyan-500/30 cursor-pointer'
-                  : 'border-slate-700/50 hover:border-cyan-500/50 cursor-pointer'
-              }`}
-              style={{ minHeight: '222px' }}
-              data-testid={`button-vote-a-${matchup.id}`}
-            >
+          <button
+            onClick={(e) => {
+              if (!hasVoted || votedB) onVote(matchup.id, 'option_a', e);
+            }}
+            className={`flex-1 flex flex-col rounded-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
+              hasVoted
+                ? votedA
+                  ? 'border-cyan-500/50 ring-2 ring-cyan-500/30'
+                  : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-cyan-500/30'
+                : 'border-slate-700/50 hover:border-cyan-500/50'
+            }`}
+            data-testid={`button-vote-a-${matchup.id}`}
+          >
+            <div className="relative" style={{ minHeight: '222px' }}>
               {matchup.optionAImage ? (
                 <div className="absolute inset-0">
                   <img 
@@ -299,31 +298,32 @@ function VersusCard({
               ) : (
                 <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedA ? 'from-cyan-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
               )}
-            </button>
-            <span className="font-semibold text-sm text-center mt-2 px-1 truncate">{matchup.optionAText}</span>
-          </div>
+            </div>
+            <div className="px-2 py-2 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
+              <span className="font-semibold text-sm truncate block">{matchup.optionAText}</span>
+            </div>
+          </button>
           
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
+          <div className="absolute left-1/2 top-[calc(50%-16px)] -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
             <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
               <span className="text-xs font-bold text-slate-200">VS</span>
             </div>
           </div>
           
-          <div className="flex-1 flex flex-col">
-            <button
-              onClick={(e) => {
-                if (!hasVoted || votedA) onVote(matchup.id, 'option_b', e);
-              }}
-              className={`rounded-lg border transition-all duration-300 overflow-hidden relative ${
-                hasVoted
-                  ? votedB
-                    ? 'border-teal-500/50 ring-2 ring-teal-500/30'
-                    : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-teal-500/30 cursor-pointer'
-                  : 'border-slate-700/50 hover:border-teal-500/50 cursor-pointer'
-              }`}
-              style={{ minHeight: '222px' }}
-              data-testid={`button-vote-b-${matchup.id}`}
-            >
+          <button
+            onClick={(e) => {
+              if (!hasVoted || votedA) onVote(matchup.id, 'option_b', e);
+            }}
+            className={`flex-1 flex flex-col rounded-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
+              hasVoted
+                ? votedB
+                  ? 'border-teal-500/50 ring-2 ring-teal-500/30'
+                  : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-teal-500/30'
+                : 'border-slate-700/50 hover:border-teal-500/50'
+            }`}
+            data-testid={`button-vote-b-${matchup.id}`}
+          >
+            <div className="relative" style={{ minHeight: '222px' }}>
               {matchup.optionBImage ? (
                 <div className="absolute inset-0">
                   <img 
@@ -335,9 +335,11 @@ function VersusCard({
               ) : (
                 <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? 'from-teal-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
               )}
-            </button>
-            <span className="font-semibold text-sm text-center mt-2 px-1 truncate">{matchup.optionBText}</span>
-          </div>
+            </div>
+            <div className="px-2 py-2 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
+              <span className="font-semibold text-sm truncate block">{matchup.optionBText}</span>
+            </div>
+          </button>
         </div>
         
         <div className="mt-3 px-4">
