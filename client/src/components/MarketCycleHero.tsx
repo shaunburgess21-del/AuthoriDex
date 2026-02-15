@@ -12,7 +12,7 @@ function padZero(num: number): string {
 function TimerSegment({ value, label, testId }: { value: string; label: string; testId: string }) {
   return (
     <div 
-      className="flex flex-col items-center justify-center bg-slate-100 border border-slate-300 rounded-lg px-3 py-2 md:px-4 md:py-3 min-w-[52px] md:min-w-[64px] dark:bg-white/5 dark:border-white/10"
+      className="flex flex-col items-center justify-center bg-slate-100 border border-slate-300 rounded-lg px-3 py-2 md:px-4 md:py-3 min-w-[52px] md:min-w-[64px] dark:bg-white/5 dark:border-white/10 pt-[2px] pb-[2px]"
       data-testid={testId}
     >
       <span className="font-mono text-xl md:text-2xl font-bold text-slate-900 dark:text-white leading-none">
