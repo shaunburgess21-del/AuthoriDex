@@ -889,7 +889,8 @@ export default function HomePage() {
                       {leaderboardTab === "fame" ? "Ranked by real-world trending data" : "Ranked by community votes"}
                     </p>
                   </div>
-                  <div className="sticky top-16 z-30 flex items-center gap-2 border-b border-border pb-2 pt-2 -mt-2 bg-card/95 backdrop-blur-sm">
+                </CardHeader>
+                <div className="sticky top-16 z-30 flex items-center gap-2 border-b border-border px-6 pb-2 pt-2 bg-card/95 backdrop-blur-sm">
                     <button
                       onClick={() => handleTabClick("fame")}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
@@ -922,8 +923,7 @@ export default function HomePage() {
                         <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                       )}
                     </button>
-                  </div>
-                </CardHeader>
+                </div>
                 <CardContent className="p-0">
                   <div className="px-6 py-4 border-b bg-muted/30">
                     <div className="space-y-3">
