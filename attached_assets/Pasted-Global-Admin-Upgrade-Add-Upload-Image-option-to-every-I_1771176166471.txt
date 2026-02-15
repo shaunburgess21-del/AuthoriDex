@@ -1,0 +1,77 @@
+Global Admin Upgrade: Add “Upload Image” option to every Image URL field (Supabase Storage)
+
+We currently use an Image URL input in multiple Admin “Create/Edit” modals (e.g., Trending Polls, Real-World Markets, and any other CMS modules that include an image field). Manually pasting URLs is clunky.
+
+Requirement
+
+For every Admin modal that includes an Image URL field, add a new option to upload an image file directly in the modal. The upload must store the image in Supabase Storage and automatically populate the Image URL field with the hosted URL.
+
+UI behavior (must be consistent everywhere)
+
+For each Image URL field:
+
+Keep the existing paste URL input.
+
+Add an Upload button next to it (or a segmented control: Paste URL | Upload).
+
+When Upload is used:
+
+Accept PNG / JPG / WEBP
+
+Enforce max size 2MB (client-side validation)
+
+Show upload progress + success state
+
+Show a small image preview thumbnail
+
+Auto-fill the Image URL input with the final URL
+
+Add a Clear/Remove action that removes the preview and clears the URL.
+
+If the modal has both “Linked Celebrity” and “Image URL”, keep the current rule:
+
+If celebrity is linked, Image URL can be optional and/or disabled (as per existing logic).
+
+Storage requirements (Supabase)
+
+Use a public storage bucket (create if missing): public-images (or similar)
+
+Upload path pattern should be consistent and unique:
+
+<module>/<slug-or-id>/<timestamp>.<ext>
+
+Examples:
+
+trending-polls/<slug>/<timestamp>.png
+
+real-world-markets/<slug>/<timestamp>.jpg
+
+Return a non-expiring URL suitable for frontend use (public URL preferred).
+
+Engineering requirement
+
+Implement this as a reusable UploadImageInput component used across all modals so behavior is identical and easy to maintain.
+
+Component props should support:
+
+current value (url)
+
+onChange(url)
+
+moduleName (for folder path)
+
+slug/id (for folder path)
+
+disabled state
+
+Acceptance tests
+
+Any modal with Image URL now supports upload.
+
+Upload auto-populates Image URL and preview renders.
+
+Saving persists the URL and frontend displays the image.
+
+Invalid file type/size is blocked with a clear error.
+
+Clear/remove works and reverts to placeholder behavior.
