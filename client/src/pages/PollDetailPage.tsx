@@ -421,38 +421,24 @@ export default function PollDetailPage() {
             Results
           </h2>
 
-          <div className="mb-4">
-            <div className="h-6 rounded-full overflow-hidden flex bg-white/5" data-testid="bar-results">
-              {poll.approvePercent > 0 && (
-                <div
-                  className="h-full bg-[#00E676] transition-all duration-300 flex items-center justify-center cursor-default hover:bg-[#69F0AE]"
-                  style={{ width: `${poll.approvePercent}%` }}
-                >
-                  {poll.approvePercent >= 10 && (
-                    <span className="text-[10px] font-bold text-white">{poll.approvePercent}%</span>
-                  )}
-                </div>
-              )}
-              {poll.neutralPercent > 0 && (
-                <div
-                  className="h-full bg-slate-300 transition-all duration-300 flex items-center justify-center cursor-default hover:bg-slate-200"
-                  style={{ width: `${poll.neutralPercent}%` }}
-                >
-                  {poll.neutralPercent >= 10 && (
-                    <span className="text-[10px] font-bold text-slate-900">{poll.neutralPercent}%</span>
-                  )}
-                </div>
-              )}
-              {poll.disapprovePercent > 0 && (
-                <div
-                  className="h-full bg-[#FF5252] transition-all duration-300 flex items-center justify-center cursor-default hover:bg-[#FF8A80]"
-                  style={{ width: `${poll.disapprovePercent}%` }}
-                >
-                  {poll.disapprovePercent >= 10 && (
-                    <span className="text-[10px] font-bold text-white">{poll.disapprovePercent}%</span>
-                  )}
-                </div>
-              )}
+          <div className="flex flex-col gap-2 mb-4" data-testid="bar-results">
+            <div
+              className="h-9 rounded-md bg-[#00C853]/10 border border-[#00C853]/50 flex items-center justify-center transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20 cursor-default"
+              style={{ width: `${Math.max(poll.approvePercent, 15)}%` }}
+            >
+              <span className="text-xs font-semibold text-[#00C853]">{poll.approvePercent}%</span>
+            </div>
+            <div
+              className="h-9 rounded-md bg-white/5 border border-white/40 flex items-center justify-center transition-all duration-300 hover:border-white/80 hover:bg-white/15 cursor-default"
+              style={{ width: `${Math.max(poll.neutralPercent, 15)}%` }}
+            >
+              <span className="text-xs font-semibold text-white">{poll.neutralPercent}%</span>
+            </div>
+            <div
+              className="h-9 rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 flex items-center justify-center transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 cursor-default"
+              style={{ width: `${Math.max(poll.disapprovePercent, 15)}%` }}
+            >
+              <span className="text-xs font-semibold text-[#FF0000]">{poll.disapprovePercent}%</span>
             </div>
           </div>
 
