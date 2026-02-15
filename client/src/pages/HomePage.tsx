@@ -889,7 +889,7 @@ export default function HomePage() {
                       {leaderboardTab === "fame" ? "Ranked by real-world trending data" : "Ranked by community votes"}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 border-b border-border pb-2">
+                  <div className="sticky top-16 z-30 flex items-center gap-2 border-b border-border pb-2 pt-2 -mt-2 bg-card/95 backdrop-blur-sm">
                     <button
                       onClick={() => handleTabClick("fame")}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
