@@ -269,10 +269,6 @@ function VersusCard({
             <span className="text-sm font-semibold text-slate-300">
               {matchup.promptText || "Who do you prefer?"}
             </span>
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <Swords className="h-3.5 w-3.5 text-cyan-400/70" />
-              <span className="font-medium">Tap an image to pick your side</span>
-            </div>
           </div>
         )}
         
@@ -395,7 +391,12 @@ function VersusCard({
                 </button>
               </div>
             </div>
-          ) : null}
+          ) : (
+            <div className="flex items-center justify-center gap-2 text-xs text-slate-400 mt-1">
+              <Swords className="h-3.5 w-3.5 text-cyan-400/70" />
+              <span className="font-medium">Tap an image to pick your side</span>
+            </div>
+          )}
         </div>
       </div>
     </Card>
