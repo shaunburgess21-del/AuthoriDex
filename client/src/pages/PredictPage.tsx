@@ -2397,9 +2397,7 @@ export default function PredictPage() {
             <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 via-transparent to-transparent" />
             <div className="relative py-4">
               <div className="text-center">
-                <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-fame-score-title">
-                  Predict the Fame Score
-                </h2>
+                <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-fame-score-title">Predict the Trend Score</h2>
                 <p className="text-muted-foreground max-w-2xl mx-auto mb-3">Use your skills to forecast celebrity trend score movements.</p>
                 <button
                   onClick={() => setShowFirstTimeModal(true)}
