@@ -4,10 +4,11 @@ interface PersonAvatarProps {
   name: string;
   avatar?: string | null;
   size?: "xs" | "sm" | "md" | "lg" | "xl";
+  className?: string;
 }
 
-export function PersonAvatar({ name, avatar, size = "md" }: PersonAvatarProps) {
-  const sizeClass = 
+export function PersonAvatar({ name, avatar, size = "md", className }: PersonAvatarProps) {
+  const sizeClass = className ? className :
     size === "xs" ? "h-6 w-6" :
     size === "sm" ? "h-10 w-10" : 
     size === "lg" ? "h-16 w-16" :
