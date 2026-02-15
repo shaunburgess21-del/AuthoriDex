@@ -2361,7 +2361,7 @@ export default function PredictPage() {
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : filteredCommunity.length > 0 ? (
-              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-community">
+              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-community" dotActiveColor="bg-violet-500">
                 {filteredCommunity.map((market: any) => (
                   <OpenMarketCard 
                     key={market.id} 
@@ -2446,7 +2446,7 @@ export default function PredictPage() {
               onAuthRequired={() => setLocation("/login")}
             />
             {filteredUpDown.length > 0 ? (
-              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-updown">
+              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-violet-500">
                 {filteredUpDown.map((market) => (
                   <WeeklyUpDownCard 
                     key={market.id} 
@@ -2484,7 +2484,7 @@ export default function PredictPage() {
               onAuthRequired={() => setLocation("/login")}
             />
             {filteredH2H.length > 0 ? (
-              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-h2h">
+              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-violet-500">
                 {filteredH2H.map((market) => (
                   <HeadToHeadCard 
                     key={market.id} 
@@ -2522,7 +2522,7 @@ export default function PredictPage() {
               onAuthRequired={() => setLocation("/login")}
             />
             {filteredGainers.length > 0 ? (
-              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-gainer">
+              <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-violet-500">
                 {filteredGainers.map((market) => (
                   <TopGainerCard 
                     key={market.id} 

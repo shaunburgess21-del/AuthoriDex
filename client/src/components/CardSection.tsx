@@ -7,6 +7,7 @@ interface CardSectionProps {
   columns?: 2 | 3;
   gap?: string;
   testIdPrefix?: string;
+  dotActiveColor?: string;
 }
 
 export function CardSection({
@@ -15,6 +16,7 @@ export function CardSection({
   columns = 3,
   gap = "gap-5",
   testIdPrefix = "card-section",
+  dotActiveColor = "bg-cyan-400",
 }: CardSectionProps) {
   const items = children.filter(Boolean);
   const desktopItems = items.slice(0, desktopLimit);
@@ -115,7 +117,7 @@ export function CardSection({
                   onClick={() => goTo(i)}
                   className={`rounded-full transition-all duration-200 ${
                     i === currentIndex
-                      ? 'w-6 h-2 bg-cyan-400'
+                      ? `w-6 h-2 ${dotActiveColor}`
                       : 'w-2 h-2 bg-slate-600 hover:bg-slate-500'
                   }`}
                   data-testid={`${testIdPrefix}-dot-${i}`}
