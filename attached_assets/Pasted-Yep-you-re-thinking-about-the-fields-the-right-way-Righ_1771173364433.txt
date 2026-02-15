@@ -1,0 +1,65 @@
+Yep — you’re thinking about the fields the right way. Right now the Description is too long for the card and it’s cluttering the grid, while Subject / Question seems under-used (or not used at all) on the frontend.
+
+What “Subject / Question” should do (recommended)
+
+Use it as the subtitle on the Trending Poll card (one line, truncating if needed). It’s the clean “what are we actually voting on?” line.
+
+What “Description (optional)” should do (recommended)
+
+Treat it as Long-form context / summary that appears primarily on the dedicated URL page, not the card (or at most show 1–2 line preview with fade, optional).
+
+That matches your intention perfectly:
+
+Card = quick scan + fast vote
+
+Dedicated page = deeper context + results + discussion
+
+Prompt to Replit (copy/paste)
+
+Trending Polls field mapping + dedicated URL content
+
+In the Trending Poll Admin “Create Poll” modal, we currently have:
+
+Headline
+
+Subject / Question
+
+Description (optional)
+
+I entered a long Description assuming it would be used on the dedicated poll URL page (not fully displayed on the card), but right now the long text appears on the card and makes the UI heavy.
+
+Please update the field usage as follows:
+
+Frontend card layout
+
+Headline = main title on the card (already working)
+
+Subject / Question = card subtitle directly under the headline (1 line max, truncate with ellipsis)
+
+Description (optional) should not render in full on the card.
+
+Either hide it entirely on the card, OR show only a very short preview (max 2 lines) with fade/truncation.
+
+Dedicated Trending Poll URL page
+
+Show Headline as page title
+
+Show Subject / Question prominently under the title (acts as the core question)
+
+Show Description (optional) in a “Context / Summary” section (full text), above the comments section.
+
+Confirm this mapping is consistent everywhere:
+
+Home → Vote toggle Trending Poll cards
+
+Vote page Trending Poll cards
+
+Dedicated poll page
+
+Acceptance:
+
+Subject/Question is visible on the card as subtitle
+
+Long Description appears on the dedicated URL page in full
+
+Card grid looks cleaner and more consistent
