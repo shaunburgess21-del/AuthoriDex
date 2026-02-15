@@ -2509,7 +2509,7 @@ export default function PredictPage() {
               onViewAll={() => setViewAllCategory("gainers")}
               onRulesClick={() => setRulesModalOpen("gainer")}
             >
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain the most raw points in 7 days?</p>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain the most points?</p>
             </SectionHeader>
             <SectionFilterBar
               categoryFilter={gainerCategory}
