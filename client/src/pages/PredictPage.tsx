@@ -2483,7 +2483,7 @@ export default function PredictPage() {
               title="Head-to-Head Battles"
               onRulesClick={() => setRulesModalOpen("h2h")}
             >
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain more points?</p>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain more points</p>
             </SectionHeader>
             <SectionFilterBar
               categoryFilter={h2hCategory}
