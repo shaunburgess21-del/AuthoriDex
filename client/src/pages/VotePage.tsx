@@ -346,58 +346,64 @@ function VersusCard({
         </div>
         
         <div className="mt-auto pt-3 px-4">
-          {hasVoted ? (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5">
-                  <span className={`text-lg font-bold ${leadingA ? 'text-cyan-400' : 'text-slate-400'}`}>
-                    {matchup.optionAPercent}%
-                  </span>
-                  {votedA && (
-                    <Badge variant="outline" className="text-[10px] border-cyan-500/40 text-cyan-400 px-1.5 py-0">
-                      Your pick
-                    </Badge>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {votedB && (
-                    <Badge variant="outline" className="text-[10px] border-sky-600/40 text-sky-500 px-1.5 py-0">
-                      Your pick
-                    </Badge>
-                  )}
-                  <span className={`text-lg font-bold ${!leadingA ? 'text-[#0386C9]' : 'text-slate-400'}`}>
-                    {matchup.optionBPercent}%
-                  </span>
-                </div>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <span className={`text-lg font-bold ${hasVoted ? (leadingA ? 'text-cyan-400' : 'text-slate-400') : 'text-slate-600'}`}>
+                  {hasVoted ? `${matchup.optionAPercent}%` : '%'}
+                </span>
+                {hasVoted && votedA && (
+                  <Badge variant="outline" className="text-[10px] border-cyan-500/40 text-cyan-400 px-1.5 py-0">
+                    Your pick
+                  </Badge>
+                )}
               </div>
-              <div className="h-2.5 rounded-full bg-slate-700/50 overflow-hidden flex">
-                <div 
-                  className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400"
-                  style={{ width: `${matchup.optionAPercent}%` }}
-                />
-                <div 
-                  className="h-full bg-gradient-to-r from-sky-500 to-sky-600"
-                  style={{ width: `${matchup.optionBPercent}%` }}
-                />
-              </div>
-              <div className="flex items-center justify-between mt-1.5">
-                <span className="text-[11px] text-slate-500 font-medium">{matchup.optionAText}</span>
-                <span className="text-[11px] text-slate-500 font-medium">{matchup.optionBText}</span>
-              </div>
-              <div className="flex items-center justify-center gap-2 mt-2">
-                <span className="text-[10px] text-slate-500/70">Tap the other image to change your vote</span>
-                <span className="text-[10px] text-slate-500/40">|</span>
-                <button
-                  onClick={() => onRemoveVote(matchup.id)}
-                  className="text-[10px] text-slate-500/70 hover:text-red-400/80 transition-colors"
-                  data-testid={`button-remove-vote-${matchup.id}`}
-                >
-                  Remove vote
-                </button>
+              <div className="flex items-center gap-1.5">
+                {hasVoted && votedB && (
+                  <Badge variant="outline" className="text-[10px] border-sky-600/40 text-sky-500 px-1.5 py-0">
+                    Your pick
+                  </Badge>
+                )}
+                <span className={`text-lg font-bold ${hasVoted ? (!leadingA ? 'text-[#0386C9]' : 'text-slate-400') : 'text-slate-600'}`}>
+                  {hasVoted ? `${matchup.optionBPercent}%` : '%'}
+                </span>
               </div>
             </div>
+            <div className={`h-2.5 rounded-full overflow-hidden flex ${hasVoted ? 'bg-slate-700/50' : 'bg-slate-700/30'}`}>
+              {hasVoted ? (
+                <>
+                  <div 
+                    className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400"
+                    style={{ width: `${matchup.optionAPercent}%` }}
+                  />
+                  <div 
+                    className="h-full bg-gradient-to-r from-sky-500 to-sky-600"
+                    style={{ width: `${matchup.optionBPercent}%` }}
+                  />
+                </>
+              ) : (
+                <div className="h-full w-full bg-slate-700/40" />
+              )}
+            </div>
+            <div className="flex items-center justify-between mt-1.5">
+              <span className={`text-[11px] font-medium ${hasVoted ? 'text-slate-500' : 'text-slate-600'}`}>{matchup.optionAText}</span>
+              <span className={`text-[11px] font-medium ${hasVoted ? 'text-slate-500' : 'text-slate-600'}`}>{matchup.optionBText}</span>
+            </div>
+          </div>
+          {hasVoted ? (
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <span className="text-[10px] text-slate-500/70">Tap the other image to change your vote</span>
+              <span className="text-[10px] text-slate-500/40">|</span>
+              <button
+                onClick={() => onRemoveVote(matchup.id)}
+                className="text-[10px] text-slate-500/70 hover:text-red-400/80 transition-colors"
+                data-testid={`button-remove-vote-${matchup.id}`}
+              >
+                Remove vote
+              </button>
+            </div>
           ) : (
-            <div className="flex items-center justify-center gap-2 text-xs text-slate-400 mt-1 min-h-[90px]">
+            <div className="flex items-center justify-center gap-2 text-xs text-slate-500/70 mt-2">
               <Swords className="h-3.5 w-3.5 text-cyan-400/70" />
               <span className="font-medium">Tap an image to pick your side</span>
             </div>
