@@ -1082,22 +1082,22 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
       </a>
       {market.teaser && <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{market.teaser}</p>}
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-        <Users className="h-3.5 w-3.5" />
-        <span>{participants} participants</span>
-      </div>
-      
-      <div className="mb-2">
-        <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
-        </div>
-        <div className="flex items-center justify-between text-xs mt-1.5">
-          <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
-          <span className="text-red-500 font-semibold">No {noPercent}%</span>
-        </div>
-      </div>
-      
       <div className="mt-auto">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+          <Users className="h-3.5 w-3.5" />
+          <span>{participants} participants</span>
+        </div>
+        
+        <div className="mb-2">
+          <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
+          </div>
+          <div className="flex items-center justify-between text-xs mt-1.5">
+            <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
+            <span className="text-red-500 font-semibold">No {noPercent}%</span>
+          </div>
+        </div>
+        
         <div className="flex items-center justify-center mb-1.5">
           <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
         </div>
@@ -1222,22 +1222,22 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
       )}
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-        <Users className="h-3.5 w-3.5" />
-        <span>{participants} participants</span>
-      </div>
-      
-      <div className="mb-2">
-        <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${abovePercent}%` }} />
-        </div>
-        <div className="flex items-center justify-between text-xs mt-1.5">
-          <span className="text-green-500 font-semibold">Above {abovePercent}%</span>
-          <span className="text-red-500 font-semibold">Below {belowPercent}%</span>
-        </div>
-      </div>
-      
       <div className="mt-auto">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+          <Users className="h-3.5 w-3.5" />
+          <span>{participants} participants</span>
+        </div>
+        
+        <div className="mb-2">
+          <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${abovePercent}%` }} />
+          </div>
+          <div className="flex items-center justify-between text-xs mt-1.5">
+            <span className="text-green-500 font-semibold">Above {abovePercent}%</span>
+            <span className="text-red-500 font-semibold">Below {belowPercent}%</span>
+          </div>
+        </div>
+        
         <div className="flex items-center justify-center mb-1.5">
           <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
         </div>
