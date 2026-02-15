@@ -1273,6 +1273,9 @@ export default function AdminDashboard() {
     seedSupportCount: 0,
     seedNeutralCount: 0,
     seedOpposeCount: 0,
+    slug: "",
+    featured: false,
+    visibility: "draft" as "draft" | "live" | "inactive" | "archived",
   });
   
   const [celebritySearchInput, setCelebritySearchInput] = useState("");
@@ -2111,6 +2114,9 @@ export default function AdminDashboard() {
       seedSupportCount: 0,
       seedNeutralCount: 0,
       seedOpposeCount: 0,
+      slug: "",
+      featured: false,
+      visibility: "draft",
     });
     setCelebritySearchInput("");
     setSelectedCelebrityName("");
@@ -2162,6 +2168,9 @@ export default function AdminDashboard() {
       seedSupportCount: poll.seedSupportCount,
       seedNeutralCount: poll.seedNeutralCount,
       seedOpposeCount: poll.seedOpposeCount,
+      slug: poll.slug || "",
+      featured: poll.featured ?? false,
+      visibility: (poll.visibility || "draft") as "draft" | "live" | "inactive" | "archived",
     });
     if (poll.personId) {
       const pid = poll.personId;
@@ -4835,18 +4844,19 @@ export default function AdminDashboard() {
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="poll-status">Status</Label>
+                <Label htmlFor="poll-visibility">Visibility</Label>
                 <Select
-                  value={pollForm.status}
-                  onValueChange={(value) => setPollForm({ ...pollForm, status: value as "draft" | "live" | "archived" })}
+                  value={pollForm.visibility}
+                  onValueChange={(value) => setPollForm({ ...pollForm, visibility: value as "draft" | "live" | "inactive" | "archived" })}
                 >
-                  <SelectTrigger data-testid="select-poll-status">
-                    <SelectValue placeholder="Select status" />
+                  <SelectTrigger data-testid="select-poll-visibility">
+                    <SelectValue placeholder="Select visibility" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="live">Live</SelectItem>
-                    <SelectItem value="archived">Archived</SelectItem>
+                    <SelectItem value="draft">Draft (Admin only)</SelectItem>
+                    <SelectItem value="live">Live (Active)</SelectItem>
+                    <SelectItem value="inactive">Inactive (Visible but dimmed)</SelectItem>
+                    <SelectItem value="archived">Archived (Hidden)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -4880,6 +4890,56 @@ export default function AdminDashboard() {
                 placeholder="Short title for the poll"
                 data-testid="input-poll-headline"
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="poll-slug">Slug</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="poll-slug"
+                    value={pollForm.slug}
+                    onChange={(e) => setPollForm({ ...pollForm, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') })}
+                    placeholder="auto-generated-from-headline"
+                    data-testid="input-poll-slug"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const generated = pollForm.headline
+                        .toLowerCase()
+                        .replace(/[^a-z0-9\s-]/g, '')
+                        .replace(/\s+/g, '-')
+                        .replace(/-+/g, '-')
+                        .slice(0, 80);
+                      setPollForm({ ...pollForm, slug: generated });
+                    }}
+                    disabled={!pollForm.headline}
+                    data-testid="button-generate-slug"
+                  >
+                    Generate
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Unique URL-friendly identifier</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="poll-featured">Featured</Label>
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={pollForm.featured}
+                    onClick={() => setPollForm({ ...pollForm, featured: !pollForm.featured })}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${pollForm.featured ? 'bg-primary' : 'bg-muted'}`}
+                    data-testid="toggle-poll-featured"
+                  >
+                    <span className={`pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform ${pollForm.featured ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                  <span className="text-sm text-muted-foreground">{pollForm.featured ? "Featured" : "Not featured"}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Highlighted on the Vote page</p>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="poll-subject">Subject / Question</Label>
