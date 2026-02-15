@@ -23,7 +23,7 @@ export function FilterDropdown({ value, onChange }: FilterDropdownProps) {
     { value: "Tech", label: "Tech" },
     { value: "Politics", label: "Politics" },
     { value: "Business", label: "Business" },
-    { value: "Entertainment", label: "Entertainment" },
+    { value: "Music", label: "Music" },
     { value: "Sports", label: "Sports" },
     { value: "Creator", label: "Creator" },
   ];

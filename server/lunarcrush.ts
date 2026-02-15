@@ -15,7 +15,7 @@ import { TrendingPerson } from "@shared/schema";
 /** @deprecated - generates mock data, do not use */
 function generateMockTrendingPeople(): TrendingPerson[] {
   console.error("[DEPRECATED] generateMockTrendingPeople() should not be called!");
-  const categories = ["Entertainment", "Sports", "Tech", "Politics", "Business", "Creator"];
+  const categories = ["Music", "Sports", "Tech", "Politics", "Business", "Creator"];
   const firstNames = [
     "Taylor", "Elon", "Cristiano", "Kim", "Lionel", "Beyoncé", "LeBron", "Rihanna",
     "Ariana", "Drake", "Selena", "Justin", "Kanye", "Serena", "Roger", "Tom",

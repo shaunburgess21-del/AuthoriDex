@@ -58,7 +58,7 @@ const foundingVotes: Record<string, { love: number; like: number; neutral: numbe
   "Pokimane": { love: 300, like: 280, neutral: 240, dislike: 100, hate: 80 },
   "Markiplier": { love: 380, like: 320, neutral: 180, dislike: 60, hate: 40 },
   
-  // Entertainment
+  // Music
   "Dwayne Johnson": { love: 450, like: 350, neutral: 120, dislike: 50, hate: 30 },
   "Tom Hanks": { love: 480, like: 340, neutral: 100, dislike: 40, hate: 30 },
   "Zendaya": { love: 420, like: 340, neutral: 160, dislike: 50, hate: 30 },

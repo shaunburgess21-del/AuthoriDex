@@ -11,7 +11,7 @@ export default function LeaderboardRowExample() {
     fameIndex: 9850,
     change24h: 12.5,
     change7d: 23.8,
-    category: "Entertainment",
+    category: "Music",
   };
 
   return (

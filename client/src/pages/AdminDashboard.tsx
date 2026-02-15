@@ -675,7 +675,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
   const CATEGORIES = [
     { value: "politics", label: "Politics" },
     { value: "tech", label: "Tech" },
-    { value: "entertainment", label: "Entertainment" },
+    { value: "music", label: "Music" },
     { value: "sports", label: "Sports" },
     { value: "business", label: "Business" },
     { value: "creator", label: "Creator" },
@@ -2947,7 +2947,7 @@ export default function AdminDashboard() {
                         <SelectContent>
                           <SelectItem value="all">All Categories</SelectItem>
                           <SelectItem value="Tech">Tech</SelectItem>
-                          <SelectItem value="Entertainment">Entertainment</SelectItem>
+                          <SelectItem value="Music">Music</SelectItem>
                           <SelectItem value="Sports">Sports</SelectItem>
                           <SelectItem value="Politics">Politics</SelectItem>
                           <SelectItem value="Business">Business</SelectItem>
@@ -4253,7 +4253,7 @@ export default function AdminDashboard() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Tech">Tech</SelectItem>
-                  <SelectItem value="Entertainment">Entertainment</SelectItem>
+                  <SelectItem value="Music">Music</SelectItem>
                   <SelectItem value="Sports">Sports</SelectItem>
                   <SelectItem value="Politics">Politics</SelectItem>
                   <SelectItem value="Business">Business</SelectItem>
@@ -4748,7 +4748,7 @@ export default function AdminDashboard() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Tech">Tech</SelectItem>
-                  <SelectItem value="Entertainment">Entertainment</SelectItem>
+                  <SelectItem value="Music">Music</SelectItem>
                   <SelectItem value="Sports">Sports</SelectItem>
                   <SelectItem value="Politics">Politics</SelectItem>
                   <SelectItem value="Business">Business</SelectItem>
@@ -4861,7 +4861,7 @@ export default function AdminDashboard() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Tech">Tech</SelectItem>
-                    <SelectItem value="Entertainment">Entertainment</SelectItem>
+                    <SelectItem value="Music">Music</SelectItem>
                     <SelectItem value="Sports">Sports</SelectItem>
                     <SelectItem value="Politics">Politics</SelectItem>
                     <SelectItem value="Business">Business</SelectItem>

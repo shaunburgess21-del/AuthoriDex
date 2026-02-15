@@ -19,7 +19,7 @@ export interface MatchupData {
 export const MATCHUP_DATA: MatchupData[] = [
   {
     id: "fo-1",
-    category: "Entertainment",
+    category: "Music",
     title: "Pop Icon Showdown",
     optionAText: "Taylor Swift",
     optionAImage: null,
@@ -83,7 +83,7 @@ export const MATCHUP_DATA: MatchupData[] = [
   },
   {
     id: "fo-5",
-    category: "Entertainment",
+    category: "Music",
     title: "Rap Legends",
     optionAText: "Drake",
     optionAImage: null,
@@ -115,8 +115,8 @@ export interface DiscourseTopicData {
 export const DISCOURSE_TOPICS: DiscourseTopicData[] = [
   { id: "d1", headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", category: "Tech", approvePercent: 35, neutralPercent: 20, disapprovePercent: 45, totalVotes: 89432, personName: "Elon Musk", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/elon-musk/1.png" },
   { id: "d2", headline: "AI replacing jobs", description: "Should we embrace or regulate AI in the workplace?", category: "Tech", approvePercent: 28, neutralPercent: 32, disapprovePercent: 40, totalVotes: 156789, personName: "Sam Altman", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sam-altman/1.png" },
-  { id: "d3", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Entertainment", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567, personName: "Taylor Swift", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/taylor-swift/1.png" },
-  { id: "d4", headline: "Spotify's royalty model", description: "Are artists fairly compensated by streaming?", category: "Entertainment", approvePercent: 22, neutralPercent: 28, disapprovePercent: 50, totalVotes: 145678, personName: "Daniel Ek", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/daniel-ek/1.png" },
+  { id: "d3", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Music", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567, personName: "Taylor Swift", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/taylor-swift/1.png" },
+  { id: "d4", headline: "Spotify's royalty model", description: "Are artists fairly compensated by streaming?", category: "Music", approvePercent: 22, neutralPercent: 28, disapprovePercent: 50, totalVotes: 145678, personName: "Daniel Ek", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/daniel-ek/1.png" },
   { id: "d5", headline: "MrBeast's philanthropy", description: "Is it genuine or just content?", category: "Creator", approvePercent: 68, neutralPercent: 20, disapprovePercent: 12, totalVotes: 98765, personName: "MrBeast", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/mrbeast/1.png" },
   { id: "d6", headline: "NFL Sunday Ticket pricing", description: "Is streaming football too expensive?", category: "Sports", approvePercent: 18, neutralPercent: 22, disapprovePercent: 60, totalVotes: 76543, personName: "Roger Goodell", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/roger-goodell/1.png" },
 ];
@@ -126,16 +126,16 @@ export interface InductionCandidate {
   name: string;
   initials: string;
   avatar: string;
-  category: "Tech" | "Entertainment" | "Creator" | "Sports" | "Business" | "Politics";
+  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics";
   votes: number;
 }
 
 export const INDUCTION_CANDIDATES: InductionCandidate[] = [
   { id: "i1", name: "Jensen Huang", initials: "JH", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/jensen-huang/1.png", category: "Tech", votes: 12406 },
-  { id: "i2", name: "Charli XCX", initials: "CX", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/charli-xcx/1.png", category: "Entertainment", votes: 11205 },
+  { id: "i2", name: "Charli XCX", initials: "CX", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/charli-xcx/1.png", category: "Music", votes: 11205 },
   { id: "i3", name: "Kai Cenat", initials: "KC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/kai-cenat/1.png", category: "Creator", votes: 10892 },
-  { id: "i4", name: "Sabrina Carpenter", initials: "SC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sabrina-carpenter/1.png", category: "Entertainment", votes: 9847 },
-  { id: "i5", name: "Ice Spice", initials: "IS", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/ice-spice/1.png", category: "Entertainment", votes: 8934 },
+  { id: "i4", name: "Sabrina Carpenter", initials: "SC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sabrina-carpenter/1.png", category: "Music", votes: 9847 },
+  { id: "i5", name: "Ice Spice", initials: "IS", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/ice-spice/1.png", category: "Music", votes: 8934 },
   { id: "i6", name: "Sam Altman", initials: "SA", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sam-altman/1.png", category: "Tech", votes: 8421 },
 ];
 
@@ -151,7 +151,7 @@ export const CURATE_PROFILE_POLLS: CurateProfilePoll[] = [
   { 
     id: "pp1", 
     personName: "Taylor Swift", 
-    category: "Entertainment",
+    category: "Music",
     totalVotes: 24680,
     photoOptions: [
       { id: "ts1", description: "Eras Tour red outfit", votes: 8934, isLeading: true },
@@ -184,5 +184,5 @@ export const CURATE_PROFILE_POLLS: CurateProfilePoll[] = [
   },
 ];
 
-export const FILTER_CATEGORIES = ["All", "Favorites", "Trending", "Tech", "Entertainment", "Sports", "Creator", "Business", "Politics"] as const;
+export const FILTER_CATEGORIES = ["All", "Favorites", "Trending", "Tech", "Music", "Sports", "Creator", "Business", "Politics"] as const;
 export type FilterCategory = typeof FILTER_CATEGORIES[number];

@@ -5,7 +5,7 @@ export const BASE_FILTER_CATEGORIES = [
   "Tech",
   "Politics",
   "Business",
-  "Entertainment",
+  "Music",
   "Sports",
   "Creator",
 ] as const;
@@ -17,7 +17,7 @@ export const FILTER_CATEGORIES_WITH_CUSTOM = [
   "Tech",
   "Politics",
   "Business",
-  "Entertainment",
+  "Music",
   "Sports",
   "Creator",
   "misc",
@@ -34,7 +34,7 @@ export const BASE_CATEGORY_FILTER_OPTIONS: { id: FilterCategory; label: string }
   { id: "Tech", label: "Tech" },
   { id: "Politics", label: "Politics" },
   { id: "Business", label: "Business" },
-  { id: "Entertainment", label: "Entertainment" },
+  { id: "Music", label: "Music" },
   { id: "Sports", label: "Sports" },
   { id: "Creator", label: "Creator" },
 ];
@@ -51,7 +51,7 @@ export const LEGACY_FILTER_CATEGORIES = [
   "Tech",
   "Politics",
   "Business",
-  "Entertainment",
+  "Music",
   "Sports",
   "Creator",
 ] as const;

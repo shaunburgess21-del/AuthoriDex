@@ -440,7 +440,7 @@ function categorizeNews(text: string): string {
   const categories: Record<string, string[]> = {
     "Politics": ["president", "senator", "congress", "election", "vote", "policy", "government", "political", "white house", "administration"],
     "Business": ["ceo", "company", "stock", "earnings", "revenue", "investment", "acquisition", "ipo", "market"],
-    "Entertainment": ["movie", "film", "album", "song", "concert", "award", "grammy", "oscar", "emmy", "performance"],
+    "Music": ["movie", "film", "album", "song", "concert", "award", "grammy", "oscar", "emmy", "performance"],
     "Sports": ["game", "match", "tournament", "championship", "win", "score", "team", "player", "season"],
     "Technology": ["tech", "ai", "software", "app", "launch", "innovation", "startup"],
     "Legal": ["lawsuit", "court", "trial", "charged", "indicted", "settlement", "legal"],

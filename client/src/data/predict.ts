@@ -262,7 +262,7 @@ export const CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: "tech", label: "Tech" },
   { id: "politics", label: "Politics" },
   { id: "business", label: "Business" },
-  { id: "entertainment", label: "Entertainment" },
+  { id: "music", label: "Music" },
   { id: "sports", label: "Sports" },
   { id: "creator", label: "Creator" },
 ];

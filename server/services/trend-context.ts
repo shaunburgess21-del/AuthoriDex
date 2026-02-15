@@ -29,7 +29,7 @@ const KEYWORD_MAPPINGS: Array<{
   { keywords: ["album", "tour", "single", "concert", "music", "song", "grammy", "billboard", "spotify"], tag: "Music" },
   { keywords: ["election", "campaign", "vote", "poll", "president", "congress", "senator", "governor", "political"], tag: "Politics" },
   { keywords: ["injury", "match", "championship", "playoff", "score", "game", "season", "draft", "trade", "team"], tag: "Sports" },
-  { keywords: ["movie", "film", "trailer", "premiere", "oscar", "box office", "actor", "actress", "director", "netflix"], tag: "Entertainment" },
+  { keywords: ["movie", "film", "trailer", "premiere", "oscar", "box office", "actor", "actress", "director", "netflix"], tag: "Music" },
   { keywords: ["married", "wedding", "divorce", "engaged", "dating", "relationship", "baby", "pregnant", "family"], tag: "Personal Life" },
   { keywords: ["died", "death", "passed away", "rip", "obituary", "funeral", "tribute", "memorial"], tag: "Breaking News" },
   { keywords: ["twitter", "tweet", "x.com", "viral", "meme", "trending", "post", "social media"], tag: "Viral Moment" },

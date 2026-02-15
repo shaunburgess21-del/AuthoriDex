@@ -4,7 +4,7 @@ const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string
     border: 'border-[#1E90FF]/40',
     text: 'text-[#1E90FF]',
   },
-  Entertainment: {
+  Music: {
     bg: 'bg-[#EC4899]/10',
     border: 'border-[#EC4899]/40',
     text: 'text-[#EC4899]',

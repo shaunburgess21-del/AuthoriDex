@@ -82,16 +82,16 @@ interface InductionCandidate {
   name: string;
   initials: string;
   avatar: string;
-  category: "Tech" | "Entertainment" | "Creator" | "Sports" | "Business" | "Politics";
+  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics";
   votes: number;
 }
 
 const INDUCTION_CANDIDATES: InductionCandidate[] = [
   { id: "i1", name: "Jensen Huang", initials: "JH", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/jensen-huang/1.png", category: "Tech", votes: 12406 },
-  { id: "i2", name: "Charli XCX", initials: "CX", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/charli-xcx/1.png", category: "Entertainment", votes: 11205 },
+  { id: "i2", name: "Charli XCX", initials: "CX", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/charli-xcx/1.png", category: "Music", votes: 11205 },
   { id: "i3", name: "Kai Cenat", initials: "KC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/kai-cenat/1.png", category: "Creator", votes: 10892 },
-  { id: "i4", name: "Sabrina Carpenter", initials: "SC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sabrina-carpenter/1.png", category: "Entertainment", votes: 9847 },
-  { id: "i5", name: "Ice Spice", initials: "IS", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/ice-spice/1.png", category: "Entertainment", votes: 8934 },
+  { id: "i4", name: "Sabrina Carpenter", initials: "SC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sabrina-carpenter/1.png", category: "Music", votes: 9847 },
+  { id: "i5", name: "Ice Spice", initials: "IS", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/ice-spice/1.png", category: "Music", votes: 8934 },
   { id: "i6", name: "Sam Altman", initials: "SA", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sam-altman/1.png", category: "Tech", votes: 8421 },
   { id: "i7", name: "Jenna Ortega", initials: "JO", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/jenna-ortega/1.png", category: "Creator", votes: 7856 },
   { id: "i8", name: "Patrick Mahomes", initials: "PM", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/patrick-mahomes/1.png", category: "Sports", votes: 7234 },
@@ -124,7 +124,7 @@ const curateProfilePolls: CurateProfilePoll[] = [
     id: "pp1", 
     personId: "852662d2-2b12-437f-ada7-1553bd5569b7",
     personName: "Taylor Swift", 
-    category: "Entertainment",
+    category: "Music",
   },
   { 
     id: "pp2", 
@@ -136,7 +136,7 @@ const curateProfilePolls: CurateProfilePoll[] = [
     id: "pp3", 
     personId: "670e5278-f359-4558-abb8-ea0caa371395",
     personName: "Beyoncé", 
-    category: "Entertainment",
+    category: "Music",
   },
   { 
     id: "pp4", 
@@ -148,7 +148,7 @@ const curateProfilePolls: CurateProfilePoll[] = [
     id: "pp5", 
     personId: "3a5bbf27-b9c2-4315-a4dc-7944d9878d0d",
     personName: "Bad Bunny", 
-    category: "Entertainment",
+    category: "Music",
   },
   { 
     id: "pp6", 
@@ -160,13 +160,13 @@ const curateProfilePolls: CurateProfilePoll[] = [
     id: "pp7", 
     personId: "3417182d-d51a-4ff2-ae60-c35781ad9aff",
     personName: "Drake", 
-    category: "Entertainment",
+    category: "Music",
   },
   { 
     id: "pp8", 
     personId: "0b9bd1d6-0f66-4665-8cec-05d87908e3a1",
     personName: "Kendrick Lamar", 
-    category: "Entertainment",
+    category: "Music",
   },
 ];
 
@@ -2837,7 +2837,7 @@ export default function VotePage() {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Entertainment">Entertainment</SelectItem>
+                  <SelectItem value="Music">Music</SelectItem>
                   <SelectItem value="Tech">Tech</SelectItem>
                   <SelectItem value="Creator">Creator</SelectItem>
                   <SelectItem value="Sports">Sports</SelectItem>
@@ -2921,7 +2921,7 @@ export default function VotePage() {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Entertainment">Entertainment</SelectItem>
+                  <SelectItem value="Music">Music</SelectItem>
                   <SelectItem value="Tech">Tech</SelectItem>
                   <SelectItem value="Creator">Creator</SelectItem>
                   <SelectItem value="Sports">Sports</SelectItem>
