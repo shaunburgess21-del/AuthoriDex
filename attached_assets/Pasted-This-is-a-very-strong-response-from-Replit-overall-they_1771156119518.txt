@@ -1,0 +1,121 @@
+This is a very strong response from Replit overall — they basically implemented the exact “make baselines deterministic + trust only run_id snapshots + clean legacy pollution” playbook.
+
+That said, there are 2 things I’d still push back on / verify, because they’re the kind of “sounds fine” statements that can hide edge-case bugs.
+
+What Replit did right ✅ (keep this)
+1) Deterministic run-based 24h/7d baselines
+
+This is the real fix. “Nearest timestamp” baselines are a silent killer (especially with gaps). Run-based comparison makes 24h changes stable and sane.
+
+2) Filtering to run_id IS NOT NULL everywhere
+
+Perfect. That ensures only ingestion-produced snapshots participate in baselines.
+
+3) Cleanup polluted snapshots
+
+Deleting legacy run_id IS NULL rows is exactly what you want once you’ve confirmed those are not needed.
+
+4) Engine-health: baseline debug + systemic-change alert
+
+This is gold. You’ll catch these “all red / all green” syndromes immediately.
+
+The 2 things I’d challenge / ask them to verify 🔍
+A) “Only ingest.ts writes to snapshots”
+
+Replit concluded off-hour snapshots were “legacy from before truncation”. That’s plausible — but it needs verification, not assumption.
+
+What I want them to prove in logs/code:
+
+There is no code path currently inserting into trend_snapshots without:
+
+run_id
+
+timestamp truncated to hour
+
+And ingestion can’t be triggered at odd minutes (e.g., manual hits / cron drift) in a way that still writes “hourly truncated” timestamps but happens “off-hour” in wall-clock.
+
+✅ Ask Replit to run a 24–48h forward check:
+
+after every ingestion run, log:
+
+run_id
+
+snapshot timestamp used
+
+count of snapshots written
+
+add a DB constraint (optional but powerful):
+
+run_id NOT NULL on trend_snapshots (after migration completes)
+
+and/or a check constraint that timestamp minute/second = 0, if that’s truly intended
+
+If they’re confident, constraints make it impossible to regress later.
+
+B) Baseline selection window policy and “coverage”
+
+Replit says “plenty of completed runs around the 24h mark”. Great — but the real question is:
+
+What happens when there isn’t?
+
+Because gaps will happen again (server redeploys, failures, etc.). If you don’t handle this cleanly, you’re back to weirdness.
+
+✅ What I want:
+
+baseline selection must return:
+
+baselineStatus: normal|degraded
+
+baselineAgeHours
+
+coveragePct (#people with baseline snapshot / total)
+
+When degraded:
+
+leaderboard should show “—” for 24h change (or greyed-out) rather than forcing a value
+
+Hot Movers should not use rank-change badges if baseline degraded
+
+It sounds like they added baseline diagnostics to admin health, but make sure the UI uses it and not just admin.
+
+One thing I’d immediately ask them to do next (very practical)
+Add a “baseline run id” to the API response
+
+For /api/leaderboard and /api/trending/hot-movers, include:
+
+currentRunId
+
+baseline24hRunId
+
+baseline24hAgeHours
+
+baselineStatus
+
+This makes it shareable + debuggable instantly if you or your brother see something weird again.
+
+Why Hot Movers was still changing often (and should now stop)
+
+If Hot Movers was flickering every few minutes, it was almost certainly because:
+
+baseline snapshot selection was sliding, OR
+
+thresholds were computed on slightly different populations each request, OR
+
+your “24h change” values were unstable because baseline was unstable
+
+Now that it’s run-based, Hot Movers should only change when a new ingestion run completes (unless your fast-lane injects internal signals into that endpoint, which it shouldn’t).
+
+So your sanity test is:
+
+✅ Refresh 20 times in 10 minutes → Hot Movers should remain identical.
+✅ Wait until after next ingestion completes → Hot Movers may change.
+
+Message you can send Replit (copy/paste)
+
+“Looks great — two follow-ups to lock this down permanently:
+
+Can you prove no current code path can insert into trend_snapshots without run_id / hour-truncated timestamp? If yes, let’s add DB guardrails: run_id NOT NULL on trend_snapshots (and optionally check minute=0) so we can’t regress.
+
+Please expose baseline diagnostics in the public API responses (leaderboard + hot-movers): currentRunId, baseline24hRunId, baseline24hAgeHours, baselineStatus, and coveragePct. If baselineStatus is degraded, UI should show ‘—’ for 24h% and disable rank-based badges/hot-movers logic rather than guessing.
+
+Then we’ll retest: Hot Movers should stay stable between ingestion runs (20 refreshes = no change).”
