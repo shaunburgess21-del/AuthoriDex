@@ -20,6 +20,7 @@ import SettingsPage from "@/pages/me/SettingsPage";
 import PublicProfilePage from "@/pages/PublicProfilePage";
 import AdminDashboard from "@/pages/AdminDashboard";
 import MarketDetailPage from "@/pages/MarketDetailPage";
+import PollDetailPage from "@/pages/PollDetailPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -38,6 +39,7 @@ function Router() {
       <Route path="/me/settings" component={SettingsPage} />
       <Route path="/u/:username" component={PublicProfilePage} />
       <Route path="/markets/:slug" component={MarketDetailPage} />
+      <Route path="/polls/:slug" component={PollDetailPage} />
       <Route path="/admin" component={AdminDashboard} />
       <Route component={NotFound} />
     </Switch>

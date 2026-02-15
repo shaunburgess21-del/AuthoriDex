@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { generateMockPlatformInsights } from "./api-integrations";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, ingestionRuns, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { eq, desc, and, gt, sql, count, gte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -5015,6 +5015,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           category: trendingPolls.category,
           personId: trendingPolls.personId,
           imageUrl: trendingPolls.imageUrl,
+          slug: trendingPolls.slug,
           seedSupportCount: trendingPolls.seedSupportCount,
           seedNeutralCount: trendingPolls.seedNeutralCount,
           seedOpposeCount: trendingPolls.seedOpposeCount,
@@ -5040,6 +5041,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           personName: p.personName || null,
           personAvatar: p.personAvatar || null,
           imageUrl: p.imageUrl,
+          slug: p.slug || null,
           totalVotes: total,
           approvePercent: total > 0 ? Math.round(((p.seedSupportCount || 0) / total) * 100) : 0,
           neutralPercent: total > 0 ? Math.round(((p.seedNeutralCount || 0) / total) * 100) : 0,
@@ -5052,6 +5054,281 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error fetching public trending polls:", error.message);
       res.status(500).json({ error: "Failed to fetch trending polls" });
+    }
+  });
+
+  // ===========================================
+  // PUBLIC: TRENDING POLL DETAIL (by slug)
+  // ===========================================
+
+  app.get("/api/polls/:slug", optionalAuth, async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const authReq = req as AuthRequest;
+      const userId = authReq.userId || null;
+
+      const [poll] = await db
+        .select({
+          id: trendingPolls.id,
+          headline: trendingPolls.headline,
+          subjectText: trendingPolls.subjectText,
+          description: trendingPolls.description,
+          category: trendingPolls.category,
+          personId: trendingPolls.personId,
+          imageUrl: trendingPolls.imageUrl,
+          slug: trendingPolls.slug,
+          featured: trendingPolls.featured,
+          visibility: trendingPolls.visibility,
+          status: trendingPolls.status,
+          timeline: trendingPolls.timeline,
+          deadlineAt: trendingPolls.deadlineAt,
+          seedSupportCount: trendingPolls.seedSupportCount,
+          seedNeutralCount: trendingPolls.seedNeutralCount,
+          seedOpposeCount: trendingPolls.seedOpposeCount,
+          createdAt: trendingPolls.createdAt,
+          personName: trackedPeople.name,
+          personAvatar: trackedPeople.avatar,
+        })
+        .from(trendingPolls)
+        .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
+        .where(eq(trendingPolls.slug, slug))
+        .limit(1);
+
+      if (!poll) {
+        return res.status(404).json({ error: "Poll not found" });
+      }
+
+      const realVotes = await db
+        .select({
+          choice: trendingPollVotes.choice,
+          cnt: count(),
+        })
+        .from(trendingPollVotes)
+        .where(eq(trendingPollVotes.pollId, poll.id))
+        .groupBy(trendingPollVotes.choice);
+
+      const realCounts: Record<string, number> = {};
+      for (const rv of realVotes) {
+        realCounts[rv.choice] = Number(rv.cnt);
+      }
+
+      const supportCount = (poll.seedSupportCount || 0) + (realCounts['support'] || 0);
+      const neutralCount = (poll.seedNeutralCount || 0) + (realCounts['neutral'] || 0);
+      const opposeCount = (poll.seedOpposeCount || 0) + (realCounts['oppose'] || 0);
+      const totalVotes = supportCount + neutralCount + opposeCount;
+
+      let userVote: string | null = null;
+      if (userId) {
+        const [uv] = await db
+          .select({ choice: trendingPollVotes.choice })
+          .from(trendingPollVotes)
+          .where(and(
+            eq(trendingPollVotes.pollId, poll.id),
+            eq(trendingPollVotes.userId, userId)
+          ))
+          .limit(1);
+        if (uv) userVote = uv.choice;
+      }
+
+      res.json({
+        ...poll,
+        supportCount,
+        neutralCount,
+        opposeCount,
+        totalVotes,
+        approvePercent: totalVotes > 0 ? Math.round((supportCount / totalVotes) * 100) : 0,
+        neutralPercent: totalVotes > 0 ? Math.round((neutralCount / totalVotes) * 100) : 0,
+        disapprovePercent: totalVotes > 0 ? Math.round((opposeCount / totalVotes) * 100) : 0,
+        userVote,
+      });
+    } catch (error: any) {
+      console.error("Error fetching poll by slug:", error.message);
+      res.status(500).json({ error: "Failed to fetch poll" });
+    }
+  });
+
+  // ===========================================
+  // PUBLIC: TRENDING POLL VOTE
+  // ===========================================
+
+  app.post("/api/polls/:slug/vote", requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      const { slug } = req.params;
+      const { choice } = req.body;
+
+      if (!choice || !['support', 'neutral', 'oppose'].includes(choice)) {
+        return res.status(400).json({ error: "Choice must be 'support', 'neutral', or 'oppose'" });
+      }
+
+      const [poll] = await db
+        .select({ id: trendingPolls.id })
+        .from(trendingPolls)
+        .where(eq(trendingPolls.slug, slug))
+        .limit(1);
+
+      if (!poll) {
+        return res.status(404).json({ error: "Poll not found" });
+      }
+
+      const [existing] = await db
+        .select()
+        .from(trendingPollVotes)
+        .where(and(
+          eq(trendingPollVotes.pollId, poll.id),
+          eq(trendingPollVotes.userId, authReq.userId!)
+        ))
+        .limit(1);
+
+      if (existing) {
+        await db
+          .update(trendingPollVotes)
+          .set({ choice, updatedAt: new Date() })
+          .where(eq(trendingPollVotes.id, existing.id));
+      } else {
+        await db
+          .insert(trendingPollVotes)
+          .values({
+            pollId: poll.id,
+            userId: authReq.userId!,
+            choice,
+          });
+      }
+
+      res.json({ success: true, choice });
+    } catch (error: any) {
+      console.error("Error voting on poll:", error.message);
+      res.status(500).json({ error: "Failed to cast vote" });
+    }
+  });
+
+  // ===========================================
+  // PUBLIC: TRENDING POLL COMMENTS
+  // ===========================================
+
+  app.get("/api/polls/:slug/comments", async (req, res) => {
+    try {
+      const { slug } = req.params;
+
+      const [poll] = await db
+        .select({ id: trendingPolls.id })
+        .from(trendingPolls)
+        .where(eq(trendingPolls.slug, slug))
+        .limit(1);
+
+      if (!poll) {
+        return res.status(404).json({ error: "Poll not found" });
+      }
+
+      const comments = await db
+        .select()
+        .from(trendingPollComments)
+        .where(eq(trendingPollComments.pollId, poll.id))
+        .orderBy(desc(trendingPollComments.createdAt))
+        .limit(100);
+
+      res.json(comments);
+    } catch (error: any) {
+      console.error("Error fetching poll comments:", error.message);
+      res.status(500).json({ error: "Failed to fetch comments" });
+    }
+  });
+
+  app.post("/api/polls/:slug/comments", requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      const { slug } = req.params;
+      const { body, parentId } = req.body;
+
+      if (!body || typeof body !== "string" || body.trim().length === 0) {
+        return res.status(400).json({ error: "Comment body is required" });
+      }
+
+      const [poll] = await db
+        .select({ id: trendingPolls.id })
+        .from(trendingPolls)
+        .where(eq(trendingPolls.slug, slug))
+        .limit(1);
+
+      if (!poll) {
+        return res.status(404).json({ error: "Poll not found" });
+      }
+
+      const [profile] = await db
+        .select({ username: profiles.username, avatarUrl: profiles.avatarUrl })
+        .from(profiles)
+        .where(eq(profiles.id, authReq.userId!))
+        .limit(1);
+
+      const [created] = await db
+        .insert(trendingPollComments)
+        .values({
+          pollId: poll.id,
+          userId: authReq.userId!,
+          username: profile?.username || null,
+          avatarUrl: profile?.avatarUrl || null,
+          body: body.trim(),
+          parentId: parentId || null,
+        })
+        .returning();
+
+      res.json(created);
+    } catch (error: any) {
+      console.error("Error creating poll comment:", error.message);
+      res.status(500).json({ error: "Failed to add comment" });
+    }
+  });
+
+  app.post("/api/polls/comments/:commentId/vote", requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      const { commentId } = req.params;
+      const { voteType } = req.body;
+
+      if (!voteType || !['up', 'down'].includes(voteType)) {
+        return res.status(400).json({ error: "voteType must be 'up' or 'down'" });
+      }
+
+      const [existingVote] = await db
+        .select()
+        .from(trendingPollCommentVotes)
+        .where(and(
+          eq(trendingPollCommentVotes.commentId, commentId),
+          eq(trendingPollCommentVotes.userId, authReq.userId!)
+        ))
+        .limit(1);
+
+      if (existingVote) {
+        if (existingVote.voteType === voteType) {
+          await db.delete(trendingPollCommentVotes).where(eq(trendingPollCommentVotes.id, existingVote.id));
+          await db.update(trendingPollComments).set({
+            [voteType === 'up' ? 'upvotes' : 'downvotes']: sql`${voteType === 'up' ? trendingPollComments.upvotes : trendingPollComments.downvotes} - 1`,
+          }).where(eq(trendingPollComments.id, commentId));
+          return res.json({ success: true, action: "removed" });
+        } else {
+          await db.update(trendingPollCommentVotes).set({ voteType }).where(eq(trendingPollCommentVotes.id, existingVote.id));
+          const oldCol = existingVote.voteType === 'up' ? 'upvotes' : 'downvotes';
+          const newCol = voteType === 'up' ? 'upvotes' : 'downvotes';
+          await db.update(trendingPollComments).set({
+            [oldCol]: sql`${oldCol === 'upvotes' ? trendingPollComments.upvotes : trendingPollComments.downvotes} - 1`,
+            [newCol]: sql`${newCol === 'upvotes' ? trendingPollComments.upvotes : trendingPollComments.downvotes} + 1`,
+          }).where(eq(trendingPollComments.id, commentId));
+          return res.json({ success: true, action: "changed" });
+        }
+      } else {
+        await db.insert(trendingPollCommentVotes).values({
+          commentId,
+          userId: authReq.userId!,
+          voteType,
+        });
+        await db.update(trendingPollComments).set({
+          [voteType === 'up' ? 'upvotes' : 'downvotes']: sql`${voteType === 'up' ? trendingPollComments.upvotes : trendingPollComments.downvotes} + 1`,
+        }).where(eq(trendingPollComments.id, commentId));
+        return res.json({ success: true, action: "added" });
+      }
+    } catch (error: any) {
+      console.error("Error voting on poll comment:", error.message);
+      res.status(500).json({ error: "Failed to vote on comment" });
     }
   });
 

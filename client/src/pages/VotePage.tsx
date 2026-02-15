@@ -860,7 +860,13 @@ function DiscourseCard({
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <h3 className="font-serif font-bold text-lg leading-tight">{topic.headline}</h3>
+          {topic.slug ? (
+            <Link href={`/polls/${topic.slug}`} data-testid={`link-poll-detail-${topic.id}`}>
+              <h3 className="font-serif font-bold text-lg leading-tight hover:text-cyan-400 transition-colors cursor-pointer">{topic.headline}</h3>
+            </Link>
+          ) : (
+            <h3 className="font-serif font-bold text-lg leading-tight">{topic.headline}</h3>
+          )}
           {topic.personName && (
             <span className="text-xs text-cyan-400">{topic.personName}</span>
           )}

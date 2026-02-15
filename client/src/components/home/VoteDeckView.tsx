@@ -9,7 +9,7 @@ import { CategoryPill } from "@/components/CategoryPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { 
   Swords, 
@@ -219,7 +219,13 @@ function PollCard({
           </div>
         )}
         
-        <h3 className="font-semibold text-base mb-1 text-center">{topic.headline}</h3>
+        {topic.slug ? (
+          <Link href={`/polls/${topic.slug}`} data-testid={`link-poll-detail-${topic.id}`}>
+            <h3 className="font-semibold text-base mb-1 text-center hover:text-cyan-400 transition-colors cursor-pointer">{topic.headline}</h3>
+          </Link>
+        ) : (
+          <h3 className="font-semibold text-base mb-1 text-center">{topic.headline}</h3>
+        )}
         <p className="text-sm text-muted-foreground mb-4 text-center">{topic.description}</p>
         
         {!hasVoted ? (

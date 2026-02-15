@@ -110,6 +110,7 @@ export interface DiscourseTopicData {
   totalVotes: number;
   personName?: string;
   avatar?: string;
+  slug?: string | null;
 }
 
 export const DISCOURSE_TOPICS: DiscourseTopicData[] = [

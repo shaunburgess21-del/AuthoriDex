@@ -563,6 +563,50 @@ export const insertTrendingPollVoteSchema = createInsertSchema(trendingPollVotes
 export type TrendingPollVote = typeof trendingPollVotes.$inferSelect;
 export type InsertTrendingPollVote = z.infer<typeof insertTrendingPollVoteSchema>;
 
+// ============================================================================
+// TRENDING POLL COMMENTS — Discussion on poll detail pages
+// ============================================================================
+
+export const trendingPollComments = pgTable("trending_poll_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pollId: varchar("poll_id").notNull().references(() => trendingPolls.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  username: text("username"),
+  avatarUrl: text("avatar_url"),
+  body: text("body").notNull(),
+  parentId: varchar("parent_id"),
+  upvotes: integer("upvotes").notNull().default(0),
+  downvotes: integer("downvotes").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  pollIdx: index("trending_poll_comments_poll_idx").on(table.pollId),
+}));
+
+export const insertTrendingPollCommentSchema = createInsertSchema(trendingPollComments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  upvotes: true,
+  downvotes: true,
+});
+
+export type TrendingPollComment = typeof trendingPollComments.$inferSelect;
+export type InsertTrendingPollComment = z.infer<typeof insertTrendingPollCommentSchema>;
+
+export const trendingPollCommentVotes = pgTable("trending_poll_comment_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  commentId: varchar("comment_id").notNull().references(() => trendingPollComments.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  voteType: text("vote_type").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueUserComment: unique("tpc_votes_user_comment_unique").on(table.userId, table.commentId),
+  commentIdx: index("tpc_votes_comment_idx").on(table.commentId),
+}));
+
+export type TrendingPollCommentVote = typeof trendingPollCommentVotes.$inferSelect;
+
 // Relations for new tables
 export const celebrityImagesRelations = relations(celebrityImages, ({ one }) => ({
   person: one(trackedPeople, {
