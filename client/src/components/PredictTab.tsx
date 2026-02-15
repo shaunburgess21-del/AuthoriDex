@@ -549,9 +549,9 @@ function HeadToHeadCard({
         <div className="flex items-center justify-between mb-4">
           <div className="flex flex-col items-center flex-1">
             <div className="relative">
-              <div className="absolute -inset-3 rounded-full bg-blue-500/30 blur-md" />
+              <div className="absolute -inset-4 rounded-full bg-blue-500/30 blur-lg" />
               <div className="relative">
-                <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="h-24 w-24" />
+                <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="h-[170px] w-[170px]" />
               </div>
             </div>
             <p className="text-sm font-semibold mt-2 text-center">{market.person1.name.split(" ")[0]}</p>
@@ -566,9 +566,9 @@ function HeadToHeadCard({
           
           <div className="flex flex-col items-center flex-1">
             <div className="relative">
-              <div className="absolute -inset-3 rounded-full bg-purple-500/30 blur-md" />
+              <div className="absolute -inset-4 rounded-full bg-purple-500/30 blur-lg" />
               <div className="relative">
-                <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-24 w-24" />
+                <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-[170px] w-[170px]" />
               </div>
             </div>
             <p className="text-sm font-semibold mt-2 text-center">{market.person2.name.split(" ")[0]}</p>
