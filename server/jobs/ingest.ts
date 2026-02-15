@@ -1,6 +1,7 @@
 import { db } from "../db";
 import { trackedPeople, trendSnapshots, trendingPeople, celebrityImages, ingestionRuns } from "@shared/schema";
 import { desc, eq, sql, gte, and } from "drizzle-orm";
+import { getBaselineDiagnostics } from "../utils/baseline";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
 import { fetchBatchGdeltNews } from "../providers/gdelt";
 import { fetchSerperBatch } from "../providers/serper";
@@ -1004,6 +1005,14 @@ export async function runDataIngestion(): Promise<IngestResult> {
     for (const g of proppedUp) {
       console.log(`  ${g.name}: raw=${g.raw.toLocaleString()} displayed=${g.displayed.toLocaleString()} gap=${g.gapPct.toFixed(1)}%`);
     }
+
+    let baselineMeta: Record<string, any> = {};
+    try {
+      baselineMeta = await getBaselineDiagnostics(processed);
+    } catch (e) {
+      console.warn("[Ingest] Failed to fetch baseline diagnostics:", e);
+    }
+    (healthSummary as any).baselineMeta = baselineMeta;
 
     console.log(`[HEALTH SUMMARY] ${JSON.stringify(healthSummary)}`);
 
