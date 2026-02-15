@@ -912,16 +912,14 @@ function HeadToHeadCard({
           ) : (
             <div className="grid grid-cols-2 gap-2">
               <Button 
-                variant="outline" 
-                className="border-blue-500/30 text-blue-500"
+                className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20"
                 onClick={() => onSelect?.(1)}
                 data-testid={`button-pick1-${market.id}`}
               >
                 {market.person1.name.split(" ")[0]}
               </Button>
               <Button 
-                variant="outline" 
-                className="border-purple-500/30 text-purple-500"
+                className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20"
                 onClick={() => onSelect?.(2)}
                 data-testid={`button-pick2-${market.id}`}
               >
