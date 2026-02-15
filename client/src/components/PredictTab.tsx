@@ -550,11 +550,11 @@ function HeadToHeadCard({
           <div className="flex" style={{ gap: '3px' }}>
             <div className="flex-1 relative">
               <div className="absolute -inset-4 rounded-md bg-blue-500/20 blur-lg pointer-events-none" />
-              <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="w-full aspect-square" />
+              <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="h-auto w-full aspect-square" />
             </div>
             <div className="flex-1 relative">
               <div className="absolute -inset-4 rounded-md bg-purple-500/20 blur-lg pointer-events-none" />
-              <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="w-full aspect-square" />
+              <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-auto w-full aspect-square" />
             </div>
           </div>
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
