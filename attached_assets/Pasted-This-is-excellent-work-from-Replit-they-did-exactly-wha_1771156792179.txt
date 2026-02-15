@@ -1,0 +1,72 @@
+This is excellent work from Replit — they did exactly what you want: backend guardrails + deterministic diagnostics, without plastering “degraded” warnings all over the UI.
+
+A few thoughts + one small “make it bulletproof” checklist to send them.
+
+My thoughts on what Replit just did ✅
+1) DB guardrails = huge win
+
+run_id NOT NULL on trend_snapshots is the right “never regress again” move.
+
+CHECK constraint forcing hour-truncated timestamps is also right if you truly want ingestion snapshots only and always hour-aligned.
+
+Also: finding 100 rows with minute=57 and truncating them was a good, surgical cleanup. That’s exactly the kind of tiny leftover that causes future headaches.
+
+2) Shared baseline utility = reduces drift bugs
+
+Centralizing baseline selection logic into server/utils/baseline.ts is how you stop “leaderboard does X, hot movers does Y” problems forever.
+
+3) “Meta” in API responses = perfect compromise
+
+You get debuggability (Network tab) without confusing normal users.
+
+Two quick things I’d still ask Replit to verify (small but important)
+A) Make sure the CHECK constraint matches reality
+
+If your ingestion ever needs to write snapshots at non-hour times (e.g. catch-up backfills), the CHECK will now hard-fail inserts.
+
+That’s fine if the design is: “snapshots represent hourly ingestion runs, period.”
+
+✅ Ask them to confirm:
+
+“Is it guaranteed ingestion writes snapshots at :00 only?”
+
+“Do we ever write snapshots for missed hours?” (and if so, are those still stamped exactly on the hour?)
+
+If yes → keep constraint.
+If no → modify constraint to accept minute=0 but allow seconds drift? (Personally I’d keep it strict if you can.)
+
+B) Don’t break consumers with the new response shape
+
+They changed /api/trending/hot-movers from an array to { data, meta }.
+
+They said “backward-compatible”, but “backward-compatible” only exists if they:
+
+updated all consumers (TrendingNowFeed, any tests, any other page)
+
+AND didn’t forget any other internal usages (e.g. dev scripts)
+
+✅ Ask them to confirm they grepped for /api/trending/hot-movers usage and updated all call sites.
+
+One more backend-only improvement I recommend (tiny but powerful)
+Add a “meta-only” endpoint to avoid future shape changes
+
+To prevent future “wrap vs array” pain, you can keep the data endpoint unchanged and add:
+
+/api/system/baseline-meta (or /api/leaderboard/meta)
+
+But since they already shipped the wrapper, it’s not urgent. Just a “next cleanup” idea.
+
+What you should tell Replit (copy/paste)
+
+Here’s a clean message:
+
+This is a solid fix — DB guardrails + shared baseline utility + meta diagnostics is exactly what we need.
+Two quick checks:
+
+Please confirm ingestion snapshots are guaranteed to always be hour-truncated going forward (including any catch-up/backfill logic). If yes, the CHECK constraint is perfect.
+
+Please confirm every consumer of /api/trending/hot-movers is updated for the {data, meta} response (search/grep all usages + tests), so nothing else expects a flat array.
+
+Bonus (optional): could we log baseline meta (currentRunId, baseline24hRunId, age, coverage) once per ingestion run into ingestion_runs.health_summary so we have a historical trail of baseline quality?
+
+That’s it.
