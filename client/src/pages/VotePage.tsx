@@ -1706,7 +1706,8 @@ export default function VotePage() {
       approvalPct: number | null;
       underratedPct: number | null;
       overratedPct: number | null;
-      userValueVote: string | null;
+      fairlyRatedPct: number | null;
+      userValueVote: 'underrated' | 'overrated' | 'fairly_rated' | null;
     }>;
   }
   

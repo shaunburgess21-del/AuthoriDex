@@ -3,10 +3,12 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
-import { ArrowUp, ArrowDown, Users, Loader2 } from "lucide-react";
+import { ArrowUp, ArrowDown, Minus, Users, Loader2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+type VoteType = 'underrated' | 'overrated' | 'fairly_rated';
 
 export interface ValueVotePerson {
   id: string;
@@ -18,9 +20,11 @@ export interface ValueVotePerson {
   approvalPct?: number | null;
   underratedPct?: number | null;
   overratedPct?: number | null;
+  fairlyRatedPct?: number | null;
   underratedCount?: number | null;
   overratedCount?: number | null;
-  userValueVote?: 'underrated' | 'overrated' | null;
+  fairlyRatedCount?: number | null;
+  userValueVote?: VoteType | null;
 }
 
 export interface UnderratedOverratedCardProps {
@@ -34,18 +38,19 @@ export function UnderratedOverratedCard({
   onVisitProfile,
   compact = false 
 }: UnderratedOverratedCardProps) {
-  const [localVote, setLocalVote] = useState<'underrated' | 'overrated' | null>(
+  const [localVote, setLocalVote] = useState<VoteType | null>(
     person.userValueVote ?? null
   );
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const totalVotes = (person.underratedCount ?? 0) + (person.overratedCount ?? 0);
-  const underratedPct = person.underratedPct ?? 50;
-  const overratedPct = person.overratedPct ?? 50;
+  const totalVotes = (person.underratedCount ?? 0) + (person.overratedCount ?? 0) + (person.fairlyRatedCount ?? 0);
+  const underratedPct = person.underratedPct ?? 33;
+  const overratedPct = person.overratedPct ?? 33;
+  const fairlyRatedPct = person.fairlyRatedPct ?? 34;
 
   const valueVoteMutation = useMutation({
-    mutationFn: async (voteType: 'underrated' | 'overrated') => {
+    mutationFn: async (voteType: VoteType) => {
       return apiRequest('POST', `/api/celebrity/${person.id}/value-vote`, { vote: voteType });
     },
     onMutate: (voteType) => {
@@ -67,7 +72,7 @@ export function UnderratedOverratedCard({
     },
   });
 
-  const handleVote = (voteType: 'underrated' | 'overrated') => {
+  const handleVote = (voteType: VoteType) => {
     if (!localVote) {
       valueVoteMutation.mutate(voteType);
     }
@@ -78,6 +83,24 @@ export function UnderratedOverratedCard({
   };
 
   const isPending = valueVoteMutation.isPending;
+
+  const voteIcon = localVote === 'underrated'
+    ? <ArrowUp className="h-4 w-4 text-[#00C853]" />
+    : localVote === 'overrated'
+      ? <ArrowDown className="h-4 w-4 text-[#FF0000]" />
+      : <Minus className="h-4 w-4 text-slate-400" />;
+
+  const voteColor = localVote === 'underrated'
+    ? 'text-[#00C853]'
+    : localVote === 'overrated'
+      ? 'text-[#FF0000]'
+      : 'text-slate-400';
+
+  const voteLabel = localVote === 'underrated'
+    ? 'underrated'
+    : localVote === 'overrated'
+      ? 'overrated'
+      : 'fairly rated';
 
   return (
     <Card 
@@ -142,6 +165,22 @@ export function UnderratedOverratedCard({
           </Button>
           <Button
             variant="outline"
+            onClick={() => handleVote('fairly_rated')}
+            disabled={isPending}
+            className="w-full bg-slate-700/40 border-slate-600/50 text-slate-300"
+            data-testid={`button-fairly-rated-${person.id}`}
+          >
+            {isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Minus className="h-4 w-4 shrink-0 mr-2" />
+                <span>Fairly Rated</span>
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => handleVote('overrated')}
             disabled={isPending}
             className="w-full bg-[#FF0000]/10 border-[#FF0000]/50 text-[#FF0000]"
@@ -171,6 +210,17 @@ export function UnderratedOverratedCard({
             <span className="text-sm text-muted-foreground w-10 text-right">{Math.round(underratedPct)}%</span>
           </div>
           <div className="flex items-center gap-3">
+            <Minus className="h-4 w-4 text-slate-400 shrink-0" />
+            <span className="text-sm text-slate-400 w-20 shrink-0">Fair</span>
+            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-slate-500 rounded-full transition-all duration-500"
+                style={{ width: `${fairlyRatedPct}%` }}
+              />
+            </div>
+            <span className="text-sm text-muted-foreground w-10 text-right">{Math.round(fairlyRatedPct)}%</span>
+          </div>
+          <div className="flex items-center gap-3">
             <ArrowDown className="h-4 w-4 text-[#FF0000] shrink-0" />
             <span className="text-sm text-[#FF0000] w-20 shrink-0">Overrated</span>
             <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
@@ -183,14 +233,10 @@ export function UnderratedOverratedCard({
           </div>
           <div className="flex items-center justify-between pt-2 border-t border-white/10">
             <div className="flex items-center gap-2">
-              {localVote === 'underrated' ? (
-                <ArrowUp className="h-4 w-4 text-[#00C853]" />
-              ) : (
-                <ArrowDown className="h-4 w-4 text-[#FF0000]" />
-              )}
+              {voteIcon}
               <span className="text-sm text-muted-foreground">
-                You voted <span className={localVote === 'underrated' ? 'text-[#00C853]' : 'text-[#FF0000]'}>
-                  {localVote}
+                You voted <span className={voteColor}>
+                  {voteLabel}
                 </span>
               </span>
             </div>

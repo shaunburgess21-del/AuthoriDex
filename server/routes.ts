@@ -334,6 +334,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           approvalVotesCount: celebrityMetrics.approvalVotesCount,
           underratedPct: celebrityMetrics.underratedPct,
           overratedPct: celebrityMetrics.overratedPct,
+          fairlyRatedPct: celebrityMetrics.fairlyRatedPct,
           valueScore: celebrityMetrics.valueScore,
         })
         .from(celebrityMetrics);
@@ -370,6 +371,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           approvalVotesCount: m?.approvalVotesCount ?? null,
           underratedPct: m?.underratedPct ?? null,
           overratedPct: m?.overratedPct ?? null,
+          fairlyRatedPct: m?.fairlyRatedPct ?? null,
           valueScore: m?.valueScore ?? null,
           rankChange,
         };
@@ -1291,6 +1293,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           seedApprovalSum: celebrityMetrics.seedApprovalSum,
           seedUnderratedCount: celebrityMetrics.seedUnderratedCount,
           seedOverratedCount: celebrityMetrics.seedOverratedCount,
+          seedFairlyRatedCount: celebrityMetrics.seedFairlyRatedCount,
         })
         .from(celebrityMetrics)
         .where(eq(celebrityMetrics.celebrityId, celebrityId))
@@ -1300,6 +1303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const seedApprovalSum = existingMetrics?.seedApprovalSum || 0;
       const seedUnderratedCount = existingMetrics?.seedUnderratedCount || 0;
       const seedOverratedCount = existingMetrics?.seedOverratedCount || 0;
+      const seedFairlyRatedCount = existingMetrics?.seedFairlyRatedCount || 0;
 
       // Get REAL approval votes from user_votes (Supabase)
       const { data: approvalVotes, error: approvalError } = await supabaseServer
@@ -1347,21 +1351,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eq(celebrityValueVotes.vote, 'overrated')
         ));
 
+      const fairlyRatedResult = await db
+        .select({ count: count() })
+        .from(celebrityValueVotes)
+        .where(and(
+          eq(celebrityValueVotes.celebrityId, celebrityId),
+          eq(celebrityValueVotes.vote, 'fairly_rated')
+        ));
+
       const realUnderratedCount = Number(underratedResult[0]?.count || 0);
       const realOverratedCount = Number(overratedResult[0]?.count || 0);
+      const realFairlyRatedCount = Number(fairlyRatedResult[0]?.count || 0);
 
       // Calculate DISPLAY totals: seed + real
       const underratedVotesCount = seedUnderratedCount + realUnderratedCount;
       const overratedVotesCount = seedOverratedCount + realOverratedCount;
-      const totalValueVotes = underratedVotesCount + overratedVotesCount;
+      const fairlyRatedVotesCount = seedFairlyRatedCount + realFairlyRatedCount;
+      const totalValueVotes = underratedVotesCount + overratedVotesCount + fairlyRatedVotesCount;
 
       let underratedPct: number | null = null;
       let overratedPct: number | null = null;
+      let fairlyRatedPct: number | null = null;
       let valueScore: number | null = null;
 
       if (totalValueVotes > 0) {
         underratedPct = Math.round((underratedVotesCount / totalValueVotes) * 100);
         overratedPct = Math.round((overratedVotesCount / totalValueVotes) * 100);
+        fairlyRatedPct = Math.round((fairlyRatedVotesCount / totalValueVotes) * 100);
         valueScore = underratedPct - overratedPct; // -100 to +100
       }
 
@@ -1386,10 +1402,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           approvalPct,
           seedUnderratedCount,
           seedOverratedCount,
+          seedFairlyRatedCount,
           underratedVotesCount,
           overratedVotesCount,
+          fairlyRatedVotesCount,
           underratedPct,
           overratedPct,
+          fairlyRatedPct,
           valueScore,
           updatedAt: new Date(),
         })
@@ -1404,8 +1423,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             approvalPct,
             underratedVotesCount,
             overratedVotesCount,
+            fairlyRatedVotesCount,
             underratedPct,
             overratedPct,
+            fairlyRatedPct,
             valueScore,
             updatedAt: new Date(),
           },
@@ -1415,6 +1436,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         approvalPct,
         underratedPct,
         overratedPct,
+        fairlyRatedPct,
         valueScore,
       };
     } catch (error) {
@@ -1430,8 +1452,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.userId!;
       const { vote } = req.body;
 
-      if (!vote || !['underrated', 'overrated'].includes(vote)) {
-        return res.status(400).json({ error: "vote must be 'underrated' or 'overrated'" });
+      if (!vote || !['underrated', 'overrated', 'fairly_rated'].includes(vote)) {
+        return res.status(400).json({ error: "vote must be 'underrated', 'overrated', or 'fairly_rated'" });
       }
 
       // Check if celebrity exists
@@ -1469,6 +1491,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userVote: vote,
         underratedPct: metrics.underratedPct,
         overratedPct: metrics.overratedPct,
+        fairlyRatedPct: metrics.fairlyRatedPct,
         valueScore: metrics.valueScore,
       });
     } catch (error: any) {
@@ -1509,9 +1532,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userVote,
         underratedPct: metrics?.underratedPct ?? null,
         overratedPct: metrics?.overratedPct ?? null,
+        fairlyRatedPct: metrics?.fairlyRatedPct ?? null,
         valueScore: metrics?.valueScore ?? null,
         underratedVotesCount: metrics?.underratedVotesCount ?? 0,
         overratedVotesCount: metrics?.overratedVotesCount ?? 0,
+        fairlyRatedVotesCount: metrics?.fairlyRatedVotesCount ?? 0,
       });
     } catch (error: any) {
       console.error("[value-vote GET] Error:", error);
@@ -1694,6 +1719,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           approvalVotesCount: celebrityMetrics.approvalVotesCount,
           underratedPct: celebrityMetrics.underratedPct,
           overratedPct: celebrityMetrics.overratedPct,
+          fairlyRatedPct: celebrityMetrics.fairlyRatedPct,
           valueScore: celebrityMetrics.valueScore,
         })
         .from(trendingPeople)

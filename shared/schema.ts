@@ -961,11 +961,14 @@ export const celebrityMetrics = pgTable("celebrity_metrics", {
   // Value SEED aggregates (pre-launch baseline, no fake users)
   seedUnderratedCount: integer("seed_underrated_count").notNull().default(0),
   seedOverratedCount: integer("seed_overrated_count").notNull().default(0),
+  seedFairlyRatedCount: integer("seed_fairly_rated_count").notNull().default(0),
   // Value DISPLAY aggregates (seed + real votes combined)
   underratedVotesCount: integer("underrated_votes_count").notNull().default(0),
   overratedVotesCount: integer("overrated_votes_count").notNull().default(0),
+  fairlyRatedVotesCount: integer("fairly_rated_votes_count").notNull().default(0),
   underratedPct: real("underrated_pct"), // 0-100
   overratedPct: real("overrated_pct"), // 0-100
+  fairlyRatedPct: real("fairly_rated_pct"), // 0-100
   valueScore: real("value_score"), // -100 to +100 (underrated_pct - overrated_pct)
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
