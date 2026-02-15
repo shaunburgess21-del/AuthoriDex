@@ -77,7 +77,7 @@ export function MarketCycleHero({ marketState }: MarketCycleHeroProps) {
   
   return (
     <div 
-      className="sticky top-0 z-30 relative rounded-xl mb-6 border border-white/10 bg-card/95 backdrop-blur-sm"
+      className="sticky top-16 z-40 relative rounded-xl mb-6 border border-white/10 bg-card/95 backdrop-blur-sm"
       data-testid="market-cycle-hero"
     >
       <div className="relative z-10 px-4 py-2 md:px-6 md:py-4">
