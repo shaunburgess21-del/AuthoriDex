@@ -2041,7 +2041,7 @@ export default function VotePage() {
       </div>
       <div className="container mx-auto px-4 py-4 max-w-7xl">
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative w-full sm:w-[172px] sm:flex-none">
+          <div className="relative w-full sm:w-[184px] sm:flex-none">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="text"
@@ -2157,7 +2157,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative w-full sm:w-[172px] sm:flex-none">
+            <div className="relative w-full sm:w-[184px] sm:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search matchups..."
@@ -2274,7 +2274,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative w-full sm:w-[172px] sm:flex-none">
+            <div className="relative w-full sm:w-[184px] sm:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search topics..."
@@ -2365,7 +2365,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative w-full sm:w-[172px] sm:flex-none">
+            <div className="relative w-full sm:w-[184px] sm:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search celebrities..."
@@ -2508,7 +2508,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative w-full sm:w-[172px] sm:flex-none">
+            <div className="relative w-full sm:w-[184px] sm:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search by name..."
@@ -2619,7 +2619,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative w-full sm:w-[172px] sm:flex-none">
+            <div className="relative w-full sm:w-[184px] sm:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search celebrities..."
