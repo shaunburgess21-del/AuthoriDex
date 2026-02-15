@@ -1,0 +1,159 @@
+Yep — your instinct is right. “All red, then all green” across everyone is almost never real-world signal. It’s almost always baseline selection + snapshot contamination + gaps.
+
+Replit’s diagnostic is mostly on the money, but I’d tighten it into a clean, actionable “here’s what’s definitely wrong vs. what’s plausible”:
+
+What I think is definitely wrong (high confidence)
+1) Your 24h baseline is not anchored to a stable reference
+
+If your “closest-to-24h-ago” logic can pick different snapshots depending on the time of day (especially across gaps), you’ll get the exact phenomenon you saw:
+
+In the morning, “24h ago” lands near a high point → everything looks down.
+
+Later, “24h ago” lands near a low point → everything looks up.
+
+This alone can create system-wide sign flips without anything changing “in the world”.
+
+✅ Fix is simple: baseline must be deterministic.
+
+Best option: compute 24h change as ingestion-run vs ingestion-run, not “nearest timestamp”.
+
+“Current run” vs “baseline run closest to 24h ago (within a strict window)”.
+
+You’ve already got ingestion_runs and now run_id on snapshots — use that as the source of truth.
+
+2) Live-tick must NOT write anything that affects canonical history
+
+Replit’s claim that off-hour snapshots might be poisoning EMA/baselines is very plausible. Even if it happens rarely, it’s catastrophic, because the next ingestion run will pick up “latest fame_index” from history.
+
+✅ Rule: only the hourly ingestion writes canonical snapshots.
+
+Live tick should write only to:
+
+trending_people.fame_index_live
+
+trending_people.live_rank
+
+trending_people.live_updated_at
+
+optionally counters (views, etc.)
+
+It should not write trend_snapshots at all. If you want a “live history”, make a separate table like live_ticks with a completely different pipeline.
+
+3) Your baseline lookup must filter to “trusted snapshots”
+
+Even if you keep old data around, your baseline comparisons must use only snapshots that are:
+
+run_id IS NOT NULL
+
+and belong to a completed ingestion run
+
+This avoids:
+
+off-hour tick writes
+
+partial runs
+
+weird “seconds apart” per-person timestamps
+
+any other future pipeline that writes snapshots
+
+✅ Make this the default everywhere (leaderboard, hot movers, detail page).
+
+What might be true, but I’d verify
+“EMA sawtooth pattern”
+
+EMA itself doesn’t inherently produce a daily sawtooth unless something is resetting the state or the input is discontinuous (gaps or overwrites). So the sawtooth is likely a symptom of:
+
+ingestion gaps
+
+“latest fame_index” being grabbed from a polluted snapshot
+
+or mixing different “flavors” of scores into the same historical stream
+
+So I wouldn’t treat “EMA alpha too low” as the first fix. Get the data lineage clean first.
+
+What I would tell Replit to do (exact spec)
+
+Send this to Replit:
+
+A) Canonical snapshots
+
+Disable live-tick writes to trend_snapshots entirely.
+
+Add a DB guardrail:
+
+snapshots inserted by ingestion must include run_id
+
+(optional) run_id foreign key to ingestion_runs
+
+B) Deterministic 24h/7d baseline
+
+Replace “nearest snapshot timestamp” with run-based baseline:
+
+current = latest completed ingestion run
+
+baseline_24h = completed ingestion run closest to now - 24h within (say) ±6h
+
+baseline_7d = closest to now - 7d within (say) ±24h
+
+If no baseline run exists in window:
+
+set change24h = null
+
+expose baselineStatus = degraded
+
+do NOT “pick something random-ish” outside the window
+
+C) Baseline filtering
+
+Wherever you compute changes, enforce:
+
+run_id IS NOT NULL
+
+join snapshots to the chosen baseline run_id
+
+do not include any snapshots without run_id
+
+D) Cleanup
+
+Delete or quarantine polluted snapshots
+
+any trend_snapshots rows with run_id IS NULL that were written by live tick
+
+if you need history, move them to live_ticks table first
+
+E) Debug visibility (so you never chase this again)
+
+Add a debug block somewhere (admin + optional API):
+
+current_run_id
+
+baseline_run_id_24h, baseline_age_hours
+
+baselineStatus
+
+count of people missing baseline
+
+percent of board with positive vs negative changes (if it’s 100% one direction, flag “systemic”)
+
+Quick “sanity alarm” rule (super useful)
+
+Add one automatic flag:
+
+If >90% of people have 24h change in the same direction (all + or all -), mark:
+
+systemicChangeAlert = true
+
+show in admin: “Baseline likely wrong or ingestion gap”
+
+This would have caught what you saw instantly.
+
+One note about “Hot Movers changing often”
+
+Even with hourly ingests, Hot Movers can still change if:
+
+you compute thresholds on every request (percentiles)
+
+your underlying change24h values are unstable (baseline problem)
+
+Once you anchor 24h to ingestion runs and cache the Hot Movers endpoint to the current run, it should stop flickering.
