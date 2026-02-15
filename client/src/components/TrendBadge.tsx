@@ -9,7 +9,7 @@ interface TrendBadgeProps {
 }
 
 export function TrendBadge({ value, size = "default", showIcon = true }: TrendBadgeProps) {
-  const sizeClass = size === "sm" ? "text-xs h-5" : size === "lg" ? "text-base h-7" : "text-sm h-6";
+  const sizeClass = size === "sm" ? "text-xs h-[33px]" : size === "lg" ? "text-base h-[41px]" : "text-sm h-[37px]";
   
   // Handle null/undefined values - display N/A
   if (value === null || value === undefined) {
