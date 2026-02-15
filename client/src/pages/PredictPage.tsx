@@ -2532,7 +2532,7 @@ export default function PredictPage() {
               title="Top Gainer Predictions"
               onRulesClick={() => setRulesModalOpen("gainer")}
             >
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain the most points?</p>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain the most points</p>
             </SectionHeader>
             <SectionFilterBar
               categoryFilter={gainerCategory}
