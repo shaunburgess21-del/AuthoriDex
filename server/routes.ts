@@ -5355,8 +5355,10 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         return res.status(400).json({ error: "Headline, subject text, and category are required" });
       }
 
+      const effectiveVisibility = visibility || status || "draft";
+      const effectiveStatus = (effectiveVisibility === "inactive") ? "draft" : effectiveVisibility;
       const [created] = await db.insert(trendingPolls).values({
-        status: status || "draft",
+        status: effectiveStatus,
         category,
         headline,
         subjectText,
@@ -5370,7 +5372,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         seedOpposeCount: seedOpposeCount || 0,
         slug: slug || null,
         featured: featured ?? false,
-        visibility: visibility || "draft",
+        visibility: effectiveVisibility,
         createdBy: adminId,
       }).returning();
 
@@ -5408,7 +5410,12 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility } = req.body;
 
       const updates: any = { updatedAt: new Date() };
-      if (status !== undefined) updates.status = status;
+      if (visibility !== undefined) {
+        updates.visibility = visibility;
+        updates.status = (visibility === "inactive") ? "draft" : visibility;
+      } else if (status !== undefined) {
+        updates.status = status;
+      }
       if (category !== undefined) updates.category = category;
       if (headline !== undefined) updates.headline = headline;
       if (subjectText !== undefined) updates.subjectText = subjectText;
@@ -5422,7 +5429,6 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       if (seedOpposeCount !== undefined) updates.seedOpposeCount = seedOpposeCount;
       if (slug !== undefined) updates.slug = slug || null;
       if (featured !== undefined) updates.featured = featured;
-      if (visibility !== undefined) updates.visibility = visibility;
 
       const [updated] = await db.update(trendingPolls).set(updates).where(eq(trendingPolls.id, id)).returning();
 

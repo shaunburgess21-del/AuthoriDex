@@ -1813,6 +1813,7 @@ export default function AdminDashboard() {
     mutationFn: async (data: typeof pollForm) => {
       const cleanData = {
         ...data,
+        status: data.visibility === "inactive" ? "draft" : data.visibility,
         personId: data.personId || null,
         timeline: data.timeline || null,
         deadlineAt: data.deadlineAt || null,
@@ -1846,6 +1847,7 @@ export default function AdminDashboard() {
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
       const cleanData = {
         ...data,
+        status: data.visibility === "inactive" ? "draft" : data.visibility,
         personId: data.personId || null,
         timeline: data.timeline || null,
         deadlineAt: data.deadlineAt || null,
@@ -2155,6 +2157,7 @@ export default function AdminDashboard() {
 
   const openEditPoll = (poll: TrendingPoll) => {
     setEditingPoll(poll);
+    const vis = (poll.visibility || poll.status || "draft") as "draft" | "live" | "inactive" | "archived";
     setPollForm({
       status: poll.status as "draft" | "live" | "archived",
       category: poll.category,
@@ -2170,7 +2173,7 @@ export default function AdminDashboard() {
       seedOpposeCount: poll.seedOpposeCount,
       slug: poll.slug || "",
       featured: poll.featured ?? false,
-      visibility: (poll.visibility || "draft") as "draft" | "live" | "inactive" | "archived",
+      visibility: vis,
     });
     if (poll.personId) {
       const pid = poll.personId;
@@ -2984,15 +2987,17 @@ export default function AdminDashboard() {
                                 <Badge variant="outline" className="text-xs">{poll.category}</Badge>
                                 <Badge
                                   variant={
-                                    poll.status === "live"
+                                    (poll.visibility || poll.status) === "live"
                                       ? "default"
-                                      : poll.status === "draft"
+                                      : (poll.visibility || poll.status) === "draft"
                                       ? "secondary"
+                                      : (poll.visibility || poll.status) === "inactive"
+                                      ? "outline"
                                       : "outline"
                                   }
                                   className="text-xs"
                                 >
-                                  {poll.status}
+                                  {poll.visibility || poll.status}
                                 </Badge>
                                 {poll.personId && (
                                   <Badge variant="outline" className="text-xs">
