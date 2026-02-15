@@ -2317,7 +2317,7 @@ export default function PredictPage() {
             <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mt-[15px] mb-[15px]">
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg sm:text-xl font-serif font-bold truncate">Real-World Markets</h2>
-                <p className="text-xs sm:text-sm text-muted-foreground truncate">Predict the outcome of verifiable global events.</p>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">Predict the outcome of verifiable global events</p>
               </div>
               <div className="flex items-center gap-2 shrink-0 ml-3">
                 <Tooltip>
