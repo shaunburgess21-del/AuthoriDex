@@ -25,7 +25,7 @@ export function HeroSection({ onCastVoteClick, onPredictClick }: HeroSectionProp
         <div className="flex flex-col sm:flex-row gap-4">
           <button
             onClick={() => document.getElementById('leaderboard')?.scrollIntoView({ behavior: 'smooth' })}
-            className="group relative inline-flex items-center justify-center gap-2 rounded-md px-8 min-h-10 text-sm font-semibold border border-white/60 text-white transition-all duration-300 overflow-hidden"
+            className="group relative inline-flex items-center justify-center gap-2 rounded-md px-8 min-h-10 text-sm font-semibold border border-[#4C5567] text-white transition-all duration-300 overflow-hidden"
             data-testid="button-explore-leaderboard"
           >
             <span className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -34,7 +34,7 @@ export function HeroSection({ onCastVoteClick, onPredictClick }: HeroSectionProp
           </button>
           <button
             onClick={onCastVoteClick}
-            className="group relative inline-flex items-center justify-center gap-2 rounded-md px-8 min-h-10 text-sm font-semibold border border-white/60 text-white transition-all duration-300 overflow-hidden"
+            className="group relative inline-flex items-center justify-center gap-2 rounded-md px-8 min-h-10 text-sm font-semibold border border-[#4C5567] text-white transition-all duration-300 overflow-hidden"
             data-testid="button-cast-vote"
           >
             <span className="absolute inset-0 bg-gradient-to-r from-cyan-500 to-cyan-300 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -43,7 +43,7 @@ export function HeroSection({ onCastVoteClick, onPredictClick }: HeroSectionProp
           </button>
           <button
             onClick={onPredictClick}
-            className="group relative inline-flex items-center justify-center gap-2 rounded-md px-8 min-h-10 text-sm font-semibold border border-white/60 text-white transition-all duration-300 overflow-hidden"
+            className="group relative inline-flex items-center justify-center gap-2 rounded-md px-8 min-h-10 text-sm font-semibold border border-[#4C5567] text-white transition-all duration-300 overflow-hidden"
             data-testid="button-prediction-markets"
           >
             <span className="absolute inset-0 bg-gradient-to-r from-violet-600 to-fuchsia-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
