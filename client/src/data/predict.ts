@@ -1,4 +1,4 @@
-export type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "entertainment" | "sports" | "creator";
+export type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "creator";
 
 export interface PredictionMarket {
   id: string;
@@ -47,7 +47,7 @@ export const MOCK_MARKETS: PredictionMarket[] = [
     endTime: "Sun 23:59 UTC",
     totalPool: 12350,
     upPoolPercent: 45,
-    category: "entertainment",
+    category: "music",
   },
   {
     id: "market-3",
@@ -113,7 +113,7 @@ export const HEAD_TO_HEAD_MARKETS: HeadToHeadMarket[] = [
     title: "Drake vs Kendrick",
     person1: { name: "Drake", avatar: `${SUPABASE_AVATAR_BASE}/drake/1.png`, currentScore: 425600 },
     person2: { name: "Kendrick Lamar", avatar: `${SUPABASE_AVATAR_BASE}/kendrick-lamar/1.png`, currentScore: 398200 },
-    category: "entertainment",
+    category: "music",
     endTime: "Sun 23:59 UTC",
     totalPool: 28450,
     person1Percent: 42,
@@ -133,7 +133,7 @@ export const HEAD_TO_HEAD_MARKETS: HeadToHeadMarket[] = [
     title: "Swift vs Beyoncé",
     person1: { name: "Taylor Swift", avatar: `${SUPABASE_AVATAR_BASE}/taylor-swift/1.png`, currentScore: 489234 },
     person2: { name: "Beyoncé", avatar: `${SUPABASE_AVATAR_BASE}/beyonce/1.png`, currentScore: 478200 },
-    category: "entertainment",
+    category: "music",
     endTime: "Sun 23:59 UTC",
     totalPool: 15780,
     person1Percent: 55,
@@ -161,7 +161,7 @@ export interface TopGainerMarket {
 export const TOP_GAINER_MARKETS: TopGainerMarket[] = [
   {
     id: "gainer-1",
-    category: "entertainment",
+    category: "music",
     leaders: [
       { name: "Taylor Swift", avatar: `${SUPABASE_AVATAR_BASE}/taylor-swift/1.png`, currentGain: 12450, percentGain: 4.2 },
       { name: "Drake", avatar: `${SUPABASE_AVATAR_BASE}/drake/1.png`, currentGain: 8920, percentGain: 3.8 },
@@ -226,7 +226,7 @@ export const COMMUNITY_MARKETS: CommunityMarket[] = [
   {
     id: "comm-2",
     question: "Taylor Swift album announcement before month end?",
-    category: "entertainment",
+    category: "music",
     options: [
       { id: "yes", text: "Yes", percent: 52 },
       { id: "no", text: "No", percent: 48 },

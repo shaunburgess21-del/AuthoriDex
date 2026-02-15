@@ -30,7 +30,7 @@ import {
   Cpu,
   Landmark,
   Briefcase,
-  Clapperboard,
+  Music2,
   Trophy,
   Video,
   LayoutGrid
@@ -643,7 +643,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
             {cat === "Tech" && <Cpu className="h-3.5 w-3.5" />}
             {cat === "Politics" && <Landmark className="h-3.5 w-3.5" />}
             {cat === "Business" && <Briefcase className="h-3.5 w-3.5" />}
-            {cat === "Music" && <Clapperboard className="h-3.5 w-3.5" />}
+            {cat === "Music" && <Music2 className="h-3.5 w-3.5" />}
             {cat === "Sports" && <Trophy className="h-3.5 w-3.5" />}
             {cat === "Creator" && <Video className="h-3.5 w-3.5" />}
             {cat === "Favorites" ? <span className="hidden md:inline">{cat}</span> : cat}

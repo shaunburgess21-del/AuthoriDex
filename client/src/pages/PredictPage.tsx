@@ -46,7 +46,7 @@ import {
   Scale,
   Landmark,
   Briefcase,
-  Clapperboard,
+  Music2,
   Video,
   LayoutGrid,
   Flame,
@@ -75,7 +75,7 @@ function MarketAvatar({ market }: { market: any }) {
 
 // Prediction Type definitions
 type PredictionType = "all" | "jackpot" | "updown" | "h2h" | "gainer" | "community";
-type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "entertainment" | "sports" | "creator" | "misc";
+type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "creator" | "misc";
 
 interface PredictionMarket {
   id: string;
@@ -122,7 +122,7 @@ const mockMarkets: PredictionMarket[] = [
     endTime: "Sun 23:59 UTC",
     totalPool: 12350,
     upPoolPercent: 45,
-    category: "entertainment",
+    category: "music",
   },
   {
     id: "market-3",
@@ -212,7 +212,7 @@ const mockMarkets: PredictionMarket[] = [
     endTime: "Sun 23:59 UTC",
     totalPool: 14200,
     upPoolPercent: 52,
-    category: "entertainment",
+    category: "music",
   },
 ];
 
@@ -233,7 +233,7 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
     title: "Drake vs Kendrick",
     person1: { name: "Drake", avatar: "", currentScore: 425600 },
     person2: { name: "Kendrick Lamar", avatar: "", currentScore: 398200 },
-    category: "entertainment",
+    category: "music",
     endTime: "Sun 23:59 UTC",
     totalPool: 28450,
     person1Percent: 42,
@@ -253,7 +253,7 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
     title: "Swift vs Beyoncé",
     person1: { name: "Taylor Swift", avatar: "", currentScore: 489234 },
     person2: { name: "Beyoncé", avatar: "", currentScore: 478200 },
-    category: "entertainment",
+    category: "music",
     endTime: "Sun 23:59 UTC",
     totalPool: 15780,
     person1Percent: 55,
@@ -301,7 +301,7 @@ interface TopGainerMarket {
 const topGainerMarkets: TopGainerMarket[] = [
   {
     id: "gainer-1",
-    category: "entertainment",
+    category: "music",
     leaders: [
       { name: "Taylor Swift", avatar: "", currentGain: 12450, percentGain: 4.2 },
       { name: "Drake", avatar: "", currentGain: 8920, percentGain: 3.8 },
@@ -594,7 +594,7 @@ const CATEGORY_ICONS: Record<CategoryFilter, LucideIcon> = {
   tech: Cpu,
   politics: Landmark,
   business: Briefcase,
-  entertainment: Clapperboard,
+  music: Music2,
   sports: Trophy,
   creator: Video,
   misc: Sparkles,

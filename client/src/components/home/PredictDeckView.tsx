@@ -32,7 +32,7 @@ import {
   Cpu,
   Landmark,
   Briefcase,
-  Clapperboard,
+  Music2,
   Video,
   LayoutGrid
 } from "lucide-react";
@@ -47,7 +47,7 @@ import {
 import { getFilterCategories } from "@shared/constants";
 import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 
-type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "entertainment" | "sports" | "creator";
+type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "creator";
 
 const PREDICT_CATEGORY_FILTERS = getFilterCategories(false).map(cat => ({
   id: cat.toLowerCase() as CategoryFilter,
@@ -674,7 +674,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             {cat.id === "tech" && <Cpu className="h-3.5 w-3.5" />}
             {cat.id === "politics" && <Landmark className="h-3.5 w-3.5" />}
             {cat.id === "business" && <Briefcase className="h-3.5 w-3.5" />}
-            {cat.id === "entertainment" && <Clapperboard className="h-3.5 w-3.5" />}
+            {cat.id === "music" && <Music2 className="h-3.5 w-3.5" />}
             {cat.id === "sports" && <Trophy className="h-3.5 w-3.5" />}
             {cat.id === "creator" && <Video className="h-3.5 w-3.5" />}
             {cat.id === "favorites" ? <span className="hidden md:inline">{cat.label}</span> : cat.label}
