@@ -1,0 +1,191 @@
+For a Trending Poll dedicated URL page, you want it to feel like “Polymarket comments + Reddit-lite + clean results”, but with the Vote (blue) identity and more context than the card. Your instincts are right: results + description + discussion are the minimum. Here’s what I’d add to make it genuinely addictive and shareable.
+
+What to show on a Trending Poll dedicated URL
+1) Header block (blue theme)
+
+Poll Title (big)
+
+Topic chips: Category (Tech/Politics/etc), “Trending Poll”, maybe “Open/Closed” if you ever close polls
+
+Created date + optional Source link (if you collect it)
+
+Share button (copy link) — super important for virality
+
+2) “Vote / Your stance” module (top of page)
+
+Even if the user voted from the card, on the detail page they must see:
+
+Support / Neutral / Oppose buttons
+
+If already voted: show “Your vote: Neutral” + “Change vote”
+
+If not voted: encourage voting (micro-copy)
+
+This page shouldn’t be read-only — it’s the best place to convert.
+
+3) Results module (beautiful + high signal)
+
+Your “beautiful format” can be:
+
+Large horizontal stacked bar (Support/Neutral/Oppose)
+
+Percent + count for each
+
+Mini trend indicator if you later store time series (optional)
+
+Also show:
+
+Total votes
+
+Time since created (e.g., “3d 4h ago”)
+
+4) “Context / Background” module
+
+This is where you place the backend “Additional description” that’s not on the card:
+
+A short paragraph(s) explaining the topic
+
+Optional bullet list: “What this means / why it matters”
+
+If you have a source URL, show a small “Read more” card
+
+5) “Community takes” (discussion) — but make it ranked
+
+Your idea is strong: comments + rating.
+
+Minimum viable structure:
+
+Comment input
+
+Comment list with Upvote / Downvote (or “Agree / Disagree”)
+
+Sort options: Top, Newest
+
+Show “Top take” pinned (highest net votes)
+
+If you want it to feel special:
+
+Allow users to tag their comment as:
+
+“Evidence”
+
+“Opinion”
+
+“Prediction”
+This improves browsing.
+
+6) Quick insights panel (optional but high value)
+
+This is what makes the page feel like it has “insights”, not just a poll:
+
+Sentiment summary auto-generated from comments (very short)
+
+Example: “Most Supporters cite X. Most Opposers cite Y.”
+
+“Most cited keywords” (simple frequency extraction)
+This can be Phase 2, but even a basic version is sticky.
+
+7) Related polls (high retention)
+
+At the bottom or right side:
+
+“Related Trending Polls” (same category or similar tags)
+This keeps users in the vote loop.
+
+Navigation behavior (critical)
+
+Clicking a Trending Poll card title should navigate to:
+
+/polls/:slug (or /vote/polls/:slug)
+
+Clicking the Support/Neutral/Oppose buttons on the card should vote and not navigate (stopPropagation), similar to your Real-World Markets behavior.
+
+Prompt for Replit (copy/paste)
+
+Build: Dedicated URL page for Trending Polls (Vote section, blue theme)
+
+Goal: Implement a dedicated detail page for each Trending Poll so users can click the poll title to open a URL with full context, results, and discussion—similar structure to the Real-World Market detail page, but using the Vote blue theme (like #62E9F9). Do not change the dedicated Vote page layout; this is for poll detail pages only.
+
+1) Routing + navigation
+
+Add a new route: /polls/:slug (or /vote/polls/:slug, choose one and use consistently).
+
+On Trending Poll cards: clicking the title/heading navigates to the poll detail URL.
+
+Clicking Support/Neutral/Oppose buttons should cast vote and must not navigate (use stopPropagation or keep buttons outside the link).
+
+2) Poll detail page layout (blue theme)
+
+Include sections:
+
+A) Header
+
+Poll title (large)
+
+Category chip + “Trending Poll” chip + status (Open/Closed if relevant)
+
+Created date
+
+Share button (copy link)
+
+B) Vote module
+
+Support / Neutral / Oppose buttons
+
+If user already voted, show “Your vote: X” + allow “Change vote”
+
+C) Results module (beautiful format)
+
+Stacked bar showing Support/Neutral/Oppose percentages
+
+Show counts + total votes
+
+D) Context / Description
+
+Display the long description text stored in admin (not shown on the card)
+
+If a source URL exists, show a “Read more” link
+
+E) Discussion
+
+Comment input at bottom
+
+Comment list with upvote/downvote (or agree/disagree)
+
+Sort: Top, Newest
+
+Rank comments by net votes (top comment appears first / optionally pinned)
+
+3) Backend/API
+
+Add GET endpoint to fetch poll by slug including:
+
+title, slug, category, description, createdAt, vote counts, user’s vote (if logged in)
+
+Add comments endpoints (reuse or mirror open_market_comments patterns):
+
+create comment
+
+list comments by pollId
+
+vote on comment
+
+Ensure permissions: only logged-in users can comment/vote; public can view.
+
+4) Admin requirements (if missing)
+
+Ensure Trending Polls have a unique slug and a description field.
+
+If slug doesn’t exist yet, generate from title on create and enforce uniqueness.
+
+Acceptance tests:
+
+Clicking poll title opens /polls/:slug
+
+Results display correct percentages and counts
+
+Voting works on detail page and updates UI
+
+Comments can be posted and upvoted/downvoted
+
+Page uses Vote blue theme and matches overall AuthoriDex styling
