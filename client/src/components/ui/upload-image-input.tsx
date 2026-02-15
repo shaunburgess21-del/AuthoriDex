@@ -15,6 +15,7 @@ interface UploadImageInputProps {
 
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const MAX_SIZE = 2 * 1024 * 1024;
+const BUCKET_NAME = "public-images";
 
 export function UploadImageInput({
   value,
@@ -46,41 +47,41 @@ export function UploadImageInput({
     setProgress(10);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("moduleName", moduleName);
-      formData.append("slugOrId", slugOrId);
+      const supabase = await getSupabase();
+      setProgress(20);
 
-      setProgress(30);
+      const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+      const timestamp = Date.now();
+      const filePath = `${moduleName}/${slugOrId}/${timestamp}.${ext}`;
 
-      const headers: Record<string, string> = {};
-      try {
-        const supabase = await getSupabase();
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          headers["Authorization"] = `Bearer ${session.access_token}`;
-        }
-      } catch (e) {}
+      setProgress(40);
 
-      const response = await fetch("/api/admin/upload-image", {
-        method: "POST",
-        headers,
-        body: formData,
-        credentials: "include",
-      });
+      const { data, error: uploadError } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(filePath, file, {
+          contentType: file.type,
+          upsert: false,
+        });
 
       setProgress(80);
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Upload failed");
+      if (uploadError) {
+        throw new Error(uploadError.message || "Upload failed");
       }
 
-      const data = await response.json();
+      const { data: urlData } = supabase.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(filePath);
+
       setProgress(100);
-      onChange(data.url);
+      onChange(urlData.publicUrl);
     } catch (err: any) {
-      setError(err.message || "Upload failed");
+      const msg = err.message || "Upload failed";
+      if (msg.includes("Bucket not found") || msg.includes("not found")) {
+        setError("Storage bucket not configured. Please create a 'public-images' bucket in your Supabase dashboard.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setTimeout(() => {
         setUploading(false);
