@@ -5071,7 +5071,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
 
   app.post("/api/admin/trending-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount } = req.body;
+      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility } = req.body;
       const adminId = req.userId!;
 
       if (!headline || !subjectText || !category) {
@@ -5091,6 +5091,9 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         seedSupportCount: seedSupportCount || 0,
         seedNeutralCount: seedNeutralCount || 0,
         seedOpposeCount: seedOpposeCount || 0,
+        slug: slug || null,
+        featured: featured ?? false,
+        visibility: visibility || "draft",
         createdBy: adminId,
       }).returning();
 
@@ -5125,7 +5128,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         return res.status(404).json({ error: "Trending poll not found" });
       }
 
-      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount } = req.body;
+      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility } = req.body;
 
       const updates: any = { updatedAt: new Date() };
       if (status !== undefined) updates.status = status;
@@ -5140,6 +5143,9 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       if (seedSupportCount !== undefined) updates.seedSupportCount = seedSupportCount;
       if (seedNeutralCount !== undefined) updates.seedNeutralCount = seedNeutralCount;
       if (seedOpposeCount !== undefined) updates.seedOpposeCount = seedOpposeCount;
+      if (slug !== undefined) updates.slug = slug || null;
+      if (featured !== undefined) updates.featured = featured;
+      if (visibility !== undefined) updates.visibility = visibility;
 
       const [updated] = await db.update(trendingPolls).set(updates).where(eq(trendingPolls.id, id)).returning();
 
