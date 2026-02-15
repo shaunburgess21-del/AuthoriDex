@@ -2431,7 +2431,6 @@ export default function PredictPage() {
           <section className="mb-10">
             <SectionHeader
               title="Weekly Up / Down"
-              onViewAll={() => setViewAllCategory("weekly")}
               onRulesClick={() => setRulesModalOpen("updown")}
             >
               <p className="text-xs sm:text-sm text-muted-foreground truncate">Will their trend score be higher / lower</p>
@@ -2462,6 +2461,18 @@ export default function PredictPage() {
                 No markets match your filters
               </div>
             )}
+            <div className="flex justify-center mt-6">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-violet-500 hover:text-violet-400 text-[14px]"
+                onClick={() => setViewAllCategory("weekly")}
+                data-testid="button-view-all-updown"
+              >
+                View All Markets
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
           </section>
         )}
 
@@ -2469,7 +2480,6 @@ export default function PredictPage() {
           <section className="mb-10">
             <SectionHeader
               title="Head-to-Head Battles"
-              onViewAll={() => setViewAllCategory("h2h")}
               onRulesClick={() => setRulesModalOpen("h2h")}
             >
               <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain more points?</p>
@@ -2500,6 +2510,18 @@ export default function PredictPage() {
                 No matchups match your filters
               </div>
             )}
+            <div className="flex justify-center mt-6">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-violet-500 hover:text-violet-400 text-[14px]"
+                onClick={() => setViewAllCategory("h2h")}
+                data-testid="button-view-all-h2h"
+              >
+                View All Markets
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
           </section>
         )}
 
@@ -2507,7 +2529,6 @@ export default function PredictPage() {
           <section className="mb-10">
             <SectionHeader
               title="Top Gainer Predictions"
-              onViewAll={() => setViewAllCategory("gainers")}
               onRulesClick={() => setRulesModalOpen("gainer")}
             >
               <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain the most points?</p>
@@ -2540,6 +2561,18 @@ export default function PredictPage() {
                 No gainers match your filters
               </div>
             )}
+            <div className="flex justify-center mt-6">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-violet-500 hover:text-violet-400 text-[14px]"
+                onClick={() => setViewAllCategory("gainers")}
+                data-testid="button-view-all-gainer"
+              >
+                View All Markets
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
           </section>
         )}
         </div>
