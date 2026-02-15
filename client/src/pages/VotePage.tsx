@@ -872,7 +872,12 @@ function DiscourseCard({
           )}
         </div>
       </div>
-      <p className="text-sm text-muted-foreground mb-5 flex-grow">{topic.description}</p>
+      {topic.subjectText && (
+        <p className="text-sm text-muted-foreground mb-5 flex-grow line-clamp-1">{topic.subjectText}</p>
+      )}
+      {!topic.subjectText && topic.description && (
+        <p className="text-sm text-muted-foreground mb-5 flex-grow line-clamp-1">{topic.description}</p>
+      )}
       
       {!voted ? (
         <div className="flex flex-col gap-3">

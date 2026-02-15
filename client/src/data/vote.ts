@@ -103,6 +103,7 @@ export interface DiscourseTopicData {
   id: string;
   headline: string;
   description: string;
+  subjectText?: string | null;
   category: string;
   approvePercent: number;
   neutralPercent: number;

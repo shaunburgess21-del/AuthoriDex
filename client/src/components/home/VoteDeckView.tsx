@@ -226,7 +226,7 @@ function PollCard({
         ) : (
           <h3 className="font-semibold text-base mb-1 text-center">{topic.headline}</h3>
         )}
-        <p className="text-sm text-muted-foreground mb-4 text-center">{topic.description}</p>
+        <p className="text-sm text-muted-foreground mb-4 text-center line-clamp-1">{topic.subjectText || topic.description}</p>
         
         {!hasVoted ? (
           <div className="flex flex-col gap-3">
