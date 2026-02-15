@@ -2471,7 +2471,7 @@ export default function PredictPage() {
               onViewAll={() => setViewAllCategory("h2h")}
               onRulesClick={() => setRulesModalOpen("h2h")}
             >
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">Curated matchups - who will gain more?</p>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain more points?</p>
             </SectionHeader>
             <SectionFilterBar
               categoryFilter={h2hCategory}
