@@ -46,10 +46,13 @@ function formatUpdatedAgo(timestamp: number | undefined): string {
 }
 
 export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: TrendingNowFeedProps) {
-  const { data: hotMovers = [], dataUpdatedAt } = useQuery<HotMover[]>({
+  const { data: rawResponse, dataUpdatedAt } = useQuery<{ data: HotMover[]; meta?: any } | HotMover[]>({
     queryKey: ['/api/trending/hot-movers'],
     refetchInterval: 60_000,
   });
+  const hotMovers: HotMover[] = rawResponse
+    ? (Array.isArray(rawResponse) ? rawResponse : rawResponse.data ?? [])
+    : [];
 
   const visibleIds = !collapsed ? hotMovers.map(p => p.id) : [];
   const { data: trendContexts } = useTrendContextBatch(visibleIds);

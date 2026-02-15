@@ -81,7 +81,7 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   drivers: text("drivers").array(),
   snapshotOrigin: text("snapshot_origin").default("ingest"),
   diagnostics: jsonb("diagnostics"),
-  runId: varchar("run_id"),
+  runId: varchar("run_id").notNull(),
 }, (table) => ({
   uniquePersonTimestamp: unique().on(table.personId, table.timestamp),
   runIdIdx: index("trend_snapshots_run_id_idx").on(table.runId),

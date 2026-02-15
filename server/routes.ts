@@ -2,6 +2,7 @@ import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateMockPlatformInsights } from "./api-integrations";
+import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { eq, desc, and, gt, sql, count, gte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
@@ -101,7 +102,7 @@ function shouldCountView(req: Request, personId: string): boolean {
 let _cachedPrevRanks: Map<string, number> | null = null;
 let _lastCompletedRunId: string | null = null;
 
-let _cachedHotMovers: any[] | null = null;
+let _cachedHotMovers: any | null = null;
 let _hotMoversCachedAt: number = 0;
 let _hotMoversCachedRunId: string | null = null;
 const HOT_MOVERS_TTL_MS = 10 * 60 * 1000; // 10 minutes
@@ -551,10 +552,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const result = hotMovers.slice(0, 8);
-      _cachedHotMovers = result;
+      const baselineMeta = await getBaselineDiagnostics(people.length);
+      const responseWithMeta = {
+        data: result,
+        meta: {
+          currentRunId: baselineMeta.currentRunId,
+          baseline24hRunId: baselineMeta.baseline24hRunId,
+          baseline24hAgeHours: baselineMeta.baseline24hAgeHours,
+          baselineStatus: baselineMeta.baseline24hStatus,
+          coveragePct: baselineMeta.baseline24hCoveragePct,
+        },
+      };
+      _cachedHotMovers = responseWithMeta;
       _hotMoversCachedAt = Date.now();
       _hotMoversCachedRunId = await getLatestCompletedRunId();
-      res.json(result);
+      res.json(responseWithMeta);
     } catch (error) {
       console.error("Error fetching hot movers:", error);
       res.status(500).json({ error: "Failed to fetch hot movers" });
@@ -1820,6 +1832,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
+      const baselineMeta = await getBaselineDiagnostics(totalCount);
+
       res.json({
         tab,
         sortDir,
@@ -1827,7 +1841,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalCount,
         data: leaderboard,
         thresholds: canonicalThresholds,
-        baselineStatus,
+        baselineStatus: baselineMeta.baseline24hStatus,
+        meta: {
+          currentRunId: baselineMeta.currentRunId,
+          baseline24hRunId: baselineMeta.baseline24hRunId,
+          baseline24hAgeHours: baselineMeta.baseline24hAgeHours,
+          baselineStatus: baselineMeta.baseline24hStatus,
+          coveragePct: baselineMeta.baseline24hCoveragePct,
+        },
       });
     } catch (error: any) {
       console.error("[leaderboard] Error:", error);
