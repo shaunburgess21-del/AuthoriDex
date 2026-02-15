@@ -253,7 +253,9 @@ function VersusCard({
   const leadingA = matchup.optionAPercent >= matchup.optionBPercent;
   
   return (
-    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50 hover-elevate">
+    <div className="relative group h-full">
+      <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100" />
+    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50 group-hover:shadow-lg group-hover:shadow-cyan-500/20 transition-all">
       <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg" />
       
       <div className="relative pt-4 pb-4">
@@ -403,6 +405,7 @@ function VersusCard({
         </div>
       </div>
     </Card>
+    </div>
   );
 }
 
@@ -451,11 +454,10 @@ function InductionCandidateCard({
   };
 
   return (
+    <div className="relative group h-full">
+      <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100" />
     <Card 
-      className="p-5 transition-all duration-200 hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] h-full min-h-[300px] flex flex-col relative overflow-hidden"
-      style={{ border: '1px solid rgba(148,163,184,0.18)' }}
-      onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)'}
-      onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
+      className="relative p-5 transition-all duration-200 h-full min-h-[300px] flex flex-col overflow-hidden border-slate-700/50 group-hover:shadow-lg group-hover:shadow-cyan-500/20"
       data-testid={`card-induction-${candidate.id}`}
     >
       <AnimatePresence>
@@ -544,6 +546,7 @@ function InductionCandidateCard({
         </button>
       )}
     </Card>
+    </div>
   );
 }
 
@@ -645,11 +648,10 @@ function CurateProfileCard({
       animate={{ opacity: isExiting ? 0 : 1, x: isExiting ? -100 : 0 }}
       transition={{ duration: 0.3 }}
     >
+      <div className="relative group">
+        <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100" />
       <Card 
-        className="p-4 transition-all duration-200 hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] relative overflow-hidden"
-        style={{ border: '1px solid rgba(148,163,184,0.18)' }}
-        onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)'}
-        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
+        className="relative p-4 transition-all duration-200 overflow-hidden border-slate-700/50 group-hover:shadow-lg group-hover:shadow-cyan-500/20"
         data-testid={`card-curate-${poll.id}`}
       >
         <AnimatePresence>
@@ -804,6 +806,7 @@ function CurateProfileCard({
           </>
         )}
       </Card>
+      </div>
     </motion.div>
   );
 }
@@ -829,13 +832,10 @@ function DiscourseCard({
   };
 
   return (
+    <div className="relative group h-full">
+      <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100" />
     <Card 
-      className="pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] relative"
-      style={{ 
-        border: '1px solid rgba(148,163,184,0.18)',
-      }}
-      onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)'}
-      onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
+      className="relative pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col border-slate-700/50 group-hover:shadow-lg group-hover:shadow-cyan-500/20"
       data-testid={`card-discourse-${topic.id}`}
     >
       <div className="absolute top-3 right-3">
@@ -962,6 +962,7 @@ function DiscourseCard({
         </div>
       )}
     </Card>
+    </div>
   );
 }
 
