@@ -546,32 +546,31 @@ function HeadToHeadCard({
           </Badge>
         </div>
         
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex flex-col items-center flex-1">
-            <div className="relative">
-              <div className="absolute -inset-4 rounded-full bg-blue-500/30 blur-lg" />
-              <div className="relative">
-                <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="h-[170px] w-[170px]" />
-              </div>
+        <div className="relative mb-4" style={{ padding: '0 5px' }}>
+          <div className="flex" style={{ gap: '3px' }}>
+            <div className="flex-1 relative">
+              <div className="absolute -inset-4 rounded-md bg-blue-500/20 blur-lg pointer-events-none" />
+              <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="w-full aspect-square" />
             </div>
-            <p className="text-sm font-semibold mt-2 text-center">{market.person1.name.split(" ")[0]}</p>
-            <span className="text-xs text-blue-400">{market.person1Percent}%</span>
+            <div className="flex-1 relative">
+              <div className="absolute -inset-4 rounded-md bg-purple-500/20 blur-lg pointer-events-none" />
+              <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="w-full aspect-square" />
+            </div>
           </div>
-          
-          <div className="relative mx-2">
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
             <div className="h-12 w-12 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
               <span className="text-xs font-bold text-slate-200">VS</span>
             </div>
           </div>
-          
+        </div>
+        
+        <div className="flex items-center justify-between px-2 mb-2">
           <div className="flex flex-col items-center flex-1">
-            <div className="relative">
-              <div className="absolute -inset-4 rounded-full bg-purple-500/30 blur-lg" />
-              <div className="relative">
-                <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-[170px] w-[170px]" />
-              </div>
-            </div>
-            <p className="text-sm font-semibold mt-2 text-center">{market.person2.name.split(" ")[0]}</p>
+            <p className="text-sm font-semibold text-center">{market.person1.name.split(" ")[0]}</p>
+            <span className="text-xs text-blue-400">{market.person1Percent}%</span>
+          </div>
+          <div className="flex flex-col items-center flex-1">
+            <p className="text-sm font-semibold text-center">{market.person2.name.split(" ")[0]}</p>
             <span className="text-xs text-purple-400">{100 - market.person1Percent}%</span>
           </div>
         </div>
