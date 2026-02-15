@@ -62,7 +62,7 @@ export function CurateSection({
     return {
       id: person.id,
       name: person.name || 'Unknown',
-      category: person.category || 'Entertainment',
+      category: person.category || 'Music',
       imageUrl: person.imageUrl,
     };
   }, [filteredCelebrities, currentIndex]);
