@@ -2435,7 +2435,7 @@ export default function VotePage() {
                 </div>
                 <div>
                   <h2 className="text-xl font-serif font-bold">The Induction Queue</h2>
-                  <p className="text-sm text-muted-foreground">Vote on which celebrity joins the main leaderboard next.</p>
+                  <p className="text-sm text-muted-foreground">Who joins the leaderboard next</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
