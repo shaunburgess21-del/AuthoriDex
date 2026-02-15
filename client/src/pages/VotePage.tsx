@@ -255,10 +255,10 @@ function VersusCard({
   return (
     <div className="relative group h-full">
       <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100" />
-    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50 group-hover:shadow-lg group-hover:shadow-cyan-500/20 transition-all">
+    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50 group-hover:shadow-lg group-hover:shadow-cyan-500/20 transition-all h-full flex flex-col">
       <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg" />
       
-      <div className="relative pt-4 pb-4">
+      <div className="relative pt-4 pb-4 flex flex-col flex-1">
         <div className="flex items-center justify-between mb-3 gap-2 px-4">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5 text-cyan-400" />
@@ -267,13 +267,11 @@ function VersusCard({
           <CategoryPill category={matchup.category} data-testid={`badge-matchup-${matchup.id}`} />
         </div>
         
-        {!hasVoted && (
-          <div className="flex flex-col items-center justify-center gap-1 px-4 mb-2">
-            <span className="text-sm font-semibold text-slate-300">
-              {matchup.promptText || "Who do you prefer?"}
-            </span>
-          </div>
-        )}
+        <div className={`flex flex-col items-center justify-center gap-1 px-4 mb-2 ${hasVoted ? 'invisible' : ''}`}>
+          <span className="text-sm font-semibold text-slate-300">
+            {matchup.promptText || "Who do you prefer?"}
+          </span>
+        </div>
         
         <div className="flex items-stretch gap-[2px] relative px-[2px]">
           <button
@@ -345,7 +343,7 @@ function VersusCard({
           </button>
         </div>
         
-        <div className="mt-3 px-4">
+        <div className="mt-auto pt-3 px-4">
           {hasVoted ? (
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -397,7 +395,7 @@ function VersusCard({
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center gap-2 text-xs text-slate-400 mt-1">
+            <div className="flex items-center justify-center gap-2 text-xs text-slate-400 mt-1 min-h-[90px]">
               <Swords className="h-3.5 w-3.5 text-cyan-400/70" />
               <span className="font-medium">Tap an image to pick your side</span>
             </div>
