@@ -451,7 +451,7 @@ function InductionCandidateCard({
 
   return (
     <Card 
-      className="p-5 transition-all duration-200 hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] h-full flex flex-col relative overflow-hidden"
+      className="p-5 transition-all duration-200 hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] h-full min-h-[300px] flex flex-col relative overflow-hidden"
       style={{ border: '1px solid rgba(148,163,184,0.18)' }}
       onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.35)'}
       onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(148,163,184,0.18)'}
@@ -487,7 +487,7 @@ function InductionCandidateCard({
 
       <div className="flex flex-col items-center text-center mb-4 flex-grow">
         <div className="relative">
-          <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="lg" />
+          <PersonAvatar name={candidate.name} avatar={candidate.avatar} className="h-32 w-32" />
           {isVoted && (
             <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center">
               <Check className="h-3 w-3 text-white" />
