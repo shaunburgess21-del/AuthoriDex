@@ -90,14 +90,14 @@ function CelebCard({
       onClick={onClick}
       data-testid={`view-all-card-${person.id}`}
     >
-      <div className="p-3">
+      <div className="p-3 relative">
+        <div className="absolute top-3 right-3 z-10">
+          <CategoryPill category={person.category} />
+        </div>
         <div className="flex items-center gap-2 mb-2">
           <PersonAvatar name={person.name} avatar={person.imageUrl || ""} size="sm" />
           <div className="min-w-0 flex flex-col justify-center">
-            <div className="flex items-center gap-1.5">
-              <p className="font-medium text-sm truncate">{person.name}</p>
-              <CategoryPill category={person.category} />
-            </div>
+            <p className="font-medium text-sm truncate">{person.name}</p>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <Users className="h-3 w-3" />
               <span>{totalVotes.toLocaleString()} votes</span>
