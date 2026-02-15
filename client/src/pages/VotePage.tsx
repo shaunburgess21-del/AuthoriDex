@@ -362,7 +362,7 @@ function VersusCard({
                       Your pick
                     </Badge>
                   )}
-                  <span className={`text-lg font-bold ${!leadingA ? 'text-sky-500' : 'text-slate-400'}`}>
+                  <span className={`text-lg font-bold ${!leadingA ? 'text-[#0386C9]' : 'text-slate-400'}`}>
                     {matchup.optionBPercent}%
                   </span>
                 </div>
