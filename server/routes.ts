@@ -11,6 +11,8 @@ import { supabaseServer } from "./supabase";
 import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
 import { createHash, randomUUID } from "crypto";
+import multer from "multer";
+import path from "path";
 import { gamificationService } from "./services/gamification";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext } from "./providers/serper";
@@ -4081,6 +4083,74 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error capturing snapshots:", error.message);
       res.status(500).json({ error: "Failed to capture snapshots" });
+    }
+  });
+
+  // Admin image upload to Supabase Storage
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 2 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ['image/png', 'image/jpeg', 'image/webp'];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only PNG, JPG, and WEBP files are allowed'));
+      }
+    },
+  });
+
+  app.post("/api/admin/upload-image", requireAuth, requireAdmin, upload.single('file'), async (req: AuthRequest, res) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const moduleName = (req.body.moduleName as string) || "general";
+      const slugOrId = (req.body.slugOrId as string) || "unnamed";
+      const ext = path.extname(file.originalname).toLowerCase() || '.png';
+      const timestamp = Date.now();
+      const filePath = `${moduleName}/${slugOrId}/${timestamp}${ext}`;
+      const bucketName = "public-images";
+
+      const { data: buckets } = await supabaseServer.storage.listBuckets();
+      const bucketExists = buckets?.some(b => b.name === bucketName);
+      if (!bucketExists) {
+        const { error: createError } = await supabaseServer.storage.createBucket(bucketName, {
+          public: true,
+          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
+          fileSizeLimit: 2 * 1024 * 1024,
+        });
+        if (createError) {
+          console.error("Failed to create bucket:", createError);
+          return res.status(500).json({ error: "Failed to create storage bucket" });
+        }
+      }
+
+      const { data, error } = await supabaseServer.storage
+        .from(bucketName)
+        .upload(filePath, file.buffer, {
+          contentType: file.mimetype,
+          upsert: false,
+        });
+
+      if (error) {
+        console.error("Supabase upload error:", error);
+        return res.status(500).json({ error: "Failed to upload image" });
+      }
+
+      const { data: urlData } = supabaseServer.storage
+        .from(bucketName)
+        .getPublicUrl(filePath);
+
+      res.json({ url: urlData.publicUrl, path: filePath });
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      if (error.message?.includes('Only PNG')) {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: "Upload failed" });
     }
   });
 

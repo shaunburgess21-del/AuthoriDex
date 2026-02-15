@@ -55,6 +55,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { UploadImageInput } from "@/components/ui/upload-image-input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
@@ -864,11 +865,12 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
             </div>
             <div className="space-y-2">
               <Label>Image URL (optional)</Label>
-              <Input
+              <UploadImageInput
                 value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="Custom image URL (overrides celebrity avatar)"
-                data-testid="input-market-image-url"
+                onChange={setImageUrl}
+                moduleName="real-world-markets"
+                slugOrId={slug || "new"}
+                placeholder="Paste URL or upload (overrides celebrity avatar)"
               />
               <p className="text-xs text-muted-foreground">
                 {personId && !imageUrl ? "Will use celebrity avatar" : imageUrl ? "Custom image set" : "No image"}
@@ -1117,22 +1119,13 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
                         </div>
                       )}
                     </div>
-                    <Input
+                    <UploadImageInput
                       value={entry.imageUrl}
-                      onChange={(e) => updateEntry(idx, "imageUrl", e.target.value)}
-                      placeholder="Or paste image URL manually..."
-                      className="text-xs"
-                      data-testid={`input-entry-image-url-${idx}`}
+                      onChange={(url) => updateEntry(idx, "imageUrl", url)}
+                      moduleName="market-entries"
+                      slugOrId={`${slug || "new"}-entry-${idx}`}
+                      placeholder="Upload or paste entry image URL..."
                     />
-                    {entry.imageUrl && (
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-6 w-6">
-                          <AvatarImage src={entry.imageUrl} alt="preview" />
-                          <AvatarFallback className="text-[8px]">?</AvatarFallback>
-                        </Avatar>
-                        <span className="text-[10px] text-muted-foreground truncate">{entry.imageUrl.slice(0, 50)}...</span>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -5019,13 +5012,13 @@ export default function AdminDashboard() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="poll-image">Image URL (optional)</Label>
-                <Input
-                  id="poll-image"
+                <UploadImageInput
                   value={pollForm.imageUrl}
-                  onChange={(e) => setPollForm({ ...pollForm, imageUrl: e.target.value })}
-                  placeholder="Custom image URL (when no celebrity linked)"
+                  onChange={(url) => setPollForm({ ...pollForm, imageUrl: url })}
+                  moduleName="trending-polls"
+                  slugOrId={pollForm.slug || "new"}
+                  placeholder="Upload or paste image URL"
                   disabled={!!pollForm.personId}
-                  data-testid="input-poll-image-url"
                 />
               </div>
             </div>
