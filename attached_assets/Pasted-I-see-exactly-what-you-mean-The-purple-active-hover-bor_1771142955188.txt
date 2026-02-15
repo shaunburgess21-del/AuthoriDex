@@ -1,0 +1,24 @@
+I see exactly what you mean. The purple active/hover borders are being clipped at the top and bottom edges across all the cards on the Predict page.
+
+In UI development, this is a classic CSS clipping issue. It almost always happens when a parent container (like the list or grid holding all the cards) has overflow: hidden turned on, and the cards inside it expand (via an added border, outline, or box-shadow) beyond their allocated space without enough padding or margin to accommodate the extra pixels.
+
+Here are a few ways you can explain this clearly to Replit so it fixes the layout for the entire page.
+
+Option 1: The Direct & Descriptive Approach (Recommended)
+Copy and paste this into Replit:
+
+"On the Predict page, the purple active/hover borders are getting cut off (clipped) at the top and bottom of all the prediction cards. This looks like an issue where a parent container (like the grid or list wrapper) has overflow: hidden and there isn't enough padding or margin to make room for the border's width. Can we adjust the CSS on the parent container to prevent the cards' borders from being clipped?"
+
+Option 2: The Quick/Technical Approach
+Copy and paste this into Replit:
+
+"The active/hover purple borders on the prediction card components are clipping at the top and bottom across the entire Predict page layout. Please check the parent container's overflow property. We likely need to either remove overflow: hidden, or add a few pixels of padding/margin to the wrapper so the borders or box-shadows can render fully without being cut off."
+
+Pro-Tips for Fixing This:
+If Replit tries a few things and gets stuck, here is what is usually going wrong under the hood:
+
+If it's using a border: Adding a border on hover physically changes the size of the element, which shifts layouts. Replit should change it to an outline or an inset box-shadow so it doesn't change the cards' actual dimensions.
+
+If it's using a box-shadow: Box shadows don't take up physical space in the layout. If the parent wrapper fits tightly around the cards and has overflow: hidden, the shadow simply gets chopped off. Replit needs to add padding to that parent wrapper.
+
+Would you like me to take a look at the actual CSS or React/HTML code for that page if Replit has trouble fixing it?
