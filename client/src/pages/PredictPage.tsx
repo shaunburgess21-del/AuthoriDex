@@ -1785,7 +1785,6 @@ function WeeklyJackpotHero({
     >
       <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl" />
       <div className="absolute bottom-0 left-0 w-48 h-48 bg-orange-500/10 rounded-full blur-3xl" />
-      
       <div className="relative z-10 p-6 md:p-8">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
           <div className="flex-1">
@@ -1821,9 +1820,7 @@ function WeeklyJackpotHero({
               </button>
             </div>
             
-            <p className="text-sm text-muted-foreground mb-4 max-w-md">
-              Predict the exact Trend Score at week's end. Closest wins the jackpot!
-            </p>
+            <p className="text-sm text-muted-foreground mb-4 max-w-md">Predict the exact Trend Score. Closest wins the jackpot!</p>
             
             {isMarketClosed ? (
               <Button size="lg" className="bg-muted text-muted-foreground cursor-not-allowed" disabled>
@@ -1864,7 +1861,6 @@ function WeeklyJackpotHero({
           </div>
         </div>
       </div>
-      
       <CelebritySearchModal
         open={searchModalOpen}
         onOpenChange={setSearchModalOpen}
