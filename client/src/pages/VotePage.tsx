@@ -524,10 +524,11 @@ function InductionCandidateCard({
       </div>
       
       <Button 
+        variant={isVoted ? undefined : "outline"}
         onClick={handleVoteClick}
         className={`w-full ${isVoted 
           ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20' 
-          : 'bg-gradient-to-r from-cyan-600 to-cyan-500 text-white shadow-[0_0_15px_rgba(34,211,238,0.2)]'
+          : 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400'
         }`}
         data-testid={`button-induct-${candidate.id}`}
       >
