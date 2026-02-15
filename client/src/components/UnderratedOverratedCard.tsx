@@ -147,54 +147,51 @@ export function UnderratedOverratedCard({
           <p className="text-sm text-muted-foreground text-center mb-1">
             Is {person.name.split(" ")[0]} underrated or overrated?
           </p>
-          <Button
-            variant="outline"
+          <button
             onClick={() => handleVote('underrated')}
             disabled={isPending}
-            className="w-full bg-[#00C853]/10 border-[#00C853]/50 text-[#00C853]"
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20 disabled:opacity-50"
             data-testid={`button-underrated-${person.id}`}
           >
             {isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <>
-                <ArrowUp className="h-4 w-4 shrink-0 mr-2" />
+                <ArrowUp className="h-4 w-4 shrink-0" />
                 <span>Underrated</span>
               </>
             )}
-          </Button>
-          <Button
-            variant="outline"
+          </button>
+          <button
             onClick={() => handleVote('fairly_rated')}
             disabled={isPending}
-            className="w-full bg-slate-700/40 border-slate-600/50 text-slate-300"
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15 disabled:opacity-50"
             data-testid={`button-fairly-rated-${person.id}`}
           >
             {isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <>
-                <Minus className="h-4 w-4 shrink-0 mr-2" />
+                <Minus className="h-4 w-4 shrink-0" />
                 <span>Fairly Rated</span>
               </>
             )}
-          </Button>
-          <Button
-            variant="outline"
+          </button>
+          <button
             onClick={() => handleVote('overrated')}
             disabled={isPending}
-            className="w-full bg-[#FF0000]/10 border-[#FF0000]/50 text-[#FF0000]"
+            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 disabled:opacity-50"
             data-testid={`button-overrated-${person.id}`}
           >
             {isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <>
-                <ArrowDown className="h-4 w-4 shrink-0 mr-2" />
+                <ArrowDown className="h-4 w-4 shrink-0" />
                 <span>Overrated</span>
               </>
             )}
-          </Button>
+          </button>
         </div>
       ) : (
         <div className="flex flex-col gap-3 mt-auto">

@@ -523,27 +523,25 @@ function InductionCandidateCard({
         </div>
       </div>
       
-      <Button 
-        variant={isVoted ? undefined : "outline"}
-        onClick={handleVoteClick}
-        className={`w-full ${isVoted 
-          ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20' 
-          : 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400'
-        }`}
-        data-testid={`button-induct-${candidate.id}`}
-      >
-        {isVoted ? (
-          <>
-            <Check className="h-4 w-4 mr-2" />
-            Voted
-          </>
-        ) : (
-          <>
-            <Vote className="h-4 w-4 mr-2" />
-            Vote to Induct
-          </>
-        )}
-      </Button>
+      {isVoted ? (
+        <Button 
+          onClick={handleVoteClick}
+          className="w-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20"
+          data-testid={`button-induct-${candidate.id}`}
+        >
+          <Check className="h-4 w-4 mr-2" />
+          Voted
+        </Button>
+      ) : (
+        <button
+          onClick={handleVoteClick}
+          className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-cyan-500/10 border border-cyan-500/50 text-cyan-400 text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/20"
+          data-testid={`button-induct-${candidate.id}`}
+        >
+          <Vote className="h-4 w-4 shrink-0" />
+          <span>Vote to Induct</span>
+        </button>
+      )}
     </Card>
   );
 }
