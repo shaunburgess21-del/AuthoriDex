@@ -2412,6 +2412,7 @@ export default function PredictPage() {
           </div>
         )}
 
+        <div>
         <MarketCycleHero marketState={marketCycle} />
 
         {showSection("jackpot") && (
@@ -2541,7 +2542,7 @@ export default function PredictPage() {
             )}
           </section>
         )}
-
+        </div>
 
         <div className="text-center pb-8">
           <button 
