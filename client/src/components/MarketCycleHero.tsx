@@ -77,17 +77,20 @@ export function MarketCycleHero({ marketState }: MarketCycleHeroProps) {
   
   return (
     <div 
-      className="relative rounded-xl mb-6 border border-white/10 bg-card"
+      className="sticky top-0 z-30 relative rounded-xl mb-6 border border-white/10 bg-card/95 backdrop-blur-sm"
       data-testid="market-cycle-hero"
     >
-      <div className="relative z-10 px-4 py-4 md:px-6">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-gray-400 text-[10px] font-medium uppercase tracking-widest">
+      <div className="relative z-10 px-4 py-2 md:px-6 md:py-4">
+        <div className="flex flex-row items-center justify-between gap-2 md:gap-4">
+          <p className="text-gray-400 text-[10px] font-medium uppercase tracking-widest hidden md:block">
             Weekly Market Closes In
+          </p>
+          <p className="text-gray-400 text-[9px] font-medium uppercase tracking-widest md:hidden shrink-0">
+            Closes In
           </p>
           
           <div 
-            className="flex items-center gap-2"
+            className="flex items-center gap-1.5 md:gap-2"
             data-testid="countdown-timer"
           >
             <TimerSegment 
@@ -115,7 +118,7 @@ export function MarketCycleHero({ marketState }: MarketCycleHeroProps) {
             />
           </div>
           
-          <div className="flex items-center">
+          <div className="hidden md:flex items-center">
             {getStatusBadge()}
           </div>
         </div>
