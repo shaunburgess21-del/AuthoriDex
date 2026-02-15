@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { generateMockPlatformInsights } from "./api-integrations";
 import { db } from "./db";
 import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
-import { eq, desc, and, gt, sql, count, gte, ilike, SQL, or, inArray, asc, lt, ne } from "drizzle-orm";
+import { eq, desc, and, gt, sql, count, gte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
@@ -165,7 +165,7 @@ async function getSnapshotRankMap(): Promise<Map<string, number>> {
         map.set(s.personId, i + 1);
       });
     } else {
-      // Strategy 2: Fallback to hour-bucketed timestamps for older snapshots without run_id
+      // Strategy 2: Fallback to hour-bucketed timestamps, but ONLY trusted snapshots (run_id IS NOT NULL)
       const targetHour = new Date(t24hAgo);
       targetHour.setMinutes(0, 0, 0);
       const tLow = new Date(targetHour.getTime() - 8 * 60 * 60 * 1000);
@@ -174,7 +174,10 @@ async function getSnapshotRankMap(): Promise<Map<string, number>> {
       const nearestHourRow = await db
         .select({ hour: sql<string>`date_trunc('hour', ${trendSnapshots.timestamp})` })
         .from(trendSnapshots)
-        .where(sql`${trendSnapshots.timestamp} BETWEEN ${tLow} AND ${tHigh}`)
+        .where(and(
+          sql`${trendSnapshots.timestamp} BETWEEN ${tLow} AND ${tHigh}`,
+          isNotNull(trendSnapshots.runId)
+        ))
         .groupBy(sql`date_trunc('hour', ${trendSnapshots.timestamp})`)
         .orderBy(sql`ABS(EXTRACT(EPOCH FROM date_trunc('hour', ${trendSnapshots.timestamp}) - ${targetHour}::timestamp))`)
         .limit(1);
@@ -189,7 +192,10 @@ async function getSnapshotRankMap(): Promise<Map<string, number>> {
             fameIndex: sql<number>`MAX(${trendSnapshots.fameIndex})`,
           })
           .from(trendSnapshots)
-          .where(sql`${trendSnapshots.timestamp} >= ${snapshotHour} AND ${trendSnapshots.timestamp} < ${snapshotHourEnd}`)
+          .where(and(
+            sql`${trendSnapshots.timestamp} >= ${snapshotHour} AND ${trendSnapshots.timestamp} < ${snapshotHourEnd}`,
+            isNotNull(trendSnapshots.runId)
+          ))
           .groupBy(trendSnapshots.personId)
           .orderBy(sql`MAX(${trendSnapshots.fameIndex}) DESC NULLS LAST`);
 
@@ -3577,6 +3583,76 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       `);
       const sourceStatsRef = (refRow.rows?.[0] as { fetched_at: string; expires_at: string } | undefined) || null;
 
+      // === BASELINE DIAGNOSTICS ===
+      const t24hAgoHealth = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const t7dAgoHealth = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const BASELINE_24H_WINDOW = 6 * 60 * 60 * 1000;
+      const BASELINE_7D_WINDOW = 24 * 60 * 60 * 1000;
+      
+      const [baseline24hRun] = await db
+        .select({ id: ingestionRuns.id, finishedAt: ingestionRuns.finishedAt })
+        .from(ingestionRuns)
+        .where(and(
+          eq(ingestionRuns.status, "completed"),
+          gt(ingestionRuns.finishedAt, new Date(t24hAgoHealth.getTime() - BASELINE_24H_WINDOW)),
+          lt(ingestionRuns.finishedAt, new Date(t24hAgoHealth.getTime() + BASELINE_24H_WINDOW))
+        ))
+        .orderBy(sql`ABS(EXTRACT(EPOCH FROM ${ingestionRuns.finishedAt} - ${t24hAgoHealth}::timestamp))`)
+        .limit(1);
+      
+      const [baseline7dRun] = await db
+        .select({ id: ingestionRuns.id, finishedAt: ingestionRuns.finishedAt })
+        .from(ingestionRuns)
+        .where(and(
+          eq(ingestionRuns.status, "completed"),
+          gt(ingestionRuns.finishedAt, new Date(t7dAgoHealth.getTime() - BASELINE_7D_WINDOW)),
+          lt(ingestionRuns.finishedAt, new Date(t7dAgoHealth.getTime() + BASELINE_7D_WINDOW))
+        ))
+        .orderBy(sql`ABS(EXTRACT(EPOCH FROM ${ingestionRuns.finishedAt} - ${t7dAgoHealth}::timestamp))`)
+        .limit(1);
+      
+      const baselineAge24hHours = baseline24hRun?.finishedAt 
+        ? Math.round((now.getTime() - new Date(baseline24hRun.finishedAt).getTime()) / (1000 * 60 * 60) * 10) / 10
+        : null;
+      const baselineAge7dHours = baseline7dRun?.finishedAt
+        ? Math.round((now.getTime() - new Date(baseline7dRun.finishedAt).getTime()) / (1000 * 60 * 60) * 10) / 10
+        : null;
+      
+      // Count people missing 24h baseline
+      let baselineCoverage24h = 0;
+      if (baseline24hRun) {
+        const [countRow] = await db
+          .select({ cnt: sql<number>`COUNT(DISTINCT ${trendSnapshots.personId})` })
+          .from(trendSnapshots)
+          .where(eq(trendSnapshots.runId, baseline24hRun.id));
+        baselineCoverage24h = Number(countRow?.cnt ?? 0);
+      }
+      
+      // === SYSTEMIC CHANGE ALERT ===
+      // Check if >90% of people have 24h changes in the same direction
+      const trendingPeopleForAlert = await db
+        .select({ change24h: trendingPeople.change24h })
+        .from(trendingPeople)
+        .where(isNotNull(trendingPeople.change24h));
+      
+      let positiveCount = 0;
+      let negativeCount = 0;
+      let totalWithChange = 0;
+      for (const p of trendingPeopleForAlert) {
+        const c = Number(p.change24h);
+        if (c > 0) positiveCount++;
+        else if (c < 0) negativeCount++;
+        totalWithChange++;
+      }
+      const positivePct = totalWithChange > 0 ? Math.round(positiveCount / totalWithChange * 100) : 0;
+      const negativePct = totalWithChange > 0 ? Math.round(negativeCount / totalWithChange * 100) : 0;
+      const systemicChangeAlert = totalWithChange > 10 && (positivePct > 90 || negativePct > 90);
+
+      const pollutedResult = await db.execute(sql`
+        SELECT COUNT(*)::int as cnt FROM trend_snapshots WHERE run_id IS NULL
+      `);
+      const pollutedSnapshotCount = Number((pollutedResult.rows?.[0] as any)?.cnt ?? 0);
+
       const spotCheckRows = await db.execute(sql`
         SELECT name, fame_index, rank
         FROM trending_people
@@ -3752,6 +3828,36 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           isCorrect: rankOrderCorrect,
           issueCount: rankIssues.length,
           issues: rankIssues.slice(0, 5),
+        },
+        baselineDiagnostics: {
+          baseline24h: {
+            runId: baseline24hRun?.id ?? null,
+            finishedAt: baseline24hRun?.finishedAt ? new Date(baseline24hRun.finishedAt).toISOString() : null,
+            ageHours: baselineAge24hHours,
+            status: baseline24hRun ? "normal" : "degraded",
+            snapshotCoverage: baselineCoverage24h,
+          },
+          baseline7d: {
+            runId: baseline7dRun?.id ?? null,
+            finishedAt: baseline7dRun?.finishedAt ? new Date(baseline7dRun.finishedAt).toISOString() : null,
+            ageHours: baselineAge7dHours,
+            status: baseline7dRun ? "normal" : "degraded",
+          },
+          currentRunId: lastSuccessfulRun?.id ?? null,
+          pollutedSnapshots: pollutedSnapshotCount,
+        },
+        systemicChangeAlert: {
+          alert: systemicChangeAlert,
+          message: systemicChangeAlert 
+            ? `WARNING: ${positivePct > 90 ? positivePct + '% positive' : negativePct + '% negative'} — baseline likely wrong or ingestion gap`
+            : "OK — changes are distributed normally",
+          breakdown: {
+            totalWithChange: totalWithChange,
+            positiveCount,
+            negativeCount,
+            positivePct,
+            negativePct,
+          },
         },
         spotCheck: (spotCheckRows.rows || []).map((r: any) => ({
           name: r.name,

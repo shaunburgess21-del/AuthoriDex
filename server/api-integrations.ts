@@ -1,6 +1,6 @@
-import { TrendingPerson, TrackedPerson, trendSnapshots, trackedPeople } from "@shared/schema";
+import { TrendingPerson, TrackedPerson, trendSnapshots, trackedPeople, ingestionRuns } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, sql, gte } from "drizzle-orm";
+import { eq, desc, and, sql, gte, gt, isNotNull, lt } from "drizzle-orm";
 
 interface CelebrityMetrics {
   name: string;
@@ -305,51 +305,77 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
     });
   }
   
-  // Fetch historical snapshots for change calculations
+  // Fetch historical baselines using DETERMINISTIC run-based selection
+  // Instead of "closest timestamp to 24h ago" (which causes systemic all-red/all-green),
+  // we find the closest COMPLETED ingestion run to 24h/7d ago and use its snapshots.
   const now = new Date();
   const time24hAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const time7dAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   
-  // Build lookup maps for historical scores (using fameIndex for stable % changes)
-  const historicalSnapshots = await db.select({
-    personId: trendSnapshots.personId,
-    timestamp: trendSnapshots.timestamp,
-    trendScore: trendSnapshots.trendScore,
-    fameIndex: trendSnapshots.fameIndex,
-  }).from(trendSnapshots).where(
-    gte(trendSnapshots.timestamp, time7dAgo)
-  );
+  const BASELINE_24H_WINDOW_MS = 6 * 60 * 60 * 1000; // ±6h strict window for 24h baseline
+  const BASELINE_7D_WINDOW_MS = 24 * 60 * 60 * 1000; // ±24h window for 7d baseline
   
-  // Create maps for 24h and 7d lookups (find closest snapshot to target time)
-  const snapshot24hMap = new Map<string, { score: number; fameIndex: number | null; diff: number }>();
-  const snapshot7dMap = new Map<string, { score: number; fameIndex: number | null; diff: number }>();
+  const snapshot24hMap = new Map<string, { score: number; fameIndex: number | null }>();
+  const snapshot7dMap = new Map<string, { score: number; fameIndex: number | null }>();
   
-  const MAX_24H_WINDOW = 8 * 60 * 60 * 1000; // 8 hours window for 24h lookup (survives overnight gaps)
-  const MAX_7D_WINDOW = 24 * 60 * 60 * 1000; // 24 hours window for 7d lookup
+  // Find baseline run for 24h: closest completed run to 24h ago within ±6h window
+  const [baselineRun24h] = await db
+    .select({ id: ingestionRuns.id, finishedAt: ingestionRuns.finishedAt })
+    .from(ingestionRuns)
+    .where(and(
+      eq(ingestionRuns.status, "completed"),
+      gt(ingestionRuns.finishedAt, new Date(time24hAgo.getTime() - BASELINE_24H_WINDOW_MS)),
+      lt(ingestionRuns.finishedAt, new Date(time24hAgo.getTime() + BASELINE_24H_WINDOW_MS))
+    ))
+    .orderBy(sql`ABS(EXTRACT(EPOCH FROM ${ingestionRuns.finishedAt} - ${time24hAgo}::timestamp))`)
+    .limit(1);
   
-  for (const snap of historicalSnapshots) {
-    const snapTime = new Date(snap.timestamp).getTime();
-    const diff24h = Math.abs(snapTime - time24hAgo.getTime());
-    const diff7d = Math.abs(snapTime - time7dAgo.getTime());
+  if (baselineRun24h) {
+    const snapshots = await db.select({
+      personId: trendSnapshots.personId,
+      trendScore: trendSnapshots.trendScore,
+      fameIndex: trendSnapshots.fameIndex,
+    }).from(trendSnapshots)
+      .where(eq(trendSnapshots.runId, baselineRun24h.id));
     
-    // Keep closest snapshot to 24h ago
-    if (diff24h < MAX_24H_WINDOW) {
-      const existing = snapshot24hMap.get(snap.personId);
-      if (!existing || diff24h < existing.diff) {
-        snapshot24hMap.set(snap.personId, { score: snap.trendScore, fameIndex: snap.fameIndex, diff: diff24h });
-      }
-    }
-    
-    // Keep closest snapshot to 7d ago
-    if (diff7d < MAX_7D_WINDOW) {
-      const existing = snapshot7dMap.get(snap.personId);
-      if (!existing || diff7d < existing.diff) {
-        snapshot7dMap.set(snap.personId, { score: snap.trendScore, fameIndex: snap.fameIndex, diff: diff7d });
-      }
+    for (const snap of snapshots) {
+      snapshot24hMap.set(snap.personId, { score: snap.trendScore, fameIndex: snap.fameIndex });
     }
   }
   
-  console.log(`[Aggregate] Found ${snapshot24hMap.size} 24h snapshots, ${snapshot7dMap.size} 7d snapshots for change calculations`);
+  // Find baseline run for 7d: closest completed run to 7d ago within ±24h window
+  const [baselineRun7d] = await db
+    .select({ id: ingestionRuns.id, finishedAt: ingestionRuns.finishedAt })
+    .from(ingestionRuns)
+    .where(and(
+      eq(ingestionRuns.status, "completed"),
+      gt(ingestionRuns.finishedAt, new Date(time7dAgo.getTime() - BASELINE_7D_WINDOW_MS)),
+      lt(ingestionRuns.finishedAt, new Date(time7dAgo.getTime() + BASELINE_7D_WINDOW_MS))
+    ))
+    .orderBy(sql`ABS(EXTRACT(EPOCH FROM ${ingestionRuns.finishedAt} - ${time7dAgo}::timestamp))`)
+    .limit(1);
+  
+  if (baselineRun7d) {
+    const snapshots = await db.select({
+      personId: trendSnapshots.personId,
+      trendScore: trendSnapshots.trendScore,
+      fameIndex: trendSnapshots.fameIndex,
+    }).from(trendSnapshots)
+      .where(eq(trendSnapshots.runId, baselineRun7d.id));
+    
+    for (const snap of snapshots) {
+      snapshot7dMap.set(snap.personId, { score: snap.trendScore, fameIndex: snap.fameIndex });
+    }
+  }
+  
+  const baselineAge24h = baselineRun24h?.finishedAt 
+    ? Math.round((now.getTime() - new Date(baselineRun24h.finishedAt).getTime()) / (1000 * 60 * 60) * 10) / 10
+    : null;
+  const baselineAge7d = baselineRun7d?.finishedAt
+    ? Math.round((now.getTime() - new Date(baselineRun7d.finishedAt).getTime()) / (1000 * 60 * 60) * 10) / 10
+    : null;
+  
+  console.log(`[Aggregate] Run-based baseline: 24h run=${baselineRun24h?.id?.slice(0,8) ?? 'NONE'} (${baselineAge24h}h ago, ${snapshot24hMap.size} snaps), 7d run=${baselineRun7d?.id?.slice(0,8) ?? 'NONE'} (${baselineAge7d}h ago, ${snapshot7dMap.size} snaps)`);
   
   // Convert to TrendingPerson format with historical changes (in displayOrder sequence)
   const trendingPeople: TrendingPerson[] = [];
