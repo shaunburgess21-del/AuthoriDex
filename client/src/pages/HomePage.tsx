@@ -856,9 +856,7 @@ export default function HomePage() {
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <CardTitle className="text-2xl font-serif">Leaderboards</CardTitle>
-                        <div className="hidden sm:block">
-                          <FilterDropdown value={category} onChange={setCategory} />
-                        </div>
+                        <FilterDropdown value={category} onChange={setCategory} />
                       </div>
                       <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap" data-testid="text-leaderboard-freshness">
                         <TouchTooltip
@@ -890,9 +888,6 @@ export default function HomePage() {
                     <p className="text-[11px] text-muted-foreground/50">
                       {leaderboardTab === "fame" ? "Ranked by real-world trending data" : "Ranked by community votes"}
                     </p>
-                    <div className="sm:hidden">
-                      <FilterDropdown value={category} onChange={setCategory} />
-                    </div>
                   </div>
                   <div className="flex items-center gap-2 border-b border-border pb-2">
                     <button
