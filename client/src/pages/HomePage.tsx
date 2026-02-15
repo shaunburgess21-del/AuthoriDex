@@ -899,10 +899,10 @@ export default function HomePage() {
                           : "text-muted-foreground hover:bg-primary/20 hover:text-primary border border-transparent hover:border-primary/30"
                       }`}
                       data-testid="tab-leaderboard-fame"
-                      title="Sort by Fame Score"
+                      title="Sort by Trend Score"
                     >
                       <Crown className="h-3.5 w-3.5" />
-                      Fame Score
+                      Trend Score
                       {leaderboardTab === "fame" && (
                         <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                       )}
@@ -1013,14 +1013,14 @@ export default function HomePage() {
                       <div className="flex-1" />
                       {leaderboardTab === "fame" ? (
                         <>
-                          <div className="text-right w-[120px] shrink-0">Fame Score</div>
+                          <div className="text-right w-[120px] shrink-0">Trend Score</div>
                           <div className="text-right w-[72px] shrink-0">24h</div>
                           <div className="text-right w-[72px] shrink-0">Approval</div>
                         </>
                       ) : (
                         <>
                           <div className="text-right w-[120px] shrink-0">Approval</div>
-                          <div className="text-right w-[120px] shrink-0">Fame Score</div>
+                          <div className="text-right w-[120px] shrink-0">Trend Score</div>
                         </>
                       )}
                       <div className="w-9 shrink-0" />
