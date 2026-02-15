@@ -265,7 +265,7 @@ function VersusCard({
         </div>
         
         {!hasVoted && (
-          <div className="flex flex-col items-center justify-center gap-1 px-4 mb-3" style={{ minHeight: '40px' }}>
+          <div className="flex flex-col items-center justify-center gap-1 px-4 mb-2">
             <span className="text-sm font-semibold text-slate-300">
               {matchup.promptText || "Who do you prefer?"}
             </span>
