@@ -1224,7 +1224,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
       )}
       
-      <div className="mt-auto" style={{ marginTop: 'auto', position: 'relative', top: '-15px' }}>
+      <div style={{ position: 'relative', top: '-15px' }}>
         <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
           <Users className="h-3.5 w-3.5" />
           <span>{participants} participants</span>
@@ -1239,7 +1239,9 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
             <span className="text-red-500 font-semibold">Below {belowPercent}%</span>
           </div>
         </div>
-        
+      </div>
+      
+      <div className="mt-auto">
         <div className="flex items-center justify-center mb-1.5">
           <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
         </div>
