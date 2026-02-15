@@ -2557,7 +2557,7 @@ export default function VotePage() {
                 </div>
                 <div>
                   <h2 className="text-xl font-serif font-bold">Curate the Profile</h2>
-                  <p className="text-sm text-muted-foreground">Winner becomes the default profile photo across AuthoriDex.</p>
+                  <p className="text-sm text-muted-foreground">Profile photo displayed on AuthoriDex</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
