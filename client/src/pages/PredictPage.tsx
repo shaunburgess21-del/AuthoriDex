@@ -403,13 +403,13 @@ function HorizontalScroll({ children, className = "" }: { children: React.ReactN
 
 function SectionHeader({ 
   title, 
-  subtitle, 
+  children, 
   onViewAll, 
   onRulesClick,
   rulesTitle 
 }: { 
   title: string; 
-  subtitle: string; 
+  children?: React.ReactNode; 
   onViewAll?: () => void;
   onRulesClick?: () => void;
   rulesTitle?: string;
@@ -418,7 +418,7 @@ function SectionHeader({
     <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mt-[15px] mb-[15px]">
       <div className="flex-1 min-w-0">
         <h2 className="text-lg sm:text-xl font-serif font-bold truncate">{title}</h2>
-        <p className="text-xs sm:text-sm text-muted-foreground truncate">{subtitle}</p>
+        {children}
       </div>
       <div className="flex items-center gap-2 shrink-0 ml-3">
         {onRulesClick && (
@@ -2430,10 +2430,11 @@ export default function PredictPage() {
           <section className="mb-10">
             <SectionHeader
               title="Weekly Up / Down"
-              subtitle="Will their trend score be higher or lower by the end of this week?"
               onViewAll={() => setViewAllCategory("weekly")}
               onRulesClick={() => setRulesModalOpen("updown")}
-            />
+            >
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Will their trend score be higher or lower by the end of this week?</p>
+            </SectionHeader>
             <SectionFilterBar
               categoryFilter={updownCategory}
               onCategoryChange={setUpdownCategory}
@@ -2467,10 +2468,11 @@ export default function PredictPage() {
           <section className="mb-10">
             <SectionHeader
               title="Head-to-Head Battles"
-              subtitle="Curated matchups - who will gain more?"
               onViewAll={() => setViewAllCategory("h2h")}
               onRulesClick={() => setRulesModalOpen("h2h")}
-            />
+            >
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Curated matchups - who will gain more?</p>
+            </SectionHeader>
             <SectionFilterBar
               categoryFilter={h2hCategory}
               onCategoryChange={setH2hCategory}
@@ -2504,10 +2506,11 @@ export default function PredictPage() {
           <section className="mb-10">
             <SectionHeader
               title="Top Gainer Predictions"
-              subtitle="Who will gain the most raw points in 7 days?"
               onViewAll={() => setViewAllCategory("gainers")}
               onRulesClick={() => setRulesModalOpen("gainer")}
-            />
+            >
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain the most raw points in 7 days?</p>
+            </SectionHeader>
             <SectionFilterBar
               categoryFilter={gainerCategory}
               onCategoryChange={setGainerCategory}
