@@ -72,7 +72,7 @@ export function CardSection({
       <div className="md:hidden">
         <div
           ref={containerRef}
-          className="relative overflow-hidden"
+          className="relative overflow-hidden py-2"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
