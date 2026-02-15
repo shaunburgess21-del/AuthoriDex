@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
+import { useScrollHint } from "@/hooks/use-scroll-hint";
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -362,6 +363,7 @@ const PREDICTION_TYPES: { id: PredictionType; label: string; mobileLabel: string
 function HorizontalScroll({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragScrollRef = useDragScroll<HTMLDivElement>();
+  useScrollHint(scrollRef);
   const [scrollState, setScrollState] = useState<"start" | "middle" | "end">("start");
   
   useEffect(() => {
@@ -476,6 +478,7 @@ function SectionFilterBar({
   includeCustomTopic?: boolean;
 }) {
   const dragScrollRef = useDragScroll<HTMLDivElement>();
+  useScrollHint(dragScrollRef);
 
   const handleCategoryClick = (catId: CategoryFilter) => {
     if (catId === "favorites" && !user) {
@@ -1307,6 +1310,7 @@ function FullScreenOverlay({
   onAuthRequired?: () => void;
 }) {
   const dragScrollRef = useDragScroll<HTMLDivElement>();
+  useScrollHint(dragScrollRef);
 
   useEffect(() => {
     if (open) {

@@ -8,6 +8,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
+import { useScrollHint } from "@/hooks/use-scroll-hint";
 import { 
   ArrowLeft, 
   ArrowUp,
@@ -1600,6 +1601,12 @@ export default function VotePage() {
   const dragScrollRef5 = useDragScroll<HTMLDivElement>();
   const dragScrollRef6 = useDragScroll<HTMLDivElement>();
   const dragScrollRef7 = useDragScroll<HTMLDivElement>();
+
+  useScrollHint(dragScrollRef3);
+  useScrollHint(dragScrollRef4);
+  useScrollHint(dragScrollRef5);
+  useScrollHint(dragScrollRef6);
+  useScrollHint(dragScrollRef7);
 
   const [currentCurateIndex, setCurrentCurateIndex] = useState(0);
   
