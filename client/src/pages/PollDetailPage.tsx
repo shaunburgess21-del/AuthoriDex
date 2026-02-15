@@ -21,6 +21,7 @@ import {
   Send,
   ThumbsUp,
   ThumbsDown,
+  Minus,
   BarChart3,
   Info,
   Share2,
@@ -108,6 +109,7 @@ export default function PollDetailPage() {
   const [commentBody, setCommentBody] = useState("");
   const [commentSort, setCommentSort] = useState<"top" | "newest">("top");
   const [linkCopied, setLinkCopied] = useState(false);
+  const [showVoteChange, setShowVoteChange] = useState(false);
 
   const { data: poll, isLoading: pollLoading, error: pollError } = useQuery<PollData>({
     queryKey: ["/api/polls", slug],
@@ -235,12 +237,6 @@ export default function PollDetailPage() {
     );
   }
 
-  const voteChoices = [
-    { key: "support", label: "Support", color: "green", percent: poll.approvePercent, count: poll.supportCount },
-    { key: "neutral", label: "Neutral", color: "white", percent: poll.neutralPercent, count: poll.neutralCount },
-    { key: "oppose", label: "Oppose", color: "red", percent: poll.disapprovePercent, count: poll.opposeCount },
-  ];
-
   return (
     <div className="min-h-screen bg-background" data-testid="poll-detail-page">
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
@@ -323,56 +319,94 @@ export default function PollDetailPage() {
         )}
 
         {/* Vote Module */}
-        <Card className="p-5 mb-6 border-[#00C853]/20" data-testid="section-vote-module">
+        <Card className="p-5 mb-6 border-cyan-500/20" data-testid="section-vote-module">
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-[#00C853]" />
+            <BarChart3 className="h-5 w-5 text-cyan-500" />
             Cast Your Vote
           </h2>
 
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            {voteChoices.map((vc) => {
-              const isSelected = poll.userVote === vc.key;
-              const colorMap: Record<string, { border: string; bg: string; text: string; shadow: string }> = {
-                green: { border: "border-[#00C853]", bg: "bg-[#00C853]/15", text: "text-[#00C853]", shadow: "shadow-[#00C853]/20" },
-                white: { border: "border-white/60", bg: "bg-white/10", text: "text-white", shadow: "shadow-white/10" },
-                red: { border: "border-[#FF0000]", bg: "bg-[#FF0000]/15", text: "text-[#FF0000]", shadow: "shadow-[#FF0000]/20" },
-              };
-              const colors = colorMap[vc.color];
-              return (
+          {(!poll.userVote || showVoteChange) ? (
+            <div className="flex flex-col gap-3 mb-4">
+              <button
+                onClick={(e) => { e.stopPropagation(); handleVote("support"); setShowVoteChange(false); }}
+                disabled={voteMutation.isPending}
+                className={`w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                data-testid="button-vote-support"
+              >
+                <ThumbsUp className="h-4 w-4 shrink-0" />
+                <span>Support</span>
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleVote("neutral"); setShowVoteChange(false); }}
+                disabled={voteMutation.isPending}
+                className={`w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                data-testid="button-vote-neutral"
+              >
+                <Minus className="h-4 w-4 shrink-0" />
+                <span>Neutral</span>
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleVote("oppose"); setShowVoteChange(false); }}
+                disabled={voteMutation.isPending}
+                className={`w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                data-testid="button-vote-oppose"
+              >
+                <ThumbsDown className="h-4 w-4 shrink-0" />
+                <span>Oppose</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <ThumbsUp className="h-4 w-4 text-[#00C853] shrink-0" />
+                <span className="text-sm text-[#00C853] w-16 shrink-0">Support</span>
+                <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#00C853] rounded-full transition-all duration-500"
+                    style={{ width: `${poll.approvePercent}%` }}
+                  />
+                </div>
+                <span className="text-sm text-muted-foreground w-10 text-right">{poll.approvePercent}%</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <Minus className="h-4 w-4 text-slate-400 shrink-0" />
+                <span className="text-sm text-slate-400 w-16 shrink-0">Neutral</span>
+                <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-slate-400 rounded-full transition-all duration-500"
+                    style={{ width: `${poll.neutralPercent}%` }}
+                  />
+                </div>
+                <span className="text-sm text-muted-foreground w-10 text-right">{poll.neutralPercent}%</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <ThumbsDown className="h-4 w-4 text-[#FF0000] shrink-0" />
+                <span className="text-sm text-[#FF0000] w-16 shrink-0">Oppose</span>
+                <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#FF0000] rounded-full transition-all duration-500"
+                    style={{ width: `${poll.disapprovePercent}%` }}
+                  />
+                </div>
+                <span className="text-sm text-muted-foreground w-10 text-right">{poll.disapprovePercent}%</span>
+              </div>
+              <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>You voted: <span className="font-semibold capitalize text-[#00C853]">{poll.userVote}</span></span>
+                </div>
                 <button
-                  key={vc.key}
-                  onClick={(e) => { e.stopPropagation(); handleVote(vc.key); }}
-                  disabled={voteMutation.isPending}
-                  className={`relative p-4 rounded-xl border-2 transition-all text-center ${
-                    isSelected
-                      ? `${colors.border} ${colors.bg} shadow-lg ${colors.shadow}`
-                      : `${colors.border}/20 ${colors.bg.replace("/15", "/5")} hover:${colors.border}/40`
-                  } ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
-                  data-testid={`button-vote-${vc.key}`}
+                  onClick={() => setShowVoteChange(true)}
+                  className="text-xs text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline"
+                  data-testid="button-change-vote"
                 >
-                  <div className={`text-sm font-semibold mb-1 ${isSelected ? colors.text : "text-foreground"}`}>
-                    {vc.label}
-                  </div>
-                  <div className={`text-2xl font-bold font-mono ${colors.text}`}>{vc.percent}%</div>
-                  <div className="text-xs text-muted-foreground mt-1">{vc.count.toLocaleString()}</div>
-                  {isSelected && (
-                    <div className="absolute top-2 right-2">
-                      <CheckCircle2 className={`h-4 w-4 ${colors.text}`} />
-                    </div>
-                  )}
+                  Change your vote
                 </button>
-              );
-            })}
-          </div>
-
-          {poll.userVote && (
-            <p className="text-xs text-center text-muted-foreground" data-testid="text-user-voted">
-              You voted: <span className="font-semibold capitalize text-[#00C853]">{poll.userVote}</span> — click another option to change
-            </p>
+              </div>
+            </div>
           )}
           {!isLoggedIn && (
             <p className="text-xs text-center text-muted-foreground">
-              <Button variant="ghost" className="p-0 h-auto text-[#00C853] underline" onClick={() => setLocation("/login")} data-testid="link-login-to-vote">
+              <Button variant="ghost" className="p-0 h-auto text-cyan-400 underline" onClick={() => setLocation("/login")} data-testid="link-login-to-vote">
                 Sign in
               </Button>{" "}
               to cast your vote
@@ -383,15 +417,15 @@ export default function PollDetailPage() {
         {/* Results Bar */}
         <Card className="p-5 mb-6" data-testid="section-results">
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-[#00C853]" />
+            <BarChart3 className="h-5 w-5 text-cyan-500" />
             Results
           </h2>
 
           <div className="mb-4">
-            <div className="h-6 rounded-full overflow-hidden flex bg-muted/30" data-testid="bar-results">
+            <div className="h-6 rounded-full overflow-hidden flex bg-white/5" data-testid="bar-results">
               {poll.approvePercent > 0 && (
                 <div
-                  className="h-full bg-[#00C853] transition-all flex items-center justify-center"
+                  className="h-full bg-[#00C853]/80 transition-all duration-300 flex items-center justify-center cursor-default hover:bg-[#00C853]"
                   style={{ width: `${poll.approvePercent}%` }}
                 >
                   {poll.approvePercent >= 10 && (
@@ -401,17 +435,17 @@ export default function PollDetailPage() {
               )}
               {poll.neutralPercent > 0 && (
                 <div
-                  className="h-full bg-white/40 transition-all flex items-center justify-center"
+                  className="h-full bg-slate-400/60 transition-all duration-300 flex items-center justify-center cursor-default hover:bg-slate-400/90"
                   style={{ width: `${poll.neutralPercent}%` }}
                 >
                   {poll.neutralPercent >= 10 && (
-                    <span className="text-[10px] font-bold text-slate-800">{poll.neutralPercent}%</span>
+                    <span className="text-[10px] font-bold text-slate-900">{poll.neutralPercent}%</span>
                   )}
                 </div>
               )}
               {poll.disapprovePercent > 0 && (
                 <div
-                  className="h-full bg-[#FF0000] transition-all flex items-center justify-center"
+                  className="h-full bg-[#FF0000]/70 transition-all duration-300 flex items-center justify-center cursor-default hover:bg-[#FF0000]"
                   style={{ width: `${poll.disapprovePercent}%` }}
                 >
                   {poll.disapprovePercent >= 10 && (
@@ -433,10 +467,10 @@ export default function PollDetailPage() {
             </div>
             <div>
               <div className="flex items-center justify-center gap-1.5 mb-1">
-                <div className="h-2.5 w-2.5 rounded-full bg-white/60" />
+                <div className="h-2.5 w-2.5 rounded-full bg-slate-400" />
                 <span className="text-xs font-medium">Neutral</span>
               </div>
-              <p className="text-lg font-bold font-mono text-white" data-testid="text-neutral-percent">{poll.neutralPercent}%</p>
+              <p className="text-lg font-bold font-mono text-slate-300" data-testid="text-neutral-percent">{poll.neutralPercent}%</p>
               <p className="text-xs text-muted-foreground">{poll.neutralCount.toLocaleString()} votes</p>
             </div>
             <div>
