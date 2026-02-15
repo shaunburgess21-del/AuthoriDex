@@ -2433,7 +2433,7 @@ export default function PredictPage() {
               onViewAll={() => setViewAllCategory("weekly")}
               onRulesClick={() => setRulesModalOpen("updown")}
             >
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">Will their trend score be higher or lower by the end of this week?</p>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Will their trend score be higher / lower</p>
             </SectionHeader>
             <SectionFilterBar
               categoryFilter={updownCategory}
