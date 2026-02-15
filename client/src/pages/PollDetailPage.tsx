@@ -425,7 +425,7 @@ export default function PollDetailPage() {
             <div className="h-6 rounded-full overflow-hidden flex bg-white/5" data-testid="bar-results">
               {poll.approvePercent > 0 && (
                 <div
-                  className="h-full bg-[#00C853]/80 transition-all duration-300 flex items-center justify-center cursor-default hover:bg-[#00C853]"
+                  className="h-full bg-[#00E676] transition-all duration-300 flex items-center justify-center cursor-default hover:bg-[#69F0AE]"
                   style={{ width: `${poll.approvePercent}%` }}
                 >
                   {poll.approvePercent >= 10 && (
@@ -435,7 +435,7 @@ export default function PollDetailPage() {
               )}
               {poll.neutralPercent > 0 && (
                 <div
-                  className="h-full bg-slate-400/60 transition-all duration-300 flex items-center justify-center cursor-default hover:bg-slate-400/90"
+                  className="h-full bg-slate-300 transition-all duration-300 flex items-center justify-center cursor-default hover:bg-slate-200"
                   style={{ width: `${poll.neutralPercent}%` }}
                 >
                   {poll.neutralPercent >= 10 && (
@@ -445,7 +445,7 @@ export default function PollDetailPage() {
               )}
               {poll.disapprovePercent > 0 && (
                 <div
-                  className="h-full bg-[#FF0000]/70 transition-all duration-300 flex items-center justify-center cursor-default hover:bg-[#FF0000]"
+                  className="h-full bg-[#FF5252] transition-all duration-300 flex items-center justify-center cursor-default hover:bg-[#FF8A80]"
                   style={{ width: `${poll.disapprovePercent}%` }}
                 >
                   {poll.disapprovePercent >= 10 && (
