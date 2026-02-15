@@ -451,7 +451,7 @@ function WeeklyUpDownCard({
     <PredictCard testId={`card-weekly-${market.id}`} className={isMarketClosed ? 'opacity-75' : ''}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <PersonAvatar name={market.personName} avatar={market.personAvatar} size="md" />
+          <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-[73px] w-[73px]" />
           <div>
             <p className="font-semibold text-sm">{market.personName}</p>
             <p className="text-xs text-muted-foreground font-mono">
