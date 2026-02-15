@@ -259,12 +259,14 @@ function VersusCard({
       <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg" />
       
       <div className="relative pt-4 pb-4 flex flex-col flex-1">
-        <div className="flex items-center justify-between mb-3 gap-2 px-4">
+        <div className="absolute top-3 right-3 z-10">
+          <CategoryPill category={matchup.category} data-testid={`badge-matchup-${matchup.id}`} />
+        </div>
+        <div className="flex items-center mb-3 gap-2 px-4">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5 text-cyan-400" />
             <span>{matchup.totalVotes.toLocaleString()} votes</span>
           </div>
-          <CategoryPill category={matchup.category} data-testid={`badge-matchup-${matchup.id}`} />
         </div>
         
         <div className={`flex flex-col items-center justify-center gap-1 px-4 mb-2 ${hasVoted ? 'invisible' : ''}`}>
