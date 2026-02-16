@@ -72,15 +72,30 @@ export interface TrendInputs {
   searchStalenessFactor?: number; // 1.0 = fresh, 0.5 = very stale
 }
 
+export interface StabilizationDetail {
+  prevFame: number;
+  rawFame: number;
+  afterRateLimit: number;
+  afterEma: number;
+  finalFame: number;
+  capUsed: number;
+  alphaUsed: number;
+  asymmetric: boolean;
+  rawVsPrevPct: number;
+  rateLimitDeltaPct: number;
+  emaDeltaPct: number;
+}
+
 export interface TrendScoreResult {
   trendScore: number;
-  fameIndex: number; // 0-1,000,000 normalized score for UI (higher variance for prediction difficulty)
-  rawFameIndex: number; // Pre-stabilization fameIndex (for monitoring stats)
-  wasStabilized: boolean; // Whether rate limiting/EMA was applied
-  spikingSourceCount: number; // Number of sources spiking (0-3) for monitoring
+  fameIndex: number;
+  rawFameIndex: number;
+  wasStabilized: boolean;
+  stabDetail: StabilizationDetail | null;
+  spikingSourceCount: number;
   massScore: number;
   velocityScore: number;
-  velocityAdjusted: number; // After anti-spam damping
+  velocityAdjusted: number;
   confidence: number;
   diversityMultiplier: number;
   momentum: "Breakout" | "Sustained" | "Cooling" | "Stable";
@@ -320,21 +335,29 @@ export function computeTrendScore(
   const recoveryRateBoost = getRecoveryRateBoost(recoveringSources);
   
   let stabilizationApplied = false;
+  let stabDetail: {
+    prevFame: number;
+    rawFame: number;
+    afterRateLimit: number;
+    afterEma: number;
+    finalFame: number;
+    capUsed: number;
+    alphaUsed: number;
+    asymmetric: boolean;
+    rawVsPrevPct: number;
+    rateLimitDeltaPct: number;
+    emaDeltaPct: number;
+  } | null = null;
+
   if (previousFameIndex !== undefined) {
     stabilizationApplied = true;
     
-    // Get base rate limit from spike count
     let effectiveCap = getDynamicRateLimit(spikingSourceCount);
     
-    // Apply recovery boost if data sources are recovering from failure
-    // Use the higher of spike-based cap or recovery-based cap
     if (recoveryRateBoost > 0 && recoveryRateBoost > effectiveCap) {
       effectiveCap = recoveryRateBoost;
     }
     
-    // ASYMMETRIC RATE LIMITING: Allow faster cooling than rising
-    // Up cap = effectiveCap (e.g., 8%), Down cap = effectiveCap * 1.5 (e.g., 12%)
-    // This prevents celebrities from staying stuck at #1 after spikes fade
     const DOWN_CAP_MULTIPLIER = 1.5;
     const maxChangeUp = previousFameIndex * effectiveCap;
     const maxChangeDown = previousFameIndex * effectiveCap * DOWN_CAP_MULTIPLIER;
@@ -347,25 +370,43 @@ export function computeTrendScore(
     }
     afterRateLimiting = Math.round(afterRateLimiting);
     
-    // Apply dynamic EMA smoothing (alpha varies by spike count)
-    // ASYMMETRIC EMA: use slightly higher alpha for downward moves to allow faster cooling
-    // Down alpha boost: +50% (e.g., 0.08 → 0.12 for 0-spike cooling)
+    let usedAlpha: number;
+    let isAsymmetric = false;
     if (afterRateLimiting < previousFameIndex) {
       const baseAlpha = getDynamicAlpha(spikingSourceCount);
-      const downAlpha = Math.min(0.30, baseAlpha * 1.5);
-      fameIndex = Math.round((downAlpha * afterRateLimiting) + ((1 - downAlpha) * previousFameIndex));
+      usedAlpha = Math.min(0.30, baseAlpha * 1.5);
+      isAsymmetric = true;
+      fameIndex = Math.round((usedAlpha * afterRateLimiting) + ((1 - usedAlpha) * previousFameIndex));
     } else {
+      usedAlpha = getDynamicAlpha(spikingSourceCount);
       fameIndex = Math.round(applyDynamicEmaSmoothing(afterRateLimiting, previousFameIndex, spikingSourceCount));
     }
+
+    const prevF = previousFameIndex;
+    const rawVsPrevPct = prevF > 0 ? Math.round(((rawFameIndex - prevF) / prevF) * 1000) / 10 : 0;
+    const rateLimitDeltaPct = prevF > 0 ? Math.round(((afterRateLimiting - prevF) / prevF) * 1000) / 10 : 0;
+    const emaDeltaPct = prevF > 0 ? Math.round(((fameIndex - prevF) / prevF) * 1000) / 10 : 0;
+
+    stabDetail = {
+      prevFame: prevF,
+      rawFame: rawFameIndex,
+      afterRateLimit: afterRateLimiting,
+      afterEma: fameIndex,
+      finalFame: fameIndex,
+      capUsed: Math.round(effectiveCap * 1000) / 1000,
+      alphaUsed: Math.round(usedAlpha * 1000) / 1000,
+      asymmetric: isAsymmetric,
+      rawVsPrevPct,
+      rateLimitDeltaPct,
+      emaDeltaPct,
+    };
     
-    // Log significant stabilization events (>10% change would have occurred)
     const rawChange = Math.abs((rawFameIndex - previousFameIndex) / previousFameIndex);
     if (rawChange > 0.10) {
-      const effectiveAlpha = getDynamicAlpha(spikingSourceCount);
       const recalMode = isRecalibrationModeActive() ? ' [RECAL]' : '';
       const recoveryMode = recoveringSources > 0 ? ` [RECOVERY:${recoveringSources}]` : '';
       console.log(`[Stabilization] Raw: ${rawFameIndex}, Prev: ${previousFameIndex}, Final: ${fameIndex} ` +
-        `(${Math.round(rawChange * 100)}% raw, ${Math.round(effectiveCap * 100)}% cap, α=${effectiveAlpha.toFixed(2)}, ` +
+        `(${Math.round(rawChange * 100)}% raw, ${Math.round(effectiveCap * 100)}% cap, α=${usedAlpha.toFixed(2)}, ` +
         `${spikingSourceCount} spiking)${recalMode}${recoveryMode}`);
     }
   }
@@ -433,9 +474,10 @@ export function computeTrendScore(
   return {
     trendScore: Math.round(trendScore),
     fameIndex,
-    rawFameIndex, // Pre-stabilization value for monitoring
+    rawFameIndex,
     wasStabilized: stabilizationApplied,
-    spikingSourceCount, // For monitoring spike distribution
+    stabDetail,
+    spikingSourceCount,
     massScore: Math.round(massScore * 100) / 100,
     velocityScore: Math.round(velocityScore * 100) / 100,
     velocityAdjusted: Math.round(velocityAdjusted * 100) / 100,

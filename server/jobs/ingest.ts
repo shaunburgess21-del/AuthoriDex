@@ -676,7 +676,13 @@ export async function runDataIngestion(): Promise<IngestResult> {
             news: !newsUsedFallback && (news?.articleCount24h ?? 0) > 0,
             search: !searchUsedFallback && (serper?.searchVolume ?? 0) > 0,
           },
-          stab: {
+          stab: scoreResult.stabDetail ? {
+            ...scoreResult.stabDetail,
+            capPct: scoreResult.stabDetail.capUsed,
+            alpha: scoreResult.stabDetail.alphaUsed,
+            limited: wasRateLimited,
+            spikes: scoreResult.spikingSourceCount,
+          } : {
             limited: wasRateLimited,
             capPct: Math.round(appliedCapPct * 1000) / 1000,
             alpha: Math.round(appliedAlpha * 1000) / 1000,
