@@ -228,6 +228,9 @@ interface MatchupData {
   optionBImage: string | null;
   promptText: string | null;
   isActive: boolean;
+  visibility: string;
+  featured: boolean;
+  slug: string | null;
   createdAt: string;
   optionAVotes: number;
   optionBVotes: number;
@@ -262,12 +265,20 @@ function VersusCard({
         <div className="absolute top-3 right-3 z-10">
           <CategoryPill category={matchup.category} data-testid={`badge-matchup-${matchup.id}`} />
         </div>
-        <div className="flex items-center mb-3 gap-2 px-4">
+        <div className="flex items-center mb-1 gap-2 px-4">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5 text-cyan-400" />
             <span>{matchup.totalVotes.toLocaleString()} votes</span>
           </div>
         </div>
+        
+        {matchup.slug && (
+          <div className="px-4 mb-2">
+            <Link href={`/vote/matchups/${matchup.slug}`} className="text-sm font-semibold text-slate-200 hover:text-cyan-400 transition-colors line-clamp-1" data-testid={`link-matchup-${matchup.id}`}>
+              {matchup.title}
+            </Link>
+          </div>
+        )}
         
         <div className={`flex flex-col items-center justify-center gap-1 px-4 mb-2 ${hasVoted ? 'invisible' : ''}`}>
           <span className="text-sm font-semibold text-slate-300">
