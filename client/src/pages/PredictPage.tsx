@@ -890,10 +890,14 @@ function HeadToHeadCard({
           </div>
         </div>
         
-        <div className="h-2 rounded-full bg-muted overflow-hidden mb-3">
+        <div className="h-2 rounded-full overflow-hidden mb-3 flex">
           <div 
             className="h-full bg-gradient-to-r from-blue-500 to-blue-400"
             style={{ width: `${market.person1Percent}%` }}
+          />
+          <div 
+            className="h-full bg-gradient-to-l from-purple-500 to-purple-400"
+            style={{ width: `${100 - market.person1Percent}%` }}
           />
         </div>
         
