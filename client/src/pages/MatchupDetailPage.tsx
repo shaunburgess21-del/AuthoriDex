@@ -128,7 +128,7 @@ export default function MatchupDetailPage() {
         <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
           <div className="container mx-auto flex items-center justify-between h-14 px-4">
             <Link href="/" data-testid="link-home">
-              <AuthoriDexLogo size="sm" />
+              <AuthoriDexLogo size={24} />
             </Link>
             <UserMenu />
           </div>
@@ -158,7 +158,7 @@ export default function MatchupDetailPage() {
       <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto flex items-center justify-between h-14 px-4">
           <Link href="/" data-testid="link-home">
-            <AuthoriDexLogo size="sm" />
+            <AuthoriDexLogo size={24} />
           </Link>
           <UserMenu />
         </div>
