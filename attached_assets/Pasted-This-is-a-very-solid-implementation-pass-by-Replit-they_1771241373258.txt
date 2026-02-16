@@ -1,0 +1,73 @@
+This is a very solid implementation pass by Replit — they hit the right “mechanical” fixes that were causing the weird behavior. A few things I’d flag (mostly to make sure it’s correct + stable + debuggable, not just “seems better today”).
+
+What Replit did well (keep)
+
+Persisting source health across restarts: this was the #1 “silent bug” creating fake freshness resets. Using api_cache is fine for V1.
+
+Decaying the weight of stale news (and renormalizing): this is exactly how you prevent a frozen source from dominating the score.
+
+Wiki velocity blend (24h + 7d): this will absolutely reduce “Bad Bunny stuck #1 for a week” type cases.
+
+Asymmetric cooling: good practical guardrail while news is flaky.
+
+Score-audit endpoint: this will save you endless guessing.
+
+The 5 things I’d tell Replit to double-check (important)
+1) api_cache concurrency + atomicity
+
+If ingestion can ever overlap (even briefly), make sure your “load → mutate → save” for health state doesn’t get clobbered.
+Suggestion: include a version or updated_at in the cached JSON and do a simple last-write-wins sanity check, or write health updates once per completed run (not per-person).
+
+2) Freshness factor definition: “how stale” must be based on last success, not “last attempt”
+
+You want decay based on now - last_success_at. If it accidentally uses “last attempted fetch,” then a constantly failing source looks “fresh” forever.
+
+3) Weight renormalization edge case (avoid weird amplification)
+
+If news weight decays toward 0, and you renormalize remaining weights, wiki/search get boosted. That’s fine, but:
+
+ensure you cap the renormalization boost (e.g., wiki can’t suddenly become 2× just because news died)
+
+or explicitly define: “when news is stale, total velocity weight reduces slightly” (more conservative)
+
+4) The wiki velocity blend constants (0.6/0.4) should be measurable
+
+This is a good guess, but you’ll want quick validation:
+
+look at 5–10 known “event spike” people and confirm they decay in 24–72h
+
+ensure long-running fame (e.g., major politicians/athletes) doesn’t jitter
+
+If it still feels sticky, push more toward 24h (e.g., 0.75/0.25). If it becomes noisy, reduce.
+
+5) Asymmetric caps + EMA asymmetry can “over-dampen” recoveries
+
+Asymmetric cooling is great, but if you also keep low alpha, you can make recovery too slow after a dip.
+Ask Replit to verify: someone who drops due to temporary missing source can recover normally once sources return.
+
+What to ask Replit for (copy/paste)
+
+Here’s a crisp message you can send:
+
+Please sanity-check these before we call it done:
+
+Source health staleness uses last_success_at (not last_attempt).
+
+api_cache health writes are safe against overlap (no clobber). Ideally write once per completed run.
+
+Weight renormalization: cap boosts so wiki/search don’t get amplified excessively when news is stale.
+
+Validate wiki velocity blend (0.624h + 0.47d) on 10 real spike cases: confirm decay within 24–72h and no jitter for stable celebs.
+
+Confirm asymmetric cooling doesn’t make recovery too slow once sources come back.
+Also: please use the new /api/admin/score-audit/:personId to show Bad Bunny today vs 3 days ago (component breakdown + freshness factors) so we can confirm the “stickiness” is now organic.
+
+Quick expectation-setting (for you/your brother)
+
+Even with these fixes, it’s still plausible for Bad Bunny to hold #1 for ~several days after a massive spike if:
+
+wiki 24h is still unusually high vs everyone else, and/or
+
+your EMA/rate-limits are still smoothing the fall.
+
+But the key is: it should now decay visibly and not feel “frozen.”
