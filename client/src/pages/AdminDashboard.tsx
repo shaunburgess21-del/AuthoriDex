@@ -197,6 +197,9 @@ interface Matchup {
   optionBImage: string | null;
   promptText: string | null;
   isActive: boolean;
+  visibility: string;
+  featured: boolean;
+  slug: string | null;
   displayOrder: number;
   createdAt: string;
 }
@@ -1247,6 +1250,9 @@ export default function AdminDashboard() {
     optionBText: "",
     promptText: "",
     isActive: true,
+    visibility: "live",
+    featured: false,
+    slug: "",
   });
   
   const [showPollModal, setShowPollModal] = useState(false);
@@ -1756,7 +1762,7 @@ export default function AdminDashboard() {
       toast({ title: "Matchup Created", description: "New matchup added successfully" });
       setShowMatchupModal(false);
       setEditingMatchup(null);
-      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
+      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
     onError: (error: any) => {
@@ -1777,7 +1783,7 @@ export default function AdminDashboard() {
       toast({ title: "Matchup Updated", description: "Matchup updated successfully" });
       setShowMatchupModal(false);
       setEditingMatchup(null);
-      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
+      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
     onError: (error: any) => {
@@ -2075,6 +2081,9 @@ export default function AdminDashboard() {
       optionBText: matchup.optionBText,
       promptText: matchup.promptText || "",
       isActive: matchup.isActive,
+      visibility: matchup.visibility || "live",
+      featured: matchup.featured || false,
+      slug: matchup.slug || "",
     });
     setShowMatchupModal(true);
   };
@@ -3089,7 +3098,7 @@ export default function AdminDashboard() {
                       size="sm"
                       onClick={() => {
                         setEditingMatchup(null);
-                        setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
+                        setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
                         setShowMatchupModal(true);
                       }}
                       data-testid="button-add-matchup"
@@ -3111,16 +3120,22 @@ export default function AdminDashboard() {
                             className="flex items-center justify-between p-3 rounded-lg border"
                             data-testid={`matchup-row-${matchup.id}`}
                           >
-                            <div className="flex-1">
-                              <p className="font-medium">{matchup.title}</p>
-                              <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                {matchup.featured && <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 shrink-0" />}
+                                <p className="font-medium truncate">{matchup.title}</p>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 <Badge variant="outline" className="text-xs">{matchup.category}</Badge>
-                                <span>{matchup.optionAText} vs {matchup.optionBText}</span>
+                                <span className="text-sm text-muted-foreground">{matchup.optionAText} vs {matchup.optionBText}</span>
+                                {matchup.slug && (
+                                  <span className="text-xs text-muted-foreground font-mono">/{matchup.slug}</span>
+                                )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <Badge variant={matchup.isActive ? "default" : "secondary"}>
-                                {matchup.isActive ? "Active" : "Inactive"}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Badge variant={matchup.visibility === 'live' ? 'default' : matchup.visibility === 'draft' ? 'outline' : 'secondary'}>
+                                {matchup.visibility || 'live'}
                               </Badge>
                               <Button
                                 variant="ghost"
@@ -3133,7 +3148,7 @@ export default function AdminDashboard() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="text-destructive hover:text-destructive"
+                                className="text-destructive"
                                 onClick={() => {
                                   setDeleteTarget({ type: "matchup", id: matchup.id, name: matchup.title });
                                   setShowDeleteConfirm(true);
@@ -3154,7 +3169,7 @@ export default function AdminDashboard() {
                           className="mt-4" 
                           onClick={() => {
                             setEditingMatchup(null);
-                            setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true });
+                            setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
                             setShowMatchupModal(true);
                           }}
                           data-testid="button-create-first-matchup"
@@ -4733,7 +4748,7 @@ export default function AdminDashboard() {
               {editingMatchup ? "Update matchup details" : "Create a new matchup voting question"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
             <div className="space-y-2">
               <Label htmlFor="matchup-title">Title</Label>
               <Input
@@ -4744,23 +4759,44 @@ export default function AdminDashboard() {
                 data-testid="input-matchup-title"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="matchup-category">Category</Label>
-              <Select 
-                value={matchupForm.category} 
-                onValueChange={(value) => setMatchupForm({ ...matchupForm, category: value })}
-              >
-                <SelectTrigger data-testid="select-matchup-category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Tech">Tech</SelectItem>
-                  <SelectItem value="Music">Music</SelectItem>
-                  <SelectItem value="Sports">Sports</SelectItem>
-                  <SelectItem value="Politics">Politics</SelectItem>
-                  <SelectItem value="Business">Business</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="matchup-category">Category</Label>
+                <Select 
+                  value={matchupForm.category} 
+                  onValueChange={(value) => setMatchupForm({ ...matchupForm, category: value })}
+                >
+                  <SelectTrigger data-testid="select-matchup-category">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Tech">Tech</SelectItem>
+                    <SelectItem value="Music">Music</SelectItem>
+                    <SelectItem value="Sports">Sports</SelectItem>
+                    <SelectItem value="Politics">Politics</SelectItem>
+                    <SelectItem value="Business">Business</SelectItem>
+                    <SelectItem value="Entertainment">Entertainment</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="matchup-visibility">Visibility</Label>
+                <Select 
+                  value={matchupForm.visibility} 
+                  onValueChange={(value) => setMatchupForm({ ...matchupForm, visibility: value })}
+                >
+                  <SelectTrigger data-testid="select-matchup-visibility">
+                    <SelectValue placeholder="Select visibility" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="live">Live</SelectItem>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                    <SelectItem value="hidden">Hidden</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="matchup-option-a">Option A</Label>
@@ -4792,14 +4828,44 @@ export default function AdminDashboard() {
                 data-testid="input-matchup-prompt"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="matchup-slug">URL Slug</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="matchup-slug"
+                  value={matchupForm.slug}
+                  onChange={(e) => setMatchupForm({ ...matchupForm, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') })}
+                  placeholder="auto-generated-from-title"
+                  className="font-mono text-sm"
+                  data-testid="input-matchup-slug"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const generated = matchupForm.title
+                      .toLowerCase()
+                      .replace(/[^a-z0-9\s-]/g, '')
+                      .replace(/\s+/g, '-')
+                      .replace(/-+/g, '-')
+                      .replace(/^-|-$/g, '');
+                    setMatchupForm({ ...matchupForm, slug: generated });
+                  }}
+                  data-testid="button-generate-slug"
+                >
+                  Generate
+                </Button>
+              </div>
+            </div>
             <div className="flex items-center space-x-2">
               <Switch
-                id="matchup-active"
-                checked={matchupForm.isActive}
-                onCheckedChange={(checked) => setMatchupForm({ ...matchupForm, isActive: checked })}
-                data-testid="switch-matchup-active"
+                id="matchup-featured"
+                checked={matchupForm.featured}
+                onCheckedChange={(checked) => setMatchupForm({ ...matchupForm, featured: checked })}
+                data-testid="switch-matchup-featured"
               />
-              <Label htmlFor="matchup-active">Active</Label>
+              <Label htmlFor="matchup-featured">Featured</Label>
             </div>
           </div>
           <DialogFooter>
