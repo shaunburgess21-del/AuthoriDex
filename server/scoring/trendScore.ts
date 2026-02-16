@@ -198,15 +198,17 @@ export function computeTrendScore(
   const effectiveXWeight = baseWeights.x;
   
   const totalEffectiveWeight = effectiveWikiWeight + effectiveNewsWeight + effectiveSearchWeight + effectiveXWeight;
+  const totalBaseWeight = baseWeights.wiki + baseWeights.news + baseWeights.search + baseWeights.x;
   const renormFactor = totalEffectiveWeight > 0 
-    ? (baseWeights.wiki + baseWeights.news + baseWeights.search + baseWeights.x) / totalEffectiveWeight 
+    ? totalBaseWeight / totalEffectiveWeight 
     : 1.0;
   
+  const MAX_BOOST = 1.5; // Cap: no source exceeds 1.5x base weight (post-cap sum may be < 1.0 intentionally)
   const velocityWeights = {
-    wiki: effectiveWikiWeight * renormFactor,
-    news: effectiveNewsWeight * renormFactor,
-    search: effectiveSearchWeight * renormFactor,
-    x: effectiveXWeight * renormFactor,
+    wiki: Math.min(effectiveWikiWeight * renormFactor, baseWeights.wiki * MAX_BOOST),
+    news: Math.min(effectiveNewsWeight * renormFactor, baseWeights.news * MAX_BOOST),
+    search: Math.min(effectiveSearchWeight * renormFactor, baseWeights.search * MAX_BOOST),
+    x: Math.min(effectiveXWeight * renormFactor, baseWeights.x * MAX_BOOST),
   };
   
   const velocityScore = (
