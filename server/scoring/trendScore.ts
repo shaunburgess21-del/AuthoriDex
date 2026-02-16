@@ -84,6 +84,8 @@ export interface StabilizationDetail {
   rawVsPrevPct: number;
   rateLimitDeltaPct: number;
   emaDeltaPct: number;
+  rateLimitStepPct: number;
+  emaStepPct: number;
 }
 
 export interface TrendScoreResult {
@@ -347,6 +349,8 @@ export function computeTrendScore(
     rawVsPrevPct: number;
     rateLimitDeltaPct: number;
     emaDeltaPct: number;
+    rateLimitStepPct: number;
+    emaStepPct: number;
   } | null = null;
 
   if (previousFameIndex !== undefined) {
@@ -386,6 +390,8 @@ export function computeTrendScore(
     const rawVsPrevPct = prevF > 0 ? Math.round(((rawFameIndex - prevF) / prevF) * 1000) / 10 : 0;
     const rateLimitDeltaPct = prevF > 0 ? Math.round(((afterRateLimiting - prevF) / prevF) * 1000) / 10 : 0;
     const emaDeltaPct = prevF > 0 ? Math.round(((fameIndex - prevF) / prevF) * 1000) / 10 : 0;
+    const rateLimitStepPct = rawFameIndex > 0 ? Math.round(((afterRateLimiting - rawFameIndex) / rawFameIndex) * 1000) / 10 : 0;
+    const emaStepPct = afterRateLimiting > 0 ? Math.round(((fameIndex - afterRateLimiting) / afterRateLimiting) * 1000) / 10 : 0;
 
     stabDetail = {
       prevFame: prevF,
@@ -399,6 +405,8 @@ export function computeTrendScore(
       rawVsPrevPct,
       rateLimitDeltaPct,
       emaDeltaPct,
+      rateLimitStepPct,
+      emaStepPct,
     };
     
     const rawChange = Math.abs((rawFameIndex - previousFameIndex) / previousFameIndex);
