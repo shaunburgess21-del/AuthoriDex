@@ -1,0 +1,114 @@
+1) The “GDELT failing for 5+ days” claim is the #1 thing to validate
+
+If GDELT is truly FAILED every run, then Replit’s core conclusion is plausible: the system is effectively 2-source (Wiki + Serper) and anything tied to “news” is either frozen, stale, or being backfilled incorrectly.
+
+But the table they showed looks suspicious:
+
+It shows News Count = 100 for multiple people, which often looks like a cap, placeholder, or fallback constant rather than real counts.
+
+If GDELT is failed, it should be clear whether “newsCount” is:
+
+last-known value,
+
+decayed last-known,
+
+hard-capped,
+
+defaulted.
+
+✅ What to ask Replit for (very specific):
+
+For the last 20 ingestion runs: gdelt.status, gdelt.duration_ms, and the actual HTTP error (timeout vs 429 vs SSL vs parsing).
+
+For 10 random people: show newsCount_raw, newsCount_used, and newsFresh (or equivalent) per run.
+
+Confirm whether there is any “cap to 100” logic in news normalization/scoring.
+
+If “100” is a cap, Bad Bunny’s “81” might actually be meaningful — but you need clarity.
+
+2) Bad Bunny staying #1 can be totally “organic” if Wiki is dominant + smoothing is sticky
+
+Replit’s explanation here is directionally right: if Bad Bunny had a massive spike (Super Bowl halftime and aftermath), and your scoring emphasizes Wikipedia strongly, he can stay elevated for a while.
+
+But two important nuances:
+
+EMA alpha = 0.12 isn’t that sticky by itself
+
+With hourly updates, an EMA with alpha 0.12 has a half-life of about 5.4 cycles (~5.4 hours). In a normal always-on system, a one-off spike should fade materially within a day.
+
+So if he’s still far ahead a week later, it’s probably not just EMA.
+
+What can make it sticky in practice (likely in your case)
+
+You’re not feeding the EMA hourly consistently (gaps / locked_out / failed runs). That makes “decay” slower in wall-clock time.
+
+You also have a stabilizer / cap that limits how much the score can fall per cycle. If down-moves are capped and cycles are missing, decay becomes slow.
+
+If you’re using 7-day rolling averages (Replit mentions “wiki7d still massive”), that will keep the input elevated until the rolling window clears.
+
+✅ What to ask Replit for (this will settle it immediately):
+
+For Bad Bunny and 5 others (ranks #2–#6), show a breakdown over the last 10 runs:
+
+wiki_signal, news_signal, search_signal
+
+massScore, velocityScore
+
+trend_score_raw and fame_index (EMA)
+
+capPct / “limited=true” and the actual capped delta applied
+
+Show whether the “mass” portion is using today’s wiki, 24h wiki, or 7d wiki average (or some blend).
+
+If the engine is using 7-day averages heavily, Bad Bunny being sticky for ~7 days is expected.
+
+3) The “GDELT failure causes whoever was high when it broke to stay high” is only true if you freeze, not decay
+
+If your news contribution truly freezes at last-known, then yes: it can “lock in” advantage.
+
+But if you implemented decay-to-floor behavior earlier (you did), then the effect should be “softened,” not frozen.
+
+✅ Ask Replit: “When gdelt.status=FAILED, do you (A) freeze, (B) decay, or (C) set to 0 / reweight? Show me the exact branch and the floor.”
+
+4) The recommendations Replit gave are a mixed bag
+Good / high-impact
+
+Fix GDELT (or replace it / reduce request load / batch calls / parallelize safely).
+
+When a source is stale, taper its weight (don’t let it dominate while stale).
+
+Risky if done blindly
+
+“Increase EMA alpha to 0.2–0.3” globally.
+That will make the whole board more jittery, especially with noisy sources. Better is adaptive alpha:
+
+higher alpha right after a spike or after long gaps,
+
+normal alpha otherwise.
+
+“Reduce stabilization cap” without controlling noise.
+If you lift caps while GDELT is unstable/noisy, you’ll get chaos.
+
+5) What I’d tell Replit to do next (clean, actionable)
+
+Send them this checklist:
+
+Prove GDELT failure mode
+
+error type, duration, rate-limit/timeout pattern, and whether “newsCount=100” is a cap/fallback.
+
+Per-person contribution audit
+
+For Bad Bunny + next 5: show the exact component contributions for the last 10 completed runs.
+
+Confirm which wiki metric drives rank
+
+“current hour”, “24h total”, “7d rolling”, etc.
+
+If GDELT remains unreliable:
+
+Temporarily down-weight news contribution when stale (e.g., multiply weight by freshness factor that decays with hours stale), rather than freezing counts.
+
+Only after (1)-(4):
+
+Consider adaptive alpha / adaptive caps (not global).

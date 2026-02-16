@@ -1,0 +1,133 @@
+Replit’s analysis is actually very strong here — they found the two big “mechanical stickiness” culprits:
+
+Wiki uses 7-day average for both mass + velocity → spikes linger for ~7 days by design
+
+News staleness decay is effectively “reset” by restarts because source health is in-memory → stale news stays stronger than intended
+
+If you want the leaderboard to feel believable and “self-correcting,” I’d tell Replit to prioritize fixes in this order:
+
+1) Fix the restart bug first: persist source health to DB (non-negotiable)
+
+Problem: sourceHealth resets to HEALTHY on server restart → lastHealthyTimestamp becomes “now” → decay becomes ~1.0 for several runs → stale news stays inflated.
+
+Fix (recommended):
+
+Create a DB table like source_health keyed by source (gdelt, serper, wiki) with:
+
+last_success_at
+
+consecutive_failures
+
+status (HEALTHY/DEGRADED/OUTAGE)
+
+last_error
+
+last_failure_at
+
+Update it at the end of each ingestion run.
+
+Compute staleness decay from now - last_success_at, not from in-memory state.
+
+Apply decay immediately on any failure, not only after “5 consecutive failures.”
+
+Acceptance test: restart the server 5 times; decay behavior should be identical (no “freshness reset” effect).
+
+2) Make stale news weight decay, not just the news value
+
+Right now you’re effectively doing:
+news_used = last_news * decay_floor(>=0.5)
+…which still gives stale news a big voice.
+
+Better behavior when news is stale:
+
+Keep last-known news count if you want, but reduce news influence:
+
+effective_news_weight = base_news_weight * freshness_factor
+
+optionally renormalize remaining weights (wiki/search) so totals still sum to 1
+
+This prevents “frozen advantage” when a source is down.
+
+Acceptance test: turn off news source for 24h; the board should not “lock in” winners from the last healthy moment.
+
+3) Unstick Bad Bunny (and future spikes) by changing the Wiki windowing
+
+Replit confirmed: you’re using wikiPageviews7dAvg for velocity, which is why a spike sticks around until the window clears.
+
+Better split (simple + effective):
+
+Mass score: use longer window (7d avg is fine)
+
+Velocity score: use short window (24h / 48h / 72h) or an EMA on daily pageviews
+Example:
+
+wiki_mass = 7d_avg
+
+wiki_vel = 24h_pageviews (or 48h rolling)
+
+Or blend:
+
+wiki_vel = 0.7*(24h) + 0.3*(7d_avg) (tunable)
+
+Outcome: Super Bowl spikes fade in 24–72h, while “true sustained fame” still benefits from 7d.
+
+Acceptance test: after a big event, top rank should cool meaningfully within 1–3 days even if still #1.
+
+4) Remove “double smoothing” or make it asymmetric
+
+Replit’s “double smoothing” note matters:
+
+rate limit cap (e.g., 8%)
+
+then EMA (alpha 0.08–0.12)
+
+That stacks stickiness.
+
+Two clean options:
+
+Option A (simplest): keep EMA, drop rate-limit on fame_index
+
+Use EMA as the smoother; apply caps only to badges/volatility UI (e.g., change labels), not to the underlying index.
+
+Option B: asymmetric caps (faster down than up)
+
+Let “cooling” happen faster than “rising”:
+
+up cap = 8%
+
+down cap = 15% (example)
+This prevents “stuck at #1 forever” after spikes.
+
+Acceptance test: a spike can fall at a reasonable pace without the whole board becoming jittery.
+
+5) Add one “truth endpoint” for score explainability
+
+To debug and to reassure yourselves:
+
+Add /api/admin/score-audit?personId=... that returns:
+
+component contributions (wiki/news/search) for mass + velocity
+
+freshness per source and last_success_at
+
+which baselines are being used (run_id)
+
+final trend_score_raw vs fame_index vs fame_index_live
+
+This makes issues obvious immediately (and is gold for sharing with ChatGPT).
+
+What I would message Replit (copy/paste)
+
+Priority fixes:
+
+Persist sourceHealth to DB and compute decay from last_success_at (restart-proof). Apply decay on first failure, not after 5.
+
+When news is stale, decay the weight (effective_news_weight = base * freshness), not only the value.
+
+Change wiki in velocity to 24h/48h (keep 7d for mass), so event spikes unwind in days not a week.
+
+Remove double smoothing or make down-moves faster than up-moves (asymmetric cap).
+
+Add a score-audit endpoint to show component breakdown + freshness + baselines.
+
+If you want, paste your current weight config (mass/velocity split + per-source weights + alpha + cap rules) and I’ll suggest exact replacement numbers that will make the board feel “alive” without becoming noisy.
