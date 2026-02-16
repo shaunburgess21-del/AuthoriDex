@@ -3900,6 +3900,108 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
 
+  // Score audit endpoint - per-person component breakdown for debugging
+  app.get("/api/admin/score-audit/:personId", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { personId } = req.params;
+      
+      const person = await db.select().from(trackedPeople).where(eq(trackedPeople.id, personId)).limit(1);
+      if (person.length === 0) {
+        return res.status(404).json({ error: "Person not found" });
+      }
+      
+      const trendingEntry = await db.select().from(trendingPeople).where(eq(trendingPeople.name, person[0].name)).limit(1);
+      
+      const snapshots = await db.select().from(trendSnapshots)
+        .where(eq(trendSnapshots.personId, personId))
+        .orderBy(desc(trendSnapshots.timestamp))
+        .limit(10);
+      
+      const healthSnapshot = getCurrentHealthSnapshot();
+      
+      const snapshotBreakdown = snapshots.map(s => {
+        let diag: Record<string, any> | null = null;
+        try {
+          diag = typeof s.diagnostics === 'string' ? JSON.parse(s.diagnostics) : (s.diagnostics as Record<string, any>);
+        } catch { /* malformed diagnostics */ }
+        return {
+          timestamp: s.timestamp,
+          runId: s.runId,
+          rawValues: {
+            wikiPageviews: s.wikiPageviews,
+            newsCount: s.newsCount,
+            searchVolume: s.searchVolume,
+            wiki7dAvg: diag?.raw?.wiki7d ?? null,
+          },
+          scores: {
+            massScore: s.massScore,
+            velocityScore: s.velocityScore,
+            velocityAdjusted: s.velocityAdjusted,
+            trendScore: s.trendScore,
+            fameIndex: s.fameIndex,
+          },
+          freshness: diag?.fresh ?? null,
+          stabilization: diag?.stab ?? null,
+          momentum: s.momentum,
+          confidence: s.confidence,
+          diversityMultiplier: s.diversityMultiplier,
+          snapshotOrigin: s.snapshotOrigin,
+          diagnostics: diag,
+        };
+      });
+      
+      res.json({
+        person: {
+          id: person[0].id,
+          name: person[0].name,
+          wikiSlug: person[0].wikiSlug,
+          searchQueryOverride: person[0].searchQueryOverride,
+        },
+        currentRanking: trendingEntry.length > 0 ? {
+          fameIndex: trendingEntry[0].fameIndex,
+          fameIndexLive: trendingEntry[0].fameIndexLive,
+          rank: trendingEntry[0].rank,
+          liveRank: trendingEntry[0].liveRank,
+          change24h: trendingEntry[0].change24h,
+          trendScore: trendingEntry[0].trendScore,
+        } : null,
+        sourceHealth: {
+          news: {
+            state: healthSnapshot.news.state,
+            lastHealthyTimestamp: healthSnapshot.news.lastHealthyTimestamp,
+            consecutiveFailures: healthSnapshot.news.consecutiveFailures,
+            reason: healthSnapshot.news.reason,
+          },
+          search: {
+            state: healthSnapshot.search.state,
+            lastHealthyTimestamp: healthSnapshot.search.lastHealthyTimestamp,
+            consecutiveFailures: healthSnapshot.search.consecutiveFailures,
+            reason: healthSnapshot.search.reason,
+          },
+          wiki: {
+            state: healthSnapshot.wiki.state,
+            lastHealthyTimestamp: healthSnapshot.wiki.lastHealthyTimestamp,
+            consecutiveFailures: healthSnapshot.wiki.consecutiveFailures,
+            reason: healthSnapshot.wiki.reason,
+          },
+        },
+        weightConfig: {
+          massAllocation: 0.40,
+          velocityAllocation: 0.60,
+          velocityWeights: { wiki: 0.25, news: 0.35, search: 0.40, x: 0 },
+          wikiVelocityBlend: "0.6*24h + 0.4*7d_avg",
+          asymmetricCaps: "up=base, down=base*1.5",
+          asymmetricEma: "down_alpha=base*1.5",
+        },
+        last10Snapshots: snapshotBreakdown,
+        auditTimestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("[Score Audit] Error:", error);
+      res.status(500).json({ error: "Failed to generate score audit" });
+    }
+  });
+
   // Get admin stats
   app.get("/api/admin/stats", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {

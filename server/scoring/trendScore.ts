@@ -65,6 +65,11 @@ export interface TrendInputs {
   
   // Source health states for weight renormalization during outages
   sourceHealthStates?: SourceHealthStates;
+  
+  // Staleness decay factors for velocity weight adjustment (0.0-1.0)
+  // When a source is stale, its velocity weight is reduced and redistributed
+  newsStalenessFactor?: number;   // 1.0 = fresh, 0.5 = very stale
+  searchStalenessFactor?: number; // 1.0 = fresh, 0.5 = very stale
 }
 
 export interface TrendScoreResult {
@@ -152,10 +157,14 @@ export function computeTrendScore(
   // =========================================================================
   
   // Get raw values for normalization (use pageviews/counts, not deltas)
-  // Wiki: use 7-day average instead of raw 24h to prevent daily boundary cliffs.
-  // Wiki data is fetched once per day (yesterday's total), so raw 24h creates step-changes
-  // at midnight UTC. The 7-day average smooths this into a gradually-changing signal.
-  const wikiRaw = inputs.wikiPageviews7dAvg > 0 ? inputs.wikiPageviews7dAvg : (inputs.wikiPageviews || 0);
+  // Wiki velocity: blend 24h and 7d to balance responsiveness with stability.
+  // Pure 7d avg caused event spikes (e.g. Super Bowl) to persist for a full week.
+  // Blend: 60% 24h (responsive) + 40% 7d avg (stability buffer) — spikes fade in 1-2 days.
+  const wiki24h = inputs.wikiPageviews || 0;
+  const wiki7d = inputs.wikiPageviews7dAvg || 0;
+  const wikiRaw = wiki7d > 0 
+    ? (wiki24h > 0 ? wiki24h * 0.6 + wiki7d * 0.4 : wiki7d)
+    : wiki24h;
   const newsRaw = inputs.newsCount ?? 0;
   const searchRaw = inputs.searchVolume ?? 0;
   
@@ -177,12 +186,29 @@ export function computeTrendScore(
     ? Math.min(100, xTotalVelocity * 2) 
     : 0;
   
-  // STABILITY FIX: Always use fixed velocity weights (25% wiki, 35% news, 40% search)
-  // During outages, we use fill-forward data with the SAME weights instead of redistributing.
-  // Weight redistribution was causing population-wide score recalculations and rank instability.
-  const velocityWeights = PLATFORM_WEIGHTS.velocity;
+  // VELOCITY WEIGHT DECAY: When a source is stale, reduce its weight and redistribute
+  // to active sources. This prevents frozen data from having full influence.
+  const baseWeights = PLATFORM_WEIGHTS.velocity;
+  const newsFreshness = inputs.newsStalenessFactor ?? 1.0;
+  const searchFreshness = inputs.searchStalenessFactor ?? 1.0;
   
-  // Total velocity score - always uses fixed weights for stability
+  const effectiveNewsWeight = baseWeights.news * newsFreshness;
+  const effectiveSearchWeight = baseWeights.search * searchFreshness;
+  const effectiveWikiWeight = baseWeights.wiki;
+  const effectiveXWeight = baseWeights.x;
+  
+  const totalEffectiveWeight = effectiveWikiWeight + effectiveNewsWeight + effectiveSearchWeight + effectiveXWeight;
+  const renormFactor = totalEffectiveWeight > 0 
+    ? (baseWeights.wiki + baseWeights.news + baseWeights.search + baseWeights.x) / totalEffectiveWeight 
+    : 1.0;
+  
+  const velocityWeights = {
+    wiki: effectiveWikiWeight * renormFactor,
+    news: effectiveNewsWeight * renormFactor,
+    search: effectiveSearchWeight * renormFactor,
+    x: effectiveXWeight * renormFactor,
+  };
+  
   const velocityScore = (
     (wikiVelocityScore * velocityWeights.wiki) +
     (newsVelocityScore * velocityWeights.news) +
@@ -304,19 +330,31 @@ export function computeTrendScore(
       effectiveCap = recoveryRateBoost;
     }
     
-    // Apply rate limiting manually with potentially boosted cap
-    const maxChange = previousFameIndex * effectiveCap;
+    // ASYMMETRIC RATE LIMITING: Allow faster cooling than rising
+    // Up cap = effectiveCap (e.g., 8%), Down cap = effectiveCap * 1.5 (e.g., 12%)
+    // This prevents celebrities from staying stuck at #1 after spikes fade
+    const DOWN_CAP_MULTIPLIER = 1.5;
+    const maxChangeUp = previousFameIndex * effectiveCap;
+    const maxChangeDown = previousFameIndex * effectiveCap * DOWN_CAP_MULTIPLIER;
     const actualChange = fameIndex - previousFameIndex;
     let afterRateLimiting = fameIndex;
-    if (actualChange > maxChange) {
-      afterRateLimiting = previousFameIndex + maxChange;
-    } else if (actualChange < -maxChange) {
-      afterRateLimiting = previousFameIndex - maxChange;
+    if (actualChange > maxChangeUp) {
+      afterRateLimiting = previousFameIndex + maxChangeUp;
+    } else if (actualChange < -maxChangeDown) {
+      afterRateLimiting = previousFameIndex - maxChangeDown;
     }
     afterRateLimiting = Math.round(afterRateLimiting);
     
-    // Then apply dynamic EMA smoothing (alpha varies by spike count)
-    fameIndex = Math.round(applyDynamicEmaSmoothing(afterRateLimiting, previousFameIndex, spikingSourceCount));
+    // Apply dynamic EMA smoothing (alpha varies by spike count)
+    // ASYMMETRIC EMA: use slightly higher alpha for downward moves to allow faster cooling
+    // Down alpha boost: +50% (e.g., 0.08 → 0.12 for 0-spike cooling)
+    if (afterRateLimiting < previousFameIndex) {
+      const baseAlpha = getDynamicAlpha(spikingSourceCount);
+      const downAlpha = Math.min(0.30, baseAlpha * 1.5);
+      fameIndex = Math.round((downAlpha * afterRateLimiting) + ((1 - downAlpha) * previousFameIndex));
+    } else {
+      fameIndex = Math.round(applyDynamicEmaSmoothing(afterRateLimiting, previousFameIndex, spikingSourceCount));
+    }
     
     // Log significant stabilization events (>10% change would have occurred)
     const rawChange = Math.abs((rawFameIndex - previousFameIndex) / previousFameIndex);

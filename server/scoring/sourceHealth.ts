@@ -1,17 +1,23 @@
 /**
- * Source Health State Machine
+ * Source Health State Machine (DB-Persisted)
  * 
  * Tracks the health status of external data sources (GDELT, Serper, Wikipedia)
  * with explicit states and logged transitions.
  * 
+ * CRITICAL: State is persisted to api_cache so it survives server restarts.
+ * Previously, in-memory state caused staleness decay to reset on restart,
+ * allowing frozen data to keep full influence indefinitely.
+ * 
  * States:
  * - HEALTHY: Source is returning fresh, valid data
- * - DEGRADED: Source has intermittent issues (some failures, suspicious data)
- * - OUTAGE: Source is down or returning global zeros
+ * - DEGRADED: Source has intermittent issues (1 consecutive failure)
+ * - OUTAGE: Source is down or returning global zeros (2+ failures or global-zero detected)
  * - RECOVERY: Source just came back after an outage (temporary boosted caps)
- * 
- * State transitions are logged for debugging and monitoring.
  */
+
+import { db } from "../db";
+import { apiCache } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 export type SourceHealthState = "HEALTHY" | "DEGRADED" | "OUTAGE" | "RECOVERY";
 
@@ -40,18 +46,17 @@ export interface GlobalHealthMetrics {
   isSearchGlobalOutage: boolean;
 }
 
-const GLOBAL_OUTAGE_THRESHOLD = 0.5; // >50% with near-zero = global outage
-const RECOVERY_RUNS = 3; // Number of runs to stay in RECOVERY state
-const DEGRADED_FAILURE_THRESHOLD = 2; // Consecutive failures before DEGRADED
-const OUTAGE_FAILURE_THRESHOLD = 5; // Consecutive failures before OUTAGE
+const GLOBAL_OUTAGE_THRESHOLD = 0.5;
+const RECOVERY_RUNS = 3;
+const DB_CACHE_KEY = "system:source_health_state";
 
 const createDefaultStatus = (): SourceHealthStatus => ({
   state: "HEALTHY",
-  lastHealthyTimestamp: new Date(),
+  lastHealthyTimestamp: null,
   lastStateChange: new Date(),
   consecutiveFailures: 0,
   recoveryRunsRemaining: 0,
-  reason: "initialized",
+  reason: "initialized_no_data",
 });
 
 let currentHealth: SourceHealthSnapshot = {
@@ -59,6 +64,90 @@ let currentHealth: SourceHealthSnapshot = {
   search: createDefaultStatus(),
   wiki: createDefaultStatus(),
 };
+
+let healthLoadedFromDB = false;
+
+function serializeHealth(health: SourceHealthSnapshot): Record<string, any> {
+  const serialize = (s: SourceHealthStatus) => ({
+    state: s.state,
+    lastHealthyTimestamp: s.lastHealthyTimestamp?.toISOString() ?? null,
+    lastStateChange: s.lastStateChange.toISOString(),
+    consecutiveFailures: s.consecutiveFailures,
+    recoveryRunsRemaining: s.recoveryRunsRemaining,
+    reason: s.reason,
+  });
+  return {
+    news: serialize(health.news),
+    search: serialize(health.search),
+    wiki: serialize(health.wiki),
+    persistedAt: new Date().toISOString(),
+  };
+}
+
+function deserializeHealth(data: Record<string, any>): SourceHealthSnapshot {
+  const deserialize = (d: any): SourceHealthStatus => ({
+    state: d.state || "HEALTHY",
+    lastHealthyTimestamp: d.lastHealthyTimestamp ? new Date(d.lastHealthyTimestamp) : null,
+    lastStateChange: d.lastStateChange ? new Date(d.lastStateChange) : new Date(),
+    consecutiveFailures: d.consecutiveFailures ?? 0,
+    recoveryRunsRemaining: d.recoveryRunsRemaining ?? 0,
+    reason: d.reason || "restored_from_db",
+  });
+  return {
+    news: deserialize(data.news || {}),
+    search: deserialize(data.search || {}),
+    wiki: deserialize(data.wiki || {}),
+  };
+}
+
+export async function loadHealthFromDB(): Promise<void> {
+  try {
+    const rows = await db.select().from(apiCache).where(eq(apiCache.cacheKey, DB_CACHE_KEY));
+    if (rows.length > 0 && rows[0].responseData) {
+      const data = typeof rows[0].responseData === 'string' 
+        ? JSON.parse(rows[0].responseData) 
+        : rows[0].responseData;
+      currentHealth = deserializeHealth(data);
+      healthLoadedFromDB = true;
+      console.log(`[SourceHealth] Restored from DB: NEWS=${currentHealth.news.state}(fails=${currentHealth.news.consecutiveFailures}), ` +
+        `SEARCH=${currentHealth.search.state}(fails=${currentHealth.search.consecutiveFailures}), ` +
+        `WIKI=${currentHealth.wiki.state}(fails=${currentHealth.wiki.consecutiveFailures})`);
+      
+      if (currentHealth.news.lastHealthyTimestamp) {
+        const staleHours = (Date.now() - currentHealth.news.lastHealthyTimestamp.getTime()) / (1000 * 60 * 60);
+        console.log(`[SourceHealth] NEWS last healthy: ${staleHours.toFixed(1)}h ago (decay=${(getStalenessDecayFactor(currentHealth.news.lastHealthyTimestamp) * 100).toFixed(0)}%)`);
+      }
+    } else {
+      console.log(`[SourceHealth] No persisted state found, starting fresh`);
+    }
+  } catch (err) {
+    console.error(`[SourceHealth] Failed to load from DB:`, err);
+  }
+}
+
+async function persistHealthToDB(): Promise<void> {
+  try {
+    const data = JSON.stringify(serializeHealth(currentHealth));
+    const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    
+    const existing = await db.select({ id: apiCache.id }).from(apiCache).where(eq(apiCache.cacheKey, DB_CACHE_KEY));
+    if (existing.length > 0) {
+      await db.update(apiCache)
+        .set({ responseData: data, fetchedAt: new Date(), expiresAt: farFuture })
+        .where(eq(apiCache.cacheKey, DB_CACHE_KEY));
+    } else {
+      await db.insert(apiCache).values({
+        cacheKey: DB_CACHE_KEY,
+        provider: "system",
+        responseData: data,
+        fetchedAt: new Date(),
+        expiresAt: farFuture,
+      });
+    }
+  } catch (err) {
+    console.error(`[SourceHealth] Failed to persist to DB:`, err);
+  }
+}
 
 function logStateTransition(
   source: string,
@@ -71,10 +160,6 @@ function logStateTransition(
   }
 }
 
-/**
- * Detect if we're in a global outage situation based on how many celebrities
- * have near-zero values for a given source.
- */
 export function detectGlobalOutage(
   sourceValues: Map<string, number>,
   nearZeroThreshold: number,
@@ -94,18 +179,12 @@ export function detectGlobalOutage(
   return { isOutage, nearZeroCount, nearZeroPercent };
 }
 
-/**
- * Calculate global health metrics from current ingestion data.
- * Used to determine if we're experiencing a global outage vs individual drops.
- */
 export function calculateGlobalHealthMetrics(
   newsValues: Map<string, number>,
   searchValues: Map<string, number>,
   totalCelebrities: number
 ): GlobalHealthMetrics {
   const newsOutage = detectGlobalOutage(newsValues, 5, totalCelebrities);
-  // NOTE: searchVolume is now composite score 0-100, so threshold must be low
-  // A score of 10 or below indicates very weak search presence
   const searchOutage = detectGlobalOutage(searchValues, 10, totalCelebrities);
   
   return {
@@ -121,6 +200,10 @@ export function calculateGlobalHealthMetrics(
 
 /**
  * Update health state for a source based on current conditions.
+ * 
+ * KEY CHANGE: Decay starts on FIRST failure (DEGRADED state) instead of
+ * waiting for 5 consecutive failures. This ensures stale data loses
+ * influence immediately rather than staying at full strength.
  */
 export function updateSourceHealth(
   source: "news" | "search" | "wiki",
@@ -136,8 +219,8 @@ export function updateSourceHealth(
   let reason = current.reason;
   let consecutiveFailures = current.consecutiveFailures;
   let recoveryRunsRemaining = current.recoveryRunsRemaining;
+  let lastHealthyTimestamp = current.lastHealthyTimestamp;
   
-  // Check if this run is a failure condition
   const isFailure = conditions.apiFailed || conditions.isGlobalOutage;
   
   if (isFailure) {
@@ -146,16 +229,14 @@ export function updateSourceHealth(
     if (conditions.isGlobalOutage) {
       newState = "OUTAGE";
       reason = "global_zero";
-    } else if (consecutiveFailures >= OUTAGE_FAILURE_THRESHOLD) {
+    } else if (consecutiveFailures >= 2) {
       newState = "OUTAGE";
       reason = `${consecutiveFailures}_consecutive_failures`;
-    } else if (consecutiveFailures >= DEGRADED_FAILURE_THRESHOLD) {
+    } else {
       newState = "DEGRADED";
-      reason = `${consecutiveFailures}_failures`;
+      reason = `first_failure`;
     }
   } else {
-    // Successful run - reset failures and update state
-    // This handles both: explicit dataReturned=true AND normal steady-state success
     if (current.state === "OUTAGE" || current.state === "DEGRADED") {
       newState = "RECOVERY";
       reason = "data_returned";
@@ -169,20 +250,20 @@ export function updateSourceHealth(
         reason = "recovery_complete";
       }
     } else {
-      // Normal successful run - ensure we're in HEALTHY state
       newState = "HEALTHY";
       consecutiveFailures = 0;
       if (current.state !== "HEALTHY") {
         reason = "normal_operation";
       }
     }
+    lastHealthyTimestamp = now;
   }
   
   logStateTransition(source, current.state, newState, reason);
   
   const updatedStatus: SourceHealthStatus = {
     state: newState,
-    lastHealthyTimestamp: newState === "HEALTHY" ? now : current.lastHealthyTimestamp,
+    lastHealthyTimestamp: lastHealthyTimestamp,
     lastStateChange: newState !== current.state ? now : current.lastStateChange,
     consecutiveFailures,
     recoveryRunsRemaining,
@@ -191,6 +272,13 @@ export function updateSourceHealth(
   
   currentHealth[source] = updatedStatus;
   return updatedStatus;
+}
+
+/**
+ * Persist current health state to DB. Should be called at end of each ingestion run.
+ */
+export async function saveHealthState(): Promise<void> {
+  await persistHealthToDB();
 }
 
 /**
@@ -206,7 +294,7 @@ export function updateSourceHealth(
  */
 export function getStalenessDecayFactor(lastHealthyTimestamp: Date | null): number {
   if (!lastHealthyTimestamp) {
-    return 0.5; // No timestamp — use generous floor to prevent signal collapse
+    return 0.5;
   }
   
   const now = new Date();
@@ -215,26 +303,20 @@ export function getStalenessDecayFactor(lastHealthyTimestamp: Date | null): numb
   if (staleHours <= 2) {
     return 1.0;
   } else if (staleHours <= 4) {
-    return 1.0 - ((staleHours - 2) / 2) * 0.2; // 1.0 → 0.8
+    return 1.0 - ((staleHours - 2) / 2) * 0.2;
   } else if (staleHours <= 8) {
-    return 0.8 - ((staleHours - 4) / 4) * 0.15; // 0.8 → 0.65
+    return 0.8 - ((staleHours - 4) / 4) * 0.15;
   } else if (staleHours <= 16) {
-    return 0.65 - ((staleHours - 8) / 8) * 0.15; // 0.65 → 0.5
+    return 0.65 - ((staleHours - 8) / 8) * 0.15;
   } else {
-    return 0.5; // Floor — preserve 50% of last-known signal during extended outages
+    return 0.5;
   }
 }
 
-/**
- * Get the current health snapshot for all sources.
- */
 export function getCurrentHealthSnapshot(): SourceHealthSnapshot {
   return { ...currentHealth };
 }
 
-/**
- * Check if any source is in OUTAGE or DEGRADED state.
- */
 export function hasAnyDegradedSource(): boolean {
   return (
     currentHealth.news.state === "OUTAGE" ||
@@ -246,9 +328,6 @@ export function hasAnyDegradedSource(): boolean {
   );
 }
 
-/**
- * Check if system is in recovery mode for any source.
- */
 export function isInRecoveryMode(): boolean {
   return (
     currentHealth.news.state === "RECOVERY" ||
@@ -256,24 +335,21 @@ export function isInRecoveryMode(): boolean {
   );
 }
 
-/**
- * Get a summary string for logging.
- */
 export function getHealthSummary(): string {
   const parts: string[] = [];
   
   for (const [source, status] of Object.entries(currentHealth)) {
     if (status.state !== "HEALTHY") {
-      parts.push(`${source.toUpperCase()}:${status.state}`);
+      const staleInfo = status.lastHealthyTimestamp 
+        ? `, stale=${((Date.now() - status.lastHealthyTimestamp.getTime()) / (1000 * 60 * 60)).toFixed(1)}h`
+        : ', stale=unknown';
+      parts.push(`${source.toUpperCase()}:${status.state}(fails=${status.consecutiveFailures}${staleInfo})`);
     }
   }
   
   return parts.length > 0 ? `[Health: ${parts.join(", ")}]` : "[Health: ALL_HEALTHY]";
 }
 
-/**
- * Reset health state (useful for testing).
- */
 export function resetHealthState(): void {
   currentHealth = {
     news: createDefaultStatus(),

@@ -17,6 +17,8 @@ import {
   getCurrentHealthSnapshot,
   getHealthSummary,
   hasAnyDegradedSource,
+  loadHealthFromDB,
+  saveHealthState,
 } from "../scoring/sourceHealth";
 import {
   updateCatchUpMode,
@@ -203,6 +205,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
 
   console.log("[Ingest] Starting data ingestion...");
 
+  await loadHealthFromDB();
   await loadCatchUpStateFromDB();
 
   try {
@@ -612,6 +615,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
             searchOutage: currentHealthSnapshot.search.state === 'OUTAGE' || currentHealthSnapshot.search.state === 'DEGRADED',
             wikiOutage: currentHealthSnapshot.wiki.state === 'OUTAGE' || currentHealthSnapshot.wiki.state === 'DEGRADED',
           },
+          // Staleness decay for velocity WEIGHT reduction (not just value decay)
+          newsStalenessFactor: newsUsedFallback ? newsDecayFactor : 1.0,
+          searchStalenessFactor: searchUsedFallback ? searchDecayFactor : 1.0,
         };
 
         // Get previous scores for change calculations and EMA smoothing
@@ -1016,6 +1022,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
 
     console.log(`[HEALTH SUMMARY] ${JSON.stringify(healthSummary)}`);
 
+    await saveHealthState();
+
     const successDuration = Date.now() - startTime;
     sourceTimings.total = successDuration;
     await releaseIngestionLock(runId, errors > 0 ? "failed" : "completed", {
@@ -1031,6 +1039,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
   } catch (error) {
     console.error("[Ingest] Fatal error:", error);
     errors++;
+    await saveHealthState();
     sourceTimings.total = Date.now() - startTime;
     await releaseIngestionLock(runId, "failed", {
       snapshotsWritten: processed,
