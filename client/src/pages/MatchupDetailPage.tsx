@@ -182,7 +182,7 @@ export default function MatchupDetailPage() {
               </Badge>
             </div>
             <h1 className="text-xl font-bold mt-1 truncate" data-testid="text-matchup-title">
-              {matchup.title}
+              {matchup.promptText || `${matchup.optionAText} vs ${matchup.optionBText}`}
             </h1>
           </div>
           <Button variant="ghost" size="icon" onClick={handleCopyLink} data-testid="button-share">
@@ -200,10 +200,10 @@ export default function MatchupDetailPage() {
               <span className="text-xs text-muted-foreground ml-auto">Created {formatDate(matchup.createdAt)}</span>
             </div>
             
-            {!hasVoted && (
+            {!hasVoted && !matchup.promptText && (
               <div className="text-center mb-4">
-                <span className="text-base font-semibold text-slate-300">
-                  {matchup.promptText || "Who do you prefer?"}
+                <span className="text-sm text-muted-foreground">
+                  Tap to cast your vote
                 </span>
               </div>
             )}

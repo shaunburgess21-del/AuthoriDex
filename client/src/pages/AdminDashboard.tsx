@@ -200,6 +200,8 @@ interface Matchup {
   visibility: string;
   featured: boolean;
   slug: string | null;
+  personAId: string | null;
+  personBId: string | null;
   displayOrder: number;
   createdAt: string;
 }
@@ -1248,12 +1250,18 @@ export default function AdminDashboard() {
     category: "Tech",
     optionAText: "",
     optionBText: "",
+    optionAImage: "",
+    optionBImage: "",
+    personAId: "",
+    personBId: "",
     promptText: "",
     isActive: true,
     visibility: "live",
     featured: false,
     slug: "",
   });
+  const [matchupSearchA, setMatchupSearchA] = useState("");
+  const [matchupSearchB, setMatchupSearchB] = useState("");
   
   const [showPollModal, setShowPollModal] = useState(false);
   const [editingPoll, setEditingPoll] = useState<TrendingPoll | null>(null);
@@ -1762,7 +1770,8 @@ export default function AdminDashboard() {
       toast({ title: "Matchup Created", description: "New matchup added successfully" });
       setShowMatchupModal(false);
       setEditingMatchup(null);
-      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
+      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
+      setMatchupSearchA(""); setMatchupSearchB("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
     onError: (error: any) => {
@@ -1783,7 +1792,8 @@ export default function AdminDashboard() {
       toast({ title: "Matchup Updated", description: "Matchup updated successfully" });
       setShowMatchupModal(false);
       setEditingMatchup(null);
-      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
+      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
+      setMatchupSearchA(""); setMatchupSearchB("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
     onError: (error: any) => {
@@ -2079,12 +2089,18 @@ export default function AdminDashboard() {
       category: matchup.category,
       optionAText: matchup.optionAText,
       optionBText: matchup.optionBText,
+      optionAImage: matchup.optionAImage || "",
+      optionBImage: matchup.optionBImage || "",
+      personAId: matchup.personAId || "",
+      personBId: matchup.personBId || "",
       promptText: matchup.promptText || "",
       isActive: matchup.isActive,
       visibility: matchup.visibility || "live",
       featured: matchup.featured || false,
       slug: matchup.slug || "",
     });
+    setMatchupSearchA("");
+    setMatchupSearchB("");
     setShowMatchupModal(true);
   };
 
@@ -2097,10 +2113,20 @@ export default function AdminDashboard() {
   };
 
   const handleSaveMatchup = () => {
+    const dataToSend: any = {
+      ...matchupForm,
+      title: matchupForm.optionAText && matchupForm.optionBText 
+        ? `${matchupForm.optionAText} vs ${matchupForm.optionBText}` 
+        : matchupForm.title || "Untitled Matchup",
+      personAId: matchupForm.personAId || null,
+      personBId: matchupForm.personBId || null,
+      optionAImage: matchupForm.optionAImage || null,
+      optionBImage: matchupForm.optionBImage || null,
+    };
     if (editingMatchup) {
-      updateMatchupMutation.mutate({ id: editingMatchup.id, data: matchupForm });
+      updateMatchupMutation.mutate({ id: editingMatchup.id, data: dataToSend });
     } else {
-      createMatchupMutation.mutate(matchupForm);
+      createMatchupMutation.mutate(dataToSend);
     }
   };
 
@@ -3098,7 +3124,8 @@ export default function AdminDashboard() {
                       size="sm"
                       onClick={() => {
                         setEditingMatchup(null);
-                        setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
+                        setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
+                        setMatchupSearchA(""); setMatchupSearchB("");
                         setShowMatchupModal(true);
                       }}
                       data-testid="button-add-matchup"
@@ -3169,7 +3196,8 @@ export default function AdminDashboard() {
                           className="mt-4" 
                           onClick={() => {
                             setEditingMatchup(null);
-                            setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
+                            setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
+                            setMatchupSearchA(""); setMatchupSearchB("");
                             setShowMatchupModal(true);
                           }}
                           data-testid="button-create-first-matchup"
@@ -4741,7 +4769,7 @@ export default function AdminDashboard() {
 
       {/* Matchup Modal */}
       <Dialog open={showMatchupModal} onOpenChange={setShowMatchupModal}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingMatchup ? "Edit Matchup" : "Create Matchup"}</DialogTitle>
             <DialogDescription>
@@ -4749,16 +4777,6 @@ export default function AdminDashboard() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-            <div className="space-y-2">
-              <Label htmlFor="matchup-title">Title</Label>
-              <Input
-                id="matchup-title"
-                value={matchupForm.title}
-                onChange={(e) => setMatchupForm({ ...matchupForm, title: e.target.value })}
-                placeholder="Matchup title"
-                data-testid="input-matchup-title"
-              />
-            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="matchup-category">Category</Label>
@@ -4798,26 +4816,133 @@ export default function AdminDashboard() {
                 </Select>
               </div>
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="matchup-option-a">Option A</Label>
-              <Input
-                id="matchup-option-a"
-                value={matchupForm.optionAText}
-                onChange={(e) => setMatchupForm({ ...matchupForm, optionAText: e.target.value })}
-                placeholder="First option"
-                data-testid="input-matchup-option-a"
-              />
+              <Label>Option A</Label>
+              <div className="relative">
+                <Input
+                  value={matchupForm.optionAText}
+                  onChange={(e) => {
+                    setMatchupForm({ ...matchupForm, optionAText: e.target.value, personAId: "" });
+                    setMatchupSearchA(e.target.value);
+                  }}
+                  placeholder="Type celebrity name or custom entry"
+                  data-testid="input-matchup-option-a"
+                />
+                {matchupSearchA.length >= 2 && !matchupForm.personAId && celebrities && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                    {celebrities
+                      .filter((c: Celebrity) => c.name.toLowerCase().includes(matchupSearchA.toLowerCase()))
+                      .slice(0, 6)
+                      .map((c: Celebrity) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover-elevate"
+                          onClick={() => {
+                            setMatchupForm({
+                              ...matchupForm,
+                              optionAText: c.name,
+                              personAId: c.id,
+                              optionAImage: "",
+                            });
+                            setMatchupSearchA("");
+                          }}
+                          data-testid={`suggest-a-${c.id}`}
+                        >
+                          <Avatar className="h-6 w-6">
+                            <AvatarImage src={c.avatar || ""} />
+                            <AvatarFallback className="text-[10px]">{c.name.slice(0, 2)}</AvatarFallback>
+                          </Avatar>
+                          <span>{c.name}</span>
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+              {matchupForm.personAId ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <CheckCircle className="h-3 w-3 text-green-500" />
+                  <span>Linked to leaderboard (image auto-resolved)</span>
+                  <button type="button" className="ml-auto text-xs text-destructive" onClick={() => setMatchupForm({ ...matchupForm, personAId: "" })}>Unlink</button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Custom Image (Option A)</Label>
+                  <UploadImageInput
+                    value={matchupForm.optionAImage}
+                    onChange={(url) => setMatchupForm({ ...matchupForm, optionAImage: url })}
+                    moduleName="matchups"
+                    slugOrId="option-a"
+                    placeholder="Paste image URL or upload"
+                  />
+                </div>
+              )}
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="matchup-option-b">Option B</Label>
-              <Input
-                id="matchup-option-b"
-                value={matchupForm.optionBText}
-                onChange={(e) => setMatchupForm({ ...matchupForm, optionBText: e.target.value })}
-                placeholder="Second option"
-                data-testid="input-matchup-option-b"
-              />
+              <Label>Option B</Label>
+              <div className="relative">
+                <Input
+                  value={matchupForm.optionBText}
+                  onChange={(e) => {
+                    setMatchupForm({ ...matchupForm, optionBText: e.target.value, personBId: "" });
+                    setMatchupSearchB(e.target.value);
+                  }}
+                  placeholder="Type celebrity name or custom entry"
+                  data-testid="input-matchup-option-b"
+                />
+                {matchupSearchB.length >= 2 && !matchupForm.personBId && celebrities && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                    {celebrities
+                      .filter((c: Celebrity) => c.name.toLowerCase().includes(matchupSearchB.toLowerCase()))
+                      .slice(0, 6)
+                      .map((c: Celebrity) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover-elevate"
+                          onClick={() => {
+                            setMatchupForm({
+                              ...matchupForm,
+                              optionBText: c.name,
+                              personBId: c.id,
+                              optionBImage: "",
+                            });
+                            setMatchupSearchB("");
+                          }}
+                          data-testid={`suggest-b-${c.id}`}
+                        >
+                          <Avatar className="h-6 w-6">
+                            <AvatarImage src={c.avatar || ""} />
+                            <AvatarFallback className="text-[10px]">{c.name.slice(0, 2)}</AvatarFallback>
+                          </Avatar>
+                          <span>{c.name}</span>
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+              {matchupForm.personBId ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <CheckCircle className="h-3 w-3 text-green-500" />
+                  <span>Linked to leaderboard (image auto-resolved)</span>
+                  <button type="button" className="ml-auto text-xs text-destructive" onClick={() => setMatchupForm({ ...matchupForm, personBId: "" })}>Unlink</button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Custom Image (Option B)</Label>
+                  <UploadImageInput
+                    value={matchupForm.optionBImage}
+                    onChange={(url) => setMatchupForm({ ...matchupForm, optionBImage: url })}
+                    moduleName="matchups"
+                    slugOrId="option-b"
+                    placeholder="Paste image URL or upload"
+                  />
+                </div>
+              )}
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="matchup-prompt">Pre-Vote Prompt</Label>
               <Input
@@ -4835,7 +4960,7 @@ export default function AdminDashboard() {
                   id="matchup-slug"
                   value={matchupForm.slug}
                   onChange={(e) => setMatchupForm({ ...matchupForm, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-') })}
-                  placeholder="auto-generated-from-title"
+                  placeholder="auto-generated-from-options"
                   className="font-mono text-sm"
                   data-testid="input-matchup-slug"
                 />
@@ -4844,7 +4969,7 @@ export default function AdminDashboard() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    const generated = matchupForm.title
+                    const generated = `${matchupForm.optionAText}-vs-${matchupForm.optionBText}`
                       .toLowerCase()
                       .replace(/[^a-z0-9\s-]/g, '')
                       .replace(/\s+/g, '-')
@@ -4875,7 +5000,6 @@ export default function AdminDashboard() {
             <Button
               onClick={handleSaveMatchup}
               disabled={
-                !matchupForm.title || 
                 !matchupForm.optionAText || 
                 !matchupForm.optionBText || 
                 createMatchupMutation.isPending || 

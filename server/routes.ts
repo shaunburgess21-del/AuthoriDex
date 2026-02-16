@@ -2891,15 +2891,18 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       // Public API: Only show live and inactive matchups (not draft/hidden/archived)
       matchupList = matchupList.filter(f => f.visibility === 'live' || f.visibility === 'inactive');
       
-      // Build a lookup map for celebrity avatars (name -> avatar URL)
+      // Build lookup maps for celebrity avatars (by ID and by name)
       const celebrities = await db.select({
+        id: trackedPeople.id,
         name: trackedPeople.name,
         avatar: trackedPeople.avatar,
       }).from(trackedPeople);
       
-      const avatarLookup: Record<string, string | null> = {};
+      const avatarByName: Record<string, string | null> = {};
+      const avatarById: Record<string, string | null> = {};
       for (const celeb of celebrities) {
-        avatarLookup[celeb.name.toLowerCase()] = celeb.avatar;
+        avatarByName[celeb.name.toLowerCase()] = celeb.avatar;
+        avatarById[celeb.id] = celeb.avatar;
       }
       
       // Get vote counts for each matchup and dynamically resolve avatars
@@ -2919,9 +2922,9 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         const optionBVotes = voteResults.find(v => v.value === 'option_b')?.count || 0;
         const totalVotes = Number(optionAVotes) + Number(optionBVotes);
         
-        // Dynamically resolve avatars from tracked_people (fallback to snapshot)
-        const optionAImageResolved = avatarLookup[matchup.optionAText.toLowerCase()] || matchup.optionAImage;
-        const optionBImageResolved = avatarLookup[matchup.optionBText.toLowerCase()] || matchup.optionBImage;
+        // Resolve avatars: linked celebrity ID > custom upload > name-based lookup
+        const optionAImageResolved = (matchup.personAId && avatarById[matchup.personAId]) || matchup.optionAImage || avatarByName[matchup.optionAText.toLowerCase()] || null;
+        const optionBImageResolved = (matchup.personBId && avatarById[matchup.personBId]) || matchup.optionBImage || avatarByName[matchup.optionBText.toLowerCase()] || null;
         
         return {
           ...matchup,
@@ -2956,13 +2959,16 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       }
       
       const celebrities = await db.select({
+        id: trackedPeople.id,
         name: trackedPeople.name,
         avatar: trackedPeople.avatar,
       }).from(trackedPeople);
       
-      const avatarLookup: Record<string, string | null> = {};
+      const avatarByName: Record<string, string | null> = {};
+      const avatarById: Record<string, string | null> = {};
       for (const celeb of celebrities) {
-        avatarLookup[celeb.name.toLowerCase()] = celeb.avatar;
+        avatarByName[celeb.name.toLowerCase()] = celeb.avatar;
+        avatarById[celeb.id] = celeb.avatar;
       }
       
       const voteResults = await db.select({
@@ -2980,8 +2986,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const optionBVotes = voteResults.find(v => v.value === 'option_b')?.count || 0;
       const totalVotes = Number(optionAVotes) + Number(optionBVotes);
       
-      const optionAImageResolved = avatarLookup[matchup.optionAText.toLowerCase()] || matchup.optionAImage;
-      const optionBImageResolved = avatarLookup[matchup.optionBText.toLowerCase()] || matchup.optionBImage;
+      const optionAImageResolved = (matchup.personAId && avatarById[matchup.personAId]) || matchup.optionAImage || avatarByName[matchup.optionAText.toLowerCase()] || null;
+      const optionBImageResolved = (matchup.personBId && avatarById[matchup.personBId]) || matchup.optionBImage || avatarByName[matchup.optionBText.toLowerCase()] || null;
       
       res.json({
         ...matchup,
