@@ -465,10 +465,16 @@ export const matchups = pgTable("face_offs", {
   promptText: text("prompt_text"),
   seedVotesA: integer("seed_votes_a").notNull().default(0),
   seedVotesB: integer("seed_votes_b").notNull().default(0),
+  visibility: text("visibility").default("live"),
+  featured: boolean("featured").default(false),
+  slug: text("slug").unique(),
   scheduledAt: timestamp("scheduled_at"),
   createdBy: varchar("created_by"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  slugIdx: index("face_offs_slug_idx").on(table.slug),
+  visibilityIdx: index("face_offs_visibility_idx").on(table.visibility),
+}));
 
 export const insertMatchupSchema = createInsertSchema(matchups).omit({
   id: true,
