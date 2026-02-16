@@ -1,0 +1,235 @@
+Replit Prompt: Upgrade “Matchups” (Voting CMS) Create/Edit + Dedicated URL (Non-Breaking)
+Goal
+
+Improve the Voting CMS → Matchups create/edit modal and the frontend matchup cards with:
+
+celebrity autocomplete + auto-avatar linking
+
+optional image upload for non-leaderboard options
+
+visibility statuses + featured toggle
+
+slug + dedicated URL page opened only by clicking the card heading (not vote area)
+
+This must be implemented without breaking existing matchups already listed in the admin panel.
+
+A) Confirm existing data model first (important)
+
+Before changing anything, inspect the existing Matchups schema/model/API. There is already a Matchup Queue with Active items, so this likely already has fields like:
+
+id, title, category, optionA, optionB, isActive (or status), createdAt, etc.
+
+Do not rename existing fields if they are already used. Only add new fields as nullable so existing data continues to work.
+
+B) Data model extensions (additive / safe)
+Add these new fields to the Matchups table (all optional/null by default)
+
+visibility (enum/string) with allowed values:
+
+draft (Admin only)
+
+live (Active)
+
+inactive (Visible but dimmed)
+
+hidden
+
+archived
+
+featured (boolean, default false)
+
+slug (string, unique, nullable initially — enforce uniqueness on non-null)
+
+optionACelebrityId (nullable FK / string id)
+
+optionBCelebrityId (nullable FK / string id)
+
+optionAImageUrl (nullable string) ← for custom uploads
+
+optionBImageUrl (nullable string) ← for custom uploads
+
+(keep existing preVotePrompt field if it already exists)
+
+Non-breaking rule
+
+If existing schema already has something similar (e.g. isActive), map it:
+
+isActive=true → visibility=live
+
+isActive=false → visibility=inactive (or draft depending on current usage)
+
+Do a simple backfill migration so existing records get a valid visibility.
+
+C) Resolved avatar logic (API response)
+
+In the Matchup API response, return resolved avatar URLs so the frontend doesn’t need to guess:
+
+optionAAvatarUrl = celebrity.imageUrl if optionACelebrityId is set and exists else optionAImageUrl else fallback
+
+optionBAvatarUrl = celebrity.imageUrl if optionBCelebrityId is set and exists else optionBImageUrl else fallback
+
+Also return:
+
+visibility, featured, slug
+
+This should work for existing matchups even if none of the new fields are filled.
+
+D) Admin Modal updates (Create + Edit)
+1) Add Visibility dropdown (copy exact UX from Trending Polls)
+
+Dropdown options:
+
+Draft (Admin only)
+
+Live (Active)
+
+Inactive (Visible but dimmed)
+
+Hidden
+
+Archived (Hidden)
+
+Default for new matchups: Live (Active)
+
+2) Add Featured toggle (copy UX from Trending Polls)
+
+visible in modal
+
+stored in featured
+
+3) Add Slug field (copy exact slug design from Trending Polls)
+
+field + “Generate” button
+
+auto-generate from Title if blank
+
+validate uniqueness
+
+show helper text: “Unique URL-friendly identifier”
+
+4) Option A / Option B improvements
+4.1 Celebrity autocomplete suggestions (typeahead)
+
+When typing in Option A or Option B:
+
+query leaderboard/celebrities endpoint (like Linked Celebrity field)
+
+show suggestion list
+
+if admin selects a celebrity:
+
+set optionAName / optionBName to the celeb name
+
+set optionACelebrityId / optionBCelebrityId
+
+disable the custom image upload OR keep enabled but show “Using celebrity image” and ignore custom image unless celebrity cleared
+
+4.2 Custom avatar upload for non-leaderboard options
+
+Add an Upload Image button for each side:
+
+“Upload image for Option A”
+
+“Upload image for Option B”
+
+Flow:
+
+Uploads to Supabase Storage
+
+Returns public URL
+
+Auto-fills optionAImageUrl / optionBImageUrl
+
+Show preview thumbnail in modal
+
+Rules:
+
+If a celebrity is selected, use celebrity avatar by default
+
+If celebrity is not selected, use uploaded image if provided
+
+If neither, use fallback placeholder
+
+E) Frontend card click behaviour (important UX)
+
+On the frontend Matchup cards:
+
+Clicking the main heading/title text opens the dedicated matchup URL: /vote/matchups/:slug
+
+Clicking on the vote area (images/buttons) must only vote, and must NOT navigate.
+
+This matches the Real-World Markets / Trending Poll intent: fast voting from cards, deeper info from heading.
+
+F) Dedicated URL page for Matchups
+
+Create a dedicated page similar in structure to Trending Poll detail, but tuned for A vs B:
+
+Must-have sections
+
+Header
+
+Title
+
+Category chip
+
+Status chip (Live/Inactive/etc)
+
+“Featured” badge if featured
+
+Vote widget (top)
+
+Two large selectable sides (A vs B)
+
+After vote: show “Your pick” and allow change if your system supports it
+
+Results module
+
+Percent split A vs B
+
+Total votes / participants count
+
+Optional: time since posted or createdAt
+
+About / Context
+
+If you have a description field already for matchups, show it
+
+If not, show a short “Prompt” / “Pre-vote prompt” if present
+
+Discussion
+
+Same discussion component as Real-World Predictions / Trending Polls
+
+Sort by top-rated comments
+
+Voting on comments enabled
+
+Filtering rules
+
+draft, archived, hidden should not be publicly accessible (404 or redirect)
+
+inactive can show but dim/labelled (depending on existing Vote page behaviour)
+
+G) Admin list row improvements (optional but recommended)
+
+In Matchup Queue list:
+
+show a small badge for visibility (Draft/Live/etc)
+
+show featured star if featured
+
+show slug if present (subtle)
+
+H) Acceptance tests
+
+Existing matchups still render and are votable (no schema break)
+
+Creating a matchup with celebrity selection auto-uses celeb image
+
+Creating a matchup with custom names allows image upload to Supabase and displays on card
+
+Title click opens the dedicated URL; voting does not navigate
+
+Visibility set to Draft does not appear on frontend
+
+Slug uniqueness enforced; generate works
