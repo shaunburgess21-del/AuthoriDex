@@ -1,0 +1,72 @@
+This is a good Replit response overall — it reads like someone actually checked the code and then tested the right things. A few notes to keep you from getting blindsided later:
+
+What looks genuinely solid
+
+Concurrency / clobber risk: If (and only if) the ingestion lock truly prevents any overlapping ingestion across all entrypoints, then their “health saved once per run” claim is fine.
+
+Freshness based on last success: Their description matches the correct approach (decay uses now - lastHealthyTimestamp and that timestamp updates only on success).
+
+Asymmetric cooling not harming recovery: Their reasoning is correct if the code really applies asymmetry only when the score is moving down, and uses normal caps/alpha when moving up. The RECOVERY boost is a nice extra.
+
+Two places Replit might be slightly overconfident
+1) “No clobber risk” depends on all ingestion triggers respecting the lock
+
+You’ve had these in your system before: cron endpoint, manual admin trigger, server restarts, etc. Even with a unique partial index lock, ask them to confirm:
+
+the lock is acquired before any health state is loaded/mutated
+
+every ingestion entrypoint uses the same lock path (no “quick ingest” bypass)
+
+health is saved in a finally/completion path even on errors
+
+If any path loads health before acquiring lock, it’s still “safe-ish,” but not as clean.
+
+2) Their “Bad Bunny wants to go higher” interpretation is suspicious
+
+If they’re seeing rawFame=724K but fame_index is 647K, that’s not necessarily “rate limiting keeps it down” — it could also be:
+
+EMA lag (fame_index trailing raw by design), or
+
+rate limiting, or
+
+a combination.
+
+It’s not wrong, but they should be careful about which limiter is responsible. The score-audit endpoint should make that explicit (prev fame, after rate limit, after EMA).
+
+The renormalization cap change: good, but I’d tighten the spec
+
+Their cap plan is sane (“cap each weight to 1.5× base, and allow total velocity weight to shrink slightly if clamped”). Two things to ensure:
+
+Monotonicity: As news gets staler, news influence should not accidentally increase due to renormalization quirks.
+
+No sudden step changes: If a source crosses a threshold (HEALTHY→DEGRADED), you don’t want weights to jump hard. Ideally smooth the weight with the same freshness factor.
+
+The testing they did: useful, but incomplete
+
+They tested:
+
+a spike case (Bad Bunny) and a stable case (Taylor Swift) ✅
+
+They did not test the exact failure mode you had: “all red then all green.” That one was about baseline selection consistency (run_id baselines, windowing, coverage). Since you already had a baseline-meta added to public APIs, ask them to show you:
+
+leaderboard meta.baseline24hAgeHours, meta.coveragePct, meta.baselineStatus
+
+hot-movers meta for same window
+
+confirm baselineStatus stayed “normal” across the time you saw flips
+
+What I’d tell you to ask Replit next (copy/paste)
+
+Send this:
+
+Looks good. Two quick “prove it” checks please:
+
+Confirm ingestion lock is acquired before health state load/mutate on all ingestion entrypoints (cron + manual + any internal scheduler), and health is saved in success + failure paths.
+
+Use the score-audit to show for Bad Bunny: prevFameIndex -> afterRateLimit -> afterEMA -> final, so we know whether the gap vs raw is EMA lag or rate limit.
+
+Please paste current /api/leaderboard meta + /api/trending/hot-movers meta (baselineStatus, baselineAgeHours, coveragePct) during a period where the board looks “weird,” so we can confirm baselines are stable and not drifting.
+
+Your core question: is Bad Bunny “organic” or “bug”?
+
+Based on what Replit reported (wiki still ~80k/day and fame is decaying ~9% over 3 days), it’s plausibly organic and still influenced by smoothing. With the new 24h/7d velocity blend, he should start falling more naturally as that 24h stays lower.

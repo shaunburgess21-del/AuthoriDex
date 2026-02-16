@@ -1,0 +1,58 @@
+Yep — this is a strong follow-up from Replit, and it answers the “prove it” items in a way that’s actually useful.
+
+My take on each point
+1) Lock → load → mutate → save (✅ good)
+
+If what they said is accurate (lock acquired before loadHealthFromDB, immediate exit on lock fail, and save happens in both success + catch), then your “health resets on restart / clobbering” risk is basically neutralized.
+
+The extra reassurance is “both cron + manual ingest call the same runDataIngestion().” That’s exactly what you want.
+
+If you want one last sanity check: ask them to confirm any other ingest-like route (e.g., “rebuild stats”, “backfill”, “dev route”) also funnels through that function, but this is already 95% there.
+
+2) EMA vs rate-limit ambiguity (✅ they caught the right missing piece)
+
+This is the only real gap left: right now you see rawFame vs final, but you can’t attribute the gap to:
+
+rate limiting (cap), vs
+
+EMA lag, vs
+
+both.
+
+So Replit’s proposed fix (“store prevFame + afterRateLimit in diagnostics JSONB”) is the right next move. It’ll make your “Bad Bunny is sticky” discussions factual instead of speculative.
+
+3) Meta exposure (✅ good)
+
+If baseline meta is exposed on both /api/leaderboard and /api/trending/hot-movers, that’s a huge win. It lets you debug weird swings instantly from the network tab — without telling users anything.
+
+What to tell Replit (simple + specific)
+
+Send this:
+
+Add these fields to the diagnostics JSON (and score-audit output):
+
+prevFameIndex
+
+rawFame
+
+afterRateLimitFame
+
+afterEmaFame
+
+finalFameIndex
+
+plus rateLimitCapPctUsed, emaAlphaUsed, and whether it was “downward-asymmetric” or not.
+
+Also add one derived line: rawMinusPrevPct, rateLimitDeltaPct, emaDeltaPct so it’s readable at a glance.
+
+That’s it. No UI changes needed.
+
+Why this matters
+
+Once those numbers exist, you’ll be able to answer:
+
+“Is he still #1 because he’s still getting unusually high wiki/search?” (organic)
+
+or “Is he #1 because the stabilizers are damping his decline too hard?” (tuning issue)
+
+or “Is his raw score still huge but EMA is lagging?” (expected)
