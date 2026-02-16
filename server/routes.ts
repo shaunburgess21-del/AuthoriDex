@@ -2878,7 +2878,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   // Get all matchups with vote counts (with dynamic avatar lookup from tracked_people)
   app.get("/api/matchups", async (req, res) => {
     try {
-      const { category, active } = req.query;
+      const { category } = req.query;
       
       // Get all matchups
       let matchupList = await db.select().from(matchups).orderBy(desc(matchups.createdAt));
@@ -2888,10 +2888,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         matchupList = matchupList.filter(f => f.category === category);
       }
       
-      // Filter by active status if provided
-      if (active === 'true') {
-        matchupList = matchupList.filter(f => f.isActive);
-      }
+      // Public API: Only show live and inactive matchups (not draft/hidden/archived)
+      matchupList = matchupList.filter(f => f.visibility === 'live' || f.visibility === 'inactive');
       
       // Build a lookup map for celebrity avatars (name -> avatar URL)
       const celebrities = await db.select({
@@ -2944,6 +2942,63 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
   
+  app.get("/api/matchups/by-slug/:slug", async (req, res) => {
+    try {
+      const { slug } = req.params;
+      
+      const [matchup] = await db.select().from(matchups).where(eq(matchups.slug, slug));
+      if (!matchup) {
+        return res.status(404).json({ error: "Matchup not found" });
+      }
+      
+      if (matchup.visibility !== 'live' && matchup.visibility !== 'inactive') {
+        return res.status(404).json({ error: "Matchup not found" });
+      }
+      
+      const celebrities = await db.select({
+        name: trackedPeople.name,
+        avatar: trackedPeople.avatar,
+      }).from(trackedPeople);
+      
+      const avatarLookup: Record<string, string | null> = {};
+      for (const celeb of celebrities) {
+        avatarLookup[celeb.name.toLowerCase()] = celeb.avatar;
+      }
+      
+      const voteResults = await db.select({
+        value: votes.value,
+        count: count(),
+      })
+      .from(votes)
+      .where(and(
+        eq(votes.voteType, 'face_off'),
+        eq(votes.targetId, matchup.id)
+      ))
+      .groupBy(votes.value);
+      
+      const optionAVotes = voteResults.find(v => v.value === 'option_a')?.count || 0;
+      const optionBVotes = voteResults.find(v => v.value === 'option_b')?.count || 0;
+      const totalVotes = Number(optionAVotes) + Number(optionBVotes);
+      
+      const optionAImageResolved = avatarLookup[matchup.optionAText.toLowerCase()] || matchup.optionAImage;
+      const optionBImageResolved = avatarLookup[matchup.optionBText.toLowerCase()] || matchup.optionBImage;
+      
+      res.json({
+        ...matchup,
+        optionAImage: optionAImageResolved,
+        optionBImage: optionBImageResolved,
+        optionAVotes: Number(optionAVotes),
+        optionBVotes: Number(optionBVotes),
+        totalVotes,
+        optionAPercent: totalVotes > 0 ? Math.round((Number(optionAVotes) / totalVotes) * 100) : 50,
+        optionBPercent: totalVotes > 0 ? Math.round((Number(optionBVotes) / totalVotes) * 100) : 50,
+      });
+    } catch (error: any) {
+      console.error("Error fetching matchup by slug:", error.message);
+      res.status(500).json({ error: "Failed to fetch matchup" });
+    }
+  });
+
   // Get user's votes on matchups (supports anonymous via session ID)
   app.get("/api/matchups/user-votes", optionalAuth, async (req: AuthRequest, res) => {
     try {
@@ -5028,7 +5083,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
 
   app.post("/api/admin/matchups", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive } = req.body;
+      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, visibility, featured, slug, personAId, personBId, promptText } = req.body;
       const adminId = req.userId!;
       
       if (!title || !optionAText || !optionBText) {
@@ -5039,6 +5094,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const [maxOrder] = await db.select({ max: sql<number>`COALESCE(MAX(display_order), 0)` }).from(matchups);
       const nextOrder = (maxOrder?.max || 0) + 1;
       
+      const effectiveVisibility = visibility || 'live';
       const [created] = await db.insert(matchups).values({
         title,
         category: category || 'General',
@@ -5046,8 +5102,14 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         optionAImage: optionAImage || null,
         optionBText,
         optionBImage: optionBImage || null,
-        isActive: isActive !== false,
+        isActive: effectiveVisibility === 'live',
         displayOrder: nextOrder,
+        visibility: effectiveVisibility,
+        featured: featured || false,
+        slug: slug || null,
+        personAId: personAId || null,
+        personBId: personBId || null,
+        promptText: promptText || null,
       }).returning();
       
       // Audit log
@@ -5067,10 +5129,24 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
 
+  app.get("/api/admin/matchups/check-slug", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { slug, excludeId } = req.query;
+      if (!slug) return res.json({ available: false });
+      
+      const results = await db.select({ id: matchups.id }).from(matchups).where(eq(matchups.slug, slug as string));
+      
+      const available = results.length === 0 || (excludeId && results.length === 1 && results[0].id === excludeId);
+      res.json({ available });
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to check slug" });
+    }
+  });
+
   app.patch("/api/admin/matchups/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, displayOrder } = req.body;
+      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, displayOrder, visibility, featured, slug, personAId, personBId, promptText } = req.body;
       const adminId = req.userId!;
       
       const [existing] = await db.select().from(matchups).where(eq(matchups.id, id));
@@ -5085,8 +5161,14 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       if (optionAImage !== undefined) updates.optionAImage = optionAImage;
       if (optionBText !== undefined) updates.optionBText = optionBText;
       if (optionBImage !== undefined) updates.optionBImage = optionBImage;
-      if (isActive !== undefined) updates.isActive = isActive;
+      if (isActive !== undefined) { updates.isActive = isActive; updates.visibility = isActive ? 'live' : 'inactive'; }
       if (displayOrder !== undefined) updates.displayOrder = displayOrder;
+      if (visibility !== undefined) { updates.visibility = visibility; updates.isActive = visibility === 'live'; }
+      if (featured !== undefined) updates.featured = featured;
+      if (slug !== undefined) updates.slug = slug;
+      if (personAId !== undefined) updates.personAId = personAId;
+      if (personBId !== undefined) updates.personBId = personBId;
+      if (promptText !== undefined) updates.promptText = promptText;
       
       await db.update(matchups).set(updates).where(eq(matchups.id, id));
       
