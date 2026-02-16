@@ -1,0 +1,141 @@
+Yep, makes sense — and you’re right to be cautious about “not breaking anything.” Based on what you’re seeing now, Replit implemented slug + dedicated URL + visibility + featured, but missed the avatar/image assignment + autocomplete, and they also added a new “Title” concept that you don’t want.
+
+Below is a clean Replit prompt that:
+
+Does NOT assume a new data model (first check what exists)
+
+Adds leaderboard autocomplete + ID linking
+
+Adds upload image per option (A & B)
+
+Ensures resolved avatar URL logic
+
+Removes the extra “Title” field and uses the matchup question as the clickable link
+
+Keeps voting buttons/image taps working without forcing users into the URL
+
+Prompt for Replit (Matchups: images + correct heading/link + no breaking changes)
+
+Context: In Voting CMS → Matchups, we already have a working create/edit flow with Category, Visibility, Option A, Option B, Pre-Vote Prompt, URL Slug, Featured, and the frontend now has a dedicated URL when clicking the heading. However:
+
+There is no leaderboard autocomplete for Option A / Option B
+
+There is no way to upload custom images for Option A / Option B
+
+The frontend card now shows an extra Title at top-left and the wrong heading is clickable. We want the matchup question/heading (“X vs Y” / “Who do you prefer?” line) to be the link to the dedicated URL, and we want the newly introduced “Title” removed entirely.
+
+A) Do not break existing data model — check what already exists first
+
+Before changing schema, inspect the current DB table/model used for Matchups and confirm whether any of these fields already exist:
+
+optionAName, optionBName
+
+optionACelebrityId, optionBCelebrityId
+
+optionAImageUrl, optionBImageUrl
+
+slug, visibility/status, featured
+If any already exist, reuse them and do a non-breaking migration only where required.
+
+B) Admin modal: Option A / Option B should support leaderboard suggestions + linking
+
+Update the Option A and Option B inputs to behave like an autocomplete:
+
+As admin types (e.g., “Tay”), show suggestions from the existing Celebrities table/leaderboard.
+
+Selecting a suggestion sets:
+
+optionAName (display name)
+
+optionACelebrityId (linked ID)
+
+clears optionAImageUrl (because image will come from linked celebrity)
+
+If the admin does NOT select a suggested celebrity (custom entry), then:
+
+optionAName is the typed text
+
+optionACelebrityId = null
+
+Same logic for option B.
+
+C) Admin modal: Add upload image for each option (A & B) when not linked to a celebrity
+
+Add two new optional controls (right below each option input):
+
+Option A Image Upload (only enabled when optionACelebrityId is null)
+
+Option B Image Upload (only enabled when optionBCelebrityId is null)
+
+Upload behavior:
+
+Uploads to Supabase Storage (same approach already used elsewhere in admin for image upload).
+
+On success, auto-fills:
+
+optionAImageUrl / optionBImageUrl
+
+Provide “Remove image” action to clear the stored URL field.
+
+If a celebrity is later selected from autocomplete, disable upload and clear the custom URL for that option (celebrity image becomes source of truth).
+
+D) API response: always return resolved avatar URLs for card rendering
+
+In the matchup fetch endpoints (list + single):
+Return resolved avatar URLs so the frontend doesn’t guess:
+
+optionAResolvedImageUrl
+
+optionBResolvedImageUrl
+
+Resolution priority:
+
+If linked celebrity exists → use celebrity’s primary image used everywhere else
+
+Else if custom uploaded URL exists → use that
+
+Else fallback to a default placeholder
+
+E) Frontend card: remove the new “Title” display + correct what is clickable
+
+Right now a new “Title” appears top-left — remove it completely.
+
+Do not show any separate “Title” label on the card.
+
+Keep the card’s main heading as the matchup question: “Option A vs Option B” (or existing heading format).
+
+Click behavior:
+
+Only the heading/question text area should open the dedicated URL.
+
+Clicking the images should still cast a vote (fast voting flow), NOT open the URL.
+
+This matches the Trending Polls / Real-World Markets pattern (easy vote without navigating).
+
+F) Dedicated URL page for Matchups (if already built, refine)
+
+Keep similar structure to Trending Poll dedicated page, but matchup-specific:
+
+Vote widget (tap A or B)
+
+Results widget (percent + vote counts)
+
+“Your pick” indicator
+
+Discussion thread (comments + upvotes/downvotes)
+
+Optional: “Why did you choose X?” prompt placeholder in comment box (light guidance)
+
+G) QA checklist
+
+Existing matchups still load and render exactly as before (no broken rows).
+
+If options are linked to leaderboard celebs, their images appear automatically.
+
+If custom options are used, uploaded images appear.
+
+Visibility “Live (Active)” must display on frontend; Draft/Admin only must not.
+
+Clicking heading opens URL; clicking images votes.
+
+If you want, I can also rewrite this into a shorter “Replit Plan” version (more compact), but the above is explicit enough that they shouldn’t misinterpret the heading/link requirement again
