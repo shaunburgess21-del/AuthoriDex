@@ -200,7 +200,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
         onClick={onVisitProfile}
         data-testid={`row-person-${person.id}`}
       >
-        <RankBadge rank={person.leaderboardRank ?? (person as any).liveRank ?? person.rank} rankChange={person.rankChange} />
+        <RankBadge rank={person.leaderboardRank ?? (person as any).liveRank ?? person.rank} rankChange={person.rankChange} colorMode={activeTab} />
         <PersonAvatar name={person.name} avatar={person.avatar} size="md" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
