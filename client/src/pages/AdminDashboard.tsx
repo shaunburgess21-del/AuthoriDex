@@ -1377,7 +1377,7 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error("Failed to fetch celebrities");
       return res.json();
     },
-    enabled: isAdmin && activeSection === "celebrities",
+    enabled: isAdmin && (activeSection === "celebrities" || activeSection === "voting"),
   });
 
   // Fetch score breakdown for a celebrity
@@ -3150,11 +3150,11 @@ export default function AdminDashboard() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 {matchup.featured && <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 shrink-0" />}
-                                <p className="font-medium truncate">{matchup.title}</p>
+                                <p className="font-medium truncate">{matchup.title || `${matchup.optionAText} vs ${matchup.optionBText}`}</p>
                               </div>
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 <Badge variant="outline" className="text-xs">{matchup.category}</Badge>
-                                <span className="text-sm text-muted-foreground">{matchup.optionAText} vs {matchup.optionBText}</span>
+                                {matchup.title && <span className="text-sm text-muted-foreground">{matchup.optionAText} vs {matchup.optionBText}</span>}
                                 {matchup.slug && (
                                   <span className="text-xs text-muted-foreground font-mono">/{matchup.slug}</span>
                                 )}
@@ -3177,7 +3177,7 @@ export default function AdminDashboard() {
                                 size="icon"
                                 className="text-destructive"
                                 onClick={() => {
-                                  setDeleteTarget({ type: "matchup", id: matchup.id, name: matchup.title });
+                                  setDeleteTarget({ type: "matchup", id: matchup.id, name: matchup.title || `${matchup.optionAText} vs ${matchup.optionBText}` });
                                   setShowDeleteConfirm(true);
                                 }}
                                 data-testid={`button-delete-matchup-${matchup.id}`}
@@ -4793,7 +4793,7 @@ export default function AdminDashboard() {
                     <SelectItem value="Sports">Sports</SelectItem>
                     <SelectItem value="Politics">Politics</SelectItem>
                     <SelectItem value="Business">Business</SelectItem>
-                    <SelectItem value="Entertainment">Entertainment</SelectItem>
+                    <SelectItem value="Creator">Creator</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -4817,18 +4817,34 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Option A</Label>
-              <div className="relative">
-                <Input
-                  value={matchupForm.optionAText}
-                  onChange={(e) => {
-                    setMatchupForm({ ...matchupForm, optionAText: e.target.value, personAId: "" });
-                    setMatchupSearchA(e.target.value);
-                  }}
-                  placeholder="Type celebrity name or custom entry"
-                  data-testid="input-matchup-option-a"
-                />
+            <Label className="text-sm font-medium">Option A</Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2 relative">
+                <Label className="text-xs text-muted-foreground">Linked Celebrity (optional)</Label>
+                {matchupForm.personAId ? (
+                  <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/30">
+                    <span className="text-sm flex-1 truncate">{matchupForm.optionAText}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setMatchupForm({ ...matchupForm, personAId: "" })}
+                      data-testid="button-clear-option-a"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Input
+                    value={matchupForm.optionAText}
+                    onChange={(e) => {
+                      setMatchupForm({ ...matchupForm, optionAText: e.target.value, personAId: "" });
+                      setMatchupSearchA(e.target.value);
+                    }}
+                    placeholder="Search by name..."
+                    data-testid="input-matchup-option-a"
+                  />
+                )}
                 {matchupSearchA.length >= 2 && !matchupForm.personAId && celebrities && (
                   <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-40 overflow-y-auto">
                     {celebrities
@@ -4855,43 +4871,56 @@ export default function AdminDashboard() {
                             <AvatarFallback className="text-[10px]">{c.name.slice(0, 2)}</AvatarFallback>
                           </Avatar>
                           <span>{c.name}</span>
+                          <span className="text-xs text-muted-foreground ml-auto">{c.category}</span>
                         </button>
                       ))}
                   </div>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  {matchupForm.personAId ? `ID: ${matchupForm.personAId.slice(0, 8)}...` : "Search and select a celebrity"}
+                </p>
               </div>
-              {matchupForm.personAId ? (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <CheckCircle className="h-3 w-3 text-green-500" />
-                  <span>Linked to leaderboard (image auto-resolved)</span>
-                  <button type="button" className="ml-auto text-xs text-destructive" onClick={() => setMatchupForm({ ...matchupForm, personAId: "" })}>Unlink</button>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Custom Image (Option A)</Label>
-                  <UploadImageInput
-                    value={matchupForm.optionAImage}
-                    onChange={(url) => setMatchupForm({ ...matchupForm, optionAImage: url })}
-                    moduleName="matchups"
-                    slugOrId="option-a"
-                    placeholder="Paste image URL or upload"
-                  />
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Image URL (optional)</Label>
+                <UploadImageInput
+                  value={matchupForm.optionAImage}
+                  onChange={(url) => setMatchupForm({ ...matchupForm, optionAImage: url })}
+                  moduleName="matchups"
+                  slugOrId="option-a"
+                  placeholder="Upload or paste image URL"
+                  disabled={!!matchupForm.personAId}
+                />
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Option B</Label>
-              <div className="relative">
-                <Input
-                  value={matchupForm.optionBText}
-                  onChange={(e) => {
-                    setMatchupForm({ ...matchupForm, optionBText: e.target.value, personBId: "" });
-                    setMatchupSearchB(e.target.value);
-                  }}
-                  placeholder="Type celebrity name or custom entry"
-                  data-testid="input-matchup-option-b"
-                />
+            <Label className="text-sm font-medium">Option B</Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2 relative">
+                <Label className="text-xs text-muted-foreground">Linked Celebrity (optional)</Label>
+                {matchupForm.personBId ? (
+                  <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/30">
+                    <span className="text-sm flex-1 truncate">{matchupForm.optionBText}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setMatchupForm({ ...matchupForm, personBId: "" })}
+                      data-testid="button-clear-option-b"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Input
+                    value={matchupForm.optionBText}
+                    onChange={(e) => {
+                      setMatchupForm({ ...matchupForm, optionBText: e.target.value, personBId: "" });
+                      setMatchupSearchB(e.target.value);
+                    }}
+                    placeholder="Search by name..."
+                    data-testid="input-matchup-option-b"
+                  />
+                )}
                 {matchupSearchB.length >= 2 && !matchupForm.personBId && celebrities && (
                   <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-40 overflow-y-auto">
                     {celebrities
@@ -4918,29 +4947,26 @@ export default function AdminDashboard() {
                             <AvatarFallback className="text-[10px]">{c.name.slice(0, 2)}</AvatarFallback>
                           </Avatar>
                           <span>{c.name}</span>
+                          <span className="text-xs text-muted-foreground ml-auto">{c.category}</span>
                         </button>
                       ))}
                   </div>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  {matchupForm.personBId ? `ID: ${matchupForm.personBId.slice(0, 8)}...` : "Search and select a celebrity"}
+                </p>
               </div>
-              {matchupForm.personBId ? (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <CheckCircle className="h-3 w-3 text-green-500" />
-                  <span>Linked to leaderboard (image auto-resolved)</span>
-                  <button type="button" className="ml-auto text-xs text-destructive" onClick={() => setMatchupForm({ ...matchupForm, personBId: "" })}>Unlink</button>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Custom Image (Option B)</Label>
-                  <UploadImageInput
-                    value={matchupForm.optionBImage}
-                    onChange={(url) => setMatchupForm({ ...matchupForm, optionBImage: url })}
-                    moduleName="matchups"
-                    slugOrId="option-b"
-                    placeholder="Paste image URL or upload"
-                  />
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Image URL (optional)</Label>
+                <UploadImageInput
+                  value={matchupForm.optionBImage}
+                  onChange={(url) => setMatchupForm({ ...matchupForm, optionBImage: url })}
+                  moduleName="matchups"
+                  slugOrId="option-b"
+                  placeholder="Upload or paste image URL"
+                  disabled={!!matchupForm.personBId}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
