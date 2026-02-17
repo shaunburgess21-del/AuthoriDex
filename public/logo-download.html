@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AuthoriDex Logo Download</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0f; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; }
+    h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+    p.sub { color: #94a3b8; margin-bottom: 2rem; }
+    .preview { background: #13131f; border: 1px solid #1e293b; border-radius: 16px; padding: 3rem; margin-bottom: 2rem; display: flex; align-items: center; justify-content: center; }
+    .preview img { width: 256px; height: 256px; }
+    .buttons { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+    button, a.btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; text-decoration: none; border: none; transition: opacity 0.2s; }
+    button:hover, a.btn:hover { opacity: 0.85; }
+    .svg-btn { background: #2563eb; color: white; }
+    .png-btn { background: #06b6d4; color: white; }
+    .sizes { display: flex; gap: 1rem; margin-top: 1rem; flex-wrap: wrap; justify-content: center; }
+    .sizes button { font-size: 0.85rem; padding: 0.5rem 1rem; background: #1e293b; color: #e2e8f0; }
+    canvas { display: none; }
+  </style>
+</head>
+<body>
+  <h1>AuthoriDex Logo</h1>
+  <p class="sub">Download in SVG or PNG format</p>
+  <div class="preview">
+    <img src="/authoridex-logo.svg" alt="AuthoriDex Logo" id="logo-preview">
+  </div>
+  <div class="buttons">
+    <a href="/authoridex-logo.svg" download="authoridex-logo.svg" class="btn svg-btn">Download SVG (Vector)</a>
+    <button class="png-btn" onclick="downloadPNG(1024)">Download PNG (1024px)</button>
+  </div>
+  <div class="sizes">
+    <button onclick="downloadPNG(256)">PNG 256px</button>
+    <button onclick="downloadPNG(512)">PNG 512px</button>
+    <button onclick="downloadPNG(2048)">PNG 2048px</button>
+  </div>
+  <canvas id="canvas"></canvas>
+  <script>
+    function downloadPNG(size) {
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = size;
+      canvas.height = size;
+      const img = new Image();
+      img.onload = function() {
+        ctx.clearRect(0, 0, size, size);
+        ctx.drawImage(img, 0, 0, size, size);
+        const link = document.createElement('a');
+        link.download = `authoridex-logo-${size}px.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      };
+      img.src = '/authoridex-logo.svg';
+    }
+  </script>
+</body>
+</html>
