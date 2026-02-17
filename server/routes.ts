@@ -434,11 +434,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Return paginated response with totalCount
+      const baselineMeta = await getBaselineDiagnostics(totalCount);
+      const baselineDegraded = baselineMeta.baseline24hStatus !== "normal";
+
+      const safeData = baselineDegraded
+        ? enrichedPeople.map(p => ({ ...p, change24h: null, change7d: null }))
+        : enrichedPeople;
+
       res.json({
-        data: enrichedPeople,
+        data: safeData,
         totalCount,
-        hasMore: limit ? (parseInt(offset as string || '0', 10) + enrichedPeople.length) < totalCount : false
+        hasMore: limit ? (parseInt(offset as string || '0', 10) + safeData.length) < totalCount : false,
+        meta: {
+          scoreVersion: baselineMeta.scoreVersion,
+          baselineStatus: baselineMeta.baseline24hStatus,
+        },
       });
     } catch (error) {
       console.error("Error fetching trending people:", error);
@@ -557,8 +567,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const result = hotMovers.slice(0, 8);
       const baselineMeta = await getBaselineDiagnostics(people.length);
+      const baselineDegraded = baselineMeta.baseline24hStatus !== "normal";
+      const safeResult = baselineDegraded
+        ? result.map(p => ({ ...p, change24h: null }))
+        : result;
       const responseWithMeta = {
-        data: result,
+        data: safeResult,
         meta: {
           currentRunId: baselineMeta.currentRunId,
           baseline24hRunId: baselineMeta.baseline24hRunId,
@@ -836,6 +850,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
+      const baselineMeta = await getBaselineDiagnostics(people.length);
+      const baselineDegraded = baselineMeta.baseline24hStatus !== "normal";
+
       if (type === 'gainers') {
         people = [...people].sort((a, b) => (b.change7d ?? 0) - (a.change7d ?? 0)).slice(0, 10);
       } else if (type === 'droppers') {
@@ -844,6 +861,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const prevRanks = await getSnapshotRankMap();
         const withRankChange = people.map(p => ({
           ...p,
+          change24h: baselineDegraded ? null : p.change24h,
+          change7d: baselineDegraded ? null : p.change7d,
           rankChange: prevRanks.has(p.id) ? (prevRanks.get(p.id)! - p.rank) : null,
         }));
         const byDelta = [...withRankChange].sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0)).slice(0, 15);
@@ -864,6 +883,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const prevRanks = await getSnapshotRankMap();
       const enriched = people.map(p => ({
         ...p,
+        change24h: baselineDegraded ? null : p.change24h,
+        change7d: baselineDegraded ? null : p.change7d,
         rankChange: prevRanks.has(p.id) ? (prevRanks.get(p.id)! - p.rank) : null,
       }));
 
@@ -1838,13 +1859,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const baselineMeta = await getBaselineDiagnostics(totalCount);
+      const baselineDegraded = baselineMeta.baseline24hStatus !== "normal";
+      const safeLeaderboard = baselineDegraded
+        ? leaderboard.map(p => ({ ...p, change24h: null, change7d: null }))
+        : leaderboard;
 
       res.json({
         tab,
         sortDir,
-        total: leaderboard.length,
+        total: safeLeaderboard.length,
         totalCount,
-        data: leaderboard,
+        data: safeLeaderboard,
         thresholds: canonicalThresholds,
         baselineStatus: baselineMeta.baseline24hStatus,
         meta: {
