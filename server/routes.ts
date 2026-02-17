@@ -27,6 +27,7 @@ import {
   PLATFORM_WEIGHTS,
   MASS_ALLOCATION,
   VELOCITY_ALLOCATION,
+  SCORE_VERSION,
 } from "./scoring/normalize";
 import {
   getCurrentHealthSnapshot,
@@ -147,6 +148,7 @@ async function getSnapshotRankMap(): Promise<Map<string, number>> {
       .from(ingestionRuns)
       .where(and(
         eq(ingestionRuns.status, "completed"),
+        eq(ingestionRuns.scoreVersion, SCORE_VERSION),
         gt(ingestionRuns.finishedAt, new Date(now - 28 * 60 * 60 * 1000)),
         sql`${ingestionRuns.finishedAt} < ${new Date(now - 20 * 60 * 60 * 1000)}`
       ))
@@ -563,6 +565,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           baseline24hAgeHours: baselineMeta.baseline24hAgeHours,
           baselineStatus: baselineMeta.baseline24hStatus,
           coveragePct: baselineMeta.baseline24hCoveragePct,
+          scoreVersion: baselineMeta.scoreVersion,
         },
       };
       _cachedHotMovers = responseWithMeta;
@@ -1850,6 +1853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           baseline24hAgeHours: baselineMeta.baseline24hAgeHours,
           baselineStatus: baselineMeta.baseline24hStatus,
           coveragePct: baselineMeta.baseline24hCoveragePct,
+          scoreVersion: baselineMeta.scoreVersion,
         },
       });
     } catch (error: any) {

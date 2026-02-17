@@ -35,6 +35,7 @@ import {
   EMA_ALPHA_DEFAULT,
   EMA_ALPHA_2_SOURCES,
   EMA_ALPHA_3_SOURCES,
+  SCORE_VERSION,
 } from "../scoring/normalize";
 
 const GDELT_CANDIDATE_COUNT = 25;
@@ -149,7 +150,7 @@ async function acquireIngestionLock(): Promise<{ acquired: boolean; runId?: stri
 
   try {
     const [newRun] = await db.insert(ingestionRuns)
-      .values({ status: "running", lockAcquiredAt: now, heartbeatAt: now })
+      .values({ status: "running", lockAcquiredAt: now, heartbeatAt: now, scoreVersion: SCORE_VERSION })
       .returning({ id: ingestionRuns.id });
 
     console.log(`[Ingest Lock] Acquired lock, run ID: ${newRun.id}`);
@@ -208,7 +209,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
   if (!lockResult.acquired) {
     console.warn(`[Ingest] SKIPPED: Another ingestion is running (${lockResult.existingRunId}). Cannot overlap.`);
     await db.insert(ingestionRuns)
-      .values({ status: "locked_out", errorSummary: `Blocked by existing run ${lockResult.existingRunId}`, finishedAt: new Date() });
+      .values({ status: "locked_out", errorSummary: `Blocked by existing run ${lockResult.existingRunId}`, finishedAt: new Date(), scoreVersion: SCORE_VERSION });
     return { processed: 0, errors: 0, duration: 0, lockedOut: true };
   }
   
@@ -755,6 +756,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
           snapshotOrigin: 'ingest',
           diagnostics: diagnosticsData,
           runId: runId,
+          scoreVersion: SCORE_VERSION,
         };
         await db.insert(trendSnapshots).values(snapshotValues)
           .onConflictDoUpdate({

@@ -1,6 +1,7 @@
 import { TrendingPerson, TrackedPerson, trendSnapshots, trackedPeople, ingestionRuns } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sql, gte, gt, isNotNull, lt } from "drizzle-orm";
+import { SCORE_VERSION } from "./scoring/normalize";
 
 interface CelebrityMetrics {
   name: string;
@@ -324,6 +325,7 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
     .from(ingestionRuns)
     .where(and(
       eq(ingestionRuns.status, "completed"),
+      eq(ingestionRuns.scoreVersion, SCORE_VERSION),
       gt(ingestionRuns.finishedAt, new Date(time24hAgo.getTime() - BASELINE_24H_WINDOW_MS)),
       lt(ingestionRuns.finishedAt, new Date(time24hAgo.getTime() + BASELINE_24H_WINDOW_MS))
     ))
@@ -349,6 +351,7 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
     .from(ingestionRuns)
     .where(and(
       eq(ingestionRuns.status, "completed"),
+      eq(ingestionRuns.scoreVersion, SCORE_VERSION),
       gt(ingestionRuns.finishedAt, new Date(time7dAgo.getTime() - BASELINE_7D_WINDOW_MS)),
       lt(ingestionRuns.finishedAt, new Date(time7dAgo.getTime() + BASELINE_7D_WINDOW_MS))
     ))

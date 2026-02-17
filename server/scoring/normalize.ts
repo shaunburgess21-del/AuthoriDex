@@ -2,6 +2,8 @@
 // SCORING ENGINE - Stable Normalization & Weights
 // ============================================================================
 
+export const SCORE_VERSION = "v2";
+
 // Platform weights - FIXED, never redistributed dynamically
 // NOTE (Jan 2026): X API removed from trend score engine due to cost constraints.
 // X API keys preserved for future Platform Insights feature.

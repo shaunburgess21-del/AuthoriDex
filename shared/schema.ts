@@ -82,6 +82,7 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   snapshotOrigin: text("snapshot_origin").default("ingest"),
   diagnostics: jsonb("diagnostics"),
   runId: varchar("run_id").notNull(),
+  scoreVersion: varchar("score_version").default("v1"),
 }, (table) => ({
   uniquePersonTimestamp: unique().on(table.personId, table.timestamp),
   runIdIdx: index("trend_snapshots_run_id_idx").on(table.runId),
@@ -1104,6 +1105,7 @@ export const ingestionRuns = pgTable("ingestion_runs", {
   lockAcquiredAt: timestamp("lock_acquired_at"),
   lockReleasedAt: timestamp("lock_released_at"),
   heartbeatAt: timestamp("heartbeat_at"),
+  scoreVersion: varchar("score_version").default("v1"),
 }, (table) => ({
   startedAtIdx: index("ingestion_runs_started_at_idx").on(table.startedAt),
   statusIdx: index("ingestion_runs_status_idx").on(table.status),

@@ -1,6 +1,7 @@
 import { db } from "../db";
 import { ingestionRuns, trendSnapshots } from "@shared/schema";
 import { eq, and, gt, lt, desc, sql } from "drizzle-orm";
+import { SCORE_VERSION } from "../scoring/normalize";
 
 export interface BaselineDiagnostics {
   currentRunId: string | null;
@@ -11,6 +12,7 @@ export interface BaselineDiagnostics {
   baseline7dRunId: string | null;
   baseline7dAgeHours: number | null;
   baseline7dStatus: "normal" | "degraded";
+  scoreVersion: string | null;
 }
 
 const BASELINE_24H_WINDOW_MS = 6 * 60 * 60 * 1000;
@@ -33,6 +35,7 @@ export async function getBaselineDiagnostics(totalPeopleCount?: number): Promise
     .from(ingestionRuns)
     .where(and(
       eq(ingestionRuns.status, "completed"),
+      eq(ingestionRuns.scoreVersion, SCORE_VERSION),
       gt(ingestionRuns.finishedAt, new Date(time24hAgo.getTime() - BASELINE_24H_WINDOW_MS)),
       lt(ingestionRuns.finishedAt, new Date(time24hAgo.getTime() + BASELINE_24H_WINDOW_MS))
     ))
@@ -44,6 +47,7 @@ export async function getBaselineDiagnostics(totalPeopleCount?: number): Promise
     .from(ingestionRuns)
     .where(and(
       eq(ingestionRuns.status, "completed"),
+      eq(ingestionRuns.scoreVersion, SCORE_VERSION),
       gt(ingestionRuns.finishedAt, new Date(time7dAgo.getTime() - BASELINE_7D_WINDOW_MS)),
       lt(ingestionRuns.finishedAt, new Date(time7dAgo.getTime() + BASELINE_7D_WINDOW_MS))
     ))
@@ -73,5 +77,6 @@ export async function getBaselineDiagnostics(totalPeopleCount?: number): Promise
     baseline7dRunId: baselineRun7d?.id ?? null,
     baseline7dAgeHours: ageHours(baselineRun7d),
     baseline7dStatus: baselineRun7d ? "normal" : "degraded",
+    scoreVersion: SCORE_VERSION,
   };
 }
