@@ -454,15 +454,15 @@ export function computePercentileRank(logValue: number, stats: SourceStats): num
   if (stats.count === 0 || stats.max === stats.min) return 0.5;
   
   const logMin = logTransform(stats.min);
-  const logMax = logTransform(stats.max);
   const logP25 = logTransform(stats.p25);
   const logP50 = logTransform(stats.p50);
   const logP75 = logTransform(stats.p75);
   const logP90 = logTransform(stats.p90);
+  const p99Est = stats.p90 + 2 * (stats.p90 - stats.p75);
+  const logEffectiveMax = logTransform(Math.min(stats.max, p99Est > stats.p90 ? p99Est : stats.max));
   
-  // Linear interpolation between known percentile thresholds
   if (logValue <= logMin) return 0;
-  if (logValue >= logMax) return 1;
+  if (logValue >= logEffectiveMax) return 1;
   
   if (logValue <= logP25) {
     return 0 + 0.25 * ((logValue - logMin) / (logP25 - logMin || 1));
@@ -473,16 +473,30 @@ export function computePercentileRank(logValue: number, stats: SourceStats): num
   } else if (logValue <= logP90) {
     return 0.75 + 0.15 * ((logValue - logP75) / (logP90 - logP75 || 1));
   } else {
-    return 0.90 + 0.10 * ((logValue - logP90) / (logMax - logP90 || 1));
+    return 0.90 + 0.10 * ((logValue - logP90) / (logEffectiveMax - logP90 || 1));
   }
 }
 
 /**
+ * Apply winsorization (p99 cap) to prevent extreme outliers from dominating.
+ * Values above the p99 threshold (approximated as p90 + 2*(p90-p75)) are capped.
+ * This prevents a single celebrity with extreme pageviews from defining the max
+ * and compressing everyone else's normalized scores.
+ */
+export function winsorize(rawValue: number, stats: SourceStats): number {
+  const p99Estimate = stats.p90 + 2 * (stats.p90 - stats.p75);
+  if (p99Estimate <= stats.p90) return rawValue;
+  return Math.min(rawValue, p99Estimate);
+}
+
+/**
  * Normalize a raw source value to 0-1 using log1p + percentile ranking.
+ * Applies winsorization first to cap extreme outliers before normalization.
  * This makes different sources (wiki, news, search) comparable before weighting.
  */
 export function normalizeSourceValue(rawValue: number, stats: SourceStats): number {
-  const logValue = logTransform(rawValue);
+  const cappedValue = winsorize(rawValue, stats);
+  const logValue = logTransform(cappedValue);
   return computePercentileRank(logValue, stats);
 }
 

@@ -3,7 +3,7 @@ import { trackedPeople, trendSnapshots, trendingPeople, celebrityImages, ingesti
 import { desc, eq, sql, gte, and } from "drizzle-orm";
 import { getBaselineDiagnostics } from "../utils/baseline";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
-import { fetchBatchGdeltNews } from "../providers/gdelt";
+import { fetchBatchGdeltNews, GdeltBatchOptions } from "../providers/gdelt";
 import { fetchSerperBatch } from "../providers/serper";
 // NOTE (Jan 2026): X API removed from trend score engine due to cost constraints.
 // X API keys preserved for future Platform Insights feature.
@@ -36,6 +36,43 @@ import {
   EMA_ALPHA_2_SOURCES,
   EMA_ALPHA_3_SOURCES,
 } from "../scoring/normalize";
+
+const GDELT_CANDIDATE_COUNT = 25;
+
+async function computeNewsCandidates(
+  people: Array<{ id: string; name: string }>,
+  wikiData: Map<string, any>,
+): Promise<Set<string>> {
+  const candidates = new Set<string>();
+
+  const currentRankings = await db
+    .select({ id: trendingPeople.id, rank: trendingPeople.rank })
+    .from(trendingPeople)
+    .orderBy(trendingPeople.rank);
+  
+  const currentRankMap = new Map<string, number>();
+  for (const r of currentRankings) {
+    currentRankMap.set(r.id, r.rank ?? 999);
+  }
+
+  for (const r of currentRankings.slice(0, GDELT_CANDIDATE_COUNT)) {
+    candidates.add(r.id);
+  }
+
+  const wikiSorted = people
+    .map(p => ({
+      id: p.id,
+      pageviews: wikiData.get(p.id)?.pageviews24h ?? 0,
+    }))
+    .sort((a, b) => b.pageviews - a.pageviews);
+
+  for (const entry of wikiSorted.slice(0, GDELT_CANDIDATE_COUNT)) {
+    candidates.add(entry.id);
+  }
+
+  console.log(`[Ingest] GDELT candidate gating: ${candidates.size} candidates (top ${GDELT_CANDIDATE_COUNT} by rank + top ${GDELT_CANDIDATE_COUNT} by wiki)`);
+  return candidates;
+}
 
 export const SNAPSHOT_DIAGNOSTICS_VERSION = 1;
 
@@ -219,18 +256,20 @@ export async function runDataIngestion(): Promise<IngestResult> {
     sourceTimings.wiki = Date.now() - wikiStart;
     sourceStatuses.wiki = wikiData.size > 0 ? "OK" : "FAILED";
 
+    const gdeltCandidates = await computeNewsCandidates(people, wikiData);
     let gdeltStart = Date.now();
     let gdeltData = new Map<string, any>();
     try {
-      const gdeltPromise = fetchBatchGdeltNews(
-        people.map(p => ({ id: p.id, name: p.name }))
+      const gdeltOptions: GdeltBatchOptions = {
+        candidates: gdeltCandidates,
+        timeBudgetMs: 120000,
+      };
+      gdeltData = await fetchBatchGdeltNews(
+        people.map(p => ({ id: p.id, name: p.name })),
+        gdeltOptions
       );
-      const timeoutPromise = new Promise<Map<string, any>>((_, reject) => 
-        setTimeout(() => reject(new Error('GDELT timeout')), 180000)
-      );
-      gdeltData = await Promise.race([gdeltPromise, timeoutPromise]);
     } catch (err) {
-      console.log('[Ingest] GDELT fetch failed (certificate/timeout), continuing with other sources');
+      console.log('[Ingest] GDELT fetch failed, continuing with other sources');
       sourceStatuses.gdelt = "FAILED";
     }
     sourceTimings.gdelt = Date.now() - gdeltStart;

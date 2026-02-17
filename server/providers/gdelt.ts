@@ -5,13 +5,10 @@ import https from "https";
 
 const GDELT_API_BASE = "https://api.gdeltproject.org/api/v2/doc/doc";
 
-// SSL bypass only when explicitly enabled via environment variable
-// GDELT sometimes has certificate issues - this allows recovery during outages
 const GDELT_RELAX_SSL = process.env.GDELT_RELAX_SSL === "true";
 
-// HTTPS agent with conditional SSL verification
 const httpsAgent = new https.Agent({
-  rejectUnauthorized: !GDELT_RELAX_SSL, // Only bypass verification if explicitly enabled
+  rejectUnauthorized: !GDELT_RELAX_SSL,
   timeout: 15000,
 });
 
@@ -19,26 +16,60 @@ if (GDELT_RELAX_SSL) {
   console.warn("[GDELT] SSL certificate verification disabled via GDELT_RELAX_SSL=true");
 }
 
-// Retry configuration - increased for stability
-const MAX_RETRIES = 4;  // Increased from 3
-const RETRY_DELAY_MS = 3000; // Start with 3 seconds, exponential backoff (increased from 2s)
-const REQUEST_DELAY_MS = 800; // Delay between individual requests (increased from 500ms)
-const JITTER_MAX_MS = 500; // Random jitter to avoid thundering herd (increased from 300ms)
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 5000;
+const REQUEST_DELAY_MS = 5500;
+const JITTER_MAX_MS = 1000;
+
+const CIRCUIT_BREAKER_THRESHOLD = 3;
+const CIRCUIT_BREAKER_RESET_MS = 5 * 60 * 1000;
+
+let circuitBreakerFailures = 0;
+let circuitBreakerOpenedAt: number | null = null;
+
+function isCircuitBreakerOpen(): boolean {
+  if (circuitBreakerOpenedAt === null) return false;
+  if (Date.now() - circuitBreakerOpenedAt > CIRCUIT_BREAKER_RESET_MS) {
+    console.log("[GDELT] Circuit breaker reset (cooldown elapsed)");
+    circuitBreakerFailures = 0;
+    circuitBreakerOpenedAt = null;
+    return false;
+  }
+  return true;
+}
+
+function recordCircuitBreakerFailure(): boolean {
+  circuitBreakerFailures++;
+  if (circuitBreakerFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+    circuitBreakerOpenedAt = Date.now();
+    console.warn(`[GDELT] Circuit breaker OPEN after ${circuitBreakerFailures} consecutive failures. Pausing for ${CIRCUIT_BREAKER_RESET_MS / 1000}s.`);
+    return true;
+  }
+  return false;
+}
+
+function recordCircuitBreakerSuccess() {
+  circuitBreakerFailures = 0;
+  circuitBreakerOpenedAt = null;
+}
 
 async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Add jitter to delays to avoid predictable request patterns
 function getJitteredDelay(baseMs: number): number {
   return baseMs + Math.floor(Math.random() * JITTER_MAX_MS);
 }
 
 async function fetchWithRetry(url: string, retries = MAX_RETRIES): Promise<Response | null> {
+  if (isCircuitBreakerOpen()) {
+    return null;
+  }
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout per request (increased from 10s)
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
       
       const response = await fetch(url, { 
         headers: { "Accept": "application/json" },
@@ -50,18 +81,31 @@ async function fetchWithRetry(url: string, retries = MAX_RETRIES): Promise<Respo
       clearTimeout(timeoutId);
       
       if (response.ok) {
+        recordCircuitBreakerSuccess();
         return response;
       }
       
-      // If rate limited or server error, retry with jittered exponential backoff
-      if (response.status >= 500 || response.status === 429) {
-        const backoffMs = getJitteredDelay(RETRY_DELAY_MS * Math.pow(2, attempt - 1));
-        console.log(`[GDELT] Retry ${attempt}/${retries} for ${url.substring(0, 80)}... (status: ${response.status}, waiting ${backoffMs}ms)`);
+      if (response.status === 429) {
+        const tripped = recordCircuitBreakerFailure();
+        if (tripped) return null;
+
+        const retryAfter = response.headers.get("Retry-After");
+        const backoffMs = retryAfter 
+          ? parseInt(retryAfter, 10) * 1000 
+          : getJitteredDelay(RETRY_DELAY_MS * Math.pow(2, attempt - 1));
+        console.log(`[GDELT] Rate limited (429), retry ${attempt}/${retries} in ${backoffMs}ms`);
         await sleep(backoffMs);
         continue;
       }
       
-      return response; // Return non-retryable responses as-is
+      if (response.status >= 500) {
+        const backoffMs = getJitteredDelay(RETRY_DELAY_MS * Math.pow(2, attempt - 1));
+        console.log(`[GDELT] Server error (${response.status}), retry ${attempt}/${retries} in ${backoffMs}ms`);
+        await sleep(backoffMs);
+        continue;
+      }
+      
+      return response;
     } catch (error: any) {
       const isLastAttempt = attempt === retries;
       const errorType = error.name === 'AbortError' ? 'timeout' : 
@@ -73,6 +117,7 @@ async function fetchWithRetry(url: string, retries = MAX_RETRIES): Promise<Respo
         console.log(`[GDELT] Retry ${attempt}/${retries} after ${errorType} error (waiting ${backoffMs}ms)`);
         await sleep(backoffMs);
       } else {
+        recordCircuitBreakerFailure();
         console.error(`[GDELT] All ${retries} attempts failed (${errorType})`);
       }
     }
@@ -97,6 +142,13 @@ async function getCachedResponse(cacheKey: string): Promise<string | null> {
     ),
   });
   
+  return cached?.responseData || null;
+}
+
+async function getStaleCache(cacheKey: string): Promise<string | null> {
+  const cached = await db.query.apiCache.findFirst({
+    where: eq(apiCache.cacheKey, cacheKey),
+  });
   return cached?.responseData || null;
 }
 
@@ -138,16 +190,20 @@ export async function fetchGdeltNews(
     return null;
   }
 
+  if (isCircuitBreakerOpen()) {
+    const cacheKey = `gdelt:news:${personName.toLowerCase().replace(/\s+/g, "_")}`;
+    const stale = await getStaleCache(cacheKey);
+    if (stale) return JSON.parse(stale);
+    return null;
+  }
+
   const cacheKey = `gdelt:news:${personName.toLowerCase().replace(/\s+/g, "_")}`;
   
   const cached = await getCachedResponse(cacheKey);
   if (cached) {
-    console.log(`[GDELT] Cache hit for ${personName}`);
     return JSON.parse(cached);
   }
 
-  console.log(`[GDELT] Fetching news for ${personName}`);
-  
   try {
     const now = new Date();
     const yesterday = new Date(now);
@@ -160,11 +216,11 @@ export async function fetchGdeltNews(
     const url24h = `${GDELT_API_BASE}?query=${query}&mode=artlist&maxrecords=100&format=json&startdatetime=${formatGdeltDate(yesterday)}&enddatetime=${formatGdeltDate(now)}`;
     const url7d = `${GDELT_API_BASE}?query=${query}&mode=artlist&maxrecords=250&format=json&startdatetime=${formatGdeltDate(weekAgo)}&enddatetime=${formatGdeltDate(now)}`;
     
-    // Use retry-enabled fetch with relaxed SSL
-    const [response24h, response7d] = await Promise.all([
-      fetchWithRetry(url24h),
-      fetchWithRetry(url7d),
-    ]);
+    const response24h = await fetchWithRetry(url24h);
+    
+    await sleep(getJitteredDelay(REQUEST_DELAY_MS));
+    
+    const response7d = await fetchWithRetry(url7d);
 
     let articleCount24h = 0;
     let articleCount7d = 0;
@@ -212,31 +268,90 @@ export async function fetchGdeltNews(
     return result;
   } catch (error) {
     console.error(`[GDELT] Error fetching ${personName}:`, error);
+    const stale = await getStaleCache(cacheKey);
+    if (stale) return JSON.parse(stale);
     return null;
   }
 }
 
+export interface GdeltBatchOptions {
+  candidates?: Set<string>;
+  timeBudgetMs?: number;
+}
+
 export async function fetchBatchGdeltNews(
-  people: Array<{ id: string; name: string }>
+  people: Array<{ id: string; name: string }>,
+  options?: GdeltBatchOptions
 ): Promise<Map<string, GdeltNewsData>> {
   const results = new Map<string, GdeltNewsData>();
+  const timeBudgetMs = options?.timeBudgetMs ?? 180000;
+  const candidates = options?.candidates;
+  const batchStart = Date.now();
   
-  console.log(`[GDELT] Fetching news for ${people.length} people...`);
+  const priorityPeople = candidates 
+    ? people.filter(p => candidates.has(p.id))
+    : people;
+  const nonPriorityPeople = candidates
+    ? people.filter(p => !candidates.has(p.id))
+    : [];
+
+  console.log(`[GDELT] Batch: ${priorityPeople.length} priority candidates, ${nonPriorityPeople.length} non-priority (cache only)`);
+
+  for (const person of nonPriorityPeople) {
+    const cacheKey = `gdelt:news:${person.name.toLowerCase().replace(/\s+/g, "_")}`;
+    const cached = await getCachedResponse(cacheKey);
+    if (cached) {
+      results.set(person.id, JSON.parse(cached));
+    } else {
+      const stale = await getStaleCache(cacheKey);
+      if (stale) {
+        results.set(person.id, JSON.parse(stale));
+      }
+    }
+  }
+  console.log(`[GDELT] Loaded ${results.size} non-priority from cache/stale`);
+
+  let freshFetched = 0;
+  let rateLimited = 0;
   
-  for (const person of people) {
+  for (const person of priorityPeople) {
+    if (isCircuitBreakerOpen()) {
+      console.warn(`[GDELT] Circuit breaker open - aborting remaining ${priorityPeople.length - freshFetched} requests`);
+      for (const remaining of priorityPeople.slice(freshFetched)) {
+        const cacheKey = `gdelt:news:${remaining.name.toLowerCase().replace(/\s+/g, "_")}`;
+        const stale = await getStaleCache(cacheKey);
+        if (stale) results.set(remaining.id, JSON.parse(stale));
+      }
+      break;
+    }
+
+    const elapsed = Date.now() - batchStart;
+    if (elapsed > timeBudgetMs) {
+      console.warn(`[GDELT] Time budget exhausted (${Math.round(elapsed / 1000)}s > ${Math.round(timeBudgetMs / 1000)}s). Processed ${freshFetched}/${priorityPeople.length} priority.`);
+      for (const remaining of priorityPeople.slice(freshFetched)) {
+        const cacheKey = `gdelt:news:${remaining.name.toLowerCase().replace(/\s+/g, "_")}`;
+        const stale = await getStaleCache(cacheKey);
+        if (stale) results.set(remaining.id, JSON.parse(stale));
+      }
+      break;
+    }
+
     try {
-      // Use jittered delay between requests to avoid rate limiting
-      await sleep(getJitteredDelay(REQUEST_DELAY_MS));
+      if (freshFetched > 0) {
+        await sleep(getJitteredDelay(REQUEST_DELAY_MS));
+      }
       
       const data = await fetchGdeltNews(person.name, person.id);
       if (data) {
         results.set(person.id, data);
       }
+      freshFetched++;
     } catch (error) {
       console.error(`[GDELT] Error for ${person.name}:`, error);
+      rateLimited++;
     }
   }
   
-  console.log(`[GDELT] Successfully fetched ${results.size} news records`);
+  console.log(`[GDELT] Batch complete: ${freshFetched} fresh fetched, ${results.size} total (including cache), ${rateLimited} errors, ${Math.round((Date.now() - batchStart) / 1000)}s elapsed`);
   return results;
 }

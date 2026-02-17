@@ -152,7 +152,6 @@ export function computeTrendScore(
   let massScore: number;
   
   if (inputs.totalFollowers && inputs.totalFollowers > 0) {
-    // Standard weighted approach when we have follower data
     const xMassContrib = inputs.activePlatforms.x ? followerScore * PLATFORM_WEIGHTS.mass.x : 0;
     const instagramMassContrib = inputs.activePlatforms.instagram ? followerScore * PLATFORM_WEIGHTS.mass.instagram : 0;
     const youtubeMassContrib = inputs.activePlatforms.youtube ? followerScore * PLATFORM_WEIGHTS.mass.youtube : 0;
@@ -164,9 +163,7 @@ export function computeTrendScore(
       youtubeMassContrib
     );
   } else {
-    // Wiki-only mode: wiki becomes the full mass signal
-    // Scale appropriately since wiki normally only gets 30% weight
-    massScore = wikiMassScore;
+    massScore = wikiMassScore * PLATFORM_WEIGHTS.mass.wiki;
   }
   
   // =========================================================================
