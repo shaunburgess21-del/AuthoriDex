@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { TrendingUp, CheckSquare, LineChart } from "lucide-react";
+import { useLocation } from "wouter";
 import heroImage from "@assets/generated_images/Hero_background_network_visualization_1293b14e.png";
 
 interface HeroSectionProps {
@@ -8,6 +9,7 @@ interface HeroSectionProps {
 }
 
 export function HeroSection({ onCastVoteClick, onPredictClick }: HeroSectionProps) {
+  const [, navigate] = useLocation();
   return (
     <div className="relative h-96 md:h-[500px] w-full overflow-hidden">
       <div
@@ -33,7 +35,7 @@ export function HeroSection({ onCastVoteClick, onPredictClick }: HeroSectionProp
             <span className="relative z-10">Explore Leaderboard</span>
           </button>
           <button
-            onClick={onCastVoteClick}
+            onClick={() => navigate("/vote")}
             className="group relative inline-flex items-center justify-center gap-2 rounded-md px-8 min-h-10 text-sm font-semibold border border-[#4C5567] text-white transition-all duration-300 overflow-hidden"
             data-testid="button-cast-vote"
           >
