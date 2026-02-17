@@ -2303,7 +2303,7 @@ export default function PredictPage() {
                 <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-open-markets-title">
                   Open Markets
                 </h2>
-                <p className="text-muted-foreground max-w-2xl mx-auto mb-3">Predict the outcome of global events.</p>
+                <p className="text-muted-foreground max-w-2xl mx-auto mb-3">Predict the outcome of any topic.</p>
                 <button
                   onClick={() => setRulesModalOpen("community")}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all cursor-pointer"
