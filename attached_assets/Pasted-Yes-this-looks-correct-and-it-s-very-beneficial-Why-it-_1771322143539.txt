@@ -1,0 +1,45 @@
+Yes — this looks correct, and it’s very beneficial.
+
+Why it’s correct
+
+Replit’s answers line up with the exact failure mode you observed:
+
+What changed: wiki-only mass path went from effectively 1.0 to 0.50 weight → mass scores halve when follower APIs are off.
+
+What 24h% uses: fame_index (EMA), not raw trend_score.
+
+How baseline is chosen: run-based (closest completed run to ~24h ago).
+
+Why everything is red: baseline run is pre-change, latest run is post-change → you’re comparing two different scoring models, so everyone moves together.
+
+Their “hard numbers” (100/100 negative, ~-30% median/avg) are exactly what you’d expect from a global scaling change.
+
+Why score_version tagging is the right fix
+
+Score versioning solves the class of problems, not just this one incident:
+
+Any future tweak (weights, caps, decay floors, EMA params, normalization, etc.) won’t cause “everyone red/green” again.
+
+It prevents misleading deltas by ensuring apples-to-apples comparisons.
+
+Returning null when there’s no same-version baseline is the most honest behavior.
+
+Two small improvements I’d suggest to Replit’s plan
+
+Put score_version on ingestion_runs too (not just snapshots)
+Then snapshots can inherit it automatically and baseline selection becomes cleaner (“find baseline run with same score_version”).
+
+Expose a tiny baselineMeta in the API (backend only)
+Even if you don’t show it in UI, having it in the response is gold for debugging:
+
+currentRunId, baselineRunId, baselineAgeHours, score_version, baselineStatus, coveragePct
+
+One more thing: this is separate from “was the 0.50 cap a good idea?”
+
+Versioning doesn’t answer whether 0.50 is the right value — it just prevents trust-breaking artifacts. You can tune the weight later without breaking deltas.
+
+If you want a message to send Replit, paste this:
+
+Plan looks right. Please implement score_version on ingestion_runs + trend_snapshots, filter baseline runs by matching version, and return null when no same-version baseline exists. Also include a small meta object in leaderboard/hot-movers responses with baselineRunId/currentRunId/score_version/baselineAgeHours so we can debug from network tab without UI changes.
+
+That’ll get you to “never think about this again” territory.
