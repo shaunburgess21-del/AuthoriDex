@@ -850,7 +850,8 @@ export default function HomePage() {
                 />
               </div>
 
-              <Card id="leaderboard">
+              <div id="leaderboard" className="scroll-mt-4" />
+              <Card>
                 <CardHeader className="flex flex-col gap-4 space-y-0 pb-4">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                     <div className="flex-1">

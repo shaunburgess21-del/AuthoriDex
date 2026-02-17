@@ -28,7 +28,7 @@ export function HeroSection({ onCastVoteClick, onPredictClick }: HeroSectionProp
             className="group relative inline-flex items-center justify-center gap-2 rounded-md px-8 min-h-10 text-sm font-semibold border border-[#4C5567] text-white transition-all duration-300 overflow-hidden"
             data-testid="button-explore-leaderboard"
           >
-            <span className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <span className="absolute inset-0 bg-gradient-to-r from-teal-500 via-blue-500 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <TrendingUp className="h-5 w-5 relative z-10" />
             <span className="relative z-10">Explore Leaderboard</span>
           </button>
