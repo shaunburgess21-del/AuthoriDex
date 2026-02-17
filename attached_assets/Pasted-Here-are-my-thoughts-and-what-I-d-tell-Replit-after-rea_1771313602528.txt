@@ -1,0 +1,125 @@
+Here are my thoughts (and what I’d tell Replit) after reading that whole diagnostic.
+
+What Replit got right
+
+The GDELT failure is almost certainly self-inflicted: 100 people × 2 requests each = 200 requests per ingest, and you’re doing the 24h + 7d calls in Promise.all plus only ~0.8–1.3s between people. If GDELT is rate limiting around ~1 request / 5s, you’re guaranteed to trip 429s.
+
+Bad Bunny being “sticky” can be explained without assuming a bug: your pipeline currently overweights Wikipedia, uses 7-day averages in places that make spikes linger, and EMA/catch-up behavior can pull him upward toward a high raw score for days.
+
+Where I think the diagnosis is missing a key point
+
+Replit’s “Option A” (sleep 5.5s per person) would make ingests too slow and likely worsen your ingestion gaps. Those gaps are already a major contributor to weird behavior (catch-up mode, jumps, stale baselines). Slower ingests = more gaps = more sawtooth/jumpiness.
+
+So: do not “slow down linearly.” You need fewer GDELT calls, not slower ones.
+
+What to suggest to Replit (actionable spec)
+1) Fix GDELT properly: reduce calls dramatically
+Best path: “candidate gating” + batching
+
+Instead of querying GDELT for all 100 people every run, do this:
+
+Step A — pick candidates using cheap signals
+
+Use Wikipedia + Serper (which you already run) to select, say, top 15–25 candidates likely to have meaningful news movement (high velocity, big deltas, etc.).
+
+Only run news (GDELT) for those candidates.
+
+Step B — run news for the rest less often
+
+Everyone else: refresh news every 6–12 hours (or daily), not hourly.
+
+This alone takes you from 200 requests/run → ~30–50 requests/run, which is survivable.
+
+If you want batching:
+
+GDELT can handle boolean queries, but OR batching gets messy with names. Candidate gating is the clean win.
+
+Message to Replit
+
+Don’t solve GDELT rate limits by adding 5.5s sleeps (it will slow ingestion and increase gaps). Instead, cut request volume: compute a “newsCandidate” list from wiki/search deltas each run and only fetch GDELT for the top ~20. Refresh the remaining 80 on a slower cadence (6–12h/daily). This keeps ingestion fast and avoids 429s.
+
+2) Make your GDELT fetcher resilient (even if you keep full coverage)
+
+If you still fetch for many people, add:
+
+Global concurrency limit for GDELT (e.g., 1–2 in flight).
+
+Backoff on 429 using Retry-After if present, otherwise exponential backoff with jitter.
+
+Circuit breaker: if you see a burst of 429s, mark source as “degraded” immediately and stop hammering it for that run.
+
+Message to Replit
+
+Add a per-source rate limiter + circuit breaker: cap concurrency to 1–2, and on 429 trigger exponential backoff + early abort for the rest of the run. Don’t continue firing requests once the source is clearly rate-limiting.
+
+3) Stabilize Bad Bunny: the real reason he’s so far ahead
+
+From the report, the structural reasons are:
+
+Mass is effectively “mostly wiki” (other channels are zero) → outliers dominate.
+
+Normalization stats include his own spike (max=285k) → everyone’s compressed, he’s still “top band.”
+
+EMA + catch-up mode can pull him upward toward high raw scores.
+
+Fixes that won’t feel “fake”
+
+Pick one of these approaches:
+
+A) Clamp wiki contribution using winsorization
+
+In normalization, instead of using raw max, cap wiki at something like p99 (or p95 + k*IQR) before scoring.
+
+This stops a single extreme event from turning into “#1 for weeks.”
+
+B) Make velocity use shorter wiki window
+
+Keep 7d for mass (stability), but use 24–48h for velocity (responsiveness). (You already started blending; make sure it’s actually dominant for velocity.)
+
+C) Reduce wiki weight until other sources exist
+
+Temporarily lower wiki weight in mass until Instagram/YT/etc are real, otherwise the leaderboard is basically “WikipediaDex.”
+
+Message to Replit
+
+Bad Bunny’s gap looks like a model artifact of “wiki-only mass + outlier spike.” Add winsorization/cap on wiki before normalization (e.g., cap at p99), and ensure velocity relies primarily on 24–48h wiki rather than 7d. Optionally reduce wiki weight until other channels are populated.
+
+4) The biggest operational problem in that report: ingestion gaps
+
+You’re seeing:
+
+stale lock auto-cleaned
+
+long running runs
+
+lock-outs
+
+fewer runs/day
+
+That will create all sorts of downstream weirdness (baseline selection strain, catch-up mode activation, big apparent moves).
+
+What to ask Replit to do
+
+Log per-source timings and fail early if a source is stuck.
+
+Add an ingest “budget”: if GDELT is failing / slow, skip it and finish the run fast rather than letting the run stall.
+
+Make sure your lock heartbeat updates frequently and doesn’t get blocked behind slow work.
+
+Message to Replit
+
+Prioritize ingest cadence over completeness. Add a time budget and skip/short-circuit slow sources so the run completes hourly. Ingestion gaps are causing more instability than missing a source.
+
+If you want one “best next step” decision
+
+Implement candidate gating for GDELT (top ~20 each run, rest slow cadence) + 429 backoff / circuit breaker.
+
+That will:
+
+stop the outage,
+
+keep runs fast,
+
+reduce gaps,
+
+and make your whole scoring system behave more normally.
