@@ -107,6 +107,9 @@ app.use(express.urlencoded({ extended: false }));
 // Serve attached assets (profile images, etc.)
 app.use("/attached_assets", express.static(path.resolve(import.meta.dirname, "..", "attached_assets")));
 
+// Serve public static files (logo downloads, etc.)
+app.use(express.static(path.resolve(import.meta.dirname, "..", "public")));
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
