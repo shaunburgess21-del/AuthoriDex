@@ -317,7 +317,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               }}
               data-testid={`button-vote-icon-${person.id}`}
             >
-              <ThumbsUp className={`h-4 w-4 ${hasVoted ? "fill-current" : ""}`} />
+              <ThumbsUp className="h-4 w-4" />
             </Button>
             <Button
               variant={hasVoted ? "ghost" : "outline"}
@@ -330,7 +330,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               }}
               data-testid={`button-expand-${person.id}`}
             >
-              <ThumbsUp className={`h-4 w-4 ${hasVoted ? "fill-current" : ""}`} />
+              <ThumbsUp className="h-4 w-4" />
             </Button>
           </>
         )}
@@ -375,7 +375,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               }}
               data-testid={`button-vote-icon-${person.id}`}
             >
-              <ThumbsUp className={`h-4 w-4 ${hasVoted ? "fill-current" : ""}`} />
+              <ThumbsUp className="h-4 w-4" />
             </Button>
             <Button
               variant={hasVoted ? "ghost" : "outline"}
@@ -388,7 +388,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               }}
               data-testid={`button-expand-${person.id}`}
             >
-              <ThumbsUp className={`h-4 w-4 ${hasVoted ? "fill-current" : ""}`} />
+              <ThumbsUp className="h-4 w-4" />
             </Button>
           </>
         )}
