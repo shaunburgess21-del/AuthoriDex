@@ -1,0 +1,57 @@
+Yep — this is exactly the right direction, and the behavior they’re seeing now (baseline24hRunId = null, baselineStatus = degraded) is expected immediately after introducing v2.
+
+That said, there’s one real issue in their write-up:
+
+The remaining “-23.6% still showing” is NOT ideal
+
+Replit is right about the cause: those values are currently coming from trending_people.change_24h, which was precomputed earlier using v1/v2 mixed baselines.
+
+But the important part is what to do next:
+
+What “correct” should look like right now
+
+Until you have a v2 baseline run at ~24h ago:
+
+baseline24hRunId should be null
+
+baselineStatus should be degraded
+
+change24h should be null everywhere you display it (leaderboard, hot movers, person page)
+
+So yes, it’s fine that after the next ingestion run it will become null — but it’s better to fix it immediately, not “wait for next ingestion”.
+
+What I’d tell Replit to do (2 quick fixes)
+Fix 1: Force-clear incompatible deltas right now
+
+Run a one-off SQL update to null out change_24h / change_7d where the current score_version is v2 but the stored deltas were computed pre-versioning.
+
+Practical way:
+
+In ingestion, whenever baselineStatus === 'degraded', explicitly write:
+
+change_24h = NULL
+
+change_7d = NULL
+That guarantees you never show stale/misleading deltas even between runs.
+
+Fix 2: Don’t trust trending_people.change_24h for display unless it matches version + baseline
+
+Safer rule for API responses:
+
+If meta.baselineStatus !== "normal" → return change24h: null in the API response (even if DB has a number).
+This prevents UI flicker and protects you if a bad value slips into the table.
+
+Meta object: good, but include one more field
+
+They added meta — great. Add baseline24hScoreVersion (or confirm it equals current) if you want future-proof debugging, but not required.
+
+Bottom line
+
+✅ Score_version on runs + snapshots: correct and valuable
+✅ Baseline filtering by version: correct
+✅ Returning null when no baseline exists: correct
+⚠️ Still showing -23.6% until next ingestion: expected given storage, but you should hard-block / null it immediately to avoid confusing users.
+
+If you want, paste this to Replit:
+
+Looks good. One issue: we should not show any lingering change24h values while baselineStatus=degraded. Please (1) force-write change_24h/change_7d = NULL whenever same-version baseline isn’t found, and (2) have the API override change24h to null when baselineStatus != normal, even if trending_people has a stale value. This prevents any misleading deltas between runs.
