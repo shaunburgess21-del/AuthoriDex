@@ -3,7 +3,7 @@ import path from "path";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startSnapshotScheduler } from "./jobs/snapshot-scheduler";
-import { runDataIngestion } from "./jobs/ingest";
+import { runDataIngestion, hydrateTrendingPeopleFromSnapshots } from "./jobs/ingest";
 import { startLiveTickScheduler, setLastFullRefreshAt, applySnapBackDampening } from "./jobs/live-tick";
 import { pool } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
@@ -171,6 +171,10 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    
+    hydrateTrendingPeopleFromSnapshots().catch(e => 
+      console.error("[Boot] Hydration error:", e)
+    );
     
     verifyDbConstraints();
     

@@ -235,15 +235,23 @@ export function startLiveTickScheduler() {
   function scheduleNext() {
     const now = new Date();
     const nextTick = new Date(now);
-    const currentMinute = now.getMinutes();
-    const nextTickMinute = Math.ceil(currentMinute / 10) * 10;
-    if (nextTickMinute === currentMinute && now.getSeconds() > 5) {
-      nextTick.setMinutes(currentMinute + 10, 0, 0);
-    } else {
-      nextTick.setMinutes(nextTickMinute === 60 ? 0 : nextTickMinute, 0, 0);
-      if (nextTickMinute >= 60) nextTick.setHours(nextTick.getHours() + 1);
+    nextTick.setSeconds(0, 0);
+    const currentMinute = nextTick.getMinutes();
+    let nextBoundary = Math.ceil(currentMinute / 10) * 10;
+    if (nextBoundary === currentMinute) {
+      if (now.getSeconds() <= 5) {
+        nextBoundary = currentMinute;
+      } else {
+        nextBoundary = currentMinute + 10;
+      }
     }
-    const ms = nextTick.getTime() - now.getTime();
+    if (nextBoundary >= 60) {
+      nextTick.setHours(nextTick.getHours() + 1);
+      nextTick.setMinutes(nextBoundary - 60);
+    } else {
+      nextTick.setMinutes(nextBoundary);
+    }
+    const ms = Math.max(nextTick.getTime() - now.getTime(), 1000);
     console.log(`[LiveTick] Next tick at ${nextTick.toISOString()} (in ${Math.round(ms / 1000)}s)`);
     _tickTimer = setTimeout(async () => {
       try {

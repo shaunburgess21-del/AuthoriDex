@@ -1129,6 +1129,93 @@ export async function getLastIngestionTime(): Promise<Date | null> {
   return lastSnapshot?.timestamp || null;
 }
 
+export async function hydrateTrendingPeopleFromSnapshots(): Promise<boolean> {
+  try {
+    const countResultRaw = await db.execute(sql`SELECT COUNT(*) as count FROM trending_people`);
+    const countRows = Array.isArray(countResultRaw) ? countResultRaw : (countResultRaw as any).rows ?? [];
+    const currentCount = parseInt((countRows[0] as any)?.count || '0', 10);
+    if (currentCount > 0) {
+      console.log(`[Boot] trending_people already has ${currentCount} rows, skipping hydration`);
+      return false;
+    }
+
+    const latestRun = await db
+      .select({ id: ingestionRuns.id, startedAt: ingestionRuns.startedAt, finishedAt: ingestionRuns.finishedAt })
+      .from(ingestionRuns)
+      .where(and(
+        eq(ingestionRuns.status, "completed"),
+        eq(ingestionRuns.scoreVersion, SCORE_VERSION),
+      ))
+      .orderBy(desc(ingestionRuns.startedAt))
+      .limit(1);
+
+    if (latestRun.length === 0) {
+      console.log("[Boot] No completed ingestion runs found, cannot hydrate trending_people");
+      return false;
+    }
+
+    const runId = latestRun[0].id;
+    console.log(`[Boot] Hydrating trending_people from completed run ${runId}...`);
+
+    const snapshotRows = await db.execute(sql`
+      SELECT 
+        ts.person_id,
+        ts.fame_index,
+        ts.trend_score,
+        tp.name,
+        tp.avatar,
+        tp.category,
+        tp.bio
+      FROM trend_snapshots ts
+      JOIN tracked_people tp ON tp.id = ts.person_id
+      WHERE ts.run_id = ${runId}
+        AND ts.score_version = ${SCORE_VERSION}
+      ORDER BY ts.fame_index DESC NULLS LAST
+    `);
+
+    const rows = Array.isArray(snapshotRows) ? snapshotRows : (snapshotRows as any).rows ?? [];
+    if (rows.length === 0) {
+      console.log("[Boot] No snapshots found for latest run, cannot hydrate");
+      return false;
+    }
+
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i] as any;
+        await tx.insert(trendingPeople).values({
+          id: row.person_id,
+          name: row.name,
+          avatar: row.avatar,
+          bio: row.bio,
+          rank: i + 1,
+          trendScore: row.trend_score,
+          fameIndex: row.fame_index,
+          change24h: null,
+          change7d: null,
+          category: row.category,
+        }).onConflictDoUpdate({
+          target: trendingPeople.id,
+          set: {
+            name: row.name,
+            avatar: row.avatar,
+            bio: row.bio,
+            rank: i + 1,
+            trendScore: row.trend_score,
+            fameIndex: row.fame_index,
+            category: row.category,
+          },
+        });
+      }
+    });
+
+    console.log(`[Boot] Successfully hydrated trending_people with ${rows.length} rows from run ${runId}`);
+    return true;
+  } catch (err) {
+    console.error("[Boot] Failed to hydrate trending_people:", err);
+    return false;
+  }
+}
+
 if (process.argv[1]?.endsWith('ingest.ts')) {
   runDataIngestion().then((result) => {
     console.log('[Ingest] Final result:', result);

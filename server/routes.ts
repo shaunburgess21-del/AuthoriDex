@@ -471,8 +471,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let people = await storage.getTrendingPeople();
       if (people.length === 0) {
-        res.json([]);
-        return;
+        const fallback = await getSnapshotFallbackPeople();
+        if (fallback && fallback.length > 0) {
+          console.log(`[API] hot-movers using snapshot fallback (${fallback.length} people)`);
+          people = fallback as any;
+        } else {
+          res.json([]);
+          return;
+        }
       }
 
       const prevRanks = await getSnapshotRankMap();
@@ -809,7 +815,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       }
       
-      const fullRefresh = getLastFullRefreshAt();
+      let fullRefresh = getLastFullRefreshAt();
 
       let liveUpdatedAt: Date | null = null;
       try {
@@ -818,6 +824,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .from(trendingPeople);
         if (liveTs?.ts) liveUpdatedAt = new Date(liveTs.ts);
       } catch (e) {}
+
+      if (!fullRefresh || !liveUpdatedAt) {
+        try {
+          const [latestCompleted] = await db
+            .select({ finishedAt: ingestionRuns.finishedAt })
+            .from(ingestionRuns)
+            .where(and(
+              eq(ingestionRuns.status, "completed"),
+              eq(ingestionRuns.scoreVersion, SCORE_VERSION),
+            ))
+            .orderBy(desc(ingestionRuns.startedAt))
+            .limit(1);
+          if (latestCompleted?.finishedAt) {
+            const completedDate = new Date(latestCompleted.finishedAt);
+            if (!fullRefresh) fullRefresh = completedDate;
+            if (!liveUpdatedAt) liveUpdatedAt = completedDate;
+          }
+        } catch (e) {}
+      }
 
       const lastScoredAt = fullRefresh || liveUpdatedAt;
 
@@ -842,12 +867,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { type } = req.params;
       let people = await storage.getTrendingPeople();
       
-      // If storage is empty, return empty array (ingestion job populates the database)
-      // DO NOT fetch mock data here - it corrupts real scores
       if (people.length === 0) {
-        console.log('[API] trending_people is empty for movers - waiting for ingestion job');
-        res.json([]);
-        return;
+        const fallback = await getSnapshotFallbackPeople();
+        if (fallback && fallback.length > 0) {
+          console.log(`[API] movers/${type} using snapshot fallback (${fallback.length} people)`);
+          people = fallback as any;
+        } else {
+          console.log('[API] trending_people is empty for movers - waiting for ingestion job');
+          res.json([]);
+          return;
+        }
       }
 
       const baselineMeta = await getBaselineDiagnostics(people.length);
@@ -1705,6 +1734,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: error.message || "Failed to get source health" });
     }
   });
+
+  // --- Shared: get fallback people from latest completed run snapshots ---
+  async function getSnapshotFallbackPeople(): Promise<Array<{
+    id: string;
+    name: string;
+    avatar: string | null;
+    bio: string | null;
+    category: string | null;
+    rank: number;
+    trendScore: number | null;
+    fameIndex: number | null;
+    change24h: number | null;
+    change7d: number | null;
+  }> | null> {
+    try {
+      const latestRun = await db
+        .select({ id: ingestionRuns.id, startedAt: ingestionRuns.startedAt })
+        .from(ingestionRuns)
+        .where(and(
+          eq(ingestionRuns.status, "completed"),
+          eq(ingestionRuns.scoreVersion, SCORE_VERSION),
+        ))
+        .orderBy(desc(ingestionRuns.startedAt))
+        .limit(1);
+
+      if (latestRun.length === 0) return null;
+
+      const fallbackRunId = latestRun[0].id;
+
+      const snapshotRows = await db.execute(sql`
+        SELECT 
+          ts.person_id,
+          ts.fame_index,
+          ts.trend_score,
+          tp.name,
+          tp.avatar,
+          tp.category,
+          tp.bio
+        FROM trend_snapshots ts
+        JOIN tracked_people tp ON tp.id = ts.person_id
+        WHERE ts.run_id = ${fallbackRunId}
+          AND ts.score_version = ${SCORE_VERSION}
+        ORDER BY ts.fame_index DESC NULLS LAST
+      `);
+
+      const rows = Array.isArray(snapshotRows) ? snapshotRows : (snapshotRows as any).rows ?? [];
+      if (rows.length === 0) return null;
+
+      return (rows as any[]).map((row: any, idx: number) => ({
+        id: row.person_id,
+        name: row.name,
+        avatar: row.avatar,
+        bio: row.bio,
+        category: row.category,
+        rank: idx + 1,
+        trendScore: row.trend_score,
+        fameIndex: row.fame_index,
+        change24h: null,
+        change7d: null,
+      }));
+    } catch (err) {
+      console.error("[fallback] Snapshot fallback people error:", err);
+      return null;
+    }
+  }
 
   // --- Snapshot-based fallback for empty trending_people ---
   async function buildSnapshotFallbackLeaderboard(
