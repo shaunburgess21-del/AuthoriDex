@@ -1,0 +1,156 @@
+Thanks — this Replit “result log” is helpful. Two things jump out immediately:
+
+They “marked tasks complete” but Weekly Jackpot wasn’t actually populated/admin-managed yet (their summary mentions Up/Down, H2H, Gainer only).
+
+Their seeding run timed out (they already felt the perf pain). That’s fine for now, but we should tighten it so it never hangs and is safe to run on-demand.
+
+Below is a clean follow-up prompt to Replit that assumes their work is mostly in place, doesn’t break existing schema, and focuses on the gaps + hardening.
+
+Replit Prompt — Fix Gaps + Harden Native Predict CMS (Post-Build Review)
+
+You’ve implemented most of the Native Predict CMS + API + frontend wiring. Before we proceed, please address the following specific gaps and corrections. Keep changes minimal and do not refactor Real-World Markets.
+
+A) Weekly Jackpot is Missing (Critical)
+
+In your “completed” summary you populated:
+
+100 Up/Down
+
+10 Head-to-Head
+
+6 Top Gainer
+
+…but there is no Weekly Jackpot CMS population and no evidence of Weekly Jackpot rows being created/managed in admin.
+
+Required:
+
+Add Weekly Jackpot tab in Prediction CMS (if not already present), with list/edit controls:
+
+Visibility: Live / Inactive (dimmed) / Archived (hidden) / Draft (admin only if exists)
+
+Featured toggle
+
+Linked Celebrity (single celebrity per jackpot instance OR an eligibility list—use current architecture)
+
+Week identifier / week ending timestamp
+
+Settle button (manual override), even if auto-settle exists
+
+Ensure Weekly Jackpot frontend widget pulls from real DB records (no placeholder/mock-only behavior).
+
+Add initial population logic:
+
+Either create one jackpot market per week with a selectable celebrity pool
+
+Or create eligibility rows per celebrity for the jackpot (preferred if widget already expects celeb selection)
+
+Whichever matches the existing Weekly Jackpot implementation—do not redesign UI.
+
+Acceptance test:
+
+Admin can set some celebs/jackpot entries to Inactive/Archived, and frontend updates immediately.
+
+B) Remove Mock Fallback in Production Mode (or Gate It)
+
+Right now PredictPage “uses DB data first and falls back to mock.” That’s good during development, but at launch it risks showing stale mocks if API fails.
+
+Required:
+
+Add an env flag (e.g. USE_MOCK_PREDICT_DATA) default false in production.
+
+If flag is false: no fallback to mock (show empty state + admin hint).
+
+If true (dev only): fallback allowed.
+
+C) Seeding Engine Must Never Timeout (Stability)
+
+You saw timeouts when running seed batches for 116 markets. We need to harden:
+
+Required improvements:
+
+Batch size + limits
+Add parameters:
+
+limitMarkets (default e.g. 25)
+
+limitOpsPerMarket (default e.g. 3–5)
+
+maxRuntimeMs (default e.g. 5000–8000ms)
+The seed run should stop gracefully once limits hit.
+
+DB efficiency
+Replace sequential per-entry inserts with:
+
+bulk insert per market where possible
+
+or use transactions per market (small transactions), not one giant transaction.
+
+Force mode
+Keep force=true, but enforce above limits so it remains safe.
+
+Idempotency per hour
+Prevent re-seeding the same market repeatedly in the same hour:
+
+store lastSeededAt on market (or a seed log table)
+
+if already seeded within the last X minutes, skip.
+
+Acceptance test:
+
+Admin “Run Seed Batch” never times out and always returns a summary like:
+
+marketsProcessed, entriesCreated, creditsAdded, skippedAlreadySeeded.
+
+D) Weekly Reset / Settlement Safety
+
+You added auto-settlement for expired markets. Ensure it only affects native weekly markets and not Real-World Markets.
+
+Required:
+
+Explicitly scope weekly reset to these native types only:
+
+Up/Down
+
+Head-to-Head
+
+Top Gainer
+
+Weekly Jackpot
+
+Ensure Real-World Markets are excluded by type/flag.
+
+Also: weekly reset should:
+
+close week at Sunday 23:59 (local/desired timezone) — confirm timezone used
+
+create next week cycle if required (or reset existing weekly markets cleanly)
+
+E) Admin UX Fixes / Consistency
+
+Make sure all four tabs use the same Visibility enum and featured toggle pattern.
+
+All “native predict” create/edit modals should not include: Title, Subtitle, Teaser, Slug, Resolution Date.
+
+Exception: if H2H/Top Gainer uses slug for dedicated URL pages, keep slug ONLY for those.
+
+Confirm that celebrity linking uses the existing leaderboard table already used in your seeding script (trackedPeople, not trendingPeople).
+
+F) Verification Checklist (What to show after fixes)
+
+After implementing, please provide:
+
+Screenshot or list output proving:
+
+Weekly Jackpot entries exist and are visible in Admin tab
+
+curl outputs for:
+
+/api/native-markets/updown
+
+/api/native-markets/h2h
+
+/api/native-markets/gainer
+
+plus the Weekly Jackpot endpoint you implement
+
+Admin “Run Seed Batch” returns a JSON summary and completes quickly.
