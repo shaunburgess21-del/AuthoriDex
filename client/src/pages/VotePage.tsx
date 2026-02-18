@@ -172,7 +172,7 @@ const curateProfilePolls: CurateProfilePoll[] = [
 ];
 
 
-const SECTION_TOGGLES = ["All", "Matchups", "Trending Polls", "Induction Queue", "Curate Profile"] as const;
+const SECTION_TOGGLES = ["All", "Matchups", "Trending Polls", "Underrated/Overrated", "Induction Queue", "Curate Profile"] as const;
 type SectionToggle = typeof SECTION_TOGGLES[number];
 
 const isGovernanceSection = (section: SectionToggle) => 
@@ -2058,6 +2058,7 @@ export default function VotePage() {
               >
                 {section === "Matchups" && <Swords className="h-4 w-4" />}
                 {section === "Trending Polls" && <MessageSquare className="h-4 w-4" />}
+                {section === "Underrated/Overrated" && <BarChart3 className="h-4 w-4" />}
                 {section === "Induction Queue" && <UserPlus className="h-4 w-4" />}
                 {section === "Curate Profile" && <ImageIcon className="h-4 w-4" />}
                 {section}
@@ -2345,7 +2346,7 @@ export default function VotePage() {
         )}
 
         {/* ZONE 2: Value Perception - Underrated/Overrated Section */}
-        {activeSection === "All" && (
+        {(activeSection === "All" || activeSection === "Underrated/Overrated") && (
         <section className="mb-10">
           <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
             <div className="flex items-center justify-between">
