@@ -7050,6 +7050,707 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
 
+  // ============ NATIVE PREDICTION MARKET ENDPOINTS ============
+
+  app.get("/api/native-markets/:type", async (req, res) => {
+    try {
+      const { type } = req.params;
+      const validTypes = ['jackpot', 'updown', 'h2h', 'gainer'];
+      if (!validTypes.includes(type)) {
+        return res.status(400).json({ error: "Invalid market type" });
+      }
+
+      const markets = await db.select()
+        .from(predictionMarkets)
+        .where(
+          and(
+            eq(predictionMarkets.marketType, type),
+            inArray(predictionMarkets.visibility, ["live", "inactive"])
+          )
+        )
+        .orderBy(desc(predictionMarkets.featured), predictionMarkets.category);
+
+      const marketIds = markets.map(m => m.id);
+      let entries: any[] = [];
+      if (marketIds.length > 0) {
+        entries = await db.select()
+          .from(marketEntries)
+          .where(inArray(marketEntries.marketId, marketIds))
+          .orderBy(marketEntries.displayOrder);
+      }
+
+      if (type === 'updown' || type === 'jackpot') {
+        const personIds = markets.map(m => m.personId).filter(Boolean) as string[];
+        let persons: any[] = [];
+        if (personIds.length > 0) {
+          persons = await db.select().from(trendingPeople).where(inArray(trendingPeople.id, personIds));
+        }
+        const personMap = Object.fromEntries(persons.map(p => [p.id, p]));
+
+        const enriched = markets.map(m => ({
+          ...m,
+          person: m.personId ? personMap[m.personId] || null : null,
+          entries: entries.filter(e => e.marketId === m.id),
+        }));
+        return res.json(enriched);
+      }
+
+      if (type === 'h2h' || type === 'gainer') {
+        const personEntryIds = entries.filter(e => e.personId).map(e => e.personId!);
+        let persons: any[] = [];
+        if (personEntryIds.length > 0) {
+          persons = await db.select().from(trendingPeople).where(inArray(trendingPeople.id, personEntryIds));
+        }
+        const personMap = Object.fromEntries(persons.map(p => [p.id, p]));
+
+        const enriched = markets.map(m => ({
+          ...m,
+          entries: entries.filter(e => e.marketId === m.id).map(e => ({
+            ...e,
+            person: e.personId ? personMap[e.personId] || null : null,
+          })),
+        }));
+        return res.json(enriched);
+      }
+
+      res.json(markets.map(m => ({
+        ...m,
+        entries: entries.filter(e => e.marketId === m.id),
+      })));
+    } catch (error: any) {
+      console.error("Error fetching native markets:", error.message);
+      res.status(500).json({ error: "Failed to fetch native markets" });
+    }
+  });
+
+  app.post("/api/admin/native-markets/generate-updown", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const now = new Date();
+      const dayOfWeek = now.getUTCDay();
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(now);
+      monday.setUTCDate(now.getUTCDate() + mondayOffset);
+      monday.setUTCHours(0, 0, 0, 0);
+
+      const sunday = new Date(monday);
+      sunday.setUTCDate(monday.getUTCDate() + 6);
+      sunday.setUTCHours(23, 59, 59, 999);
+
+      const jan1 = new Date(now.getUTCFullYear(), 0, 1);
+      const weekNumber = Math.ceil(((now.getTime() - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
+
+      const people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
+
+      const existing = await db.select({ personId: predictionMarkets.personId })
+        .from(predictionMarkets)
+        .where(and(
+          eq(predictionMarkets.marketType, "updown"),
+          eq(predictionMarkets.weekNumber, weekNumber)
+        ));
+      const existingPersonIds = new Set(existing.map(e => e.personId));
+
+      let created = 0;
+      for (const person of people) {
+        if (existingPersonIds.has(person.id)) continue;
+
+        const slug = `updown-${person.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
+
+        try {
+          const [market] = await db.insert(predictionMarkets).values({
+            marketType: "updown",
+            title: `${person.name}: Up or Down?`,
+            slug,
+            personId: person.id,
+            category: person.category?.toLowerCase() || "misc",
+            visibility: "live",
+            status: "OPEN",
+            startAt: monday,
+            endAt: sunday,
+            weekNumber,
+            seedParticipants: 0,
+            seedVolume: "0",
+            seedConfig: {
+              enabled: true,
+              targetParticipantsMin: 30,
+              targetParticipantsMax: 80,
+              targetPoolMin: 5000,
+              targetPoolMax: 15000,
+              distributionBias: { up: 55, down: 45 },
+            },
+            featured: false,
+          }).returning();
+
+          await db.insert(marketEntries).values([
+            {
+              marketId: market.id,
+              entryType: "custom",
+              label: "Up",
+              displayOrder: 0,
+              seedCount: 0,
+            },
+            {
+              marketId: market.id,
+              entryType: "custom",
+              label: "Down",
+              displayOrder: 1,
+              seedCount: 0,
+            },
+          ]);
+
+          created++;
+        } catch (slugErr: any) {
+          if (slugErr.code === '23505') {
+            const slugRetry = `${slug}-${randomUUID().slice(0, 6)}`;
+            const [market] = await db.insert(predictionMarkets).values({
+              marketType: "updown",
+              title: `${person.name}: Up or Down?`,
+              slug: slugRetry,
+              personId: person.id,
+              category: person.category?.toLowerCase() || "misc",
+              visibility: "live",
+              status: "OPEN",
+              startAt: monday,
+              endAt: sunday,
+              weekNumber,
+              seedParticipants: 0,
+              seedVolume: "0",
+              seedConfig: {
+                enabled: true,
+                targetParticipantsMin: 30,
+                targetParticipantsMax: 80,
+                targetPoolMin: 5000,
+                targetPoolMax: 15000,
+                distributionBias: { up: 55, down: 45 },
+              },
+              featured: false,
+            }).returning();
+
+            await db.insert(marketEntries).values([
+              { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0, seedCount: 0 },
+              { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1, seedCount: 0 },
+            ]);
+            created++;
+          } else {
+            throw slugErr;
+          }
+        }
+      }
+
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId!,
+        adminEmail: null,
+        actionType: "create",
+        targetTable: "prediction_markets",
+        targetId: "bulk-updown",
+        metadata: { type: "updown", created, weekNumber },
+      });
+
+      res.json({ success: true, created, weekNumber });
+    } catch (error: any) {
+      console.error("Error generating updown markets:", error.message);
+      res.status(500).json({ error: "Failed to generate updown markets" });
+    }
+  });
+
+  app.post("/api/admin/native-markets/h2h", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { personAId, personBId, category, visibility = "live", featured = false, seedConfig } = req.body;
+
+      if (!personAId || !personBId) {
+        return res.status(400).json({ error: "Both person A and person B are required" });
+      }
+      if (personAId === personBId) {
+        return res.status(400).json({ error: "Person A and B must be different" });
+      }
+
+      const [personA] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, personAId));
+      const [personB] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, personBId));
+
+      if (!personA || !personB) {
+        return res.status(404).json({ error: "One or both celebrities not found" });
+      }
+
+      const now = new Date();
+      const dayOfWeek = now.getUTCDay();
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(now);
+      monday.setUTCDate(now.getUTCDate() + mondayOffset);
+      monday.setUTCHours(0, 0, 0, 0);
+      const sunday = new Date(monday);
+      sunday.setUTCDate(monday.getUTCDate() + 6);
+      sunday.setUTCHours(23, 59, 59, 999);
+
+      const jan1 = new Date(now.getUTCFullYear(), 0, 1);
+      const weekNumber = Math.ceil(((now.getTime() - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
+
+      const title = `${personA.name} vs ${personB.name}`;
+      let slug = `h2h-${personA.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-vs-${personB.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
+
+      const defaultSeedConfig = {
+        enabled: true,
+        targetParticipantsMin: 40,
+        targetParticipantsMax: 120,
+        targetPoolMin: 10000,
+        targetPoolMax: 35000,
+        distributionBias: { personA: 50, personB: 50 },
+      };
+
+      let market: any;
+      try {
+        [market] = await db.insert(predictionMarkets).values({
+          marketType: "h2h",
+          title,
+          slug,
+          category: category || personA.category?.toLowerCase() || "misc",
+          visibility,
+          featured,
+          status: "OPEN",
+          startAt: monday,
+          endAt: sunday,
+          weekNumber,
+          seedParticipants: 0,
+          seedVolume: "0",
+          seedConfig: seedConfig || defaultSeedConfig,
+        }).returning();
+      } catch (slugErr: any) {
+        if (slugErr.code === '23505') {
+          slug = `${slug}-${randomUUID().slice(0, 6)}`;
+          [market] = await db.insert(predictionMarkets).values({
+            marketType: "h2h",
+            title,
+            slug,
+            category: category || personA.category?.toLowerCase() || "misc",
+            visibility,
+            featured,
+            status: "OPEN",
+            startAt: monday,
+            endAt: sunday,
+            weekNumber,
+            seedParticipants: 0,
+            seedVolume: "0",
+            seedConfig: seedConfig || defaultSeedConfig,
+          }).returning();
+        } else {
+          throw slugErr;
+        }
+      }
+
+      await db.insert(marketEntries).values([
+        {
+          marketId: market.id,
+          entryType: "person",
+          personId: personA.id,
+          label: personA.name,
+          displayOrder: 0,
+          seedCount: 0,
+          imageUrl: personA.avatar,
+        },
+        {
+          marketId: market.id,
+          entryType: "person",
+          personId: personB.id,
+          label: personB.name,
+          displayOrder: 1,
+          seedCount: 0,
+          imageUrl: personB.avatar,
+        },
+      ]);
+
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId!,
+        adminEmail: null,
+        actionType: "create",
+        targetTable: "prediction_markets",
+        targetId: market.id,
+        metadata: { type: "h2h", title, personAId, personBId },
+      });
+
+      res.json(market);
+    } catch (error: any) {
+      console.error("Error creating H2H market:", error.message);
+      res.status(500).json({ error: "Failed to create H2H market" });
+    }
+  });
+
+  app.post("/api/admin/native-markets/gainer", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { category, personIds, visibility = "live", featured = false, seedConfig } = req.body;
+
+      const validCategories = ['tech', 'politics', 'business', 'sports', 'creator', 'music'];
+      if (!validCategories.includes(category)) {
+        return res.status(400).json({ error: "Invalid category" });
+      }
+      if (!personIds || !Array.isArray(personIds) || personIds.length === 0) {
+        return res.status(400).json({ error: "At least one person ID required" });
+      }
+      if (personIds.length > 20) {
+        return res.status(400).json({ error: "Maximum 20 celebrities per gainer market" });
+      }
+
+      const now = new Date();
+      const dayOfWeek = now.getUTCDay();
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(now);
+      monday.setUTCDate(now.getUTCDate() + mondayOffset);
+      monday.setUTCHours(0, 0, 0, 0);
+      const sunday = new Date(monday);
+      sunday.setUTCDate(monday.getUTCDate() + 6);
+      sunday.setUTCHours(23, 59, 59, 999);
+
+      const jan1 = new Date(now.getUTCFullYear(), 0, 1);
+      const weekNumber = Math.ceil(((now.getTime() - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
+
+      const [existingGainer] = await db.select().from(predictionMarkets).where(and(
+        eq(predictionMarkets.marketType, "gainer"),
+        eq(predictionMarkets.category, category),
+        eq(predictionMarkets.weekNumber, weekNumber)
+      ));
+      if (existingGainer) {
+        return res.status(409).json({ error: `A Top Gainer market for ${category} already exists this week`, existingId: existingGainer.id });
+      }
+
+      const persons = await db.select().from(trackedPeople).where(inArray(trackedPeople.id, personIds));
+      if (persons.length !== personIds.length) {
+        return res.status(400).json({ error: "Some person IDs not found" });
+      }
+
+      const title = `Top Gainer: ${category.charAt(0).toUpperCase() + category.slice(1)}`;
+      let slug = `gainer-${category}-week-${weekNumber}`;
+
+      const defaultSeedConfig = {
+        enabled: true,
+        targetParticipantsMin: 25,
+        targetParticipantsMax: 60,
+        targetPoolMin: 8000,
+        targetPoolMax: 20000,
+        distributionBias: {},
+      };
+
+      let market: any;
+      try {
+        [market] = await db.insert(predictionMarkets).values({
+          marketType: "gainer",
+          title,
+          slug,
+          category,
+          visibility,
+          featured,
+          status: "OPEN",
+          startAt: monday,
+          endAt: sunday,
+          weekNumber,
+          seedParticipants: 0,
+          seedVolume: "0",
+          seedConfig: seedConfig || defaultSeedConfig,
+        }).returning();
+      } catch (slugErr: any) {
+        if (slugErr.code === '23505') {
+          slug = `${slug}-${randomUUID().slice(0, 6)}`;
+          [market] = await db.insert(predictionMarkets).values({
+            marketType: "gainer",
+            title,
+            slug,
+            category,
+            visibility,
+            featured,
+            status: "OPEN",
+            startAt: monday,
+            endAt: sunday,
+            weekNumber,
+            seedParticipants: 0,
+            seedVolume: "0",
+            seedConfig: seedConfig || defaultSeedConfig,
+          }).returning();
+        } else {
+          throw slugErr;
+        }
+      }
+
+      const entryValues = persons.map((person, idx) => ({
+        marketId: market.id,
+        entryType: "person" as const,
+        personId: person.id,
+        label: person.name,
+        displayOrder: idx,
+        seedCount: 0,
+        imageUrl: person.avatar,
+      }));
+
+      await db.insert(marketEntries).values(entryValues);
+
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId!,
+        adminEmail: null,
+        actionType: "create",
+        targetTable: "prediction_markets",
+        targetId: market.id,
+        metadata: { type: "gainer", category, personCount: personIds.length },
+      });
+
+      res.json(market);
+    } catch (error: any) {
+      console.error("Error creating gainer market:", error.message);
+      res.status(500).json({ error: "Failed to create gainer market" });
+    }
+  });
+
+  app.patch("/api/admin/native-markets/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { visibility, featured, seedConfig, inactiveMessage } = req.body;
+
+      const [existing] = await db.select().from(predictionMarkets).where(eq(predictionMarkets.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+
+      const updates: any = { updatedAt: new Date() };
+      if (visibility !== undefined) updates.visibility = visibility;
+      if (featured !== undefined) updates.featured = featured;
+      if (seedConfig !== undefined) updates.seedConfig = seedConfig;
+      if (inactiveMessage !== undefined) updates.inactiveMessage = inactiveMessage;
+
+      const [updated] = await db.update(predictionMarkets)
+        .set(updates)
+        .where(eq(predictionMarkets.id, id))
+        .returning();
+
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId!,
+        adminEmail: null,
+        actionType: "update",
+        targetTable: "prediction_markets",
+        targetId: id,
+        metadata: { type: existing.marketType, changes: Object.keys(updates) },
+      });
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating native market:", error.message);
+      res.status(500).json({ error: "Failed to update market" });
+    }
+  });
+
+  app.post("/api/admin/native-markets/bulk-visibility", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { marketIds, visibility } = req.body;
+      if (!marketIds?.length || !['live', 'inactive', 'archived', 'draft'].includes(visibility)) {
+        return res.status(400).json({ error: "Invalid parameters" });
+      }
+
+      await db.update(predictionMarkets)
+        .set({ visibility, updatedAt: new Date() })
+        .where(inArray(predictionMarkets.id, marketIds));
+
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId!,
+        adminEmail: null,
+        actionType: "update",
+        targetTable: "prediction_markets",
+        targetId: "bulk",
+        metadata: { visibility, count: marketIds.length },
+      });
+
+      res.json({ success: true, updated: marketIds.length });
+    } catch (error: any) {
+      console.error("Error bulk updating visibility:", error.message);
+      res.status(500).json({ error: "Failed to bulk update" });
+    }
+  });
+
+  app.delete("/api/admin/native-markets/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const [existing] = await db.select().from(predictionMarkets).where(eq(predictionMarkets.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+
+      await db.delete(predictionMarkets).where(eq(predictionMarkets.id, id));
+
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId!,
+        adminEmail: null,
+        actionType: "delete",
+        targetTable: "prediction_markets",
+        targetId: id,
+        metadata: { type: existing.marketType, title: existing.title },
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting native market:", error.message);
+      res.status(500).json({ error: "Failed to delete market" });
+    }
+  });
+
+  app.post("/api/admin/native-markets/:id/settle", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { winnerEntryId, notes } = req.body;
+
+      const [market] = await db.select().from(predictionMarkets).where(eq(predictionMarkets.id, id));
+      if (!market) return res.status(404).json({ error: "Market not found" });
+      if (market.status === "RESOLVED") return res.status(400).json({ error: "Market already resolved" });
+
+      await db.update(predictionMarkets).set({
+        status: "RESOLVED",
+        resolvedAt: new Date(),
+        settledBy: req.userId!,
+        resolutionNotes: notes,
+        updatedAt: new Date(),
+      }).where(eq(predictionMarkets.id, id));
+
+      if (winnerEntryId) {
+        await db.update(marketEntries)
+          .set({ resolutionStatus: "loser" })
+          .where(and(eq(marketEntries.marketId, id), sql`${marketEntries.id} != ${winnerEntryId}`));
+        await db.update(marketEntries)
+          .set({ resolutionStatus: "winner" })
+          .where(eq(marketEntries.id, winnerEntryId));
+      }
+
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId!,
+        adminEmail: null,
+        actionType: "update",
+        targetTable: "prediction_markets",
+        targetId: id,
+        metadata: { action: "settle", winnerEntryId, type: market.marketType },
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error settling market:", error.message);
+      res.status(500).json({ error: "Failed to settle market" });
+    }
+  });
+
+  app.patch("/api/admin/native-markets/h2h/:id/entries", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { personAId, personBId } = req.body;
+
+      const [market] = await db.select().from(predictionMarkets).where(
+        and(eq(predictionMarkets.id, id), eq(predictionMarkets.marketType, "h2h"))
+      );
+      if (!market) return res.status(404).json({ error: "H2H market not found" });
+
+      const [personA] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, personAId));
+      const [personB] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, personBId));
+      if (!personA || !personB) return res.status(404).json({ error: "Person not found" });
+
+      await db.delete(marketEntries).where(eq(marketEntries.marketId, id));
+
+      await db.insert(marketEntries).values([
+        { marketId: id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, seedCount: 0, imageUrl: personA.avatar },
+        { marketId: id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, seedCount: 0, imageUrl: personB.avatar },
+      ]);
+
+      await db.update(predictionMarkets).set({
+        title: `${personA.name} vs ${personB.name}`,
+        updatedAt: new Date(),
+      }).where(eq(predictionMarkets.id, id));
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error updating H2H entries:", error.message);
+      res.status(500).json({ error: "Failed to update entries" });
+    }
+  });
+
+  app.patch("/api/admin/native-markets/gainer/:id/entries", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { personIds } = req.body;
+
+      if (!personIds?.length || personIds.length > 20) {
+        return res.status(400).json({ error: "1-20 person IDs required" });
+      }
+
+      const [market] = await db.select().from(predictionMarkets).where(
+        and(eq(predictionMarkets.id, id), eq(predictionMarkets.marketType, "gainer"))
+      );
+      if (!market) return res.status(404).json({ error: "Gainer market not found" });
+
+      const persons = await db.select().from(trackedPeople).where(inArray(trackedPeople.id, personIds));
+      if (persons.length !== personIds.length) {
+        return res.status(400).json({ error: "Some person IDs not found" });
+      }
+
+      await db.delete(marketEntries).where(eq(marketEntries.marketId, id));
+
+      const entryValues = persons.map((person, idx) => ({
+        marketId: id,
+        entryType: "person" as const,
+        personId: person.id,
+        label: person.name,
+        displayOrder: idx,
+        seedCount: 0,
+        imageUrl: person.avatar,
+      }));
+
+      await db.insert(marketEntries).values(entryValues);
+
+      await db.update(predictionMarkets).set({ updatedAt: new Date() }).where(eq(predictionMarkets.id, id));
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error updating gainer entries:", error.message);
+      res.status(500).json({ error: "Failed to update entries" });
+    }
+  });
+
+  app.post("/api/admin/seed-engine/run", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { runSeedBatch } = await import("./jobs/seed-engine");
+      const result = await runSeedBatch(true);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error running seed batch:", error.message);
+      res.status(500).json({ error: "Failed to run seed batch" });
+    }
+  });
+
+  app.post("/api/admin/weekly-reset", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const now = new Date();
+      const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      const currentWeek = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+
+      const openMarkets = await db.select()
+        .from(predictionMarkets)
+        .where(
+          and(
+            eq(predictionMarkets.status, "OPEN"),
+            inArray(predictionMarkets.marketType, ["updown", "h2h", "gainer", "jackpot"])
+          )
+        );
+
+      let settled = 0;
+      for (const market of openMarkets) {
+        if (market.weekNumber && market.weekNumber < currentWeek) {
+          await db.update(predictionMarkets).set({
+            status: "RESOLVED",
+            resolvedAt: new Date(),
+            settledBy: req.userId!,
+            resolutionNotes: "Auto-settled by weekly reset",
+            updatedAt: new Date(),
+          }).where(eq(predictionMarkets.id, market.id));
+          settled++;
+        }
+      }
+
+      res.json({ settled, currentWeek });
+    } catch (error: any) {
+      console.error("Error running weekly reset:", error.message);
+      res.status(500).json({ error: "Failed to run weekly reset" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

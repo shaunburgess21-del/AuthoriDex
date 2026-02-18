@@ -151,6 +151,12 @@ interface PredictionMarket {
   voidReason: string | null;
   rules: string | null;
   metadata: any;
+  personId: string | null;
+  visibility: string | null;
+  isLive: boolean | null;
+  inactiveMessage: string | null;
+  seedConfig: any;
+  weekNumber: number | null;
 }
 
 interface MarketEntryForm {
@@ -1308,6 +1314,21 @@ export default function AdminDashboard() {
   const [settleMarketId, setSettleMarketId] = useState<string | null>(null);
   const [voidMarketId, setVoidMarketId] = useState<string | null>(null);
 
+  const [nativeVisFilter, setNativeVisFilter] = useState("all");
+  const [nativeCatFilter, setNativeCatFilter] = useState("all");
+  const [nativeSearchQuery, setNativeSearchQuery] = useState("");
+  const [selectedNativeIds, setSelectedNativeIds] = useState<Set<string>>(new Set());
+  const [h2hModalOpen, setH2hModalOpen] = useState(false);
+  const [gainerModalOpen, setGainerModalOpen] = useState(false);
+  const [h2hPersonASearch, setH2hPersonASearch] = useState("");
+  const [h2hPersonBSearch, setH2hPersonBSearch] = useState("");
+  const [h2hPersonAId, setH2hPersonAId] = useState("");
+  const [h2hPersonBId, setH2hPersonBId] = useState("");
+  const [h2hCategory, setH2hCategory] = useState("misc");
+  const [gainerCategory, setGainerCategory] = useState("tech");
+  const [gainerPersonIds, setGainerPersonIds] = useState<string[]>([]);
+  const [gainerPersonSearch, setGainerPersonSearch] = useState("");
+
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS (React rules of hooks)
   
   // Fetch admin stats - only when user is admin
@@ -1377,7 +1398,7 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error("Failed to fetch celebrities");
       return res.json();
     },
-    enabled: isAdmin && (activeSection === "celebrities" || activeSection === "voting"),
+    enabled: isAdmin && (activeSection === "celebrities" || activeSection === "voting" || activeSection === "predictions"),
   });
 
   // Fetch score breakdown for a celebrity
@@ -1816,6 +1837,124 @@ export default function AdminDashboard() {
     onError: (error: any) => {
       toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
     },
+  });
+
+  const generateUpdownMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetchWithAuth("/api/admin/native-markets/generate-updown", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to generate");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Generated Up/Down Markets", description: `Created ${data.created} markets for week ${data.weekNumber}` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to generate markets", variant: "destructive" }),
+  });
+
+  const bulkVisibilityMutation = useMutation({
+    mutationFn: async ({ marketIds, visibility }: { marketIds: string[]; visibility: string }) => {
+      const res = await fetchWithAuth("/api/admin/native-markets/bulk-visibility", {
+        method: "POST",
+        body: JSON.stringify({ marketIds, visibility }),
+      });
+      if (!res.ok) throw new Error("Failed to update");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Updated", description: `${data.updated} markets updated` });
+      setSelectedNativeIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to update visibility", variant: "destructive" }),
+  });
+
+  const updateNativeMarketMutation = useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string; visibility?: string; featured?: boolean; inactiveMessage?: string }) => {
+      const res = await fetchWithAuth(`/api/admin/native-markets/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) throw new Error("Failed to update");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to update market", variant: "destructive" }),
+  });
+
+  const createH2hMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await fetchWithAuth("/api/admin/native-markets/h2h", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to create");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Created", description: "Head-to-Head battle created" });
+      setH2hModalOpen(false);
+      setH2hPersonAId(""); setH2hPersonBId("");
+      setH2hPersonASearch(""); setH2hPersonBSearch("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const createGainerMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await fetchWithAuth("/api/admin/native-markets/gainer", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to create");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Created", description: "Top Gainer market created" });
+      setGainerModalOpen(false);
+      setGainerPersonIds([]);
+      setGainerPersonSearch("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteNativeMarketMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetchWithAuth(`/api/admin/native-markets/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Deleted", description: "Market removed" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to delete", variant: "destructive" }),
+  });
+
+  const settleNativeMarketMutation = useMutation({
+    mutationFn: async ({ id, winnerEntryId, notes }: { id: string; winnerEntryId?: string; notes?: string }) => {
+      const res = await fetchWithAuth(`/api/admin/native-markets/${id}/settle`, {
+        method: "POST",
+        body: JSON.stringify({ winnerEntryId, notes }),
+      });
+      if (!res.ok) throw new Error("Failed to settle");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Settled", description: "Market resolved" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to settle", variant: "destructive" }),
   });
 
   const createPollMutation = useMutation({
@@ -2856,64 +2995,425 @@ export default function AdminDashboard() {
 
               <TabsContent value="weekly-jackpot" className="mt-4">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Weekly Jackpot</CardTitle>
-                    <CardDescription>Predict exact fame scores for weekly prizes</CardDescription>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2">
+                    <div>
+                      <CardTitle>Weekly Jackpot</CardTitle>
+                      <CardDescription>Jackpot eligibility tied to all leaderboard celebrities</CardDescription>
+                    </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Trophy className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>Weekly Jackpot predictions coming soon</p>
+                    <div className="flex items-center gap-2 mb-4 flex-wrap">
+                      <Select value={nativeVisFilter} onValueChange={setNativeVisFilter}>
+                        <SelectTrigger className="w-[140px]" data-testid="select-jackpot-vis-filter">
+                          <SelectValue placeholder="Visibility" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Status</SelectItem>
+                          <SelectItem value="live">Live</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                          <SelectItem value="archived">Archived</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input placeholder="Search..." value={nativeSearchQuery} onChange={(e) => setNativeSearchQuery(e.target.value)} className="w-[200px]" data-testid="input-jackpot-search" />
                     </div>
+                    {marketsLoading ? (
+                      <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+                    ) : (() => {
+                      const jMarkets = (markets || []).filter(m => m.marketType === "jackpot").filter(m => {
+                        if (nativeVisFilter !== "all" && m.visibility !== nativeVisFilter) return false;
+                        if (nativeSearchQuery && !m.title?.toLowerCase().includes(nativeSearchQuery.toLowerCase())) return false;
+                        return true;
+                      });
+                      return jMarkets.length > 0 ? (
+                        <div className="space-y-2">
+                          {jMarkets.map((market) => (
+                            <div key={market.id} className="flex items-center justify-between p-3 rounded-lg border gap-3" data-testid={`jackpot-row-${market.id}`}>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium truncate text-sm">{market.title}</p>
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                  <Badge variant={market.visibility === "live" ? "default" : market.visibility === "inactive" ? "secondary" : "outline"} className="text-xs">{market.visibility}</Badge>
+                                  <Badge variant="outline" className="text-xs">{market.status}</Badge>
+                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
+                                  <span className="text-xs text-muted-foreground">Pool: {Number(market.seedVolume || 0).toLocaleString()}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Select value={market.visibility || "live"} onValueChange={(v) => updateNativeMarketMutation.mutate({ id: market.id, visibility: v })}>
+                                  <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="live">Live</SelectItem>
+                                    <SelectItem value="inactive">Inactive</SelectItem>
+                                    <SelectItem value="archived">Archived</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Button variant="ghost" size="icon" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
+                                {market.status === "OPEN" && <Button variant="ghost" size="icon" onClick={() => settleNativeMarketMutation.mutate({ id: market.id })}><Gavel className="h-4 w-4" /></Button>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Trophy className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                          <p>No jackpot markets found. Generate Up/Down markets first.</p>
+                        </div>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               </TabsContent>
 
               <TabsContent value="weekly-updown" className="mt-4">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Weekly Up/Down</CardTitle>
-                    <CardDescription>Will a celebrity's fame score go up or down this week?</CardDescription>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2">
+                    <div>
+                      <CardTitle>Weekly Up/Down</CardTitle>
+                      <CardDescription>Auto-generated cards for all leaderboard celebrities</CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {selectedNativeIds.size > 0 && (
+                        <Select onValueChange={(v) => bulkVisibilityMutation.mutate({ marketIds: Array.from(selectedNativeIds), visibility: v })}>
+                          <SelectTrigger className="w-[130px]" data-testid="select-bulk-vis"><SelectValue placeholder={`Bulk (${selectedNativeIds.size})`} /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="live">Set Live</SelectItem>
+                            <SelectItem value="inactive">Set Inactive</SelectItem>
+                            <SelectItem value="archived">Set Archived</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                      <Button onClick={() => generateUpdownMutation.mutate()} disabled={generateUpdownMutation.isPending} size="sm" data-testid="button-generate-updown">
+                        {generateUpdownMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+                        Generate All
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-center py-8 text-muted-foreground">
-                      <ArrowUpDown className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>Weekly Up/Down predictions coming soon</p>
+                    <div className="flex items-center gap-2 mb-4 flex-wrap">
+                      <Select value={nativeVisFilter} onValueChange={setNativeVisFilter}>
+                        <SelectTrigger className="w-[140px]" data-testid="select-updown-vis-filter"><SelectValue placeholder="Visibility" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Status</SelectItem>
+                          <SelectItem value="live">Live</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                          <SelectItem value="archived">Archived</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={nativeCatFilter} onValueChange={setNativeCatFilter}>
+                        <SelectTrigger className="w-[140px]" data-testid="select-updown-cat-filter"><SelectValue placeholder="Category" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Categories</SelectItem>
+                          <SelectItem value="tech">Tech</SelectItem>
+                          <SelectItem value="music">Music</SelectItem>
+                          <SelectItem value="sports">Sports</SelectItem>
+                          <SelectItem value="politics">Politics</SelectItem>
+                          <SelectItem value="business">Business</SelectItem>
+                          <SelectItem value="creator">Creator</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input placeholder="Search celebrities..." value={nativeSearchQuery} onChange={(e) => setNativeSearchQuery(e.target.value)} className="w-[200px]" data-testid="input-updown-search" />
+                      <span className="text-xs text-muted-foreground ml-auto">{(markets || []).filter(m => m.marketType === "updown").length} total</span>
                     </div>
+                    {marketsLoading ? (
+                      <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+                    ) : (() => {
+                      const filtered = (markets || []).filter(m => m.marketType === "updown").filter(m => {
+                        if (nativeVisFilter !== "all" && m.visibility !== nativeVisFilter) return false;
+                        if (nativeCatFilter !== "all" && m.category !== nativeCatFilter) return false;
+                        if (nativeSearchQuery && !m.title?.toLowerCase().includes(nativeSearchQuery.toLowerCase())) return false;
+                        return true;
+                      });
+                      return filtered.length > 0 ? (
+                        <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                          {filtered.map((market) => (
+                            <div key={market.id} className="flex items-center justify-between p-3 rounded-lg border gap-3" data-testid={`updown-row-${market.id}`}>
+                              <div className="flex items-center gap-2">
+                                <input type="checkbox" checked={selectedNativeIds.has(market.id)} onChange={(e) => { const next = new Set(selectedNativeIds); e.target.checked ? next.add(market.id) : next.delete(market.id); setSelectedNativeIds(next); }} className="rounded" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium truncate text-sm">{market.title}</p>
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                  <Badge variant={market.visibility === "live" ? "default" : market.visibility === "inactive" ? "secondary" : "outline"} className="text-xs">{market.visibility}</Badge>
+                                  {market.category && <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>}
+                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
+                                  <span className="text-xs text-muted-foreground">Pool: {Number(market.seedVolume || 0).toLocaleString()} | Wk {market.weekNumber || "-"}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Select value={market.visibility || "live"} onValueChange={(v) => updateNativeMarketMutation.mutate({ id: market.id, visibility: v })}>
+                                  <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="live">Live</SelectItem>
+                                    <SelectItem value="inactive">Inactive</SelectItem>
+                                    <SelectItem value="archived">Archived</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Button variant="ghost" size="icon" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
+                                <Button variant="ghost" size="icon" onClick={() => deleteNativeMarketMutation.mutate(market.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <ArrowUpDown className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                          <p>No Up/Down markets yet</p>
+                          <Button className="mt-4" onClick={() => generateUpdownMutation.mutate()} data-testid="button-generate-updown-empty">
+                            <Plus className="h-4 w-4 mr-2" />Generate for All Celebrities
+                          </Button>
+                        </div>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               </TabsContent>
 
               <TabsContent value="head-to-head" className="mt-4">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Head-to-Head Battles</CardTitle>
-                    <CardDescription>Predict which celebrity will have a higher fame score</CardDescription>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2">
+                    <div>
+                      <CardTitle>Head-to-Head Battles</CardTitle>
+                      <CardDescription>Curated matchups between two celebrities</CardDescription>
+                    </div>
+                    <Button onClick={() => { setH2hPersonAId(""); setH2hPersonBId(""); setH2hPersonASearch(""); setH2hPersonBSearch(""); setH2hCategory("misc"); setH2hModalOpen(true); }} size="sm" data-testid="button-create-h2h">
+                      <Plus className="h-4 w-4 mr-1" />New Battle
+                    </Button>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-center py-8 text-muted-foreground">
-                      <ArrowUpDown className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>Head-to-Head Battle predictions coming soon</p>
-                    </div>
+                    {marketsLoading ? (
+                      <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+                    ) : (() => {
+                      const h2hList = (markets || []).filter(m => m.marketType === "h2h");
+                      return h2hList.length > 0 ? (
+                        <div className="space-y-2">
+                          {h2hList.map((market) => (
+                            <div key={market.id} className="flex items-center justify-between p-3 rounded-lg border gap-3" data-testid={`h2h-row-${market.id}`}>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium truncate">{market.title}</p>
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                  <Badge variant={market.visibility === "live" ? "default" : market.visibility === "inactive" ? "secondary" : "outline"} className="text-xs">{market.visibility}</Badge>
+                                  <Badge variant="outline" className="text-xs">{market.status}</Badge>
+                                  {market.category && <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>}
+                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
+                                  <span className="text-xs text-muted-foreground">Pool: {Number(market.seedVolume || 0).toLocaleString()} | Wk {market.weekNumber || "-"}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Select value={market.visibility || "live"} onValueChange={(v) => updateNativeMarketMutation.mutate({ id: market.id, visibility: v })}>
+                                  <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="live">Live</SelectItem>
+                                    <SelectItem value="inactive">Inactive</SelectItem>
+                                    <SelectItem value="archived">Archived</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Button variant="ghost" size="icon" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
+                                {market.status === "OPEN" && <Button variant="ghost" size="icon" onClick={() => settleNativeMarketMutation.mutate({ id: market.id })}><Gavel className="h-4 w-4" /></Button>}
+                                <Button variant="ghost" size="icon" onClick={() => deleteNativeMarketMutation.mutate(market.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                          <p>No Head-to-Head battles yet</p>
+                          <Button className="mt-4" onClick={() => { setH2hPersonAId(""); setH2hPersonBId(""); setH2hModalOpen(true); }} data-testid="button-create-first-h2h">
+                            <Plus className="h-4 w-4 mr-2" />Create First Battle
+                          </Button>
+                        </div>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               </TabsContent>
 
               <TabsContent value="top-gainer" className="mt-4">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Top Gainer Predictions</CardTitle>
-                    <CardDescription>Predict which celebrity will gain the most fame this week</CardDescription>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2">
+                    <div>
+                      <CardTitle>Top Gainer Predictions</CardTitle>
+                      <CardDescription>One per category: Tech, Politics, Business, Sports, Creator, Music</CardDescription>
+                    </div>
+                    <Button onClick={() => { setGainerPersonIds([]); setGainerPersonSearch(""); setGainerCategory("tech"); setGainerModalOpen(true); }} size="sm" data-testid="button-create-gainer">
+                      <Plus className="h-4 w-4 mr-1" />New Gainer
+                    </Button>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-center py-8 text-muted-foreground">
-                      <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>Top Gainer predictions coming soon</p>
-                    </div>
+                    {marketsLoading ? (
+                      <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+                    ) : (() => {
+                      const gainerList = (markets || []).filter(m => m.marketType === "gainer");
+                      return gainerList.length > 0 ? (
+                        <div className="space-y-2">
+                          {gainerList.map((market) => (
+                            <div key={market.id} className="flex items-center justify-between p-3 rounded-lg border gap-3" data-testid={`gainer-row-${market.id}`}>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium truncate">{market.title}</p>
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                  <Badge variant={market.visibility === "live" ? "default" : market.visibility === "inactive" ? "secondary" : "outline"} className="text-xs">{market.visibility}</Badge>
+                                  <Badge variant="outline" className="text-xs">{market.status}</Badge>
+                                  <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>
+                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
+                                  <span className="text-xs text-muted-foreground">Pool: {Number(market.seedVolume || 0).toLocaleString()} | Wk {market.weekNumber || "-"}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Select value={market.visibility || "live"} onValueChange={(v) => updateNativeMarketMutation.mutate({ id: market.id, visibility: v })}>
+                                  <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="live">Live</SelectItem>
+                                    <SelectItem value="inactive">Inactive</SelectItem>
+                                    <SelectItem value="archived">Archived</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Button variant="ghost" size="icon" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
+                                {market.status === "OPEN" && <Button variant="ghost" size="icon" onClick={() => settleNativeMarketMutation.mutate({ id: market.id })}><Gavel className="h-4 w-4" /></Button>}
+                                <Button variant="ghost" size="icon" onClick={() => deleteNativeMarketMutation.mutate(market.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                          <p>No Top Gainer markets yet</p>
+                          <Button className="mt-4" onClick={() => { setGainerPersonIds([]); setGainerCategory("tech"); setGainerModalOpen(true); }} data-testid="button-create-first-gainer">
+                            <Plus className="h-4 w-4 mr-2" />Create First Market
+                          </Button>
+                        </div>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               </TabsContent>
             </Tabs>
+
+            {/* H2H Create Modal */}
+            <Dialog open={h2hModalOpen} onOpenChange={setH2hModalOpen}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Create Head-to-Head Battle</DialogTitle>
+                  <DialogDescription>Select two celebrities to create a matchup</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Celebrity A</Label>
+                    <Input placeholder="Search celebrity..." value={h2hPersonASearch} onChange={(e) => setH2hPersonASearch(e.target.value)} data-testid="input-h2h-person-a" />
+                    {h2hPersonASearch && (celebrities || []).filter((c: any) => c.name.toLowerCase().includes(h2hPersonASearch.toLowerCase()) && c.id !== h2hPersonBId).length > 0 && (
+                      <div className="mt-1 max-h-32 overflow-y-auto border rounded-md">
+                        {(celebrities || []).filter((c: any) => c.name.toLowerCase().includes(h2hPersonASearch.toLowerCase()) && c.id !== h2hPersonBId).slice(0, 8).map((c: any) => (
+                          <button key={c.id} className="w-full text-left px-3 py-2 text-sm hover-elevate flex items-center gap-2" onClick={() => { setH2hPersonAId(c.id); setH2hPersonASearch(c.name); }} data-testid={`h2h-persona-option-${c.id}`}>
+                            <Avatar className="h-6 w-6"><AvatarImage src={c.avatar} /><AvatarFallback>{c.name[0]}</AvatarFallback></Avatar>
+                            <span>{c.name}</span>
+                            <Badge variant="outline" className="text-xs ml-auto capitalize">{c.category}</Badge>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {h2hPersonAId && <p className="text-xs text-green-500 mt-1">Selected: {(celebrities || []).find((c: any) => c.id === h2hPersonAId)?.name}</p>}
+                  </div>
+                  <div>
+                    <Label>Celebrity B</Label>
+                    <Input placeholder="Search celebrity..." value={h2hPersonBSearch} onChange={(e) => setH2hPersonBSearch(e.target.value)} data-testid="input-h2h-person-b" />
+                    {h2hPersonBSearch && (celebrities || []).filter((c: any) => c.name.toLowerCase().includes(h2hPersonBSearch.toLowerCase()) && c.id !== h2hPersonAId).length > 0 && (
+                      <div className="mt-1 max-h-32 overflow-y-auto border rounded-md">
+                        {(celebrities || []).filter((c: any) => c.name.toLowerCase().includes(h2hPersonBSearch.toLowerCase()) && c.id !== h2hPersonAId).slice(0, 8).map((c: any) => (
+                          <button key={c.id} className="w-full text-left px-3 py-2 text-sm hover-elevate flex items-center gap-2" onClick={() => { setH2hPersonBId(c.id); setH2hPersonBSearch(c.name); }} data-testid={`h2h-personb-option-${c.id}`}>
+                            <Avatar className="h-6 w-6"><AvatarImage src={c.avatar} /><AvatarFallback>{c.name[0]}</AvatarFallback></Avatar>
+                            <span>{c.name}</span>
+                            <Badge variant="outline" className="text-xs ml-auto capitalize">{c.category}</Badge>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {h2hPersonBId && <p className="text-xs text-green-500 mt-1">Selected: {(celebrities || []).find((c: any) => c.id === h2hPersonBId)?.name}</p>}
+                  </div>
+                  <div>
+                    <Label>Category</Label>
+                    <Select value={h2hCategory} onValueChange={setH2hCategory}>
+                      <SelectTrigger data-testid="select-h2h-category"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="tech">Tech</SelectItem>
+                        <SelectItem value="music">Music</SelectItem>
+                        <SelectItem value="sports">Sports</SelectItem>
+                        <SelectItem value="politics">Politics</SelectItem>
+                        <SelectItem value="business">Business</SelectItem>
+                        <SelectItem value="creator">Creator</SelectItem>
+                        <SelectItem value="misc">Misc</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setH2hModalOpen(false)} data-testid="button-cancel-h2h">Cancel</Button>
+                  <Button onClick={() => createH2hMutation.mutate({ personAId: h2hPersonAId, personBId: h2hPersonBId, category: h2hCategory })} disabled={!h2hPersonAId || !h2hPersonBId || createH2hMutation.isPending} data-testid="button-submit-h2h">
+                    {createH2hMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+                    Create Battle
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Gainer Create Modal */}
+            <Dialog open={gainerModalOpen} onOpenChange={setGainerModalOpen}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Create Top Gainer Market</DialogTitle>
+                  <DialogDescription>Select a category and link up to 20 celebrities</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Category</Label>
+                    <Select value={gainerCategory} onValueChange={setGainerCategory}>
+                      <SelectTrigger data-testid="select-gainer-category"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="tech">Tech</SelectItem>
+                        <SelectItem value="music">Music</SelectItem>
+                        <SelectItem value="sports">Sports</SelectItem>
+                        <SelectItem value="politics">Politics</SelectItem>
+                        <SelectItem value="business">Business</SelectItem>
+                        <SelectItem value="creator">Creator</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Linked Celebrities ({gainerPersonIds.length}/20)</Label>
+                    <Input placeholder="Search to add celebrities..." value={gainerPersonSearch} onChange={(e) => setGainerPersonSearch(e.target.value)} data-testid="input-gainer-person-search" />
+                    {gainerPersonSearch && (
+                      <div className="mt-1 max-h-32 overflow-y-auto border rounded-md">
+                        {(celebrities || []).filter((c: any) => c.name.toLowerCase().includes(gainerPersonSearch.toLowerCase()) && !gainerPersonIds.includes(c.id)).slice(0, 8).map((c: any) => (
+                          <button key={c.id} className="w-full text-left px-3 py-2 text-sm hover-elevate flex items-center gap-2" onClick={() => { if (gainerPersonIds.length < 20) { setGainerPersonIds([...gainerPersonIds, c.id]); setGainerPersonSearch(""); } }} data-testid={`gainer-person-option-${c.id}`}>
+                            <Avatar className="h-6 w-6"><AvatarImage src={c.avatar} /><AvatarFallback>{c.name[0]}</AvatarFallback></Avatar>
+                            <span>{c.name}</span>
+                            <Badge variant="outline" className="text-xs ml-auto capitalize">{c.category}</Badge>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {gainerPersonIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {gainerPersonIds.map(pid => {
+                          const person = (celebrities || []).find((c: any) => c.id === pid);
+                          return (
+                            <Badge key={pid} variant="secondary" className="text-xs">
+                              {person?.name || pid}
+                              <button className="ml-1" onClick={() => setGainerPersonIds(gainerPersonIds.filter(id => id !== pid))}><X className="h-3 w-3" /></button>
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setGainerModalOpen(false)} data-testid="button-cancel-gainer">Cancel</Button>
+                  <Button onClick={() => createGainerMutation.mutate({ category: gainerCategory, personIds: gainerPersonIds })} disabled={gainerPersonIds.length === 0 || createGainerMutation.isPending} data-testid="button-submit-gainer">
+                    {createGainerMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+                    Create Market
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
 

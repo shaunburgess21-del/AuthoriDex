@@ -789,6 +789,8 @@ export const predictionMarkets = pgTable("prediction_markets", {
   isLive: boolean("is_live").default(true), // Legacy - use visibility instead
   visibility: text("visibility").default("live"), // draft | live | inactive | archived
   inactiveMessage: text("inactive_message"), // Custom message shown on inactive cards (e.g. "Coming Soon")
+  seedConfig: jsonb("seed_config"),
+  weekNumber: integer("week_number"),
 });
 
 export const insertPredictionMarketSchema = createInsertSchema(predictionMarkets).omit({

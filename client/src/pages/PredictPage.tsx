@@ -1977,48 +1977,105 @@ export default function PredictPage() {
     queryKey: ['/api/open-markets'],
   });
   const openMarkets = openMarketsData || [];
-  
-  // Create avatar lookup map from trending people (name -> avatar URL)
-  const avatarLookup = useMemo(() => {
-    const lookup: Record<string, string> = {};
-    for (const person of trendingPeople) {
-      lookup[person.name.toLowerCase()] = person.avatar || "";
+
+  const { data: nativeUpdownData } = useQuery<any[]>({
+    queryKey: ['/api/native-markets/updown'],
+  });
+  const { data: nativeH2hData } = useQuery<any[]>({
+    queryKey: ['/api/native-markets/h2h'],
+  });
+  const { data: nativeGainerData } = useQuery<any[]>({
+    queryKey: ['/api/native-markets/gainer'],
+  });
+
+  const hydratedMarkets = useMemo((): PredictionMarket[] => {
+    const dbMarkets = (nativeUpdownData || []).filter((m: any) => m.visibility === "live");
+    if (dbMarkets.length > 0) {
+      return dbMarkets.map((m: any) => {
+        const person = m.person || {};
+        const entries = m.entries || [];
+        const upEntry = entries.find((e: any) => e.label?.toLowerCase() === "up");
+        const downEntry = entries.find((e: any) => e.label?.toLowerCase() === "down");
+        const upStake = Number(upEntry?.totalStake || 0);
+        const downStake = Number(downEntry?.totalStake || 0);
+        const total = upStake + downStake || 1;
+        const upPercent = Math.round((upStake / total) * 100);
+        const upMultiplier = upStake > 0 ? +(total / upStake).toFixed(1) : 2.0;
+        const downMultiplier = downStake > 0 ? +(total / downStake).toFixed(1) : 2.0;
+        return {
+          id: m.id,
+          personId: m.personId || "",
+          personName: person.name || m.title?.replace(/: Up or Down\?$/, "") || "Unknown",
+          personAvatar: person.avatar || "",
+          currentScore: Number(person.trendScore || 0),
+          startScore: Number(person.trendScore || 0) - Math.floor(Number(person.trendScore || 0) * (Number(person.change7d || 0) / 100)),
+          change7d: Number(person.change7d || 0),
+          upMultiplier,
+          downMultiplier,
+          endTime: "Sun 23:59 UTC",
+          totalPool: Number(m.seedVolume || 0),
+          upPoolPercent: upPercent || 50,
+          category: (m.category || person.category || "misc") as CategoryFilter,
+          totalBets: Number(m.seedConfig?.participants || 0),
+        } as PredictionMarket;
+      });
     }
-    return lookup;
-  }, [trendingPeople]);
-  
-  // Helper to get avatar from lookup (case-insensitive)
-  const getAvatar = useCallback((name: string) => {
-    return avatarLookup[name.toLowerCase()] || "";
-  }, [avatarLookup]);
-  
-  // Hydrate mock markets with real avatar URLs
-  const hydratedMarkets = useMemo(() => {
-    return mockMarkets.map(market => ({
-      ...market,
-      personAvatar: getAvatar(market.personName),
-    }));
-  }, [getAvatar]);
-  
-  // Hydrate head-to-head markets with real avatar URLs
-  const hydratedH2H = useMemo(() => {
-    return headToHeadMarkets.map(market => ({
-      ...market,
-      person1: { ...market.person1, avatar: getAvatar(market.person1.name) },
-      person2: { ...market.person2, avatar: getAvatar(market.person2.name) },
-    }));
-  }, [getAvatar]);
-  
-  // Hydrate top gainer data with real avatar URLs
-  const hydratedGainers = useMemo(() => {
-    return topGainerMarkets.map(gainer => ({
-      ...gainer,
-      leaders: gainer.leaders.map(leader => ({
-        ...leader,
-        avatar: getAvatar(leader.name),
-      })),
-    }));
-  }, [getAvatar]);
+    return mockMarkets;
+  }, [nativeUpdownData]);
+
+  const hydratedH2H = useMemo((): HeadToHeadMarket[] => {
+    const dbMarkets = (nativeH2hData || []).filter((m: any) => m.visibility === "live");
+    if (dbMarkets.length > 0) {
+      return dbMarkets.map((m: any) => {
+        const entries = m.entries || [];
+        const e1 = entries[0] || {};
+        const e2 = entries[1] || {};
+        const p1 = e1.person || {};
+        const p2 = e2.person || {};
+        const s1 = Number(e1.totalStake || 0);
+        const s2 = Number(e2.totalStake || 0);
+        const total = s1 + s2 || 1;
+        return {
+          id: m.id,
+          title: m.title || `${p1.name || "?"} vs ${p2.name || "?"}`,
+          person1: { name: p1.name || e1.label || "?", avatar: p1.avatar || "", currentScore: Number(p1.trendScore || 0) },
+          person2: { name: p2.name || e2.label || "?", avatar: p2.avatar || "", currentScore: Number(p2.trendScore || 0) },
+          category: (m.category || "misc") as CategoryFilter,
+          endTime: "Sun 23:59 UTC",
+          totalPool: Number(m.seedVolume || 0),
+          person1Percent: Math.round((s1 / total) * 100) || 50,
+          totalBets: Number(m.seedConfig?.participants || 0),
+        } as HeadToHeadMarket;
+      });
+    }
+    return headToHeadMarkets;
+  }, [nativeH2hData]);
+
+  const hydratedGainers = useMemo((): TopGainerMarket[] => {
+    const dbMarkets = (nativeGainerData || []).filter((m: any) => m.visibility === "live");
+    if (dbMarkets.length > 0) {
+      return dbMarkets.map((m: any) => {
+        const entries = m.entries || [];
+        return {
+          id: m.id,
+          category: (m.category || "misc") as CategoryFilter,
+          leaders: entries.slice(0, 3).map((e: any) => {
+            const p = e.person || {};
+            return {
+              name: p.name || e.label || "?",
+              avatar: p.avatar || "",
+              currentGain: Math.abs(Number(p.change7d || 0) * Number(p.trendScore || 0) / 100),
+              percentGain: Math.abs(Number(p.change7d || 0)),
+            };
+          }),
+          totalPool: Number(m.seedVolume || 0),
+          endTime: "Sun 23:59 UTC",
+          totalBets: Number(m.seedConfig?.participants || 0),
+        } as TopGainerMarket;
+      });
+    }
+    return topGainerMarkets;
+  }, [nativeGainerData]);
   
   const [selectedJackpotPerson, setSelectedJackpotPerson] = useState<TrendingPerson | null>(null);
   
