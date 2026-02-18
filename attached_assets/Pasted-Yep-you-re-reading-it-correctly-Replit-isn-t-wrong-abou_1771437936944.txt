@@ -1,0 +1,78 @@
+Yep — you’re reading it correctly.
+
+Replit isn’t wrong about the data, but they’re definitely thinking in old naming:
+
+DB / code still uses “community” as the market type (and probably table naming / constants / endpoints).
+
+UI/brand uses “Real-World Markets” (your renamed label).
+
+So when they say “community markets”, they mean the same thing you call “Real-World Markets”.
+
+That mismatch is exactly how teams end up with:
+
+“Community” showing in admin labels
+
+confusing endpoints like /api/open-markets vs /api/community-markets
+
+bugs caused by someone filtering for the wrong type later
+
+Do we need to rename tables?
+
+Not necessarily. Renaming DB tables is risky and not required for launch. The high-value fix is:
+
+rename labels + enums/constants + admin tabs to “Real-World Markets”
+
+keep the DB marketType = 'community' as an internal implementation detail (or alias it safely)
+
+If you really want to rename the DB type from community → real_world, it’s doable, but it’s a migration + backfill + compatibility work. I’d only do it if you’re early enough and willing to absorb the risk.
+
+Best approach (recommended): “Real-World” label everywhere, keep internal community
+What to tell Replit to do
+
+Everywhere in UI (Admin + frontend) replace wording Community Markets → Real-World Markets
+
+In code, treat marketType: 'community' as the underlying value, but display label “Real-World”
+
+Optional: introduce a constant mapping so nobody hardcodes strings.
+
+Prompt to Replit (safe rename, no breaking migrations)
+
+Replit prompt: Rename “Community Markets” to “Real-World Markets” across UI + code semantics (keep DB stable)
+
+Please standardize naming: we renamed “Community Markets” to Real-World Markets. They are the same thing.
+
+Requirements
+
+Admin Panel UI
+
+Rename any tab/heading/label that says Community Markets to Real-World Markets.
+
+Rename buttons, empty states, modals, and filters accordingly.
+
+If there’s a “marketType === 'community'” filter, keep it as-is (that’s fine), but the displayed label must be “Real-World Markets”.
+
+Frontend UI
+
+Anywhere the user sees “Community” wording, change to “Real-World”.
+
+Keep /api/open-markets naming if you want, but ensure the section headers and references are “Real-World Markets”.
+
+Code hygiene
+
+Add a single source of truth mapping, e.g.:
+
+MARKET_TYPE_LABELS = { community: "Real-World Markets", updown: "...", ... }
+
+Replace scattered hardcoded UI strings with this mapping.
+
+Do NOT rename DB tables right now
+
+Keep market_type = 'community' in the database (internal only) to avoid risky migrations.
+
+If you want to improve semantics later, we can plan a safe migration to real_world, but not in this pass.
+
+Acceptance
+
+No “Community Markets” text appears anywhere in Admin or Frontend.
+
+Filtering still works and shows the same 4 Real-World (community-type) markets.
