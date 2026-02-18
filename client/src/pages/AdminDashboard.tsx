@@ -2427,7 +2427,7 @@ export default function AdminDashboard() {
   return (
     <div className="flex min-h-screen bg-background">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-card/50 p-4 hidden md:block">
+      <aside className="w-64 border-r border-border bg-card/50 p-4 hidden md:flex md:flex-col md:sticky md:top-0 md:h-screen md:overflow-y-auto">
         <div className="flex items-center gap-2 mb-8 px-2">
           <Shield className="h-6 w-6 text-violet-500" />
           <h1 className="text-xl font-bold">Admin Panel</h1>
@@ -2452,7 +2452,7 @@ export default function AdminDashboard() {
           ))}
         </nav>
 
-        <div className="absolute bottom-4 left-4 right-4">
+        <div className="mt-auto pt-4">
           <Button
             variant="outline"
             className="w-full"
