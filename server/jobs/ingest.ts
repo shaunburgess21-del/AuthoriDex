@@ -897,9 +897,22 @@ export async function runDataIngestion(): Promise<IngestResult> {
       }
 
       if (upsertedIds.length > 0) {
-        const deleteResult = await tx.delete(trendingPeople)
-          .where(sql`${trendingPeople.id} NOT IN (${sql.join(upsertedIds.map(id => sql`${id}`), sql`, `)})`);
-        console.log(`[Ingest] Cleaned up stale rows not in current batch`);
+        const staleCountResult = await tx.execute(
+          sql`SELECT COUNT(*) as count FROM trending_people WHERE id NOT IN (${sql.join(upsertedIds.map(id => sql`${id}`), sql`, `)})`
+        );
+        const staleRows = Array.isArray(staleCountResult) ? staleCountResult : (staleCountResult as any).rows ?? [];
+        const staleCount = parseInt(staleRows[0]?.count || '0', 10);
+        const remainingAfterDelete = upsertedIds.length;
+        
+        if (remainingAfterDelete < expectedRowCount) {
+          throw new Error(`[Ingest] Safety abort: stale cleanup would leave ${remainingAfterDelete} rows (expected ${expectedRowCount}). Rolling back.`);
+        }
+        
+        if (staleCount > 0) {
+          await tx.delete(trendingPeople)
+            .where(sql`${trendingPeople.id} NOT IN (${sql.join(upsertedIds.map(id => sql`${id}`), sql`, `)})`);
+          console.log(`[Ingest] Cleaned up ${staleCount} stale rows not in current batch`);
+        }
       }
       
       const countResult = await tx.execute(sql`SELECT COUNT(*) as count FROM trending_people`);

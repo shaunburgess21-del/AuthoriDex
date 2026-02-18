@@ -1706,6 +1706,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // --- Snapshot-based fallback for empty trending_people ---
+  async function buildSnapshotFallbackLeaderboard(
+    tab: string,
+    search: string | undefined,
+    category: string | undefined,
+    limit: number,
+    offset: number,
+    sortDir: string
+  ) {
+    try {
+      const latestRun = await db
+        .select({ id: ingestionRuns.id, startedAt: ingestionRuns.startedAt, scoreVersion: ingestionRuns.scoreVersion })
+        .from(ingestionRuns)
+        .where(and(
+          eq(ingestionRuns.status, "completed"),
+          eq(ingestionRuns.scoreVersion, SCORE_VERSION),
+        ))
+        .orderBy(desc(ingestionRuns.startedAt))
+        .limit(1);
+
+      if (latestRun.length === 0) return null;
+
+      const fallbackRunId = latestRun[0].id;
+      const fallbackRunAt = latestRun[0].startedAt;
+
+      const snapshotRows = await db.execute(sql`
+        SELECT 
+          ts.person_id,
+          ts.fame_index,
+          ts.trend_score,
+          ts.mass_score,
+          ts.velocity_score,
+          ts.momentum,
+          tp.name,
+          tp.avatar,
+          tp.category,
+          tp.bio
+        FROM trend_snapshots ts
+        JOIN tracked_people tp ON tp.id = ts.person_id
+        WHERE ts.run_id = ${fallbackRunId}
+          AND ts.score_version = ${SCORE_VERSION}
+        ORDER BY ts.fame_index DESC NULLS LAST
+      `);
+
+      const rows = Array.isArray(snapshotRows) ? snapshotRows : (snapshotRows as any).rows ?? [];
+      if (rows.length === 0) return null;
+
+      let filtered = rows as any[];
+      if (category && category !== "all") {
+        filtered = filtered.filter((r: any) => r.category === category);
+      }
+      if (search && search.trim()) {
+        const term = search.trim().toLowerCase();
+        filtered = filtered.filter((r: any) => r.name?.toLowerCase().includes(term));
+      }
+
+      if (sortDir === "asc") {
+        filtered.sort((a: any, b: any) => (a.fame_index ?? 0) - (b.fame_index ?? 0));
+      }
+
+      const totalCount = filtered.length;
+      const paged = filtered.slice(offset, offset + limit);
+
+      const data = paged.map((row: any, idx: number) => ({
+        id: row.person_id,
+        name: row.name,
+        avatar: row.avatar,
+        category: row.category,
+        rank: offset + idx + 1,
+        trendScore: row.trend_score,
+        fameIndex: row.fame_index,
+        change24h: null,
+        change7d: null,
+        liveRank: null,
+        fameIndexLive: null,
+        liveUpdatedAt: null,
+        approvalPct: null,
+        approvalVotesCount: null,
+        underratedPct: null,
+        overratedPct: null,
+        fairlyRatedPct: null,
+        valueScore: null,
+        leaderboardRank: offset + idx + 1,
+        userValueVote: null,
+        rankChange: 0,
+      }));
+
+      return {
+        tab,
+        sortDir,
+        total: data.length,
+        totalCount,
+        data,
+        thresholds: { rankChangeP90: 999, deltaP90: 999, negRankChangeP10: -999, negDeltaP10: -999 },
+        baselineStatus: "fallback",
+        meta: {
+          currentRunId: null,
+          baseline24hRunId: null,
+          baseline24hAgeHours: null,
+          baselineStatus: "fallback",
+          coveragePct: 0,
+          scoreVersion: SCORE_VERSION,
+          fallbackUsed: true,
+          fallbackRunId,
+          fallbackRunAt: fallbackRunAt?.toISOString() ?? null,
+        },
+      };
+    } catch (err) {
+      console.error("[leaderboard] Snapshot fallback error:", err);
+      return null;
+    }
+  }
+
   // GET /api/leaderboard - Enhanced leaderboard with tab support
   app.get("/api/leaderboard", optionalAuth, async (req: AuthRequest, res) => {
     try {
@@ -1720,18 +1833,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Build conditions array
       const conditions: SQL<unknown>[] = [];
       
-      // Apply category filter if provided
       if (category && category !== 'all') {
         conditions.push(eq(trendingPeople.category, category));
       }
       
-      // Apply search filter if provided
       if (search && search.trim()) {
         const searchTerm = `%${search.trim().toLowerCase()}%`;
         conditions.push(sql`LOWER(${trendingPeople.name}) LIKE ${searchTerm}`);
       }
 
-      // Get total count for pagination (before limit/offset)
       let countQuery = db
         .select({ count: sql<number>`COUNT(*)` })
         .from(trendingPeople);
@@ -1743,7 +1853,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [countResult] = await countQuery;
       const totalCount = Number(countResult?.count) || 0;
 
-      // Base query: join trending_people with celebrity_metrics
+      // --- SNAPSHOT FALLBACK: If trending_people is empty, reconstruct from latest completed run ---
+      if (totalCount === 0) {
+        console.log("[leaderboard] trending_people is empty, attempting snapshot fallback...");
+        const fallbackResult = await buildSnapshotFallbackLeaderboard(tab, search, category, limit, offset, sortDir);
+        if (fallbackResult) {
+          console.log(`[leaderboard] Snapshot fallback serving ${fallbackResult.data.length} people from run ${fallbackResult.meta.fallbackRunId}`);
+          return res.json(fallbackResult);
+        }
+        console.log("[leaderboard] No snapshot fallback available either");
+      }
+
       let query = db
         .select({
           id: trendingPeople.id,
@@ -1758,7 +1878,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           liveRank: trendingPeople.liveRank,
           fameIndexLive: trendingPeople.fameIndexLive,
           liveUpdatedAt: trendingPeople.liveUpdatedAt,
-          // Metrics
           approvalPct: celebrityMetrics.approvalPct,
           approvalVotesCount: celebrityMetrics.approvalVotesCount,
           underratedPct: celebrityMetrics.underratedPct,
@@ -1769,12 +1888,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(trendingPeople)
         .leftJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId));
 
-      // Apply filters
       if (conditions.length > 0) {
         query = query.where(and(...conditions)) as typeof query;
       }
 
-      // Determine sort column based on tab
       let orderByColumn: any;
       switch (tab) {
         case 'approval':
@@ -1789,7 +1906,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           break;
       }
 
-      // Apply sort order (nulls last, alphabetical tiebreaker for equal values)
       if (sortDir === 'asc') {
         query = query.orderBy(sql`${orderByColumn} ASC NULLS LAST, ${trendingPeople.name} ASC`) as typeof query;
       } else {
@@ -1800,7 +1916,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const results = await query;
 
-      // If user is authenticated and on value tab, fetch their votes
       let userValueVotes: Record<string, string> = {};
       if (userId && tab === 'value') {
         const votes = await db
@@ -1813,11 +1928,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Compute rank changes from actual trend_snapshots ~24h ago (cached)
       const prevRankLookup = await getSnapshotRankMap();
       const baselineStatus = prevRankLookup.size > 0 ? "normal" : "degraded";
 
-      // Compute canonical percentile thresholds from FULL dataset (not filtered/paginated)
       const allPeopleForThresholds = await db
         .select({
           id: trendingPeople.id,
@@ -1847,7 +1960,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         negDeltaP10: negativeDeltas.length > 0 ? negativeDeltas[p5Idx(negativeDeltas)] : -999,
       };
 
-      // Map results with user vote state + rank change
       const leaderboard = results.map((person, index) => {
         const prevRank = prevRankLookup.get(person.id) ?? person.rank;
         return {
@@ -1879,6 +1991,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           baselineStatus: baselineMeta.baseline24hStatus,
           coveragePct: baselineMeta.baseline24hCoveragePct,
           scoreVersion: baselineMeta.scoreVersion,
+          fallbackUsed: false,
+          fallbackRunId: null,
         },
       });
     } catch (error: any) {
