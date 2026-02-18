@@ -1139,6 +1139,17 @@ export async function hydrateTrendingPeopleFromSnapshots(): Promise<boolean> {
       return false;
     }
 
+    const runningRuns = await db
+      .select({ id: ingestionRuns.id })
+      .from(ingestionRuns)
+      .where(eq(ingestionRuns.status, "running"))
+      .limit(1);
+
+    if (runningRuns.length > 0) {
+      console.log(`[Boot] Ingestion run ${runningRuns[0].id} is currently running, skipping hydration to avoid race`);
+      return false;
+    }
+
     const latestRun = await db
       .select({ id: ingestionRuns.id, startedAt: ingestionRuns.startedAt, finishedAt: ingestionRuns.finishedAt })
       .from(ingestionRuns)
@@ -1208,7 +1219,15 @@ export async function hydrateTrendingPeopleFromSnapshots(): Promise<boolean> {
       }
     });
 
-    console.log(`[Boot] Successfully hydrated trending_people with ${rows.length} rows from run ${runId}`);
+    const trackedCountRaw = await db.execute(sql`SELECT COUNT(*) as count FROM tracked_people`);
+    const trackedRows = Array.isArray(trackedCountRaw) ? trackedCountRaw : (trackedCountRaw as any).rows ?? [];
+    const trackedCount = parseInt((trackedRows[0] as any)?.count || '0', 10);
+
+    if (rows.length < trackedCount) {
+      console.warn(`[Boot] WARNING: Hydrated ${rows.length} rows but tracked_people has ${trackedCount}. Coverage is incomplete (${Math.round(rows.length / trackedCount * 100)}%).`);
+    }
+
+    console.log(`[Boot] Successfully hydrated trending_people with ${rows.length}/${trackedCount} rows from run ${runId}`);
     return true;
   } catch (err) {
     console.error("[Boot] Failed to hydrate trending_people:", err);

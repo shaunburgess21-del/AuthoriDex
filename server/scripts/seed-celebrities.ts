@@ -13,21 +13,39 @@ interface ExcelRow {
 }
 
 async function seedCelebrities() {
-  console.log('🔄 Starting celebrity seed from Excel file...\n');
+  const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === undefined;
+  const allowSeedDelete = process.env.ALLOW_SEED_DELETE === 'true';
+
+  if (!isDev && !allowSeedDelete) {
+    console.error('ABORT: seed-celebrities.ts refused to run.');
+    console.error('This script deletes ALL trending data (trending_people, trend_snapshots, api_cache, etc.).');
+    console.error('To proceed, either:');
+    console.error('  1. Set NODE_ENV=development');
+    console.error('  2. Set ALLOW_SEED_DELETE=true (for intentional production reseeds)');
+    process.exit(1);
+  }
+
+  if (allowSeedDelete && !isDev) {
+    console.warn('WARNING: Running seed with ALLOW_SEED_DELETE=true in non-development environment.');
+    console.warn('This will wipe all scored data. Proceeding in 5 seconds...');
+    await new Promise(r => setTimeout(r, 5000));
+  }
+
+  console.log('Starting celebrity seed from Excel file...\n');
 
   const workbook = XLSX.readFile('attached_assets/2025-12-30_FameDex_Leaderboard_-_Final_1767047208792.xlsx');
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
   const data = XLSX.utils.sheet_to_json<ExcelRow>(sheet);
 
-  console.log(`📊 Found ${data.length} celebrities in Excel file`);
+  console.log(`Found ${data.length} celebrities in Excel file`);
 
   if (data.length !== 100) {
-    console.error(`❌ Expected 100 celebrities, found ${data.length}. Aborting.`);
+    console.error(`Expected 100 celebrities, found ${data.length}. Aborting.`);
     process.exit(1);
   }
 
-  console.log('\n🗑️  Clearing old data (in order due to foreign keys)...');
+  console.log('\nClearing old data (in order due to foreign keys)...');
   
   await db.delete(insightItems);
   console.log('   - Cleared insight_items');
