@@ -4,7 +4,7 @@ import { desc, eq, sql, gte, and } from "drizzle-orm";
 import { getBaselineDiagnostics } from "../utils/baseline";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
 import { fetchBatchGdeltNews, GdeltBatchOptions } from "../providers/gdelt";
-import { fetchSerperBatch } from "../providers/serper";
+import { fetchSerperBatch, fetchSerperNewsBatch } from "../providers/serper";
 // NOTE (Jan 2026): X API removed from trend score engine due to cost constraints.
 // X API keys preserved for future Platform Insights feature.
 // import { fetchXBatch } from "../providers/x-api";
@@ -19,6 +19,7 @@ import {
   hasAnyDegradedSource,
   loadHealthFromDB,
   saveHealthState,
+  computeDegradationGovernor,
 } from "../scoring/sourceHealth";
 import {
   updateCatchUpMode,
@@ -289,6 +290,44 @@ export async function runDataIngestion(): Promise<IngestResult> {
     }
     if (!sourceStatuses.gdelt) sourceStatuses.gdelt = gdeltData.size > 0 ? "OK" : "DEGRADED";
 
+    const SERPER_NEWS_FALLBACK_THRESHOLD = 0.30;
+    let newsSource: "gdelt" | "serper_news" = "gdelt";
+    const gdeltFreshPct = gdeltData.size / people.length;
+
+    if (gdeltFreshPct < SERPER_NEWS_FALLBACK_THRESHOLD) {
+      console.log(`[Ingest] GDELT freshness ${(gdeltFreshPct * 100).toFixed(0)}% < ${SERPER_NEWS_FALLBACK_THRESHOLD * 100}% threshold — activating Serper News fallback`);
+      try {
+        const serperNewsStart = Date.now();
+        const serperNewsData = await fetchSerperNewsBatch(
+          people.map(p => ({ id: p.id, name: p.name })),
+          2,
+          500
+        );
+        const serperNewsTiming = Date.now() - serperNewsStart;
+        const serperNewsCoverage = serperNewsData.size / people.length;
+
+        if (serperNewsCoverage >= SERPER_NEWS_FALLBACK_THRESHOLD) {
+          console.log(`[Ingest] Serper News fallback successful: ${serperNewsData.size}/${people.length} (${(serperNewsCoverage * 100).toFixed(0)}%) in ${(serperNewsTiming / 1000).toFixed(1)}s`);
+          for (const [id, data] of Array.from(serperNewsData.entries())) {
+            gdeltData.set(id, {
+              query: data.query,
+              articleCount24h: data.articleCount24h,
+              articleCount7d: data.articleCount7d,
+              averageDaily7d: data.averageDaily7d,
+              delta: data.delta,
+              topHeadlines: data.topHeadlines,
+            });
+          }
+          newsSource = "serper_news";
+          sourceStatuses.gdelt = "OK_FALLBACK";
+        } else {
+          console.log(`[Ingest] Serper News fallback also insufficient: ${serperNewsData.size}/${people.length} (${(serperNewsCoverage * 100).toFixed(0)}%)`);
+        }
+      } catch (err) {
+        console.error('[Ingest] Serper News fallback failed:', err);
+      }
+    }
+
     let serperStart = Date.now();
     let serperData = await fetchSerperBatch(
       people.map(p => ({ id: p.id, name: p.name, searchQueryOverride: p.searchQueryOverride })),
@@ -517,6 +556,19 @@ export async function runDataIngestion(): Promise<IngestResult> {
       console.log(`[Ingest] Staleness decay: News=${(newsDecayFactor * 100).toFixed(0)}%, Search=${(searchDecayFactor * 100).toFixed(0)}%`);
     }
 
+    // Degradation Governor: compute weight multipliers based on run-over-run coverage
+    const newsFreshCount = Array.from(gdeltData.values()).filter(d => (d.articleCount24h ?? 0) > 0).length;
+    const newsCoveragePctActual = (newsFreshCount / people.length) * 100;
+    const searchFreshCount = Array.from(serperData.values()).filter(d => (d.searchVolume ?? 0) > 0).length;
+    const searchCoveragePctActual = (searchFreshCount / people.length) * 100;
+
+    const newsGovernorFactor = computeDegradationGovernor("news", newsCoveragePctActual);
+    const searchGovernorFactor = computeDegradationGovernor("search", searchCoveragePctActual);
+
+    if (newsGovernorFactor < 1.0 || searchGovernorFactor < 1.0) {
+      console.log(`[Ingest] Degradation governor: News=${(newsGovernorFactor * 100).toFixed(0)}%, Search=${(searchGovernorFactor * 100).toFixed(0)}%`);
+    }
+
     for (const person of people) {
       try {
         const wiki = wikiData.get(person.id);
@@ -656,8 +708,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
             wikiOutage: currentHealthSnapshot.wiki.state === 'OUTAGE' || currentHealthSnapshot.wiki.state === 'DEGRADED',
           },
           // Staleness decay for velocity WEIGHT reduction (not just value decay)
-          newsStalenessFactor: newsUsedFallback ? newsDecayFactor : 1.0,
-          searchStalenessFactor: searchUsedFallback ? searchDecayFactor : 1.0,
+          // Governor factor further dampens weight when coverage drops sharply
+          newsStalenessFactor: Math.min(newsUsedFallback ? newsDecayFactor : 1.0, newsGovernorFactor),
+          searchStalenessFactor: Math.min(searchUsedFallback ? searchDecayFactor : 1.0, searchGovernorFactor),
         };
 
         // Get previous scores for change calculations and EMA smoothing
@@ -715,6 +768,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
             wiki: !!wiki,
             news: !newsUsedFallback && (news?.articleCount24h ?? 0) > 0,
             search: !searchUsedFallback && (serper?.searchVolume ?? 0) > 0,
+            newsSource: newsSource,
           },
           stab: scoreResult.stabDetail ? {
             ...scoreResult.stabDetail,
@@ -1018,6 +1072,12 @@ export async function runDataIngestion(): Promise<IngestResult> {
       fallbacks: {
         news: newsApiUsedFallback,
         search: searchApiUsedFallback,
+      },
+      coverage: {
+        newsPct: `${newsCoveragePctActual.toFixed(0)}%`,
+        searchPct: `${searchCoveragePctActual.toFixed(0)}%`,
+        newsGovernor: `${(newsGovernorFactor * 100).toFixed(0)}%`,
+        searchGovernor: `${(searchGovernorFactor * 100).toFixed(0)}%`,
       },
       bootstrap: {
         newsHistory: lastNonZeroNewsMap.size,

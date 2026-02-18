@@ -28,6 +28,8 @@ export interface SourceHealthStatus {
   consecutiveFailures: number;
   recoveryRunsRemaining: number;
   reason: string;
+  prevCoveragePct?: number;
+  coverageDropRuns?: number;
 }
 
 export interface SourceHealthSnapshot {
@@ -75,6 +77,8 @@ function serializeHealth(health: SourceHealthSnapshot): Record<string, any> {
     consecutiveFailures: s.consecutiveFailures,
     recoveryRunsRemaining: s.recoveryRunsRemaining,
     reason: s.reason,
+    prevCoveragePct: s.prevCoveragePct ?? null,
+    coverageDropRuns: s.coverageDropRuns ?? 0,
   });
   return {
     news: serialize(health.news),
@@ -92,6 +96,8 @@ function deserializeHealth(data: Record<string, any>): SourceHealthSnapshot {
     consecutiveFailures: d.consecutiveFailures ?? 0,
     recoveryRunsRemaining: d.recoveryRunsRemaining ?? 0,
     reason: d.reason || "restored_from_db",
+    prevCoveragePct: d.prevCoveragePct ?? undefined,
+    coverageDropRuns: d.coverageDropRuns ?? 0,
   });
   return {
     news: deserialize(data.news || {}),
@@ -348,6 +354,51 @@ export function getHealthSummary(): string {
   }
   
   return parts.length > 0 ? `[Health: ${parts.join(", ")}]` : "[Health: ALL_HEALTHY]";
+}
+
+/**
+ * Degradation Governor: Computes a weight multiplier for a source
+ * based on run-over-run coverage changes.
+ * 
+ * When coverage drops sharply (>50 percentage points in one run),
+ * instead of allowing immediate full-weight impact, the governor
+ * ramps down the weight over 3 runs:
+ *   Run 1 (first drop): 75% weight
+ *   Run 2: 50% weight  
+ *   Run 3+: 25% weight (floor)
+ * 
+ * When coverage recovers, weight immediately returns to 100%.
+ */
+export function computeDegradationGovernor(
+  source: "news" | "search" | "wiki",
+  currentCoveragePct: number
+): number {
+  const status = currentHealth[source];
+  const prevCoverage = status.prevCoveragePct ?? 100;
+  const coverageDrop = prevCoverage - currentCoveragePct;
+  
+  status.prevCoveragePct = currentCoveragePct;
+  
+  if (currentCoveragePct >= 70) {
+    status.coverageDropRuns = 0;
+    return 1.0;
+  }
+  
+  if (coverageDrop > 50 && (status.coverageDropRuns ?? 0) === 0) {
+    status.coverageDropRuns = 1;
+    console.log(`[DegradationGovernor] ${source.toUpperCase()}: Sharp coverage drop detected (${prevCoverage.toFixed(0)}% → ${currentCoveragePct.toFixed(0)}%). Starting ramp-down.`);
+  } else if (currentCoveragePct < 70) {
+    status.coverageDropRuns = Math.max(1, (status.coverageDropRuns ?? 0) + 1);
+    if ((status.coverageDropRuns ?? 0) > 1) {
+      console.log(`[DegradationGovernor] ${source.toUpperCase()}: Sustained low coverage (${currentCoveragePct.toFixed(0)}%), run ${status.coverageDropRuns} of ramp-down.`);
+    }
+  }
+  
+  const dropRuns = status.coverageDropRuns ?? 0;
+  if (dropRuns <= 0) return 1.0;
+  if (dropRuns === 1) return 0.75;
+  if (dropRuns === 2) return 0.50;
+  return 0.25;
 }
 
 export function resetHealthState(): void {

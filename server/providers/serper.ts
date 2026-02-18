@@ -215,6 +215,120 @@ export async function fetchSerperBatch(
 
 // Web search grounding for AI profile generation
 // Returns recent news headlines and context about a person
+export interface SerperNewsCountData {
+  query: string;
+  articleCount24h: number;
+  articleCount7d: number;
+  averageDaily7d: number;
+  delta: number;
+  topHeadlines: string[];
+  source: "serper_news";
+}
+
+export async function fetchSerperNewsCount(name: string, personId?: string): Promise<SerperNewsCountData | null> {
+  if (!SERPER_API_KEY) return null;
+
+  const cacheKey = `serper:newscount:${name.replace(/\s+/g, "_").toLowerCase()}`;
+  const CACHE_TTL_HOURS = 2;
+
+  try {
+    const cached = await getCachedResponse(cacheKey);
+    if (cached) {
+      return JSON.parse(cached.responseData);
+    }
+
+    const response24h = await fetch("https://google.serper.dev/news", {
+      method: "POST",
+      headers: {
+        "X-API-KEY": SERPER_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        q: `"${name}"`,
+        num: 100,
+        gl: "us",
+        hl: "en",
+        tbs: "qdr:d",
+      }),
+    });
+
+    await new Promise(r => setTimeout(r, 300));
+
+    const response7d = await fetch("https://google.serper.dev/news", {
+      method: "POST",
+      headers: {
+        "X-API-KEY": SERPER_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        q: `"${name}"`,
+        num: 100,
+        gl: "us",
+        hl: "en",
+        tbs: "qdr:w",
+      }),
+    });
+
+    const data24h = response24h.ok ? await response24h.json() : { news: [] };
+    const data7d = response7d.ok ? await response7d.json() : { news: [] };
+
+    const articleCount24h = data24h.news?.length || 0;
+    const articleCount7d = data7d.news?.length || 0;
+    const averageDaily7d = articleCount7d / 7;
+    const delta = averageDaily7d > 0
+      ? ((articleCount24h - averageDaily7d) / averageDaily7d)
+      : (articleCount24h > 0 ? 1 : 0);
+
+    const topHeadlines = (data24h.news || [])
+      .slice(0, 3)
+      .map((a: any) => a.title || "");
+
+    const result: SerperNewsCountData = {
+      query: name,
+      articleCount24h,
+      articleCount7d,
+      averageDaily7d,
+      delta,
+      topHeadlines,
+      source: "serper_news",
+    };
+
+    await setCachedResponse(cacheKey, "serper_news", JSON.stringify(result), CACHE_TTL_HOURS);
+
+    return result;
+  } catch (error) {
+    console.error(`[Serper News] Error fetching news count for ${name}:`, error);
+    return null;
+  }
+}
+
+export async function fetchSerperNewsBatch(
+  people: Array<{ id: string; name: string }>,
+  concurrency: number = 2,
+  delayMs: number = 500
+): Promise<Map<string, SerperNewsCountData>> {
+  const results = new Map<string, SerperNewsCountData>();
+  const limit = pLimit(concurrency);
+
+  console.log(`[Serper News] Fetching news counts for ${people.length} people as GDELT fallback`);
+
+  const tasks = people.map((person, index) =>
+    limit(async () => {
+      if (index > 0) {
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+      const result = await fetchSerperNewsCount(person.name, person.id);
+      if (result) {
+        results.set(person.id, result);
+      }
+    })
+  );
+
+  await Promise.all(tasks);
+  console.log(`[Serper News] Fetched ${results.size}/${people.length} news counts`);
+  return results;
+}
+
 export interface WebSearchContext {
   headlines: string[];
   snippets: string[];

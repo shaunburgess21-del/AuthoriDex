@@ -33,6 +33,7 @@ import {
   getCurrentHealthSnapshot,
   hasAnyDegradedSource,
   getHealthSummary,
+  getStalenessDecayFactor,
 } from "./scoring/sourceHealth";
 import { getLastFullRefreshAt } from "./jobs/live-tick";
 
@@ -448,6 +449,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         meta: {
           scoreVersion: baselineMeta.scoreVersion,
           baselineStatus: baselineMeta.baseline24hStatus,
+          sourceHealth: (() => {
+            const health = getCurrentHealthSnapshot();
+            return {
+              news: health.news.state,
+              search: health.search.state,
+              wiki: health.wiki.state,
+            };
+          })(),
         },
       });
     } catch (error) {
@@ -4110,6 +4119,22 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           timings: latestSourceTimings,
           statuses: latestSourceStatuses,
           lastRunHealthSummary: lastSuccessfulRun?.healthSummary || null,
+          liveStateMachine: (() => {
+            const h = getCurrentHealthSnapshot();
+            const fmt = (s: typeof h.news) => ({
+              state: s.state,
+              consecutiveFailures: s.consecutiveFailures,
+              lastHealthyAt: s.lastHealthyTimestamp?.toISOString() ?? null,
+              staleHours: s.lastHealthyTimestamp
+                ? Math.round((now.getTime() - s.lastHealthyTimestamp.getTime()) / (1000 * 60 * 60) * 10) / 10
+                : null,
+              decayFactor: Math.round(getStalenessDecayFactor(s.lastHealthyTimestamp) * 100),
+              coveragePct: s.prevCoveragePct ?? null,
+              coverageDropRuns: s.coverageDropRuns ?? 0,
+              reason: s.reason,
+            });
+            return { news: fmt(h.news), search: fmt(h.search), wiki: fmt(h.wiki) };
+          })(),
         },
         coverage: {
           trackedPeople: Number(coverage.tracked),
