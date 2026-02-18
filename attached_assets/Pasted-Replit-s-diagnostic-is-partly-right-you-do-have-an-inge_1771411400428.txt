@@ -1,0 +1,152 @@
+Replit’s diagnostic is partly right (you do have an ingestion reliability problem), but it also contains a serious inconsistency and one likely-wrong claim. I’d treat it as: good instincts, but needs a tighter root-cause proof + a safer fix plan.
+
+Here’s the clean assessment you can share with ChatGPT (and use to push Replit to the correct fixes).
+
+What looks correct / useful in Replit’s diagnosis ✅
+1) “Everything is N/A because trending_people is empty”
+
+That’s plausible if your UI (leaderboard + movers + freshness) reads primarily from trending_people. If it’s 0 rows, the UI will have nothing to render and show blanks/N/A.
+
+2) Run history pattern: “one stuck running run → locked_out → no new completed runs”
+
+That pattern makes sense with your ingestion lock design: a stuck run blocks subsequent runs.
+
+3) “Movers endpoints don’t have fallback”
+
+This matches what you’ve seen earlier: leaderboard might have some fallback, but hot movers / daily movers / gainers / droppers could still return empty if they rely only on trending_people.
+
+4) LiveTick tight loop hypothesis
+
+If logs show “Next tick … (in -Xs)” repeating, that’s a real bug: when scheduled time is in the past, the scheduler should immediately compute the next future tick and schedule once—not spin/log repeatedly.
+
+What’s inconsistent / likely wrong ⚠️
+A) They contradict themselves on ingestion write safety
+
+Earlier, Replit claimed ingestion is already safe: upsert in a single transaction, stale cleanup at end, rollback preserves old data, etc.
+
+Now they claim:
+
+“delete-then-insert… if crashes after deletion you get an empty table.”
+
+Those two can’t both be true. Either:
+
+the write is transactional/upsert-safe (then a crash shouldn’t leave it empty), or
+
+there is a delete-first path (or a non-transactional cleanup) that can empty the table.
+
+Action: ask Replit to point to the exact SQL / code path that deletes rows in trending_people, and show whether it’s inside the same transaction as the upsert/write.
+
+B) “Snapshot fallback is working for leaderboard (serving 100)”
+
+…but you said both Live and Full show N/A, and movers are empty. That suggests:
+
+either fallback is not truly wired into the UI paths you’re using now, or
+
+only one endpoint has fallback and the rest don’t (likely), or
+
+the client expects freshness fields only from trending_people and doesn’t read fallback meta.
+
+So the fix is not just “fallback exists”; it’s make fallback consistent across endpoints + provide freshness timestamps from snapshots/ingestion_runs when trending_people is empty.
+
+C) GDELT being slow shouldn’t make trending_people empty
+
+GDELT delays can cause no new data, but it shouldn’t wipe your existing last-good dataset. Empty table implies either:
+
+a cleanup process ran, or
+
+a migration reset, or
+
+ingestion write logic wiped or truncated, or
+
+another component wrote trending_people incorrectly.
+
+The best “correct + beneficial” plan (what you should suggest to Replit)
+1) Make trending_people updates atomic (two safe patterns)
+
+Pick one:
+
+Pattern A — Upsert-only + stale cleanup guarded
+
+Upsert the 100 current people.
+
+Then delete stale rows only if the new run successfully wrote the expected count.
+
+Do everything in one transaction.
+
+Pattern B — Versioned/partition swap (best practice)
+
+Write new run’s results to trending_people_next (or same table with run_id).
+
+When complete, “swap” what the API reads (e.g., a pointer in api_cache to latest run_id).
+
+No deletions needed; you keep last-good and simply move the pointer.
+
+This eliminates “empty table” risk completely.
+
+2) Add a “last-good dataset fallback” in API (not UI)
+
+If trending_people rowcount < expected (e.g., <100), then:
+
+serve leaderboard + movers from latest completed ingestion run snapshots (trend_snapshots WHERE run_id = latest_completed_run_id AND score_version = current)
+
+fill freshness timestamps from ingestion_runs.completed_at (or run start/end)
+
+And include:
+
+meta.fallbackUsed: true
+
+meta.fallbackRunId
+
+meta.reason: "trending_people_empty"
+
+3) Fix the stuck-run problem properly
+
+You need two things:
+
+Heartbeat watchdog: if running and no heartbeat in N minutes, mark failed and release lock.
+
+Ensure the watchdog cannot coincide with a still-writing transaction (e.g., don’t kill a run mid-commit).
+
+And add visibility:
+
+admin endpoint shows currentRun, heartbeat age, phase (wiki/gdelt/serper/write).
+
+4) Fix LiveTick negative-time loop
+
+When “next tick time” is in the past:
+
+compute next future tick immediately:
+
+next = ceil(now to next 10-min boundary)
+
+schedule a single timer
+
+never loop-log in sync.
+
+5) GDELT rate limit: don’t let it stall the world
+
+Even with 5.5s spacing, ingestion shouldn’t block indefinitely.
+
+Do one of:
+
+hard cap total time for GDELT phase; if exceeded → mark news degraded and proceed.
+
+reduce candidates and/or batch queries.
+
+switch news source (Serper News is the easiest since you already use Serper).
+
+Copy/paste message you can send to Replit
+
+Use this exactly:
+
+Your diagnosis is helpful but there’s an inconsistency: earlier you said trending_people updates are upsert + single transaction + stale cleanup at end, so a crash shouldn’t empty the table. Now you’re saying there’s a delete-then-insert path that can wipe it.
+
+Please prove which is true by pointing to the exact code/SQL that deletes from trending_people, and confirm it’s inside the same transaction as the upsert.
+
+Regardless, we need two fixes:
+
+Make trending_people never empty (atomic swap or versioned pointer to latest completed run).
+
+Add snapshot-based fallback for ALL endpoints (leaderboard + hot movers + daily movers + gainers/droppers + freshness timestamps) using trend_snapshots WHERE run_id = latest_completed_run_id AND score_version = current. Include meta.fallbackUsed + fallbackRunId.
+
+Also fix LiveTick “next tick in -Xs” tight loop by advancing to the next future boundary immediately, and make GDELT phase time-bounded so it can’t stall ingestion.
