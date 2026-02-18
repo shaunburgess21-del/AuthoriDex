@@ -1,0 +1,317 @@
+Got it. Here’s a single, explicit Replit prompt that focuses only on the remaining native Predict sections (below the countdown timer) and ensures:
+
+Cards populate correctly on frontend (using existing card designs)
+
+Every card type has a clean Admin CMS list + create/edit
+
+All cards are linked to leaderboard celebrities
+
+Weekly reset + seed simulation works (without “empty restaurant”)
+
+Replit Prompt — Build Admin CMS + Populate Native Predict Sections (Non–Real-World Markets)
+
+Scope note (important):
+Do not change anything for Open Markets / Real-World Markets. That section is complete and out of scope.
+This prompt applies only to these Predict sections below the Countdown Timer:
+
+Weekly Jackpot
+
+Weekly Up/Down Predictions
+
+Head-to-Head Battles
+
+Top Gainer Predictions
+
+Also: Do not change any frontend card designs for these sections—only connect them to real data + admin tooling.
+
+1) Admin Portal Structure (Prediction CMS)
+
+In the backend Admin Portal, under Prediction CMS, create 4 tabs (or sub-pages) matching the sections:
+
+Weekly Jackpot
+
+Weekly Up/Down
+
+Head-to-Head Battles
+
+Top Gainer Predictions
+
+Each tab must have:
+
+A list view of all cards/items in that section
+
+Search + filter by Category (where applicable) and Visibility
+
+Quick status pill (Live / Inactive / Archived / Draft/Admin-only if you keep it)
+
+Edit + Delete actions
+
+“Add New” button (except where generation is automatic, see below)
+
+Visibility options (standardize across all four):
+
+Live (Active) → visible normally
+
+Inactive (Visible but dimmed) → visible but clearly dimmed/disabled
+
+Archived (Hidden) → not shown
+
+(Optional) Draft (Admin only) if already used elsewhere—only if it’s already part of your system
+
+Also include:
+
+Featured toggle (where applicable, used to pin/prioritize in UI if featured behavior exists)
+
+2) Data Behavior Principles (Native Predictions)
+
+These native Predict sections are tied to AuthoriDex Trend Score and leaderboard celebrities already exist (names + images). Therefore:
+
+No manual upload of titles/subtitles/resolution dates/slugs is needed.
+
+Each item should primarily store:
+
+linked celebrity IDs (one / two / many depending on section)
+
+visibility + featured
+
+seed configuration (details below)
+
+weekly cycle metadata (week start/end, etc.)
+
+3) Weekly Jackpot (Native)
+Frontend behavior (already exists):
+
+Users predict the exact Trend Score for a selected celebrity by weekly close (Sun 23:59).
+
+Admin requirements:
+
+Create a Weekly Jackpot CMS list that shows:
+
+Celebrity (linked)
+
+Status / Visibility
+
+Featured
+
+Current week metadata (week ending date/time)
+
+Total pool, participants, and settlement status (if available)
+
+Ability to manually trigger “Settle” for the week if needed (even if automated normally)
+
+Data model expectation:
+
+The Weekly Jackpot is already wired to celebrity selection; we now need admin visibility/settlement controls.
+
+Core deliverable:
+
+In Admin: show the “full list of celebrity rows” relevant to weekly jackpot management.
+If jackpot is only one market per week, then list that single market plus a sub-table of participating celebs OR show a dedicated “Jackpot Celeb Eligibility” list—choose whichever matches current architecture.
+
+4) Weekly Up/Down Predictions (Auto-generate for all celebs)
+Requirement:
+
+Auto-generate ~100 Weekly Up/Down prediction cards, one per leaderboard celebrity.
+
+These should exist as real DB rows, not placeholders.
+
+Each row links to exactly one celebrity.
+
+Admin must be able to:
+
+set visibility (Live/Inactive/Archived)
+
+set featured
+
+adjust seed configuration (optional per celeb or default)
+
+create new entries for new inductees (but ideally auto-create)
+
+Auto-create on new inductee:
+
+When a new celebrity is added to the leaderboard, automatically create their Weekly Up/Down row (default visibility = Inactive or Archived, whichever is safer). Admin can then switch to Live.
+
+Admin tab:
+
+“Weekly Up/Down” list with filters by category + visibility, and a bulk action:
+
+Bulk set visibility (e.g., select many → set Live/Inactive/Archived)
+
+5) Head-to-Head Battles (Curated ~20)
+Requirement:
+
+Do NOT auto-create for all celebs. We curate about 20 for Phase 1.
+
+Admin create/edit modal fields:
+
+Category
+
+Visibility
+
+Featured
+
+Linked Celebrity A (required) — searchable dropdown with leaderboard suggestions
+
+Linked Celebrity B (required) — searchable dropdown with leaderboard suggestions
+
+Seed configuration (see seeding section below)
+
+Frontend:
+
+Must render using existing design, using celebrity images automatically.
+
+No manual image uploads required since both are always linked celebs.
+
+6) Top Gainer Predictions (6 category markets, up to 20 linked celebs each)
+Requirement:
+
+Create exactly 6 Top Gainer markets (one per category):
+
+Tech, Politics, Business, Sports, Creator, Music
+
+Admin create/edit modal:
+
+Category (locked if you want to enforce only one per category)
+
+Visibility
+
+Featured
+
+Linked Celebrities (up to 20): multi-select searchable dropdown from leaderboard
+
+Seed configuration
+
+Frontend:
+
+Each card represents “Who will be top gainer in this category this week?”
+
+Uses existing Top Gainer card design.
+
+Celebrity images and names come from linked list.
+
+Also add a safeguard:
+
+Prevent duplicates (only one Top Gainer market per category per week), unless the system is intentionally multi-market.
+
+7) Weekly Reset + Seeding System (Critical)
+
+We need to avoid the “empty restaurant” problem at launch.
+
+Weekly reset rules:
+
+All native prediction sections reset weekly at Sunday 23:59
+
+New weekly cycle begins Monday 00:00
+
+Seed activity should accumulate mostly Mon–Tue, in small hourly batches, to look organic.
+
+What to seed:
+
+For each market type:
+
+Participants count
+
+Distribution across outcomes (Up/Down; A/B; Top Gainer picks; Jackpot guesses)
+
+Total pool (credits)
+
+How to seed:
+
+Create a “Seed Engine” that runs automatically:
+
+Runs hourly from Monday 06:00 to Tuesday 22:00 (configurable)
+
+Adds small batches each hour until a weekly target is reached per market/card
+
+Targets should vary per card so it doesn’t look uniform
+
+Admin seed configuration fields:
+
+For each card/market, add seed config fields (with sensible defaults):
+
+Seed enabled (toggle)
+
+Weekly target participants (min/max range)
+
+Weekly target total pool (credits) (min/max range)
+
+Distribution bias (optional):
+
+Up/Down: bias % Up vs Down
+
+Head-to-Head: bias % A vs B
+
+Top Gainer: weighted distribution across selected celebs
+
+Jackpot: generate guesses around plausible Trend Score range (based on last known Trend Score + volatility band)
+
+Important:
+
+Seed activity must look like “real users”:
+
+Use pseudo-user identities (system/bot users) OR a “seed” flag in bets table
+
+Ensure UI counts include seed activity
+
+Prevent seeded votes/bets from being editable by real users
+
+Weekly close + settlement:
+
+At Sunday 23:59:
+
+freeze markets
+
+determine outcomes based on Trend Score changes
+
+settle automatically (preferred), but keep manual settle button in admin
+
+8) “No extra fields” requirement (Keep modals clean)
+
+For these native Predict sections, do NOT add:
+
+Title, subtitle, teaser, resolution date, slug fields, source URLs
+Those are either irrelevant or already handled natively.
+
+Only include:
+
+Visibility
+
+Featured
+
+Linked celebrity/celebrities
+
+Seed config controls
+
+Category (where needed)
+
+9) Deliverables / Acceptance Criteria
+
+Frontend sections below countdown show real populated cards:
+
+Weekly Jackpot
+
+Weekly Up/Down (100 celebs)
+
+Head-to-Head (curated list)
+
+Top Gainer (6 categories)
+
+Admin Portal has a clean CMS for each:
+
+List view + edit
+
+Visibility + featured works and affects frontend
+
+Linked celebrity selection works via searchable dropdown
+
+Weekly Up/Down auto-creates for new inductees
+
+Seed engine:
+
+Runs Mon–Tue hourly batches
+
+Produces non-uniform participant/pool counts
+
+Resets weekly and starts again next cycle
+
+No changes to Real-World Markets.
