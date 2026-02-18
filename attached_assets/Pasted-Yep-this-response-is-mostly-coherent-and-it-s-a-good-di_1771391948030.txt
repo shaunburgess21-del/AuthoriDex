@@ -1,0 +1,87 @@
+Yep — this response is mostly coherent and it’s a good direction, with one big caveat:
+
+✅ What Replit says that sounds correct
+
+If the ingestion write truly does:
+
+Upsert inside a single DB transaction
+
+Only deletes stale rows at the end of that same transaction
+
+Rolls back on any failure
+
+Has a row-count assertion that aborts the transaction if counts don’t match
+
+…then you should never end up with an empty trending_people because of a mid-run failure. That’s solid.
+
+⚠️ The part that doesn’t fully add up (and what to ask Replit to prove)
+
+Replit claims the table was empty due to “server down / stale lock / locked out runs”.
+
+A stale lock / locked-out runs can explain stale data, but does not explain trending_people = 0 rows unless one of these is true:
+
+It was genuinely first boot / new DB / table got wiped (or reset)
+
+There is some separate cleanup job / migration / manual SQL that cleared it
+
+The “stale rows are cleaned up at the end” logic can, in some edge path, delete too much
+
+The transaction wasn’t actually wrapping the delete in all code paths (rare but possible)
+
+So the “snapshot-based fallback” is a great idea regardless — but you should still ask them to show the evidence of why it was empty.
+
+✅ Is the snapshot-fallback plan beneficial?
+
+Yes — absolutely. It’s a classic “never show an empty leaderboard” reliability pattern.
+
+Even if the DB is perfect, a fallback prevents:
+
+first deploy / first boot emptiness
+
+edge-case empty state bugs
+
+partial data loads
+
+future regressions
+
+Exactly what to tell Replit (copy/paste)
+
+Here’s a clean message you can send:
+
+This sounds good. Two requests:
+
+Please confirm why trending_people was 0 rows (first boot? migration? cleanup query?). A stale lock alone shouldn’t empty it if the transaction rollback preserves old rows. Please share the exact log/SQL evidence.
+
+Yes to snapshot-based fallback — but implement it in a safe, deterministic way:
+
+If trending_people rowcount < expected (e.g., <100), serve leaderboard from the latest completed ingestion run’s snapshots (trend_snapshots filtered by run_id), not “latest timestamp”.
+
+Keep it filtered by run_id and score_version so we don’t reintroduce the baseline mixing bug.
+
+Add meta.fallbackUsed=true + meta.fallbackRunId so we can see it in network tab when it triggers.
+
+How the fallback should work (simple + robust)
+
+Preferred fallback logic:
+
+Query latest completed run: SELECT id FROM ingestion_runs WHERE status='completed' ORDER BY started_at DESC LIMIT 1
+
+Fetch leaderboard rows from snapshots for that run:
+
+SELECT person_id, fame_index, rank, change24h... FROM trend_snapshots WHERE run_id = $runId
+
+If rank isn’t stored there, compute rank by sorting fame_index descending.
+
+Return that as leaderboard data, plus meta telling you it’s fallback.
+
+Important: do NOT fallback to “latest snapshot by timestamp” (that’s how you got earlier drift issues). Always use run_id.
+
+One more must-have guardrail
+
+Even with fallback, ensure ingestion never leaves the app “blank” by adding:
+
+Minimum rows invariant: if ingestion is about to delete stale rows, ensure it will still keep >=100 rows after cleanup.
+
+If not, abort transaction.
+
+This catches “oops, delete clause too broad”.

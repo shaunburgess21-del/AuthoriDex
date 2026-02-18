@@ -1,0 +1,87 @@
+That explanation from Replit is plausible, but the “leaderboard empty because trending_people is empty while ingestion is running” is also a design smell you should harden immediately.
+
+Right now you’ve got a single point of failure: if ingestion clears (or fails to populate) trending_people, the product looks “dead” even though you still have thousands of snapshots.
+
+What’s most likely happening
+
+One of these is true (Replit should confirm which):
+
+Ingestion clears trending_people early (delete/truncate) and repopulates at the end.
+If the run fails or gets locked out mid-run → table stays empty.
+
+Ingestion uses an “overwrite” write path that isn’t atomic (partial inserts, then crash).
+End result: 0 rows (or partial) for a period.
+
+A stale “running” lock blocked runs for a while and you restarted, which kicked off a new run.
+But the table being empty implies it was already cleared, or you have a cleanup routine that wiped it.
+
+Even if the current run eventually finishes, the user experience is still bad and this will recur.
+
+What to tell Replit (copy/paste)
+
+Here’s a direct instruction set that will make this bulletproof:
+
+1) Never leave trending_people empty during ingestion
+
+Do not TRUNCATE / DELETE FROM trending_people as the first step.
+
+Instead write new results into a staging table (or same table with a run_id/version marker).
+
+2) Use an atomic swap
+Two good patterns:
+
+Staging table swap
+
+Populate trending_people_next
+
+In a single transaction:
+
+ALTER TABLE trending_people RENAME TO trending_people_prev
+
+ALTER TABLE trending_people_next RENAME TO trending_people
+
+(optional) drop prev later
+
+Single table + “active_run_id” pointer
+
+Upsert results tagged with run_id
+
+Only flip api_cache.active_trending_run_id = <newRunId> once complete
+
+Leaderboard queries always read the active run id
+
+3) Add a “last good state” fallback
+If current run is running/degraded:
+
+Serve leaderboard from last completed run’s trending_people rows (or from snapshots by run_id).
+
+If you must show “freshness”, show “Last updated X ago” — but don’t show a blank board.
+
+4) Harden the lock + watchdog
+
+If a run is running and heartbeat is stale, mark it failed and immediately start a new run (sounds like you do this).
+
+But crucially: don’t clear current leaderboard data until the new run is fully successful.
+
+5) Add an invariant check
+At the end of ingestion:
+
+Assert you wrote exactly 100 rows (or expected count).
+
+If not, do not flip active pointer / do not swap tables.
+
+Why this is beneficial
+
+Users never see an empty leaderboard.
+
+Failed runs don’t “wipe” your app.
+
+You can safely slow down GDELT (5.5s spacing) without downtime.
+
+Debugging becomes simpler: “active run” vs “in progress run”.
+
+One quick question you can ask Replit (optional, but useful)
+
+“Does ingestion currently truncate/delete trending_people before finishing? If yes, switch to staging+swap or active_run_id gating so the table never goes empty.”
+
+If you want, paste the relevant ingestion write section (the part that writes to trending_people) and I’ll tell you exactly which pattern fits your codebase best with minimal changes.
