@@ -1,3 +1,15 @@
+export const MARKET_TYPE_LABELS: Record<string, string> = {
+  community: "Real-World Markets",
+  updown: "Weekly Up/Down",
+  h2h: "Head-to-Head Battles",
+  gainer: "Top Gainer Predictions",
+  jackpot: "Weekly Jackpot",
+};
+
+export function getMarketTypeLabel(marketType: string): string {
+  return MARKET_TYPE_LABELS[marketType] || marketType;
+}
+
 export const BASE_FILTER_CATEGORIES = [
   "All",
   "Favorites",

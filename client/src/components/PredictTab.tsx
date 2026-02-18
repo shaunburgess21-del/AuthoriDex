@@ -799,7 +799,7 @@ function ViewAllCommunityOverlay({
         <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b p-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-serif font-bold">Community Predictions</h2>
+              <h2 className="text-lg font-serif font-bold">Real-World Predictions</h2>
               <p className="text-sm text-muted-foreground">{filteredMarkets.length} predictions about {personName}</p>
             </div>
             <Button variant="ghost" size="icon" onClick={onClose} className="relative z-20" data-testid="button-close-community-overlay">
@@ -1135,12 +1135,12 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         <section>
           <SectionHeader
             icon={<Users className="h-4 w-4 text-violet-400" />}
-            title="Community Predictions"
-            subtitle="User-created markets for unique predictions"
+            title="Real-World Predictions"
+            subtitle="Markets for real-world event predictions"
             count={communityPredictions.length}
             showViewAll={communityPredictions.length > 3}
             onViewAll={() => setShowCommunityOverlay(true)}
-            infoTooltip="Community-created prediction markets about this celebrity"
+            infoTooltip="Real-world prediction markets about this celebrity"
           />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {communityPredictions.slice(0, 3).map(community => (

@@ -1394,7 +1394,7 @@ const MISSION_HEADERS: Record<string, string> = {
   h2h: "Back your champion to win this weekly matchup.",
   race: "Predict the #1 top performer to win.",
   gainer: "Predict the #1 top performer to win.",
-  community: "Cast your vote on this community prediction.",
+  community: "Cast your vote on this real-world prediction.",
 };
 
 function StakeModal({
@@ -2354,7 +2354,7 @@ export default function PredictPage() {
         </div>
       </div>
       <div className="container mx-auto px-4 max-w-7xl">
-        {/* SECTION HEADER: Open Markets (Community Predictions) */}
+        {/* SECTION HEADER: Open Markets (Real-World Predictions) */}
         {showSection("community") && (
           <div className="relative overflow-hidden mb-6">
             <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 via-transparent to-transparent" />

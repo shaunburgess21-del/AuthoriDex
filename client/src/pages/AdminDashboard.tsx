@@ -2888,7 +2888,7 @@ export default function AdminDashboard() {
                   <CardHeader className="flex flex-row items-center justify-between gap-2">
                     <div>
                       <CardTitle>Real-World Markets</CardTitle>
-                      <CardDescription>Community prediction markets for real-world events</CardDescription>
+                      <CardDescription>Prediction markets for real-world events</CardDescription>
                     </div>
                     <Button onClick={() => setCreateMarketOpen(true)} size="sm" data-testid="button-create-rw-market">
                       <Plus className="h-4 w-4 mr-1" />
