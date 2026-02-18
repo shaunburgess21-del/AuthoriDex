@@ -30,6 +30,7 @@ export interface SourceHealthStatus {
   reason: string;
   prevCoveragePct?: number;
   coverageDropRuns?: number;
+  consecutiveRecoveryRuns?: number;
 }
 
 export interface SourceHealthSnapshot {
@@ -79,6 +80,7 @@ function serializeHealth(health: SourceHealthSnapshot): Record<string, any> {
     reason: s.reason,
     prevCoveragePct: s.prevCoveragePct ?? null,
     coverageDropRuns: s.coverageDropRuns ?? 0,
+    consecutiveRecoveryRuns: s.consecutiveRecoveryRuns ?? 0,
   });
   return {
     news: serialize(health.news),
@@ -98,6 +100,7 @@ function deserializeHealth(data: Record<string, any>): SourceHealthSnapshot {
     reason: d.reason || "restored_from_db",
     prevCoveragePct: d.prevCoveragePct ?? undefined,
     coverageDropRuns: d.coverageDropRuns ?? 0,
+    consecutiveRecoveryRuns: d.consecutiveRecoveryRuns ?? 0,
   });
   return {
     news: deserialize(data.news || {}),
@@ -380,9 +383,22 @@ export function computeDegradationGovernor(
   status.prevCoveragePct = currentCoveragePct;
   
   if (currentCoveragePct >= 70) {
+    const RECOVERY_HYSTERESIS = 2;
+    status.consecutiveRecoveryRuns = (status.consecutiveRecoveryRuns ?? 0) + 1;
+    
+    if ((status.coverageDropRuns ?? 0) > 0 && status.consecutiveRecoveryRuns < RECOVERY_HYSTERESIS) {
+      console.log(`[DegradationGovernor] ${source.toUpperCase()}: Coverage recovered to ${currentCoveragePct.toFixed(0)}%, but need ${RECOVERY_HYSTERESIS - status.consecutiveRecoveryRuns} more run(s) to confirm stability.`);
+      return 0.75;
+    }
+    
+    if ((status.coverageDropRuns ?? 0) > 0 && status.consecutiveRecoveryRuns >= RECOVERY_HYSTERESIS) {
+      console.log(`[DegradationGovernor] ${source.toUpperCase()}: Recovery confirmed (${status.consecutiveRecoveryRuns} consecutive runs above 70%). Restoring full weight.`);
+    }
     status.coverageDropRuns = 0;
     return 1.0;
   }
+  
+  status.consecutiveRecoveryRuns = 0;
   
   if (coverageDrop > 50 && (status.coverageDropRuns ?? 0) === 0) {
     status.coverageDropRuns = 1;

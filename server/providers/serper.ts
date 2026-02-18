@@ -273,7 +273,8 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
     const data7d = response7d.ok ? await response7d.json() : { news: [] };
 
     const articleCount24h = data24h.news?.length || 0;
-    const articleCount7d = data7d.news?.length || 0;
+    const rawArticleCount7d = data7d.news?.length || 0;
+    const articleCount7d = Math.round(rawArticleCount7d * 2.5);
     const averageDaily7d = articleCount7d / 7;
     const delta = averageDaily7d > 0
       ? ((articleCount24h - averageDaily7d) / averageDaily7d)

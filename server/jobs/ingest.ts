@@ -78,6 +78,20 @@ async function computeNewsCandidates(
 
 export const SNAPSHOT_DIAGNOSTICS_VERSION = 1;
 
+export interface LastRunMeta {
+  newsProviderUsed: "gdelt" | "serper_news";
+  newsFreshCoveragePct: number;
+  searchFreshCoveragePct: number;
+  newsGovernorFactor: number;
+  searchGovernorFactor: number;
+  finishedAt: Date;
+}
+let _lastRunMeta: LastRunMeta | null = null;
+
+export function getLastRunMeta(): LastRunMeta | null {
+  return _lastRunMeta;
+}
+
 export function parseSnapshotDiagnostics(diagnostics: unknown): Record<string, any> | null {
   if (!diagnostics || typeof diagnostics !== "object") return null;
   const d = diagnostics as Record<string, any>;
@@ -1078,6 +1092,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
         searchPct: `${searchCoveragePctActual.toFixed(0)}%`,
         newsGovernor: `${(newsGovernorFactor * 100).toFixed(0)}%`,
         searchGovernor: `${(searchGovernorFactor * 100).toFixed(0)}%`,
+        newsProviderUsed: newsSource,
+        newsFreshCoveragePct: `${newsCoveragePctActual.toFixed(0)}%`,
       },
       bootstrap: {
         newsHistory: lastNonZeroNewsMap.size,
@@ -1141,6 +1157,15 @@ export async function runDataIngestion(): Promise<IngestResult> {
     (healthSummary as any).baselineMeta = baselineMeta;
 
     console.log(`[HEALTH SUMMARY] ${JSON.stringify(healthSummary)}`);
+
+    _lastRunMeta = {
+      newsProviderUsed: newsSource,
+      newsFreshCoveragePct: newsCoveragePctActual,
+      searchFreshCoveragePct: searchCoveragePctActual,
+      newsGovernorFactor,
+      searchGovernorFactor,
+      finishedAt: new Date(),
+    };
 
     await saveHealthState();
 

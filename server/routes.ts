@@ -36,6 +36,7 @@ import {
   getStalenessDecayFactor,
 } from "./scoring/sourceHealth";
 import { getLastFullRefreshAt } from "./jobs/live-tick";
+import { getLastRunMeta } from "./jobs/ingest";
 
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
@@ -451,10 +452,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           baselineStatus: baselineMeta.baseline24hStatus,
           sourceHealth: (() => {
             const health = getCurrentHealthSnapshot();
+            const runMeta = getLastRunMeta();
             return {
               news: health.news.state,
               search: health.search.state,
               wiki: health.wiki.state,
+              newsProviderUsed: runMeta?.newsProviderUsed ?? null,
+              newsFreshCoveragePct: runMeta?.newsFreshCoveragePct ?? null,
+              newsGovernorFactor: runMeta?.newsGovernorFactor ?? null,
+              newsDegradedReason: health.news.state !== "HEALTHY" ? health.news.reason : null,
             };
           })(),
         },
@@ -4131,9 +4137,21 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
               decayFactor: Math.round(getStalenessDecayFactor(s.lastHealthyTimestamp) * 100),
               coveragePct: s.prevCoveragePct ?? null,
               coverageDropRuns: s.coverageDropRuns ?? 0,
+              consecutiveRecoveryRuns: s.consecutiveRecoveryRuns ?? 0,
               reason: s.reason,
             });
-            return { news: fmt(h.news), search: fmt(h.search), wiki: fmt(h.wiki) };
+            const runMeta = getLastRunMeta();
+            return {
+              news: fmt(h.news), search: fmt(h.search), wiki: fmt(h.wiki),
+              lastRun: runMeta ? {
+                newsProviderUsed: runMeta.newsProviderUsed,
+                newsFreshCoveragePct: Math.round(runMeta.newsFreshCoveragePct),
+                searchFreshCoveragePct: Math.round(runMeta.searchFreshCoveragePct),
+                newsGovernorFactor: Math.round(runMeta.newsGovernorFactor * 100),
+                searchGovernorFactor: Math.round(runMeta.searchGovernorFactor * 100),
+                finishedAt: runMeta.finishedAt.toISOString(),
+              } : null,
+            };
           })(),
         },
         coverage: {
