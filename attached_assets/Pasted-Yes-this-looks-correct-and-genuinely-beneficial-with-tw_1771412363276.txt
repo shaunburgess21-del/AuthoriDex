@@ -1,0 +1,92 @@
+Yes — this looks correct and genuinely beneficial, with two important caveats you should tighten up with Replit so you don’t introduce “hidden wrongness” later.
+
+✅ What looks correct (and why it’s beneficial)
+1) They resolved the earlier inconsistency properly
+
+Replit now proved the trending_people write path is transactional upsert + delete stale + count assertion inside a db.transaction(). That’s exactly the safe model we want. ✅
+
+2) They found a real “table wipe” risk: seed-celebrities.ts
+
+If there truly is an unguarded db.delete(trendingPeople) in a script, that absolutely can zero out the table outside ingestion, and it explains “suddenly empty” even if ingestion is transactional. ✅
+
+This is the most credible explanation they’ve given so far for a sudden empty table.
+
+3) LiveTick tight-loop fix is a must
+
+Their bug description is a classic scheduling issue: negative delays cause immediate setTimeout() callbacks → loop spam → resource drain. Fixing it reduces noise, CPU churn, and accidental starvation of other tasks. ✅
+
+4) Snapshot fallback for movers endpoints is the right backend-only UX
+
+This is a good “make the system robust” move:
+
+leaderboard/movers never go blank just because trending_people is missing
+
+you can still browse while ingestion catches up
+
+you reduce support incidents
+
+✅ Big practical win.
+
+5) Freshness fallback to last completed run (filtered by score version)
+
+This is also correct: freshness shouldn’t become N/A when trending_people is empty. Using latest completed ingestion run and filtering by SCORE_VERSION avoids showing timestamps from the “wrong scoring era.” ✅
+
+6) Boot-time hydration
+
+This is a valid reliability pattern: if the server starts and trending_people is empty, repopulate from the latest completed snapshots.
+
+✅ It’s especially useful if you ever restart mid-incident.
+
+⚠️ Two caveats to tighten (you should tell Replit)
+Caveat A — Boot-time hydration must be safe + deterministic
+
+Hydration is great, but it must not introduce weird partial states or “wrong version” fills.
+
+Ask Replit to confirm:
+
+Hydration selects latest completed run for current SCORE_VERSION (not just latest run overall)
+
+It hydrates exactly 100 people (or whatever your tracked set is), and fails loudly if coverage is incomplete
+
+It does upsert, not truncate/replace
+
+It cannot race with ingestion (e.g., don’t hydrate if a run is currently running)
+
+If they don’t already do these, you want them.
+
+Caveat B — The “seed-celebrities” wipe must be guarded
+
+This is the most dangerous thing in the whole system.
+
+Tell Replit to do one of these (minimum one):
+
+Make the delete require an explicit env var like ALLOW_SEED_DELETE=true
+
+Or require NODE_ENV === 'development'
+
+Or remove delete entirely and make it idempotent upsert-only
+
+Or move it behind an admin endpoint requiring auth
+
+Otherwise you’ll get “mystery empty table” incidents again.
+
+One more subtle thing (worth checking)
+
+Replit said: “Leaderboard: 3 people returned… then later 100 rows exist.” That’s a bit odd.
+
+It might just be during a transition moment (before hydration completes), but you should ask them to confirm:
+
+all fallback endpoints return a consistent count
+
+and UI queries aren’t accidentally hitting a debug/limited endpoint or an early-return path
+
+Not a blocker, but worth sanity-checking.
+
+What you should reply to Replit (copy/paste)
+
+This looks good and the fixes are beneficial. Two things I want tightened so we don’t regress:
+
+Boot-time hydration: confirm it only hydrates from the latest completed run for the current SCORE_VERSION, skips if any run is running, and asserts full coverage (100 people). Must upsert only.
+
+seed-celebrities.ts: please guard or remove the db.delete(trendingPeople) so it cannot wipe production accidentally (env flag + dev-only + auth).
+If those are in place, I’m happy with the approach.
