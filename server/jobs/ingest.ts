@@ -1223,8 +1223,16 @@ export async function hydrateTrendingPeopleFromSnapshots(): Promise<boolean> {
     const trackedRows = Array.isArray(trackedCountRaw) ? trackedCountRaw : (trackedCountRaw as any).rows ?? [];
     const trackedCount = parseInt((trackedRows[0] as any)?.count || '0', 10);
 
+    const coveragePct = trackedCount > 0 ? Math.round(rows.length / trackedCount * 100) : 100;
+
+    if (coveragePct < 90) {
+      console.error(`[Boot] ABORT hydration: only ${rows.length}/${trackedCount} rows available (${coveragePct}% coverage, need >=90%). Rolling back to prevent serving incomplete data.`);
+      await db.delete(trendingPeople);
+      return false;
+    }
+
     if (rows.length < trackedCount) {
-      console.warn(`[Boot] WARNING: Hydrated ${rows.length} rows but tracked_people has ${trackedCount}. Coverage is incomplete (${Math.round(rows.length / trackedCount * 100)}%).`);
+      console.warn(`[Boot] WARNING: Hydrated ${rows.length}/${trackedCount} rows (${coveragePct}% coverage). Some people may be missing from the leaderboard.`);
     }
 
     console.log(`[Boot] Successfully hydrated trending_people with ${rows.length}/${trackedCount} rows from run ${runId}`);

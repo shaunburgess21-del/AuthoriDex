@@ -13,21 +13,27 @@ interface ExcelRow {
 }
 
 async function seedCelebrities() {
-  const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === undefined;
+  const isDev = process.env.NODE_ENV === 'development';
   const allowSeedDelete = process.env.ALLOW_SEED_DELETE === 'true';
+  const confirmSeedDelete = process.env.CONFIRM_SEED_DELETE === 'YES_I_UNDERSTAND';
 
-  if (!isDev && !allowSeedDelete) {
-    console.error('ABORT: seed-celebrities.ts refused to run.');
-    console.error('This script deletes ALL trending data (trending_people, trend_snapshots, api_cache, etc.).');
-    console.error('To proceed, either:');
-    console.error('  1. Set NODE_ENV=development');
-    console.error('  2. Set ALLOW_SEED_DELETE=true (for intentional production reseeds)');
-    process.exit(1);
-  }
+  if (!isDev) {
+    if (!allowSeedDelete || !confirmSeedDelete) {
+      console.error('ABORT: seed-celebrities.ts refused to run.');
+      console.error('This script deletes ALL trending data (trending_people, trend_snapshots, api_cache, etc.).');
+      console.error('');
+      console.error('To run in development, set: NODE_ENV=development');
+      console.error('To run in production/other, set ALL of these:');
+      console.error('  ALLOW_SEED_DELETE=true');
+      console.error('  CONFIRM_SEED_DELETE=YES_I_UNDERSTAND');
+      console.error('');
+      console.error(`Current NODE_ENV: "${process.env.NODE_ENV || '(unset)'}"`);
+      process.exit(1);
+    }
 
-  if (allowSeedDelete && !isDev) {
-    console.warn('WARNING: Running seed with ALLOW_SEED_DELETE=true in non-development environment.');
-    console.warn('This will wipe all scored data. Proceeding in 5 seconds...');
+    console.warn('WARNING: Running destructive seed in non-development environment.');
+    console.warn(`NODE_ENV="${process.env.NODE_ENV || '(unset)'}", ALLOW_SEED_DELETE=true, CONFIRM_SEED_DELETE confirmed.`);
+    console.warn('This will wipe ALL scored data. Proceeding in 5 seconds...');
     await new Promise(r => setTimeout(r, 5000));
   }
 
