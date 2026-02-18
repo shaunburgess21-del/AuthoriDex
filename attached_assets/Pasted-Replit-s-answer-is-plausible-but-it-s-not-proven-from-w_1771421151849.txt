@@ -1,0 +1,108 @@
+Replit’s answer is plausible, but it’s not proven from what they wrote — and “all 100 are down” is unusual enough that I’d want a couple of specific checks before accepting “quiet day on the internet” as the explanation.
+
+What in Replit’s response is solid
+
+If baselineStatus === "normal" and scoreVersion matches on both current and baseline runs, then this is not the score-versioning / v1-v2 mixing bug. That part is legit.
+
+Showing actual fame_index values for 24h ago → now suggests they did compare real snapshots, not just eyeballing.
+
+What’s weak / potentially wrong
+
+“All sources had lower volume globally” is a hand-wavy story unless they actually checked raw inputs. Also:
+
+Wikipedia pageviews can dip day-to-day, but “every person down” usually means something systemic like:
+
+Normalization reference stats changed (source_stats_reference recompute) causing everyone’s normalized scores to compress.
+
+A provider scaling or parsing change (e.g., wiki pageviews units or window changed, serper returning lower values, news gating changed).
+
+Weighting changed (even slightly) or a cap/limit toggled.
+
+Mass/velocity pipeline shifting (e.g., new cap, new taper, or floor affecting all).
+
+Timezone/window mismatch in the “24h ago” selection (run-based baseline might be correct, but the “closest run” could still be consistently biased if runs are irregular).
+
+Given your recent 48h of engine surgery, I would not accept “nothing broken” without a couple objective checks.
+
+What I would ask Replit to verify (fast, definitive)
+
+Tell them you want evidence, not a narrative. Something like this:
+
+1) Prove it’s real by comparing raw inputs (not just fame_index)
+
+Ask for the median and mean of raw inputs now vs baseline run:
+
+wikiPageviews24h and wikiPageviews7dAvg (or whatever fields you store)
+
+searchVolume
+
+newsCount
+
+and their freshness factors (staleness multipliers / source health)
+
+If those medians are all down materially, then “real movement” is believable.
+
+2) Check whether reference normalization shifted
+
+Ask:
+
+Did source_stats_reference recompute in the last 24h?
+
+Compare wiki p50/p75/p90, news p50/p90, search p50/p90 between:
+
+baseline run time
+
+latest run time
+
+If those percentiles moved, everyone’s normalized scores can move together even if raw inputs didn’t.
+
+3) Validate score components shifted together
+
+For a sample of ~10 people across the rank spectrum:
+
+massScore now vs baseline
+
+velocityScore now vs baseline
+
+diversity multiplier
+
+final rawFame / afterRateLimit / afterEma (your new stab diagnostics)
+
+If mass or velocity dropped in sync for all of them, that tells you which subsystem caused the global red.
+
+4) Sanity check “all down” frequency
+
+Ask them to run:
+
+“How many are negative vs positive?”
+
+“What is the median change24h?”
+
+“Is this pattern present over the last N runs, or only one run?”
+
+If it’s one run, it’s likely a step-change (config/normalization/source hiccup).
+If it’s several runs, it might be true broad cooldown.
+
+Copy/paste message to send to Replit
+
+Here you go:
+
+Thanks — I get the explanation, but can you prove it with hard diagnostics?
+
+For the current run and the baseline24h run (both v2, baselineStatus=normal), please compare median/mean of raw inputs: wiki24h (and wiki7dAvg if used), newsCount, searchVolume, plus their freshness/staleness factors.
+
+Did source_stats_reference recompute in the last 24h? If yes, show wiki/news/search p50/p75/p90 at baseline vs now.
+
+For ~10 sample people (top, middle, bottom), show component deltas: massScore, velocityScore, rawFame, afterRateLimit, afterEma.
+
+Confirm how many are negative vs positive and whether this persisted across multiple runs or just one.
+
+If raw inputs are down and reference stats stable, I’ll accept “real movement.” If reference stats or weights shifted, then it’s systemic and we need to address it.
+
+My gut call
+
+If baselineStatus truly is normal and scoreVersion matches, it’s less likely to be the old version-mixing issue.
+
+But 100/100 red still smells like a normalization/reference update or source-wide scaling change, not organic celebrity movement.
+
+If you paste whatever Replit returns from those 4 checks, I’ll help you interpret it and decide whether it’s “self-correcting noise” vs “engine regression.”
