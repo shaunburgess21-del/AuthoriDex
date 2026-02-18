@@ -4730,7 +4730,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   // Get prediction markets (for admin CMS)
   app.get("/api/admin/markets", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const markets = await db.select().from(predictionMarkets).orderBy(desc(predictionMarkets.createdAt)).limit(100);
+      const markets = await db.select().from(predictionMarkets).orderBy(desc(predictionMarkets.createdAt));
       res.json(markets);
     } catch (error: any) {
       console.error("Error fetching markets:", error.message);
@@ -7249,6 +7249,94 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error generating updown markets:", error.message);
       res.status(500).json({ error: "Failed to generate updown markets" });
+    }
+  });
+
+  app.post("/api/admin/native-markets/generate-jackpot", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const now = new Date();
+      const dayOfWeek = now.getUTCDay();
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(now);
+      monday.setUTCDate(now.getUTCDate() + mondayOffset);
+      monday.setUTCHours(0, 0, 0, 0);
+      const sunday = new Date(monday);
+      sunday.setUTCDate(monday.getUTCDate() + 6);
+      sunday.setUTCHours(23, 59, 59, 999);
+      const jan1 = new Date(now.getUTCFullYear(), 0, 1);
+      const weekNumber = Math.ceil(((now.getTime() - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
+
+      const people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
+      const existing = await db.select({ personId: predictionMarkets.personId })
+        .from(predictionMarkets)
+        .where(and(eq(predictionMarkets.marketType, "jackpot"), eq(predictionMarkets.weekNumber, weekNumber)));
+      const existingPersonIds = new Set(existing.map(e => e.personId));
+
+      let created = 0;
+      for (const person of people) {
+        if (existingPersonIds.has(person.id)) continue;
+        const slug = `jackpot-${person.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
+        try {
+          await db.insert(predictionMarkets).values({
+            marketType: "jackpot",
+            title: `${person.name}: Predict Exact Score`,
+            slug,
+            personId: person.id,
+            category: person.category?.toLowerCase() || "misc",
+            visibility: "live",
+            status: "OPEN",
+            startAt: monday,
+            endAt: sunday,
+            weekNumber,
+            seedParticipants: 0,
+            seedVolume: "0",
+            seedConfig: {
+              enabled: true,
+              targetParticipantsMin: 10,
+              targetParticipantsMax: 40,
+              targetPoolMin: 2000,
+              targetPoolMax: 8000,
+            },
+            featured: false,
+          });
+          created++;
+        } catch (slugErr: any) {
+          if (slugErr.code === '23505') {
+            const slugRetry = `${slug}-${randomUUID().slice(0, 6)}`;
+            await db.insert(predictionMarkets).values({
+              marketType: "jackpot",
+              title: `${person.name}: Predict Exact Score`,
+              slug: slugRetry,
+              personId: person.id,
+              category: person.category?.toLowerCase() || "misc",
+              visibility: "live",
+              status: "OPEN",
+              startAt: monday,
+              endAt: sunday,
+              weekNumber,
+              seedParticipants: 0,
+              seedVolume: "0",
+              seedConfig: { enabled: true, targetParticipantsMin: 10, targetParticipantsMax: 40, targetPoolMin: 2000, targetPoolMax: 8000 },
+              featured: false,
+            });
+            created++;
+          }
+        }
+      }
+
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId!,
+        adminEmail: null,
+        actionType: "create",
+        targetTable: "prediction_markets",
+        targetId: "bulk-jackpot",
+        metadata: { type: "jackpot", created, weekNumber },
+      });
+
+      res.json({ success: true, created, weekNumber });
+    } catch (error: any) {
+      console.error("Error generating jackpot markets:", error.message);
+      res.status(500).json({ error: "Failed to generate jackpot markets" });
     }
   });
 

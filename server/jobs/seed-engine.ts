@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { predictionMarkets, marketEntries, marketBets } from "../../shared/schema";
+import { predictionMarkets, marketEntries } from "../../shared/schema";
 import { eq, and, inArray, sql } from "drizzle-orm";
 
 interface SeedConfig {
@@ -9,6 +9,7 @@ interface SeedConfig {
   distributionShape?: "front-loaded" | "uniform" | "bell-curve";
   batchesCompleted?: number;
   totalBatches?: number;
+  lastSeededAt?: string;
 }
 
 const TOTAL_SEED_BATCHES = 40;
@@ -16,6 +17,10 @@ const SEED_WINDOW_START_HOUR = 6;
 const SEED_WINDOW_END_HOUR = 22;
 const SEED_WINDOW_START_DAY = 1;
 const SEED_WINDOW_END_DAY = 2;
+
+const DEFAULT_LIMIT_MARKETS = 25;
+const DEFAULT_MAX_RUNTIME_MS = 8000;
+const SEED_COOLDOWN_MS = 30 * 60 * 1000;
 
 function getISOWeekNumber(date: Date): number {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -28,8 +33,7 @@ function getISOWeekNumber(date: Date): number {
 function bellCurveWeight(batchIndex: number, total: number): number {
   const mean = total / 2;
   const sigma = total / 4;
-  const x = batchIndex;
-  return Math.exp(-0.5 * Math.pow((x - mean) / sigma, 2));
+  return Math.exp(-0.5 * Math.pow((batchIndex - mean) / sigma, 2));
 }
 
 function frontLoadedWeight(batchIndex: number, total: number): number {
@@ -38,18 +42,14 @@ function frontLoadedWeight(batchIndex: number, total: number): number {
 
 function getBatchWeight(batchIndex: number, total: number, shape: string): number {
   switch (shape) {
-    case "bell-curve":
-      return bellCurveWeight(batchIndex, total);
-    case "front-loaded":
-      return frontLoadedWeight(batchIndex, total);
-    default:
-      return 1;
+    case "bell-curve": return bellCurveWeight(batchIndex, total);
+    case "front-loaded": return frontLoadedWeight(batchIndex, total);
+    default: return 1;
   }
 }
 
 function jitter(value: number, range: number = 0.2): number {
-  const factor = 1 + (Math.random() * 2 - 1) * range;
-  return Math.round(value * factor);
+  return Math.round(value * (1 + (Math.random() * 2 - 1) * range));
 }
 
 function generateSeedBets(
@@ -60,11 +60,10 @@ function generateSeedBets(
 ): { entryId: string; amount: number }[] {
   const bets: { entryId: string; amount: number }[] = [];
 
-  if (marketType === "updown" && entries.length === 2) {
+  if ((marketType === "updown" || marketType === "jackpot") && entries.length === 2) {
     const upEntry = entries.find(e => e.label?.toLowerCase() === "up");
     const downEntry = entries.find(e => e.label?.toLowerCase() === "down");
     if (!upEntry || !downEntry) return bets;
-
     const upAmount = Math.round(batchCredits * (bias / 100));
     const downAmount = batchCredits - upAmount;
     if (upAmount > 0) bets.push({ entryId: upEntry.id, amount: jitter(upAmount, 0.15) });
@@ -91,21 +90,32 @@ function generateSeedBets(
   return bets.filter(b => b.amount > 0);
 }
 
-export async function runSeedBatch(force = false): Promise<{
+export interface SeedBatchResult {
   processed: number;
   skipped: number;
+  skippedCooldown: number;
+  skippedComplete: number;
   totalCreditsDistributed: number;
-}> {
+  runtimeMs: number;
+  stoppedEarly: boolean;
+}
+
+export async function runSeedBatch(
+  force = false,
+  limitMarkets = DEFAULT_LIMIT_MARKETS,
+  maxRuntimeMs = DEFAULT_MAX_RUNTIME_MS
+): Promise<SeedBatchResult> {
+  const startTime = Date.now();
   const now = new Date();
   const dayOfWeek = now.getUTCDay();
   const hour = now.getUTCHours();
 
   if (!force) {
     if (dayOfWeek < SEED_WINDOW_START_DAY || dayOfWeek > SEED_WINDOW_END_DAY) {
-      return { processed: 0, skipped: 0, totalCreditsDistributed: 0 };
+      return { processed: 0, skipped: 0, skippedCooldown: 0, skippedComplete: 0, totalCreditsDistributed: 0, runtimeMs: 0, stoppedEarly: false };
     }
     if (hour < SEED_WINDOW_START_HOUR || hour > SEED_WINDOW_END_HOUR) {
-      return { processed: 0, skipped: 0, totalCreditsDistributed: 0 };
+      return { processed: 0, skipped: 0, skippedCooldown: 0, skippedComplete: 0, totalCreditsDistributed: 0, runtimeMs: 0, stoppedEarly: false };
     }
   }
 
@@ -123,7 +133,7 @@ export async function runSeedBatch(force = false): Promise<{
     );
 
   if (markets.length === 0) {
-    return { processed: 0, skipped: 0, totalCreditsDistributed: 0 };
+    return { processed: 0, skipped: 0, skippedCooldown: 0, skippedComplete: 0, totalCreditsDistributed: 0, runtimeMs: Date.now() - startTime, stoppedEarly: false };
   }
 
   const marketIds = markets.map(m => m.id);
@@ -133,20 +143,44 @@ export async function runSeedBatch(force = false): Promise<{
 
   let processed = 0;
   let skipped = 0;
+  let skippedCooldown = 0;
+  let skippedComplete = 0;
   let totalCreditsDistributed = 0;
+  let stoppedEarly = false;
 
-  for (const market of markets) {
+  const shuffled = [...markets].sort(() => Math.random() - 0.5);
+
+  for (const market of shuffled) {
+    if (Date.now() - startTime > maxRuntimeMs) {
+      stoppedEarly = true;
+      break;
+    }
+
+    if (processed >= limitMarkets) {
+      stoppedEarly = true;
+      break;
+    }
+
     const config: SeedConfig = (market.seedConfig as SeedConfig) || {};
     const batchesCompleted = config.batchesCompleted || 0;
     const totalBatches = config.totalBatches || TOTAL_SEED_BATCHES;
 
     if (batchesCompleted >= totalBatches) {
+      skippedComplete++;
       skipped++;
       continue;
     }
 
+    if (config.lastSeededAt) {
+      const lastSeeded = new Date(config.lastSeededAt).getTime();
+      if (now.getTime() - lastSeeded < SEED_COOLDOWN_MS) {
+        skippedCooldown++;
+        skipped++;
+        continue;
+      }
+    }
+
     const poolTarget = config.poolTarget || getDefaultPoolTarget(market.marketType);
-    const participants = config.participants || getDefaultParticipants(market.marketType);
     const upBias = config.upBias ?? 55;
     const shape = config.distributionShape || "bell-curve";
 
@@ -169,12 +203,12 @@ export async function runSeedBatch(force = false): Promise<{
           totalStake: sql`COALESCE(${marketEntries.totalStake}, 0) + ${bet.amount}`,
         })
         .where(eq(marketEntries.id, bet.entryId));
-
       totalCreditsDistributed += bet.amount;
     }
 
     const currentVolume = Number(market.seedVolume || 0);
     const batchTotal = bets.reduce((s, b) => s + b.amount, 0);
+    const participants = config.participants || getDefaultParticipants(market.marketType);
     const newParticipants = Math.round(participants * (weight / sumWeights) * (0.8 + Math.random() * 0.4));
 
     await db.update(predictionMarkets)
@@ -184,6 +218,7 @@ export async function runSeedBatch(force = false): Promise<{
           ...config,
           batchesCompleted: batchesCompleted + 1,
           participants: (config.participants || 0) + newParticipants,
+          lastSeededAt: now.toISOString(),
         },
       })
       .where(eq(predictionMarkets.id, market.id));
@@ -191,7 +226,15 @@ export async function runSeedBatch(force = false): Promise<{
     processed++;
   }
 
-  return { processed, skipped, totalCreditsDistributed };
+  return {
+    processed,
+    skipped,
+    skippedCooldown,
+    skippedComplete,
+    totalCreditsDistributed,
+    runtimeMs: Date.now() - startTime,
+    stoppedEarly,
+  };
 }
 
 function getDefaultPoolTarget(marketType: string): number {
@@ -199,6 +242,7 @@ function getDefaultPoolTarget(marketType: string): number {
     case "updown": return 5000 + Math.round(Math.random() * 3000);
     case "h2h": return 15000 + Math.round(Math.random() * 10000);
     case "gainer": return 12000 + Math.round(Math.random() * 8000);
+    case "jackpot": return 3000 + Math.round(Math.random() * 2000);
     default: return 8000;
   }
 }
@@ -208,6 +252,7 @@ function getDefaultParticipants(marketType: string): number {
     case "updown": return 50 + Math.round(Math.random() * 30);
     case "h2h": return 80 + Math.round(Math.random() * 40);
     case "gainer": return 60 + Math.round(Math.random() * 30);
+    case "jackpot": return 20 + Math.round(Math.random() * 15);
     default: return 50;
   }
 }

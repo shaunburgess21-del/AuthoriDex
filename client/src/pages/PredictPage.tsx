@@ -2020,7 +2020,8 @@ export default function PredictPage() {
         } as PredictionMarket;
       });
     }
-    return mockMarkets;
+    if (import.meta.env.VITE_USE_MOCK_PREDICT_DATA === "true") return mockMarkets;
+    return [];
   }, [nativeUpdownData]);
 
   const hydratedH2H = useMemo((): HeadToHeadMarket[] => {
@@ -2048,7 +2049,8 @@ export default function PredictPage() {
         } as HeadToHeadMarket;
       });
     }
-    return headToHeadMarkets;
+    if (import.meta.env.VITE_USE_MOCK_PREDICT_DATA === "true") return headToHeadMarkets;
+    return [];
   }, [nativeH2hData]);
 
   const hydratedGainers = useMemo((): TopGainerMarket[] => {
@@ -2074,7 +2076,8 @@ export default function PredictPage() {
         } as TopGainerMarket;
       });
     }
-    return topGainerMarkets;
+    if (import.meta.env.VITE_USE_MOCK_PREDICT_DATA === "true") return topGainerMarkets;
+    return [];
   }, [nativeGainerData]);
   
   const [selectedJackpotPerson, setSelectedJackpotPerson] = useState<TrendingPerson | null>(null);

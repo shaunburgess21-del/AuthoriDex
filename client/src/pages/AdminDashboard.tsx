@@ -1852,6 +1852,19 @@ export default function AdminDashboard() {
     onError: () => toast({ title: "Error", description: "Failed to generate markets", variant: "destructive" }),
   });
 
+  const generateJackpotMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetchWithAuth("/api/admin/native-markets/generate-jackpot", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to generate");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Generated Jackpot Markets", description: `Created ${data.created} jackpot entries for week ${data.weekNumber}` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to generate jackpot markets", variant: "destructive" }),
+  });
+
   const bulkVisibilityMutation = useMutation({
     mutationFn: async ({ marketIds, visibility }: { marketIds: string[]; visibility: string }) => {
       const res = await fetchWithAuth("/api/admin/native-markets/bulk-visibility", {
@@ -2822,7 +2835,7 @@ export default function AdminDashboard() {
                       className="mt-4" 
                       onClick={() => {
                         setEditingCelebrity(null);
-                        setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "" });
+                        setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
                         setShowCelebrityModal(true);
                       }}
                       data-testid="button-create-first-celebrity"
@@ -3000,6 +3013,10 @@ export default function AdminDashboard() {
                       <CardTitle>Weekly Jackpot</CardTitle>
                       <CardDescription>Jackpot eligibility tied to all leaderboard celebrities</CardDescription>
                     </div>
+                    <Button onClick={() => generateJackpotMutation.mutate()} disabled={generateJackpotMutation.isPending} size="sm" data-testid="button-generate-jackpot">
+                      {generateJackpotMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+                      Generate All
+                    </Button>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -3055,7 +3072,11 @@ export default function AdminDashboard() {
                       ) : (
                         <div className="text-center py-8 text-muted-foreground">
                           <Trophy className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                          <p>No jackpot markets found. Generate Up/Down markets first.</p>
+                          <p>No jackpot markets found.</p>
+                          <Button className="mt-4" onClick={() => generateJackpotMutation.mutate()} data-testid="button-generate-jackpot-empty">
+                            <Plus className="h-4 w-4 mr-2" />
+                            Generate Jackpot Markets
+                          </Button>
                         </div>
                       );
                     })()}

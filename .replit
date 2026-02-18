@@ -46,3 +46,4 @@ integrations = ["javascript_mem_db:1.0.0", "javascript_database:1.0.0", "javascr
 
 [userenv.shared]
 GDELT_RELAX_SSL = "true"
+VITE_USE_MOCK_PREDICT_DATA = "false"
