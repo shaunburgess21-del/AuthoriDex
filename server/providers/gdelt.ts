@@ -20,7 +20,7 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 5000;
 const JITTER_MAX_MS = 1000;
 
-const SPACING_MIN_MS = 3000;
+const SPACING_MIN_MS = 4500;
 const SPACING_DEFAULT_MS = 5500;
 const SPACING_MAX_MS = 30000;
 const SPACING_INCREASE_FACTOR = 1.5;
@@ -343,10 +343,25 @@ export interface GdeltBatchOptions {
   isDegraded?: boolean;
 }
 
+export interface GdeltBatchStats {
+  liveApiFetched: number;
+  cacheReused: number;
+  staleUsed: number;
+  errors: number;
+  elapsedMs: number;
+  finalSpacingMs: number;
+  avgSpacingMs: number;
+}
+
+export interface GdeltBatchResult {
+  data: Map<string, GdeltNewsData>;
+  stats: GdeltBatchStats;
+}
+
 export async function fetchBatchGdeltNews(
   people: Array<{ id: string; name: string }>,
   options?: GdeltBatchOptions
-): Promise<Map<string, GdeltNewsData>> {
+): Promise<GdeltBatchResult> {
   const results = new Map<string, GdeltNewsData>();
   const timeBudgetMs = options?.timeBudgetMs ?? 180000;
   const candidates = options?.candidates;
@@ -364,62 +379,94 @@ export async function fetchBatchGdeltNews(
   resetAdaptiveSpacing();
   console.log(`[GDELT] Batch: ${priorityPeople.length} priority candidates, ${nonPriorityPeople.length} non-priority (cache only), spacing=${Math.round(adaptiveSpacingMs)}ms, reuse=${reuseMinutes}min${isDegraded ? " (DEGRADED)" : ""}`);
 
+  let liveApiFetched = 0;
+  let cacheReused = 0;
+  let staleUsed = 0;
+  let errors = 0;
+  let spacingSum = 0;
+  let spacingCount = 0;
+
   for (const person of nonPriorityPeople) {
     const cacheKey = `gdelt:news:${person.name.toLowerCase().replace(/\s+/g, "_")}`;
     const cached = await getCachedResponse(cacheKey);
     if (cached) {
       results.set(person.id, JSON.parse(cached));
+      cacheReused++;
     } else {
       const stale = await getStaleCache(cacheKey);
       if (stale) {
         results.set(person.id, JSON.parse(stale));
+        staleUsed++;
       }
     }
   }
   console.log(`[GDELT] Loaded ${results.size} non-priority from cache/stale`);
 
-  let freshFetched = 0;
-  let rateLimited = 0;
+  let processed = 0;
   
   for (const person of priorityPeople) {
     if (isCircuitBreakerOpen()) {
-      console.warn(`[GDELT] Circuit breaker open - aborting remaining ${priorityPeople.length - freshFetched} requests`);
-      for (const remaining of priorityPeople.slice(freshFetched)) {
+      console.warn(`[GDELT] Circuit breaker open - aborting remaining ${priorityPeople.length - processed} requests`);
+      for (const remaining of priorityPeople.slice(processed)) {
         const cacheKey = `gdelt:news:${remaining.name.toLowerCase().replace(/\s+/g, "_")}`;
         const stale = await getStaleCache(cacheKey);
-        if (stale) results.set(remaining.id, JSON.parse(stale));
+        if (stale) { results.set(remaining.id, JSON.parse(stale)); staleUsed++; }
       }
       break;
     }
 
     const elapsed = Date.now() - batchStart;
     if (elapsed > timeBudgetMs) {
-      console.warn(`[GDELT] Time budget exhausted (${Math.round(elapsed / 1000)}s > ${Math.round(timeBudgetMs / 1000)}s). Processed ${freshFetched}/${priorityPeople.length} priority.`);
-      for (const remaining of priorityPeople.slice(freshFetched)) {
+      console.warn(`[GDELT] Time budget exhausted (${Math.round(elapsed / 1000)}s > ${Math.round(timeBudgetMs / 1000)}s). Processed ${processed}/${priorityPeople.length} priority.`);
+      for (const remaining of priorityPeople.slice(processed)) {
         const cacheKey = `gdelt:news:${remaining.name.toLowerCase().replace(/\s+/g, "_")}`;
         const stale = await getStaleCache(cacheKey);
-        if (stale) results.set(remaining.id, JSON.parse(stale));
+        if (stale) { results.set(remaining.id, JSON.parse(stale)); staleUsed++; }
       }
       break;
     }
 
     try {
-      if (freshFetched > 0) {
-        await sleep(getJitteredDelay(adaptiveSpacingMs));
+      if (processed > 0) {
+        const delay = getJitteredDelay(adaptiveSpacingMs);
+        spacingSum += delay;
+        spacingCount++;
+        await sleep(delay);
       }
       
-      const data = await fetchGdeltNews(person.name, person.id, reuseMinutes);
-      if (data) {
-        results.set(person.id, data);
+      const cacheKey = `gdelt:news:${person.name.toLowerCase().replace(/\s+/g, "_")}`;
+      const reusable = reuseMinutes > 0 ? await getFreshEnoughCache(cacheKey, reuseMinutes) : null;
+      
+      if (reusable) {
+        results.set(person.id, JSON.parse(reusable));
+        cacheReused++;
+      } else {
+        const data = await fetchGdeltNews(person.name, person.id);
+        if (data) {
+          results.set(person.id, data);
+          liveApiFetched++;
+        }
       }
-      freshFetched++;
+      processed++;
     } catch (error) {
       console.error(`[GDELT] Error for ${person.name}:`, error);
-      rateLimited++;
+      errors++;
+      processed++;
       recordSpacingFailure();
     }
   }
   
-  console.log(`[GDELT] Batch complete: ${freshFetched} fresh fetched, ${results.size} total (including cache), ${rateLimited} errors, ${Math.round((Date.now() - batchStart) / 1000)}s elapsed, final spacing=${Math.round(adaptiveSpacingMs)}ms`);
-  return results;
+  const avgSpacingMs = spacingCount > 0 ? Math.round(spacingSum / spacingCount) : 0;
+  const stats: GdeltBatchStats = {
+    liveApiFetched,
+    cacheReused,
+    staleUsed,
+    errors,
+    elapsedMs: Date.now() - batchStart,
+    finalSpacingMs: Math.round(adaptiveSpacingMs),
+    avgSpacingMs,
+  };
+  
+  console.log(`[GDELT] Batch complete: ${liveApiFetched} live API, ${cacheReused} cache reused, ${staleUsed} stale, ${errors} errors, ${results.size} total, ${Math.round(stats.elapsedMs / 1000)}s elapsed, avgSpacing=${avgSpacingMs}ms, finalSpacing=${stats.finalSpacingMs}ms`);
+  return { data: results, stats };
 }

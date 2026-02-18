@@ -3,7 +3,7 @@ import { trackedPeople, trendSnapshots, trendingPeople, celebrityImages, ingesti
 import { desc, eq, sql, gte, and } from "drizzle-orm";
 import { getBaselineDiagnostics } from "../utils/baseline";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
-import { fetchBatchGdeltNews, GdeltBatchOptions } from "../providers/gdelt";
+import { fetchBatchGdeltNews, GdeltBatchOptions, GdeltBatchStats } from "../providers/gdelt";
 import { fetchSerperBatch, fetchSerperNewsBatch } from "../providers/serper";
 // NOTE (Jan 2026): X API removed from trend score engine due to cost constraints.
 // X API keys preserved for future Platform Insights feature.
@@ -275,6 +275,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     const gdeltCandidates = await computeNewsCandidates(people, wikiData);
     let gdeltStart = Date.now();
     let gdeltData = new Map<string, any>();
+    let gdeltBatchStats: GdeltBatchStats | null = null;
     try {
       const newsHealth = getCurrentHealthSnapshot().news;
       const gdeltIsDegraded = newsHealth.state === "DEGRADED" || newsHealth.state === "OUTAGE" || newsHealth.state === "RECOVERY";
@@ -283,10 +284,12 @@ export async function runDataIngestion(): Promise<IngestResult> {
         timeBudgetMs: 120000,
         isDegraded: gdeltIsDegraded,
       };
-      gdeltData = await fetchBatchGdeltNews(
+      const gdeltResult = await fetchBatchGdeltNews(
         people.map(p => ({ id: p.id, name: p.name })),
         gdeltOptions
       );
+      gdeltData = gdeltResult.data;
+      gdeltBatchStats = gdeltResult.stats;
     } catch (err) {
       console.log('[Ingest] GDELT fetch failed, continuing with other sources');
       sourceStatuses.gdelt = "FAILED";
@@ -573,8 +576,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
       console.log(`[Ingest] Staleness decay: News=${(newsDecayFactor * 100).toFixed(0)}%, Search=${(searchDecayFactor * 100).toFixed(0)}%`);
     }
 
-    // Degradation Governor: compute weight multipliers based on run-over-run coverage
-    const newsFreshCount = Array.from(gdeltData.values()).filter(d => (d.articleCount24h ?? 0) > 0).length;
+    const newsFreshCount = gdeltBatchStats
+      ? gdeltBatchStats.liveApiFetched
+      : Array.from(gdeltData.values()).filter(d => (d.articleCount24h ?? 0) > 0).length;
     const newsCoveragePctActual = (newsFreshCount / people.length) * 100;
     const searchFreshCount = Array.from(serperData.values()).filter(d => (d.searchVolume ?? 0) > 0).length;
     const searchCoveragePctActual = (searchFreshCount / people.length) * 100;
@@ -1097,6 +1101,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
         searchGovernor: `${(searchGovernorFactor * 100).toFixed(0)}%`,
         newsProviderUsed: newsSource,
         newsFreshCoveragePct: `${newsCoveragePctActual.toFixed(0)}%`,
+        newsLiveApiFetched: gdeltBatchStats?.liveApiFetched ?? 0,
+        newsCacheReused: gdeltBatchStats?.cacheReused ?? 0,
+        avgGdeltSpacingMs: gdeltBatchStats?.avgSpacingMs ?? 0,
       },
       bootstrap: {
         newsHistory: lastNonZeroNewsMap.size,
