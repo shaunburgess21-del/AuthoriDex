@@ -276,9 +276,12 @@ export async function runDataIngestion(): Promise<IngestResult> {
     let gdeltStart = Date.now();
     let gdeltData = new Map<string, any>();
     try {
+      const newsHealth = getCurrentHealthSnapshot().news;
+      const gdeltIsDegraded = newsHealth.state === "DEGRADED" || newsHealth.state === "OUTAGE" || newsHealth.state === "RECOVERY";
       const gdeltOptions: GdeltBatchOptions = {
         candidates: gdeltCandidates,
         timeBudgetMs: 120000,
+        isDegraded: gdeltIsDegraded,
       };
       gdeltData = await fetchBatchGdeltNews(
         people.map(p => ({ id: p.id, name: p.name })),
