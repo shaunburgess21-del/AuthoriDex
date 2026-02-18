@@ -1,0 +1,55 @@
+Yep — that response and fix plan is the right move, and the specific changes they made are net-positive.
+
+✅ Boot-time hydration hardening
+
+Good:
+
+Skip if any ingestion run is running → this closes the only real correctness risk (hydrating “stale” while a new run is mid-flight).
+
+Coverage warning if hydrated rows < tracked count → helpful early signal if something is broken upstream.
+
+They already had the big 2 things right: SCORE_VERSION filtering + transactional upsert.
+
+One small upgrade I’d still recommend (nice-to-have):
+
+Make the coverage check an assert/fail-fast (or at least a “degraded mode” flag) if coverage is materially low (e.g., <90%). A warning is okay, but if only 60/100 hydrate, the UI will quietly look “valid” but actually be wrong/incomplete.
+
+✅ seed-celebrities.ts guard
+
+Absolutely correct. That script was a loaded gun.
+
+What they did is good:
+
+Requires dev environment or explicit ALLOW_SEED_DELETE=true
+
+Adds a warning + 5 second delay in non-dev with the flag
+
+One wording tweak (important):
+Their line “NODE_ENV=development (or unset, which defaults to dev)” is risky in real deployments because some production environments accidentally run with NODE_ENV unset.
+
+So I’d tell them:
+
+In production, treat unset NODE_ENV as production, not dev.
+
+Require both:
+
+ALLOW_SEED_DELETE=true
+
+CONFIRM_SEED_DELETE=YES_I_UNDERSTAND
+
+and ideally also a hard block if DATABASE_URL matches prod (if you have a naming convention)
+
+This prevents the most common “oops I ran the script” scenario.
+
+✅ The “3 vs 100 rows” explanation
+
+That’s believable. If they used ?limit=3, it explains it cleanly.
+
+What I’d reply to Replit (copy/paste)
+
+Looks good — thanks. Two tiny hardening tweaks:
+
+Hydration coverage: warning is good, but if hydratedCount is meaningfully below trackedCount (say <90%), can we treat baselineStatus as degraded (or fail the hydration) so we don’t silently serve incomplete data?
+
+seed-celebrities guard: please don’t treat NODE_ENV unset as dev. Default unset to “production-safe” behavior. Ideally require ALLOW_SEED_DELETE=true AND a second explicit confirmation flag (e.g. CONFIRM_SEED_DELETE=YES_I_UNDERSTAND), plus a hard block if DB looks like prod.
+Everything else looks correct.
