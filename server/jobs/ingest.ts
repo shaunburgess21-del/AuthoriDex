@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { trackedPeople, trendSnapshots, trendingPeople, celebrityImages, ingestionRuns } from "@shared/schema";
+import { trackedPeople, trendSnapshots, trendingPeople, celebrityImages, ingestionRuns, apiCache } from "@shared/schema";
 import { desc, eq, sql, gte, and } from "drizzle-orm";
 import { getBaselineDiagnostics } from "../utils/baseline";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
@@ -93,6 +93,89 @@ let _lastRunMeta: LastRunMeta | null = null;
 
 export function getLastRunMeta(): LastRunMeta | null {
   return _lastRunMeta;
+}
+
+const NEWS_PROVIDER_PREF_KEY = "system:news_provider_pref";
+const GDELT_RECOVERY_THRESHOLD = 4;
+const GDELT_RECOVERY_RUNS_NEEDED = 2;
+
+interface NewsProviderPref {
+  preferSerper: boolean;
+  consecutiveGoodGdeltRuns: number;
+  lastUpdated: string;
+}
+
+let _newsProviderPref: NewsProviderPref = {
+  preferSerper: false,
+  consecutiveGoodGdeltRuns: 0,
+  lastUpdated: new Date().toISOString(),
+};
+
+export async function loadNewsProviderPref(): Promise<void> {
+  try {
+    const rows = await db.select({ responseData: apiCache.responseData })
+      .from(apiCache)
+      .where(eq(apiCache.cacheKey, NEWS_PROVIDER_PREF_KEY));
+    if (rows.length > 0 && rows[0].responseData) {
+      const parsed = JSON.parse(rows[0].responseData) as NewsProviderPref;
+      _newsProviderPref = parsed;
+    }
+  } catch (err) {
+    console.warn("[NewsProviderPref] Failed to load from DB, using defaults");
+  }
+}
+
+async function saveNewsProviderPref(): Promise<void> {
+  try {
+    _newsProviderPref.lastUpdated = new Date().toISOString();
+    const data = JSON.stringify(_newsProviderPref);
+    const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    const existing = await db.select({ id: apiCache.id })
+      .from(apiCache)
+      .where(eq(apiCache.cacheKey, NEWS_PROVIDER_PREF_KEY));
+    if (existing.length > 0) {
+      await db.update(apiCache)
+        .set({ responseData: data, fetchedAt: new Date(), expiresAt: farFuture })
+        .where(eq(apiCache.cacheKey, NEWS_PROVIDER_PREF_KEY));
+    } else {
+      await db.insert(apiCache).values({
+        cacheKey: NEWS_PROVIDER_PREF_KEY,
+        provider: "system",
+        responseData: data,
+        fetchedAt: new Date(),
+        expiresAt: farFuture,
+      });
+    }
+  } catch (err) {
+    console.error("[NewsProviderPref] Failed to save:", err);
+  }
+}
+
+function shouldPreferSerper(gdeltMedian: number, gdeltQualityLow: boolean): boolean {
+  if (gdeltQualityLow) {
+    _newsProviderPref.preferSerper = true;
+    _newsProviderPref.consecutiveGoodGdeltRuns = 0;
+    return true;
+  }
+
+  if (_newsProviderPref.preferSerper) {
+    if (gdeltMedian >= GDELT_RECOVERY_THRESHOLD) {
+      _newsProviderPref.consecutiveGoodGdeltRuns++;
+      if (_newsProviderPref.consecutiveGoodGdeltRuns >= GDELT_RECOVERY_RUNS_NEEDED) {
+        console.log(`[NewsProviderPref] GDELT quality recovered (median=${gdeltMedian} >= ${GDELT_RECOVERY_THRESHOLD} for ${_newsProviderPref.consecutiveGoodGdeltRuns} runs). Switching back to GDELT.`);
+        _newsProviderPref.preferSerper = false;
+        _newsProviderPref.consecutiveGoodGdeltRuns = 0;
+        return false;
+      }
+      console.log(`[NewsProviderPref] GDELT looks better (median=${gdeltMedian}), need ${GDELT_RECOVERY_RUNS_NEEDED - _newsProviderPref.consecutiveGoodGdeltRuns} more good run(s) to switch back.`);
+      return true;
+    } else {
+      _newsProviderPref.consecutiveGoodGdeltRuns = 0;
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function parseSnapshotDiagnostics(diagnostics: unknown): Record<string, any> | null {
@@ -263,6 +346,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
 
   await loadHealthFromDB();
   await loadCatchUpStateFromDB();
+  await loadNewsProviderPref();
 
   try {
     const people = await db.select().from(trackedPeople);
@@ -328,16 +412,20 @@ export async function runDataIngestion(): Promise<IngestResult> {
       ? gdeltArticleCounts.reduce((s, v) => s + v, 0) / gdeltArticleCounts.length
       : 0;
     const gdeltQualityLow = gdeltData.size > 0 && gdeltMedianArticles < GDELT_QUALITY_THRESHOLD;
+    const useSerperFallback = shouldPreferSerper(gdeltMedianArticles, gdeltQualityLow);
 
     if (gdeltQualityLow) {
-      console.log(`[Ingest] GDELT data quality low: median=${gdeltMedianArticles}, mean=${gdeltMeanArticles.toFixed(1)}, threshold=${GDELT_QUALITY_THRESHOLD} — activating Serper News fallback`);
+      console.log(`[Ingest] GDELT data quality low: median=${gdeltMedianArticles}, mean=${gdeltMeanArticles.toFixed(1)}, threshold=${GDELT_QUALITY_THRESHOLD}`);
+    }
+    if (useSerperFallback && !gdeltQualityLow) {
+      console.log(`[Ingest] Provider hysteresis: still preferring Serper (GDELT median=${gdeltMedianArticles}, need >=${GDELT_RECOVERY_THRESHOLD} for ${GDELT_RECOVERY_RUNS_NEEDED} runs)`);
     }
 
-    if (gdeltFreshPct < SERPER_NEWS_FALLBACK_THRESHOLD || gdeltQualityLow) {
-      const reason = gdeltQualityLow
-        ? `quality low (median=${gdeltMedianArticles})`
+    if (gdeltFreshPct < SERPER_NEWS_FALLBACK_THRESHOLD || useSerperFallback) {
+      const reason = useSerperFallback
+        ? `provider preference (hysteresis: GDELT median=${gdeltMedianArticles})`
         : `freshness ${(gdeltFreshPct * 100).toFixed(0)}% < ${SERPER_NEWS_FALLBACK_THRESHOLD * 100}%`;
-      console.log(`[Ingest] GDELT ${reason} — activating Serper News fallback`);
+      console.log(`[Ingest] ${reason} — activating Serper News fallback`);
       try {
         const serperNewsStart = Date.now();
         const serperNewsData = await fetchSerperNewsBatch(
@@ -1162,6 +1250,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
           : null,
         search: searchHealth.state,
         wiki: wikiApiFailed ? "DEGRADED" : "HEALTHY",
+        providerPref: {
+          preferSerper: _newsProviderPref.preferSerper,
+          consecutiveGoodGdeltRuns: _newsProviderPref.consecutiveGoodGdeltRuns,
+        },
       },
       bootstrap: {
         newsHistory: lastNonZeroNewsMap.size,
@@ -1239,6 +1331,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     };
 
     await saveHealthState();
+    await saveNewsProviderPref();
 
     const successDuration = Date.now() - startTime;
     sourceTimings.total = successDuration;
