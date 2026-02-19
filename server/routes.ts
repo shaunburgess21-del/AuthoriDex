@@ -754,7 +754,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           wiki: formatRelativeTime(context.sourceTimestamps.wiki),
           news: formatRelativeTime(context.sourceTimestamps.news),
           search: formatRelativeTime(context.sourceTimestamps.search),
-          x: formatRelativeTime(context.sourceTimestamps.x),
         },
       });
     } catch (error) {
@@ -763,7 +762,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Get trend context for multiple people (batch endpoint for leaderboard)
   app.post("/api/trending/context/batch", async (req, res) => {
     try {
       const { personIds } = req.body;
@@ -788,7 +786,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             wiki: formatRelativeTime(context.sourceTimestamps.wiki),
             news: formatRelativeTime(context.sourceTimestamps.news),
             search: formatRelativeTime(context.sourceTimestamps.search),
-            x: formatRelativeTime(context.sourceTimestamps.x),
           },
         };
       });
@@ -5019,7 +5016,6 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           wiki: PLATFORM_WEIGHTS.velocity.wiki,
           news: PLATFORM_WEIGHTS.velocity.news,
           search: PLATFORM_WEIGHTS.velocity.search,
-          x: PLATFORM_WEIGHTS.velocity.x,
         },
       };
       

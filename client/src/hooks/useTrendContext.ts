@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
-export type TrendDriver = "NEWS" | "SEARCH" | "SOCIAL" | "WIKI";
+export type TrendDriver = "NEWS" | "SEARCH" | "WIKI";
 
 export interface TrendContext {
   primaryDriver: TrendDriver | null;
@@ -14,7 +14,6 @@ export interface TrendContext {
     wiki: string | null;
     news: string | null;
     search: string | null;
-    x: string | null;
   };
   isHeated: boolean;
   lastScoredAtFormatted: string;
@@ -22,7 +21,6 @@ export interface TrendContext {
     wiki: string;
     news: string;
     search: string;
-    x: string;
   };
 }
 
@@ -67,7 +65,6 @@ export function getDriverLabel(driver: TrendDriver | null): string {
   switch (driver) {
     case "NEWS": return "News surge";
     case "SEARCH": return "Search spiking";
-    case "SOCIAL": return "Social buzz";
     case "WIKI": return "Wiki views up";
     default: return "Steady";
   }

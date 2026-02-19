@@ -1044,13 +1044,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
           // Baseline medians for spike detection (p50 is more robust than mean)
           wikiBaseline: wiki?.averageDaily7d || sourceStats.wiki.p50,
           newsBaseline: sourceStats.news.p50,  // Use median (p50), not mean - more robust
-          searchBaseline: sourceStats.search.p50,  // Use median (p50), not mean - more robust
-          // X API disabled - set to 0
-          xQuoteVelocity: 0,
-          xReplyVelocity: 0,
+          searchBaseline: sourceStats.search.p50,
           activePlatforms: {
             wiki: !!person.wikiSlug,
-            x: false,  // X API disabled for trend scoring
             instagram: !!person.instagramHandle,
             youtube: !!person.youtubeId,
           },
@@ -1152,8 +1148,6 @@ export async function runDataIngestion(): Promise<IngestResult> {
           wikiDelta: wiki?.delta || 0,
           newsDelta: newsDelta,
           searchDelta: searchDelta,
-          xQuoteVelocity: 0,
-          xReplyVelocity: 0,
           massScore: scoreResult.massScore,
           velocityScore: scoreResult.velocityScore,
           velocityAdjusted: scoreResult.velocityAdjusted,

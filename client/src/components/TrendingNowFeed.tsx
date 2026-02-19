@@ -1,5 +1,5 @@
 import { formatDelta } from "@/lib/formatNumber";
-import { Flame, ChevronDown, Info, TrendingUp, TrendingDown, Newspaper, Search, Globe, MessageCircle, ArrowRight, ArrowUpRight, ArrowDownRight, Clock } from "lucide-react";
+import { Flame, ChevronDown, Info, TrendingUp, TrendingDown, Newspaper, Search, Globe, ArrowRight, ArrowUpRight, ArrowDownRight, Clock } from "lucide-react";
 import { PersonAvatar } from "./PersonAvatar";
 import { useTrendContextBatch, getDriverLabel, TrendDriver } from "@/hooks/useTrendContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -30,7 +30,6 @@ function getDriverExplanation(driver: TrendDriver): string {
     case "NEWS": return "Increased news coverage and media mentions";
     case "SEARCH": return "Search interest surged significantly";
     case "WIKI": return "Wikipedia pageviews rising fast";
-    case "SOCIAL": return "High social media velocity and engagement";
     default: return "";
   }
 }
@@ -189,7 +188,6 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                                   {ctx.primaryDriver === "NEWS" && <Newspaper className="h-3 w-3" />}
                                   {ctx.primaryDriver === "SEARCH" && <Search className="h-3 w-3" />}
                                   {ctx.primaryDriver === "WIKI" && <Globe className="h-3 w-3" />}
-                                  {ctx.primaryDriver === "SOCIAL" && <MessageCircle className="h-3 w-3" />}
                                   Driver
                                 </span>
                                 <Popover>

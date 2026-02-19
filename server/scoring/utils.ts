@@ -43,7 +43,7 @@ export function generateDrivers(
   wikiDelta: number,
   newsDelta: number,
   searchDelta: number,
-  xVelocity: number
+  _unused?: number
 ): string[] {
   const drivers: string[] = [];
   
@@ -63,12 +63,6 @@ export function generateDrivers(
     drivers.push("Search Breakout");
   } else if (searchDelta > 0.2) {
     drivers.push("Trending in Search");
-  }
-  
-  if (xVelocity > 100) {
-    drivers.push("Viral on X");
-  } else if (xVelocity > 50) {
-    drivers.push("Active X Discussion");
   }
   
   if (drivers.length === 0) {

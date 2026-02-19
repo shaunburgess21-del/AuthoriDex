@@ -11,16 +11,14 @@ export const SCORE_VERSION = "v2";
 // For mass, wiki becomes the primary signal when follower data unavailable.
 export const PLATFORM_WEIGHTS = {
   mass: {
-    wiki: 0.50,      // Increased from 0.30 (primary mass signal without follower data)
-    x: 0.00,         // DISABLED - X API removed from trend engine
-    instagram: 0.25, // Increased from 0.20 (future placeholder)
-    youtube: 0.25,   // Increased from 0.15 (future placeholder)
+    wiki: 0.50,
+    instagram: 0.25,
+    youtube: 0.25,
   },
   velocity: {
-    wiki: 0.25,      // Increased from 0.15
-    news: 0.35,      // Increased from 0.20
-    search: 0.40,    // Increased from 0.25
-    x: 0.00,         // DISABLED - X API removed from trend engine
+    wiki: 0.25,
+    news: 0.35,
+    search: 0.40,
   },
 };
 
@@ -292,7 +290,6 @@ export type PlatformStatusValue = "ACTIVE" | "NOT_PRESENT" | "NOT_APPLICABLE" | 
 
 export interface PlatformStatuses {
   wiki: PlatformStatusValue;
-  x: PlatformStatusValue;
   instagram: PlatformStatusValue;
   youtube: PlatformStatusValue;
   news: PlatformStatusValue;
@@ -302,7 +299,6 @@ export interface PlatformStatuses {
 // For backwards compatibility
 export interface ActivePlatforms {
   wiki: boolean;
-  x: boolean;
   instagram: boolean;
   youtube: boolean;
 }
@@ -700,7 +696,6 @@ export function applyDynamicRateLimiting(
 export interface StandardWeights {
   mass: {
     wiki: number;
-    x: number;
     instagram: number;
     youtube: number;
   };
@@ -708,7 +703,6 @@ export interface StandardWeights {
     wikiDelta: number;
     newsDelta: number;
     searchDelta: number;
-    xVelocity: number;
   };
 }
 
@@ -718,20 +712,13 @@ export const STANDARD_WEIGHTS: StandardWeights = {
     wikiDelta: PLATFORM_WEIGHTS.velocity.wiki,
     newsDelta: PLATFORM_WEIGHTS.velocity.news,
     searchDelta: PLATFORM_WEIGHTS.velocity.search,
-    xVelocity: PLATFORM_WEIGHTS.velocity.x,
   },
 };
 
-// Legacy constants
-// X penalty neutralized: X API is disabled (NOT_APPLICABLE), so penalizing
-// everyone equally is misleading. Set to 1.0 to prevent accidental distortion
-// if confidence is ever used for ranking. Restore to 0.6 when X is re-enabled.
-export const MISSING_X_PENALTY = 1.0;
 export const WIKI_DOMINANCE_CAP = 0.4;
 
 export interface AdjustedMassWeights {
   wiki: number;
-  x: number;
   instagram: number;
   youtube: number;
 }
@@ -740,7 +727,6 @@ export interface AdjustedVelocityWeights {
   wikiDelta: number;
   newsDelta: number;
   searchDelta: number;
-  xVelocity: number;
 }
 
 /**
@@ -753,7 +739,6 @@ export function calculateDynamicMassWeights(
   // Now returns fixed weights - no more redistribution
   return {
     wiki: PLATFORM_WEIGHTS.mass.wiki,
-    x: activePlatforms.x ? PLATFORM_WEIGHTS.mass.x : 0,
     instagram: activePlatforms.instagram ? PLATFORM_WEIGHTS.mass.instagram : 0,
     youtube: activePlatforms.youtube ? PLATFORM_WEIGHTS.mass.youtube : 0,
   };
@@ -767,14 +752,12 @@ export function calculateDynamicVelocityWeights(
   hasWiki: boolean,
   hasNews: boolean,
   hasSearch: boolean,
-  hasX: boolean
 ): AdjustedVelocityWeights {
   // Now returns fixed weights - no more redistribution
   return {
     wikiDelta: PLATFORM_WEIGHTS.velocity.wiki,
     newsDelta: PLATFORM_WEIGHTS.velocity.news,
     searchDelta: PLATFORM_WEIGHTS.velocity.search,
-    xVelocity: PLATFORM_WEIGHTS.velocity.x,
   };
 }
 
@@ -839,7 +822,6 @@ export interface RenormalizedVelocityWeights {
   wiki: number;
   news: number;
   search: number;
-  x: number;
 }
 
 /**
@@ -857,23 +839,18 @@ export function getRenormalizedVelocityWeights(
   let wikiWeight = healthStates.wikiOutage ? 0 : PLATFORM_WEIGHTS.velocity.wiki;
   let newsWeight = healthStates.newsOutage ? 0 : PLATFORM_WEIGHTS.velocity.news;
   let searchWeight = healthStates.searchOutage ? 0 : PLATFORM_WEIGHTS.velocity.search;
-  const xWeight = 0; // X is disabled
   
-  // Calculate how much weight needs redistribution
   const totalActiveWeight = wikiWeight + newsWeight + searchWeight;
   
-  // If all sources are down, return zeros
   if (totalActiveWeight === 0) {
-    return { wiki: 0, news: 0, search: 0, x: 0 };
+    return { wiki: 0, news: 0, search: 0 };
   }
   
-  // Renormalize so active weights sum to 1.0
   const normalizationFactor = (PLATFORM_WEIGHTS.velocity.wiki + PLATFORM_WEIGHTS.velocity.news + PLATFORM_WEIGHTS.velocity.search) / totalActiveWeight;
   
   return {
     wiki: wikiWeight * normalizationFactor,
     news: newsWeight * normalizationFactor,
     search: searchWeight * normalizationFactor,
-    x: xWeight,
   };
 }

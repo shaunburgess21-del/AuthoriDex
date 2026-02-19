@@ -27,7 +27,6 @@ function getStaleStatus(sourceTimestamps: TrendContext["sourceTimestamps"]): {
   if (isSourceStale(sourceTimestamps.wiki)) staleSources.push("Wiki");
   if (isSourceStale(sourceTimestamps.news)) staleSources.push("News");
   if (isSourceStale(sourceTimestamps.search)) staleSources.push("Search");
-  if (isSourceStale(sourceTimestamps.x)) staleSources.push("X");
   return {
     hasStale: staleSources.length > 0,
     staleSources,
@@ -71,8 +70,6 @@ export function WhyTrendingBadge({
         return "bg-blue-500/20 text-blue-300 border-blue-500/30";
       case "SEARCH":
         return "bg-purple-500/20 text-purple-300 border-purple-500/30";
-      case "SOCIAL":
-        return "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
       case "WIKI":
         return "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
       default:
@@ -103,7 +100,6 @@ export function WhyTrendingBadge({
             <p className="flex items-center gap-1">{getSourceStatusIcon("News")} News: {context.sourceTimestampsFormatted.news}</p>
             <p className="flex items-center gap-1">{getSourceStatusIcon("Search")} Search: {context.sourceTimestampsFormatted.search}</p>
             <p className="flex items-center gap-1">{getSourceStatusIcon("Wiki")} Wiki: {context.sourceTimestampsFormatted.wiki}</p>
-            <p className="flex items-center gap-1">{getSourceStatusIcon("X")} X: {context.sourceTimestampsFormatted.x}</p>
           </div>
         )}
         {staleStatus.hasStale && staleStatus.staleSources.length >= 2 && (

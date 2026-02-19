@@ -158,16 +158,12 @@ export async function runQuickScoring(): Promise<QuickScoreOutput> {
 
         const inputs = {
           wikiPageviews: wiki?.pageviews24h || 0,
-          wikiPageviews7dAvg: wiki?.averageDaily7d || 0, // 7-day average for stable mass baseline
+          wikiPageviews7dAvg: wiki?.averageDaily7d || 0,
           wikiDelta: wiki?.delta || 0,
           newsDelta: news?.delta || 0,
           searchDelta: serper?.delta || 0,
-          // X API disabled - set to 0
-          xQuoteVelocity: 0,
-          xReplyVelocity: 0,
           activePlatforms: {
             wiki: !!person.wikiSlug,
-            x: false,  // X API disabled for trend scoring
             instagram: !!person.instagramHandle,
             youtube: !!person.youtubeId,
           },

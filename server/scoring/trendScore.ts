@@ -9,7 +9,6 @@ import {
   isRecalibrationModeActive,
   PlatformStatuses,
   ActivePlatforms,
-  MISSING_X_PENALTY,
   WIKI_DOMINANCE_CAP,
   AllSourceStats,
   DEFAULT_SOURCE_STATS,
@@ -31,45 +30,35 @@ import {
 } from "./utils";
 
 export interface TrendInputs {
-  wikiPageviews: number;       // 24h pageviews (used for velocity)
-  wikiPageviews7dAvg: number;  // 7-day daily average (used for mass - more stable baseline)
+  wikiPageviews: number;
+  wikiPageviews7dAvg: number;
   wikiDelta: number;
   newsDelta: number;
   searchDelta: number;
-  xQuoteVelocity: number;
-  xReplyVelocity: number;
   
-  // Raw source values for normalization (current period)
-  newsCount?: number;          // Raw news article count
-  searchVolume?: number;       // Raw search volume
+  newsCount?: number;
+  searchVolume?: number;
   
-  // Previous source values for recovery detection (graceful degradation)
-  prevNewsCount?: number;      // Previous snapshot's news count
-  prevSearchVolume?: number;   // Previous snapshot's search volume
+  prevNewsCount?: number;
+  prevSearchVolume?: number;
   
-  // Freshness flags for recovery detection (when fresh data returns after fallback)
-  newsIsFresh?: boolean;       // True if news data is fresh (not fallback)
-  searchIsFresh?: boolean;     // True if search data is fresh (not fallback)
+  newsIsFresh?: boolean;
+  searchIsFresh?: boolean;
   
-  // Baseline averages for spike detection
-  wikiBaseline?: number;       // 7-day avg wiki pageviews
-  newsBaseline?: number;       // 7-day avg news count
-  searchBaseline?: number;     // 7-day avg search volume
+  wikiBaseline?: number;
+  newsBaseline?: number;
+  searchBaseline?: number;
   
   totalFollowers?: number;
   
   activePlatforms: ActivePlatforms;
   
-  // New: platform statuses for diversity multiplier
   platformStatuses?: PlatformStatuses;
   
-  // Source health states for weight renormalization during outages
   sourceHealthStates?: SourceHealthStates;
   
-  // Staleness decay factors for velocity weight adjustment (0.0-1.0)
-  // When a source is stale, its velocity weight is reduced and redistributed
-  newsStalenessFactor?: number;   // 1.0 = fresh, 0.5 = very stale
-  searchStalenessFactor?: number; // 1.0 = fresh, 0.5 = very stale
+  newsStalenessFactor?: number;
+  searchStalenessFactor?: number;
 }
 
 export interface StabilizationDetail {
@@ -152,13 +141,11 @@ export function computeTrendScore(
   let massScore: number;
   
   if (inputs.totalFollowers && inputs.totalFollowers > 0) {
-    const xMassContrib = inputs.activePlatforms.x ? followerScore * PLATFORM_WEIGHTS.mass.x : 0;
     const instagramMassContrib = inputs.activePlatforms.instagram ? followerScore * PLATFORM_WEIGHTS.mass.instagram : 0;
     const youtubeMassContrib = inputs.activePlatforms.youtube ? followerScore * PLATFORM_WEIGHTS.mass.youtube : 0;
     
     massScore = (
       (wikiMassScore * PLATFORM_WEIGHTS.mass.wiki) +
-      xMassContrib +
       instagramMassContrib +
       youtubeMassContrib
     );
@@ -194,14 +181,6 @@ export function computeTrendScore(
   const newsVelocityScore = newsNormalized * 100;
   const searchVelocityScore = searchNormalized * 100;
   
-  // X velocity - only if X handle is present (currently disabled)
-  const xTotalVelocity = inputs.xQuoteVelocity + inputs.xReplyVelocity;
-  const xVelocityScore = inputs.activePlatforms.x 
-    ? Math.min(100, xTotalVelocity * 2) 
-    : 0;
-  
-  // VELOCITY WEIGHT DECAY: When a source is stale, reduce its weight and redistribute
-  // to active sources. This prevents frozen data from having full influence.
   const baseWeights = PLATFORM_WEIGHTS.velocity;
   const newsFreshness = inputs.newsStalenessFactor ?? 1.0;
   const searchFreshness = inputs.searchStalenessFactor ?? 1.0;
@@ -209,27 +188,24 @@ export function computeTrendScore(
   const effectiveNewsWeight = baseWeights.news * newsFreshness;
   const effectiveSearchWeight = baseWeights.search * searchFreshness;
   const effectiveWikiWeight = baseWeights.wiki;
-  const effectiveXWeight = baseWeights.x;
   
-  const totalEffectiveWeight = effectiveWikiWeight + effectiveNewsWeight + effectiveSearchWeight + effectiveXWeight;
-  const totalBaseWeight = baseWeights.wiki + baseWeights.news + baseWeights.search + baseWeights.x;
+  const totalEffectiveWeight = effectiveWikiWeight + effectiveNewsWeight + effectiveSearchWeight;
+  const totalBaseWeight = baseWeights.wiki + baseWeights.news + baseWeights.search;
   const renormFactor = totalEffectiveWeight > 0 
     ? totalBaseWeight / totalEffectiveWeight 
     : 1.0;
   
-  const MAX_BOOST = 1.5; // Cap: no source exceeds 1.5x base weight (post-cap sum may be < 1.0 intentionally)
+  const MAX_BOOST = 1.5;
   const velocityWeights = {
     wiki: Math.min(effectiveWikiWeight * renormFactor, baseWeights.wiki * MAX_BOOST),
     news: Math.min(effectiveNewsWeight * renormFactor, baseWeights.news * MAX_BOOST),
     search: Math.min(effectiveSearchWeight * renormFactor, baseWeights.search * MAX_BOOST),
-    x: Math.min(effectiveXWeight * renormFactor, baseWeights.x * MAX_BOOST),
   };
   
   const velocityScore = (
     (wikiVelocityScore * velocityWeights.wiki) +
     (newsVelocityScore * velocityWeights.news) +
-    (searchVelocityScore * velocityWeights.search) +
-    (xVelocityScore * velocityWeights.x)
+    (searchVelocityScore * velocityWeights.search)
   );
   
   // =========================================================================
@@ -277,11 +253,10 @@ export function computeTrendScore(
   // This prevents unfair penalization for platforms we don't yet track
   const platformStatuses: PlatformStatuses = inputs.platformStatuses || {
     wiki: inputs.activePlatforms.wiki ? "ACTIVE" : "NOT_PRESENT",
-    x: inputs.activePlatforms.x ? "ACTIVE" : "NOT_PRESENT",
-    instagram: "NOT_APPLICABLE", // Not tracking yet - don't penalize
-    youtube: "NOT_APPLICABLE",   // Not tracking yet - don't penalize
-    news: "ACTIVE",              // News is always a data source (even if 0)
-    search: "ACTIVE",            // Search is always a data source (even if 0)
+    instagram: "NOT_APPLICABLE",
+    youtube: "NOT_APPLICABLE",
+    news: "ACTIVE",
+    search: "ACTIVE",
   };
   
   const diversityMultiplier = calculateDiversityMultiplier(platformStatuses);
@@ -426,21 +401,15 @@ export function computeTrendScore(
   const hasWiki = inputs.wikiDelta !== 0 || inputs.wikiPageviews > 0;
   const hasNews = inputs.newsDelta !== 0;
   const hasSearch = inputs.searchDelta !== 0;
-  const hasX = inputs.xQuoteVelocity > 0 || inputs.xReplyVelocity > 0;
   
   let dataSourceCount = 0;
   if (hasWiki) dataSourceCount++;
   if (hasNews) dataSourceCount++;
   if (hasSearch) dataSourceCount++;
-  if (hasX) dataSourceCount++;
-  
-  const hasXHandle = inputs.activePlatforms.x;
-  const xPenalty = hasXHandle ? 1.0 : MISSING_X_PENALTY;
   
   let confidence = dataSourceCount >= 3 ? 1.3 : 
                    dataSourceCount >= 2 ? 1.0 : 
                    dataSourceCount >= 1 ? 0.8 : 0.6;
-  confidence = confidence * xPenalty;
   
   // =========================================================================
   // 8. CALCULATE MOMENTUM & DRIVERS
@@ -453,7 +422,7 @@ export function computeTrendScore(
     inputs.wikiDelta,
     inputs.newsDelta,
     inputs.searchDelta,
-    xTotalVelocity
+    0
   );
   
   // =========================================================================

@@ -2,7 +2,7 @@ import { db } from "../db";
 import { trendSnapshots, trackedPeople, apiCache } from "@shared/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 
-export type TrendDriver = "NEWS" | "SEARCH" | "SOCIAL" | "WIKI";
+export type TrendDriver = "NEWS" | "SEARCH" | "WIKI";
 
 export interface TrendContext {
   primaryDriver: TrendDriver | null;
@@ -15,7 +15,6 @@ export interface TrendContext {
     wiki: Date | null;
     news: Date | null;
     search: Date | null;
-    x: Date | null;
   };
   isHeated: boolean;
 }
@@ -87,14 +86,13 @@ function determinePrimaryDriver(
   wikiDelta: number,
   newsDelta: number,
   searchDelta: number,
-  xVelocity: number,
+  _xVelocity: number = 0,
   hasHeadlines: boolean = false
 ): { primary: TrendDriver | null; secondary: TrendDriver | null; strength: number } {
   const drivers: Array<{ type: TrendDriver; value: number }> = [
     { type: "WIKI", value: wikiDelta },
     { type: "NEWS", value: newsDelta },
     { type: "SEARCH", value: searchDelta },
-    { type: "SOCIAL", value: xVelocity / 50 },
   ];
   
   drivers.sort((a, b) => b.value - a.value);
@@ -120,7 +118,6 @@ function getDriverLabel(driver: TrendDriver | null): string {
   switch (driver) {
     case "NEWS": return "News surge";
     case "SEARCH": return "Search spiking";
-    case "SOCIAL": return "Social buzz";
     case "WIKI": return "Wiki views up";
     default: return "Steady";
   }
@@ -138,7 +135,7 @@ export async function getTrendContext(personId: string): Promise<TrendContext> {
       driverStrength: 0,
       headlineSnippet: null,
       lastScoredAt: null,
-      sourceTimestamps: { wiki: null, news: null, search: null, x: null },
+      sourceTimestamps: { wiki: null, news: null, search: null },
       isHeated: false,
     };
   }
@@ -160,7 +157,6 @@ export async function getTrendContext(personId: string): Promise<TrendContext> {
     { key: `wiki:pageviews:${personData.wikiSlug}`, provider: "wiki" },
     { key: `gdelt:news:${personData.name.toLowerCase().replace(/ /g, "_")}`, provider: "gdelt" },
     { key: `serper:search:${personData.name.toLowerCase().replace(/ /g, "_")}`, provider: "serper" },
-    { key: `x:metrics:${personData.xHandle?.toLowerCase().replace("@", "")}`, provider: "x" },
   ];
   
   const cacheResults = await db
@@ -177,7 +173,6 @@ export async function getTrendContext(personId: string): Promise<TrendContext> {
   const allCache = await db.select().from(apiCache);
   const wikiCache = allCache.find(c => c.cacheKey === `wiki:pageviews:${personData.wikiSlug}`);
   const serperCache = allCache.find(c => c.cacheKey === `serper:search:${personData.name.toLowerCase().replace(/ /g, "_")}`);
-  const xCache = allCache.find(c => c.cacheKey === `x:metrics:${personData.xHandle?.toLowerCase().replace("@", "")}`);
   
   let headlines: string[] = [];
   if (gdeltCache) {
@@ -192,15 +187,13 @@ export async function getTrendContext(personId: string): Promise<TrendContext> {
   const wikiDelta = snapshot?.wikiDelta || 0;
   const newsDelta = snapshot?.newsDelta || 0;
   const searchDelta = snapshot?.searchDelta || 0;
-  const xVelocity = (snapshot?.xQuoteVelocity || 0) + (snapshot?.xReplyVelocity || 0);
-  
   const hasHeadlines = headlines.length > 0;
   
   const { primary, secondary, strength } = determinePrimaryDriver(
     wikiDelta,
     newsDelta,
     searchDelta,
-    xVelocity,
+    0,
     hasHeadlines
   );
   
@@ -210,8 +203,7 @@ export async function getTrendContext(personId: string): Promise<TrendContext> {
     reasonTagResult = extractReasonTag(headlines);
   }
   
-  const isHeated = (newsDelta > 0.3 && searchDelta > 0.3) || 
-                   (xVelocity > 80 && (newsDelta > 0.2 || searchDelta > 0.2));
+  const isHeated = (newsDelta > 0.3 && searchDelta > 0.3);
   
   return {
     primaryDriver: primary,
@@ -224,7 +216,6 @@ export async function getTrendContext(personId: string): Promise<TrendContext> {
       wiki: wikiCache?.fetchedAt || null,
       news: gdeltCache?.fetchedAt || null,
       search: serperCache?.fetchedAt || null,
-      x: xCache?.fetchedAt || null,
     },
     isHeated,
   };
@@ -285,7 +276,7 @@ export async function getTrendContextBatch(personIds: string[]): Promise<Map<str
         driverStrength: 0,
         headlineSnippet: null,
         lastScoredAt: null,
-        sourceTimestamps: { wiki: null, news: null, search: null, x: null },
+        sourceTimestamps: { wiki: null, news: null, search: null },
         isHeated: false,
       });
       continue;
@@ -306,14 +297,13 @@ export async function getTrendContextBatch(personIds: string[]): Promise<Map<str
     const wikiDelta = snapshot?.wikiDelta || 0;
     const newsDelta = snapshot?.newsDelta || 0;
     const searchDelta = snapshot?.searchDelta || 0;
-    const xVelocity = (snapshot?.xQuoteVelocity || 0) + (snapshot?.xReplyVelocity || 0);
     const hasHeadlines = headlines.length > 0;
     
     const { primary, secondary, strength } = determinePrimaryDriver(
       wikiDelta,
       newsDelta,
       searchDelta,
-      xVelocity,
+      0,
       hasHeadlines
     );
     
@@ -322,12 +312,10 @@ export async function getTrendContextBatch(personIds: string[]): Promise<Map<str
       reasonTagResult = extractReasonTag(headlines);
     }
     
-    const isHeated = (newsDelta > 0.3 && searchDelta > 0.3) || 
-                     (xVelocity > 80 && (newsDelta > 0.2 || searchDelta > 0.2));
+    const isHeated = (newsDelta > 0.3 && searchDelta > 0.3);
     
     const wikiKey = `wiki:pageviews:${person.wikiSlug}`;
     const serperKey = `serper:search:${person.name.toLowerCase().replace(/ /g, "_")}`;
-    const xKey = `x:metrics:${person.xHandle?.toLowerCase().replace("@", "")}`;
     
     results.set(personId, {
       primaryDriver: primary,
@@ -340,7 +328,6 @@ export async function getTrendContextBatch(personIds: string[]): Promise<Map<str
         wiki: cacheMap.get(wikiKey)?.fetchedAt || null,
         news: gdeltCache?.fetchedAt || null,
         search: cacheMap.get(serperKey)?.fetchedAt || null,
-        x: cacheMap.get(xKey)?.fetchedAt || null,
       },
       isHeated,
     });
