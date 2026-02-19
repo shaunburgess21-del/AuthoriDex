@@ -1,0 +1,72 @@
+Yeah — based on everything you’ve shown, a paid (or at least “production-grade”) news provider becomes important if news is going to stay a meaningful chunk of your score.
+
+What you’re seeing now (GDELT returning “technically valid” but near-zero counts for specific people like Elon, plus “global near-zero” periods) is exactly the kind of brittleness that makes a free, unslatted endpoint painful in production. Your recent improvements (Serper fallback, governor, hysteresis, quality thresholds) are good engineering, but they’re still working around an unreliable upstream.
+
+Do you need to switch away from GDELT?
+
+Not strictly, but here’s the practical trade:
+
+If you keep GDELT as primary, you’ll always be exposed to coverage cliffs and per-person weirdness (“Elon gets 0 while others don’t”) that won’t be fixed by a single global median trigger.
+
+If you use a paid provider (or a provider with stronger infra + predictable quotas), you reduce the chance that your product UI looks “broken” (mass red days, top people sliding for non-organic reasons).
+
+Given your use case (celebs / public figures, frequent refresh, leaderboard optics), I’d treat this as:
+GDELT = great as a supplementary signal; a more reliable provider = primary.
+
+The key point you raised about Serper fallback is valid
+
+If your fallback logic is global (“median across everyone”), it can miss per-person failures. Even if you also implemented quality-based fallback, you still want per-person fallback as the real production fix:
+
+If person’s news_count24h == 0 for N consecutive runs while wiki/search are normal, then fallback for that person only (Serper News or paid provider).
+
+Store news_provider_used per person per snapshot (you already do) so debugging is instant.
+
+That makes the system behave like: “news data is resilient per celebrity,” not “news data is resilient on average.”
+
+Providers to consider (besides GNews + NewsAPI)
+
+You’re already looking at two common options:
+
+NewsAPI.org — widely used; check their plan limitations/terms carefully for your intended usage.
+
+GNews.io — Google News–based; also check quota + commercial terms.
+
+Other providers worth evaluating for your exact scoring-style use (counts + freshness + broad coverage):
+
+Newscatcher (good for “mentions/counts” style use cases; often used for entity monitoring)
+
+Event Registry (strong for event/entity-style news intelligence)
+
+Mediastack (simple, cost-effective for basic “article counts”)
+
+Webz.io (formerly Webhose; lots of sources, more “firehose” style)
+
+Diffbot News / AYLIEN (more enterprise-y, but robust if you ever need entity extraction/sentiment too)
+
+Also: don’t plan around Bing Search APIs for “news counts” — Microsoft retired Bing Search APIs (Aug 11, 2025), so it’s not a dependable path for new builds.
+
+How I’d choose quickly (so you don’t overthink it)
+
+For each provider, test the same 20 people (top 10 + 10 random) for:
+
+Coverage: % with count > 0
+
+Stability: variance of counts across 10 runs (hourly)
+
+Latency + rate limits: can you comfortably ingest 100 people/hour?
+
+Terms: caching, commercial use, displaying headlines/snippets, etc.
+
+If you want one clean, production approach:
+
+Use Paid provider (primary) for news counts
+
+Keep GDELT (secondary) as a “bonus signal” when it’s healthy
+
+Keep Serper News (tertiary) as emergency fallback
+
+And in your engine:
+
+Maintain news_provider_used per snapshot/person
+
+Normalize news per provider (either separate percentile tables, or a provider scaling layer) so switching providers doesn’t silently shift the leaderboard.

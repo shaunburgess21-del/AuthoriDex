@@ -1,0 +1,74 @@
+Yep — overall I agree with Replit’s proposed build. It’s the right direction and it matches the actual failure mode (single-person news blind spots).
+
+That said, there are 3 tweaks I’d strongly recommend so it’s robust in production and doesn’t create new weirdness.
+
+✅ What’s solid in Replit’s plan
+
+Zero-streak trigger + qualification gate (top 25 OR wiki/search above p50) — exactly right. This prevents wasting calls on long-tail names that nobody cares about.
+
+Cap (15/run) + cooldown (90 min) — good cost + safety control.
+
+Keep global fallback — also right. Per-person fallback patches holes; global fallback handles outages.
+
+Log fallback_reason — critical for debugging (“why did we switch?”).
+
+3 improvements I’d add (small changes, big payoff)
+1) Don’t rely only on an in-memory map for streaks
+
+If the server restarts, you lose streak state unless your “boot hydration from recent snapshots” is perfect.
+
+Better options (in order):
+
+Best: persist the streak/cooldown map in api_cache under a system key (same pattern you already used for provider prefs).
+
+Good enough: compute streak “just-in-time” from the last N snapshots per person (e.g., last 3 runs) at runtime. Slightly more DB reads, but very reliable.
+
+If staying in-memory: hydration should read “last 3 snapshots per person” filtered by score_version.
+
+Why this matters: otherwise you’ll get flip-floppy behavior after restarts (“why didn’t Elon fallback this time?”).
+
+2) Define “bad news” as freshness, not only count == 0
+
+Replit wrote “0 fresh news” which is good — make sure it is literally:
+
+fresh.news == false OR
+
+news_count24h == 0 OR
+
+(optional but good) news_count24h < 2 for N runs
+
+Because you already saw the “near-zero” problem: counts of 1 can be effectively broken but won’t trigger == 0.
+
+I’d do:
+
+streak increments when news_count24h == 0 OR fresh.news == false
+
+and add an additional “qualityLow” path if median < threshold (you already did globally; per-person can be count < 2)
+
+3) Don’t let per-person fallback be overwritten by OUTAGE fill-forward
+
+You already fixed a similar issue for Serper-vs-outage: make sure the same rule exists here:
+
+If the person gets good fallback data, it must win over any decayed fill-forward logic for that person.
+
+Otherwise you’ll do a Serper call and still end up using decayed values in scoring.
+
+Two optional nice-to-haves
+
+Parallelism limit for Serper calls (e.g., concurrency=3–5) so one run doesn’t stall.
+
+Add run summary fields:
+
+perPersonFallbackTriggeredCount
+
+perPersonFallbackSuccessCount
+
+perPersonFallbackSkippedCooldownCount
+
+Bottom line
+
+Yes, implement it. It’s beneficial right now even before a paid provider.
+
+If Replit makes the three tweaks above (persist or DB-derived streaks, use freshness/near-zero not only zero, and guarantee fallback data wins over outage fill-forward), then this is absolutely a production-grade step.
+
+If you paste the exact trigger snippet Replit plans to use (even just pseudocode), I’ll sanity-check it for edge cases like “top 25 but cache reused”, “provider hysteresis + per-person fallback interacting”, and “global outage + per-person fallback both firing”.

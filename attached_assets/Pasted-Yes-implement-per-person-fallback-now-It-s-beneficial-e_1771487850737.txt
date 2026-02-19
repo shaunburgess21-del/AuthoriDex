@@ -1,0 +1,95 @@
+Yes — implement per-person fallback now. It’s beneficial even if you later move to a paid provider, because it fixes the exact failure mode you just saw with Elon (provider works “overall” but fails for specific entities).
+
+The “median/global” fallback is still useful for platform-wide outages, but it will always miss individual blind spots.
+
+Why per-person fallback is worth doing immediately
+
+Stops false drops: prevents “Elon gets 0 news → slides down the board” when wiki/search stay strong.
+
+Makes the system feel reliable: users judge your product by top names. One top name glitch looks like your engine is wrong.
+
+Provider-agnostic: when you plug in Newscatcher/Mediastack later, the logic stays the same—just swap the provider chain.
+
+Cheaper than you think: you only trigger fallback for the small subset of people who look “broken,” not all 100.
+
+The right way to do it (so it is “fit for production”)
+
+Don’t fallback purely on news_count == 0 once. Use a small set of conditions so you’re not over-calling APIs:
+
+Trigger (per person)
+
+Fallback if any of these are true:
+
+news_count24h == 0 for N consecutive runs (start with N=2 or 3), AND
+
+At least one of these “interest is alive” checks is true:
+
+wiki is above baseline (or above p50), or
+
+search is above baseline (or above p50), or
+
+the person is top-X on leaderboard (e.g., top 25)
+
+Optional extra trigger (good):
+
+news_provider_used == gdelt AND fresh.news == false for N runs
+
+Provider chain (per person)
+
+For that person only:
+Paid provider (when you add it) → GDELT → Serper News
+
+Right now (pre-paid provider), just do:
+GDELT → Serper for the person when they trip the rule.
+
+Safety rails
+
+Cap per-run fallback calls (e.g., max 10–20 people) so a systemic issue doesn’t explode cost.
+
+Cool-down window: if fallback succeeded for a person, don’t retry for e.g. 60–120 minutes unless it fails again.
+
+Record fallback_reason (e.g., per_person_zero_streak, global_quality_low) in diagnostics/meta.
+
+Keep the global median fallback too
+
+Use it for:
+
+“Provider is returning near-zero across the board”
+
+“Global outage / circuit breaker”
+
+So your architecture becomes:
+
+Global check (median/coverage/near-zero) → maybe switch the whole run
+
+Per-person check (zero streak + healthy wiki/search) → patch holes
+
+They complement each other.
+
+One important caveat (you’re right to worry about “true representation”)
+
+If your fallback provider returns counts on a different scale, you must either:
+
+Normalize per provider, or
+
+Convert counts with a scaling layer
+
+But per-person fallback doesn’t worsen this problem — it exposes it, which is good. The clean solution is what Replit suggested: separate percentile baselines per provider (ideal), especially once you add Newscatcher/Mediastack.
+
+What I’d tell Replit to implement right now
+
+Per-person fallback with:
+
+N=2 consecutive zeros
+
+only for top 25 OR people with wiki/search above p50
+
+max 15 fallbacks per run
+
+cooldown 90 minutes
+
+log news_provider_used + fallback_reason per person per snapshot
+
+That will fix “Elon-style” anomalies today and still be compatible with a paid provider later.
+
+If you want, paste Replit’s planned pseudocode (or the relevant function names/where they’d hook it in), and I’ll sanity-check it for edge cases (like not creating feedback loops with the governor, not double-counting cached data, etc.).
