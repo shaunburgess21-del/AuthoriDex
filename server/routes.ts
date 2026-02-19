@@ -4153,6 +4153,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
                 newsMeanArticles: runMeta.newsMeanArticles,
                 newsQualityLow: runMeta.newsQualityLow,
                 finishedAt: runMeta.finishedAt.toISOString(),
+                perPersonFallback: runMeta.perPersonFallback ?? null,
               } : null,
             };
           })(),

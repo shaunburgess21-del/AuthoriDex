@@ -30,6 +30,7 @@ Preferred communication style: Simple, everyday language.
     - Implements deterministic baseline selection for trend changes and score versioning to ensure consistency after formula changes.
     - Features Leaderboard Resilience with snapshot-based fallbacks and boot-time hydration to prevent empty leaderboards.
     - Includes Serper News Fallback for automatic news source switching when GDELT coverage OR quality drops (median article count < 3 triggers fallback). Fallback override allows health state recovery even when raw global_zero would re-trigger OUTAGE.
+    - Implements Per-Person News Fallback: When GDELT works globally but fails for specific individuals (2+ consecutive bad-news runs with fresh.news==false OR count < 2), targeted Serper calls patch affected people. Qualification gate: top-25 by rank OR wiki/search above p50. Safety rails: max 15 per run, 90-min cooldown per person, priority by rank. Fallback data bypasses fill-forward decay path. Stats tracked in health summary, engine health endpoint, and per-snapshot diagnostics.
     - Employs a Degradation Governor to gradually reduce source weights during prolonged coverage drops and includes recovery hysteresis.
     - Implements a Two-Speed Leaderboard Pipeline for hourly full refreshes and fast-lane 10-minute ticks based on internal signals.
 

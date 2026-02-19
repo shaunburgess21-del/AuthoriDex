@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { trackedPeople, trendSnapshots, trendingPeople, celebrityImages, ingestionRuns, apiCache } from "@shared/schema";
-import { desc, eq, sql, gte, and } from "drizzle-orm";
+import { desc, eq, sql, gte, and, inArray } from "drizzle-orm";
 import { getBaselineDiagnostics } from "../utils/baseline";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
 import { fetchBatchGdeltNews, GdeltBatchOptions, GdeltBatchStats } from "../providers/gdelt";
@@ -88,6 +88,13 @@ export interface LastRunMeta {
   newsMeanArticles: number;
   newsQualityLow: boolean;
   finishedAt: Date;
+  perPersonFallback?: {
+    triggered: number;
+    succeeded: number;
+    skippedCooldown: number;
+    skippedNotQualified: number;
+    patched: string[];
+  };
 }
 let _lastRunMeta: LastRunMeta | null = null;
 
@@ -458,6 +465,14 @@ export async function runDataIngestion(): Promise<IngestResult> {
       }
     }
 
+    const perPersonFallbackStats = {
+      triggered: 0,
+      succeeded: 0,
+      skippedCooldown: 0,
+      skippedQualified: 0,
+      patchedPeople: [] as string[],
+    };
+
     let serperStart = Date.now();
     let serperData = await fetchSerperBatch(
       people.map(p => ({ id: p.id, name: p.name, searchQueryOverride: p.searchQueryOverride })),
@@ -586,6 +601,177 @@ export async function runDataIngestion(): Promise<IngestResult> {
     console.log(`[Ingest] Bootstrap maps: ${lastNonZeroNewsMap.size} people with non-zero news history, ${lastNonZeroSearchMap.size} with non-zero search history`);
     
     console.log(`[Ingest] Found ${mostRecentMap.size} recent snapshots (EMA), ${snapshot24hMap.size} 24h snapshots, ${snapshot7dMap.size} 7d snapshots`);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PER-PERSON NEWS FALLBACK
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Even when GDELT works globally, individual people can get zero articles.
+    // This catches per-person blind spots (e.g. Elon Musk getting 0 while others
+    // are fine) by making targeted Serper calls for affected individuals.
+    //
+    // Trigger: 2+ consecutive bad-news runs (fresh.news==false OR count < 2)
+    //          AND person is top-25 by rank OR wiki/search above p50
+    // Safety:  max 15 per run, 90-minute cooldown, priority by rank
+    // ═══════════════════════════════════════════════════════════════════════════
+    const PER_PERSON_FALLBACK_MAX = 15;
+    const PER_PERSON_FALLBACK_STREAK_THRESHOLD = 2;
+    const PER_PERSON_FALLBACK_COOLDOWN_MS = 90 * 60 * 1000;
+    const PER_PERSON_FALLBACK_COOLDOWN_KEY_PREFIX = "system:pp_fallback_cd:";
+    const PER_PERSON_BAD_NEWS_THRESHOLD = 2;
+
+    if (newsSource === "gdelt" && gdeltData.size > 0) {
+      const perPersonFallbackStart = Date.now();
+
+      const recentSnapsForStreak = await db.select({
+        personId: trendSnapshots.personId,
+        newsCount: trendSnapshots.newsCount,
+        diagnostics: trendSnapshots.diagnostics,
+        timestamp: trendSnapshots.timestamp,
+      }).from(trendSnapshots).where(
+        and(
+          gte(trendSnapshots.timestamp, new Date(now.getTime() - 6 * 60 * 60 * 1000)),
+          eq(trendSnapshots.snapshotOrigin, 'ingest'),
+        )
+      ).orderBy(desc(trendSnapshots.timestamp));
+
+      const streakMap = new Map<string, number>();
+      const snapsByPerson = new Map<string, Array<{ newsCount: number | null; diagnostics: any; timestamp: Date }>>();
+      for (const s of recentSnapsForStreak) {
+        if (!snapsByPerson.has(s.personId)) snapsByPerson.set(s.personId, []);
+        snapsByPerson.get(s.personId)!.push({
+          newsCount: s.newsCount,
+          diagnostics: s.diagnostics,
+          timestamp: s.timestamp,
+        });
+      }
+
+      for (const [personId, snaps] of Array.from(snapsByPerson.entries())) {
+        const sorted = snaps.sort((a: typeof snaps[0], b: typeof snaps[0]) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 3);
+        let streak = 0;
+        for (const s of sorted) {
+          const diag = parseSnapshotDiagnostics(s.diagnostics);
+          const freshNews = diag ? diag.fresh?.news === true : false;
+          const count = s.newsCount ?? 0;
+          if (!freshNews || count < PER_PERSON_BAD_NEWS_THRESHOLD) {
+            streak++;
+          } else {
+            break;
+          }
+        }
+        if (streak >= PER_PERSON_FALLBACK_STREAK_THRESHOLD) {
+          streakMap.set(personId, streak);
+        }
+      }
+
+      if (streakMap.size > 0) {
+        const currentRankings = await db
+          .select({ id: trendingPeople.id, rank: trendingPeople.rank })
+          .from(trendingPeople)
+          .orderBy(trendingPeople.rank);
+        const ppRankMap = new Map(currentRankings.map(r => [r.id, r.rank ?? 999]));
+
+        const wikiValues = Array.from(wikiData.values()).map((w: any) => w?.pageviews24h ?? 0).sort((a: number, b: number) => a - b);
+        const wikiP50 = wikiValues.length > 0 ? wikiValues[Math.floor(wikiValues.length / 2)] : 0;
+        const searchValues = Array.from(serperData.values()).map((s: any) => s?.searchVolume ?? 0).sort((a: number, b: number) => a - b);
+        const searchP50 = searchValues.length > 0 ? searchValues[Math.floor(searchValues.length / 2)] : 0;
+
+        const ppCandidates: Array<{ id: string; name: string; rank: number; streak: number }> = [];
+        for (const [personId, streak] of Array.from(streakMap.entries())) {
+          const person = people.find(p => p.id === personId);
+          if (!person) continue;
+
+          const rank = ppRankMap.get(personId) ?? 999;
+          const wikiPv = wikiData.get(personId)?.pageviews24h ?? 0;
+          const searchVol = serperData.get(personId)?.searchVolume ?? 0;
+          const isTop25 = rank <= 25;
+          const isAboveP50 = wikiPv >= wikiP50 || searchVol >= searchP50;
+
+          if (isTop25 || isAboveP50) {
+            ppCandidates.push({ id: personId, name: person.name, rank, streak });
+          } else {
+            perPersonFallbackStats.skippedQualified++;
+          }
+        }
+
+        ppCandidates.sort((a, b) => a.rank - b.rank);
+
+        const cooldownKeys = ppCandidates.slice(0, PER_PERSON_FALLBACK_MAX + 10).map(c =>
+          PER_PERSON_FALLBACK_COOLDOWN_KEY_PREFIX + c.id
+        );
+        const cooldownRows = cooldownKeys.length > 0
+          ? await db.select({ cacheKey: apiCache.cacheKey, fetchedAt: apiCache.fetchedAt })
+              .from(apiCache)
+              .where(inArray(apiCache.cacheKey, cooldownKeys))
+          : [];
+        const cooldownMap = new Map(cooldownRows.map(r => [r.cacheKey, r.fetchedAt]));
+
+        const eligibleCandidates: typeof ppCandidates = [];
+        for (const c of ppCandidates) {
+          const cdKey = PER_PERSON_FALLBACK_COOLDOWN_KEY_PREFIX + c.id;
+          const lastFallback = cooldownMap.get(cdKey);
+          if (lastFallback && (now.getTime() - lastFallback.getTime()) < PER_PERSON_FALLBACK_COOLDOWN_MS) {
+            perPersonFallbackStats.skippedCooldown++;
+            continue;
+          }
+          eligibleCandidates.push(c);
+          if (eligibleCandidates.length >= PER_PERSON_FALLBACK_MAX) break;
+        }
+
+        if (eligibleCandidates.length > 0) {
+          console.log(`[Per-Person Fallback] Triggering for ${eligibleCandidates.length} people (${streakMap.size} with streaks, ${perPersonFallbackStats.skippedCooldown} on cooldown, ${perPersonFallbackStats.skippedQualified} not qualified)`);
+          for (const c of eligibleCandidates) {
+            console.log(`  → ${c.name} (#${c.rank}, streak=${c.streak})`);
+          }
+
+          const perPersonSerperData = await fetchSerperNewsBatch(
+            eligibleCandidates.map(c => ({ id: c.id, name: c.name })),
+            5,
+            300
+          );
+
+          for (const c of eligibleCandidates) {
+            perPersonFallbackStats.triggered++;
+            const serperResult = perPersonSerperData.get(c.id);
+            if (serperResult && serperResult.articleCount24h >= 3) {
+              gdeltData.set(c.id, {
+                query: serperResult.query,
+                articleCount24h: serperResult.articleCount24h,
+                articleCount7d: serperResult.articleCount7d,
+                averageDaily7d: serperResult.averageDaily7d,
+                delta: serperResult.delta,
+                topHeadlines: serperResult.topHeadlines,
+                _perPersonFallback: true,
+                _fallbackReason: "per_person_zero_streak",
+              });
+              perPersonFallbackStats.succeeded++;
+              perPersonFallbackStats.patchedPeople.push(c.name);
+              console.log(`[Per-Person Fallback] ${c.name}: ${serperResult.articleCount24h} articles from Serper`);
+
+              const cdKey = PER_PERSON_FALLBACK_COOLDOWN_KEY_PREFIX + c.id;
+              const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+              await db.insert(apiCache).values({
+                cacheKey: cdKey,
+                provider: "system",
+                responseData: JSON.stringify({ lastFallback: now.toISOString(), reason: "per_person_zero_streak" }),
+                fetchedAt: now,
+                expiresAt: farFuture,
+              }).onConflictDoUpdate({
+                target: apiCache.cacheKey,
+                set: { fetchedAt: now, responseData: JSON.stringify({ lastFallback: now.toISOString(), reason: "per_person_zero_streak" }) },
+              });
+            } else {
+              const count = serperResult?.articleCount24h ?? 0;
+              console.log(`[Per-Person Fallback] ${c.name}: Serper returned ${count} articles (below threshold of 3)`);
+            }
+          }
+        }
+
+        const perPersonFallbackDuration = Date.now() - perPersonFallbackStart;
+        if (perPersonFallbackStats.triggered > 0) {
+          console.log(`[Per-Person Fallback] Complete: ${perPersonFallbackStats.succeeded}/${perPersonFallbackStats.triggered} succeeded in ${perPersonFallbackDuration}ms`);
+        }
+      }
+    }
 
     // Fetch 7-day source statistics for normalization
     const sourceStats = await refreshSourceStats();
@@ -746,10 +932,11 @@ export async function runDataIngestion(): Promise<IngestResult> {
         // NEWS: Use fallback if source is in OUTAGE state (global-zero or API failed)
         const newsNeedsOutageFallback = newsHealth.state === "OUTAGE" || newsHealth.state === "DEGRADED";
         
-        // If the current news data comes from a successful Serper fallback and has
-        // meaningful article counts, prefer it over decayed fill-forward values.
-        // This prevents the system from ignoring good fallback data during OUTAGE.
-        const newsHasGoodFallbackData = newsSource === "serper_news" && news && newsCount >= 3;
+        // If the current news data comes from a successful fallback (global Serper OR
+        // per-person Serper) and has meaningful article counts, prefer it over decayed
+        // fill-forward values. This prevents the system from ignoring good fallback data.
+        const hasPerPersonFallback = news?._perPersonFallback === true;
+        const newsHasGoodFallbackData = (newsSource === "serper_news" || hasPerPersonFallback) && news && newsCount >= 3;
         
         // Also detect individual suspicious drop, but only activate fallback if global outage
         const suspiciousNewsDrop = news && prevNewsCount >= 5 && 
@@ -919,7 +1106,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
             wiki: !!wiki,
             news: !newsUsedFallback && (news?.articleCount24h ?? 0) > 0,
             search: !searchUsedFallback && (serper?.searchVolume ?? 0) > 0,
-            newsSource: newsSource,
+            newsSource: hasPerPersonFallback ? "serper_news" : newsSource,
+            ...(hasPerPersonFallback ? { fallbackReason: news?._fallbackReason ?? "per_person_zero_streak" } : {}),
           },
           stab: scoreResult.stabDetail ? {
             ...scoreResult.stabDetail,
@@ -1223,6 +1411,13 @@ export async function runDataIngestion(): Promise<IngestResult> {
       fallbacks: {
         news: newsApiUsedFallback,
         search: searchApiUsedFallback,
+        perPerson: {
+          triggered: perPersonFallbackStats.triggered,
+          succeeded: perPersonFallbackStats.succeeded,
+          skippedCooldown: perPersonFallbackStats.skippedCooldown,
+          skippedNotQualified: perPersonFallbackStats.skippedQualified,
+          patched: perPersonFallbackStats.patchedPeople,
+        },
       },
       coverage: {
         newsPct: `${newsCoveragePctActual.toFixed(0)}%`,
@@ -1328,6 +1523,13 @@ export async function runDataIngestion(): Promise<IngestResult> {
       newsMeanArticles: Math.round(gdeltMeanArticles * 10) / 10,
       newsQualityLow: gdeltQualityLow,
       finishedAt: new Date(),
+      perPersonFallback: {
+        triggered: perPersonFallbackStats.triggered,
+        succeeded: perPersonFallbackStats.succeeded,
+        skippedCooldown: perPersonFallbackStats.skippedCooldown,
+        skippedNotQualified: perPersonFallbackStats.skippedQualified,
+        patched: perPersonFallbackStats.patchedPeople,
+      },
     };
 
     await saveHealthState();
