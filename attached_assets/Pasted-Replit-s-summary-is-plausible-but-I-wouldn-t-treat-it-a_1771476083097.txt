@@ -1,0 +1,109 @@
+Replit’s summary is plausible, but I wouldn’t treat it as “all good” yet — there’s one big red flag:
+
+The red flag
+
+“19 consecutive failures due to global_zero detection” + “average news counts ~1”
+
+That pattern usually means one of these is happening:
+
+Provider is actually blacked out / failing (timeouts/429s/5xx), or
+
+Your ingest path is “succeeding” but returning near-empty results (bad query shape, too-strict filtering, cache reuse returning empty, windowing bug, etc.), or
+
+Your global_zero detector is too aggressive / mis-specified and is classifying “low coverage” as “outage,” keeping the news weight suppressed even when some news is available.
+
+If news is truly “OUTAGE since Feb 18” while wiki+search are healthy, then continuous downtrend is expected because your velocity score is missing a big chunk of signal. So the behavior (scores slowly eroding) makes sense — but the diagnosis “global_zero” needs verification.
+
+What I think this means for your engine
+
+If you already have Serper News fallback + degradation governor, then a long-lived “OUTAGE” shouldn’t require users to eat a steady score decay unless:
+
+the fallback isn’t triggering, or
+
+fallback is triggering but produces near-zero counts, or
+
+the governor is stuck in a “ramped-down” state and not recovering.
+
+So: this is likely not just “normal erosion”—it’s probably a news subsystem stuck degraded.
+
+What to ask Replit for (copy/paste)
+
+Ask for these exact checks and numbers so you can share with ChatGPT cleanly:
+
+Per-run news coverage + provider used
+
+For the last 10 completed runs:
+
+newsFreshCoveragePct
+
+newsProviderUsed (gdelt vs serper_news)
+
+newsDegradedReason (rate_limit / timeout / circuit_breaker / global_zero etc.)
+
+What exactly triggers global_zero
+
+The condition in code. Example:
+
+Is it “freshCoveragePct == 0”?
+
+Or “median news_count == 0”?
+
+Or “(freshCoveragePct < X AND avgCount < Y)”?
+
+And whether it looks at GDELT only or post-fallback combined news.
+
+Is fallback actually firing?
+
+If newsProviderUsed is still “gdelt” during outage runs, fallback isn’t activating.
+
+If it’s “serper_news” but counts are ~0–1, then Serper query shape is off (or too strict).
+
+Health state recovery
+
+If you added recovery hysteresis: confirm the counter is moving.
+
+Confirm the health machine can transition OUTAGE → RECOVERY → HEALTHY once coverage improves.
+
+Cache reuse side effects
+
+With “proactive cache reuse,” confirm you are not repeatedly reusing empty/near-empty cached responses and calling them “success.”
+
+Ideally: cache entries store result_count + fetched_at + source, and you avoid treating “0 results” as a healthy success unless you have strong confidence the query truly yields 0.
+
+Do you need to switch to a paid news provider because of this?
+
+Not automatically. If Serper News is integrated properly, it should prevent “everyone red” caused by news outages.
+
+You should consider a paid provider only if:
+
+Even with fallback + backoff + caching, you still see newsFreshCoveragePct < ~70% in >20% of runs, or
+
+Your product needs consistent news coverage for credibility.
+
+Right now, your priority is: make the system reliably detect and recover, and ensure fallback genuinely supplies non-zero signal.
+
+My quick interpretation of Replit’s final line
+
+“scores are gradually eroding as expected during an extended outage”
+
+That’s only acceptable if:
+
+you intentionally want “news missing = scores trend down”
+
+and you’re comfortable with the UX of “whole board slowly bleeding red” during outages.
+
+Most apps don’t want that. Instead, they:
+
+downweight the missing source but renormalize, and/or
+
+clamp per-run impact when a source goes missing (your governor), and/or
+
+rely on fallback (Serper) so “outage” doesn’t feel like “platform dying.”
+
+So I’d push Replit to prove:
+
+why fallback isn’t preventing this, or
+
+why the system is correct to stay in OUTAGE despite fallback.
+
+If you paste the last 5 runs’ meta.sourceHealth (or the admin health output) here, I’ll tell you immediately whether this is “expected erosion” or “news pipeline stuck degraded.
