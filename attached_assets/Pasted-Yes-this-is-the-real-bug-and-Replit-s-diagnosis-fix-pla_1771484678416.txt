@@ -1,0 +1,92 @@
+Yes — this is the real bug and Replit’s diagnosis + fix plan is exactly what you want.
+
+What’s actually going on (and why it mattered)
+
+Your system had two different definitions of “news is healthy”:
+
+Fallback trigger = “Did GDELT return any result object for most people?” (gdeltData.size / people.length)
+
+Outage detector = “Are the returned article counts near zero for most people?” (< 5 for >50% of people)
+
+So GDELT could “succeed” structurally (size ≈ 100) while being functionally useless (median ≈ 1).
+That means:
+
+fallback never fires
+
+global outage correctly fires
+
+health state gets stuck in OUTAGE
+
+fill-forward + decay erodes scores continuously
+
+Replit’s “threshold mismatch” framing is spot on.
+
+Is the proposed fix beneficial?
+
+Yes — very. Specifically:
+
+✅ 1) Quality-based fallback trigger (median < 3)
+
+This is the right move. Coverage-by-size is too blunt. A median-quality trigger catches “soft outages” like the one you hit.
+
+One small tweak I’d suggest (optional): use both:
+
+median < 3 or
+
+% below nearZeroThreshold is high (e.g., >60%)
+That makes it robust against skewed distributions.
+
+✅ 2) Allow health recovery when fallback is good
+
+Also correct. Otherwise you’d still be stuck in OUTAGE even after switching providers.
+
+The architect note was important: if your outage detector uses <5 but “good fallback” is >=3, you can get awkward states. Their “effectiveNewsGlobalOutage override” resolves that.
+
+✅ 3) Per-person bypass of fill-forward when fallback has good data
+
+This is a big correctness fix. Without it, you’d fetch good Serper data… and then overwrite it because the global state is OUTAGE. Replit caught the subtlety.
+
+✅ 4) Logging quality metrics
+
+This is the difference between “we think it’s fixed” and you can prove it’s fixed. Having medianArticles, meanArticles, and qualityLow in run meta is gold.
+
+Two things I’d still add (small but high value)
+1) Hysteresis for the quality trigger too
+
+Right now you’ll flip to Serper whenever median < 3. If GDELT bounces around 2.8–3.2, you can flap.
+
+A simple pattern:
+
+switch to Serper if median < 3 for 1 run
+
+switch back to GDELT only if median ≥ 4 for 2 consecutive runs
+
+(You already added hysteresis to the governor; this is the same idea but for provider selection.)
+
+2) Add “newsProviderUsed” at run level everywhere
+
+You’ve started doing this. Make sure:
+
+leaderboard meta includes it
+
+engine-health includes it
+
+ingestion logs include it (one line per run)
+
+So when you see “everyone red” again, you can answer in 5 seconds:
+
+“We were on GDELT with qualityLow=true” or “we were on Serper fallback”.
+
+What you should expect after this fix
+
+On the next few runs you should see:
+
+newsProviderUsed: "serper_news" (at least initially)
+
+newsQuality.medianArticles jump above the threshold
+
+effectiveNewsGlobalOutage: false
+
+news health transitions OUTAGE → RECOVERY → HEALTHY after ~3 good runs (as designed)
+
+the “steady erosion” should stop; scores will stabilize and then normalize based on real signals
