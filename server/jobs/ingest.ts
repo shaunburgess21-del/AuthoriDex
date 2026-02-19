@@ -84,6 +84,9 @@ export interface LastRunMeta {
   searchFreshCoveragePct: number;
   newsGovernorFactor: number;
   searchGovernorFactor: number;
+  newsMedianArticles: number;
+  newsMeanArticles: number;
+  newsQualityLow: boolean;
   finishedAt: Date;
 }
 let _lastRunMeta: LastRunMeta | null = null;
@@ -311,11 +314,30 @@ export async function runDataIngestion(): Promise<IngestResult> {
     if (!sourceStatuses.gdelt) sourceStatuses.gdelt = gdeltData.size > 0 ? "OK" : "DEGRADED";
 
     const SERPER_NEWS_FALLBACK_THRESHOLD = 0.30;
+    const GDELT_QUALITY_THRESHOLD = 3;
     let newsSource: "gdelt" | "serper_news" = "gdelt";
     const gdeltFreshPct = gdeltData.size / people.length;
 
-    if (gdeltFreshPct < SERPER_NEWS_FALLBACK_THRESHOLD) {
-      console.log(`[Ingest] GDELT freshness ${(gdeltFreshPct * 100).toFixed(0)}% < ${SERPER_NEWS_FALLBACK_THRESHOLD * 100}% threshold — activating Serper News fallback`);
+    const gdeltArticleCounts = Array.from(gdeltData.values())
+      .map(d => d.articleCount24h ?? 0)
+      .sort((a, b) => a - b);
+    const gdeltMedianArticles = gdeltArticleCounts.length > 0
+      ? gdeltArticleCounts[Math.floor(gdeltArticleCounts.length / 2)]
+      : 0;
+    const gdeltMeanArticles = gdeltArticleCounts.length > 0
+      ? gdeltArticleCounts.reduce((s, v) => s + v, 0) / gdeltArticleCounts.length
+      : 0;
+    const gdeltQualityLow = gdeltData.size > 0 && gdeltMedianArticles < GDELT_QUALITY_THRESHOLD;
+
+    if (gdeltQualityLow) {
+      console.log(`[Ingest] GDELT data quality low: median=${gdeltMedianArticles}, mean=${gdeltMeanArticles.toFixed(1)}, threshold=${GDELT_QUALITY_THRESHOLD} — activating Serper News fallback`);
+    }
+
+    if (gdeltFreshPct < SERPER_NEWS_FALLBACK_THRESHOLD || gdeltQualityLow) {
+      const reason = gdeltQualityLow
+        ? `quality low (median=${gdeltMedianArticles})`
+        : `freshness ${(gdeltFreshPct * 100).toFixed(0)}% < ${SERPER_NEWS_FALLBACK_THRESHOLD * 100}%`;
+      console.log(`[Ingest] GDELT ${reason} — activating Serper News fallback`);
       try {
         const serperNewsStart = Date.now();
         const serperNewsData = await fetchSerperNewsBatch(
@@ -510,10 +532,13 @@ export async function runDataIngestion(): Promise<IngestResult> {
     // Track API failure stats for logging
     let newsApiUsedFallback = 0;
     let searchApiUsedFallback = 0;
-    const gdeltFailed = gdeltData.size === 0;
+    const newsFailed = gdeltData.size === 0;
     const serperFailed = serperData.size === 0;
     
     // Build maps of current source values for global-zero detection
+    // IMPORTANT: This runs AFTER the Serper News fallback, so gdeltData may
+    // contain Serper-sourced data if fallback was activated. This ensures
+    // global_zero detection evaluates the BEST available data, not just GDELT.
     const currentNewsValues = new Map<string, number>();
     const currentSearchValues = new Map<string, number>();
     
@@ -531,12 +556,24 @@ export async function runDataIngestion(): Promise<IngestResult> {
       currentSearchValues,
       people.length
     );
+
+    // When Serper fallback is active and provided good quality data, override the
+    // global_zero signal so the health state can transition out of OUTAGE.
+    // Without this, the near-zero threshold (5) in detectGlobalOutage would keep
+    // re-triggering OUTAGE even when fallback data is meaningful (median >= 3).
+    const fallbackOverridesOutage = newsSource === "serper_news" && !gdeltQualityLow;
+
+    if (newsSource === "serper_news") {
+      console.log(`[Ingest] Post-fallback news quality: globalZero=${globalHealth.isNewsGlobalOutage}, nearZeroPct=${(globalHealth.newsNearZeroPercent * 100).toFixed(0)}%, fallbackOverride=${fallbackOverridesOutage}`);
+    }
+
+    const effectiveNewsGlobalOutage = fallbackOverridesOutage ? false : globalHealth.isNewsGlobalOutage;
     
     // Update source health states based on current conditions
     const newsHealth = updateSourceHealth("news", {
-      apiFailed: gdeltFailed,
-      isGlobalOutage: globalHealth.isNewsGlobalOutage,
-      dataReturned: !gdeltFailed && !globalHealth.isNewsGlobalOutage,
+      apiFailed: newsFailed,
+      isGlobalOutage: effectiveNewsGlobalOutage,
+      dataReturned: !newsFailed && !effectiveNewsGlobalOutage,
     });
     
     const searchHealth = updateSourceHealth("search", {
@@ -556,10 +593,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
     // Log health status
     console.log(getHealthSummary());
     
-    if (gdeltFailed) {
+    if (newsFailed) {
       console.log('[Ingest] GDELT API failed completely - using graceful degradation (last known values)');
-    } else if (globalHealth.isNewsGlobalOutage) {
-      console.log(`[Ingest] GDELT global-zero detected (${Math.round(globalHealth.newsNearZeroPercent * 100)}% near-zero) - treating as OUTAGE`);
+    } else if (effectiveNewsGlobalOutage) {
+      console.log(`[Ingest] News global-zero detected (${Math.round(globalHealth.newsNearZeroPercent * 100)}% near-zero) - treating as OUTAGE`);
     }
     
     if (serperFailed) {
@@ -621,14 +658,19 @@ export async function runDataIngestion(): Promise<IngestResult> {
         // NEWS: Use fallback if source is in OUTAGE state (global-zero or API failed)
         const newsNeedsOutageFallback = newsHealth.state === "OUTAGE" || newsHealth.state === "DEGRADED";
         
+        // If the current news data comes from a successful Serper fallback and has
+        // meaningful article counts, prefer it over decayed fill-forward values.
+        // This prevents the system from ignoring good fallback data during OUTAGE.
+        const newsHasGoodFallbackData = newsSource === "serper_news" && news && newsCount >= 3;
+        
         // Also detect individual suspicious drop, but only activate fallback if global outage
         const suspiciousNewsDrop = news && prevNewsCount >= 5 && 
           newsCount < prevNewsCount * 0.1; // 90%+ drop
         
-        // Use fallback if: (global outage OR API failed)
+        // Use fill-forward if: (global outage OR API failed) AND we don't have good fallback data
         // Bootstrap recovery: if prevNewsCount is 0 (from prior zero-propagation), 
         // look back in history for the last non-zero value to prevent permanent zero-lock
-        if (newsNeedsOutageFallback || !news || (suspiciousNewsDrop && globalHealth.isNewsGlobalOutage)) {
+        if ((newsNeedsOutageFallback && !newsHasGoodFallbackData) || !news || (suspiciousNewsDrop && effectiveNewsGlobalOutage && !newsHasGoodFallbackData)) {
           let fallbackNewsCount = prevNewsCount;
           let fallbackNewsDelta = mostRecent?.newsDelta ?? 0;
           let fallbackDecay = newsDecayFactor;
@@ -1105,6 +1147,22 @@ export async function runDataIngestion(): Promise<IngestResult> {
         newsCacheReused: gdeltBatchStats?.cacheReused ?? 0,
         avgGdeltSpacingMs: gdeltBatchStats?.avgSpacingMs ?? 0,
       },
+      newsQuality: {
+        medianArticles: gdeltMedianArticles,
+        meanArticles: Math.round(gdeltMeanArticles * 10) / 10,
+        qualityLow: gdeltQualityLow,
+        qualityThreshold: GDELT_QUALITY_THRESHOLD,
+      },
+      sourceHealth: {
+        news: newsHealth.state,
+        newsReason: newsHealth.reason,
+        newsFailures: newsHealth.consecutiveFailures,
+        newsStaleHours: newsHealth.lastHealthyTimestamp
+          ? Math.round((Date.now() - newsHealth.lastHealthyTimestamp.getTime()) / (1000 * 60 * 60) * 10) / 10
+          : null,
+        search: searchHealth.state,
+        wiki: wikiApiFailed ? "DEGRADED" : "HEALTHY",
+      },
       bootstrap: {
         newsHistory: lastNonZeroNewsMap.size,
         searchHistory: lastNonZeroSearchMap.size,
@@ -1174,6 +1232,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
       searchFreshCoveragePct: searchCoveragePctActual,
       newsGovernorFactor,
       searchGovernorFactor,
+      newsMedianArticles: gdeltMedianArticles,
+      newsMeanArticles: Math.round(gdeltMeanArticles * 10) / 10,
+      newsQualityLow: gdeltQualityLow,
       finishedAt: new Date(),
     };
 

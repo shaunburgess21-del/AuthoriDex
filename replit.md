@@ -29,7 +29,7 @@ Preferred communication style: Simple, everyday language.
     - Tapers velocity contribution when news/search signals are low and adjusts weights based on source health and staleness.
     - Implements deterministic baseline selection for trend changes and score versioning to ensure consistency after formula changes.
     - Features Leaderboard Resilience with snapshot-based fallbacks and boot-time hydration to prevent empty leaderboards.
-    - Includes Serper News Fallback for automatic news source switching when GDELT coverage drops.
+    - Includes Serper News Fallback for automatic news source switching when GDELT coverage OR quality drops (median article count < 3 triggers fallback). Fallback override allows health state recovery even when raw global_zero would re-trigger OUTAGE.
     - Employs a Degradation Governor to gradually reduce source weights during prolonged coverage drops and includes recovery hysteresis.
     - Implements a Two-Speed Leaderboard Pipeline for hourly full refreshes and fast-lane 10-minute ticks based on internal signals.
 

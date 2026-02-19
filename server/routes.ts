@@ -4149,6 +4149,9 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
                 searchFreshCoveragePct: Math.round(runMeta.searchFreshCoveragePct),
                 newsGovernorFactor: Math.round(runMeta.newsGovernorFactor * 100),
                 searchGovernorFactor: Math.round(runMeta.searchGovernorFactor * 100),
+                newsMedianArticles: runMeta.newsMedianArticles,
+                newsMeanArticles: runMeta.newsMeanArticles,
+                newsQualityLow: runMeta.newsQualityLow,
                 finishedAt: runMeta.finishedAt.toISOString(),
               } : null,
             };
