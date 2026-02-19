@@ -1,0 +1,69 @@
+Yes — this updated plan (with your 3 tweaks incorporated) is correct, beneficial, and much closer to production-safe. Replit’s adjustments also show they actually hit the real integration pitfalls (variable ordering, avoiding duplicate DB work, using existing snapshot fetches, etc.).
+
+A few quick notes so you know what to “audit” mentally before you let this run wild:
+
+What looks right ✅
+
+Just-in-time streaks from last 3 snapshots (no state loss on restart) ✅
+
+Trigger on fresh.news == false OR news_count < 2 (captures near-zero) ✅
+
+Good fallback wins over fill-forward (prevents “Serper worked but got overwritten”) ✅
+
+Caps + concurrency + cooldown (prevents Serper cost blowups) ✅
+
+Health summary + LastRunMeta + engine-health exposure (you’ll be able to see if it’s firing too often) ✅
+
+Fixing the Drizzle query to inArray() is the kind of boring detail that prevents silent failure ✅
+
+Using parseSnapshotDiagnostics() for streak computation is also a solid hardening move ✅
+
+Two things I’d still sanity-check (small but important)
+1) “Bad run” logic should only increment streak when the news signal is expected to be fresh
+
+If you count a run as “bad” just because news_count < 2, you might falsely streak people who genuinely have low coverage (obscure names, misspelled query, etc.).
+You already mitigate this with “top 25 OR wiki/search above p50”, which helps a lot. Still, best practice is:
+
+streak increments only if the provider used was “gdelt” (or primary provider) and it’s a “fresh window” attempt, not a cached fill-forward artifact
+
+or if diagnostics include a newsAttempted: true / newsApiHit: true style marker
+
+If you don’t have that marker, your qualification gate probably keeps it safe enough — but this is the one subtle source of “phantom streaks.”
+
+2) Cooldown should be keyed to the fallback provider and the person
+
+You want cooldown per person per provider (e.g., Serper), otherwise later when you add a paid provider you might accidentally block the better provider because Serper was recently used.
+
+(If they implemented cooldown via “who had per-person fallback in last 90 minutes” without distinguishing provider, it’s still okay for now, but worth evolving.)
+
+Is it worth implementing per-person fallback before paying for news?
+
+Yes. Even if you adopt a paid news API, you’ll still have:
+
+occasional entity coverage gaps,
+
+transient provider hiccups,
+
+query edge cases.
+
+Per-person fallback becomes your reliability layer.
+
+One extra practical suggestion
+
+Make sure the health summary includes:
+
+perPersonFallbackTriggered
+
+perPersonFallbackSucceeded
+
+perPersonFallbackCooldown
+
+top 5 people who triggered fallback (names + counts)
+
+That last bit is gold for debugging (you’ll instantly see “it’s always Elon + Trump” etc.).
+
+Bottom line
+
+I agree with Replit’s build. It directly addresses the Elon-type failure, it’s constrained enough not to blow up Serper spend, and it’s observable.
+
+If you want, paste the exact new trigger rules (the few lines that decide who gets fallback + what “good” means) and I’ll spot-check edge cases like “OUTAGE state but per-person still firing”, “provider hysteresis interacting with per-person”, and “near-zero global vs per-person duplicates.”
