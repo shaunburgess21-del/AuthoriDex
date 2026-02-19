@@ -94,6 +94,7 @@ export interface LastRunMeta {
     skippedCooldown: number;
     skippedNotQualified: number;
     patched: string[];
+    topTriggered: Array<{ name: string; streak: number; rank: number }>;
   };
 }
 let _lastRunMeta: LastRunMeta | null = null;
@@ -471,6 +472,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
       skippedCooldown: 0,
       skippedQualified: 0,
       patchedPeople: [] as string[],
+      topTriggered: [] as Array<{ name: string; streak: number; rank: number }>,
     };
 
     let serperStart = Date.now();
@@ -616,7 +618,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     const PER_PERSON_FALLBACK_MAX = 15;
     const PER_PERSON_FALLBACK_STREAK_THRESHOLD = 2;
     const PER_PERSON_FALLBACK_COOLDOWN_MS = 90 * 60 * 1000;
-    const PER_PERSON_FALLBACK_COOLDOWN_KEY_PREFIX = "system:pp_fallback_cd:";
+    const PER_PERSON_FALLBACK_COOLDOWN_KEY_PREFIX = "system:pp_fallback_cd:serper_news:";
     const PER_PERSON_BAD_NEWS_THRESHOLD = 2;
 
     if (newsSource === "gdelt" && gdeltData.size > 0) {
@@ -650,7 +652,14 @@ export async function runDataIngestion(): Promise<IngestResult> {
         let streak = 0;
         for (const s of sorted) {
           const diag = parseSnapshotDiagnostics(s.diagnostics);
-          const freshNews = diag ? diag.fresh?.news === true : false;
+          if (!diag || diag.fresh === undefined || diag.fresh === null) {
+            continue;
+          }
+          const freshNews = diag.fresh?.news === true;
+          const newsProvider = diag.newsSource ?? diag.provider?.news;
+          if (newsProvider && newsProvider !== "gdelt") {
+            continue;
+          }
           const count = s.newsCount ?? 0;
           if (!freshNews || count < PER_PERSON_BAD_NEWS_THRESHOLD) {
             streak++;
@@ -716,6 +725,12 @@ export async function runDataIngestion(): Promise<IngestResult> {
           eligibleCandidates.push(c);
           if (eligibleCandidates.length >= PER_PERSON_FALLBACK_MAX) break;
         }
+
+        perPersonFallbackStats.topTriggered = ppCandidates.slice(0, 5).map(c => ({
+          name: c.name,
+          streak: c.streak,
+          rank: c.rank,
+        }));
 
         if (eligibleCandidates.length > 0) {
           console.log(`[Per-Person Fallback] Triggering for ${eligibleCandidates.length} people (${streakMap.size} with streaks, ${perPersonFallbackStats.skippedCooldown} on cooldown, ${perPersonFallbackStats.skippedQualified} not qualified)`);
@@ -1417,6 +1432,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
           skippedCooldown: perPersonFallbackStats.skippedCooldown,
           skippedNotQualified: perPersonFallbackStats.skippedQualified,
           patched: perPersonFallbackStats.patchedPeople,
+          topTriggered: perPersonFallbackStats.topTriggered.slice(0, 5),
         },
       },
       coverage: {
@@ -1529,6 +1545,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
         skippedCooldown: perPersonFallbackStats.skippedCooldown,
         skippedNotQualified: perPersonFallbackStats.skippedQualified,
         patched: perPersonFallbackStats.patchedPeople,
+        topTriggered: perPersonFallbackStats.topTriggered.slice(0, 5),
       },
     };
 
