@@ -5,9 +5,7 @@ import { getBaselineDiagnostics } from "../utils/baseline";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
 import { fetchBatchGdeltNews, GdeltBatchOptions, GdeltBatchStats } from "../providers/gdelt";
 import { fetchSerperBatch, fetchSerperNewsBatch } from "../providers/serper";
-// NOTE (Jan 2026): X API removed from trend score engine due to cost constraints.
-// X API keys preserved for future Platform Insights feature.
-// import { fetchXBatch } from "../providers/x-api";
+import { fetchMediastackBatch, isMediastackConfigured, MediastackBatchStats } from "../providers/mediastack";
 import { computeTrendScore } from "../scoring/trendScore";
 import { refreshSourceStats } from "../scoring/sourceStats";
 import {
@@ -79,7 +77,7 @@ async function computeNewsCandidates(
 export const SNAPSHOT_DIAGNOSTICS_VERSION = 1;
 
 export interface LastRunMeta {
-  newsProviderUsed: "gdelt" | "serper_news";
+  newsProviderUsed: "mediastack" | "gdelt" | "serper_news";
   newsFreshCoveragePct: number;
   searchFreshCoveragePct: number;
   newsGovernorFactor: number;
@@ -367,102 +365,159 @@ export async function runDataIngestion(): Promise<IngestResult> {
     sourceTimings.wiki = Date.now() - wikiStart;
     sourceStatuses.wiki = wikiData.size > 0 ? "OK" : "FAILED";
 
-    const gdeltCandidates = await computeNewsCandidates(people, wikiData);
-    let gdeltStart = Date.now();
-    let gdeltData = new Map<string, any>();
-    let gdeltBatchStats: GdeltBatchStats | null = null;
-    try {
-      const newsHealth = getCurrentHealthSnapshot().news;
-      const gdeltIsDegraded = newsHealth.state === "DEGRADED" || newsHealth.state === "OUTAGE" || newsHealth.state === "RECOVERY";
-      const gdeltOptions: GdeltBatchOptions = {
-        candidates: gdeltCandidates,
-        timeBudgetMs: 120000,
-        isDegraded: gdeltIsDegraded,
-      };
-      const gdeltResult = await fetchBatchGdeltNews(
-        people.map(p => ({ id: p.id, name: p.name })),
-        gdeltOptions
-      );
-      gdeltData = gdeltResult.data;
-      gdeltBatchStats = gdeltResult.stats;
-    } catch (err) {
-      console.log('[Ingest] GDELT fetch failed, continuing with other sources');
-      sourceStatuses.gdelt = "FAILED";
-    }
-    sourceTimings.gdelt = Date.now() - gdeltStart;
-
-    // COVERAGE GATE: If GDELT returns fresh data for <70% of celebrities, treat as degraded
-    // and use previous values for EVERYONE to ensure population consistency.
-    // This prevents "mixed freshness" where some celebs get fresh data and others get stale,
-    // which creates unfair ranking comparisons within the same hour.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // NEWS DATA FETCHING — Cascading provider chain:
+    //   1. Mediastack (primary, paid, every 2 hours)
+    //   2. GDELT (secondary, free, fallback)
+    //   3. Serper News (emergency, paid, last resort)
+    //
+    // On even UTC hours: call Mediastack fresh for all people
+    // On odd UTC hours: reuse Mediastack cache (2h TTL) — no API calls
+    // If Mediastack fails or isn't configured: fall through to GDELT → Serper
+    // ═══════════════════════════════════════════════════════════════════════════
     const COVERAGE_THRESHOLD = 0.70;
-    const gdeltCoverage = gdeltData.size / people.length;
-    if (gdeltData.size > 0 && gdeltCoverage < COVERAGE_THRESHOLD) {
-      console.log(`[Coverage Gate] GDELT partial failure: ${gdeltData.size}/${people.length} (${(gdeltCoverage * 100).toFixed(0)}%) < ${COVERAGE_THRESHOLD * 100}% threshold`);
-      console.log(`[Coverage Gate] Treating NEWS as degraded for entire run - using previous values for all celebrities`);
-      gdeltData.clear();
-      sourceStatuses.gdelt = "DEGRADED";
-    }
-    if (!sourceStatuses.gdelt) sourceStatuses.gdelt = gdeltData.size > 0 ? "OK" : "DEGRADED";
-
     const SERPER_NEWS_FALLBACK_THRESHOLD = 0.30;
     const GDELT_QUALITY_THRESHOLD = 3;
-    let newsSource: "gdelt" | "serper_news" = "gdelt";
-    const gdeltFreshPct = gdeltData.size / people.length;
+    let newsSource: "mediastack" | "gdelt" | "serper_news" = "gdelt";
+    let newsData = new Map<string, any>();
+    let gdeltBatchStats: GdeltBatchStats | null = null;
+    let mediastackBatchStats: MediastackBatchStats | null = null;
 
-    const gdeltArticleCounts = Array.from(gdeltData.values())
-      .map(d => d.articleCount24h ?? 0)
-      .sort((a, b) => a - b);
-    const gdeltMedianArticles = gdeltArticleCounts.length > 0
-      ? gdeltArticleCounts[Math.floor(gdeltArticleCounts.length / 2)]
-      : 0;
-    const gdeltMeanArticles = gdeltArticleCounts.length > 0
-      ? gdeltArticleCounts.reduce((s, v) => s + v, 0) / gdeltArticleCounts.length
-      : 0;
-    const gdeltQualityLow = gdeltData.size > 0 && gdeltMedianArticles < GDELT_QUALITY_THRESHOLD;
-    const useSerperFallback = shouldPreferSerper(gdeltMedianArticles, gdeltQualityLow);
+    const currentUtcHour = hourTimestamp.getUTCHours();
+    const isMediastackFreshHour = currentUtcHour % 2 === 0;
+    const mediastackAvailable = isMediastackConfigured();
 
-    if (gdeltQualityLow) {
-      console.log(`[Ingest] GDELT data quality low: median=${gdeltMedianArticles}, mean=${gdeltMeanArticles.toFixed(1)}, threshold=${GDELT_QUALITY_THRESHOLD}`);
-    }
-    if (useSerperFallback && !gdeltQualityLow) {
-      console.log(`[Ingest] Provider hysteresis: still preferring Serper (GDELT median=${gdeltMedianArticles}, need >=${GDELT_RECOVERY_THRESHOLD} for ${GDELT_RECOVERY_RUNS_NEEDED} runs)`);
-    }
-
-    if (gdeltFreshPct < SERPER_NEWS_FALLBACK_THRESHOLD || useSerperFallback) {
-      const reason = useSerperFallback
-        ? `provider preference (hysteresis: GDELT median=${gdeltMedianArticles})`
-        : `freshness ${(gdeltFreshPct * 100).toFixed(0)}% < ${SERPER_NEWS_FALLBACK_THRESHOLD * 100}%`;
-      console.log(`[Ingest] ${reason} — activating Serper News fallback`);
+    // ── TIER 1: Mediastack (primary) ──────────────────────────────────────────
+    if (mediastackAvailable) {
+      const msStart = Date.now();
       try {
-        const serperNewsStart = Date.now();
-        const serperNewsData = await fetchSerperNewsBatch(
-          people.map(p => ({ id: p.id, name: p.name })),
-          2,
-          500
-        );
-        const serperNewsTiming = Date.now() - serperNewsStart;
-        const serperNewsCoverage = serperNewsData.size / people.length;
-
-        if (serperNewsCoverage >= SERPER_NEWS_FALLBACK_THRESHOLD) {
-          console.log(`[Ingest] Serper News fallback successful: ${serperNewsData.size}/${people.length} (${(serperNewsCoverage * 100).toFixed(0)}%) in ${(serperNewsTiming / 1000).toFixed(1)}s`);
-          for (const [id, data] of Array.from(serperNewsData.entries())) {
-            gdeltData.set(id, {
-              query: data.query,
-              articleCount24h: data.articleCount24h,
-              articleCount7d: data.articleCount7d,
-              averageDaily7d: data.averageDaily7d,
-              delta: data.delta,
-              topHeadlines: data.topHeadlines,
-            });
-          }
-          newsSource = "serper_news";
-          sourceStatuses.gdelt = "OK_FALLBACK";
+        if (isMediastackFreshHour) {
+          console.log(`[Ingest] Mediastack refresh hour (UTC ${currentUtcHour}:00) — fetching fresh news for all`);
         } else {
-          console.log(`[Ingest] Serper News fallback also insufficient: ${serperNewsData.size}/${people.length} (${(serperNewsCoverage * 100).toFixed(0)}%)`);
+          console.log(`[Ingest] Mediastack cache hour (UTC ${currentUtcHour}:00) — reusing cached data (2h TTL)`);
+        }
+
+        const msResult = await fetchMediastackBatch(
+          people.map(p => ({ id: p.id, name: p.name })),
+          3,
+          400,
+        );
+        mediastackBatchStats = msResult.stats;
+
+        const msCoverage = msResult.data.size / people.length;
+        if (msCoverage >= COVERAGE_THRESHOLD) {
+          newsData = msResult.data as Map<string, any>;
+          newsSource = "mediastack";
+          sourceStatuses.mediastack = "OK";
+          console.log(`[Ingest] Mediastack primary: ${msResult.data.size}/${people.length} (${(msCoverage * 100).toFixed(0)}%) — ${msResult.stats.fetched} fresh, ${msResult.stats.cached} cached, ${msResult.stats.failed} failed`);
+        } else if (msResult.data.size > 0) {
+          console.log(`[Coverage Gate] Mediastack partial: ${msResult.data.size}/${people.length} (${(msCoverage * 100).toFixed(0)}%) < ${COVERAGE_THRESHOLD * 100}% — falling through to GDELT`);
+          sourceStatuses.mediastack = "DEGRADED";
+        } else {
+          console.log(`[Ingest] Mediastack returned no data — falling through to GDELT`);
+          sourceStatuses.mediastack = "FAILED";
         }
       } catch (err) {
-        console.error('[Ingest] Serper News fallback failed:', err);
+        console.error('[Ingest] Mediastack fetch failed:', err);
+        sourceStatuses.mediastack = "FAILED";
+      }
+      sourceTimings.mediastack = Date.now() - msStart;
+    }
+
+    // ── TIER 2: GDELT (secondary) ────────────────────────────────────────────
+    if (newsSource !== "mediastack") {
+      const gdeltCandidates = await computeNewsCandidates(people, wikiData);
+      let gdeltStart = Date.now();
+      try {
+        const newsHealth = getCurrentHealthSnapshot().news;
+        const gdeltIsDegraded = newsHealth.state === "DEGRADED" || newsHealth.state === "OUTAGE" || newsHealth.state === "RECOVERY";
+        const gdeltOptions: GdeltBatchOptions = {
+          candidates: gdeltCandidates,
+          timeBudgetMs: 120000,
+          isDegraded: gdeltIsDegraded,
+        };
+        const gdeltResult = await fetchBatchGdeltNews(
+          people.map(p => ({ id: p.id, name: p.name })),
+          gdeltOptions
+        );
+        newsData = gdeltResult.data;
+        gdeltBatchStats = gdeltResult.stats;
+      } catch (err) {
+        console.log('[Ingest] GDELT fetch failed, continuing with other sources');
+        sourceStatuses.gdelt = "FAILED";
+      }
+      sourceTimings.gdelt = Date.now() - gdeltStart;
+
+      const gdeltCoverage = newsData.size / people.length;
+      if (newsData.size > 0 && gdeltCoverage < COVERAGE_THRESHOLD) {
+        console.log(`[Coverage Gate] GDELT partial failure: ${newsData.size}/${people.length} (${(gdeltCoverage * 100).toFixed(0)}%) < ${COVERAGE_THRESHOLD * 100}% threshold`);
+        console.log(`[Coverage Gate] Treating NEWS as degraded for entire run - using previous values for all celebrities`);
+        newsData.clear();
+        sourceStatuses.gdelt = "DEGRADED";
+      }
+      if (!sourceStatuses.gdelt) sourceStatuses.gdelt = newsData.size > 0 ? "OK" : "DEGRADED";
+    }
+
+    // Compute news quality metrics (used for GDELT→Serper fallback decision and health summary)
+    const newsArticleCounts = Array.from(newsData.values())
+      .map((d: any) => d.articleCount24h ?? d.paginationTotal ?? 0)
+      .sort((a: number, b: number) => a - b);
+    const gdeltMedianArticles = newsArticleCounts.length > 0
+      ? newsArticleCounts[Math.floor(newsArticleCounts.length / 2)]
+      : 0;
+    const gdeltMeanArticles = newsArticleCounts.length > 0
+      ? newsArticleCounts.reduce((s: number, v: number) => s + v, 0) / newsArticleCounts.length
+      : 0;
+    const gdeltQualityLow = newsSource === "gdelt" && newsData.size > 0 && gdeltMedianArticles < GDELT_QUALITY_THRESHOLD;
+    const gdeltFreshPct = newsData.size / people.length;
+
+    // ── TIER 3: Serper News (emergency fallback) ─────────────────────────────
+    // Only triggers when using GDELT as primary and GDELT quality is poor
+    if (newsSource === "gdelt") {
+      const useSerperFallback = shouldPreferSerper(gdeltMedianArticles, gdeltQualityLow);
+
+      if (gdeltQualityLow) {
+        console.log(`[Ingest] GDELT data quality low: median=${gdeltMedianArticles}, mean=${gdeltMeanArticles.toFixed(1)}, threshold=${GDELT_QUALITY_THRESHOLD}`);
+      }
+      if (useSerperFallback && !gdeltQualityLow) {
+        console.log(`[Ingest] Provider hysteresis: still preferring Serper (GDELT median=${gdeltMedianArticles}, need >=${GDELT_RECOVERY_THRESHOLD} for ${GDELT_RECOVERY_RUNS_NEEDED} runs)`);
+      }
+
+      if (gdeltFreshPct < SERPER_NEWS_FALLBACK_THRESHOLD || useSerperFallback) {
+        const reason = useSerperFallback
+          ? `provider preference (hysteresis: GDELT median=${gdeltMedianArticles})`
+          : `freshness ${(gdeltFreshPct * 100).toFixed(0)}% < ${SERPER_NEWS_FALLBACK_THRESHOLD * 100}%`;
+        console.log(`[Ingest] ${reason} — activating Serper News fallback`);
+        try {
+          const serperNewsStart = Date.now();
+          const serperNewsData = await fetchSerperNewsBatch(
+            people.map(p => ({ id: p.id, name: p.name })),
+            2,
+            500
+          );
+          const serperNewsTiming = Date.now() - serperNewsStart;
+          const serperNewsCoverage = serperNewsData.size / people.length;
+
+          if (serperNewsCoverage >= SERPER_NEWS_FALLBACK_THRESHOLD) {
+            console.log(`[Ingest] Serper News fallback successful: ${serperNewsData.size}/${people.length} (${(serperNewsCoverage * 100).toFixed(0)}%) in ${(serperNewsTiming / 1000).toFixed(1)}s`);
+            for (const [id, data] of Array.from(serperNewsData.entries())) {
+              newsData.set(id, {
+                query: data.query,
+                articleCount24h: data.articleCount24h,
+                articleCount7d: data.articleCount7d,
+                averageDaily7d: data.averageDaily7d,
+                delta: data.delta,
+                topHeadlines: data.topHeadlines,
+              });
+            }
+            newsSource = "serper_news";
+            sourceStatuses.gdelt = "OK_FALLBACK";
+          } else {
+            console.log(`[Ingest] Serper News fallback also insufficient: ${serperNewsData.size}/${people.length} (${(serperNewsCoverage * 100).toFixed(0)}%)`);
+          }
+        } catch (err) {
+          console.error('[Ingest] Serper News fallback failed:', err);
+        }
       }
     }
 
@@ -621,7 +676,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     const PER_PERSON_FALLBACK_COOLDOWN_KEY_PREFIX = "system:pp_fallback_cd:serper_news:";
     const PER_PERSON_BAD_NEWS_THRESHOLD = 2;
 
-    if (newsSource === "gdelt" && gdeltData.size > 0) {
+    if ((newsSource === "gdelt" || newsSource === "mediastack") && newsData.size > 0) {
       const perPersonFallbackStart = Date.now();
 
       const recentSnapsForStreak = await db.select({
@@ -657,7 +712,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
           }
           const freshNews = diag.fresh?.news === true;
           const newsProvider = diag.newsSource ?? diag.provider?.news;
-          if (newsProvider && newsProvider !== "gdelt") {
+          if (newsProvider && newsProvider === "serper_news") {
             continue;
           }
           const count = s.newsCount ?? 0;
@@ -748,7 +803,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
             perPersonFallbackStats.triggered++;
             const serperResult = perPersonSerperData.get(c.id);
             if (serperResult && serperResult.articleCount24h >= 3) {
-              gdeltData.set(c.id, {
+              newsData.set(c.id, {
                 query: serperResult.query,
                 articleCount24h: serperResult.articleCount24h,
                 articleCount7d: serperResult.articleCount7d,
@@ -821,18 +876,18 @@ export async function runDataIngestion(): Promise<IngestResult> {
     // Track API failure stats for logging
     let newsApiUsedFallback = 0;
     let searchApiUsedFallback = 0;
-    const newsFailed = gdeltData.size === 0;
+    const newsFailed = newsData.size === 0;
     const serperFailed = serperData.size === 0;
     
     // Build maps of current source values for global-zero detection
-    // IMPORTANT: This runs AFTER the Serper News fallback, so gdeltData may
+    // IMPORTANT: This runs AFTER the Serper News fallback, so newsData may
     // contain Serper-sourced data if fallback was activated. This ensures
     // global_zero detection evaluates the BEST available data, not just GDELT.
     const currentNewsValues = new Map<string, number>();
     const currentSearchValues = new Map<string, number>();
     
     for (const person of people) {
-      const news = gdeltData.get(person.id);
+      const news = newsData.get(person.id);
       const serper = serperData.get(person.id);
       currentNewsValues.set(person.id, news?.articleCount24h ?? 0);
       currentSearchValues.set(person.id, serper?.searchVolume ?? 0);
@@ -850,10 +905,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
     // global_zero signal so the health state can transition out of OUTAGE.
     // Without this, the near-zero threshold (5) in detectGlobalOutage would keep
     // re-triggering OUTAGE even when fallback data is meaningful (median >= 3).
-    const fallbackOverridesOutage = newsSource === "serper_news" && !gdeltQualityLow;
+    const fallbackOverridesOutage = (newsSource === "serper_news" && !gdeltQualityLow) || newsSource === "mediastack";
 
-    if (newsSource === "serper_news") {
-      console.log(`[Ingest] Post-fallback news quality: globalZero=${globalHealth.isNewsGlobalOutage}, nearZeroPct=${(globalHealth.newsNearZeroPercent * 100).toFixed(0)}%, fallbackOverride=${fallbackOverridesOutage}`);
+    if (newsSource !== "gdelt") {
+      console.log(`[Ingest] Post-news-fetch quality (${newsSource}): globalZero=${globalHealth.isNewsGlobalOutage}, nearZeroPct=${(globalHealth.newsNearZeroPercent * 100).toFixed(0)}%, fallbackOverride=${fallbackOverridesOutage}`);
     }
 
     const effectiveNewsGlobalOutage = fallbackOverridesOutage ? false : globalHealth.isNewsGlobalOutage;
@@ -902,9 +957,11 @@ export async function runDataIngestion(): Promise<IngestResult> {
       console.log(`[Ingest] Staleness decay: News=${(newsDecayFactor * 100).toFixed(0)}%, Search=${(searchDecayFactor * 100).toFixed(0)}%`);
     }
 
-    const newsFreshCount = gdeltBatchStats
-      ? gdeltBatchStats.liveApiFetched
-      : Array.from(gdeltData.values()).filter(d => (d.articleCount24h ?? 0) > 0).length;
+    const newsFreshCount = mediastackBatchStats
+      ? mediastackBatchStats.fetched
+      : gdeltBatchStats
+        ? gdeltBatchStats.liveApiFetched
+        : Array.from(newsData.values()).filter(d => (d.articleCount24h ?? 0) > 0).length;
     const newsCoveragePctActual = (newsFreshCount / people.length) * 100;
     const searchFreshCount = Array.from(serperData.values()).filter(d => (d.searchVolume ?? 0) > 0).length;
     const searchCoveragePctActual = (searchFreshCount / people.length) * 100;
@@ -919,7 +976,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     for (const person of people) {
       try {
         const wiki = wikiData.get(person.id);
-        const news = gdeltData.get(person.id);
+        const news = newsData.get(person.id);
         const serper = serperData.get(person.id);
         const mostRecent = mostRecentMap.get(person.id);
         // NOTE (Jan 2026): X API disabled for trend scoring - kept for Platform Insights
@@ -1436,9 +1493,14 @@ export async function runDataIngestion(): Promise<IngestResult> {
         searchGovernor: `${(searchGovernorFactor * 100).toFixed(0)}%`,
         newsProviderUsed: newsSource,
         newsFreshCoveragePct: `${newsCoveragePctActual.toFixed(0)}%`,
-        newsLiveApiFetched: gdeltBatchStats?.liveApiFetched ?? 0,
-        newsCacheReused: gdeltBatchStats?.cacheReused ?? 0,
+        newsLiveApiFetched: newsSource === "mediastack"
+          ? (mediastackBatchStats?.fetched ?? 0)
+          : (gdeltBatchStats?.liveApiFetched ?? 0),
+        newsCacheReused: newsSource === "mediastack"
+          ? (mediastackBatchStats?.cached ?? 0)
+          : (gdeltBatchStats?.cacheReused ?? 0),
         avgGdeltSpacingMs: gdeltBatchStats?.avgSpacingMs ?? 0,
+        mediastackApiCalls: mediastackBatchStats?.apiCallsMade ?? 0,
       },
       newsQuality: {
         medianArticles: gdeltMedianArticles,
