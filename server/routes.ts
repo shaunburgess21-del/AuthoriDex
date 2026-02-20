@@ -812,7 +812,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const freshness: Record<string, { lastUpdated: string; count: number; status: "live" | "stale" | "cached" }> = {};
       const now = new Date();
       
+      const excludedProviders = new Set(["x", "twitter"]);
       for (const stat of cacheStats) {
+        if (excludedProviders.has(stat.provider)) continue;
         const latestDate = stat.latestFetch ? new Date(stat.latestFetch) : null;
         const hoursSince = latestDate ? (now.getTime() - latestDate.getTime()) / (1000 * 60 * 60) : Infinity;
         
