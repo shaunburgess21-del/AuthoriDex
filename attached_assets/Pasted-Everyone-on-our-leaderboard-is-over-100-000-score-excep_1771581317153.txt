@@ -1,0 +1,120 @@
+Everyone on our leaderboard is over 100,000 score, except for the final 2 which are much lower - Brian Armstrong and Michael Saylor. It has been that way since inception of the leaderboard. Would you say they are just not trendy people, or do you think there could be an error in the way Replit reads them and draws data for them from one of (or all) the API's?
+
+It could be that they’re just less “trendy” in your particular mix — but given both are big public figures and the fact that they’ve been stuck low since inception, I’d treat this as “very likely a data-mapping/query issue” until proven otherwise.
+
+Here’s how I’d think about it, and the fastest checks to confirm.
+
+Why “since inception” strongly suggests an issue
+
+A truly less-trendy person will still move around and occasionally spike. Being permanently depressed (especially just two people, consistently) usually means:
+
+their baseline snapshot was captured wrong (too low), or
+
+one of their signals is always near-zero because the query is wrong / ambiguous, or
+
+you’re pulling data for the wrong entity (Wikipedia page, news query, knowledge panel, etc.), or
+
+your pipeline is hitting a silent per-person fallback/skip for them every time.
+
+The most common failure modes for exactly this pattern
+1) Wrong Wikipedia mapping (most common)
+
+If your wiki signal is a big part of Mass/Velocity, and Brian/Saylor are mapped to the wrong page title or pageid, they’ll be permanently low.
+
+Quick tell:
+
+Check their stored wikipedia_page_title / pageid and open it manually.
+
+Compare pageviews against someone nearby (Lex/Satya). If theirs are near-zero or “flatline,” mapping is wrong.
+
+Common causes:
+
+title mismatch (“Michael_Saylor” vs “Michael_J._Saylor”)
+
+disambiguation page
+
+redirect handling bug
+
+a “company page” vs “person page” mix-up
+
+2) News query misses because the person is referenced differently
+
+Michael Saylor is often mentioned as “Saylor” or “MicroStrategy’s Saylor,” and Brian Armstrong as “Coinbase CEO” or “Armstrong” (and “Armstrong” is extremely ambiguous).
+
+If your query is too strict (e.g., exact match on full name), you can undercount badly.
+
+Fix pattern:
+
+use aliases in query templates:
+
+Brian: "Brian Armstrong" OR (Armstrong AND Coinbase)
+
+Saylor: "Michael Saylor" OR (Saylor AND MicroStrategy) OR (Saylor AND MSTR)
+
+3) Entity ambiguity / polluted results filtering
+
+If you do any filtering like “must contain full name in title” or aggressive dedup/anti-noise rules, Armstrong gets nuked (Neil Armstrong, Lance Armstrong), and “Saylor” can get mixed with unrelated mentions or be filtered out.
+
+4) Baseline snapshot captured during a “dead zone”
+
+If your baseline snapshots were taken when those two had missing news (fresh=false / zero count) or wrong wiki IDs, your “relative to baseline” math may permanently handicap them.
+
+Since you said it’s been that way since inception, baseline is very suspect.
+
+5) A “silent fail” or cached-zero bug in api_cache keys
+
+If their per-person keys got cached with zeros early and you fill-forward/decay incorrectly for just those keys, they can get stuck.
+
+This can happen if their cache key is malformed (e.g., different casing/spacing) so writes go to one key but reads come from another key = reads always “miss” and default to zero.
+
+The fastest way to know: check their per-signal breakdown for one run
+
+In your engine-health/admin/snapshot diagnostics you already expose a lot. For Brian and Saylor, look at:
+
+diagnostics.fresh.newsSource + provider used
+
+raw newsCount before smoothing, and whether newsEmaHeld is firing
+
+wiki pageviews raw + the wiki page identifier
+
+search volume raw
+
+whether per-person fallback ever triggers for them
+
+What you’re looking for
+
+If wiki is near-zero but others are normal → bad wiki mapping.
+
+If newsCount is always 0 / fresh=false while others aren’t → query/coverage issue (or provider blind spot).
+
+If search volume is always tiny → query mismatch or keyword too strict.
+
+If everything is low → wrong identity mapping overall or baseline captured wrong.
+
+My bet (based on your screenshots + history)
+
+Most likely:
+
+Brian Armstrong: name ambiguity + query too strict → low news/search.
+
+Michael Saylor: either strict matching, or wiki mapping/title mismatch, or baseline snapshot captured wrong.
+
+What I’d do next (10-minute checklist)
+
+Manually verify identity fields:
+
+wiki title/pageid
+
+search query string used
+
+news query string used
+
+Open your new evidence headlines for them:
+
+If headlines look unrelated → wrong entity/query pollution.
+
+If headlines are empty for weeks → query mismatch/provider gap.
+
+Temporarily run a one-off debug query with expanded aliases for each and compare counts vs current.
+
+If you paste the diagnostics JSON for Brian + Saylor from a recent snapshot (even just the relevant fields: wiki title/pageviews, newsCount/provider/fresh, searchVolume/query), I’ll tell you exactly which bucket it falls into and the most surgical fix.
