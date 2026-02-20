@@ -5,7 +5,7 @@ import { getBaselineDiagnostics } from "../utils/baseline";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
 import { fetchBatchGdeltNews, GdeltBatchOptions, GdeltBatchStats } from "../providers/gdelt";
 import { fetchSerperBatch, fetchSerperNewsBatch } from "../providers/serper";
-import { fetchMediastackBatch, isMediastackConfigured, MediastackBatchStats } from "../providers/mediastack";
+import { fetchMediastackBatch, isMediastackConfigured, MediastackBatchStats, shouldRefreshMediastack } from "../providers/mediastack";
 import { computeTrendScore } from "../scoring/trendScore";
 import { refreshSourceStats } from "../scoring/sourceStats";
 import {
@@ -86,6 +86,10 @@ export interface LastRunMeta {
   newsMeanArticles: number;
   newsQualityLow: boolean;
   finishedAt: Date;
+  mediastackSuccessPct?: number;
+  mediastackNonZeroPct?: number;
+  mediastackIsRefresh?: boolean;
+  mediastackLastFetchAt?: string | null;
   perPersonFallback?: {
     triggered: number;
     succeeded: number;
@@ -383,35 +387,40 @@ export async function runDataIngestion(): Promise<IngestResult> {
     let gdeltBatchStats: GdeltBatchStats | null = null;
     let mediastackBatchStats: MediastackBatchStats | null = null;
 
-    const currentUtcHour = hourTimestamp.getUTCHours();
-    const isMediastackFreshHour = currentUtcHour % 2 === 0;
     const mediastackAvailable = isMediastackConfigured();
+    let mediastackCadence: { shouldRefresh: boolean; lastFetchAt: Date | null; ageMs: number | null } | null = null;
 
     // ── TIER 1: Mediastack (primary) ──────────────────────────────────────────
     if (mediastackAvailable) {
       const msStart = Date.now();
       try {
-        if (isMediastackFreshHour) {
-          console.log(`[Ingest] Mediastack refresh hour (UTC ${currentUtcHour}:00) — fetching fresh news for all`);
+        mediastackCadence = await shouldRefreshMediastack();
+        const cacheOnly = !mediastackCadence.shouldRefresh;
+        const ageHours = mediastackCadence.ageMs != null ? (mediastackCadence.ageMs / (1000 * 60 * 60)).toFixed(1) : "never";
+
+        if (cacheOnly) {
+          console.log(`[Ingest] Mediastack cache mode — last refresh ${ageHours}h ago (< 2h threshold), reusing cached data`);
         } else {
-          console.log(`[Ingest] Mediastack cache hour (UTC ${currentUtcHour}:00) — reusing cached data (2h TTL)`);
+          console.log(`[Ingest] Mediastack refresh mode — last refresh ${ageHours}h ago (>= 2h threshold), fetching fresh news`);
         }
 
         const msResult = await fetchMediastackBatch(
           people.map(p => ({ id: p.id, name: p.name })),
           3,
           400,
+          { cacheOnly },
         );
         mediastackBatchStats = msResult.stats;
 
-        const msCoverage = msResult.data.size / people.length;
-        if (msCoverage >= COVERAGE_THRESHOLD) {
+        const msSuccessPct = msResult.stats.successCoveragePct;
+        const msNonZeroPct = msResult.stats.nonZeroCoveragePct;
+        if (msSuccessPct >= COVERAGE_THRESHOLD * 100) {
           newsData = msResult.data as Map<string, any>;
           newsSource = "mediastack";
           sourceStatuses.mediastack = "OK";
-          console.log(`[Ingest] Mediastack primary: ${msResult.data.size}/${people.length} (${(msCoverage * 100).toFixed(0)}%) — ${msResult.stats.fetched} fresh, ${msResult.stats.cached} cached, ${msResult.stats.failed} failed`);
+          console.log(`[Ingest] Mediastack primary: ${msResult.data.size}/${people.length} (success=${msSuccessPct.toFixed(0)}%, nonZero=${msNonZeroPct.toFixed(0)}%) — ${msResult.stats.fetched} fresh, ${msResult.stats.cached} cached, ${msResult.stats.failed} failed`);
         } else if (msResult.data.size > 0) {
-          console.log(`[Coverage Gate] Mediastack partial: ${msResult.data.size}/${people.length} (${(msCoverage * 100).toFixed(0)}%) < ${COVERAGE_THRESHOLD * 100}% — falling through to GDELT`);
+          console.log(`[Coverage Gate] Mediastack partial: success=${msSuccessPct.toFixed(0)}% < ${COVERAGE_THRESHOLD * 100}% (nonZero=${msNonZeroPct.toFixed(0)}%) — falling through to GDELT`);
           sourceStatuses.mediastack = "DEGRADED";
         } else {
           console.log(`[Ingest] Mediastack returned no data — falling through to GDELT`);
@@ -666,12 +675,13 @@ export async function runDataIngestion(): Promise<IngestResult> {
     // This catches per-person blind spots (e.g. Elon Musk getting 0 while others
     // are fine) by making targeted Serper calls for affected individuals.
     //
-    // Trigger: 2+ consecutive bad-news runs (fresh.news==false OR count < 2)
-    //          AND person is top-25 by rank OR wiki/search above p50
+    // Trigger: 2+ (GDELT) or 3+ (Mediastack) consecutive bad-news REFRESHES
+    //          with news_count < 2, AND person is top-25 by rank OR wiki/search > p50
     // Safety:  max 15 per run, 90-minute cooldown, priority by rank
+    // For Mediastack: only counts refresh-cycle snapshots (not cache-reuse ticks)
     // ═══════════════════════════════════════════════════════════════════════════
     const PER_PERSON_FALLBACK_MAX = 15;
-    const PER_PERSON_FALLBACK_STREAK_THRESHOLD = 2;
+    const PER_PERSON_FALLBACK_STREAK_THRESHOLD = newsSource === "mediastack" ? 3 : 2;
     const PER_PERSON_FALLBACK_COOLDOWN_MS = 90 * 60 * 1000;
     const PER_PERSON_FALLBACK_COOLDOWN_KEY_PREFIX = "system:pp_fallback_cd:serper_news:";
     const PER_PERSON_BAD_NEWS_THRESHOLD = 2;
@@ -679,6 +689,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     if ((newsSource === "gdelt" || newsSource === "mediastack") && newsData.size > 0) {
       const perPersonFallbackStart = Date.now();
 
+      const streakLookbackMs = newsSource === "mediastack" ? 12 * 60 * 60 * 1000 : 6 * 60 * 60 * 1000;
       const recentSnapsForStreak = await db.select({
         personId: trendSnapshots.personId,
         newsCount: trendSnapshots.newsCount,
@@ -686,7 +697,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
         timestamp: trendSnapshots.timestamp,
       }).from(trendSnapshots).where(
         and(
-          gte(trendSnapshots.timestamp, new Date(now.getTime() - 6 * 60 * 60 * 1000)),
+          gte(trendSnapshots.timestamp, new Date(now.getTime() - streakLookbackMs)),
           eq(trendSnapshots.snapshotOrigin, 'ingest'),
         )
       ).orderBy(desc(trendSnapshots.timestamp));
@@ -703,18 +714,24 @@ export async function runDataIngestion(): Promise<IngestResult> {
       }
 
       for (const [personId, snaps] of Array.from(snapsByPerson.entries())) {
-        const sorted = snaps.sort((a: typeof snaps[0], b: typeof snaps[0]) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 3);
+        const sorted = snaps.sort((a: typeof snaps[0], b: typeof snaps[0]) => b.timestamp.getTime() - a.timestamp.getTime());
         let streak = 0;
-        for (const s of sorted) {
+        let refreshesSeen = 0;
+        const maxSnapsToCheck = newsSource === "mediastack" ? 10 : 3;
+        for (const s of sorted.slice(0, maxSnapsToCheck)) {
           const diag = parseSnapshotDiagnostics(s.diagnostics);
           if (!diag || diag.fresh === undefined || diag.fresh === null) {
             continue;
           }
-          const freshNews = diag.fresh?.news === true;
-          const newsProvider = diag.newsSource ?? diag.provider?.news;
+          const newsProvider = diag.newsSource ?? diag.provider?.news ?? diag.fresh?.newsSource;
           if (newsProvider && newsProvider === "serper_news") {
             continue;
           }
+          if (newsSource === "mediastack" && diag.fresh?.newsIsRefresh === false) {
+            continue;
+          }
+          refreshesSeen++;
+          const freshNews = diag.fresh?.news === true;
           const count = s.newsCount ?? 0;
           if (!freshNews || count < PER_PERSON_BAD_NEWS_THRESHOLD) {
             streak++;
@@ -1175,6 +1192,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
             news: !newsUsedFallback && (news?.articleCount24h ?? 0) > 0,
             search: !searchUsedFallback && (serper?.searchVolume ?? 0) > 0,
             newsSource: hasPerPersonFallback ? "serper_news" : newsSource,
+            newsIsRefresh: newsSource === "mediastack" ? (mediastackCadence?.shouldRefresh ?? true) : true,
             ...(hasPerPersonFallback ? { fallbackReason: news?._fallbackReason ?? "per_person_zero_streak" } : {}),
           },
           stab: scoreResult.stabDetail ? {
@@ -1501,6 +1519,13 @@ export async function runDataIngestion(): Promise<IngestResult> {
           : (gdeltBatchStats?.cacheReused ?? 0),
         avgGdeltSpacingMs: gdeltBatchStats?.avgSpacingMs ?? 0,
         mediastackApiCalls: mediastackBatchStats?.apiCallsMade ?? 0,
+        mediastackSuccessPct: mediastackBatchStats ? `${mediastackBatchStats.successCoveragePct.toFixed(0)}%` : null,
+        mediastackNonZeroPct: mediastackBatchStats ? `${mediastackBatchStats.nonZeroCoveragePct.toFixed(0)}%` : null,
+        mediastackCadence: mediastackCadence ? {
+          isRefresh: mediastackCadence.shouldRefresh,
+          lastFetchAt: mediastackCadence.lastFetchAt?.toISOString() ?? null,
+          ageHours: mediastackCadence.ageMs != null ? Math.round(mediastackCadence.ageMs / (1000 * 60 * 60) * 10) / 10 : null,
+        } : null,
       },
       newsQuality: {
         medianArticles: gdeltMedianArticles,
@@ -1595,6 +1620,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
       newsMeanArticles: Math.round(gdeltMeanArticles * 10) / 10,
       newsQualityLow: gdeltQualityLow,
       finishedAt: new Date(),
+      mediastackSuccessPct: mediastackBatchStats?.successCoveragePct,
+      mediastackNonZeroPct: mediastackBatchStats?.nonZeroCoveragePct,
+      mediastackIsRefresh: mediastackCadence?.shouldRefresh,
+      mediastackLastFetchAt: mediastackCadence?.lastFetchAt?.toISOString() ?? null,
       perPersonFallback: {
         triggered: perPersonFallbackStats.triggered,
         succeeded: perPersonFallbackStats.succeeded,

@@ -29,8 +29,9 @@ Preferred communication style: Simple, everyday language.
     - Tapers velocity contribution when news/search signals are low and adjusts weights based on source health and staleness.
     - Implements deterministic baseline selection for trend changes and score versioning to ensure consistency after formula changes.
     - Features Leaderboard Resilience with snapshot-based fallbacks and boot-time hydration to prevent empty leaderboards.
-    - Includes Serper News Fallback for automatic news source switching when GDELT coverage OR quality drops (median article count < 3 triggers fallback). Fallback override allows health state recovery even when raw global_zero would re-trigger OUTAGE.
-    - Implements Per-Person News Fallback: When GDELT works globally but fails for specific individuals (2+ consecutive bad-news runs with fresh.news==false OR count < 2), targeted Serper calls patch affected people. Qualification gate: top-25 by rank OR wiki/search above p50. Safety rails: max 15 per run, 90-min cooldown per person, priority by rank. Fallback data bypasses fill-forward decay path. Stats tracked in health summary, engine health endpoint, and per-snapshot diagnostics.
+    - **Mediastack Integration (Primary News Provider)**: Mediastack API is the primary news source with a persisted 2-hour refresh cadence (`system:mediastack:last_fetch_at` in api_cache). Coverage uses split metrics: `successCoveragePct` (API responded with pagination.total, even if 0) for fallback-to-GDELT gate, and `nonZeroCoveragePct` (articles > 0) for quality monitoring. Cache-only mode on non-refresh ticks. Budget tracking with daily call counts and 7-day retention.
+    - **Cascading News Provider Hierarchy**: Mediastack (primary) → GDELT (secondary) → Serper News (emergency). Each provider tagged in snapshot diagnostics via `newsSource`. Serper News fallback only triggers from GDELT (not Mediastack). Fallback override allows health state recovery.
+    - Implements Per-Person News Fallback: When primary news source (Mediastack or GDELT) fails for specific individuals, targeted Serper calls patch affected people. For Mediastack: 3+ consecutive refresh-cycle snapshots with news_count < 2 (ignores cache-reuse ticks). For GDELT: 2+ consecutive bad runs. Qualification gate: top-25 by rank OR wiki/search above p50. Safety rails: max 15 per run, 90-min cooldown per person, priority by rank. Fallback data bypasses fill-forward decay path. Stats tracked in health summary, engine health endpoint, and per-snapshot diagnostics.
     - Employs a Degradation Governor to gradually reduce source weights during prolonged coverage drops and includes recovery hysteresis.
     - Implements a Two-Speed Leaderboard Pipeline for hourly full refreshes and fast-lane 10-minute ticks based on internal signals.
 
@@ -51,8 +52,9 @@ Preferred communication style: Simple, everyday language.
 
 ### Third-Party API Services
 - **Wikipedia API**: Pageview data.
-- **GDELT API**: News mention counts.
-- **Serper.dev API**: Google search results.
+- **Mediastack API**: Primary news article counts (Professional plan, 50k calls/month).
+- **GDELT API**: Secondary news mention counts (fallback).
+- **Serper.dev API**: Google search results + emergency news fallback.
 - **Google Fonts**: Inter, Space Grotesk, JetBrains Mono.
 - **Supabase**: PostgreSQL database provider.
 - **OpenAI**: `gpt-4o-mini` for AI-generated summaries.
