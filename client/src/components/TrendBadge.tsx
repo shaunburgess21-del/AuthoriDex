@@ -33,9 +33,11 @@ export function TrendBadge({ value, size = "default", showIcon = true }: TrendBa
   
   const colorClass = isNeutral 
     ? "bg-trend-neutral text-trend-neutral-foreground" 
-    : isPositive 
-    ? "bg-trend-up text-trend-up-foreground" 
-    : "bg-trend-down text-trend-down-foreground";
+    : "";
+
+  const glassStyle = isNeutral ? undefined : isPositive
+    ? { backgroundColor: "rgba(0, 200, 83, 0.15)", borderColor: "rgba(0, 200, 83, 0.5)", color: "#00C853" }
+    : { backgroundColor: "rgba(255, 0, 0, 0.15)", borderColor: "rgba(255, 0, 0, 0.5)", color: "#FF0000" };
 
   return (
     <Badge
@@ -44,6 +46,7 @@ export function TrendBadge({ value, size = "default", showIcon = true }: TrendBa
         colorClass,
         sizeClass
       )}
+      style={glassStyle}
       data-testid={`badge-trend-${isPositive ? 'up' : isNeutral ? 'neutral' : 'down'}`}
     >
       {showIcon && (
