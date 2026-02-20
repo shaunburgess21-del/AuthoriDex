@@ -1,0 +1,141 @@
+My recent message to Replit. (can you do research how Mediastack works, so we can best set up our calling of everyone on the leaderboard):
+
+Do a full trend score engine health check. Ensure on the next run, data will be pulled correctly from Meadiastack as primary, not GDELT. Check that Elon musk will return to his rightful place now that Mediastack is in place (he dropped significantly yesterday do to GDELT failing) 
+
+
+Replit:
+Let me pull the current engine health state and check the latest run diagnostics.
+
+Here's the full health check:
+
+Engine Health: All Green
+
+Source Health State: All three sources (News, Search, Wiki) are HEALTHY with zero consecutive failures
+News state recovered at 16:18 UTC yesterday and has been healthy since
+Mediastack is Primary — Confirmed
+
+The most recent run (07:00 UTC today) used Mediastack as the primary news source for all people. Looking at the top 15, every single one shows newsSource: mediastack. GDELT is not being used — exactly as it should be.
+
+Mediastack Refresh Timing
+
+Last refresh: 09:20 UTC today
+Time since last refresh: ~1 hour ago
+Next refresh will trigger at the next ingestion run after the 2-hour cadence elapses (~11:20 UTC)
+On non-refresh ticks, cached Mediastack data is reused (cache-only mode)
+Elon Musk's Recovery
+
+Here's his trajectory — you can see the GDELT damage and the Mediastack recovery:
+
+Time	News Source	News Count	Fame Index	Trend
+Feb 19 03:00	gdelt	1 (stale)	241,865	--
+Feb 19 07:00	gdelt	0 (stale)	228,568	Dropping
+Feb 19 16:00	gdelt	100 (live)	243,379	Spike
+Feb 19 17:00	gdelt	100 (live)	249,267	Rising
+Feb 19 18:00	gdelt	0 (stale)	253,273	Dropping again
+Feb 20 06:00	mediastack	5	268,475	Recovering
+Feb 20 07:00	mediastack	5	272,805	Recovering
+Elon is already climbing back. His fame index went from the GDELT-damaged low of 228,568 up to 272,805 — a steady recovery. However, Mediastack is only finding 5 articles for him, which is suspiciously low for Elon Musk. That could be because Mediastack's keyword search for just "Elon Musk" misses articles that reference "Musk" alone or "Tesla CEO."
+
+He doesn't have a search_query_override set. Adding one like "Elon Musk" OR (Musk Tesla) OR (Musk SpaceX) could help Mediastack find more articles for him and accelerate his recovery. Would you like me to set that up, or are you happy to let it recover naturally with the current query?
+Thought for 31s
+
+Yep — I did a quick dive into Mediastack’s docs and pricing, and there are a couple of important details that affect how you should structure calls for a 100-person leaderboard.
+
+How Mediastack “keywords” really works (this matters a lot)
+
+Mediastack’s keywords parameter is not a full boolean query language. It supports:
+
+A phrase / sentence (spaces are allowed): keywords=food industry
+
+Multiple comma-separated keywords (and it describes this as searching for keywords, plus allowing exclusions with -): keywords=food industry, meat
+
+Exclusions: keywords=virus,-corona
+
+Standard filters: sources, categories, countries, languages, plus limit (max 100) and offset.
+
+What it doesn’t document is support for OR / parentheses syntax like ("Elon Musk" OR Musk Tesla). So if you’re currently passing “OR” style strings into keywords, you should assume it might not behave the way you expect (could be treated as literal text, or just degrade matching).
+
+What this implies for your leaderboard design
+1) Prefer one strong phrase per person (default)
+
+For most people:
+
+keywords = "<Full Name>" (as a phrase)
+
+Add languages=en (unless you explicitly want multilingual)
+
+sort=published_desc
+
+limit=3 or limit=5 (you only need headlines + a count proxy)
+
+This keeps results clean and reduces false matches.
+
+2) Use conditional widening when counts look suspicious (best practice)
+
+Elon is the perfect example: many articles say “Musk” without “Elon”.
+
+Because Mediastack doesn’t give you boolean OR, the safest widening strategy (without blowing budget) is:
+
+On refresh ticks only (every 2h):
+
+Query A: keywords="Elon Musk"
+
+If result count is below a threshold (say < 3), run Query B as a fallback:
+
+keywords="Musk Tesla" or keywords="Musk SpaceX" (space-separated phrase)
+
+Use whichever produces better coverage, and record it in diagnostics.
+
+That gives Elon better coverage without doing 2 calls for everyone.
+
+3) Be careful with comma-separated keywords
+
+Docs show comma-separated keywords as supported, but they don’t clearly state whether it’s “AND” vs “OR” semantics.
+So I’d avoid relying on commas for “OR broadening” and instead use the conditional second query method above.
+
+Your call budget sanity check
+
+On Mediastack Professional you get 50,000 requests/month.
+At 100 people:
+
+100 requests every 2 hours = 1,200/day ≈ 36,000/month (safe)
+
+If you add conditional second queries for only a few people per refresh tick, you’re still fine.
+
+If you ever go to 30-minute refresh: 100 * 48/day = 4,800/day ≈ 144,000/month → you’d need the 250k tier (as you already planned).
+
+Concrete setup I’d recommend (for Replit)
+
+Default per-person Mediastack query:
+
+keywords = person.newsQueryOverride ?? person.name
+
+languages = "en"
+
+sort = "published_desc"
+
+limit = 5 (or 3)
+
+Conditional widening (only if low coverage on refresh tick):
+
+If count < 3 and person is in “high-importance list” (Top 25 or canaries), do one more call using a widenedNewsQueryOverride you define per person.
+
+Store in diagnostics:
+
+provider, keywordsUsed, count, sample titles (you already do some of this)
+
+About Elon specifically
+
+Replit’s instinct (“Elon Musk is suspiciously low at 5”) is valid — but the fix should be a Mediastack-compatible query, not an OR-string.
+
+So instead of:
+
+"Elon Musk" OR (Musk Tesla) OR (Musk SpaceX) (not documented as supported)
+
+Use either:
+
+primary: "Elon Musk"
+
+conditional widen: "Musk Tesla" or "Musk SpaceX"
+
+…and only widen when needed.
