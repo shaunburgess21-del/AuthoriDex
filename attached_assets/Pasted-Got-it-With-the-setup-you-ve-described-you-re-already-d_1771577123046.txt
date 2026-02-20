@@ -1,0 +1,147 @@
+Got it. With the setup you’ve described, you’re already doing the right kind of hardening (cache reuse, hysteresis, per-person patching, bypassing decay on patched values, persisted health state).
+
+Here are the highest-leverage robustness upgrades I’d add for a 10-day launch window, and then a clear recommendation on Mediastack-only primary vs “Mediastack + GDELT simultaneously.”
+
+Additional hardening ideas (practical + high impact)
+1) Add a “confidence” layer to the news signal (not just count/fresh)
+
+Right now your triggers are largely fresh=false and “very low count.” Add a computed newsConfidence per person per snapshot, e.g.:
+
+provider health (global)
+
+response validity (schema OK, latency OK, non-empty OK)
+
+stability vs baseline band (e.g., count isn’t wildly off historical distribution unless there’s corroboration)
+
+dedup ratio / repeated-article ratio (if you store URLs/hashes)
+
+Then feed that into:
+
+whether to fill-forward vs decay
+
+whether to allow per-person patch
+
+whether to suppress sudden drops as “likely provider artifact”
+
+This turns a brittle threshold system into a smoother, more explainable system.
+
+2) Circuit breakers + “shadow penalties” (avoid contaminating EMA)
+
+When a provider is unhealthy, don’t just switch; also prevent that hour’s bad reading from pulling the EMA down.
+
+A simple rule:
+
+If newsConfidence < X, do EMA hold (keep prior EMA) rather than updating with near-zero.
+
+Only allow “real drops” to impact EMA when confidence is decent or two independent sources agree.
+
+This is the single best way to stop leaderboard whiplash.
+
+3) Store minimal raw evidence for audits (cheap, lifesaver)
+
+For each person per refresh window, persist:
+
+articles_sample (top N titles + source + published_at + url hash)
+
+unique_article_count, dedup_rate, median_age_minutes
+
+You don’t need full-text. Just enough to debug “why did Elon go to zero?”
+
+4) “Two-pass” fallback to reduce Serper usage
+
+Before you pay for per-person Serper patches, try a cheap intermediary:
+
+Re-query Mediastack with a slightly broader query template (aliases, middle names, company tie-in) only for that person.
+
+If still bad → Serper.
+
+This often fixes “blind spots” without invoking another provider.
+
+5) Provider-specific normalization (don’t force one global mapping)
+
+Mediastack and GDELT will have different “count dynamics.” Normalize per provider before it touches your Mass/Velocity split.
+
+Example:
+
+map each provider’s raw counts to a comparable scale using rolling quantiles (p50/p90) per person or per segment (politics/tech/finance).
+
+then blend/compare.
+
+This prevents “provider swap” from looking like a real trend move.
+
+6) Expand monitoring beyond Top-25
+
+Top-25 quality is great, but also add:
+
+Top-10 / Top-50 quality
+
+“coverage by decile” (are you only healthy for famous names?)
+
+“freshness histogram” (0–30m, 30–120m, 2–12h, >12h)
+
+“provider divergence” (when both sources disagree by >k sigma)
+
+These catch slow failures before users do.
+
+7) Canary people list (handpicked)
+
+Create ~10 canary profiles (Elon, Taylor Swift-type, a politician, a niche author, etc.). Track:
+
+expected baseline counts
+
+expected update cadence
+
+If canaries fail, flip global state faster than waiting for aggregate metrics.
+
+Should you run Mediastack + GDELT simultaneously?
+My recommendation for launch: Mediastack primary, GDELT in “shadow mode,” not blended into scoring
+
+Why:
+
+Simultaneous blending adds a new class of bugs: double-counting, inconsistent “what is an article,” different geo/language coverage, and normalization drift.
+
+With only ~10 days, reliability comes from simplicity + strong fallbacks, not a more complex fusion model.
+
+What “shadow mode” means (best of both worlds):
+
+Keep Mediastack as the only source that feeds the actual news metric used in Mass/Velocity (unless you’re in fallback).
+
+Still run GDELT on a lower cadence (or same cadence if cheap) purely to:
+
+compute provider_divergence
+
+detect systemic gaps early (“Mediastack missed X category today”)
+
+provide evidence for auto-tuning your per-person fallback triggers
+
+Then GDELT remains your secondary exactly as you planned: global fallback + per-person patch support.
+
+When to consider true simultaneous use (post-launch)
+
+Do it only if you implement one of these clean fusion strategies:
+
+Union with dedup + confidence weights
+
+merge article sets by URL/title hash
+
+compute count_union
+
+weight by provider health/confidence
+
+Max-of-providers (safer than sum)
+
+newsCount = max(norm_mediastack, norm_gdelt)
+This avoids double counting while letting GDELT “rescue” blind spots.
+
+Two-source confirmation for big moves
+
+Only allow large jumps/drops if both providers corroborate (or confidence is high).
+
+If you don’t have time for that now, blending will create more instability than it removes.
+
+The one tweak I would make immediately
+
+Even if you keep Mediastack as primary-only, add:
+
+EMA hold / skip-update when confidence is low
+This prevents “provider artifact hours” from poisoning your velocity component.
