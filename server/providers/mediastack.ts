@@ -275,6 +275,7 @@ export async function getMonthlyCallEstimate(): Promise<{ dailyCalls: number[]; 
 export async function fetchMediastackNews(
   personName: string,
   personId?: string,
+  searchQueryOverride?: string | null,
 ): Promise<MediastackNewsData | null> {
   if (!MEDIASTACK_API_KEY) {
     console.log(`[Mediastack] No API key configured, skipping ${personName}`);
@@ -294,9 +295,14 @@ export async function fetchMediastackNews(
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
 
-    const keywords = encodeURIComponent(personName);
+    const queryText = searchQueryOverride || personName;
+    const keywords = encodeURIComponent(queryText);
     const dateFrom = formatDate(yesterday);
     const dateTo = formatDate(now);
+
+    if (searchQueryOverride) {
+      console.log(`[Mediastack] Using search override for ${personName}: "${searchQueryOverride}"`);
+    }
 
     const url = `${MEDIASTACK_BASE_URL}?access_key=${MEDIASTACK_API_KEY}&keywords=${keywords}&languages=en&sort=published_desc&limit=100&date=${dateFrom},${dateTo}`;
 
@@ -313,7 +319,7 @@ export async function fetchMediastackNews(
       .map(a => a.title || "");
 
     const result: MediastackNewsData = {
-      query: personName,
+      query: queryText,
       articleCount24h,
       articleCount7d: 0,
       averageDaily7d: 0,
@@ -333,7 +339,7 @@ export async function fetchMediastackNews(
 }
 
 export async function fetchMediastackBatch(
-  people: Array<{ id: string; name: string }>,
+  people: Array<{ id: string; name: string; searchQueryOverride?: string | null }>,
   concurrency: number = 3,
   delayMs: number = 400,
   options?: { cacheOnly?: boolean }
@@ -385,7 +391,7 @@ export async function fetchMediastackBatch(
         return;
       }
 
-      const result = await fetchMediastackNews(person.name, person.id);
+      const result = await fetchMediastackNews(person.name, person.id, person.searchQueryOverride);
       if (result) {
         results.set(person.id, result);
         fetched++;

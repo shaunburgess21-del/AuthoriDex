@@ -456,7 +456,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
         const rankMap = new Map(leaderboardRanks.map(r => [r.name, r.rank ?? 9999]));
         const peopleSortedByRank = [...people].sort((a, b) => (rankMap.get(a.name) ?? 9999) - (rankMap.get(b.name) ?? 9999));
         const msResult = await fetchMediastackBatch(
-          peopleSortedByRank.map(p => ({ id: p.id, name: p.name })),
+          peopleSortedByRank.map(p => ({ id: p.id, name: p.name, searchQueryOverride: p.searchQueryOverride })),
           3,
           400,
           { cacheOnly },
@@ -497,7 +497,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
           isDegraded: gdeltIsDegraded,
         };
         const gdeltResult = await fetchBatchGdeltNews(
-          people.map(p => ({ id: p.id, name: p.name })),
+          people.map(p => ({ id: p.id, name: p.name, searchQueryOverride: p.searchQueryOverride })),
           gdeltOptions
         );
         newsData = gdeltResult.data;

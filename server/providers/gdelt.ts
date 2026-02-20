@@ -231,7 +231,8 @@ function formatGdeltDate(date: Date): string {
 export async function fetchGdeltNews(
   personName: string,
   personId?: string,
-  reuseMinutes?: number
+  reuseMinutes?: number,
+  searchQueryOverride?: string | null,
 ): Promise<GdeltNewsData | null> {
   if (!personName) {
     return null;
@@ -264,7 +265,13 @@ export async function fetchGdeltNews(
     const weekAgo = new Date(now);
     weekAgo.setDate(weekAgo.getDate() - 7);
     
-    const query = encodeURIComponent(`"${personName}"`);
+    const queryText = searchQueryOverride
+      ? searchQueryOverride.split(/\s+OR\s+/i).map(t => t.trim()).filter(Boolean).join(" OR ")
+      : `"${personName}"`;
+    if (searchQueryOverride) {
+      console.log(`[GDELT] Using search override for ${personName}: "${queryText}"`);
+    }
+    const query = encodeURIComponent(queryText);
     
     const url24h = `${GDELT_API_BASE}?query=${query}&mode=artlist&maxrecords=100&format=json&startdatetime=${formatGdeltDate(yesterday)}&enddatetime=${formatGdeltDate(now)}`;
     const url7d = `${GDELT_API_BASE}?query=${query}&mode=artlist&maxrecords=250&format=json&startdatetime=${formatGdeltDate(weekAgo)}&enddatetime=${formatGdeltDate(now)}`;
@@ -318,7 +325,7 @@ export async function fetchGdeltNews(
       : (articleCount24h > 0 ? 1 : 0);
 
     const result: GdeltNewsData = {
-      query: personName,
+      query: searchQueryOverride || personName,
       articleCount24h,
       articleCount7d,
       averageDaily7d,
@@ -359,7 +366,7 @@ export interface GdeltBatchResult {
 }
 
 export async function fetchBatchGdeltNews(
-  people: Array<{ id: string; name: string }>,
+  people: Array<{ id: string; name: string; searchQueryOverride?: string | null }>,
   options?: GdeltBatchOptions
 ): Promise<GdeltBatchResult> {
   const results = new Map<string, GdeltNewsData>();
@@ -441,7 +448,7 @@ export async function fetchBatchGdeltNews(
         results.set(person.id, JSON.parse(reusable));
         cacheReused++;
       } else {
-        const data = await fetchGdeltNews(person.name, person.id);
+        const data = await fetchGdeltNews(person.name, person.id, undefined, person.searchQueryOverride);
         if (data) {
           results.set(person.id, data);
           liveApiFetched++;
