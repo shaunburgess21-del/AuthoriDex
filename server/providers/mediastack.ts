@@ -34,6 +34,9 @@ export interface MediastackBatchStats {
   nonZeroCount: number;
   successCoveragePct: number;
   nonZeroCoveragePct: number;
+  top25NonZeroCount: number;
+  top25Total: number;
+  top25NonZeroCoveragePct: number;
 }
 
 async function getCachedResponse(cacheKey: string): Promise<{ responseData: string; fetchedAt: Date } | null> {
@@ -348,7 +351,7 @@ export async function fetchMediastackBatch(
     console.log(`[Mediastack] No API key configured, skipping batch`);
     return {
       data: results,
-      stats: { total: people.length, fetched: 0, cached: 0, failed: people.length, apiCallsMade: 0, durationMs: 0, successCount: 0, nonZeroCount: 0, successCoveragePct: 0, nonZeroCoveragePct: 0 },
+      stats: { total: people.length, fetched: 0, cached: 0, failed: people.length, apiCallsMade: 0, durationMs: 0, successCount: 0, nonZeroCount: 0, successCoveragePct: 0, nonZeroCoveragePct: 0, top25NonZeroCount: 0, top25Total: Math.min(25, people.length), top25NonZeroCoveragePct: 0 },
       isRefresh: false,
     };
   }
@@ -407,6 +410,14 @@ export async function fetchMediastackBatch(
     if ((entry.articleCount24h ?? 0) > 0) nonZeroCount++;
   });
 
+  const top25Ids = new Set(people.slice(0, 25).map(p => p.id));
+  let top25NonZeroCount = 0;
+  top25Ids.forEach((pid) => {
+    const entry = results.get(pid);
+    if (entry && (entry.articleCount24h ?? 0) > 0) top25NonZeroCount++;
+  });
+  const top25Total = Math.min(25, people.length);
+
   const stats: MediastackBatchStats = {
     total: people.length,
     fetched,
@@ -418,6 +429,9 @@ export async function fetchMediastackBatch(
     nonZeroCount,
     successCoveragePct: people.length > 0 ? (successCount / people.length) * 100 : 0,
     nonZeroCoveragePct: people.length > 0 ? (nonZeroCount / people.length) * 100 : 0,
+    top25NonZeroCount,
+    top25Total,
+    top25NonZeroCoveragePct: top25Total > 0 ? (top25NonZeroCount / top25Total) * 100 : 0,
   };
 
   console.log(`[Mediastack] Batch complete: ${fetched} fresh + ${cached} cached + ${failed} failed = ${results.size}/${people.length} in ${(durationMs / 1000).toFixed(1)}s (${stats.apiCallsMade} API calls, success=${stats.successCoveragePct.toFixed(0)}%, nonZero=${stats.nonZeroCoveragePct.toFixed(0)}%)`);

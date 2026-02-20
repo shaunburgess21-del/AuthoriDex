@@ -88,6 +88,7 @@ export interface LastRunMeta {
   finishedAt: Date;
   mediastackSuccessPct?: number;
   mediastackNonZeroPct?: number;
+  mediastackTop25NonZeroPct?: number;
   mediastackIsRefresh?: boolean;
   mediastackLastFetchAt?: string | null;
   perPersonFallback?: {
@@ -100,9 +101,50 @@ export interface LastRunMeta {
   };
 }
 let _lastRunMeta: LastRunMeta | null = null;
+const LAST_RUN_META_KEY = "system:lastRunMeta";
+const HEALTH_SUMMARY_KEY = "system:healthSummary";
 
 export function getLastRunMeta(): LastRunMeta | null {
   return _lastRunMeta;
+}
+
+async function persistSystemKey(key: string, data: any): Promise<void> {
+  try {
+    const json = JSON.stringify(data);
+    const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    const existing = await db.select({ id: apiCache.id }).from(apiCache).where(eq(apiCache.cacheKey, key));
+    if (existing.length > 0) {
+      await db.update(apiCache)
+        .set({ responseData: json, fetchedAt: new Date(), expiresAt: farFuture })
+        .where(eq(apiCache.cacheKey, key));
+    } else {
+      await db.insert(apiCache).values({
+        cacheKey: key,
+        provider: "system",
+        responseData: json,
+        fetchedAt: new Date(),
+        expiresAt: farFuture,
+      });
+    }
+  } catch (err) {
+    console.error(`[Persist] Failed to save ${key}:`, err);
+  }
+}
+
+export async function loadLastRunMetaFromDB(): Promise<void> {
+  try {
+    const rows = await db.select().from(apiCache).where(eq(apiCache.cacheKey, LAST_RUN_META_KEY));
+    if (rows.length > 0 && rows[0].responseData) {
+      const parsed = JSON.parse(rows[0].responseData);
+      if (parsed.finishedAt) parsed.finishedAt = new Date(parsed.finishedAt);
+      _lastRunMeta = parsed;
+      console.log(`[LastRunMeta] Loaded persisted state from DB (finished ${parsed.finishedAt?.toISOString?.() ?? 'unknown'})`);
+    } else {
+      console.log(`[LastRunMeta] No persisted state found`);
+    }
+  } catch (err) {
+    console.error(`[LastRunMeta] Failed to load from DB:`, err);
+  }
 }
 
 const NEWS_PROVIDER_PREF_KEY = "system:news_provider_pref";
@@ -357,6 +399,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
   await loadHealthFromDB();
   await loadCatchUpStateFromDB();
   await loadNewsProviderPref();
+  await loadLastRunMetaFromDB();
 
   try {
     const people = await db.select().from(trackedPeople);
@@ -404,8 +447,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
           console.log(`[Ingest] Mediastack refresh mode — last refresh ${ageHours}h ago (>= 2h threshold), fetching fresh news`);
         }
 
+        const peopleSortedByRank = [...people].sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
         const msResult = await fetchMediastackBatch(
-          people.map(p => ({ id: p.id, name: p.name })),
+          peopleSortedByRank.map(p => ({ id: p.id, name: p.name })),
           3,
           400,
           { cacheOnly },
@@ -1521,6 +1565,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
         mediastackApiCalls: mediastackBatchStats?.apiCallsMade ?? 0,
         mediastackSuccessPct: mediastackBatchStats ? `${mediastackBatchStats.successCoveragePct.toFixed(0)}%` : null,
         mediastackNonZeroPct: mediastackBatchStats ? `${mediastackBatchStats.nonZeroCoveragePct.toFixed(0)}%` : null,
+        mediastackTop25NonZeroPct: mediastackBatchStats ? `${mediastackBatchStats.top25NonZeroCoveragePct.toFixed(0)}%` : null,
         mediastackCadence: mediastackCadence ? {
           isRefresh: mediastackCadence.shouldRefresh,
           lastFetchAt: mediastackCadence.lastFetchAt?.toISOString() ?? null,
@@ -1622,6 +1667,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
       finishedAt: new Date(),
       mediastackSuccessPct: mediastackBatchStats?.successCoveragePct,
       mediastackNonZeroPct: mediastackBatchStats?.nonZeroCoveragePct,
+      mediastackTop25NonZeroPct: mediastackBatchStats?.top25NonZeroCoveragePct,
       mediastackIsRefresh: mediastackCadence?.shouldRefresh,
       mediastackLastFetchAt: mediastackCadence?.lastFetchAt?.toISOString() ?? null,
       perPersonFallback: {
@@ -1634,6 +1680,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
       },
     };
 
+    await persistSystemKey(LAST_RUN_META_KEY, _lastRunMeta);
+    await persistSystemKey(HEALTH_SUMMARY_KEY, healthSummary);
     await saveHealthState();
     await saveNewsProviderPref();
 

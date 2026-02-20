@@ -4151,7 +4151,12 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
                 newsMedianArticles: runMeta.newsMedianArticles,
                 newsMeanArticles: runMeta.newsMeanArticles,
                 newsQualityLow: runMeta.newsQualityLow,
-                finishedAt: runMeta.finishedAt.toISOString(),
+                finishedAt: runMeta.finishedAt instanceof Date ? runMeta.finishedAt.toISOString() : String(runMeta.finishedAt),
+                mediastackSuccessPct: runMeta.mediastackSuccessPct != null ? Math.round(runMeta.mediastackSuccessPct) : null,
+                mediastackNonZeroPct: runMeta.mediastackNonZeroPct != null ? Math.round(runMeta.mediastackNonZeroPct) : null,
+                mediastackTop25NonZeroPct: runMeta.mediastackTop25NonZeroPct != null ? Math.round(runMeta.mediastackTop25NonZeroPct) : null,
+                mediastackIsRefresh: runMeta.mediastackIsRefresh ?? null,
+                mediastackLastFetchAt: runMeta.mediastackLastFetchAt ?? null,
                 perPersonFallback: runMeta.perPersonFallback ?? null,
               } : null,
             };
@@ -4226,6 +4231,39 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
             negativePct,
           },
         },
+        persistedInstrumentation: await (async () => {
+          try {
+            const systemKeys = await db.select({
+              cacheKey: apiCache.cacheKey,
+              responseData: apiCache.responseData,
+              fetchedAt: apiCache.fetchedAt,
+            }).from(apiCache).where(
+              inArray(apiCache.cacheKey, [
+                'system:lastRunMeta',
+                'system:healthSummary',
+                'system:source_health_state',
+              ])
+            );
+            const result: Record<string, any> = {};
+            for (const row of systemKeys) {
+              try {
+                result[row.cacheKey] = {
+                  data: JSON.parse(row.responseData),
+                  persistedAt: row.fetchedAt ? new Date(row.fetchedAt).toISOString() : null,
+                };
+              } catch {
+                result[row.cacheKey] = { data: null, error: "parse_failed", persistedAt: row.fetchedAt ? new Date(row.fetchedAt).toISOString() : null };
+              }
+            }
+            const expectedKeys = ['system:lastRunMeta', 'system:healthSummary', 'system:source_health_state'];
+            for (const k of expectedKeys) {
+              if (!result[k]) result[k] = { data: null, status: "missing" };
+            }
+            return result;
+          } catch (err) {
+            return { error: "Failed to query persisted instrumentation" };
+          }
+        })(),
         spotCheck: (spotCheckRows.rows || []).map((r: any) => ({
           name: r.name,
           fameIndex: Number(r.fame_index),
