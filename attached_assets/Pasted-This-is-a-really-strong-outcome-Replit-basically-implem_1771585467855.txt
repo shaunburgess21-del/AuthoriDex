@@ -1,0 +1,98 @@
+This is a really strong outcome. Replit basically implemented the exact “production-safe widening” pattern you want for a 100-person leaderboard under a strict request budget. ✅
+
+Here’s my read on each improvement, and the only remaining “watch-outs” I’d keep an eye on.
+
+✅ 1) Cache reuse fixed (this was the critical one)
+
+Replit’s fix — “after widening, write the chosen result back to the primary cache key” — is the correct behavior.
+
+Why it matters: it ensures the next 1–2 cache-only ticks reuse the best available result, not the stale low plain-name result. This prevents Elon-style “5 articles forever” even after widening finds 30+.
+
+Sanity check: verify diagnostics on a cache-only tick show:
+
+newsSource=mediastack
+
+keywordsUsed matches last refresh’s chosen query
+
+chosenCount persists
+
+✅ 2) Canaries included in widen candidates
+
+Also correct. Otherwise canaries can produce false “provider failure” alerts due to query weakness, not provider health.
+
+✅ 3) Cooldown (6 hours, but always widen on zero)
+
+This is exactly the right shape. Two small refinements (optional, not necessary for launch):
+
+Track cooldown by “last attempt” not “last success” (they implemented that after architect feedback — good).
+
+Consider a shorter cooldown for top-5 (e.g., 2–3 hours) if you really care about being razor responsive for the very top — but 6 hours is totally fine given you refresh every 2 hours and you’re budget-constrained.
+
+✅ 4) Pick-best > sum-merge
+
+Absolutely agree.
+
+Until you can dedupe confidently (URL hash), sum-merge can create fake spikes. Pick-best is safer and more explainable:
+
+“We tried a widened query; we used whichever returned more articles.”
+
+✅ 5) Instrumentation
+
+This is the difference between “we think it’s working” and “we know it’s working.”
+
+The three aggregated metrics you’ll love watching:
+
+widening.firedCount
+
+widening.successCount
+
+widening.cooldownSkippedCount
+
+What “good” looks like:
+
+firedCount is low (single digits per refresh most of the time)
+
+successCount is meaningful (at least 30–50% of firedCount)
+
+cooldownSkippedCount grows over time (because the same people don’t keep re-widening)
+
+If firedCount stays high and successCount stays low → your widened phrases aren’t good.
+
+Remaining watch-outs (small, but worth monitoring)
+A) “Keyword drift” risk
+
+Because you now overwrite the primary cache with whichever query wins, it’s possible a widened query returns more articles but they’re less relevant (noisy).
+
+Two ways to keep this safe (optional):
+
+Add a minimum relevance check: e.g., at least 1 headline contains the surname or company token.
+
+Use “medianAgeMin” if available: newer articles tend to be more relevant for “trend.”
+
+But honestly, for launch, your current approach is fine — just watch the evidence headlines for a few widened people.
+
+B) Ensure widening does not distort “fresh” flags
+
+Make sure fresh.news=true corresponds to the chosen result being from the current refresh window (not an older widened cache entry). Replit seems to have this under control, but it’s worth watching one refresh + following cache-only tick to ensure freshness behaves as intended.
+
+C) Make sure top-25 selection is stable
+
+If your top-25 list changes hourly, widen candidates will also churn. That’s okay, but it can slightly increase budget variability. Not a problem — your cooldown + threshold handles it.
+
+One concrete suggestion for tomorrow morning
+
+Do a 1-page “widening audit” after 3 refresh cycles:
+
+For the top 10 people and the 8 widen-configured people:
+
+look at plainCount / widenedCount / chosenCount
+
+check headlines for relevance
+
+confirm cache-only ticks reuse the chosenCount
+
+If you paste one healthSummary snippet (the widening section) and one person’s diagnostics (Elon), I can tell you immediately if it’s behaving exactly right.
+
+Verdict
+
+Replit’s implementation is excellent for launch: stable, budget-safe, explainable, and robust against both low coverage and provider quirks. I wouldn’t change anything else right now beyond watching the widening ROI metrics for 24–48 hours.
