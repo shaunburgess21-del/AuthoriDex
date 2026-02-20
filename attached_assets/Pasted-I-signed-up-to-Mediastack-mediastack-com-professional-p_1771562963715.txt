@@ -1,0 +1,189 @@
+I signed up to Mediastack (mediastack.com) professional plan API, 50,000 calls/month, which should be enough for our leaderboard (100 individuals x 24 (once per hour calls) x 30 days). I have the API key. How do you think we should integrate it into the trend score engine, replace GDELT API? What should I tell Replit?
+Thought for 52s
+
+Yeah — Mediastack is a good move for production stability. But with 50,000 calls/month, you can’t naïvely do “100 people × every hour × 30 days” as fresh news calls and still be safe.
+
+First: the math (important)
+
+Your estimate 100 × 24 × 30 = 72,000 calls/month is correct if it’s 1 API call per person per hour.
+
+So with Mediastack 50k/month, you need one of these:
+
+Reduce frequency (e.g., news refresh every 2 hours → ~36k/month)
+
+Reduce coverage per run (e.g., refresh news hourly only for Top 50, rest less often)
+
+Use caching / cooldowns so many people don’t get called every hour
+
+Or upgrade plan later
+
+What I’d integrate (clean + robust)
+
+Treat Mediastack as your primary News provider, but keep the chain you already built:
+
+Mediastack (primary) → GDELT (secondary/free) → Serper News (emergency fallback)
+
+That gives you:
+
+Paid stability most of the time
+
+Free backup if Mediastack hiccups
+
+Serper as “break glass” so you never go dark
+
+The key design decision: Don’t call Mediastack for everyone every hour
+
+Instead, tell Replit to implement tiered fetching + caching:
+
+Recommended fetch policy (fits 50k/month)
+
+Hourly
+
+Top 25–40 people by rank (the people users actually see)
+
+Plus anyone with “news anomaly” (e.g., news suddenly 0 / near-zero while wiki/search strong)
+
+Every 2–4 hours
+
+Everyone else (round-robin so everyone gets refreshed over time)
+
+Caching
+
+If a person’s news was fetched within the last 90–120 minutes, reuse it (no new call)
+
+This will keep you comfortably under 50k while maintaining “feels live” where it matters.
+
+How to compute the signals with Mediastack
+
+Mediastack gives you:
+
+/v1/news endpoint with keywords, date, languages, countries, limit, etc.
+
+It returns a pagination.total you can use as a count estimate for the query window, without paging everything.
+
+Practical approach for your engine
+
+Your engine currently needs something like:
+
+articleCount24h
+
+articleCount7d (or a rolling average / delta)
+
+But Mediastack date is day-based (YYYY-MM-DD or date range).
+So the simplest reliable method is:
+
+Query last 2 days (date=yesterday,today) and treat that as your “~24h-ish” pool (or count only items with published_at >= now-24h if you want closer precision, but capped at 100 returned items).
+
+For 7d: don’t make a second request. Instead, compute “7d average” from your own snapshots (rolling mean of the past 7 days of news_count for each person). This saves half your calls immediately.
+
+So: one Mediastack call per person per refresh, not two.
+
+What you should tell Replit (copy/paste)
+
+Here’s a very direct instruction you can send:
+
+Integrate Mediastack as primary news provider. Use https://api.mediastack.com/v1/news?access_key=... with keywords=<person name> and languages=en (optionally countries=us,gb,...) and sort=published_desc, limit=25–100.
+
+Do not replace everything with Mediastack naïvely because 100 ppl × hourly = ~72k calls/month > 50k. Implement tiered fetching + caching:
+
+Hourly refresh for Top 25–40 + anomaly-triggered individuals
+
+Round-robin refresh for the rest every 2–4 hours
+
+Cache reuse: if fetched < 90–120 minutes ago, reuse (no call)
+
+Counts: Use pagination.total as the “news_count” for the query window.
+Use date=yesterday,today as the “recent” window.
+
+7d baseline/delta: Stop calling the news API for 7d counts. Compute 7d average and deltas from our stored snapshots (rolling window in DB).
+
+Fallback chain: Mediastack → GDELT → Serper. Keep your per-person fallback logic (Elon-style) but make it provider-agnostic (if primary provider returns near-zero for N runs, try secondary).
+
+Versioning/normalization: Track news_provider_used per snapshot and keep provider-aware diagnostics in API meta.
+
+Should Mediastack fully replace GDELT?
+
+For production UX: yes as primary.
+But I would not delete GDELT yet — keep it as a secondary source for:
+
+redundancy
+
+cross-checking
+
+and cheaper “broad coverage” if you later increase tracked people beyond what your paid tier supports
+
+Quick “sanity checklist” after integration
+
+Tell Replit to verify these immediately:
+
+Call budget: estimate calls/day from logs (target < ~1,600/day to stay under 50k/month).
+
+Coverage: % of top 40 with fresh news each run.
+
+Provider blind spots: if a single person goes near-zero repeatedly, per-person fallback should patch them.
+
+Diagnostics: newsProviderUsed, newsCoveragePct, and “quality” metrics visible in the admin health endpoint.
+
+If you want, paste your current ingestion cadence (hourly at :02) and the current “top-N gating” numbers Replit uses, and I’ll give you a concrete call-budget plan (e.g., “Top 35 hourly + 20 rolling/hour + 120-min cache = ~X calls/month”).
+
+You are right, I calculated incorrectly, I did 12 hours instead of 24 hours. There is another tier I can upgrade to (see attached) although a bit more expensive, it gives a lot of breathing room and we can call more often. Your thoughts? 
+If we stay on the current package, to keep things simple, I think we just call once every 2 hours. it's still better than GDELT failing 80% of the time.
+
+If your goal is production reliability + simple ops, your instinct is right:
+
+Staying on 50k and calling every 2 hours is a clean, low-effort path and will already feel dramatically better than GDELT.
+
+Upgrading to 250k/month is worth it only if you want to (a) refresh hourly for everyone, (b) scale to more tracked people, or (c) add more news features later (topics, entity expansion, extra regions/languages) without constantly thinking about budget.
+
+Quick math so you can decide confidently
+
+Assume 1 Mediastack call per person per refresh (recommended; don’t do “24h + 7d” as separate calls).
+
+100 people
+
+Every 2 hours: 100 × 12 × 30 = 36,000/month ✅ fits 50k comfortably (even with retries + a few extras)
+
+Every 1 hour: 100 × 24 × 30 = 72,000/month ❌ exceeds 50k, but ✅ fits 250k easily
+
+Every 30 min: 144,000/month ✅ fits 250k
+
+So:
+
+If you’re happy with 2-hour news freshness, 50k is perfect and still leaves headroom for occasional “per-person retry/fallback” calls.
+
+If you want hourly (or plan to expand beyond 100 people soon), 250k is the “set-and-forget” tier.
+
+My recommendation
+
+Phase 1 (simple + solid): stay on 50k, refresh every 2 hours.
+Do it now, stabilize the engine, confirm rankings behave well, and measure how often you actually need extra calls.
+
+Upgrade to 250k when either becomes true:
+
+you want “hourly for everyone” as a product promise, or
+
+you increase tracked people (e.g., 200+), or
+
+you start running “extra” news queries (multiple languages/regions, aliases per person, topic expansion).
+
+What to tell Replit (simple implementation spec)
+
+You can send this:
+
+We’re integrating Mediastack as the primary news provider. On the current 50k plan we’ll keep it simple: fetch news counts every 2 hours for all 100 people (1 request per person, not 2). Use cached values for the in-between hourly ingestions.
+
+Don’t do separate 24h + 7d API calls. Use one Mediastack query (e.g., date range today + yesterday) and set news_count from pagination.total. Compute any 7d baseline/delta from our own snapshots/history.
+
+Keep provider tracking (news_provider_used) and the existing fallbacks (GDELT/Serper) as backup only, but Mediastack should drive the “fresh” path.
+
+One extra thought (optional but powerful)
+
+Even on the 2-hour schedule, you can keep the UI feeling “alive” by still ingesting hourly — you’ll just have:
+
+news refreshed every 2 hours
+
+wiki/search refreshed hourly
+
+scoring/EMA still runs hourly
+
+That’s totally fine and users won’t notice unless they’re inspecting timestamps.
