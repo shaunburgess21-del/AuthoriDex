@@ -1,0 +1,39 @@
+Replit’s conclusion (“engine is sound”) mostly tracks, but on the “remove X from diversity multiplier” question:
+
+Removing X is fine, but it’s not urgent
+
+If X is already NOT_APPLICABLE and your diversity function truly excludes NOT_APPLICABLE, then it’s already not penalizing anyone. In that case, removing X is mainly a code clarity / future-footgun prevention change, not a scoring correctness fix.
+
+The one real risk with removing X
+
+The risk isn’t the diversity multiplier itself — it’s accidental schema/contract drift:
+
+Do any DB columns still exist for X metrics? (even if unused)
+
+Do any API response shapes include x in breakdown/meta?
+
+Does any frontend logic still assume drivers might include “SOCIAL” or sourceTimestamps.x?
+
+Replit claims they cleaned server + client references, and that’s exactly what you’d want. But the way they described it (“removed from three files… then found more files… then more frontend references…”) is a clue that X was spread wider than expected. That’s normal in fast-moving codebases, but it means:
+
+✅ If tests pass + ingestion completes + UI loads + APIs respond, then the cleanup is probably good.
+❗If you don’t have automated tests for “scoring write cycle → trending_people → leaderboard endpoints,” you should do a quick manual verification checklist.
+
+Quick verification checklist (10 minutes)
+
+After an ingestion run completes:
+
+Leaderboard loads and shows 100 people.
+
+/api/trending, /api/leaderboard, /api/trending/hot-movers all return 200 and include expected meta.
+
+Engine health endpoint shows no exceptions and run completes normally.
+
+Check one person’s diagnostics / breakdown: no missing fields that UI expects.
+
+Confirm diversity multiplier is sensible (likely 1.0 if your “applicable platforms” are wiki/news/search and all are present; or <1.0 if one source is degraded).
+
+Do I agree with the change overall?
+
+Yes — if your product doesn’t use X right now, removing it reduces cognitive load and prevents future confusion.
+Just make sure you didn’t accidentally remove something the UI still expects (even if it was “unused”).
