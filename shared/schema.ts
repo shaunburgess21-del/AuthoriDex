@@ -1027,6 +1027,8 @@ export const celebrityMetrics = pgTable("celebrity_metrics", {
   overratedPct: real("overrated_pct"), // 0-100
   fairlyRatedPct: real("fairly_rated_pct"), // 0-100
   valueScore: real("value_score"), // -100 to +100 (underrated_pct - overrated_pct)
+  visibility: text("visibility").notNull().default("live"), // live | inactive | archived
+  curateVisibility: text("curate_visibility").notNull().default("live"), // live | inactive | archived
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

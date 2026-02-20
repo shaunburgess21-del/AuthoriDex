@@ -87,21 +87,6 @@ interface InductionCandidate {
   votes: number;
 }
 
-const INDUCTION_CANDIDATES: InductionCandidate[] = [
-  { id: "i1", name: "Jensen Huang", initials: "JH", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/jensen-huang/1.png", category: "Tech", votes: 12406 },
-  { id: "i2", name: "Charli XCX", initials: "CX", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/charli-xcx/1.png", category: "Music", votes: 11205 },
-  { id: "i3", name: "Kai Cenat", initials: "KC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/kai-cenat/1.png", category: "Creator", votes: 10892 },
-  { id: "i4", name: "Sabrina Carpenter", initials: "SC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sabrina-carpenter/1.png", category: "Music", votes: 9847 },
-  { id: "i5", name: "Ice Spice", initials: "IS", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/ice-spice/1.png", category: "Music", votes: 8934 },
-  { id: "i6", name: "Sam Altman", initials: "SA", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sam-altman/1.png", category: "Tech", votes: 8421 },
-  { id: "i7", name: "Jenna Ortega", initials: "JO", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/jenna-ortega/1.png", category: "Creator", votes: 7856 },
-  { id: "i8", name: "Patrick Mahomes", initials: "PM", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/patrick-mahomes/1.png", category: "Sports", votes: 7234 },
-  { id: "i9", name: "Vivek Ramaswamy", initials: "VR", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/vivek-ramaswamy/1.png", category: "Politics", votes: 6891 },
-  { id: "i10", name: "xQc", initials: "XQ", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/xqc/1.png", category: "Creator", votes: 6543 },
-  { id: "i11", name: "Hailey Bieber", initials: "HB", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/hailey-bieber/1.png", category: "Creator", votes: 5987 },
-  { id: "i12", name: "Mark Cuban", initials: "MC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/mark-cuban/1.png", category: "Business", votes: 5432 },
-];
-
 interface CelebrityImage {
   id: string;
   personId: string;
@@ -1638,11 +1623,39 @@ export default function VotePage() {
   const [currentCurateIndex, setCurrentCurateIndex] = useState(0);
   
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
-  const [candidateVotes, setCandidateVotes] = useState<Record<string, number>>(() => {
-    const votes: Record<string, number> = {};
-    INDUCTION_CANDIDATES.forEach(c => { votes[c.id] = c.votes; });
-    return votes;
+
+  interface InductionAPIResponse {
+    data: Array<{
+      id: string;
+      name: string;
+      category: string;
+      avatar: string | null;
+      votesFor: number;
+      votesAgainst: number;
+      status: string;
+    }>;
+  }
+  
+  const { data: inductionData } = useQuery<InductionAPIResponse>({
+    queryKey: ['/api/vote/induction'],
+    staleTime: 60 * 1000,
   });
+
+  const inductionVoteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest('POST', `/api/vote/induction/${id}/vote`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
+    },
+  });
+
+  const dbInductionCandidates: InductionCandidate[] = (inductionData?.data || []).map(c => ({
+    id: c.id,
+    name: c.name,
+    initials: c.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
+    avatar: c.avatar || '',
+    category: c.category as InductionCandidate['category'],
+    votes: c.votesFor,
+  }));
 
   const [inductionCategoryFilter, setInductionCategoryFilter] = useState<FilterCategory>("All");
   const [inductionSearchQuery, setInductionSearchQuery] = useState("");
@@ -1682,10 +1695,7 @@ export default function VotePage() {
   const [valuePerceptionSearchQuery, setValuePerceptionSearchQuery] = useState("");
   const [curateSearchQuery, setCurateSearchQuery] = useState("");
 
-  const enrichedCandidates = INDUCTION_CANDIDATES.map(c => ({
-    ...c,
-    votes: candidateVotes[c.id] ?? c.votes
-  }));
+  const enrichedCandidates = dbInductionCandidates;
   
   const filteredCandidates = enrichedCandidates.filter(c => {
     const matchesCategory = inductionCategoryFilter === "All" || inductionCategoryFilter === "Trending" || c.category === inductionCategoryFilter;
@@ -1745,7 +1755,7 @@ export default function VotePage() {
   }
   
   const { data: valueCelebritiesData } = useQuery<ValueLeaderboardResponse>({
-    queryKey: ['/api/leaderboard?tab=value&limit=20'],
+    queryKey: ['/api/leaderboard?tab=value&limit=100'],
     staleTime: 60 * 1000,
   });
   
@@ -1905,17 +1915,13 @@ export default function VotePage() {
   }, [globalCategoryFilter]);
 
   const handleToggleVote = (candidateId: string) => {
+    if (votedIds.has(candidateId)) return;
     setVotedIds(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(candidateId)) {
-        newSet.delete(candidateId);
-        setCandidateVotes(v => ({ ...v, [candidateId]: (v[candidateId] || 0) - 1 }));
-      } else {
-        newSet.add(candidateId);
-        setCandidateVotes(v => ({ ...v, [candidateId]: (v[candidateId] || 0) + 1 }));
-      }
+      newSet.add(candidateId);
       return newSet;
     });
+    inductionVoteMutation.mutate(candidateId);
   };
 
   const handleInductionXP = (event: React.MouseEvent) => {

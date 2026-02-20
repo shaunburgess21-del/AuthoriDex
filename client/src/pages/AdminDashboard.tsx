@@ -52,6 +52,9 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import { AdminUnderratedOverrated } from "@/components/admin/AdminUnderratedOverrated";
+import { AdminCurateProfile } from "@/components/admin/AdminCurateProfile";
+import { AdminInductionQueue } from "@/components/admin/AdminInductionQueue";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -3733,48 +3736,15 @@ export default function AdminDashboard() {
               </TabsContent>
 
               <TabsContent value="underrated-overrated" className="mt-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Underrated / Overrated</CardTitle>
-                    <CardDescription>Manage approval rating voting options</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-center py-8 text-muted-foreground">
-                      <ThumbsUp className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>Underrated/Overrated voting management coming soon</p>
-                    </div>
-                  </CardContent>
-                </Card>
+                <AdminUnderratedOverrated />
               </TabsContent>
 
               <TabsContent value="induction" className="mt-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Induction Queue</CardTitle>
-                    <CardDescription>Approve or reject new celebrity nominations</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-center py-8 text-muted-foreground">
-                      <UserCheck className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>No pending induction candidates</p>
-                    </div>
-                  </CardContent>
-                </Card>
+                <AdminInductionQueue />
               </TabsContent>
 
               <TabsContent value="curate-profile" className="mt-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Curate Profile</CardTitle>
-                    <CardDescription>Manage celebrity profile curation and data quality</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Star className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>Profile curation tools coming soon</p>
-                    </div>
-                  </CardContent>
-                </Card>
+                <AdminCurateProfile />
               </TabsContent>
             </Tabs>
           </div>

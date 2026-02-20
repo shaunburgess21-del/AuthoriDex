@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Vote, Crown, Check, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 
 export interface InductionCandidate {
   id: string;
@@ -13,15 +15,6 @@ export interface InductionCandidate {
   category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics";
   votes: number;
 }
-
-export const INDUCTION_CANDIDATES: InductionCandidate[] = [
-  { id: "i1", name: "Jensen Huang", initials: "JH", category: "Tech", votes: 12406 },
-  { id: "i2", name: "Charli XCX", initials: "CX", category: "Music", votes: 11205 },
-  { id: "i3", name: "Kai Cenat", initials: "KC", category: "Creator", votes: 10892 },
-  { id: "i4", name: "Sabrina Carpenter", initials: "SC", category: "Music", votes: 9847 },
-  { id: "i5", name: "Ice Spice", initials: "IS", category: "Music", votes: 8934 },
-  { id: "i6", name: "Sam Altman", initials: "SA", category: "Tech", votes: 8421 },
-];
 
 function getRankBadgeStyle(rank: number) {
   if (rank === 1) return "bg-yellow-500/10 border-yellow-500/20 text-yellow-300";
@@ -151,15 +144,50 @@ export interface InductionLeaderboardSliceProps {
 }
 
 export function InductionLeaderboardSlice({ 
-  candidates = INDUCTION_CANDIDATES,
+  candidates,
   limit = 3,
   onExplore,
   votedCandidates = new Set(),
-  onToggleVote = () => {},
+  onToggleVote,
 }: InductionLeaderboardSliceProps) {
-  const displayCandidates = candidates.slice(0, limit);
-  const maxVotes = candidates[0]?.votes || 1;
-  const totalVoters = candidates.reduce((sum, c) => sum + c.votes, 0);
+  const { data: inductionData } = useQuery<any>({
+    queryKey: ['/api/vote/induction'],
+    staleTime: 60 * 1000,
+    enabled: !candidates,
+  });
+
+  const inductionVoteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest('POST', `/api/vote/induction/${id}/vote`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
+    },
+  });
+
+  const [localVotedIds, setLocalVotedIds] = useState<Set<string>>(new Set());
+
+  const dbCandidates: InductionCandidate[] = (inductionData?.data || []).map((c: any) => ({
+    id: c.id,
+    name: c.name,
+    initials: c.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
+    category: c.category as InductionCandidate['category'],
+    votes: c.votesFor,
+  }));
+
+  const resolvedCandidates = candidates || dbCandidates;
+  const displayCandidates = resolvedCandidates.slice(0, limit);
+  const maxVotes = resolvedCandidates[0]?.votes || 1;
+  const totalVoters = resolvedCandidates.reduce((sum, c) => sum + c.votes, 0);
+  const resolvedVotedIds = onToggleVote ? votedCandidates : localVotedIds;
+
+  const handleVote = onToggleVote || ((id: string) => {
+    if (localVotedIds.has(id)) return;
+    setLocalVotedIds(prev => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    inductionVoteMutation.mutate(id);
+  });
 
   return (
     <Card 
@@ -189,8 +217,8 @@ export function InductionLeaderboardSlice({
             candidate={candidate}
             rank={idx + 1}
             maxVotes={maxVotes}
-            isVoted={votedCandidates.has(candidate.id)}
-            onToggleVote={onToggleVote}
+            isVoted={resolvedVotedIds.has(candidate.id)}
+            onToggleVote={handleVote}
           />
         ))}
       </div>

@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { generateMockPlatformInsights } from "./api-integrations";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, ingestionRuns, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, ingestionRuns, inductionCandidates, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { eq, desc, and, gt, sql, count, gte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -7838,6 +7838,332 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error running weekly reset:", error.message);
       res.status(500).json({ error: "Failed to run weekly reset" });
+    }
+  });
+
+  // ============ ADMIN: UNDERRATED/OVERRATED MANAGEMENT ============
+
+  // GET /api/admin/vote/underrated - List all U/O cards for admin
+  app.get("/api/admin/vote/underrated", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const results = await db
+        .select({
+          id: trendingPeople.id,
+          name: trendingPeople.name,
+          category: trendingPeople.category,
+          avatar: trendingPeople.avatar,
+          rank: trendingPeople.rank,
+          trendScore: celebrityMetrics.trendScore,
+          underratedPct: celebrityMetrics.underratedPct,
+          overratedPct: celebrityMetrics.overratedPct,
+          fairlyRatedPct: celebrityMetrics.fairlyRatedPct,
+          underratedVotesCount: celebrityMetrics.underratedVotesCount,
+          overratedVotesCount: celebrityMetrics.overratedVotesCount,
+          fairlyRatedVotesCount: celebrityMetrics.fairlyRatedVotesCount,
+          valueScore: celebrityMetrics.valueScore,
+          visibility: celebrityMetrics.visibility,
+        })
+        .from(trendingPeople)
+        .leftJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId))
+        .orderBy(asc(trendingPeople.rank));
+
+      res.json({ data: results, totalCount: results.length });
+    } catch (error: any) {
+      console.error("Error fetching admin U/O cards:", error);
+      res.status(500).json({ error: "Failed to fetch U/O cards" });
+    }
+  });
+
+  // POST /api/admin/vote/underrated/sync - Sync U/O cards from leaderboard (idempotent)
+  app.post("/api/admin/vote/underrated/sync", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const allPeople = await db.select({ id: trendingPeople.id }).from(trendingPeople);
+      const existingMetrics = await db.select({ celebrityId: celebrityMetrics.celebrityId }).from(celebrityMetrics);
+      const existingIds = new Set(existingMetrics.map(m => m.celebrityId));
+
+      let created = 0;
+      for (const person of allPeople) {
+        if (!existingIds.has(person.id)) {
+          await db.insert(celebrityMetrics).values({
+            celebrityId: person.id,
+            updatedAt: new Date(),
+          });
+          created++;
+        }
+      }
+
+      res.json({ created, total: allPeople.length });
+    } catch (error: any) {
+      console.error("Error syncing U/O cards:", error);
+      res.status(500).json({ error: "Failed to sync U/O cards" });
+    }
+  });
+
+  // PATCH /api/admin/vote/underrated/:id/visibility - Update U/O visibility
+  app.patch("/api/admin/vote/underrated/:id/visibility", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { visibility } = req.body;
+      if (!visibility || !['live', 'inactive', 'archived'].includes(visibility)) {
+        return res.status(400).json({ error: "visibility must be 'live', 'inactive', or 'archived'" });
+      }
+      await db.update(celebrityMetrics).set({ visibility, updatedAt: new Date() }).where(eq(celebrityMetrics.celebrityId, id));
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error updating U/O visibility:", error);
+      res.status(500).json({ error: "Failed to update visibility" });
+    }
+  });
+
+  // ============ ADMIN: CURATE PROFILE MANAGEMENT ============
+
+  // GET /api/admin/vote/curate-profile - List all curate profile cards for admin
+  app.get("/api/admin/vote/curate-profile", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const results = await db
+        .select({
+          id: trendingPeople.id,
+          name: trendingPeople.name,
+          category: trendingPeople.category,
+          avatar: trendingPeople.avatar,
+          rank: trendingPeople.rank,
+          curateVisibility: celebrityMetrics.curateVisibility,
+        })
+        .from(trendingPeople)
+        .leftJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId))
+        .orderBy(asc(trendingPeople.rank));
+
+      const imageStats = await db
+        .select({
+          personId: celebrityImages.personId,
+          imageCount: count(),
+          totalVotes: sql<number>`COALESCE(SUM(${celebrityImages.votesUp}), 0)`,
+        })
+        .from(celebrityImages)
+        .groupBy(celebrityImages.personId);
+
+      const imageMap = new Map(imageStats.map(s => [s.personId, { imageCount: Number(s.imageCount), totalVotes: Number(s.totalVotes) }]));
+
+      const data = results.map(r => ({
+        ...r,
+        curateVisibility: r.curateVisibility || 'live',
+        imageCount: imageMap.get(r.id)?.imageCount || 0,
+        totalVotes: imageMap.get(r.id)?.totalVotes || 0,
+      }));
+
+      res.json({ data, totalCount: data.length });
+    } catch (error: any) {
+      console.error("Error fetching admin curate profile cards:", error);
+      res.status(500).json({ error: "Failed to fetch curate profile cards" });
+    }
+  });
+
+  // PATCH /api/admin/vote/curate-profile/:id/visibility - Update curate profile visibility
+  app.patch("/api/admin/vote/curate-profile/:id/visibility", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { visibility } = req.body;
+      if (!visibility || !['live', 'inactive', 'archived'].includes(visibility)) {
+        return res.status(400).json({ error: "visibility must be 'live', 'inactive', or 'archived'" });
+      }
+      await db.update(celebrityMetrics).set({ curateVisibility: visibility, updatedAt: new Date() }).where(eq(celebrityMetrics.celebrityId, id));
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error updating curate visibility:", error);
+      res.status(500).json({ error: "Failed to update visibility" });
+    }
+  });
+
+  // ============ ADMIN: INDUCTION QUEUE MANAGEMENT ============
+
+  // GET /api/vote/induction - Public: list induction candidates (pending/approved)
+  app.get("/api/vote/induction", async (req, res) => {
+    try {
+      const statusFilter = (req.query.status as string) || 'pending';
+      const candidates = await db
+        .select()
+        .from(inductionCandidates)
+        .where(eq(inductionCandidates.status, statusFilter))
+        .orderBy(desc(inductionCandidates.votesFor));
+      res.json({ data: candidates, totalCount: candidates.length });
+    } catch (error: any) {
+      console.error("Error fetching induction candidates:", error);
+      res.status(500).json({ error: "Failed to fetch induction candidates" });
+    }
+  });
+
+  // POST /api/vote/induction/:id/vote - Public: vote for an induction candidate
+  app.post("/api/vote/induction/:id/vote", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const [candidate] = await db.select().from(inductionCandidates).where(eq(inductionCandidates.id, id)).limit(1);
+      if (!candidate) return res.status(404).json({ error: "Candidate not found" });
+      if (candidate.status !== 'pending') return res.status(400).json({ error: "Candidate is not in pending status" });
+
+      await db.update(inductionCandidates)
+        .set({ votesFor: sql`${inductionCandidates.votesFor} + 1` })
+        .where(eq(inductionCandidates.id, id));
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error voting for induction candidate:", error);
+      res.status(500).json({ error: "Failed to vote" });
+    }
+  });
+
+  // GET /api/admin/induction - Admin: list all induction candidates
+  app.get("/api/admin/induction", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const candidates = await db
+        .select()
+        .from(inductionCandidates)
+        .orderBy(desc(inductionCandidates.submittedAt));
+      res.json({ data: candidates, totalCount: candidates.length });
+    } catch (error: any) {
+      console.error("Error fetching admin induction candidates:", error);
+      res.status(500).json({ error: "Failed to fetch induction candidates" });
+    }
+  });
+
+  // POST /api/admin/induction - Admin: create a new induction candidate
+  app.post("/api/admin/induction", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { name, category, avatar, bio, wikiSlug, xHandle, instagramHandle } = req.body;
+      if (!name || !category) return res.status(400).json({ error: "name and category are required" });
+
+      const existing = await db.select({ id: inductionCandidates.id }).from(inductionCandidates).where(eq(inductionCandidates.name, name)).limit(1);
+      if (existing.length > 0) return res.status(409).json({ error: "Candidate with this name already exists" });
+
+      const [created] = await db.insert(inductionCandidates).values({
+        name,
+        category,
+        avatar: avatar || null,
+        bio: bio || null,
+        wikiSlug: wikiSlug || null,
+        xHandle: xHandle || null,
+        instagramHandle: instagramHandle || null,
+        submittedBy: req.userId,
+        status: 'pending',
+      }).returning();
+
+      res.json(created);
+    } catch (error: any) {
+      console.error("Error creating induction candidate:", error);
+      res.status(500).json({ error: "Failed to create candidate" });
+    }
+  });
+
+  // PATCH /api/admin/induction/:id - Admin: update an induction candidate
+  app.patch("/api/admin/induction/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { name, category, avatar, bio, wikiSlug, xHandle, instagramHandle, status } = req.body;
+
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (category !== undefined) updates.category = category;
+      if (avatar !== undefined) updates.avatar = avatar;
+      if (bio !== undefined) updates.bio = bio;
+      if (wikiSlug !== undefined) updates.wikiSlug = wikiSlug;
+      if (xHandle !== undefined) updates.xHandle = xHandle;
+      if (instagramHandle !== undefined) updates.instagramHandle = instagramHandle;
+      if (status !== undefined && ['pending', 'approved', 'rejected', 'archived'].includes(status)) {
+        updates.status = status;
+      }
+
+      if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });
+
+      const [updated] = await db.update(inductionCandidates).set(updates).where(eq(inductionCandidates.id, id)).returning();
+      if (!updated) return res.status(404).json({ error: "Candidate not found" });
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating induction candidate:", error);
+      res.status(500).json({ error: "Failed to update candidate" });
+    }
+  });
+
+  // POST /api/admin/induction/:id/approve - Admin: approve and induct to leaderboard
+  app.post("/api/admin/induction/:id/approve", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const [candidate] = await db.select().from(inductionCandidates).where(eq(inductionCandidates.id, id)).limit(1);
+      if (!candidate) return res.status(404).json({ error: "Candidate not found" });
+
+      // Check if person already exists on leaderboard
+      const existingPerson = await db.select({ id: trackedPeople.id }).from(trackedPeople).where(eq(trackedPeople.name, candidate.name)).limit(1);
+
+      let personId: string;
+
+      if (existingPerson.length > 0) {
+        personId = existingPerson[0].id;
+      } else {
+        // Add to tracked_people
+        const maxOrder = await db.select({ maxOrder: sql<number>`COALESCE(MAX(${trackedPeople.displayOrder}), 0)` }).from(trackedPeople);
+        const [newPerson] = await db.insert(trackedPeople).values({
+          name: candidate.name,
+          category: candidate.category,
+          avatar: candidate.avatar,
+          bio: candidate.bio,
+          wikiSlug: candidate.wikiSlug,
+          xHandle: candidate.xHandle,
+          instagramHandle: candidate.instagramHandle,
+          displayOrder: (maxOrder[0]?.maxOrder || 0) + 1,
+          status: 'main_leaderboard',
+        }).returning();
+        personId = newPerson.id;
+
+        // Also create trending_people entry
+        await db.insert(trendingPeople).values({
+          id: personId,
+          name: candidate.name,
+          category: candidate.category,
+          avatar: candidate.avatar,
+          rank: 999,
+          trendScore: 0,
+          fameIndex: 0,
+        }).onConflictDoNothing();
+      }
+
+      // Idempotent: ensure celebrity_metrics exists
+      await db.insert(celebrityMetrics).values({
+        celebrityId: personId,
+        updatedAt: new Date(),
+      }).onConflictDoNothing();
+
+      // Mark candidate as approved
+      await db.update(inductionCandidates).set({ status: 'approved' }).where(eq(inductionCandidates.id, id));
+
+      res.json({ success: true, personId, message: "Candidate approved and added to leaderboard" });
+    } catch (error: any) {
+      console.error("Error approving induction candidate:", error);
+      res.status(500).json({ error: "Failed to approve candidate" });
+    }
+  });
+
+  // POST /api/admin/induction/:id/reject - Admin: reject candidate
+  app.post("/api/admin/induction/:id/reject", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const [updated] = await db.update(inductionCandidates).set({ status: 'rejected' }).where(eq(inductionCandidates.id, id)).returning();
+      if (!updated) return res.status(404).json({ error: "Candidate not found" });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error rejecting induction candidate:", error);
+      res.status(500).json({ error: "Failed to reject candidate" });
+    }
+  });
+
+  // DELETE /api/admin/induction/:id - Admin: delete candidate
+  app.delete("/api/admin/induction/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const [deleted] = await db.delete(inductionCandidates).where(eq(inductionCandidates.id, id)).returning();
+      if (!deleted) return res.status(404).json({ error: "Candidate not found" });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting induction candidate:", error);
+      res.status(500).json({ error: "Failed to delete candidate" });
     }
   });
 
