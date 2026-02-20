@@ -8,7 +8,7 @@ import { fetchSerperBatch, fetchSerperNewsBatch } from "../providers/serper";
 import { fetchMediastackBatch, isMediastackConfigured, MediastackBatchStats, shouldRefreshMediastack } from "../providers/mediastack";
 import { computeTrendScore } from "../scoring/trendScore";
 import { refreshSourceStats } from "../scoring/sourceStats";
-import { evaluateCanaries, CanaryReport } from "../scoring/canaryMonitor";
+import { evaluateCanaries, CanaryReport, getCanaryNames } from "../scoring/canaryMonitor";
 import {
   calculateGlobalHealthMetrics,
   updateSourceHealth,
@@ -456,11 +456,14 @@ export async function runDataIngestion(): Promise<IngestResult> {
         const rankMap = new Map(leaderboardRanks.map(r => [r.name, r.rank ?? 9999]));
         const peopleSortedByRank = [...people].sort((a, b) => (rankMap.get(a.name) ?? 9999) - (rankMap.get(b.name) ?? 9999));
         const top25Ids = new Set(peopleSortedByRank.slice(0, 25).map(p => p.id));
+        const canaryNames = new Set(getCanaryNames());
+        const canaryIds = new Set(people.filter(p => canaryNames.has(p.name)).map(p => p.id));
+        const widenCandidateIds = new Set([...Array.from(top25Ids), ...Array.from(canaryIds)]);
         const msResult = await fetchMediastackBatch(
           peopleSortedByRank.map(p => ({ id: p.id, name: p.name, newsQueryWidened: p.newsQueryWidened })),
           3,
           400,
-          { cacheOnly, widenCandidateIds: cacheOnly ? undefined : top25Ids },
+          { cacheOnly, widenCandidateIds: cacheOnly ? undefined : widenCandidateIds },
         );
         mediastackBatchStats = msResult.stats;
 
@@ -1705,6 +1708,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
           lastFetchAt: mediastackCadence.lastFetchAt?.toISOString() ?? null,
           ageHours: mediastackCadence.ageMs != null ? Math.round(mediastackCadence.ageMs / (1000 * 60 * 60) * 10) / 10 : null,
         } : null,
+        mediastackWidening: mediastackBatchStats?.widening ?? null,
       },
       newsQuality: {
         medianArticles: gdeltMedianArticles,

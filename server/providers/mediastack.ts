@@ -37,6 +37,22 @@ export interface MediastackBatchStats {
   top25NonZeroCount: number;
   top25Total: number;
   top25NonZeroCoveragePct: number;
+  widening?: {
+    firedCount: number;
+    successCount: number;
+    cooldownSkippedCount: number;
+  };
+}
+
+export interface WidenDiagnostic {
+  personId: string;
+  personName: string;
+  plainCount: number;
+  widenedCount: number;
+  chosenCount: number;
+  keywordsUsed: string;
+  widenedApplied: boolean;
+  cooldownSkipped?: boolean;
 }
 
 async function getCachedResponse(cacheKey: string): Promise<{ responseData: string; fetchedAt: Date } | null> {
@@ -340,12 +356,47 @@ export async function fetchMediastackNews(
   }
 }
 
+const WIDEN_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+const WIDEN_COOLDOWN_KEY_PREFIX = "system:mediastack_widen_cooldown:";
+
+async function getWidenCooldown(personId: string): Promise<Date | null> {
+  try {
+    const key = `${WIDEN_COOLDOWN_KEY_PREFIX}${personId}`;
+    const row = await db.select({ responseData: apiCache.responseData })
+      .from(apiCache)
+      .where(eq(apiCache.cacheKey, key))
+      .limit(1);
+    if (row.length > 0 && row[0].responseData) {
+      const parsed = JSON.parse(row[0].responseData);
+      return parsed.lastWidenedAt ? new Date(parsed.lastWidenedAt) : null;
+    }
+  } catch {}
+  return null;
+}
+
+async function setWidenCooldown(personId: string): Promise<void> {
+  const key = `${WIDEN_COOLDOWN_KEY_PREFIX}${personId}`;
+  const now = new Date();
+  const data = JSON.stringify({ lastWidenedAt: now.toISOString() });
+  const farFuture = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  await db.insert(apiCache).values({
+    cacheKey: key,
+    provider: "system",
+    responseData: data,
+    fetchedAt: now,
+    expiresAt: farFuture,
+  }).onConflictDoUpdate({
+    target: apiCache.cacheKey,
+    set: { responseData: data, fetchedAt: now, expiresAt: farFuture },
+  });
+}
+
 export async function fetchMediastackBatch(
   people: Array<{ id: string; name: string; newsQueryWidened?: string | null }>,
   concurrency: number = 3,
   delayMs: number = 400,
   options?: { cacheOnly?: boolean; widenCandidateIds?: Set<string> }
-): Promise<{ data: Map<string, MediastackNewsData>; stats: MediastackBatchStats; isRefresh: boolean; widenedCount: number }> {
+): Promise<{ data: Map<string, MediastackNewsData>; stats: MediastackBatchStats; isRefresh: boolean; widenedCount: number; widenDiagnostics: WidenDiagnostic[] }> {
   const results = new Map<string, MediastackNewsData>();
   const startTime = Date.now();
   let fetched = 0;
@@ -353,6 +404,9 @@ export async function fetchMediastackBatch(
   let failed = 0;
   let apiCallsMade = 0;
   let widenedCount = 0;
+  let widenFiredCount = 0;
+  let widenCooldownSkipped = 0;
+  const widenDiagnostics: WidenDiagnostic[] = [];
   const cacheOnly = options?.cacheOnly ?? false;
   const widenCandidateIds = options?.widenCandidateIds;
   const WIDEN_THRESHOLD = 3;
@@ -365,6 +419,7 @@ export async function fetchMediastackBatch(
       stats: { total: people.length, fetched: 0, cached: 0, failed: people.length, apiCallsMade: 0, durationMs: 0, successCount: 0, nonZeroCount: 0, successCoveragePct: 0, nonZeroCoveragePct: 0, top25NonZeroCount: 0, top25Total: Math.min(25, people.length), top25NonZeroCoveragePct: 0 },
       isRefresh: false,
       widenedCount: 0,
+      widenDiagnostics: [],
     };
   }
 
@@ -382,8 +437,8 @@ export async function fetchMediastackBatch(
         await sleep(delayMs);
       }
 
-      const cacheKey = `mediastack:news:${person.name.replace(/\s+/g, "_").toLowerCase()}`;
-      const cachedData = await getCachedResponse(cacheKey);
+      const primaryCacheKey = `mediastack:news:${person.name.replace(/\s+/g, "_").toLowerCase()}`;
+      const cachedData = await getCachedResponse(primaryCacheKey);
 
       if (cachedData) {
         const parsed = JSON.parse(cachedData.responseData) as MediastackNewsData;
@@ -408,20 +463,68 @@ export async function fetchMediastackBatch(
           person.newsQueryWidened &&
           widenCandidateIds?.has(person.id)
         ) {
+          const lastWidened = await getWidenCooldown(person.id);
+          const cooldownActive = lastWidened &&
+            (Date.now() - lastWidened.getTime()) < WIDEN_COOLDOWN_MS &&
+            result.articleCount24h > 0;
+
+          if (cooldownActive) {
+            console.log(`[Mediastack] Widen cooldown active for ${person.name} (last widened ${Math.round((Date.now() - lastWidened!.getTime()) / 60000)}min ago), skipping`);
+            widenCooldownSkipped++;
+            widenDiagnostics.push({
+              personId: person.id,
+              personName: person.name,
+              plainCount: result.articleCount24h,
+              widenedCount: 0,
+              chosenCount: result.articleCount24h,
+              keywordsUsed: person.name,
+              widenedApplied: false,
+              cooldownSkipped: true,
+            });
+            return;
+          }
+
+          widenFiredCount++;
           await sleep(delayMs);
           const widenedResult = await fetchMediastackNews(person.name, person.id, person.newsQueryWidened);
-          if (widenedResult && widenedResult.articleCount24h > result.articleCount24h) {
-            console.log(`[Mediastack] Widened query improved ${person.name}: ${result.articleCount24h} → ${widenedResult.articleCount24h} articles ("${person.newsQueryWidened}")`);
-            const merged: MediastackNewsData = {
-              ...result,
-              articleCount24h: result.articleCount24h + widenedResult.articleCount24h,
-              topHeadlines: [...result.topHeadlines, ...widenedResult.topHeadlines].slice(0, 3),
-              query: `${person.name} + widened:${person.newsQueryWidened}`,
-            };
-            results.set(person.id, merged);
-            widenedCount++;
-          }
           apiCallsMade++;
+
+          if (widenedResult && widenedResult.articleCount24h > result.articleCount24h) {
+            const chosen: MediastackNewsData = {
+              ...widenedResult,
+              topHeadlines: widenedResult.topHeadlines.slice(0, 3),
+              query: `${person.name} [widened:${person.newsQueryWidened}]`,
+            };
+            results.set(person.id, chosen);
+
+            await setCachedResponse(primaryCacheKey, "mediastack", JSON.stringify(chosen), 2);
+
+            await setWidenCooldown(person.id);
+            widenedCount++;
+
+            console.log(`[Mediastack] Widened pick-best for ${person.name}: plain=${result.articleCount24h} < widened=${widenedResult.articleCount24h}, chose widened ("${person.newsQueryWidened}")`);
+
+            widenDiagnostics.push({
+              personId: person.id,
+              personName: person.name,
+              plainCount: result.articleCount24h,
+              widenedCount: widenedResult.articleCount24h,
+              chosenCount: widenedResult.articleCount24h,
+              keywordsUsed: person.newsQueryWidened!,
+              widenedApplied: true,
+            });
+          } else {
+            await setWidenCooldown(person.id);
+            widenDiagnostics.push({
+              personId: person.id,
+              personName: person.name,
+              plainCount: result.articleCount24h,
+              widenedCount: widenedResult?.articleCount24h ?? 0,
+              chosenCount: result.articleCount24h,
+              keywordsUsed: person.name,
+              widenedApplied: false,
+            });
+          }
         }
       } else {
         failed++;
@@ -465,15 +568,16 @@ export async function fetchMediastackBatch(
     top25NonZeroCount,
     top25Total,
     top25NonZeroCoveragePct: top25Total > 0 ? (top25NonZeroCount / top25Total) * 100 : 0,
+    widening: widenFiredCount > 0 || widenCooldownSkipped > 0
+      ? { firedCount: widenFiredCount, successCount: widenedCount, cooldownSkippedCount: widenCooldownSkipped }
+      : undefined,
   };
 
-  if (widenedCount > 0) {
-    console.log(`[Mediastack] Batch complete: ${fetched} fresh + ${cached} cached + ${failed} failed + ${widenedCount} widened = ${results.size}/${people.length} in ${(durationMs / 1000).toFixed(1)}s (${stats.apiCallsMade} API calls, success=${stats.successCoveragePct.toFixed(0)}%, nonZero=${stats.nonZeroCoveragePct.toFixed(0)}%)`);
-  } else {
-    console.log(`[Mediastack] Batch complete: ${fetched} fresh + ${cached} cached + ${failed} failed = ${results.size}/${people.length} in ${(durationMs / 1000).toFixed(1)}s (${stats.apiCallsMade} API calls, success=${stats.successCoveragePct.toFixed(0)}%, nonZero=${stats.nonZeroCoveragePct.toFixed(0)}%)`);
-  }
+  const widenSuffix = widenedCount > 0 ? ` + ${widenedCount} widened` : "";
+  const cooldownSuffix = widenCooldownSkipped > 0 ? ` (${widenCooldownSkipped} cooldown-skipped)` : "";
+  console.log(`[Mediastack] Batch complete: ${fetched} fresh + ${cached} cached + ${failed} failed${widenSuffix}${cooldownSuffix} = ${results.size}/${people.length} in ${(durationMs / 1000).toFixed(1)}s (${stats.apiCallsMade} API calls, success=${stats.successCoveragePct.toFixed(0)}%, nonZero=${stats.nonZeroCoveragePct.toFixed(0)}%)`);
 
-  return { data: results, stats, isRefresh: !cacheOnly && fetched > 0, widenedCount };
+  return { data: results, stats, isRefresh: !cacheOnly && fetched > 0, widenedCount, widenDiagnostics };
 }
 
 export function isMediastackConfigured(): boolean {
