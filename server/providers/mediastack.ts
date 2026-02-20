@@ -275,14 +275,17 @@ export async function getMonthlyCallEstimate(): Promise<{ dailyCalls: number[]; 
 export async function fetchMediastackNews(
   personName: string,
   personId?: string,
-  searchQueryOverride?: string | null,
+  keywordsOverride?: string | null,
 ): Promise<MediastackNewsData | null> {
   if (!MEDIASTACK_API_KEY) {
     console.log(`[Mediastack] No API key configured, skipping ${personName}`);
     return null;
   }
 
-  const cacheKey = `mediastack:news:${personName.replace(/\s+/g, "_").toLowerCase()}`;
+  const queryText = keywordsOverride || personName;
+  const cacheKey = keywordsOverride
+    ? `mediastack:news:${personName.replace(/\s+/g, "_").toLowerCase()}:widened`
+    : `mediastack:news:${personName.replace(/\s+/g, "_").toLowerCase()}`;
   const CACHE_TTL_HOURS = 2;
 
   try {
@@ -295,13 +298,12 @@ export async function fetchMediastackNews(
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
 
-    const queryText = searchQueryOverride || personName;
     const keywords = encodeURIComponent(queryText);
     const dateFrom = formatDate(yesterday);
     const dateTo = formatDate(now);
 
-    if (searchQueryOverride) {
-      console.log(`[Mediastack] Using search override for ${personName}: "${searchQueryOverride}"`);
+    if (keywordsOverride) {
+      console.log(`[Mediastack] Widened query for ${personName}: "${keywordsOverride}"`);
     }
 
     const url = `${MEDIASTACK_BASE_URL}?access_key=${MEDIASTACK_API_KEY}&keywords=${keywords}&languages=en&sort=published_desc&limit=100&date=${dateFrom},${dateTo}`;
@@ -339,18 +341,21 @@ export async function fetchMediastackNews(
 }
 
 export async function fetchMediastackBatch(
-  people: Array<{ id: string; name: string; searchQueryOverride?: string | null }>,
+  people: Array<{ id: string; name: string; newsQueryWidened?: string | null }>,
   concurrency: number = 3,
   delayMs: number = 400,
-  options?: { cacheOnly?: boolean }
-): Promise<{ data: Map<string, MediastackNewsData>; stats: MediastackBatchStats; isRefresh: boolean }> {
+  options?: { cacheOnly?: boolean; widenCandidateIds?: Set<string> }
+): Promise<{ data: Map<string, MediastackNewsData>; stats: MediastackBatchStats; isRefresh: boolean; widenedCount: number }> {
   const results = new Map<string, MediastackNewsData>();
   const startTime = Date.now();
   let fetched = 0;
   let cached = 0;
   let failed = 0;
   let apiCallsMade = 0;
+  let widenedCount = 0;
   const cacheOnly = options?.cacheOnly ?? false;
+  const widenCandidateIds = options?.widenCandidateIds;
+  const WIDEN_THRESHOLD = 3;
   const limit = pLimit(concurrency);
 
   if (!MEDIASTACK_API_KEY) {
@@ -359,6 +364,7 @@ export async function fetchMediastackBatch(
       data: results,
       stats: { total: people.length, fetched: 0, cached: 0, failed: people.length, apiCallsMade: 0, durationMs: 0, successCount: 0, nonZeroCount: 0, successCoveragePct: 0, nonZeroCoveragePct: 0, top25NonZeroCount: 0, top25Total: Math.min(25, people.length), top25NonZeroCoveragePct: 0 },
       isRefresh: false,
+      widenedCount: 0,
     };
   }
 
@@ -391,11 +397,32 @@ export async function fetchMediastackBatch(
         return;
       }
 
-      const result = await fetchMediastackNews(person.name, person.id, person.searchQueryOverride);
+      const result = await fetchMediastackNews(person.name, person.id);
       if (result) {
         results.set(person.id, result);
         fetched++;
         apiCallsMade++;
+
+        if (
+          result.articleCount24h < WIDEN_THRESHOLD &&
+          person.newsQueryWidened &&
+          widenCandidateIds?.has(person.id)
+        ) {
+          await sleep(delayMs);
+          const widenedResult = await fetchMediastackNews(person.name, person.id, person.newsQueryWidened);
+          if (widenedResult && widenedResult.articleCount24h > result.articleCount24h) {
+            console.log(`[Mediastack] Widened query improved ${person.name}: ${result.articleCount24h} → ${widenedResult.articleCount24h} articles ("${person.newsQueryWidened}")`);
+            const merged: MediastackNewsData = {
+              ...result,
+              articleCount24h: result.articleCount24h + widenedResult.articleCount24h,
+              topHeadlines: [...result.topHeadlines, ...widenedResult.topHeadlines].slice(0, 3),
+              query: `${person.name} + widened:${person.newsQueryWidened}`,
+            };
+            results.set(person.id, merged);
+            widenedCount++;
+          }
+          apiCallsMade++;
+        }
       } else {
         failed++;
       }
@@ -440,9 +467,13 @@ export async function fetchMediastackBatch(
     top25NonZeroCoveragePct: top25Total > 0 ? (top25NonZeroCount / top25Total) * 100 : 0,
   };
 
-  console.log(`[Mediastack] Batch complete: ${fetched} fresh + ${cached} cached + ${failed} failed = ${results.size}/${people.length} in ${(durationMs / 1000).toFixed(1)}s (${stats.apiCallsMade} API calls, success=${stats.successCoveragePct.toFixed(0)}%, nonZero=${stats.nonZeroCoveragePct.toFixed(0)}%)`);
+  if (widenedCount > 0) {
+    console.log(`[Mediastack] Batch complete: ${fetched} fresh + ${cached} cached + ${failed} failed + ${widenedCount} widened = ${results.size}/${people.length} in ${(durationMs / 1000).toFixed(1)}s (${stats.apiCallsMade} API calls, success=${stats.successCoveragePct.toFixed(0)}%, nonZero=${stats.nonZeroCoveragePct.toFixed(0)}%)`);
+  } else {
+    console.log(`[Mediastack] Batch complete: ${fetched} fresh + ${cached} cached + ${failed} failed = ${results.size}/${people.length} in ${(durationMs / 1000).toFixed(1)}s (${stats.apiCallsMade} API calls, success=${stats.successCoveragePct.toFixed(0)}%, nonZero=${stats.nonZeroCoveragePct.toFixed(0)}%)`);
+  }
 
-  return { data: results, stats, isRefresh: !cacheOnly && fetched > 0 };
+  return { data: results, stats, isRefresh: !cacheOnly && fetched > 0, widenedCount };
 }
 
 export function isMediastackConfigured(): boolean {

@@ -455,11 +455,12 @@ export async function runDataIngestion(): Promise<IngestResult> {
         const leaderboardRanks = await db.select({ name: trendingPeople.name, rank: trendingPeople.rank }).from(trendingPeople);
         const rankMap = new Map(leaderboardRanks.map(r => [r.name, r.rank ?? 9999]));
         const peopleSortedByRank = [...people].sort((a, b) => (rankMap.get(a.name) ?? 9999) - (rankMap.get(b.name) ?? 9999));
+        const top25Ids = new Set(peopleSortedByRank.slice(0, 25).map(p => p.id));
         const msResult = await fetchMediastackBatch(
-          peopleSortedByRank.map(p => ({ id: p.id, name: p.name, searchQueryOverride: p.searchQueryOverride })),
+          peopleSortedByRank.map(p => ({ id: p.id, name: p.name, newsQueryWidened: p.newsQueryWidened })),
           3,
           400,
-          { cacheOnly },
+          { cacheOnly, widenCandidateIds: cacheOnly ? undefined : top25Ids },
         );
         mediastackBatchStats = msResult.stats;
 
