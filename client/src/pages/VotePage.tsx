@@ -1659,7 +1659,10 @@ export default function VotePage() {
 
   const [inductionCategoryFilter, setInductionCategoryFilter] = useState<FilterCategory>("All");
   const [inductionSearchQuery, setInductionSearchQuery] = useState("");
-  const [inductionOverlayOpen, setInductionOverlayOpen] = useState(false);
+  const [inductionOverlayOpen, setInductionOverlayOpen] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("section") === "induction";
+  });
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   const [topicsCategoryFilter, setTopicsCategoryFilter] = useState<FilterCategory>("All");

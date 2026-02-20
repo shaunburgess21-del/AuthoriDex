@@ -1029,8 +1029,18 @@ export default function HomePage() {
                   )}
                   <div>
                     {displayPeople.length === 0 && !isLoading && (
-                      <div className="p-8 text-center text-muted-foreground">
-                        {searchQuery ? "No results found" : "No results found for current filters"}
+                      <div className="p-8 text-center">
+                        <p className="text-muted-foreground mb-3">
+                          {searchQuery ? "No results found" : "No results found for current filters"}
+                        </p>
+                        {searchQuery && (
+                          <Link href="/vote?section=induction">
+                            <Button variant="outline" size="sm" data-testid="button-view-induction-list">
+                              <Users className="h-4 w-4 mr-2" />
+                              View Induction List
+                            </Button>
+                          </Link>
+                        )}
                       </div>
                     )}
                     {displayPeople.map((person) => (
