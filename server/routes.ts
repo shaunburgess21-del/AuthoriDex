@@ -37,6 +37,7 @@ import {
 } from "./scoring/sourceHealth";
 import { getLastFullRefreshAt } from "./jobs/live-tick";
 import { getLastRunMeta } from "./jobs/ingest";
+import { getMediastackBudgetSummary } from "./providers/mediastack";
 
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
@@ -4163,6 +4164,13 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
             };
           })(),
         },
+        mediastackBudget: await (async () => {
+          try {
+            return await getMediastackBudgetSummary();
+          } catch (err) {
+            return { error: "Failed to fetch budget summary" };
+          }
+        })(),
         coverage: {
           trackedPeople: Number(coverage.tracked),
           trendingPeople: Number(coverage.trending),

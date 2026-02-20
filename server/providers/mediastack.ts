@@ -445,6 +445,9 @@ export function isMediastackConfigured(): boolean {
 
 const LAST_FETCH_KEY = "system:mediastack:last_fetch_at";
 const MEDIASTACK_REFRESH_INTERVAL_MS = 2 * 60 * 60 * 1000;
+const MEDIASTACK_MONTHLY_LIMIT = 50_000;
+const BUDGET_WARN_PCT = 85;
+const BUDGET_HARD_STOP_PCT = 95;
 
 export async function getLastMediastackFetchAt(): Promise<Date | null> {
   try {
@@ -475,15 +478,53 @@ export async function setLastMediastackFetchAt(timestamp: Date): Promise<void> {
   });
 }
 
-export async function shouldRefreshMediastack(): Promise<{ shouldRefresh: boolean; lastFetchAt: Date | null; ageMs: number | null }> {
+export async function shouldRefreshMediastack(): Promise<{ shouldRefresh: boolean; lastFetchAt: Date | null; ageMs: number | null; budgetThrottled: boolean }> {
   const lastFetch = await getLastMediastackFetchAt();
   if (!lastFetch) {
-    return { shouldRefresh: true, lastFetchAt: null, ageMs: null };
+    return { shouldRefresh: true, lastFetchAt: null, ageMs: null, budgetThrottled: false };
   }
   const ageMs = Date.now() - lastFetch.getTime();
+  const cadenceDue = ageMs >= MEDIASTACK_REFRESH_INTERVAL_MS;
+
+  if (cadenceDue) {
+    try {
+      const budget = await getMonthlyCallEstimate();
+      const usagePct = (budget.projectedMonthly / MEDIASTACK_MONTHLY_LIMIT) * 100;
+      if (usagePct >= BUDGET_HARD_STOP_PCT) {
+        console.warn(`[Mediastack] Budget hard stop: projected ${budget.projectedMonthly} calls/month (${usagePct.toFixed(0)}% of ${MEDIASTACK_MONTHLY_LIMIT} limit) — skipping refresh`);
+        return { shouldRefresh: false, lastFetchAt: lastFetch, ageMs, budgetThrottled: true };
+      }
+      if (usagePct >= BUDGET_WARN_PCT) {
+        console.warn(`[Mediastack] Budget warning: projected ${budget.projectedMonthly} calls/month (${usagePct.toFixed(0)}% of ${MEDIASTACK_MONTHLY_LIMIT} limit)`);
+      }
+    } catch (err) {
+      console.warn("[Mediastack] Budget check failed, proceeding with refresh:", err);
+    }
+  }
+
   return {
-    shouldRefresh: ageMs >= MEDIASTACK_REFRESH_INTERVAL_MS,
+    shouldRefresh: cadenceDue,
     lastFetchAt: lastFetch,
     ageMs,
+    budgetThrottled: false,
+  };
+}
+
+export async function getMediastackBudgetSummary() {
+  const estimate = await getMonthlyCallEstimate();
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const dayOfMonth = now.getDate();
+  const usagePct = Math.round((estimate.projectedMonthly / MEDIASTACK_MONTHLY_LIMIT) * 100);
+  return {
+    callsToday: estimate.dailyCalls[0] ?? 0,
+    dailyHistory7d: estimate.dailyCalls,
+    totalLast7d: estimate.totalThisMonth,
+    projectedMonthly: estimate.projectedMonthly,
+    monthlyLimit: MEDIASTACK_MONTHLY_LIMIT,
+    usagePct,
+    dayOfMonth,
+    daysInMonth,
+    status: usagePct >= BUDGET_HARD_STOP_PCT ? "hard_stop" : usagePct >= BUDGET_WARN_PCT ? "warning" : "ok",
   };
 }

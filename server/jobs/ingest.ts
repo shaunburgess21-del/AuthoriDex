@@ -442,7 +442,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
         const cacheOnly = !mediastackCadence.shouldRefresh;
         const ageHours = mediastackCadence.ageMs != null ? (mediastackCadence.ageMs / (1000 * 60 * 60)).toFixed(1) : "never";
 
-        if (cacheOnly) {
+        if (mediastackCadence.budgetThrottled) {
+          console.warn(`[Ingest] Mediastack budget throttled — projected usage exceeds 95% of monthly limit, using cached data`);
+        } else if (cacheOnly) {
           console.log(`[Ingest] Mediastack cache mode — last refresh ${ageHours}h ago (< 2h threshold), reusing cached data`);
         } else {
           console.log(`[Ingest] Mediastack refresh mode — last refresh ${ageHours}h ago (>= 2h threshold), fetching fresh news`);
@@ -1581,6 +1583,31 @@ export async function runDataIngestion(): Promise<IngestResult> {
         qualityLow: gdeltQualityLow,
         qualityThreshold: GDELT_QUALITY_THRESHOLD,
       },
+      providerNormalization: (() => {
+        const articleCounts: number[] = [];
+        if (newsData) {
+          newsData.forEach((entry: any) => {
+            const count = entry?.articleCount24h ?? entry?.toneCount ?? entry?.searchResults ?? 0;
+            articleCounts.push(count);
+          });
+        }
+        articleCounts.sort((a, b) => a - b);
+        const len = articleCounts.length;
+        const p25 = len > 0 ? articleCounts[Math.floor(len * 0.25)] : 0;
+        const p50 = len > 0 ? articleCounts[Math.floor(len * 0.50)] : 0;
+        const p75 = len > 0 ? articleCounts[Math.floor(len * 0.75)] : 0;
+        const p90 = len > 0 ? articleCounts[Math.floor(len * 0.90)] : 0;
+        const max = len > 0 ? articleCounts[len - 1] : 0;
+        const mean = len > 0 ? Math.round(articleCounts.reduce((a, b) => a + b, 0) / len * 10) / 10 : 0;
+        const zeroCount = articleCounts.filter(c => c === 0).length;
+        return {
+          provider: newsSource,
+          sampleSize: len,
+          zeroCount,
+          percentiles: { p25, p50, p75, p90, max },
+          mean,
+        };
+      })(),
       sourceHealth: {
         news: newsHealth.state,
         newsReason: newsHealth.reason,

@@ -53,7 +53,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Third-Party API Services
 - **Wikipedia API**: Pageview data.
-- **Mediastack API**: Primary news article counts (Professional plan, 50k calls/month).
+- **Mediastack API**: Primary news article counts (Professional plan, 50k calls/month). Budget guardrails: warning at 85% projected monthly usage, hard stop at 95%. Budget metrics surfaced in engine health endpoint.
 - **GDELT API**: Secondary news mention counts (fallback).
 - **Serper.dev API**: Google search results + emergency news fallback.
 - **Google Fonts**: Inter, Space Grotesk, JetBrains Mono.
