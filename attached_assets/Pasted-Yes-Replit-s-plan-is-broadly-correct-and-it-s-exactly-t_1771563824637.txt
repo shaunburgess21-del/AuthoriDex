@@ -1,0 +1,88 @@
+Yes — Replit’s plan is broadly correct and it’s exactly the direction you want (paid provider as primary, keep GDELT/Serper as backups). But there are 3 important tweaks I’d tell Replit to make before you call this “production-ready”, plus 1 usage/budget note.
+
+The 3 important tweaks
+1) Don’t use “even UTC hour” as the cadence trigger
+
+It works, but it’s brittle:
+
+If an ingestion run is delayed and crosses the hour boundary, you can get unexpected patterns.
+
+If you later change ingestion frequency, it gets weird.
+
+Better: store last_mediastack_fetch_at (in api_cache system key) and refresh if now - last >= 2h.
+That keeps the cadence stable regardless of ingestion drift/restarts.
+
+What to tell Replit:
+
+Replace currentUtcHour % 2 === 0 with a persisted timer in api_cache: system:mediastack:last_fetch_at. Refresh if older than 2 hours.
+
+2) “Coverage >= 70%” is the wrong success criterion for Mediastack
+
+With Mediastack, a “successful request” might still return 0 articles, but that doesn’t mean the provider failed; it might mean the query is too strict or the person name needs aliasing.
+
+So coverage should be defined as:
+
+request succeeded (HTTP 200) AND we got a pagination.total (even if total = 0)
+
+plus optionally: result quality (e.g., median total >= threshold) to detect provider-wide issues.
+
+What to tell Replit:
+
+For Mediastack, treat success as “request succeeded and returned pagination.total”, not “articleCount > 0”. Track both successCoveragePct and nonZeroCoveragePct separately.
+
+3) Per-person fallback should trigger for Mediastack blind spots too — but not on 1–2 zeros
+
+This is the big one. Elon dropping because one source returns 0 is exactly what you’re solving.
+
+But with paid news APIs, “0” can be legit sometimes. So don’t fire fallback too aggressively.
+
+A sane rule:
+
+Trigger per-person fallback only if:
+
+news_count < 2 for 3 consecutive refreshes (note: refreshes, not hourly ingestions), and
+
+wiki/search are strong (above p50) or they are in top 25.
+
+Also: per-person fallback should try GDELT first (cheap) or Serper (costly). Since you want to rely on Mediastack, I’d do:
+
+Primary: Mediastack
+
+Per-person fallback chain (if Mediastack looks wrong for that person): Serper (because it catches “Google News presence” even when API indexing misses)
+
+GDELT can remain tertiary, but it’s unreliable.
+
+What to tell Replit:
+
+Update per-person fallback thresholds for Mediastack: use “3 consecutive refreshes with news_count < 2” (not hourly), and gate by wiki/search strength or rank. Prefer Serper for the targeted patch when Mediastack is returning repeated zeros for a high-signal person.
+
+Budget note you should not miss
+
+Replit is implementing 1 Mediastack call per person per refresh. Great.
+
+But if you later add:
+
+per-person retries,
+
+alias expansion (e.g., Elon Musk + “Musk” + “Tesla CEO”),
+
+multi-language,
+
+per-person fallback calls,
+you’ll eat the 50k headroom quickly.
+
+So: 2-hour cadence is safe, but keep per-person Mediastack retries to 1 retry max and push extra validation/fallback to Serper only for a small capped set.
+
+Exactly what I’d message Replit (copy/paste)
+
+Send this:
+
+Looks good overall. Please make 3 tweaks before we finalize:
+
+Replace currentUtcHour % 2 === 0 with a persisted cadence timer in api_cache (e.g., system:mediastack:last_fetch_at) so we refresh if last fetch was >= 2 hours ago (stable across drift/restarts).
+
+For Mediastack, change “coverage” logic: success should mean request succeeded and returned pagination.total (even if 0). Track two metrics: successCoveragePct and nonZeroCoveragePct so we don’t misclassify legit zeros as outages.
+
+Update per-person fallback for Mediastack blind spots: trigger only after 3 consecutive Mediastack refreshes with news_count < 2 for high-signal people (top 25 or wiki/search > p50). When triggered, use Serper for the targeted patch (cap e.g. 10–15 per run, cooldown 90m).
+Keep provider tracking in snapshot diagnostics + run meta (newsProviderUsed).
+Once this is in, we’ll run a parity test on 10 people (Mediastack vs Serper patched) to confirm rankings don’t shift unexpectedly.
