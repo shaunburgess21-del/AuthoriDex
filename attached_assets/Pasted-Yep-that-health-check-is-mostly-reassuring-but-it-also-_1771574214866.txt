@@ -1,0 +1,107 @@
+Yep — that health check is mostly reassuring, but it also contains two red flags and one likely “instrumentation regression” that you should have Replit fix ASAP (because without it you’re flying blind).
+
+What looks good ✅
+
+Leaderboard populated (100 people), scheduler running, ingestion cadence looks normal.
+
+Wiki + Search at 100% coverage is great.
+
+Mediastack cadence “persisted timer working” + low call usage is exactly what you want on the 2-hour plan.
+
+The 3 concerning bits 🚩
+1) “newsSource in diagnostics is unset”
+
+If you’ve built a provider chain (Mediastack → GDELT → Serper), you must tag every snapshot with:
+
+newsProviderUsed at run level, and
+
+diagnostics.newsSource (or similar) at person level.
+
+If it’s unset, you cannot tell whether:
+
+Mediastack is actually being used,
+
+you’re silently falling back to GDELT/Serper,
+
+or you’re reusing cache.
+
+This is a must-fix.
+
+2) “No system:lastRunMeta / system:healthSummary records found”
+
+This is also a big deal. It means one of:
+
+the keys changed names, or
+
+the writes were removed during refactors, or
+
+the code writes into memory only and not api_cache, or
+
+a schema/DB transaction path isn’t being reached (early return).
+
+But Replit is simultaneously claiming “persisted timer working” and “budget tracking active” — so some system keys are being written. That makes it very likely the meta/summary keys are:
+
+using a different prefix,
+
+or being written to a different table/environment,
+
+or being overwritten/serialized wrong.
+
+You want those keys back so you can see provider performance, coverage, failures, and fallback counts at a glance.
+
+3) “No source health/degradation records found”
+
+If you previously built a health state machine (HEALTHY/DEGRADED/OUTAGE/RECOVERY), then “no records” usually means:
+
+the persistence call isn’t happening,
+
+or it’s gated behind admin/auth and never runs,
+
+or it’s writing to a different key than you’re querying.
+
+Even if everything is healthy, you should still see state = HEALTHY persisted.
+
+Also: 61% news coverage is not automatically “bad”
+
+With a paid provider, it’s common that some people legitimately have 0 articles in the last window (especially smaller names). The key is: is the top cohort (top 25–40) covered?
+So I’d ask Replit to split coverage metrics into:
+
+SuccessCoveragePct (API call succeeded + pagination.total returned)
+
+NonZeroCoveragePct (pagination.total > 0)
+
+Top25 NonZeroCoveragePct
+
+Because 61% nonzero across all 100 could still be perfectly fine if top 25 are ~90–100% nonzero.
+
+What you should tell Replit (copy/paste)
+
+Send this:
+
+Thanks. Overall looks stable, but we need to fix instrumentation immediately:
+
+newsSource tagging is missing in recent snapshot diagnostics. Please ensure every snapshot writes diagnostics.newsSource (mediastack/gdelt/serper/cache) + run-level newsProviderUsed.
+
+I can’t find system:lastRunMeta or system:healthSummary in api_cache anymore. Please locate where these are being written (key name change?) and restore persistence so we can monitor runs without DB digging.
+
+Same for source health/degradation — even if healthy, I expect persisted HEALTHY state. Please confirm the persistence path is executing and the query is looking at the correct keys.
+
+Update coverage reporting to split successCoveragePct vs nonZeroCoveragePct, and also report top25 nonZeroCoveragePct, so 0-article cases don’t get misclassified as outages.
+
+Quick sanity check you can ask for
+
+Ask Replit for one run’s meta blob printed from the DB/cache:
+
+last Mediastack fetch timestamp
+
+provider used this run
+
+successCoveragePct + nonZeroCoveragePct
+
+top25 nonZeroCoveragePct
+
+per-person fallback counts (triggered/patched/skipped)
+
+If they can’t produce that in one response, the observability layer is still broken.
+
+If you paste their next reply here, I’ll tell you whether it’s properly fixed and whether their coverage numbers mean “real-world normal” vs “integration issue.”
