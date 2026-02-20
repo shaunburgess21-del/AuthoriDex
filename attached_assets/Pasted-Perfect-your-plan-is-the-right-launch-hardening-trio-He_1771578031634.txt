@@ -1,0 +1,189 @@
+Perfect — your plan is the right “launch-hardening trio.” Here’s how I’d implement each one cleanly, quickly, and without introducing new instability, with concrete rules + suggested schema keys so it slots into what you already have (baselines, EMA, source_health_state, diagnostics).
+
+1) EMA Hold Rule (anti-whiplash)
+Goal
+
+Prevent a single glitchy hour (near-zero news) from dragging the velocity EMA down.
+
+Core idea
+
+When a reading looks like a provider artifact, do EMA hold (keep prior EMA), and optionally mark the snapshot as “held” so the UI/admin can explain it.
+
+Minimal rule (fast + effective)
+
+Treat a news reading as an artifact if all are true:
+
+Provider globally healthy (or at least not degraded):
+
+system:source_health_state.mediastack.state in ["healthy","warn"]
+(NOT in degraded/down)
+
+Person had a meaningful baseline:
+
+baseline.newsCountP50 >= BASE_MIN (e.g., 2 or 3)
+
+Sudden collapse relative to baseline:
+
+currentCount <= max(ABS_FLOOR, baselineP50 * DROP_RATIO)
+Suggested: DROP_RATIO = 0.1 (90% drop), ABS_FLOOR = 0
+
+Not corroborated by cached freshness:
+
+fresh=true but count is near-zero OR fresh=false with “unexpected low”
+(either way we’re shielding the EMA)
+
+Then:
+
+newsEma = prevNewsEma (hold)
+
+optionally still update “mass” using a safer fill-forward (your cached reuse already does this), but do not update velocity from the artifact.
+
+Where to apply
+
+Apply the hold specifically to the velocity news component (or whatever derived feature feeds velocity). If your velocity is based on deltas, you can set:
+
+newsVelocityInput = prevNewsEma (so delta becomes ~0)
+
+Snapshot instrumentation
+
+Add to diagnostics:
+
+diagnostics: {
+  emaHold: {
+    applied: true,
+    reason: "artifact_drop_vs_baseline",
+    provider: "mediastack",
+    baselineP50: 18,
+    currentCount: 0,
+    dropRatio: 0.0
+  }
+}
+Edge cases to avoid false holds
+
+If provider state is warn because of legit low global coverage (e.g. night hours), you might still hold too often. To reduce that:
+
+Only apply the hold if overall coverage metric is good (you already have coverage/quality). Example: healthSummary.coveragePct > 0.7.
+
+People who genuinely go quiet (e.g., niche authors) → baselineP50 filter prevents over-holding.
+
+Suggested constants (launch defaults)
+
+BASE_MIN = 2
+
+DROP_RATIO = 0.10
+
+MIN_COVERAGE_PCT_FOR_HOLD = 0.65 (optional gate)
+
+MAX_HOLDS_PER_PERSON_PER_DAY = 6 (optional, to avoid “stuck” behavior)
+
+2) Canary People List (fast early warning)
+Goal
+
+Detect platform-wide provider failure before aggregate metrics “catch up,” and before users see weirdness.
+
+Implementation
+
+Add system:canaryList (static list of person_ids) in config, or hardcode initially.
+
+Each hourly scoring run (or each 2-hour news refresh), compute:
+
+canary_bad = count(canary where (fresh=false OR count<=CANARY_LOW) AND baselineP50>=BASE_MIN)
+
+canary_total = count(canary where baselineP50>=BASE_MIN)
+
+canary_bad_ratio = canary_bad / max(1, canary_total)
+
+Trigger a fast health flip if:
+
+canary_bad >= 4 or canary_bad_ratio >= 0.5
+
+Then:
+
+set system:source_health_state.mediastack.state = "degraded" (or down if extreme)
+
+set a canaryTrip object in system:healthSummary
+
+Persisted state + hysteresis
+
+To avoid flapping:
+
+require 2 consecutive canary trips to go from healthy → degraded
+
+require 3 consecutive healthy canary checks to return to healthy
+
+Store counters in:
+
+system:source_health_state.mediastack.canaryTripStreak
+
+system:source_health_state.mediastack.canaryRecoverStreak
+
+Expose in engine-health endpoint
+
+Include:
+
+canary.badCount
+
+canary.badRatio
+
+canary.badPeople (IDs/names)
+
+canary.lastTripAt
+
+Pick canaries (10 people, diverse, high baseline)
+
+Pick from your existing 100 tracked people, across:
+
+Tech (Elon, Sam Altman, Jensen)
+
+Politics (Biden/Trump type, local SA figure if tracked)
+
+Entertainment (Taylor Swift, Beyoncé)
+
+Sports (Messi/Ronaldo)
+
+Business (Jeff Bezos)
+
+“News magnet” (anyone reliably covered)
+
+Key requirement: baselineP50 should be comfortably > 2.
+
+3) Minimal Raw Evidence Storage (debug superpower)
+Goal
+
+When someone asks “why did X drop,” you can answer with receipts.
+
+What to store (lean)
+
+On each snapshot, store a compact JSON object:
+
+newsEvidence: {
+  provider: "mediastack",
+  fetchedAt: "2026-02-20T07:00:00Z",
+  fresh: true,
+  countRaw: 12,
+  uniqueCount: 10,
+  medianAgeMin: 47,
+  sample: [
+    { "t": "Title here", "s": "Reuters", "ts": "2026-02-20T06:10:00Z", "h": "url_hash" },
+    ...
+  ]
+}
+
+sample: top 3–5 articles only
+
+h: hash(url) or hash(title+source+timestamp) if no URL
+
+medianAgeMin: helps catch “stale but non-zero”
+
+Schema change
+
+If you have trend_snapshots table, add:
+
+news_evidence JSONB NULL (Postgres) / TEXT storing JSON (SQLite) / similar.
+
+When to write it
+
+Only write evidence when:
+
+fresh=true OR when fallback applied OR when emaHold applied
+(so you don’t bloat every row unnecessarily)
