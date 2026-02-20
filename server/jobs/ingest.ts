@@ -715,6 +715,33 @@ export async function runDataIngestion(): Promise<IngestResult> {
       }
     }
     
+    const newsBaselineMap = new Map<string, number>();
+    const searchBaselineMap = new Map<string, number>();
+    {
+      const newsValues = new Map<string, number[]>();
+      const searchValues = new Map<string, number[]>();
+      for (const snap of historicalSnapshots) {
+        if ((snap.newsCount ?? 0) > 0) {
+          const arr = newsValues.get(snap.personId) ?? [];
+          arr.push(snap.newsCount!);
+          newsValues.set(snap.personId, arr);
+        }
+        if ((snap.searchVolume ?? 0) > 0) {
+          const arr = searchValues.get(snap.personId) ?? [];
+          arr.push(snap.searchVolume!);
+          searchValues.set(snap.personId, arr);
+        }
+      }
+      newsValues.forEach((vals, pid) => {
+        vals.sort((a: number, b: number) => a - b);
+        newsBaselineMap.set(pid, vals[Math.floor(vals.length / 2)]);
+      });
+      searchValues.forEach((vals, pid) => {
+        vals.sort((a: number, b: number) => a - b);
+        searchBaselineMap.set(pid, vals[Math.floor(vals.length / 2)]);
+      });
+    }
+
     console.log(`[Ingest] Bootstrap maps: ${lastNonZeroNewsMap.size} people with non-zero news history, ${lastNonZeroSearchMap.size} with non-zero search history`);
     
     console.log(`[Ingest] Found ${mostRecentMap.size} recent snapshots (EMA), ${snapshot24hMap.size} 24h snapshots, ${snapshot7dMap.size} 7d snapshots`);
@@ -1138,20 +1165,33 @@ export async function runDataIngestion(): Promise<IngestResult> {
           }
         }
         
-        // EMA HOLD RULE: When the provider is globally healthy but an individual person
-        // shows a suspicious drop (80%+ from baseline), hold the prior value instead of
-        // letting the bad reading contaminate the EMA. This prevents leaderboard whiplash
-        // from provider artifacts (missed queries, temporary API blind spots).
         let newsEmaHeld = false;
+        let newsHoldDiag: Record<string, any> | null = null;
         if (!newsUsedFallback && !newsNeedsOutageFallback && !hasPerPersonFallback && news) {
           const isProviderHealthy = newsHealth.state === "HEALTHY" || newsHealth.state === "RECOVERY";
-          const hasStrongBaseline = prevNewsCount >= 8;
-          const isHugeDrop = newsCount < prevNewsCount * 0.2; // 80%+ drop
-          if (isProviderHealthy && hasStrongBaseline && isHugeDrop) {
-            newsCount = prevNewsCount;
-            newsDelta = mostRecent?.newsDelta ?? 0;
-            newsEmaHeld = true;
-            newsEmaHeldCount++;
+          if (isProviderHealthy) {
+            const rawNewsCount = newsCount;
+            const bp50 = newsBaselineMap.get(person.id);
+            const hasBaseline = bp50 !== undefined && bp50 >= 2;
+            const baselineHold = hasBaseline &&
+              rawNewsCount <= bp50! * 0.1 &&
+              prevNewsCount >= bp50! * 0.6;
+            const floorHold = !hasBaseline && prevNewsCount >= 8 &&
+              rawNewsCount < prevNewsCount * 0.2;
+
+            if (baselineHold || floorHold) {
+              newsCount = prevNewsCount;
+              newsDelta = mostRecent?.newsDelta ?? 0;
+              newsEmaHeld = true;
+              newsEmaHeldCount++;
+              newsHoldDiag = {
+                reason: baselineHold ? "baseline_artifact" : "floor_artifact",
+                prevCount: prevNewsCount,
+                currentCount: rawNewsCount,
+                baselineP50: bp50 ?? null,
+                dropRatio: prevNewsCount > 0 ? +(rawNewsCount / prevNewsCount).toFixed(3) : 0,
+              };
+            }
           }
         }
 
@@ -1189,17 +1229,33 @@ export async function runDataIngestion(): Promise<IngestResult> {
           }
         }
 
-        // EMA HOLD for search: same logic as news, applied after search fallback
         let searchEmaHeld = false;
+        let searchHoldDiag: Record<string, any> | null = null;
         if (!searchUsedFallback && !searchNeedsOutageFallback && serper) {
           const isSearchHealthy = searchHealth.state === "HEALTHY" || searchHealth.state === "RECOVERY";
-          const hasStrongSearchBaseline = prevSearchVolume >= 200;
-          const isHugeSearchDrop = searchVolume < prevSearchVolume * 0.2;
-          if (isSearchHealthy && hasStrongSearchBaseline && isHugeSearchDrop) {
-            searchVolume = prevSearchVolume;
-            searchDelta = mostRecent?.searchDelta ?? 0;
-            searchEmaHeld = true;
-            searchEmaHeldCount++;
+          if (isSearchHealthy) {
+            const rawSearchVolume = searchVolume;
+            const sbp50 = searchBaselineMap.get(person.id);
+            const hasSearchBaseline = sbp50 !== undefined && sbp50 >= 50;
+            const baselineHold = hasSearchBaseline &&
+              rawSearchVolume <= sbp50! * 0.1 &&
+              prevSearchVolume >= sbp50! * 0.6;
+            const floorHold = !hasSearchBaseline && prevSearchVolume >= 200 &&
+              rawSearchVolume < prevSearchVolume * 0.2;
+
+            if (baselineHold || floorHold) {
+              searchVolume = prevSearchVolume;
+              searchDelta = mostRecent?.searchDelta ?? 0;
+              searchEmaHeld = true;
+              searchEmaHeldCount++;
+              searchHoldDiag = {
+                reason: baselineHold ? "baseline_artifact" : "floor_artifact",
+                prevVolume: prevSearchVolume,
+                currentVolume: rawSearchVolume,
+                baselineP50: sbp50 ?? null,
+                dropRatio: prevSearchVolume > 0 ? +(rawSearchVolume / prevSearchVolume).toFixed(3) : 0,
+              };
+            }
           }
         }
 
@@ -1302,8 +1358,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
             newsSource: hasPerPersonFallback ? "serper_news" : newsSource,
             newsIsRefresh: newsSource === "mediastack" ? (mediastackCadence?.shouldRefresh ?? true) : true,
             ...(hasPerPersonFallback ? { fallbackReason: news?._fallbackReason ?? "per_person_zero_streak" } : {}),
-            ...(newsEmaHeld ? { newsEmaHeld: true, newsRawCount: news?.articleCount24h ?? 0 } : {}),
-            ...(searchEmaHeld ? { searchEmaHeld: true, searchRawVolume: serper?.searchVolume ?? 0 } : {}),
+            ...(newsEmaHeld ? { newsEmaHeld: true, newsRawCount: news?.articleCount24h ?? 0, newsHoldDetail: newsHoldDiag } : {}),
+            ...(searchEmaHeld ? { searchEmaHeld: true, searchRawVolume: serper?.searchVolume ?? 0, searchHoldDetail: searchHoldDiag } : {}),
           },
           evidence: {
             newsHeadlines: (news?.topHeadlines ?? []).slice(0, 3),
