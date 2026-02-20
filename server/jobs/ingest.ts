@@ -19,6 +19,7 @@ import {
   loadHealthFromDB,
   saveHealthState,
   computeDegradationGovernor,
+  updateCanaryStreak,
 } from "../scoring/sourceHealth";
 import {
   updateCatchUpMode,
@@ -1047,12 +1048,19 @@ export async function runDataIngestion(): Promise<IngestResult> {
       canaryReport = await evaluateCanaries(newsData, serperData);
       console.log(`[Canary] ${canaryReport.resolved}/${canaryReport.canaryCount} resolved | News fails: ${canaryReport.newsFailures}, Search fails: ${canaryReport.searchFailures}${canaryReport.newsAlert ? " | NEWS ALERT" : ""}${canaryReport.searchAlert ? " | SEARCH ALERT" : ""}`);
 
-      if (canaryReport.newsAlert && newsHealth.state === "HEALTHY") {
-        console.warn(`[Canary] Accelerating news health to DEGRADED (${canaryReport.newsFailures} canaries failed)`);
+      const newsCanary = updateCanaryStreak("news", canaryReport.newsAlert);
+      const searchCanary = updateCanaryStreak("search", canaryReport.searchAlert);
+
+      if (newsCanary.tripStreak > 0 || searchCanary.tripStreak > 0) {
+        console.log(`[Canary] Streaks: News trip=${newsCanary.tripStreak} recover=${newsCanary.recoverStreak} | Search trip=${searchCanary.tripStreak} recover=${searchCanary.recoverStreak}`);
+      }
+
+      if (newsCanary.shouldAccelerate) {
+        console.warn(`[Canary] Accelerating news health to DEGRADED (${newsCanary.tripStreak} consecutive canary trips, ${canaryReport.newsFailures} canaries failed)`);
         updateSourceHealth("news", { apiFailed: true, isGlobalOutage: false, dataReturned: false });
       }
-      if (canaryReport.searchAlert && searchHealth.state === "HEALTHY") {
-        console.warn(`[Canary] Accelerating search health to DEGRADED (${canaryReport.searchFailures} canaries failed)`);
+      if (searchCanary.shouldAccelerate) {
+        console.warn(`[Canary] Accelerating search health to DEGRADED (${searchCanary.tripStreak} consecutive canary trips, ${canaryReport.searchFailures} canaries failed)`);
         updateSourceHealth("search", { apiFailed: true, isGlobalOutage: false, dataReturned: false });
       }
     } catch (e) {

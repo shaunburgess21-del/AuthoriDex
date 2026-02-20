@@ -31,6 +31,8 @@ export interface SourceHealthStatus {
   prevCoveragePct?: number;
   coverageDropRuns?: number;
   consecutiveRecoveryRuns?: number;
+  canaryTripStreak?: number;
+  canaryRecoverStreak?: number;
 }
 
 export interface SourceHealthSnapshot {
@@ -81,6 +83,8 @@ function serializeHealth(health: SourceHealthSnapshot): Record<string, any> {
     prevCoveragePct: s.prevCoveragePct ?? null,
     coverageDropRuns: s.coverageDropRuns ?? 0,
     consecutiveRecoveryRuns: s.consecutiveRecoveryRuns ?? 0,
+    canaryTripStreak: s.canaryTripStreak ?? 0,
+    canaryRecoverStreak: s.canaryRecoverStreak ?? 0,
   });
   return {
     news: serialize(health.news),
@@ -101,6 +105,8 @@ function deserializeHealth(data: Record<string, any>): SourceHealthSnapshot {
     prevCoveragePct: d.prevCoveragePct ?? undefined,
     coverageDropRuns: d.coverageDropRuns ?? 0,
     consecutiveRecoveryRuns: d.consecutiveRecoveryRuns ?? 0,
+    canaryTripStreak: d.canaryTripStreak ?? 0,
+    canaryRecoverStreak: d.canaryRecoverStreak ?? 0,
   });
   return {
     news: deserialize(data.news || {}),
@@ -415,6 +421,43 @@ export function computeDegradationGovernor(
   if (dropRuns === 1) return 0.75;
   if (dropRuns === 2) return 0.50;
   return 0.25;
+}
+
+const CANARY_TRIP_THRESHOLD = 2;
+const CANARY_RECOVER_THRESHOLD = 3;
+
+export function updateCanaryStreak(
+  source: "news" | "search",
+  canaryAlert: boolean
+): { shouldAccelerate: boolean; tripStreak: number; recoverStreak: number } {
+  const status = currentHealth[source];
+
+  if (canaryAlert) {
+    status.canaryTripStreak = (status.canaryTripStreak ?? 0) + 1;
+    status.canaryRecoverStreak = 0;
+
+    const shouldAccelerate =
+      status.canaryTripStreak >= CANARY_TRIP_THRESHOLD &&
+      status.state === "HEALTHY";
+
+    return {
+      shouldAccelerate,
+      tripStreak: status.canaryTripStreak,
+      recoverStreak: 0,
+    };
+  } else {
+    status.canaryRecoverStreak = (status.canaryRecoverStreak ?? 0) + 1;
+
+    if (status.canaryRecoverStreak >= CANARY_RECOVER_THRESHOLD) {
+      status.canaryTripStreak = 0;
+    }
+
+    return {
+      shouldAccelerate: false,
+      tripStreak: status.canaryTripStreak ?? 0,
+      recoverStreak: status.canaryRecoverStreak,
+    };
+  }
 }
 
 export function resetHealthState(): void {
