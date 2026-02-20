@@ -1,0 +1,72 @@
+We need to build out Vote CMS + Vote page data plumbing for 3 areas: (1) Underrated/Overrated (native per leaderboard person), (2) Curate Profile (native per leaderboard person), and (3) Induction Queue (admin-managed candidates).
+
+IMPORTANT CONSTRAINTS
+- Do NOT redesign any frontend UI. Card designs are final.
+- Do NOT break existing DB/schema. Prefer additive changes or reuse existing tables if they already exist.
+- Avoid “limit(100)” style issues. If lists are capped, add pagination or remove limits for admin screens.
+- Keep naming consistent: “leaderboard people” = the list powering the 100 celebs (trackedPeople/trendingPeople main leaderboard).
+- If you already created tables/models for these, reuse them—only extend.
+
+PART A — UnderrATED / OVERRATED (Frontend + Admin)
+1) Frontend: ensure the Underrated/Overrated section displays a card for EVERY leaderboard person.
+   - Diagnose why some are missing (likely API limit, join/filter bug, or not auto-generating rows).
+   - Implement a robust “sync” approach:
+     Option A (preferred): U/O cards are generated/ensured automatically for each leaderboard person at fetch time (upsert), OR via a background sync job.
+     Option B: create a “Generate Missing” admin action that inserts missing U/O rows for all leaderboard people.
+   - The cards must remain native (no uploads).
+   - Visibility states required per card: Live (Active), Inactive (Visible but dimmed), Archived (Hidden). (Match whatever visibility enum we already use elsewhere.)
+
+2) Admin (Voting CMS → Underrated/Overrated):
+   - Replace “coming soon” state with a full list view showing all U/O cards for all leaderboard people.
+   - Each row/card in admin should show: celebrity name, category, current visibility, total votes (if available), and quick actions:
+     - Visibility dropdown
+     - Optional “Featured” toggle if supported in this module; if not needed, skip.
+   - Add “Sync from Leaderboard” button to ensure all leaderboard people have U/O cards (idempotent).
+
+PART B — CURATE PROFILE (Admin only; frontend already complete)
+3) Admin (Voting CMS → Curate Profile):
+   - Build list view that mirrors what exists on frontend (100 cards).
+   - Must show all profile curation items and allow management:
+     - Visibility dropdown (Live/Inactive/Archived)
+     - Total votes / current winning image (if available)
+   - Add “Sync from Leaderboard” to ensure every leaderboard person has a Curate Profile curation card (idempotent).
+4) Frontend: NO CHANGES besides ensuring it’s still reading from the same data source. If it’s already correct, just wire admin to the same underlying table/query.
+
+PART C — INDUCTION QUEUE (Admin creates; frontend displays)
+5) Remove hardcoded induction cards from the Vote page frontend. Replace with DB-driven list.
+6) Admin (Voting CMS → Induction Queue):
+   - Build CRUD UI to create/manage induction candidates:
+     Fields: fullName, category, shortDescription, optional image upload, optional social links (X/IG/wiki/etc), optional “reason for nomination”.
+     Status states: Pending, Approved, Rejected, Archived.
+   - Provide Approve/Reject actions.
+7) Frontend: Induction Queue section pulls from API: show only Pending (and maybe Approved if you want to show “recently inducted”).
+8) Approval flow:
+   - On Approve: create/insert the person into the leaderboard system (trackedPeople/trendingPeople or whatever is the canonical table).
+   - After the person is added to leaderboard, trigger ONE unified hook that ensures all “native-per-person” modules exist:
+     - Create Underrated/Overrated card for that person (if missing)
+     - Create Curate Profile card for that person (if missing)
+     - Create Weekly Up/Down market for that person (if missing)
+     - Add them to Weekly Jackpot eligibility (if jackpot uses per-person markers) (if missing)
+     - Make them selectable in Top Gainer market candidate lists (no auto-add into existing 6 markets unless safe; at minimum ensure admin can add them easily)
+   - This hook must be idempotent and safe to re-run.
+
+PART D — API + DATA MODEL NOTES
+9) If tables already exist for U/O and Curate Profile, reuse them. If not, create minimal tables:
+   - underrated_overrated_cards: id, personId (unique), visibility, featured?, createdAt, updatedAt
+   - profile_curation_cards: id, personId (unique), visibility, featured?, createdAt, updatedAt
+   - induction_candidates: id, name, category, description, imageUrl, links(json), status, createdAt, updatedAt
+10) Add API endpoints (auth for admin routes):
+   - GET /api/vote/underrated (public) returns list for frontend
+   - GET /api/admin/vote/underrated (admin)
+   - POST /api/admin/vote/underrated/sync (admin, idempotent)
+   - Similar for /curate-profile
+   - GET /api/vote/induction (public)
+   - Admin CRUD: /api/admin/induction (list/create/update) and /api/admin/induction/:id/approve, /reject
+11) Ensure no hidden limits prevent the full 100+ results from showing in admin or frontend.
+
+PART E — VERIFICATION CHECKLIST
+- Confirm U/O frontend shows 100/100 leaderboard people.
+- Confirm Voting CMS shows full list for U/O and Curate Profile (no “coming soon”).
+- Confirm Induction Queue is fully DB-driven and hardcoded items removed.
+- Confirm approving an inductee auto-creates U/O + Curate Profile + Up/Down + Jackpot markers safely (idempotent).
+- Confirm visibility toggles affect frontend display correctly.
