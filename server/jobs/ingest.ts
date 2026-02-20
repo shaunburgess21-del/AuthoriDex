@@ -8,6 +8,7 @@ import { fetchSerperBatch, fetchSerperNewsBatch } from "../providers/serper";
 import { fetchMediastackBatch, isMediastackConfigured, MediastackBatchStats, shouldRefreshMediastack } from "../providers/mediastack";
 import { computeTrendScore } from "../scoring/trendScore";
 import { refreshSourceStats } from "../scoring/sourceStats";
+import { evaluateCanaries, CanaryReport } from "../scoring/canaryMonitor";
 import {
   calculateGlobalHealthMetrics,
   updateSourceHealth,
@@ -942,6 +943,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
     // Track API failure stats for logging
     let newsApiUsedFallback = 0;
     let searchApiUsedFallback = 0;
+    let newsEmaHeldCount = 0;
+    let searchEmaHeldCount = 0;
     const newsFailed = newsData.size === 0;
     const serperFailed = serperData.size === 0;
     
@@ -1039,6 +1042,23 @@ export async function runDataIngestion(): Promise<IngestResult> {
       console.log(`[Ingest] Degradation governor: News=${(newsGovernorFactor * 100).toFixed(0)}%, Search=${(searchGovernorFactor * 100).toFixed(0)}%`);
     }
 
+    let canaryReport: CanaryReport | null = null;
+    try {
+      canaryReport = await evaluateCanaries(newsData, serperData);
+      console.log(`[Canary] ${canaryReport.resolved}/${canaryReport.canaryCount} resolved | News fails: ${canaryReport.newsFailures}, Search fails: ${canaryReport.searchFailures}${canaryReport.newsAlert ? " | NEWS ALERT" : ""}${canaryReport.searchAlert ? " | SEARCH ALERT" : ""}`);
+
+      if (canaryReport.newsAlert && newsHealth.state === "HEALTHY") {
+        console.warn(`[Canary] Accelerating news health to DEGRADED (${canaryReport.newsFailures} canaries failed)`);
+        updateSourceHealth("news", { apiFailed: true, isGlobalOutage: false, dataReturned: false });
+      }
+      if (canaryReport.searchAlert && searchHealth.state === "HEALTHY") {
+        console.warn(`[Canary] Accelerating search health to DEGRADED (${canaryReport.searchFailures} canaries failed)`);
+        updateSourceHealth("search", { apiFailed: true, isGlobalOutage: false, dataReturned: false });
+      }
+    } catch (e) {
+      console.warn("[Canary] Failed to evaluate canaries:", e);
+    }
+
     for (const person of people) {
       try {
         const wiki = wikiData.get(person.id);
@@ -1110,6 +1130,23 @@ export async function runDataIngestion(): Promise<IngestResult> {
           }
         }
         
+        // EMA HOLD RULE: When the provider is globally healthy but an individual person
+        // shows a suspicious drop (80%+ from baseline), hold the prior value instead of
+        // letting the bad reading contaminate the EMA. This prevents leaderboard whiplash
+        // from provider artifacts (missed queries, temporary API blind spots).
+        let newsEmaHeld = false;
+        if (!newsUsedFallback && !newsNeedsOutageFallback && !hasPerPersonFallback && news) {
+          const isProviderHealthy = newsHealth.state === "HEALTHY" || newsHealth.state === "RECOVERY";
+          const hasStrongBaseline = prevNewsCount >= 8;
+          const isHugeDrop = newsCount < prevNewsCount * 0.2; // 80%+ drop
+          if (isProviderHealthy && hasStrongBaseline && isHugeDrop) {
+            newsCount = prevNewsCount;
+            newsDelta = mostRecent?.newsDelta ?? 0;
+            newsEmaHeld = true;
+            newsEmaHeldCount++;
+          }
+        }
+
         // SEARCH: Use fallback if source is in OUTAGE state
         const searchNeedsOutageFallback = searchHealth.state === "OUTAGE" || searchHealth.state === "DEGRADED";
         
@@ -1141,6 +1178,20 @@ export async function runDataIngestion(): Promise<IngestResult> {
             searchDelta = Math.round(fallbackSearchDelta * fallbackDecay);
             searchUsedFallback = true;
             searchApiUsedFallback++;
+          }
+        }
+
+        // EMA HOLD for search: same logic as news, applied after search fallback
+        let searchEmaHeld = false;
+        if (!searchUsedFallback && !searchNeedsOutageFallback && serper) {
+          const isSearchHealthy = searchHealth.state === "HEALTHY" || searchHealth.state === "RECOVERY";
+          const hasStrongSearchBaseline = prevSearchVolume >= 200;
+          const isHugeSearchDrop = searchVolume < prevSearchVolume * 0.2;
+          if (isSearchHealthy && hasStrongSearchBaseline && isHugeSearchDrop) {
+            searchVolume = prevSearchVolume;
+            searchDelta = mostRecent?.searchDelta ?? 0;
+            searchEmaHeld = true;
+            searchEmaHeldCount++;
           }
         }
 
@@ -1238,11 +1289,17 @@ export async function runDataIngestion(): Promise<IngestResult> {
           },
           fresh: {
             wiki: !!wiki,
-            news: !newsUsedFallback && (news?.articleCount24h ?? 0) > 0,
-            search: !searchUsedFallback && (serper?.searchVolume ?? 0) > 0,
+            news: !newsUsedFallback && !newsEmaHeld && (news?.articleCount24h ?? 0) > 0,
+            search: !searchUsedFallback && !searchEmaHeld && (serper?.searchVolume ?? 0) > 0,
             newsSource: hasPerPersonFallback ? "serper_news" : newsSource,
             newsIsRefresh: newsSource === "mediastack" ? (mediastackCadence?.shouldRefresh ?? true) : true,
             ...(hasPerPersonFallback ? { fallbackReason: news?._fallbackReason ?? "per_person_zero_streak" } : {}),
+            ...(newsEmaHeld ? { newsEmaHeld: true, newsRawCount: news?.articleCount24h ?? 0 } : {}),
+            ...(searchEmaHeld ? { searchEmaHeld: true, searchRawVolume: serper?.searchVolume ?? 0 } : {}),
+          },
+          evidence: {
+            newsHeadlines: (news?.topHeadlines ?? []).slice(0, 3),
+            newsProvider: hasPerPersonFallback ? "serper_news" : newsSource,
           },
           stab: scoreResult.stabDetail ? {
             ...scoreResult.stabDetail,
@@ -1482,6 +1539,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
         ` (${lastNonZeroSearchMap.size} bootstrapped from history)` : '';
       console.log(`[Graceful Degradation] News fallback: ${newsApiUsedFallback}/${people.length}${newsBootstrapped}, Search fallback: ${searchApiUsedFallback}/${people.length}${searchBootstrapped}`);
     }
+    if (newsEmaHeldCount > 0 || searchEmaHeldCount > 0) {
+      console.log(`[EMA Hold] News held: ${newsEmaHeldCount}/${people.length}, Search held: ${searchEmaHeldCount}/${people.length} (provider healthy, individual artifact suppressed)`);
+    }
     
     // Log rank churn
     console.log(`[Rank Churn] Top 10: +${enteredTop10}/-${exitedTop10} | Top 20: +${enteredTop20}/-${exitedTop20}`);
@@ -1544,6 +1604,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
       fallbacks: {
         news: newsApiUsedFallback,
         search: searchApiUsedFallback,
+        emaHeld: {
+          news: newsEmaHeldCount,
+          search: searchEmaHeldCount,
+        },
         perPerson: {
           triggered: perPersonFallbackStats.triggered,
           succeeded: perPersonFallbackStats.succeeded,
@@ -1608,6 +1672,20 @@ export async function runDataIngestion(): Promise<IngestResult> {
           mean,
         };
       })(),
+      canary: canaryReport ? {
+        resolved: canaryReport.resolved,
+        newsFailures: canaryReport.newsFailures,
+        searchFailures: canaryReport.searchFailures,
+        newsAlert: canaryReport.newsAlert,
+        searchAlert: canaryReport.searchAlert,
+        results: canaryReport.results.map(r => ({
+          name: r.name,
+          newsCount: r.newsCount,
+          searchVolume: r.searchVolume,
+          newsOk: r.newsOk,
+          searchOk: r.searchOk,
+        })),
+      } : null,
       sourceHealth: {
         news: newsHealth.state,
         newsReason: newsHealth.reason,
