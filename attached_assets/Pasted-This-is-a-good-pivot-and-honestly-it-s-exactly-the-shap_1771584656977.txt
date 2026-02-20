@@ -1,0 +1,131 @@
+This is a good pivot, and honestly it’s exactly the shape I’d want for launch: keep Mediastack “simple + predictable,” and only spend extra calls when the result is clearly underperforming. ✅
+
+A few things I’d sanity-check / tweak (small changes, big leverage):
+
+1) The biggest correctness question: cache keys
+
+Replit said: “widening only fires… with separate cache keys so it doesn’t interfere with normal cache reuse.”
+
+That can be fine, but it can also accidentally create a “sticky low” situation if you aren’t careful:
+
+If your normal hourly ticks reuse plain-name cache, and widening writes to a different key, then you might widen successfully on refresh… but your subsequent non-refresh ticks could still reuse the low plain-name cache value.
+
+Best practice for your design:
+If widening finds better coverage, you want that to become the cached value used for the next 2 hours.
+
+So either:
+
+Option A (recommended): keep one cache key per person per provider (e.g., news:mediastack:<personId>) and store metadata about whether the refresh used widen or not (keywordsUsed, widenedApplied).
+
+Option B: if you keep separate keys, make sure the read path prefers the “best available” value for reuse (e.g., read merged/selected result key, not just plain).
+
+Quick check: confirm that after a refresh tick where widening fires, the cached news value reused on the next hour is the widened/merged result (not the original low one).
+
+2) Widen candidates should include canaries, not only top-25
+
+Replit said they build widen candidates from top-25.
+
+I’d include:
+
+Top-25
+
+All canaries
+
+And optionally your “known tricky names list” (even if outside top-25)
+
+Because canaries are explicitly meant to detect failures early — if canary results are low due to query issues, you’ll get false alarms.
+
+3) Add a widening cooldown (prevents budget creep)
+
+Right now it sounds like:
+
+on refresh ticks, if <3 articles, do second call.
+
+If a person always returns 1–2 by plain name, widening will fire every refresh (12 times/day for that person). That’s still not huge, but across multiple people it can creep.
+
+Add a simple per-person cooldown:
+
+“don’t widen again for this person for the next N refreshes unless it’s 0”
+Example:
+
+widen if count < 3 AND (lastWidenedAt older than 6 hours OR count == 0)
+
+Persist it in api_cache meta or source_health_state (tiny).
+
+4) Be careful merging results (avoid double counting)
+
+If widening returns articles overlapping the plain query, “merge” should deduplicate by:
+
+URL if available
+
+else hash(title + source + published_at)
+
+If you can’t dedup reliably, the safe approach is:
+
+choose the better of the two queries (higher unique count / newer median age) rather than summing.
+
+For launch, “pick best” beats “union merge” if dedup is uncertain.
+
+5) Pick widen strings that are Mediastack-friendly (and low-noise)
+
+Your initial widened phrases look sensible. A couple quick “style rules”:
+
+Prefer two-term disambiguators: "Musk Tesla", "Armstrong Coinbase", "Saylor MicroStrategy".
+
+Avoid overly broad single tokens like "Musk" alone (too noisy).
+
+For ambiguous names: use company + surname rather than full name:
+
+"Coinbase Armstrong" may work better than "Brian Armstrong" on some systems.
+
+Also: consider setting languages=en for consistency unless you intentionally want global/multilingual.
+
+6) Instrument it so you can tell if widening is actually helping
+
+In diagnostics / healthSummary, log for each refresh tick:
+
+plainCount
+
+widenedCount
+
+chosenCount
+
+keywordsUsed
+
+widenedApplied: true/false
+
+Then add one aggregated metric:
+
+widening.firedCount
+
+widening.successCount (cases where widened > plain)
+
+This lets you audit ROI: “Are we spending extra calls for real benefit?”
+
+7) One more thought: don’t revert Mediastack to only plain name if you already have safe overrides
+
+If you add news_query_override (Mediastack-safe), you can use it as the primary phrase for some people instead of plain name. Then widening becomes “fallback to alternate phrase.”
+
+Example for Elon:
+
+primary phrase: "Elon Musk" (fine)
+
+widened phrase: "Musk Tesla"
+
+Example for Brian:
+
+primary phrase: "Brian Armstrong Coinbase" (simple phrase, no OR)
+
+widened phrase: "Armstrong Coinbase"
+
+This reduces widening frequency.
+
+Bottom line
+
+Replit’s implementation is the right move.
+
+If you do only 2 quick follow-ups, make them:
+
+Ensure cache reuse uses the widened/merged chosen value, not plain-name stale low values.
+
+Include canaries in widen candidates + add a cooldown to avoid budget creep.
