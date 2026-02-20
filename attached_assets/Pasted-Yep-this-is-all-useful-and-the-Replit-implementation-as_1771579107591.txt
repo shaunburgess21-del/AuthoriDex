@@ -1,0 +1,116 @@
+Yep — this is all useful, and the Replit implementation (as described) is directionally correct. The only things I’d still tighten (small deltas, big payoff) are about false positives/false holds, explainability, and making sure your “held” values don’t accidentally mask real signal.
+
+Below is my take, mapped to what Replit built, and the “do we change anything?” shortlist.
+
+1) EMA Hold Rule — looks good, but tweak the trigger so it’s baseline-aware
+What Replit did
+
+Holds when provider is globally healthy/RECOVERY and person shows an 80%+ drop.
+
+Adds absolute floors like prevCount >= 8 (news) / prevVolume >= 200 (search) before holding.
+
+Overwrites the inputs before computeTrendScore, so EMA won’t get poisoned.
+
+That’s solid and safe for launch.
+
+What I’d adjust (low effort)
+
+Make the hold decision use baselineP50 when available, and keep the absolute floors as a fallback.
+
+Reason: prevCount can be high for a single spike hour (e.g., one breaking story hour), and then a normal reversion can look like an “80% drop” even though it’s legit. BaselineP50 avoids holding during “return to normal.”
+
+Recommended hold condition (news):
+Hold if provider healthy AND either:
+
+baseline-based: baselineP50 >= 2 AND current <= baselineP50 * 0.1 AND prevEma >= baselineP50 * 0.6 (optional sanity)
+OR
+
+floor-based (your existing): prevCount >= 8 AND current <= prevCount * 0.2
+
+This keeps your conservative approach but reduces false holds after spike hours.
+
+Add one small diagnostic detail
+
+Right now you flag newsEmaHeld=true. I’d also log:
+
+reason
+
+prevCount, currentCount, baselineP50 if present, dropRatio
+
+Even if you don’t want the full block, those 4 fields are huge for debugging.
+
+2) Canary list + hysteresis — excellent, and you chose the right “degrade not outage” behavior
+
+Replit fixed the one important issue (canary shouldn’t force OUTAGE), and then added streak-based hysteresis:
+
+degrade only after 2 consecutive trips
+
+clear after 3 healthy checks
+
+persisted streak counters
+
+That’s exactly the kind of stability you want.
+
+One more guardrail I’d add
+
+Require that canaries are “eligible” (baselineP50 or baselineMean above a threshold). If a canary’s typical news is low, they’re a bad canary and will create noise.
+
+So compute canary_bad_ratio over only:
+
+baselineP50 >= 3 (or similar)
+
+Also, for “near-zero” define it as:
+
+count == 0 OR (count <= 1 AND baselineP50 >= 5)
+
+That makes canary trips more meaningful.
+
+3) Evidence storage in diagnostics — good for launch; add 2 fields if cheap
+
+Storing headlines + provider in existing diagnostics is perfect for launch (no schema migration).
+
+If it’s easy with what Mediastack gives you, add:
+
+fetchedAt
+
+medianAgeMin (or just newestAgeMin)
+
+These are super useful to distinguish “provider returned old stuff” vs “provider returned nothing.”
+
+If Serper doesn’t provide headlines in your pipeline, that’s fine. Don’t force it.
+
+The only “must-do” change I’d consider right now
+
+If you have time for only one refinement:
+
+✅ Baseline-aware EMA hold
+
+It reduces the only remaining class of visible weirdness: false holds after spikes.
+
+Everything else is “nice-to-have.”
+
+Primary vs simultaneous provider usage — still stick with your current approach
+
+Your current “Mediastack primary + GDELT shadow/fallback + Serper per-person patch” is the best setup for a 10-day launch.
+
+Running both simultaneously into scoring (even with normalization) will introduce:
+
+double-counting risk
+
+misaligned count dynamics
+
+harder-to-debug “why did score change?” explanations
+
+Shadow mode + divergence monitoring is the sweet spot.
+
+Quick sanity checklist to run in prod after this patch
+
+Held-rate metric: % of people per run with newsEmaHeld
+
+If it’s > ~3–5% on a normal day, your hold trigger is too sensitive.
+
+Canary trips: verify 2-trip degrade actually fires during a simulated failure.
+
+Leaderboard stability: compare “top 10 churn per hour” before vs after.
+
+If you want to be extra safe: tell Replit to implement the baseline-aware hold as described above, without changing any architecture. That’s a small patch and the last big robustness win before launch.
