@@ -4143,6 +4143,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
             return {
               news: fmt(h.news), search: fmt(h.search), wiki: fmt(h.wiki),
               lastRun: runMeta ? {
+                runId: runMeta.runId ?? null,
                 newsProviderUsed: runMeta.newsProviderUsed,
                 newsFreshCoveragePct: Math.round(runMeta.newsFreshCoveragePct),
                 searchFreshCoveragePct: Math.round(runMeta.searchFreshCoveragePct),

@@ -77,6 +77,7 @@ async function computeNewsCandidates(
 export const SNAPSHOT_DIAGNOSTICS_VERSION = 1;
 
 export interface LastRunMeta {
+  runId: string;
   newsProviderUsed: "mediastack" | "gdelt" | "serper_news";
   newsFreshCoveragePct: number;
   searchFreshCoveragePct: number;
@@ -447,7 +448,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
           console.log(`[Ingest] Mediastack refresh mode — last refresh ${ageHours}h ago (>= 2h threshold), fetching fresh news`);
         }
 
-        const peopleSortedByRank = [...people].sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
+        const leaderboardRanks = await db.select({ name: trendingPeople.name, rank: trendingPeople.rank }).from(trendingPeople);
+        const rankMap = new Map(leaderboardRanks.map(r => [r.name, r.rank ?? 9999]));
+        const peopleSortedByRank = [...people].sort((a, b) => (rankMap.get(a.name) ?? 9999) - (rankMap.get(b.name) ?? 9999));
         const msResult = await fetchMediastackBatch(
           peopleSortedByRank.map(p => ({ id: p.id, name: p.name })),
           3,
@@ -1655,7 +1658,14 @@ export async function runDataIngestion(): Promise<IngestResult> {
 
     console.log(`[HEALTH SUMMARY] ${JSON.stringify(healthSummary)}`);
 
+    await saveHealthState();
+    await saveNewsProviderPref();
+
+    const successDuration = Date.now() - startTime;
+    sourceTimings.total = successDuration;
+
     _lastRunMeta = {
+      runId,
       newsProviderUsed: newsSource,
       newsFreshCoveragePct: newsCoveragePctActual,
       searchFreshCoveragePct: searchCoveragePctActual,
@@ -1679,15 +1689,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
         topTriggered: perPersonFallbackStats.topTriggered.slice(0, 5),
       },
     };
+    (healthSummary as any).runId = runId;
 
-    await persistSystemKey(LAST_RUN_META_KEY, _lastRunMeta);
-    await persistSystemKey(HEALTH_SUMMARY_KEY, healthSummary);
-    await saveHealthState();
-    await saveNewsProviderPref();
-
-    const successDuration = Date.now() - startTime;
-    sourceTimings.total = successDuration;
-    await releaseIngestionLock(runId, errors > 0 ? "failed" : "completed", {
+    const runStatus = errors > 0 ? "failed" : "completed";
+    await releaseIngestionLock(runId, runStatus, {
       snapshotsWritten: processed,
       peopleProcessed: processed,
       errorCount: errors,
@@ -1696,6 +1701,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
       hourBucket: hourTimestamp,
       healthSummary,
     });
+
+    await persistSystemKey(LAST_RUN_META_KEY, _lastRunMeta);
+    await persistSystemKey(HEALTH_SUMMARY_KEY, healthSummary);
 
   } catch (error) {
     console.error("[Ingest] Fatal error:", error);
