@@ -1,0 +1,83 @@
+This is the right direction, and Replit’s plan makes sense — but I’d treat it as “✅ good, with 3 things to verify / tighten” before you consider the instrumentation problem fully solved.
+
+What looks correct & beneficial ✅
+1) Persisting run meta + health summary
+
+Persisting these to api_cache is exactly what you want:
+
+system:lastRunMeta
+
+system:healthSummary
+
+(already) system:source_health_state
+
+That turns your engine from “works but we can’t prove why” into “observable + debuggable”, especially after restarts.
+
+2) Adding Top-25 non-zero coverage
+
+Also correct. Your users mainly care about the top of the board, and this answers the key question:
+
+“Is the news source actually covering the celebrities people look at?”
+
+3) Engine-health endpoint surfacing persisted state
+
+Very useful. After a restart, in-memory _lastRunMeta will be empty until the next run — so the endpoint needs a DB fallback.
+
+The 3 things I’d ask Replit to verify / adjust 🔧
+A) “Top-25” should be based on current rank, not “displayOrder”
+
+Replit says: “sort by displayOrder.” That may be fine if displayOrder == rank (or is always kept consistent). But in most systems:
+
+displayOrder = UI ordering, maybe curated
+
+rank = dynamic, based on fame_index
+
+If you want top-25 ranked, compute top-25 using current leaderboard rank (from trending_people.rank after the last run), or at least from tracked_people.rank if that’s your canonical rank source.
+
+Tell Replit:
+
+Please confirm what “rank” means in your DB. If tracked_people doesn’t represent live rank, then top-25 coverage must be computed against trending_people order (latest run), not displayOrder.
+
+B) Confirm newsSource tagging is truly present in recent snapshots
+
+Replit says it’s already there. Your earlier health check said it was unset. That could mean:
+
+old snapshots from before the fix,
+
+or a code path that writes diagnostics differently (fallback path vs normal path),
+
+or the UI reads a different diagnostics field.
+
+Simple verification request:
+
+Please run a query on the latest completed run’s snapshots and show the distribution of diagnostics.newsSource values (mediastack/gdelt/serper_news/cache/undefined). We should see near-100% non-null now.
+
+C) Make sure persistence is done “after commit”
+
+If they write system:lastRunMeta inside the same transaction before the run is fully finalized, a crash could leave you with “meta says completed but DB write didn’t”.
+
+Best practice:
+
+Persist the instrumentation after the ingestion transaction commits and run status is updated to completed.
+
+Store a run_id inside lastRunMeta and healthSummary, so you can correlate.
+
+Ask:
+
+Confirm lastRunMeta/healthSummary persistence happens after the run is marked completed and includes the run_id + finishedAt.
+
+What you should tell Replit (copy/paste)
+
+Looks good. Please verify 3 items:
+
+Top-25 coverage should be based on the current leaderboard rank (preferably trending_people order), not displayOrder unless those are guaranteed identical.
+
+Prove diagnostics.newsSource is now present by showing the latest run’s snapshot distribution (counts per provider + null count).
+
+Confirm persisted system:lastRunMeta and system:healthSummary are written post-commit and include run_id + finishedAt so we can correlate.
+
+Your Mediastack plan (2-hour cadence) is still the right call
+
+Given your 50k plan, refreshing everyone every 2 hours is clean math and avoids complexity. Once you upgrade, you just change the cadence.
+
+If you paste Replit’s verification query outputs (especially the newsSource distribution + top-25 coverage definition), I’ll sanity-check whether it’s truly production-grade now.
