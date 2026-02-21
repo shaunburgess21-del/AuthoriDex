@@ -1,0 +1,122 @@
+This is a really good debugging chain from Replit — and the conclusion is correct:
+
+SearchVolume (mass) is flowing
+
+SearchDelta (velocity) is structurally broken
+
+So your “Score Drivers” initially showing Search 0% wasn’t a UI/weighting issue; it was an actual pipeline gap.
+
+Why the current Serper delta method fails
+
+Replit nailed it: deriving “recentness” from organic results requires dates, and Google organic results rarely include a reliable date field. So recentResults ~ 0 → delta ~ 0 forever.
+
+That’s a design mismatch.
+
+Should you compute searchDelta from (current - previous) / previous?
+
+Yes — but do it carefully, or you’ll introduce noisy spikes and weird behavior when the denominator is small.
+
+Replit’s proposed formula is the right shape, but needs guardrails.
+
+The main pitfalls
+
+Small denominators explode
+If prevSearchVolume is 1–5 and current jumps to 20, you get huge ratios.
+
+SearchVolume is a composite 0–100
+It might not be linear or stable between hours, so raw percent change can be jittery.
+
+You already have smoothing + caps
+So you want a delta that’s meaningful, not one that triggers caps constantly.
+
+The best “launch-safe” implementation
+
+Instead of pure ratio, use a bounded, normalized change that behaves well:
+
+Recommended delta (bounded)
+
+Let:
+
+curr = searchVolume
+
+prev = prevSearchVolume
+
+diff = curr - prev
+
+Compute:
+
+searchDeltaRaw = diff / max(prev, 20) ← denominator floor prevents explosions
+Then clamp:
+
+searchDelta = clamp(searchDeltaRaw, -0.5, +0.5) (or tighter like ±0.35)
+
+This gives you:
+
+sensitivity when volumes change meaningfully
+
+no insane spikes when prev is tiny
+
+Even better (still simple): EWMA baseline
+
+If you have access to a rolling baseline (even just EMA of searchVolume), do:
+
+baseline = prevSearchEma (or a 24h/7d rolling average from snapshots)
+
+searchDeltaRaw = (curr - baseline) / max(baseline, 20)
+
+That mirrors your wiki “deviation from baseline” spirit more than “hour-to-hour wiggle.”
+
+If you don’t have that baseline yet, start with prev and add the denominator floor + clamp.
+
+Where to compute it
+
+Replit is right: compute it in ingest.ts, not inside Serper provider.
+
+Reason:
+
+provider should return raw readings (searchVolume)
+
+pipeline computes deltas consistently with the rest of your model
+
+So:
+
+keep Serper’s broken delta but ignore it
+
+compute searchDelta in ingest from snapshot history
+
+Quick checklist for a clean rollout
+
+Backfill vs forward-only
+
+You don’t need to backfill the whole DB for launch.
+
+Just start writing non-zero searchDelta going forward.
+
+Your movers breakdown will immediately become more meaningful.
+
+Instrumentation
+Log per run:
+
+avg abs(searchDelta)
+
+% people with non-zero searchDelta
+
+top 5 biggest searchDelta values (for sanity)
+
+Cap alignment
+Make sure your existing rate limit / EMA cap isn’t constantly triggered by searchDelta. If it is, tighten clamp.
+
+One more nuance: do you want delta to reflect “direction” or “magnitude”?
+
+For score attribution, you’ll want signed delta.
+For “driver %” you’re already doing abs() percentages — good.
+
+Verdict
+
+Replit’s diagnosis is excellent and the fix is correct, but I’d tell them:
+
+✅ Compute searchDelta from snapshot history
+✅ Use denominator floor + clamp (don’t use raw percent change unbounded)
+✅ Prefer baseline deviation when you can
+
+If you want, paste your current wikiDelta formula + the range your other deltas typically fall into (newsDelta, wikiDelta), and I’ll recommend the exact clamp bounds so SearchDelta lives in a comparable range and doesn’t dominate.
