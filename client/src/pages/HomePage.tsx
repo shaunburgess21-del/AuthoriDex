@@ -983,7 +983,7 @@ export default function HomePage() {
                       </TouchTooltip>
                       <TouchTooltip content="Fading momentum or dropping in rank" side="bottom" className="text-xs max-w-[200px]">
                         <span className="inline-flex items-center gap-1 cursor-help opacity-80" data-testid="legend-cooling">
-                          <TrendingDown className="h-3 w-3 text-blue-400/60" />
+                          <TrendingDown className="h-3 w-3 text-sky-300" />
                           Cooling
                         </span>
                       </TouchTooltip>

@@ -96,7 +96,7 @@ function getExceptionalIndicator(
   }
   if (delta != null && delta <= thresholds.negDeltaP10 && delta <= -3) {
     const hasRankDrop = rankChange != null && rankChange <= thresholds.negRankChangeP10;
-    return { icon: TrendingDown, color: "text-blue-400/60", label: "Cooling", description: `${hasRankDrop ? 'Fading momentum + rank drop' : 'Fading momentum'}\n${metrics}`, triggersHotMover: false };
+    return { icon: TrendingDown, color: "text-sky-300", label: "Cooling", description: `${hasRankDrop ? 'Fading momentum + rank drop' : 'Fading momentum'}\n${metrics}`, triggersHotMover: false };
   }
 
   return null;
