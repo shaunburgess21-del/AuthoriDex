@@ -61,12 +61,13 @@ function computePercentileThresholds(people: ExtendedPerson[]): PercentileThresh
   const negativeDeltas = deltas.filter(v => v < 0).sort((a, b) => a - b);
 
   const p5Index = (arr: number[]) => Math.max(0, Math.ceil(arr.length * 0.05) - 1);
+  const p10Index = (arr: number[]) => Math.max(0, Math.ceil(arr.length * 0.10) - 1);
 
   return {
     rankChangeP90: positiveRC.length > 0 ? positiveRC[p5Index(positiveRC)] : 999,
     deltaP90: positiveDeltas.length > 0 ? positiveDeltas[p5Index(positiveDeltas)] : 999,
-    negRankChangeP10: negativeRC.length > 0 ? negativeRC[p5Index(negativeRC)] : -999,
-    negDeltaP10: negativeDeltas.length > 0 ? negativeDeltas[p5Index(negativeDeltas)] : -999,
+    negRankChangeP10: negativeRC.length > 0 ? negativeRC[p10Index(negativeRC)] : -999,
+    negDeltaP10: negativeDeltas.length > 0 ? negativeDeltas[p10Index(negativeDeltas)] : -999,
   };
 }
 
