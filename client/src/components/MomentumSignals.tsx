@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Newspaper, BookOpen, BarChart3, Trophy, AlertTriangle, Clock, ChevronDown, ChevronUp, ExternalLink, Info } from "lucide-react";
+import { Search, Newspaper, BookOpen, BarChart3, Trophy, AlertTriangle, Clock, ChevronDown, ChevronUp, ExternalLink, Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -221,13 +221,32 @@ export function MomentumSignals({ personId }: { personId: string }) {
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-blue-500" />
                 <span className="font-semibold text-sm">Search Interest</span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-search-tooltip" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[200px] text-xs">
+                    Search Interest is a composite activity score, not follower count.
+                  </TooltipContent>
+                </Tooltip>
               </div>
               <DeltaBadge pct={signals.search.deltaPct} />
             </div>
           </CardHeader>
           <CardContent className="pt-4 space-y-3">
-            <div className="text-2xl font-bold" data-testid="text-search-volume">
-              {signals.search.volume}<span className="text-sm font-normal text-muted-foreground ml-1">activity score</span>
+            <div className="flex items-baseline justify-between gap-2 flex-wrap" data-testid="text-search-volume">
+              <div className="text-2xl font-bold">
+                {signals.search.volume}<span className="text-sm font-normal text-muted-foreground ml-1">activity score</span>
+              </div>
+              <div className="flex items-center gap-1 text-xs" data-testid="text-search-trend">
+                {signals.search.deltaPct > 5 ? (
+                  <><TrendingUp className="h-3 w-3 text-green-500" /><span className="text-green-500">Rising</span></>
+                ) : signals.search.deltaPct < -5 ? (
+                  <><TrendingDown className="h-3 w-3 text-red-500" /><span className="text-red-500">Falling</span></>
+                ) : (
+                  <><Minus className="h-3 w-3 text-muted-foreground" /><span className="text-muted-foreground">Steady</span></>
+                )}
+              </div>
             </div>
             {signals.search.relatedSearches.length > 0 ? (
               <div>
@@ -261,6 +280,7 @@ export function MomentumSignals({ personId }: { personId: string }) {
                     </Badge>
                   ))}
                 </div>
+                <p className="text-[10px] text-muted-foreground/50 mt-1.5" data-testid="text-top-searches-hint">Top searches appear when available</p>
               </div>
             ) : (
               <div data-testid="text-search-empty">
