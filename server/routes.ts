@@ -711,12 +711,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             const top = sources.find(s => s.status === "active");
             if (top) {
-              const driverLabels: Record<string, string> = {
+              const moverEntry = result.find(m => m.id === id);
+              const isUp = (moverEntry?.change24h ?? 0) >= 0;
+              const upLabels: Record<string, string> = {
                 news: "News coverage up",
                 wiki: "Wiki views up",
                 search: "Search interest up",
               };
-              dominantDriver = driverLabels[top.key] ?? null;
+              const downLabels: Record<string, string> = {
+                news: "News coverage shifting",
+                wiki: "Wiki views shifting",
+                search: "Search interest shifting",
+              };
+              dominantDriver = (isUp ? upLabels : downLabels)[top.key] ?? null;
             }
 
             sourceAttribution.set(id, { sources, activeSources: sources.filter(s => s.status === "active").length, dominantDriver });
@@ -1311,12 +1318,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
             relatedSearches: (evidence.relatedSearches ?? []).slice(0, 5),
             peopleAlsoAsk: (evidence.peopleAlsoAsk ?? []).slice(0, 5),
           },
-          news: {
-            count: latest.newsCount,
-            deltaPct: newsDeltaPct,
-            headlines: (evidence.newsHeadlines ?? []).slice(0, 3),
-            provider: evidence.newsProvider ?? fresh.newsSource ?? "unknown",
-          },
+          news: await (async () => {
+            let displayCount = latest.newsCount;
+            let recentPeak: number | null = null;
+            let recentPeakAge: string | null = null;
+
+            if (latest.newsCount === 0) {
+              const recentNonZero = await db
+                .select({
+                  newsCount: trendSnapshots.newsCount,
+                  timestamp: trendSnapshots.timestamp,
+                })
+                .from(trendSnapshots)
+                .where(and(
+                  eq(trendSnapshots.personId, id),
+                  eq(trendSnapshots.snapshotOrigin, 'ingest'),
+                  sql`${trendSnapshots.newsCount} > 0`,
+                  sql`${trendSnapshots.timestamp} >= NOW() - INTERVAL '24 hours'`,
+                ))
+                .orderBy(desc(trendSnapshots.newsCount))
+                .limit(1);
+
+              if (recentNonZero.length > 0) {
+                recentPeak = recentNonZero[0].newsCount;
+                const hoursAgo = Math.round((Date.now() - recentNonZero[0].timestamp.getTime()) / (1000 * 60 * 60));
+                recentPeakAge = hoursAgo < 1 ? "just now" : hoursAgo === 1 ? "~1h ago" : `~${hoursAgo}h ago`;
+              }
+            }
+
+            return {
+              count: displayCount,
+              recentPeak,
+              recentPeakAge,
+              deltaPct: newsDeltaPct,
+              headlines: (evidence.newsHeadlines ?? []).slice(0, 3),
+              provider: evidence.newsProvider ?? fresh.newsSource ?? "unknown",
+            };
+          })(),
           wiki: {
             views: latest.wikiPageviews ?? 0,
             deltaPct: wikiDeltaPct,

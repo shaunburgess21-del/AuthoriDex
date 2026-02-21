@@ -22,6 +22,8 @@ interface MomentumData {
     };
     news: {
       count: number;
+      recentPeak?: number | null;
+      recentPeakAge?: string | null;
       deltaPct: number;
       headlines: string[];
       provider: string;
@@ -317,8 +319,21 @@ export function MomentumSignals({ personId }: { personId: string }) {
           </CardHeader>
           <CardContent className="pt-4 space-y-3">
             <div className="text-2xl font-bold" data-testid="text-news-count">
-              {formatNum(signals.news.count)}<span className="text-sm font-normal text-muted-foreground ml-1">articles (24h)</span>
+              {signals.news.count === 0 && signals.news.recentPeak ? (
+                <>
+                  {formatNum(signals.news.recentPeak)}<span className="text-sm font-normal text-muted-foreground ml-1">articles tracked recently</span>
+                </>
+              ) : (
+                <>
+                  {formatNum(signals.news.count)}<span className="text-sm font-normal text-muted-foreground ml-1">articles (24h)</span>
+                </>
+              )}
             </div>
+            {signals.news.count === 0 && signals.news.recentPeak && signals.news.recentPeakAge && (
+              <p className="text-[10px] text-muted-foreground/60" data-testid="text-news-recent-peak">
+                {signals.news.recentPeak} articles detected {signals.news.recentPeakAge} &middot; current tick shows 0
+              </p>
+            )}
             {signals.news.headlines.length > 0 ? (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1.5">Top Headlines</p>
@@ -332,7 +347,7 @@ export function MomentumSignals({ personId }: { personId: string }) {
               </div>
             ) : (
               <p className="text-[10px] text-muted-foreground/60" data-testid="text-news-empty">
-                {signals.news.count > 0 ? "No major headlines in the last 24h" : "No headlines tracked yet"}
+                {signals.news.count > 0 ? "No major headlines in the last 24h" : (signals.news.recentPeak ? "Headlines from recent coverage no longer cached" : "No headlines tracked yet")}
               </p>
             )}
             <p className="text-[10px] text-muted-foreground/60 capitalize">via {signals.news.provider}</p>
