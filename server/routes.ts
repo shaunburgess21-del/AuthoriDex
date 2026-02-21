@@ -1142,22 +1142,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? Math.round(((latest.wikiPageviews! - prev.wikiPageviews) / prev.wikiPageviews) * 100)
         : 0;
 
-      const totalAbsDelta = Math.abs(latest.searchDelta ?? 0) + Math.abs(latest.newsDelta ?? 0) + Math.abs(latest.wikiDelta ?? 0);
       const change24hAbs = Math.abs(trending?.change24h ?? 0);
-      const hasSignificantMovement = change24hAbs >= 2.0 || totalAbsDelta > 0.15;
+      const hasSignificantMovement = change24hAbs >= 2.0;
 
       let driverBreakdown: { search: number; news: number; wiki: number } | null = null;
-      if (hasSignificantMovement && totalAbsDelta > 0) {
-        const searchContrib = Math.abs(latest.searchDelta ?? 0) * 0.40;
-        const newsContrib = Math.abs(latest.newsDelta ?? 0) * 0.35;
-        const wikiContrib = Math.abs(latest.wikiDelta ?? 0) * 0.25;
-        const totalContrib = searchContrib + newsContrib + wikiContrib;
-        if (totalContrib > 0) {
-          driverBreakdown = {
-            search: Math.round((searchContrib / totalContrib) * 100),
-            news: Math.round((newsContrib / totalContrib) * 100),
-            wiki: Math.round((wikiContrib / totalContrib) * 100),
-          };
+      let driverSourceCount = 3;
+      let quietSources: string[] = [];
+      let driversStatus: "active" | "stable" = "stable";
+      if (hasSignificantMovement) {
+        const [snap24hAgo] = await db
+          .select({
+            searchVolume: trendSnapshots.searchVolume,
+            newsCount: trendSnapshots.newsCount,
+            wikiPageviews: trendSnapshots.wikiPageviews,
+          })
+          .from(trendSnapshots)
+          .where(and(
+            eq(trendSnapshots.personId, id),
+            eq(trendSnapshots.snapshotOrigin, 'ingest'),
+            sql`${trendSnapshots.timestamp} BETWEEN NOW() - INTERVAL '28 hours' AND NOW() - INTERVAL '20 hours'`,
+          ))
+          .orderBy(desc(trendSnapshots.timestamp))
+          .limit(1);
+
+        if (snap24hAgo) {
+          const searchChange = Math.abs(latest.searchVolume - snap24hAgo.searchVolume);
+          const newsChange = Math.abs(latest.newsCount - snap24hAgo.newsCount);
+          const wikiChange = Math.abs((latest.wikiPageviews ?? 0) - (snap24hAgo.wikiPageviews ?? 0));
+
+          const searchContrib = searchChange * 0.40;
+          const newsContrib = newsChange * 0.35;
+          const wikiContrib = wikiChange * 0.25;
+          const totalContrib = searchContrib + newsContrib + wikiContrib;
+
+          const searchBase = Math.max(snap24hAgo.searchVolume, 1);
+          const newsBase = Math.max(snap24hAgo.newsCount, 1);
+          const wikiBase = Math.max(snap24hAgo.wikiPageviews ?? 1, 1);
+          if (searchChange / searchBase < 0.05) quietSources.push("Search");
+          if (newsChange / newsBase < 0.05) quietSources.push("News");
+          if (wikiChange / wikiBase < 0.05) quietSources.push("Wikipedia");
+          driverSourceCount = 3 - quietSources.length;
+
+          if (totalContrib > 0) {
+            driverBreakdown = {
+              search: Math.round((searchContrib / totalContrib) * 100),
+              news: Math.round((newsContrib / totalContrib) * 100),
+              wiki: Math.round((wikiContrib / totalContrib) * 100),
+            };
+            driversStatus = "active";
+          }
         }
       }
 
@@ -1202,9 +1235,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             views: latest.wikiPageviews ?? 0,
             deltaPct: wikiDeltaPct,
           },
-          drivers: (hasSignificantMovement && driverBreakdown)
-            ? { status: "active", breakdown: driverBreakdown, activeSources: activeSources.length }
-            : { status: "stable", breakdown: null, activeSources: activeSources.length },
+          drivers: {
+            status: driversStatus,
+            breakdown: driverBreakdown,
+            activeSources: driversStatus === "active" ? driverSourceCount : activeSources.length,
+            quietSources: driversStatus === "active" ? quietSources : [],
+          },
         },
         categoryRank: trending ? {
           overall: trending.rank,

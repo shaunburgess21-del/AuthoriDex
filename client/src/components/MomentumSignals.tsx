@@ -34,6 +34,7 @@ interface MomentumData {
       status: "active" | "stable";
       breakdown: { search: number; news: number; wiki: number } | null;
       activeSources: number;
+      quietSources: string[];
     };
   } | null;
   categoryRank: {
@@ -176,7 +177,7 @@ export function MomentumSignals({ personId }: { personId: string }) {
             <div className="text-2xl font-bold" data-testid="text-search-volume">
               {signals.search.volume}<span className="text-sm font-normal text-muted-foreground ml-1">activity score</span>
             </div>
-            {signals.search.relatedSearches.length > 0 && (
+            {signals.search.relatedSearches.length > 0 ? (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1.5">Top searches</p>
                 <div className="flex flex-wrap gap-1.5">
@@ -187,6 +188,10 @@ export function MomentumSignals({ personId }: { personId: string }) {
                   ))}
                 </div>
               </div>
+            ) : (
+              <p className="text-[10px] text-muted-foreground/60" data-testid="text-search-empty">
+                {signals.search.volume > 0 ? "Search interest steady" : "Collecting search data..."}
+              </p>
             )}
             {signals.search.peopleAlsoAsk.length > 0 && (
               <div>
@@ -217,7 +222,7 @@ export function MomentumSignals({ personId }: { personId: string }) {
             <div className="text-2xl font-bold" data-testid="text-news-count">
               {formatNum(signals.news.count)}<span className="text-sm font-normal text-muted-foreground ml-1">articles (24h)</span>
             </div>
-            {signals.news.headlines.length > 0 && (
+            {signals.news.headlines.length > 0 ? (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1.5">Top Headlines</p>
                 <ul className="space-y-1.5">
@@ -228,6 +233,10 @@ export function MomentumSignals({ personId }: { personId: string }) {
                   ))}
                 </ul>
               </div>
+            ) : (
+              <p className="text-[10px] text-muted-foreground/60" data-testid="text-news-empty">
+                {signals.news.count > 0 ? "No major headlines in the last 24h" : "No headlines tracked yet"}
+              </p>
             )}
             <p className="text-[10px] text-muted-foreground/60 capitalize">via {signals.news.provider}</p>
           </CardContent>
@@ -247,16 +256,20 @@ export function MomentumSignals({ personId }: { personId: string }) {
             <div className="text-2xl font-bold" data-testid="text-wiki-views">
               {formatNum(signals.wiki.views)}<span className="text-sm font-normal text-muted-foreground ml-1">page views (24h)</span>
             </div>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <p className="text-[10px] text-muted-foreground/60 mt-2 cursor-help underline decoration-dotted">
-                  Wikipedia views as curiosity proxy
-                </p>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs max-w-[200px]">Wikipedia page views spike when public curiosity increases — often before or alongside news cycles.</p>
-              </TooltipContent>
-            </Tooltip>
+            {signals.wiki.views < 100 && signals.wiki.deltaPct === 0 ? (
+              <p className="text-[10px] text-muted-foreground/60 mt-2" data-testid="text-wiki-quiet">Low curiosity signal today</p>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="text-[10px] text-muted-foreground/60 mt-2 cursor-help underline decoration-dotted">
+                    Wikipedia views as curiosity proxy
+                  </p>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs max-w-[200px]">Wikipedia page views spike when public curiosity increases — often before or alongside news cycles.</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </CardContent>
         </Card>
 
@@ -305,6 +318,11 @@ export function MomentumSignals({ personId }: { personId: string }) {
                     <DriverBar label="News" pct={signals.drivers.breakdown.news} color="bg-red-500" />
                     <DriverBar label="Wiki" pct={signals.drivers.breakdown.wiki} color="bg-gray-400" />
                   </div>
+                  {signals.drivers.quietSources.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground/60" data-testid="text-quiet-sources">
+                      Based on {signals.drivers.activeSources}/3 sources ({signals.drivers.quietSources.join(" & ")} quiet)
+                    </p>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -320,12 +338,12 @@ export function MomentumSignals({ personId }: { personId: string }) {
                       <p>Search activity score: {signals.search.volume}/100</p>
                       <p>News articles (24h): {formatNum(signals.news.count)}</p>
                       <p>Wiki page views (24h): {formatNum(signals.wiki.views)}</p>
-                      <p className="text-[10px] mt-1">Driver weights: Search 40%, News 35%, Wiki 25%</p>
+                      <p className="text-[10px] mt-1">Attribution based on actual 24h signal changes, weighted: Search 40%, News 35%, Wiki 25%</p>
                     </div>
                   )}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">Insufficient data</p>
+                <p className="text-sm text-muted-foreground">Insufficient data for attribution</p>
               )}
             </CardContent>
           </Card>
