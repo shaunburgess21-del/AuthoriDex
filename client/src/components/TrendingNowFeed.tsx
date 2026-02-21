@@ -16,6 +16,7 @@ interface HotMover {
   change24h: number | null;
   rankChange: number | null;
   badge: { label: string; color: string; description: string };
+  sourceBreakdown?: { searchPct: number; newsPct: number; wikiPct: number } | null;
 }
 
 interface TrendingNowFeedProps {
@@ -182,7 +183,36 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                                 </span>
                               </div>
                             )}
-                            {ctx?.primaryDriver && (
+                            {person.sourceBreakdown && (
+                              <>
+                                <div className="border-t border-slate-700/40 my-1.5" />
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Source Breakdown</p>
+                                {[
+                                  { icon: <Search className="h-3 w-3" />, label: "Search", pct: person.sourceBreakdown.searchPct },
+                                  { icon: <Newspaper className="h-3 w-3" />, label: "News", pct: person.sourceBreakdown.newsPct },
+                                  { icon: <Globe className="h-3 w-3" />, label: "Wiki", pct: person.sourceBreakdown.wikiPct },
+                                ].sort((a, b) => b.pct - a.pct).map(src => (
+                                  <div key={src.label} className="flex items-center gap-2" data-testid={`source-breakdown-${src.label.toLowerCase()}-${person.id}`}>
+                                    <span className="text-muted-foreground flex items-center gap-1 w-[60px]">
+                                      {src.icon}
+                                      {src.label}
+                                    </span>
+                                    <div className="flex-1 h-1.5 bg-slate-700/40 rounded-full overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full ${
+                                          src.label === "Search" ? "bg-blue-400/70" :
+                                          src.label === "News" ? "bg-amber-400/70" :
+                                          "bg-emerald-400/70"
+                                        }`}
+                                        style={{ width: `${src.pct}%` }}
+                                      />
+                                    </div>
+                                    <span className="font-mono text-[10px] w-[28px] text-right">{src.pct}%</span>
+                                  </div>
+                                ))}
+                              </>
+                            )}
+                            {!person.sourceBreakdown && ctx?.primaryDriver && (
                               <div className="flex items-center justify-between gap-2">
                                 <span className="text-muted-foreground flex items-center gap-1">
                                   {ctx.primaryDriver === "NEWS" && <Newspaper className="h-3 w-3" />}
@@ -190,25 +220,9 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                                   {ctx.primaryDriver === "WIKI" && <Globe className="h-3 w-3" />}
                                   Driver
                                 </span>
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <button
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="font-medium cursor-help border-b border-dotted border-muted-foreground/40 text-[11px] bg-transparent p-0"
-                                      data-testid={`trending-now-driver-${person.id}`}
-                                    >
-                                      {getDriverLabel(ctx.primaryDriver)}
-                                    </button>
-                                  </PopoverTrigger>
-                                  <PopoverContent
-                                    side="top"
-                                    align="end"
-                                    className="w-auto max-w-[200px] p-2 text-xs"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {getDriverExplanation(ctx.primaryDriver)}
-                                  </PopoverContent>
-                                </Popover>
+                                <span className="font-medium text-[11px]">
+                                  {getDriverLabel(ctx.primaryDriver)}
+                                </span>
                               </div>
                             )}
                           </div>
