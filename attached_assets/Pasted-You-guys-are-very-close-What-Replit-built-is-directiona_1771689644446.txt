@@ -1,0 +1,123 @@
+You guys are very close. What Replit built is directionally correct (Momentum Signals is the right Phase 1 move), but there are two important product/trust gaps you should tighten so the section feels “alive” and doesn’t confuse users:
+
+1) Search Interest card: yes, you can show “Top searches” — but you need a reliable fallback path
+
+Serper can return:
+
+relatedSearches
+
+peopleAlsoAsk
+
+So the plan to display “Top searches” + “People ask” is solid.
+
+Why you’re not seeing them yet
+
+In practice it’s usually one (or more) of these:
+
+Cached Serper results were created before you started storing those fields → they’ll be empty until you get fresh Serper pulls.
+
+Serper sometimes returns none for certain queries/people.
+
+Your query is too “entity clean” (e.g., “Jake Paul”) and Serper gives a knowledge panel but not rich related searches every time.
+
+The fix (do this so the card never looks empty)
+
+Make the Search card always show something in this order:
+
+Search card rendering rules
+
+If relatedSearches.length > 0 → show Top searches (max 5)
+
+Else if peopleAlsoAsk.length > 0 → show People ask (max 3)
+
+Else show a “not empty” fallback:
+
+“Search interest steady” (already there)
+
+plus a small line: “Top searches will appear as we collect more data.”
+
+Optional “free” fallback (no extra APIs): extract keywords/topics from top headlines and show as:
+
+“Topics in the news: …” (don’t label this “Top searches”)
+
+This keeps the card feeling premium even when Serper doesn’t cooperate.
+
+One more practical improvement
+Force Serper to refresh for top N people daily (or every X hours) even if caching is enabled, so you’re guaranteed to populate these fields for the most-viewed profiles.
+
+2) Score Drivers: the latest approach is better, but it’s still not “truthful enough” unless you align it with the score math
+
+What Replit changed (compute drivers from 24h raw signal changes) is a big improvement over EMA micro-deltas. It explains movement more often.
+
+But here’s the core issue:
+
+Your Fame/Trend score is not a simple linear function of raw changes.
+It includes normalization, governors, holds, smoothing, etc.
+
+So “59% Search / 41% News” can still feel off if:
+
+the user sees +9% but your underlying score movement came mostly from mass vs velocity, or
+
+a governor suppressed news, or
+
+an EMA hold prevented a drop/spike.
+
+Best long-term fix (high trust)
+
+Store per-source velocity components in the snapshot at ingest time:
+
+searchVelocityScore
+
+newsVelocityScore
+
+wikiVelocityScore
+
+Then Score Drivers becomes exactly true:
+
+compute driver attribution from the actual component deltas between now and ~24h ago.
+
+This is the cleanest answer to “make it match what users see.”
+
+Short-term fix (still decent)
+
+If you don’t want schema changes now:
+
+keep the current “signal-delta weighted” approach,
+
+but label it honestly in tooltip:
+
+“Drivers estimate what changed most in the underlying signals (Search/News/Wiki) over 24h.”
+
+And keep the “Based on X/3 sources (Y quiet)” line. That’s good.
+
+3) “Wiki 0%” is not wrong — but you should make it intuitively obvious
+
+Your explanation is correct: wiki can be huge every day but steady, so it contributes 0% to change.
+
+To prevent repeated confusion, add one tiny line under the bars:
+
+“Drivers explain today’s change, not total attention.”
+
+That single sentence removes 80% of “but he’s famous” objections.
+
+My recommended “way forward” checklist (in order)
+
+If you want the section to feel complete quickly:
+
+Search card non-empty logic (fallback messaging + optional headline-topic fallback)
+
+Ensure Serper refreshes periodically for top profiles so you actually collect related searches/PAA
+
+Score Drivers: add the one-line clarification (“change, not totals”)
+
+If you want true accuracy: store per-source velocity components in snapshots (then drivers become exact)
+
+Quick opinion on the current UI
+
+Momentum Signals looks clean and premium.
+
+The “flat” badges and quiet states are good.
+
+The Search card does look too empty right now — that’s the biggest UX gap.
+
+Score Drivers now looks much less strange than before, but it will feel “rock solid” only once it’s based on actual score component deltas (or clearly labeled as an estimate).
