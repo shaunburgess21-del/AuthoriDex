@@ -1,0 +1,76 @@
+Yeah — your instinct is right: Score Drivers was the one thing that could quietly undermine trust if it looked “math-y but wrong.” Replit’s fix is the right direction and (if implemented as described) should make it feel sane.
+
+Here’s my take on what they did, what’s good, and the one improvement I’d still recommend.
+
+Is Replit’s fix a good idea?
+✅ Yes, the two changes they made are exactly what you want
+
+Tighten the “stable” threshold
+If you don’t have meaningful movement, showing bars is worse than showing nothing. Collapsing to “Stable — no major signal shift” is the correct UX.
+
+Add a lopsided guard (the >90% single source rule)
+This specifically kills the “0/0/100” visual that screams “bug,” even if it’s technically coming from tiny non-zero deltas. Great safety net.
+
+Also: renaming to “Score Drivers (24h change)” + tooltip is a must. That framing is what prevents confusion.
+
+The small red flag (still worth fixing)
+
+Their logic uses:
+
+totalAbsDelta threshold (now 0.15 instead of 0.05)
+
+AND a “lopsided + small change24h” collapse rule (>90% and <3% change)
+
+That’s fine, but it’s still a bit heuristic-heavy. The more robust approach is to base “drivers” on a quantity that directly matches what users see:
+
+Better rule of thumb (more truthful)
+
+Only show Score Drivers when the person’s actual 24h score move is meaningful.
+
+For example:
+
+show drivers only if abs(change_24h) >= 2% (or 1.5%)
+
+otherwise show “Stable”
+
+This keeps the drivers tied to something users already understand (“24h change”), and avoids edge cases where deltas are non-zero but the score barely moved.
+
+Even better (if you want one extra step)
+
+Use both:
+
+abs(change_24h) >= 2% OR
+
+totalAbsWeightedDelta >= threshold
+
+That gives you a precise model-based gate and a user-facing gate.
+
+What caused “0/0/100” in the first place?
+
+Your deltas can be tiny-but-nonzero due to EMA smoothing and caching behaviors. When two sources are near-zero and one has even a tiny non-zero, it becomes 100% of “what changed”—mathematically correct, visually misleading.
+
+So hiding that under “Stable” is absolutely correct.
+
+The other improvements they listed
+
+“flat” vs “no change” ✅ Much better language.
+
+Jump to Signals ✅ Great especially on mobile.
+
+Related Searches / People Ask ✅ This will become your most shareable “wow” moment once data is flowing.
+
+Single profile inline ✅ Small polish, but makes the page feel cleaner.
+
+My one recommendation to send back to Replit
+
+Ask them to switch the drivers gating to be primarily based on abs(change_24h), not only totalAbsDelta.
+
+Suggested final gate:
+
+If abs(change_24h) < 1.5–2% → Stable
+
+Else show drivers.
+
+That makes Score Drivers feel “obviously correct” to users.
+
+If you want, paste the exact current backend condition (the hasSignificantMovement + the lopsided check) and I’ll suggest the cleanest final boolean logic so it’s simple and not brittle.
