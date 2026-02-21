@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Newspaper, BookOpen, BarChart3, Trophy, AlertTriangle, Clock, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { Search, Newspaper, BookOpen, BarChart3, Trophy, AlertTriangle, Clock, ChevronDown, ChevronUp, ExternalLink, Info } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -51,7 +51,13 @@ function formatNum(n: number): string {
 }
 
 function DeltaBadge({ pct }: { pct: number }) {
-  if (pct === 0) return <span className="text-xs text-muted-foreground">no change</span>;
+  if (pct === 0) {
+    return (
+      <Badge variant="outline" className="text-xs text-muted-foreground border-muted" data-testid="badge-delta">
+        flat
+      </Badge>
+    );
+  }
   const isUp = pct > 0;
   return (
     <Badge
@@ -124,7 +130,7 @@ export function MomentumSignals({ personId }: { personId: string }) {
   );
 
   return (
-    <div className="mt-8 space-y-6" data-testid="section-momentum-signals">
+    <div id="momentum-signals" className="mt-8 space-y-6" data-testid="section-momentum-signals">
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-xl font-bold">Momentum Signals</h2>
@@ -172,9 +178,9 @@ export function MomentumSignals({ personId }: { personId: string }) {
             </div>
             {signals.search.relatedSearches.length > 0 && (
               <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1.5">Related Searches</p>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">Top searches</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {signals.search.relatedSearches.map((q, i) => (
+                  {signals.search.relatedSearches.slice(0, 5).map((q, i) => (
                     <Badge key={i} variant="outline" className="text-xs font-normal" data-testid={`badge-related-search-${i}`}>
                       {q}
                     </Badge>
@@ -184,9 +190,9 @@ export function MomentumSignals({ personId }: { personId: string }) {
             )}
             {signals.search.peopleAlsoAsk.length > 0 && (
               <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1.5">People Also Ask</p>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">People ask</p>
                 <ul className="space-y-1">
-                  {signals.search.peopleAlsoAsk.slice(0, 3).map((q, i) => (
+                  {signals.search.peopleAlsoAsk.slice(0, 2).map((q, i) => (
                     <li key={i} className="text-xs text-muted-foreground" data-testid={`text-paa-${i}`}>
                       {q}
                     </li>
@@ -257,7 +263,15 @@ export function MomentumSignals({ personId }: { personId: string }) {
         {signals.drivers.status === "stable" ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground col-span-1 md:col-span-2 py-2" data-testid="card-score-drivers-collapsed">
             <BarChart3 className="h-4 w-4" />
-            <span>Score Drivers: Stable — no major signal shift</span>
+            <span>Score Drivers (24h): Stable — no major signal shift</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="h-3.5 w-3.5 cursor-help shrink-0" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs max-w-[220px]">Based on what changed in the last 24 hours, not raw totals. Shows which signals drove movement.</p>
+              </TooltipContent>
+            </Tooltip>
             <Badge variant="outline" className="text-xs ml-auto">
               {signals.drivers.activeSources}/3 sources
             </Badge>
@@ -268,7 +282,15 @@ export function MomentumSignals({ personId }: { personId: string }) {
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
                   <BarChart3 className="h-4 w-4 text-primary" />
-                  <span className="font-semibold text-sm">Score Drivers</span>
+                  <span className="font-semibold text-sm">Score Drivers (24h change)</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs max-w-[220px]">Based on what changed, not raw totals. Shows which signals drove the most movement.</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
                 <Badge variant="outline" className="text-xs">
                   {signals.drivers.activeSources}/3 sources
@@ -310,9 +332,7 @@ export function MomentumSignals({ personId }: { personId: string }) {
         )}
       </div>
 
-      {Object.keys(officialProfiles).length > 0 && (
-        <OfficialProfiles profiles={officialProfiles} />
-      )}
+      <OfficialProfiles profiles={officialProfiles} />
     </div>
   );
 }
@@ -376,14 +396,41 @@ const profileConfig: Record<string, {
   },
 };
 
+export function InlineProfileBadge({ platform, handle }: { platform: string; handle: string }) {
+  const config = profileConfig[platform];
+  if (!config) return null;
+  const Icon = config.icon;
+  const url = `${config.urlPrefix}${handle}`;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group"
+      data-testid={`link-inline-profile-${platform}`}
+    >
+      <Badge
+        variant="outline"
+        className={`${config.bgColor} gap-1.5 py-1 px-2.5 text-xs cursor-pointer`}
+      >
+        <Icon className={`h-3 w-3 ${config.color}`} />
+        <span className="font-normal">@{handle}</span>
+        <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+      </Badge>
+    </a>
+  );
+}
+
 function OfficialProfiles({ profiles }: { profiles: Record<string, string> }) {
   const entries = Object.entries(profiles).filter(([key]) => profileConfig[key]);
   if (entries.length === 0) return null;
 
   return (
     <div data-testid="section-official-profiles">
-      <h3 className="text-sm font-semibold text-muted-foreground mb-3">Official Profiles</h3>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex items-center gap-3 flex-wrap">
+        <h3 className="text-sm font-semibold text-muted-foreground">
+          {entries.length === 1 ? "Official Profile" : "Official Profiles"}
+        </h3>
         {entries.map(([platform, handle]) => {
           const config = profileConfig[platform];
           if (!config) return null;

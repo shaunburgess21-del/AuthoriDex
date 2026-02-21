@@ -1143,7 +1143,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : 0;
 
       const totalAbsDelta = Math.abs(latest.searchDelta ?? 0) + Math.abs(latest.newsDelta ?? 0) + Math.abs(latest.wikiDelta ?? 0);
-      const hasSignificantMovement = totalAbsDelta > 0.05 || Math.abs(trending?.change24h ?? 0) > 1.5;
+      const change24hAbs = Math.abs(trending?.change24h ?? 0);
+      const hasSignificantMovement = totalAbsDelta > 0.15 || change24hAbs > 2.0;
 
       let driverBreakdown: { search: number; news: number; wiki: number } | null = null;
       if (hasSignificantMovement && totalAbsDelta > 0) {
@@ -1152,11 +1153,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const wikiContrib = Math.abs(latest.wikiDelta ?? 0) * 0.25;
         const totalContrib = searchContrib + newsContrib + wikiContrib;
         if (totalContrib > 0) {
-          driverBreakdown = {
+          const rawBreakdown = {
             search: Math.round((searchContrib / totalContrib) * 100),
             news: Math.round((newsContrib / totalContrib) * 100),
             wiki: Math.round((wikiContrib / totalContrib) * 100),
           };
+          const maxPct = Math.max(rawBreakdown.search, rawBreakdown.news, rawBreakdown.wiki);
+          const isLopsided = maxPct >= 90 && change24hAbs < 3.0;
+          if (!isLopsided) {
+            driverBreakdown = rawBreakdown;
+          }
         }
       }
 
@@ -1201,7 +1207,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             views: latest.wikiPageviews ?? 0,
             deltaPct: wikiDeltaPct,
           },
-          drivers: hasSignificantMovement
+          drivers: (hasSignificantMovement && driverBreakdown)
             ? { status: "active", breakdown: driverBreakdown, activeSources: activeSources.length }
             : { status: "stable", breakdown: null, activeSources: activeSources.length },
         },

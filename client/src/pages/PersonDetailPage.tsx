@@ -13,7 +13,7 @@ import { ProfileTabs } from "@/components/ProfileTabs";
 import { PredictTab } from "@/components/PredictTab";
 import { CelebrityInfoModal } from "@/components/CelebrityInfoModal";
 import { CategoryPill } from "@/components/CategoryPill";
-import { ArrowLeft, Share2, Star, TrendingUp, Users, MessageSquare, Trophy, Zap, Camera, Check, X, Search, ThumbsUp, ThumbsDown, Minus, HelpCircle } from "lucide-react";
+import { ArrowLeft, Share2, Star, TrendingUp, Users, MessageSquare, Trophy, Zap, Camera, Check, X, Search, ThumbsUp, ThumbsDown, Minus, HelpCircle, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -781,6 +781,19 @@ export default function PersonDetailPage() {
             )}
           </Card>
         </div>
+
+        {activeTab === "overview" && (
+          <div className="flex justify-end mb-2">
+            <a
+              href="#momentum-signals"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="link-jump-to-signals"
+            >
+              Jump to Signals
+              <ChevronDown className="inline h-3 w-3 ml-0.5" />
+            </a>
+          </div>
+        )}
 
         {/* Why They're Trending - AI-powered news summary (top 10 + Hot Movers) */}
         {((person.rank && person.rank <= 10) || isHotMover) && (
