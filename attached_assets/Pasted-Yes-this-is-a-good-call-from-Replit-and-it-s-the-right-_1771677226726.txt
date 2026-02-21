@@ -1,0 +1,55 @@
+Yes — this is a good call from Replit, and it’s the right ordering.
+
+Why item 1 (stale snapshot guard) is worth doing now
+
+When you’ve had downtime (Replit sleeping), comparing “current vs previous” can turn into “current vs 13-hours-ago,” which will create big deltas that look like a sudden spike even though it’s just a gap. Zeroing searchDelta when the prior snapshot is older than 6 hours prevents:
+
+false “Hot Movers”
+
+noisy driver breakdowns
+
+velocity EMA being jerked around on restart
+
+And since your Mass component still uses searchVolume, you’re not losing the search signal entirely — you’re only suppressing velocity when it’s unreliable.
+
+Confirming fallback path consistency
+
+Also good. If fallback uses a different delta formula, you’d get “different physics” depending on provider path — nightmare to debug. So confirming it matches is exactly what you want.
+
+One nuance on the “architect note” (searchEmaHeld + stale)
+
+The architect is onto something: if data is stale, you probably shouldn’t interpret it as an “artifact drop” vs baseline.
+
+My recommendation:
+
+If searchDeltaStale=true (prev snapshot too old), then skip EMA-hold evaluation for search, or at least don’t increment hold counters.
+
+Reason: the hold logic is designed for provider blind spots in otherwise normal cadence. After downtime, cadence isn’t normal.
+
+But I agree with Replit: you can watch a few runs first and only add this if you see odd behavior.
+
+What I’d watch in the next 24 hours (simple)
+
+From your new instrumentation logs, watch for:
+
+staleDeltaCount should drop to ~0 once the engine is running hourly again.
+
+nonZero% should become meaningful (not near 0, not near 100).
+
+max abs searchDelta should be reasonable (clamped at 0.5 anyway).
+
+Hot Movers should look more believable, and driver breakdown should start showing all 3 sources.
+
+Deadband (abs(diff) < 2) — I’d keep it in your back pocket
+
+You’re right to wait. Some jitter is fine; you only add deadband if:
+
+movers look noisy for no reason, or
+
+driver breakdown constantly flips for small movements.
+
+Verdict
+
+✅ Implementing the stale guard now was smart.
+✅ Confirming fallback consistency was necessary hygiene.
+➕ Next optional step (only if needed): suppress search EMA-hold when stale.

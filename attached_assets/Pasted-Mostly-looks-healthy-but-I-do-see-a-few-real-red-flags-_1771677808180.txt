@@ -1,0 +1,130 @@
+Mostly looks healthy, but I do see a few real red flags (and a couple “watch this” items) worth addressing.
+
+Red flags
+1) News EMA held = 39/100 is high
+
+Even with widening + hold rules, having ~40% of people triggering “artifact suppression” while NEWS=HEALTHY suggests one of these is happening:
+
+Baseline mismatch: lots of people have baselines higher than what Mediastack is consistently returning now, so normal variation looks like an 80% drop.
+
+Mediastack coverage is uneven: nonZeroPct 63% (or 97/100 >0 in last run depending on definition) implies lots of low counts, which increases false “drops.”
+
+Hold threshold too aggressive for your current provider/cadence (2-hour refresh + cache reuse).
+
+Cache-reuse ticks may be treated as “fresh enough” for hold comparisons, but counts can be step-like.
+
+Enhancement: add one extra condition so holds fire less noisily:
+
+Only hold if currentCount <= baselineP50 * 0.1 and baselineP50 >= 3 (or 5 for safety), not just “80% drop vs EMA”.
+
+Or require the low reading to persist for 2 consecutive refresh windows before holding (light hysteresis for holds).
+
+2) “News fresh 100/100 (all cache-reuse)” + “News not fresh 42/100” is contradictory
+
+This reads like a definition mismatch in your health report:
+
+one metric is “we had cached news available”
+
+another is “freshness flag in diagnostics”
+
+This isn’t fatal, but it will confuse you and make debugging harder.
+
+Enhancement: standardize these metrics:
+
+available.news (cache hit / present)
+
+fresh.news (fetched on refresh tick within X minutes)
+
+stale.news (older than X hours)
+…and make sure the dashboard uses the same definitions.
+
+3) Mediastack nonZeroPct 63% vs “News with articles > 0: 97/100”
+
+Same issue: you’re likely mixing:
+
+“non-zero on refresh ticks” vs
+
+“non-zero after reuse/widen/pick-best”
+
+You need both metrics, but label them explicitly:
+
+mediastack.refreshNonZeroPct
+
+mediastack.effectiveNonZeroPct (after widening + cache reuse)
+
+Right now it’s ambiguous.
+
+4) DB guardrails missing constraints
+
+If those constraints were intentionally there, missing them is a data integrity risk:
+
+bad origins
+
+ingest hour not truncated → can break “nearest snapshot” and 24h comparisons subtly
+
+This won’t crash the app, but it can silently corrupt analytics. Worth re-applying before launch.
+
+5) Ingestion lock held / skipped run
+
+“One ingestion started at 12:30 and was still running when server restarted, so 12:31 attempt was skipped.”
+
+That’s fine occasionally, but watch for:
+
+runs overlapping
+
+deadlocks where a lock isn’t released on crash
+
+Enhancement: a “stale lock breaker”
+
+If lock age > 10–15 minutes (longer than max expected run), auto-clear and log a warning.
+
+Watch items (not red, but monitor)
+6) SearchDelta fix not reflected yet (expected)
+
+No action until you see the next run results. After it runs:
+
+check % non-zero
+
+check top 5 values
+
+see if “Score Drivers” now shows all 3 sources sometimes
+
+7) Catch-up mode SOFT band since Feb 19
+
+Fine, but if it never exits, you may have a “never converges” situation where governor/normalization keeps you in catch-up permanently.
+
+Enhancement: expose “why still in catch-up” (which metric hasn’t stabilized).
+
+8) preferSerper: true for news
+
+If Mediastack is primary, “preferSerper: true” is odd wording. It might mean:
+
+“if fallback is needed, prefer Serper over GDELT”
+That’s fine, but rename it to avoid confusion:
+
+fallbackNewsPreferredProvider = serper_news
+
+Biggest enhancement I’d recommend (if you do only one)
+Make EMA-hold less trigger-happy and more explainable
+
+Because 39/100 holds is the only “this feels off” number.
+
+Two quick improvements:
+
+Add a baseline minimum (don’t hold if baseline is tiny)
+
+Add hold hysteresis (require 2 consecutive bad readings before holding)
+
+That keeps the protection but reduces “masked real moves” and constant holding.
+
+Summary verdict
+
+Engine is running and not failing ✅
+
+Budget and provider routing look fine ✅
+
+The only significant quality concern is the high news EMA hold rate + confusing freshness/coverage metrics ⚠️
+
+Missing DB constraints is a quiet risk ⚠️
+
+If you paste your exact EMA-hold condition (news) and what “baseline” field it compares against, I’ll suggest the cleanest adjustment that reduces holds without reintroducing leaderboard whiplash.
