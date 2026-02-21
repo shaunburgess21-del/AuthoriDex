@@ -985,6 +985,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     let newsEmaHeldCount = 0;
     let searchEmaHeldCount = 0;
     const searchDeltaValues: number[] = [];
+    let searchDeltaStaleCount = 0;
     const newsFailed = newsData.size === 0;
     const serperFailed = serperData.size === 0;
     
@@ -1138,8 +1139,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
         // Uses bounded normalized change: (curr - prev) / max(prev, 20)
         // Denominator floor of 20 prevents explosions from low volumes.
         // Clamp to ±0.5 keeps it in the wikiDelta range (p95 ~0.58).
+        const snapshotAgeHours = mostRecent ? (now.getTime() - mostRecent.timestamp.getTime()) / (1000 * 60 * 60) : Infinity;
         const searchDeltaRaw = (searchVolume - prevSearchVolume) / Math.max(prevSearchVolume, 20);
-        let searchDelta = Math.max(-0.5, Math.min(0.5, searchDeltaRaw));
+        let searchDelta = snapshotAgeHours > 6 ? 0 : Math.max(-0.5, Math.min(0.5, searchDeltaRaw));
+        const searchDeltaStale = snapshotAgeHours > 6;
         
         // NEWS: Use fallback if source is in OUTAGE state (global-zero or API failed)
         const newsNeedsOutageFallback = newsHealth.state === "OUTAGE" || newsHealth.state === "DEGRADED";
@@ -1282,6 +1285,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
         const currentHealthSnapshot = getCurrentHealthSnapshot();
         
         searchDeltaValues.push(searchDelta);
+        if (searchDeltaStale) searchDeltaStaleCount++;
 
         const inputs = {
           wikiPageviews: wiki?.pageviews24h || 0,
@@ -1381,6 +1385,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
             ...(hasPerPersonFallback ? { fallbackReason: news?._fallbackReason ?? "per_person_zero_streak" } : {}),
             ...(newsEmaHeld ? { newsEmaHeld: true, newsRawCount: news?.articleCount24h ?? 0, newsHoldDetail: newsHoldDiag } : {}),
             ...(searchEmaHeld ? { searchEmaHeld: true, searchRawVolume: serper?.searchVolume ?? 0, searchHoldDetail: searchHoldDiag } : {}),
+            ...(searchDeltaStale ? { searchDeltaStale: true, snapshotAgeHours: Math.round(snapshotAgeHours * 10) / 10 } : {}),
           },
           change: {
             basisHours24h: prev24h?.basisHours ?? null,
@@ -1640,7 +1645,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
       const avgAbs = absVals.reduce((a, b) => a + b, 0) / absVals.length;
       const maxAbs = Math.max(...absVals);
       const top5 = [...absVals].sort((a, b) => b - a).slice(0, 5).map(v => v.toFixed(4));
-      console.log(`[SearchDelta] avg=${avgAbs.toFixed(4)}, max=${maxAbs.toFixed(4)}, nonZero=${nonZero.length}/${searchDeltaValues.length} (${((nonZero.length / searchDeltaValues.length) * 100).toFixed(0)}%), top5=[${top5.join(', ')}]`);
+      const staleNote = searchDeltaStaleCount > 0 ? `, stale=${searchDeltaStaleCount} (zeroed, prev snapshot >6h)` : '';
+      console.log(`[SearchDelta] avg=${avgAbs.toFixed(4)}, max=${maxAbs.toFixed(4)}, nonZero=${nonZero.length}/${searchDeltaValues.length} (${((nonZero.length / searchDeltaValues.length) * 100).toFixed(0)}%), top5=[${top5.join(', ')}]${staleNote}`);
     }
     
     // Log rank churn
