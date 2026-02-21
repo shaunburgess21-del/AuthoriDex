@@ -451,18 +451,26 @@ export default function PersonDetailPage() {
   const [location, setLocation] = useLocation();
   const [isFavorited, setIsFavorited] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
+  const validTabs = ["overview", "vote", "predict"];
+  const initialTab = (() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get("tab");
+    return tabParam && validTabs.includes(tabParam) ? tabParam : "overview";
+  })();
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [showAllPollsOverlay, setShowAllPollsOverlay] = useState(false);
   const [curateCompleted, setCurateCompleted] = useState(false);
 
-  // Handle URL query param for tab
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const tabParam = urlParams.get("tab");
-    if (tabParam && ["overview", "vote", "predict"].includes(tabParam)) {
-      setActiveTab(tabParam);
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    if (tab === "overview") {
+      url.searchParams.delete("tab");
+    } else {
+      url.searchParams.set("tab", tab);
     }
-  }, [location]);
+    window.history.replaceState({}, "", url.toString());
+  };
 
   const { data: person, isLoading, error } = useQuery<TrendingPerson>({
     queryKey: [`/api/trending/${params?.id}`],
@@ -628,7 +636,7 @@ export default function PersonDetailPage() {
   }
 
   const handlePredictClick = () => {
-    setActiveTab("predict");
+    handleTabChange("predict");
     const tabsElement = document.getElementById("profile-tabs-section");
     if (tabsElement) {
       tabsElement.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -684,7 +692,7 @@ export default function PersonDetailPage() {
         <div className="mb-8">
           <div className="flex gap-6">
             <PersonAvatar name={person.name} avatar={person.avatar} size="xl" />
-            <div className="flex-1 flex flex-col justify-between h-32 sm:h-48">
+            <div className="flex-1 flex flex-col justify-between min-h-[5rem]">
               <div>
                 <h1 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-person-name">
                   {person.name}
@@ -804,7 +812,7 @@ export default function PersonDetailPage() {
 
         {/* Profile Tabs Section */}
         <div id="profile-tabs-section">
-          <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
+          <ProfileTabs activeTab={activeTab} onTabChange={handleTabChange} />
         </div>
 
         {/* OVERVIEW TAB */}
