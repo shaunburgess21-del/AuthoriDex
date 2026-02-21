@@ -1,0 +1,98 @@
+This is a solid diagnosis from Replit, and it’s exactly the kind of “non-bug bug” that makes dashboards look broken: your scoring engine didn’t fail — it just didn’t run because the process wasn’t awake.
+
+Here’s what’s useful to share with your brother / ChatGPT, plus what I’d tweak in the system so this doesn’t keep biting you.
+
+What likely happened (and why it matches your symptoms)
+“Refresh says 13 hours ago”
+
+Your scheduler is in-process (runs inside the Node server). If Replit sleeps/pauses the container overnight, the scheduler stops. No runs happen, so the “last updated” timestamp doesn’t move.
+
+This perfectly explains:
+
+no new snapshot rows
+
+stale leaderboard
+
+stale “last refresh” UI
+
+“No 24h changes”
+
+The 24h change calculation needs:
+
+a current run, and
+
+a snapshot around ~24 hours ago (or a method to pick the closest)
+
+When your current run is missing for 13 hours, you often end up with:
+
+no “now” baseline to compare, or
+
+no snapshot in the expected window
+
+So change_24h becomes null until the next successful run.
+
+When the run completed, everything immediately repopulated → that’s consistent.
+
+What’s “good news” in their report
+
+All sources healthy after restart, and Mediastack is clearly primary.
+
+Budget looks safe.
+
+Your hardening is actively doing its job (EMA holds triggered; per-person Serper fallback capped at 15).
+
+Coverage quality is being monitored and down-weighted (newsGovernorFactor: 0.75) which is exactly what you want if coverage is imperfect.
+
+The real product risk: uptime, not scoring logic
+
+If you’re launching in ~10 days, the biggest risk isn’t the math — it’s “will the engine run every hour reliably?”
+
+Recommendation: make ingestion independent of “server is awake”
+
+You have 3 practical options, in order of “best for launch”:
+
+External scheduler calls your ingestion endpoint
+Use something like Upstash QStash / GitHub Actions cron / a simple cron ping service to hit:
+
+/api/ingest?key=... (or a POST with a secret)
+
+every hour at :02 (or whatever cadence you use)
+
+This is the cleanest way to guarantee cadence even if Replit sleeps.
+
+Deploy always-on
+Paid Replit deployment or move the worker to a cheap always-on host (Render/Fly/Railway/DigitalOcean).
+
+Accept dev-environment gaps
+Fine for development, but it will cause exactly the issues you saw and users will interpret it as “the product is broken.”
+
+For a launch leaderboard, I’d do (1) even if you later migrate to (2).
+
+Two small engineering tweaks to make “24h change” resilient (even with gaps)
+1) Use “nearest snapshot within window” rather than “must exist exactly 24h ago”
+
+Instead of “snapshot at T-24h”, do:
+
+pick the most recent snapshot in the window: T-28h to T-20h
+
+if none exists, show “—” or compute using the closest older snapshot with a label like “since last run”
+
+This prevents nulls.
+
+2) Add “staleness state” to the UI
+
+If last run > 90 minutes ago:
+
+show a banner: “Data delayed (last run 13h ago). Engine offline.”
+
+hide 24h deltas or show “stale”.
+
+That protects user trust.
+
+Things in Replit’s report I’d ask them to clarify (not because I doubt them—just to be sure)
+
+What exactly triggers newsGovernorFactor: 0.75?
+Is that based on overall coverage %? Top-25 quality? Both?
+(It’s good, just make sure the rule is consistent and logged.)
+
+26 news EMA holds: confirm these were true “artifact drops” and not “real drops” caused by query changes after your widening logic update.

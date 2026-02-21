@@ -1,0 +1,81 @@
+Replit’s answers are solid, and their proposed next steps are the right ones. Here’s what I’d tell them to do now (without needing you to sign up for anything yet) vs what requires an external service.
+
+✅ What to implement immediately (no external signup)
+1) Make 24h change resilient (“nearest snapshot within window”)
+
+Yes — do this. It’s a pure backend change and removes the “null deltas” embarrassment whenever there’s a gap.
+
+A good default:
+
+target: now - 24h
+
+acceptable window: 20h to 28h (or 18h–30h if you want to be extra forgiving)
+
+choose the snapshot closest to now-24h
+
+if none exists in the window, fall back to:
+
+“since last snapshot” (and label it), or
+
+show null but with a reason flag
+
+Also persist:
+
+change_24h_basis_hours (e.g., 23.4h) so you can show “24h change (≈23h)” if you want.
+
+This solves your “no 24h changes” complaint even if Replit sleeps.
+
+2) Add a staleness banner / badge in the UI
+
+Yes — do this. Users don’t mind delayed data if you tell them.
+
+Suggested UI logic:
+
+if now - lastRunAt > 90 minutes → show “Data delayed”
+
+if > 6 hours → show “Engine offline / sleeping — last run at …”
+
+hide or gray out deltas when stale (or show them with “stale” label)
+
+This protects trust.
+
+3) Add “last successful run” vs “run in progress”
+
+Also worth it. Sometimes you’ll be mid-run and still show stale. Have the UI show:
+
+last successful
+
+currently running (startedAt, progress)
+
+last error (if any)
+
+That prevents confusion like “13 hours ago” while a job is actively running.
+
+✅ What to do next (requires external scheduler)
+4) External cron ping
+
+This is the real uptime fix. Replit’s right: you’ll need an external ping.
+
+But you don’t need Upstash right away if you want simplest:
+
+cron-job.org (free) can hit a URL every hour.
+
+Or GitHub Actions cron (also free) can call your endpoint hourly.
+
+Important: secure it properly:
+
+require a secret token header or query param
+
+rate limit that endpoint
+
+log caller + response status
+
+One comment on Replit’s “26 EMA holds” explanation
+
+Their logic is consistent. One nuance to consider later:
+
+if widening fails and you hold the EMA too often for top names, you might be masking a real drop.
+You can mitigate by:
+
+allowing down moves only after 2 consecutive low readings (like you did with canaries)
+But this is not urgent for launch.
