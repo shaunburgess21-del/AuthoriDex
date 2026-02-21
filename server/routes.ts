@@ -591,7 +591,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Compute per-source score driver attribution for top movers
       const moverIds = result.map(m => m.id);
-      const sourceAttribution = new Map<string, { sources: Array<{ key: string; pct: number }>; activeSources: number }>();
+      const sourceAttribution = new Map<string, { sources: Array<{ key: string; pct: number; status: string }>; activeSources: number; dominantDriver: string | null }>();
       if (moverIds.length > 0) {
         try {
           const now = new Date();
@@ -605,6 +605,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               searchDelta: trendSnapshots.searchDelta,
               newsDelta: trendSnapshots.newsDelta,
               wikiDelta: trendSnapshots.wikiDelta,
+              searchVolume: trendSnapshots.searchVolume,
+              newsCount: trendSnapshots.newsCount,
+              wikiPageviews: trendSnapshots.wikiPageviews,
               timestamp: trendSnapshots.timestamp,
             })
               .from(trendSnapshots)
@@ -619,6 +622,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               searchDelta: trendSnapshots.searchDelta,
               newsDelta: trendSnapshots.newsDelta,
               wikiDelta: trendSnapshots.wikiDelta,
+              searchVolume: trendSnapshots.searchVolume,
+              newsCount: trendSnapshots.newsCount,
+              wikiPageviews: trendSnapshots.wikiPageviews,
               timestamp: trendSnapshots.timestamp,
             })
               .from(trendSnapshots)
@@ -653,26 +659,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
               { key: "wiki", currVal: curr.wikiDelta ?? 0, prevVal: prev?.wikiDelta ?? 0, weight: 0.25 },
             ];
 
-            // Exclude sources with no data flowing (both current and prev are 0)
             const activeSources = rawSources.filter(s => s.currVal !== 0 || s.prevVal !== 0);
-            if (activeSources.length === 0) continue;
 
-            // Use abs-value of weighted change for attribution
-            const contributions = activeSources.map(s => ({
-              key: s.key,
-              absContrib: Math.abs(s.currVal - s.prevVal) * s.weight,
-            }));
+            let sources: Array<{ key: string; pct: number; status: string }> = [];
+            let dominantDriver: string | null = null;
 
-            const total = contributions.reduce((sum, c) => sum + c.absContrib, 0);
+            if (activeSources.length > 0) {
+              const contributions = activeSources.map(s => ({
+                key: s.key,
+                absContrib: Math.abs(s.currVal - s.prevVal) * s.weight,
+              }));
+              const total = contributions.reduce((sum, c) => sum + c.absContrib, 0);
 
-            // Zero-total guardrail: if total weighted change is negligible, skip
-            if (total < 0.001) continue;
+              if (total >= 0.001) {
+                sources = contributions
+                  .map(c => ({ key: c.key, pct: Math.round((c.absContrib / total) * 100), status: "active" as string }))
+                  .sort((a, b) => b.pct - a.pct);
+              }
+            }
 
-            const sources = contributions
-              .map(c => ({ key: c.key, pct: Math.round((c.absContrib / total) * 100) }))
-              .sort((a, b) => b.pct - a.pct);
+            if (sources.length === 0) {
+              const searchChange = Math.abs((curr.searchVolume ?? 0) - (prev?.searchVolume ?? 0));
+              const newsChange = Math.abs((curr.newsCount ?? 0) - (prev?.newsCount ?? 0));
+              const wikiChange = Math.abs((curr.wikiPageviews ?? 0) - (prev?.wikiPageviews ?? 0));
+              const searchContrib = searchChange * 0.40;
+              const newsContrib = newsChange * 0.35;
+              const wikiContrib = wikiChange * 0.25;
+              const totalContrib = searchContrib + newsContrib + wikiContrib;
 
-            sourceAttribution.set(id, { sources, activeSources: activeSources.length });
+              if (totalContrib > 0) {
+                const rawContribs = [
+                  { key: "search", absContrib: searchContrib },
+                  { key: "news", absContrib: newsContrib },
+                  { key: "wiki", absContrib: wikiContrib },
+                ].filter(c => c.absContrib > 0);
+                sources = rawContribs
+                  .map(c => ({ key: c.key, pct: Math.round((c.absContrib / totalContrib) * 100), status: "active" }))
+                  .sort((a, b) => b.pct - a.pct);
+              }
+            }
+
+            const allKeys = ["search", "news", "wiki"];
+            const presentKeys = new Set(sources.map(s => s.key));
+            const hasAnyData = curr.searchDelta != null || curr.newsDelta != null || curr.wikiDelta != null
+              || (curr.searchVolume ?? 0) > 0 || (curr.newsCount ?? 0) > 0 || (curr.wikiPageviews ?? 0) > 0;
+            for (const k of allKeys) {
+              if (!presentKeys.has(k)) {
+                sources.push({ key: k, pct: 0, status: hasAnyData ? "quiet" : "no-data" });
+              }
+            }
+
+            const top = sources.find(s => s.status === "active");
+            if (top) {
+              const driverLabels: Record<string, string> = {
+                news: "News coverage up",
+                wiki: "Wiki views up",
+                search: "Search interest up",
+              };
+              dominantDriver = driverLabels[top.key] ?? null;
+            }
+
+            sourceAttribution.set(id, { sources, activeSources: sources.filter(s => s.status === "active").length, dominantDriver });
           }
         } catch (e) {
           console.warn("[hot-movers] Source attribution computation failed:", e);

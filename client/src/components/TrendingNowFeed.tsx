@@ -16,7 +16,7 @@ interface HotMover {
   change24h: number | null;
   rankChange: number | null;
   badge: { label: string; color: string; description: string };
-  sourceBreakdown?: { sources: Array<{ key: string; pct: number }>; activeSources: number } | null;
+  sourceBreakdown?: { sources: Array<{ key: string; pct: number; status?: string }>; activeSources: number; dominantDriver?: string | null } | null;
 }
 
 interface TrendingNowFeedProps {
@@ -183,38 +183,53 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                                 </span>
                               </div>
                             )}
-                            {person.sourceBreakdown && person.sourceBreakdown.sources.length > 0 ? (
-                              <>
-                                <div className="border-t border-slate-700/40 my-1.5" />
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider" data-testid={`score-drivers-label-${person.id}`}>Score Drivers (24h)</p>
-                                  {person.sourceBreakdown.activeSources < 3 && (
-                                    <span className="text-[9px] text-slate-500">{person.sourceBreakdown.activeSources}/3 sources</span>
-                                  )}
-                                </div>
-                                {person.sourceBreakdown.sources.map(src => {
-                                  const meta = { search: { icon: <Search className="h-3 w-3" />, color: "bg-blue-400/70" }, news: { icon: <Newspaper className="h-3 w-3" />, color: "bg-amber-400/70" }, wiki: { icon: <Globe className="h-3 w-3" />, color: "bg-emerald-400/70" } }[src.key] ?? { icon: null, color: "bg-slate-400/70" };
-                                  const label = src.key.charAt(0).toUpperCase() + src.key.slice(1);
-                                  return (
-                                    <div key={src.key} className="flex items-center gap-2" data-testid={`score-driver-${src.key}-${person.id}`}>
-                                      <span className="text-muted-foreground flex items-center gap-1 w-[60px]">
-                                        {meta.icon}
-                                        {label}
-                                      </span>
-                                      <div className="flex-1 h-1.5 bg-slate-700/40 rounded-full overflow-hidden">
-                                        <div className={`h-full rounded-full ${meta.color}`} style={{ width: `${src.pct}%` }} />
-                                      </div>
-                                      <span className="font-mono text-[10px] w-[28px] text-right">{src.pct}%</span>
+                            {(() => {
+                              const sb = person.sourceBreakdown;
+                              const driverIconMeta: Record<string, { icon: JSX.Element; color: string }> = {
+                                news: { icon: <Newspaper className="h-3 w-3" />, color: "text-amber-400" },
+                                wiki: { icon: <Globe className="h-3 w-3" />, color: "text-emerald-400" },
+                                search: { icon: <Search className="h-3 w-3" />, color: "text-blue-400" },
+                              };
+                              const topActiveSource = sb?.sources?.find(s => s.status === "active");
+                              const driverMeta = topActiveSource ? driverIconMeta[topActiveSource.key] : null;
+                              const driverLabel = sb?.dominantDriver;
+                              const hasData = sb && sb.sources && sb.sources.some(s => s.status !== "no-data");
+                              const statusLabels: Record<string, string> = {
+                                news: "News", wiki: "Wiki", search: "Search",
+                              };
+                              return (
+                                <>
+                                  <div className="border-t border-slate-700/40 my-1.5" />
+                                  {driverLabel ? (
+                                    <div className="flex items-center gap-1.5 mb-1" data-testid={`score-drivers-label-${person.id}`}>
+                                      {driverMeta && <span className={driverMeta.color}>{driverMeta.icon}</span>}
+                                      <span className="text-[11px] font-medium">{driverLabel}</span>
                                     </div>
-                                  );
-                                })}
-                              </>
-                            ) : !person.sourceBreakdown ? (
-                              <>
-                                <div className="border-t border-slate-700/40 my-1.5" />
-                                <p className="text-[10px] text-muted-foreground italic" data-testid={`no-driver-${person.id}`}>No strong driver (minimal movement)</p>
-                              </>
-                            ) : null}
+                                  ) : hasData ? (
+                                    <div className="flex items-center gap-1.5 mb-1" data-testid={`score-drivers-label-${person.id}`}>
+                                      <TrendingUp className="h-3 w-3 text-emerald-400" />
+                                      <span className="text-[11px] font-medium text-muted-foreground">Multiple signals contributing</span>
+                                    </div>
+                                  ) : (
+                                    <p className="text-[10px] text-muted-foreground italic" data-testid={`score-drivers-label-${person.id}`}>Driver data not yet available</p>
+                                  )}
+                                  {sb?.sources && sb.sources.length > 0 && (
+                                    <div className="flex items-center gap-2 flex-wrap" data-testid={`source-status-${person.id}`}>
+                                      {["news", "wiki", "search"].map(key => {
+                                        const src = sb.sources.find(s => s.key === key);
+                                        const st = src?.status ?? "no-data";
+                                        const label = st === "active" ? "active" : st === "quiet" ? "quiet" : "no data";
+                                        return (
+                                          <span key={key} className={`text-[9px] ${st === "active" ? "text-slate-300" : "text-slate-600"}`}>
+                                            {statusLabels[key]}: {label}
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
                           <Button
                             variant="secondary"
