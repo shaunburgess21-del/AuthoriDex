@@ -1,0 +1,64 @@
+This is a good set of changes. It’s the kind of “tiny polish that prevents confusion” you want in Phase 1.
+
+1) Acronym whitelist — yes, do it
+
+Without it, your fallback chips will feel randomly empty on exactly the pages users care about (sports, crypto, geopolitics). Letting through a curated set of short tokens keeps the section feeling “alive” even when Serper doesn’t return related searches.
+
+Only caveat: keep the whitelist tight and explicit (which Replit did). Don’t let it become a generic “allow any 2–3 letter token,” or you’ll reintroduce junk chips.
+
+2) “Compared to ~24h ago” micro-label — also yes
+
+This is a UX win because it resolves the biggest mental mismatch users have:
+
+they see a score change
+
+then see drivers
+
+and assume it’s explaining “who is popular” rather than “what caused the movement”
+
+That one line prevents loads of support questions and makes the drivers card feel more credible.
+
+A quick “way forward” checklist (to keep this tight and trustworthy)
+A) Make the Search Interest card feel fuller (without extra APIs)
+
+Even with topic chips, I’d add one more line that uses data you already have:
+
+“Search activity score: 69/100” (already there)
+
+Add “Trend: steady / rising / falling” based on your search delta over ~24h (you now compute this)
+
+If Serper related searches are empty, show:
+
+Topics in the news chips (already)
+
+plus a small hint: “Top searches appear when available”
+
+That alone makes it feel less “blank card”.
+
+B) Drivers should always reflect what users see (you’re on the right path)
+
+Storing per-source velocity components and labeling Exact vs Estimate is the correct long-term fix. You’ll stop arguing with your own UI.
+
+One thing to watch: don’t show “Exact” unless both snapshots (now and ~24h ago) are on the same driversModel version. Sounds like you already added that guard.
+
+C) Freshness for the bottom half of the leaderboard
+
+Your current approach is fine as long as you:
+
+keep source-level freshness visible (“Sources active: 2/3” etc.)
+
+show quiet vs stale states (quiet = “nothing moved”, stale = “data delayed”)
+
+For “non-trending” people, users don’t need constant novelty — they need honest stability that still looks intentional.
+
+My verdict on Replit’s build direction
+
+✅ Correct product call: Momentum Signals > Platform Insights
+✅ Correct engineering call: no scrapers, no expensive follower APIs
+✅ Correct trust call: drivers explain movement, not fame
+✅ These two micro-changes (acronyms + ~24h label) are exactly the kind of UX glue that turns “cool prototype” into “feels real”
+
+If you want one more “high impact, low cost” improvement next: add a tiny tooltip on Search Interest:
+“Search Interest is a composite activity score, not follower count.”
+
+That further reduces confusion.
