@@ -58,6 +58,8 @@ interface SerperResult {
   searchVolume: number;
   newsCount: number;
   delta: number;
+  relatedSearches?: string[];
+  peopleAlsoAsk?: string[];
 }
 
 interface SerperSearchResponse {
@@ -150,10 +152,16 @@ export async function fetchSerperData(name: string, searchQueryOverride?: string
     const searchVolume = searchActivityScore;
     const delta = recentResults > 3 ? 0.3 : recentResults > 1 ? 0.1 : recentResults > 0 ? 0.05 : 0;
 
+    const rawRelated = (data.relatedSearches || []).map(r => r.query.trim());
+    const rawPAA = (data.peopleAlsoAsk || []).map(r => r.question.trim());
+    const deduped = (arr: string[]) => Array.from(new Set(arr)).slice(0, 5);
+
     const result: SerperResult = {
       searchVolume,
       newsCount,
       delta,
+      relatedSearches: deduped(rawRelated),
+      peopleAlsoAsk: deduped(rawPAA),
     };
 
     // CACHE VALIDITY GATE

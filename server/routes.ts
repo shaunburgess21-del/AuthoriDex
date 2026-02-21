@@ -1,7 +1,6 @@
 import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { generateMockPlatformInsights } from "./api-integrations";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, ingestionRuns, inductionCandidates, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
@@ -1054,44 +1053,168 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get platform insights for a person
-  app.get("/api/people/:id/insights", async (req, res) => {
+  // ============ MOMENTUM SIGNALS ENDPOINT ============
+  app.get("/api/people/:id/momentum", async (req, res) => {
     try {
       const { id } = req.params;
-      
-      // Get person details from database
+
       const [person] = await db
         .select()
         .from(trackedPeople)
         .where(eq(trackedPeople.id, id))
         .limit(1);
-      
+
       if (!person) {
         return res.status(404).json({ error: "Person not found" });
       }
-      
-      // Generate mock platform insights
-      const insights = generateMockPlatformInsights(person.name);
-      
-      // Generate mock follower counts for each platform
-      const hash = person.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const followerCounts = {
-        'X': Math.round(1000000 + (hash % 50000000)), // 1M-51M followers
-        'YouTube': Math.round(500000 + (hash % 20000000)), // 500K-20.5M subscribers
-        'Instagram': Math.round(2000000 + (hash % 100000000)), // 2M-102M followers
-        'TikTok': Math.round(5000000 + (hash % 150000000)), // 5M-155M followers
-        'Spotify': Math.round(100000 + (hash % 10000000)), // 100K-10.1M monthly listeners
-        'News': 0, // No followers for news
-      };
-      
-      // Add follower counts to the response
+
+      const [trending] = await db
+        .select()
+        .from(trendingPeople)
+        .where(eq(trendingPeople.id, id))
+        .limit(1);
+
+      const latestSnapshots = await db
+        .select({
+          timestamp: trendSnapshots.timestamp,
+          newsCount: trendSnapshots.newsCount,
+          searchVolume: trendSnapshots.searchVolume,
+          wikiPageviews: trendSnapshots.wikiPageviews,
+          wikiDelta: trendSnapshots.wikiDelta,
+          newsDelta: trendSnapshots.newsDelta,
+          searchDelta: trendSnapshots.searchDelta,
+          massScore: trendSnapshots.massScore,
+          velocityScore: trendSnapshots.velocityScore,
+          drivers: trendSnapshots.drivers,
+          diagnostics: trendSnapshots.diagnostics,
+          trendScore: trendSnapshots.trendScore,
+          fameIndex: trendSnapshots.fameIndex,
+        })
+        .from(trendSnapshots)
+        .where(and(
+          eq(trendSnapshots.personId, id),
+          eq(trendSnapshots.snapshotOrigin, 'ingest'),
+          sql`${trendSnapshots.timestamp} = date_trunc('hour', ${trendSnapshots.timestamp})`
+        ))
+        .orderBy(desc(trendSnapshots.timestamp))
+        .limit(2);
+
+      if (latestSnapshots.length === 0) {
+        return res.json({
+          asOf: null,
+          activeSources: [],
+          staleFlags: { dataDelayed: true },
+          signals: null,
+          categoryRank: null,
+          officialProfiles: {},
+        });
+      }
+
+      const latest = latestSnapshots[0];
+      const prev = latestSnapshots.length > 1 ? latestSnapshots[1] : null;
+      const diag = latest.diagnostics as Record<string, any> | null;
+      const evidence = diag?.evidence ?? {};
+      const fresh = diag?.fresh ?? {};
+
+      const ageMs = Date.now() - latest.timestamp.getTime();
+      const ageMinutes = Math.round(ageMs / 60000);
+      const dataDelayed = ageMs > 3 * 60 * 60 * 1000;
+
+      const activeSources: string[] = [];
+      if (fresh.wiki !== false) activeSources.push("wiki");
+      if (fresh.news !== false) activeSources.push("news");
+      if (fresh.search !== false) activeSources.push("search");
+
+      const staleFlags: Record<string, boolean> = {};
+      if (dataDelayed) staleFlags.dataDelayed = true;
+      if (fresh.newsEmaHeld) staleFlags.newsHeld = true;
+      if (fresh.searchEmaHeld) staleFlags.searchHeld = true;
+
+      const searchDeltaPct = prev && prev.searchVolume > 0
+        ? Math.round(((latest.searchVolume - prev.searchVolume) / prev.searchVolume) * 100)
+        : 0;
+
+      const newsDeltaPct = prev && prev.newsCount > 0
+        ? Math.round(((latest.newsCount - prev.newsCount) / prev.newsCount) * 100)
+        : 0;
+
+      const wikiDeltaPct = prev && prev.wikiPageviews && prev.wikiPageviews > 0
+        ? Math.round(((latest.wikiPageviews! - prev.wikiPageviews) / prev.wikiPageviews) * 100)
+        : 0;
+
+      const totalAbsDelta = Math.abs(latest.searchDelta ?? 0) + Math.abs(latest.newsDelta ?? 0) + Math.abs(latest.wikiDelta ?? 0);
+      const hasSignificantMovement = totalAbsDelta > 0.05 || Math.abs(trending?.change24h ?? 0) > 1.5;
+
+      let driverBreakdown: { search: number; news: number; wiki: number } | null = null;
+      if (hasSignificantMovement && totalAbsDelta > 0) {
+        const searchContrib = Math.abs(latest.searchDelta ?? 0) * 0.40;
+        const newsContrib = Math.abs(latest.newsDelta ?? 0) * 0.35;
+        const wikiContrib = Math.abs(latest.wikiDelta ?? 0) * 0.25;
+        const totalContrib = searchContrib + newsContrib + wikiContrib;
+        if (totalContrib > 0) {
+          driverBreakdown = {
+            search: Math.round((searchContrib / totalContrib) * 100),
+            news: Math.round((newsContrib / totalContrib) * 100),
+            wiki: Math.round((wikiContrib / totalContrib) * 100),
+          };
+        }
+      }
+
+      let categoryRankNum: number | null = null;
+      if (trending?.category) {
+        const [catRankRow] = await db
+          .select({ cnt: sql<number>`count(*)::int` })
+          .from(trendingPeople)
+          .where(and(
+            eq(trendingPeople.category, trending.category),
+            sql`${trendingPeople.rank} < ${trending.rank}`
+          ));
+        categoryRankNum = (catRankRow?.cnt ?? 0) + 1;
+      }
+
+      const officialProfiles: Record<string, string> = {};
+      if (person.xHandle) officialProfiles.x = person.xHandle;
+      if (person.instagramHandle) officialProfiles.instagram = person.instagramHandle;
+      if (person.tiktokHandle) officialProfiles.tiktok = person.tiktokHandle;
+      if (person.youtubeId) officialProfiles.youtube = person.youtubeId;
+      if (person.spotifyId) officialProfiles.spotify = person.spotifyId;
+
       res.json({
-        insights,
-        followerCounts,
+        asOf: latest.timestamp.toISOString(),
+        ageMinutes,
+        activeSources,
+        staleFlags,
+        signals: {
+          search: {
+            volume: latest.searchVolume,
+            deltaPct: searchDeltaPct,
+            relatedSearches: (evidence.relatedSearches ?? []).slice(0, 5),
+            peopleAlsoAsk: (evidence.peopleAlsoAsk ?? []).slice(0, 5),
+          },
+          news: {
+            count: latest.newsCount,
+            deltaPct: newsDeltaPct,
+            headlines: (evidence.newsHeadlines ?? []).slice(0, 3),
+            provider: evidence.newsProvider ?? fresh.newsSource ?? "unknown",
+          },
+          wiki: {
+            views: latest.wikiPageviews ?? 0,
+            deltaPct: wikiDeltaPct,
+          },
+          drivers: hasSignificantMovement
+            ? { status: "active", breakdown: driverBreakdown, activeSources: activeSources.length }
+            : { status: "stable", breakdown: null, activeSources: activeSources.length },
+        },
+        categoryRank: trending ? {
+          overall: trending.rank,
+          category: trending.category,
+          categoryRank: categoryRankNum,
+        } : null,
+        officialProfiles,
       });
     } catch (error) {
-      console.error("Error fetching platform insights:", error);
-      res.status(500).json({ error: "Failed to fetch platform insights" });
+      console.error("Error fetching momentum signals:", error);
+      res.status(500).json({ error: "Failed to fetch momentum signals" });
     }
   });
 
@@ -3188,55 +3311,6 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         });
       } catch {}
       res.status(500).json({ error: "Failed to fetch trending context", message: error.message });
-    }
-  });
-
-  // Polymarket API proxy (to avoid CORS issues)
-  app.post("/api/polymarket/markets", async (req, res) => {
-    try {
-      const { personName } = req.body;
-      
-      if (!personName || typeof personName !== 'string') {
-        return res.status(400).json({ error: "personName is required" });
-      }
-
-      const query = `
-        query GetPersonMarkets($name: String!) {
-          markets(search: $name, limit: 5, sort: "volume") {
-            id
-            question
-            slug
-            volume
-            endDate
-          }
-        }
-      `;
-
-      const response = await fetch("https://api.polymarket.com/graphql", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          query,
-          variables: { name: personName },
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Polymarket API error: ${response.status}`);
-      }
-
-      const result = await response.json();
-      
-      if (result.errors) {
-        throw new Error(result.errors[0]?.message || "GraphQL error");
-      }
-
-      res.json({ markets: result.data?.markets || [] });
-    } catch (error: any) {
-      console.error("Polymarket proxy error:", error.message);
-      res.status(500).json({ error: "Failed to fetch prediction markets", markets: [] });
     }
   });
 

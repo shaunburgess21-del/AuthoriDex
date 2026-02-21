@@ -1398,6 +1398,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
           evidence: {
             newsHeadlines: (news?.topHeadlines ?? []).slice(0, 3),
             newsProvider: hasPerPersonFallback ? "serper_news" : newsSource,
+            relatedSearches: (serper?.relatedSearches ?? []).slice(0, 5),
+            peopleAlsoAsk: (serper?.peopleAlsoAsk ?? []).slice(0, 5),
           },
           stab: scoreResult.stabDetail ? {
             ...scoreResult.stabDetail,

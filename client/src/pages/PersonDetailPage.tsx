@@ -7,15 +7,13 @@ import { TrendBadge } from "@/components/TrendBadge";
 import { TrendChart } from "@/components/TrendChart";
 import { StatCard } from "@/components/StatCard";
 import { UserMenu } from "@/components/UserMenu";
-import { PlatformInsightsSection } from "@/components/PlatformInsightsSection";
 import { AnimatedSentimentVotingWidget } from "@/components/AnimatedSentimentVotingWidget";
 import { CommunityInsights } from "@/components/CommunityInsights";
 import { ProfileTabs } from "@/components/ProfileTabs";
 import { PredictTab } from "@/components/PredictTab";
-import { PolymarketBetsWidget } from "@/components/PolymarketBetsWidget";
 import { CelebrityInfoModal } from "@/components/CelebrityInfoModal";
 import { CategoryPill } from "@/components/CategoryPill";
-import { ArrowLeft, Share2, Star, TrendingUp, Users, Eye, DollarSign, Globe, MessageSquare, Trophy, Zap, Camera, Check, X, Search, ThumbsUp, ThumbsDown, Minus, HelpCircle } from "lucide-react";
+import { ArrowLeft, Share2, Star, TrendingUp, Users, MessageSquare, Trophy, Zap, Camera, Check, X, Search, ThumbsUp, ThumbsDown, Minus, HelpCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -30,6 +28,7 @@ import { OverratedUnderratedWidget } from "@/components/OverratedUnderratedWidge
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { getExceptionalIndicator } from "@/components/LeaderboardRow";
 import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { MomentumSignals } from "@/components/MomentumSignals";
 
 const APPROVAL_COLORS = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
 const getApprovalColor = (approvalPct: number): string => {
@@ -801,72 +800,8 @@ export default function PersonDetailPage() {
             {/* 5. Trend History Chart */}
             <TrendChart personId={person.id} personName={person.name} />
             
-            {/* 6. Platform Insights (stacked blocks) */}
-            <PlatformInsightsSection personId={person.id} />
-
-            {/* 7. Polymarket Bets Widget */}
-            <PolymarketBetsWidget personName={person.name} />
-
-            {/* Future Widgets - Placeholder Section */}
-            <div className="mt-12 space-y-6">
-              <h2 className="text-2xl font-serif font-bold mb-6">Additional Insights</h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Net Worth Placeholder */}
-                <Card className="p-6 opacity-50">
-                  <div className="flex items-center gap-3 mb-3">
-                    <DollarSign className="h-5 w-5 text-muted-foreground" />
-                    <h3 className="font-semibold">Net Worth</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Coming soon: Forbes & Knowledge Graph data</p>
-                </Card>
-
-                {/* Social Reach Summary Placeholder */}
-                <Card className="p-6 opacity-50">
-                  <div className="flex items-center gap-3 mb-3">
-                    <Globe className="h-5 w-5 text-muted-foreground" />
-                    <h3 className="font-semibold">Social Reach</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Coming soon: Total followers across platforms</p>
-                </Card>
-
-                {/* AI Sentiment Summary Placeholder */}
-                <Card className="p-6 opacity-50">
-                  <div className="flex items-center gap-3 mb-3">
-                    <MessageSquare className="h-5 w-5 text-muted-foreground" />
-                    <h3 className="font-semibold">AI Sentiment</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Coming soon: AI-powered sentiment analysis</p>
-                </Card>
-
-                {/* Engagement Rank Placeholder */}
-                <Card className="p-6 opacity-50">
-                  <div className="flex items-center gap-3 mb-3">
-                    <Trophy className="h-5 w-5 text-muted-foreground" />
-                    <h3 className="font-semibold">Category Rank</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Coming soon: Engagement vs. peers</p>
-                </Card>
-
-                {/* Most Talked About Topic Placeholder */}
-                <Card className="p-6 opacity-50">
-                  <div className="flex items-center gap-3 mb-3">
-                    <TrendingUp className="h-5 w-5 text-muted-foreground" />
-                    <h3 className="font-semibold">Trending Topics</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Coming soon: Keywords from latest posts</p>
-                </Card>
-
-                {/* Search Volume Detail Placeholder */}
-                <Card className="p-6 opacity-50">
-                  <div className="flex items-center gap-3 mb-3">
-                    <Eye className="h-5 w-5 text-muted-foreground" />
-                    <h3 className="font-semibold">Search Trends</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">Coming soon: Geographic search distribution</p>
-                </Card>
-              </div>
-            </div>
+            {/* 6. Momentum Signals + Official Profiles */}
+            <MomentumSignals personId={person.id} />
           </>
         )}
 
