@@ -984,6 +984,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     let searchApiUsedFallback = 0;
     let newsEmaHeldCount = 0;
     let searchEmaHeldCount = 0;
+    const searchDeltaValues: number[] = [];
     const newsFailed = newsData.size === 0;
     const serperFailed = serperData.size === 0;
     
@@ -1126,12 +1127,19 @@ export async function runDataIngestion(): Promise<IngestResult> {
         let newsCount = news?.articleCount24h ?? 0;
         let newsDelta = news?.delta ?? 0;
         let searchVolume = serper?.searchVolume ?? 0;
-        let searchDelta = serper?.delta ?? 0;
         let newsUsedFallback = false;
         let searchUsedFallback = false;
         
         const prevNewsCount = mostRecent?.newsCount ?? 0;
         const prevSearchVolume = mostRecent?.searchVolume ?? 0;
+
+        // Compute searchDelta from snapshot history instead of Serper's broken
+        // date-based delta (organic results almost never have dates).
+        // Uses bounded normalized change: (curr - prev) / max(prev, 20)
+        // Denominator floor of 20 prevents explosions from low volumes.
+        // Clamp to ±0.5 keeps it in the wikiDelta range (p95 ~0.58).
+        const searchDeltaRaw = (searchVolume - prevSearchVolume) / Math.max(prevSearchVolume, 20);
+        let searchDelta = Math.max(-0.5, Math.min(0.5, searchDeltaRaw));
         
         // NEWS: Use fallback if source is in OUTAGE state (global-zero or API failed)
         const newsNeedsOutageFallback = newsHealth.state === "OUTAGE" || newsHealth.state === "DEGRADED";
@@ -1215,14 +1223,12 @@ export async function runDataIngestion(): Promise<IngestResult> {
         // Same bootstrap recovery logic for search
         if (searchNeedsOutageFallback || !serper || (suspiciousSearchDrop && globalHealth.isSearchGlobalOutage)) {
           let fallbackSearchVolume = prevSearchVolume;
-          let fallbackSearchDelta = mostRecent?.searchDelta ?? 0;
           let fallbackDecay = searchDecayFactor;
 
           if (fallbackSearchVolume <= 0) {
             const lastNonZero = lastNonZeroSearchMap.get(person.id);
             if (lastNonZero) {
               fallbackSearchVolume = lastNonZero.searchVolume;
-              fallbackSearchDelta = lastNonZero.searchDelta;
               const staleHours = (now.getTime() - lastNonZero.timestamp.getTime()) / (1000 * 60 * 60);
               if (staleHours <= 2) fallbackDecay = 1.0;
               else if (staleHours <= 4) fallbackDecay = 1.0 - ((staleHours - 2) / 2) * 0.2;
@@ -1234,7 +1240,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
 
           if (fallbackSearchVolume > 0) {
             searchVolume = Math.round(fallbackSearchVolume * fallbackDecay);
-            searchDelta = Math.round(fallbackSearchDelta * fallbackDecay);
+            // Recompute searchDelta from fallback volume (don't use stored zero delta)
+            const fbDeltaRaw = (searchVolume - prevSearchVolume) / Math.max(prevSearchVolume, 20);
+            searchDelta = Math.max(-0.5, Math.min(0.5, fbDeltaRaw));
             searchUsedFallback = true;
             searchApiUsedFallback++;
           }
@@ -1273,6 +1281,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
         // Get current source health states for weight renormalization
         const currentHealthSnapshot = getCurrentHealthSnapshot();
         
+        searchDeltaValues.push(searchDelta);
+
         const inputs = {
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiPageviews7dAvg: wiki?.averageDaily7d || 0, // 7-day average for stable mass baseline
@@ -1621,6 +1631,16 @@ export async function runDataIngestion(): Promise<IngestResult> {
     }
     if (newsEmaHeldCount > 0 || searchEmaHeldCount > 0) {
       console.log(`[EMA Hold] News held: ${newsEmaHeldCount}/${people.length}, Search held: ${searchEmaHeldCount}/${people.length} (provider healthy, individual artifact suppressed)`);
+    }
+
+    // Search delta instrumentation
+    if (searchDeltaValues.length > 0) {
+      const nonZero = searchDeltaValues.filter(v => v !== 0);
+      const absVals = searchDeltaValues.map(Math.abs);
+      const avgAbs = absVals.reduce((a, b) => a + b, 0) / absVals.length;
+      const maxAbs = Math.max(...absVals);
+      const top5 = [...absVals].sort((a, b) => b - a).slice(0, 5).map(v => v.toFixed(4));
+      console.log(`[SearchDelta] avg=${avgAbs.toFixed(4)}, max=${maxAbs.toFixed(4)}, nonZero=${nonZero.length}/${searchDeltaValues.length} (${((nonZero.length / searchDeltaValues.length) * 100).toFixed(0)}%), top5=[${top5.join(', ')}]`);
     }
     
     // Log rank churn
