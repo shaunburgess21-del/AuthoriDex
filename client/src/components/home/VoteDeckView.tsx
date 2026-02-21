@@ -340,7 +340,7 @@ function ValueCard({
   onChangeVote,
 }: {
   person: ValueVotePerson;
-  userVote: 'underrated' | 'overrated' | null;
+  userVote: 'underrated' | 'overrated' | 'fairly_rated' | null;
   onVote: (personId: string, vote: 'underrated' | 'overrated') => void;
   onChangeVote: (personId: string) => void;
 }) {
