@@ -1,0 +1,90 @@
+I’m with Replit on this: you don’t need an Approval Rating tooltip.
+
+Why
+
+“Approval rating” is already a known mental model (like/dislike, upvote/downvote). People won’t ask “what is this number?” the way they do with Trend Score.
+
+Too many tooltips starts to feel like the product is explaining itself instead of feeling intuitive.
+
+Tooltips are most valuable when the label is ambiguous (Trend Score), or the metric could be misread (e.g., “Search Interest” as followers).
+
+The one small exception (when it is worth it)
+
+If you’re seeing (or expect) confusion like:
+
+“Is this global public opinion or just AuthoriDex users?”
+
+“Is 93% based on 10 votes or 10,000?”
+
+“Can one user vote multiple times?”
+
+…then don’t add a big tooltip—add micro-copy instead:
+
+Option A (best, tiny):
+
+Change label to: Community Approval (instead of Approval Rating)
+
+Option B (small subtext under the filter or column header):
+
+“Based on votes on AuthoriDex”
+
+Option C (tap-to-expand detail only on the profile page, not the leaderboard):
+
+Show: “84% approval · 1,238 votes” (vote count adds instant trust)
+
+My recommendation
+
+No tooltip on the leaderboard filter.
+
+If you want extra clarity, rename it to Community Approval and (optionally) show vote count on the profile page.
+
+If you tell me whether users can vote once ever vs once per day vs per matchup, I’ll give you the cleanest one-liner that matches your exact rules.
+
+I'm leaning towards a tooltip and I'll tell you why. I think it's important for our users to know that the approval rating is purely from our AuthoriDex verified users, not public sentiment via any api. It's a true reflection of what our users think. Maximum of 1 vote per user per day (for each of the people on the leaderboard, so no gaming the system). Things like that that will give context to any user who was unsure of how it works. a tooltip is a simple inclusion that can clear up any confusion.
+What do you think?
+
+Yeah—in your case, a tooltip is justified, because your Approval Rating isn’t a generic “public approval” metric. It’s a community signal with rules, and without context some people will assume it’s pulled from the internet or “overall sentiment.”
+
+The key is to keep it short, confidence-building, and non-legalistic.
+
+Best pattern
+
+Add a small ⓘ icon next to Approval Rating (tab label + column header).
+
+Tooltip content = 3 bullets + 1 rule line, max.
+
+Avoid “verified” unless you truly have an identity verification flow—if you mean “logged-in users,” say that.
+
+Suggested tooltip copy (tight + clear)
+
+How Approval Rating Works
+Approval Rating is based only on votes from AuthoriDex users — not public sentiment or external APIs.
+
+👍 Approve / 👎 Disapprove
+
+One vote per user per day, per person
+
+Designed to reflect what our community thinks right now
+
+If you want it even tighter:
+
+Approval Rating
+Community votes on AuthoriDex (not external data).
+1 vote per user per day, per person.
+
+Tiny UI tweaks that make it feel “trustworthy”
+
+On the profile + leaderboard row, show vote volume when you can:
+
+84% · 1,238 votes (even if the tooltip exists, this removes doubt fast)
+
+If vote count is low, consider showing:
+
+Low sample badge under a threshold (e.g., <50 votes last 7d), to avoid “this looks fake” reactions.
+
+One wording caution
+
+If “verified users” means “accounts that can vote,” I’d swap it to:
+
+“signed-in users” or “authenticated users”
+Unless you truly verify identity/phone/KYC, “verified” can trigger skepticism.
