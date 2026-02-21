@@ -656,7 +656,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     }>();
     const lastNonZeroNewsMap = new Map<string, { newsCount: number; newsDelta: number; timestamp: Date }>();
     const lastNonZeroSearchMap = new Map<string, { searchVolume: number; searchDelta: number; timestamp: Date }>();
-    const snapshot24hMap = new Map<string, { trendScore: number; fameIndex: number | null; timestamp?: Date }>();
+    const snapshot24hMap = new Map<string, { trendScore: number; fameIndex: number | null; timestamp?: Date; basisHours?: number }>();
     const snapshot7dMap = new Map<string, { trendScore: number; fameIndex: number | null }>();
     
     for (const snap of historicalSnapshots) {
@@ -702,11 +702,18 @@ export async function runDataIngestion(): Promise<IngestResult> {
         }
       }
       
-      // Keep closest snapshot to 24h ago (within 8 hour window to survive overnight gaps)
-      if (diff24h < 8 * 60 * 60 * 1000) {
+      // Keep closest snapshot to 24h ago (within 18h–30h window to survive overnight gaps)
+      // Window: now-30h to now-18h, picks snapshot closest to the 24h mark
+      const snapAgeHours = (now.getTime() - snapTime) / (1000 * 60 * 60);
+      if (snapAgeHours >= 18 && snapAgeHours <= 30) {
         const existing = snapshot24hMap.get(snap.personId);
         if (!existing || diff24h < Math.abs(new Date(existing.timestamp!).getTime() - time24hAgo.getTime())) {
-          snapshot24hMap.set(snap.personId, { trendScore: snap.trendScore, fameIndex: snap.fameIndex, timestamp: snap.timestamp });
+          snapshot24hMap.set(snap.personId, { 
+            trendScore: snap.trendScore, 
+            fameIndex: snap.fameIndex, 
+            timestamp: snap.timestamp,
+            basisHours: Math.round(snapAgeHours * 10) / 10,
+          });
         }
       }
       
@@ -1364,6 +1371,11 @@ export async function runDataIngestion(): Promise<IngestResult> {
             ...(hasPerPersonFallback ? { fallbackReason: news?._fallbackReason ?? "per_person_zero_streak" } : {}),
             ...(newsEmaHeld ? { newsEmaHeld: true, newsRawCount: news?.articleCount24h ?? 0, newsHoldDetail: newsHoldDiag } : {}),
             ...(searchEmaHeld ? { searchEmaHeld: true, searchRawVolume: serper?.searchVolume ?? 0, searchHoldDetail: searchHoldDiag } : {}),
+          },
+          change: {
+            basisHours24h: prev24h?.basisHours ?? null,
+            has24hBaseline: !!prev24h,
+            has7dBaseline: !!prev7d,
           },
           evidence: {
             newsHeadlines: (news?.topHeadlines ?? []).slice(0, 3),
