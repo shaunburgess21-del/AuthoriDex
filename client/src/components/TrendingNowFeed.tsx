@@ -200,7 +200,7 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                                   {driverLabel ? (
                                     <div className="flex items-center gap-1.5 mb-1" data-testid={`score-drivers-label-${person.id}`}>
                                       {driverMeta && <span className={driverMeta.color}>{driverMeta.icon}</span>}
-                                      <span className="text-[11px] font-medium">{driverLabel}</span>
+                                      <span className="text-[11px] font-medium">Main driver: {driverLabel}</span>
                                     </div>
                                   ) : hasData ? (
                                     <div className="flex items-center gap-1.5 mb-1" data-testid={`score-drivers-label-${person.id}`}>

@@ -6,7 +6,7 @@ function ApprovalRatingInfoContent() {
     <div className="space-y-3">
       <p className="font-semibold text-sm">How Approval Rating Works</p>
       <p className="text-xs text-muted-foreground">
-        Approval Rating is based only on votes from authenticated AuthoriDex users — not external public sentiment or APIs.
+        Approval Rating is based only on votes from verified AuthoriDex users — not external public sentiment or APIs.
       </p>
       <ul className="space-y-1.5">
         <li className="flex items-center gap-2 text-xs">

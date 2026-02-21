@@ -2458,7 +2458,7 @@ export default function PredictPage() {
           </section>
         )}
 
-        {/* SECTION HEADER: Predict the Fame Score (Official Markets) */}
+        {/* SECTION HEADER: Predict the Trend Score (Official Markets) */}
         {(showSection("jackpot") || showSection("updown") || showSection("h2h") || showSection("gainer")) && (
           <div className="relative overflow-hidden mb-6">
             <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 via-transparent to-transparent" />

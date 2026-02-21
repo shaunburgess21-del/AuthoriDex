@@ -274,7 +274,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 {fameScore.toLocaleString()}
               </p>
               <p className="text-xs text-muted-foreground uppercase tracking-wide lg:hidden">
-                Fame Score
+                Trend Score
               </p>
             </div>
             <div className="hidden lg:block text-right w-[72px] shrink-0" data-testid={`text-delta-desktop-${person.id}`}>
@@ -362,7 +362,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 {fameScore.toLocaleString()}
               </p>
               <p className="text-xs text-muted-foreground uppercase tracking-wide lg:hidden">
-                Fame Score
+                Trend Score
               </p>
             </div>
             <Button

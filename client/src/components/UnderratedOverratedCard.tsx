@@ -134,7 +134,7 @@ export function UnderratedOverratedCard({
             {person.name}
           </h3>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Fame Score: <span className="font-mono text-foreground">{(person.fameIndex ?? 0).toLocaleString()}</span>
+            Trend Score: <span className="font-mono text-foreground">{(person.fameIndex ?? 0).toLocaleString()}</span>
           </p>
           {person.approvalPct != null && (
             <p className="text-xs text-muted-foreground mt-0.5">

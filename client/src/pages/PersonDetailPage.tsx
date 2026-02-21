@@ -755,7 +755,7 @@ export default function PersonDetailPage() {
           <Card className="text-center p-4">
             <div className="flex items-center justify-center gap-1 mb-1">
               <p className="text-sm text-muted-foreground uppercase tracking-wide">
-                Fame Score
+                Trend Score
               </p>
               <TrendScoreInfoIcon testId="icon-trend-score-profile" className="h-3 w-3 text-muted-foreground/40 cursor-help" />
             </div>

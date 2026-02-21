@@ -741,8 +741,8 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             theme="predict"
             icon={TrendingUp}
             title="Up/Down Predictions"
-            subtitle="Will their Fame Score rise or fall?"
-            help={{ title: "How Up/Down Predictions Work", bullets: ["Predict whether a celebrity's Fame Score will go up or down.", "Higher multipliers mean bigger risk and bigger rewards.", "Markets resolve at the end of each weekly cycle."] }}
+            subtitle="Will their Trend Score rise or fall?"
+            help={{ title: "How Up/Down Predictions Work", bullets: ["Predict whether a celebrity's Trend Score will go up or down.", "Higher multipliers mean bigger risk and bigger rewards.", "Markets resolve at the end of each weekly cycle."] }}
             onViewAll={onExplore}
           />
           <CardDeckContainer
@@ -806,7 +806,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             icon={TrendingUp}
             title="Top Gainer Predictions"
             subtitle="Pick the biggest mover in 7 days."
-            help={{ title: "How Top Gainer Predictions Work", bullets: ["Predict which celebrity will have the biggest Fame Score increase.", "Choose from trending celebrities across all categories.", "The closest prediction to the actual top gainer wins."] }}
+            help={{ title: "How Top Gainer Predictions Work", bullets: ["Predict which celebrity will have the biggest Trend Score increase.", "Choose from trending celebrities across all categories.", "The closest prediction to the actual top gainer wins."] }}
             onViewAll={onExplore}
           />
           <CardDeckContainer
