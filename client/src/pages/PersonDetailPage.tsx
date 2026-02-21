@@ -474,7 +474,7 @@ export default function PersonDetailPage() {
     window.history.replaceState({}, "", url.toString());
   };
 
-  const { data: person, isLoading, error } = useQuery<TrendingPerson>({
+  const { data: person, isLoading, error } = useQuery<TrendingPerson & { wikiSlug?: string | null }>({
     queryKey: [`/api/trending/${params?.id}`],
     enabled: !!params?.id,
   });

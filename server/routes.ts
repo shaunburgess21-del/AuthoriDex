@@ -794,10 +794,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const m = metrics[0];
 
+      const tracked = await db
+        .select({ wikiSlug: trackedPeople.wikiSlug })
+        .from(trackedPeople)
+        .where(eq(trackedPeople.id, id))
+        .limit(1);
+
       res.json({
         ...person,
         approvalPct: m?.approvalPct ?? null,
         approvalVotesCount: m?.approvalVotesCount ?? 0,
+        wikiSlug: tracked[0]?.wikiSlug ?? null,
       });
     } catch (error) {
       console.error("Error fetching person:", error);
