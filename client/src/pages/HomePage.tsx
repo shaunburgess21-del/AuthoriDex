@@ -1017,6 +1017,7 @@ export default function HomePage() {
                           <div className="text-right w-[120px] shrink-0">Trend Score</div>
                           <div className="text-right w-[72px] shrink-0">24h</div>
                           <div className="text-right w-[72px] shrink-0">Approval</div>
+                          <div className="text-right w-[72px] shrink-0">Vote</div>
                         </>
                       ) : (
                         <>
