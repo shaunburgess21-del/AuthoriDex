@@ -1,0 +1,96 @@
+Yes — this is a good idea, and honestly it’s the best “Phase 1 → Phase 2” bridge you could ask for. Replit did three things here, and all three improve user trust and perceived richness without introducing new paid APIs.
+
+1) Search card “never empty” + headline-topic fallback ✅
+
+This is exactly what you want for early-stage UX:
+
+If Serper gives relatedSearches / peopleAlsoAsk, awesome.
+
+If it doesn’t (or cache is old), you still show something meaningful derived from your own existing data (headlines you already have).
+
+And crucially: the fallback is labeled as “Topics in the news” (not “Top searches”), so you’re not misrepresenting data.
+
+That’s a big win. The Search card will no longer look like a placeholder.
+
+One small refinement: in the fallback case, keep it capped and clean:
+
+max 3–5 topic chips
+
+avoid generic words (“surgery”, “news”, “Olympics” can be too broad unless paired: “jaw surgery”, “Winter Olympics”)
+
+dedupe aggressively
+
+2) “Drivers explain change, not totals” line ✅ (massive trust win)
+
+This single line will prevent the exact confusion you had (wiki 0% doesn’t mean zero views). This is the kind of microcopy that saves you support threads and skepticism.
+
+Good addition.
+
+3) Storing per-source velocity components in diagnostics JSONB ✅ (smart shortcut)
+
+This is the best part.
+
+Instead of doing a schema migration right now, storing:
+
+searchVelocityScore
+
+newsVelocityScore
+
+wikiVelocityScore
+
+and maybe the effective weights
+
+inside the existing diagnostics blob is:
+
+fast
+
+backwards compatible
+
+easy to iterate
+
+Then your Score Drivers attribution can become exact once both snapshots (now and ~24h ago) have those fields.
+
+That’s the right architecture.
+
+Two things to watch:
+
+Versioning: add something like diagnostics.version = 2 or driversModel = "velocity_components_v1" so you know what logic produced it.
+
+Old snapshots: you’ll see (estimate) for about 24 hours until enough new snapshots exist. That’s normal and totally acceptable.
+
+The only “red flag”
+
+Make sure the UI doesn’t flip-flop too much between “estimate” and “exact” per person.
+
+If it feels jumpy, use a rule:
+
+only show “exact” once you have two exact snapshots in the 20–28h window
+
+otherwise keep estimate until stable
+
+Way forward (what I’d tell Replit to do next)
+
+Force a fresh Serper pull periodically for top profiles (or on profile view) until you see related searches populating reliably.
+
+After next ingestion + 24h:
+
+verify drivers turn “exact” for most top profiles
+
+spot-check that “exact” attribution matches what you’d intuitively expect when a big news spike happens
+
+Add one more UI polish:
+
+on the drivers card, show a tiny label when exact: “Exact (from score components)”
+
+when estimate: “Estimate (from signal changes)”
+This keeps trust high.
+
+Bottom line
+
+Replit’s build is a good call. It solves your two biggest problems:
+
+empty-looking Search card
+
+“why is X 0%?” confusion
+
+…and it sets you up to make Score Drivers truly defensible without expensive APIs.
