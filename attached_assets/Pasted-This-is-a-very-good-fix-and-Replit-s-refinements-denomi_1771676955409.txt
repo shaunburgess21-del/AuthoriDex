@@ -1,0 +1,60 @@
+This is a very good fix, and Replit’s refinements (denominator floor + clamp + instrumentation) are exactly the right “production-safe” way to bring search velocity online.
+
+A few final checks / small tweaks I’d recommend (optional, but high-value):
+
+1) Confirm you’re using the right “previous” value
+
+Replit is using mostRecent?.searchVolume as prevSearchVol. That’s good as long as “mostRecent” is:
+
+the most recent completed snapshot for that same person, and
+
+from the prior run (or at least prior timestamp)
+
+If “mostRecent” can sometimes be missing or too old (due to gaps/sleep), you may get weird deltas. The clamp protects you, but you’ll see more non-zero deltas after downtime.
+
+Tiny improvement: If last snapshot age > X hours, treat delta as 0 or “soften” it:
+
+if ageHours > 6, set prevSearchVol = max(prevSearchVol, 20) and maybe clamp tighter, or set delta=0 and mark stale.
+
+Not required for launch; just something to watch.
+
+2) Consider a “deadband” to reduce jitter
+
+SearchVolume is a 0–100 composite score; it can wiggle by 1–2 points hourly.
+
+Add a deadband:
+
+if abs(diff) < 2, set delta = 0
+
+That reduces noisy motion. If you notice the leaderboard getting “twitchy” after this change, add the deadband.
+
+3) Make sure fallback paths compute delta consistently
+
+Replit said they updated fallback to “recompute delta from fallback volume.” That’s correct.
+
+Just ensure the fallback path uses the same formula:
+
+(fallbackVol - prevVol) / max(prevVol, 20) clamped to ±0.5
+
+You don’t want searchDelta behaving differently depending on whether fallback fired.
+
+4) Watch the first 3 runs after enabling
+
+Your new instrumentation line is perfect. After the next ingestion, sanity-check:
+
+Non-zero %: I’d expect something like 10–40% of people non-zero per run (depending on how jumpy your searchVolume is).
+
+Avg abs: should be small (e.g., 0.01–0.08). If it’s huge, searchVolume is too volatile or the formula needs deadband.
+
+Top 5 values: click into those people and see if it “makes sense” (e.g., big news day, spike in public interest).
+
+5) One expected side effect: movers will change
+
+Once searchDelta starts contributing to velocity, your “Hot Movers” will likely reshuffle. That’s normal and desired — it will look more “alive.”
+
+Bottom line
+
+✅ Replit’s plan and implementation are solid and safe.
+The clamp to ±0.5 is well-justified given your wikiDelta p95 ~0.58 and newsDelta can be larger — search won’t dominate.
+
+If after 24 hours you see too much twitching, the first knob to add is the deadband (abs(diff) < 2 => 0)
