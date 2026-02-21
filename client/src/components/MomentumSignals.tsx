@@ -227,8 +227,8 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                   <TooltipTrigger asChild>
                     <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-search-tooltip" />
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[200px] text-xs">
-                    Search Interest is a composite activity score, not follower count.
+                  <TooltipContent side="top" className="max-w-[220px] text-xs normal-case tracking-normal">
+                    How actively people are searching for this person on Google right now, scored from 0 to 100. Higher means more search buzz.
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -238,7 +238,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           <CardContent className="pt-4 space-y-3">
             <div className="flex items-baseline justify-between gap-2 flex-wrap" data-testid="text-search-volume">
               <div className="text-2xl font-bold">
-                {signals.search.volume}<span className="text-sm font-normal text-muted-foreground ml-1">activity score</span>
+                {signals.search.volume}<span className="text-sm font-normal text-muted-foreground ml-1">/ 100 search activity</span>
               </div>
               <div className="flex items-center gap-1 text-xs" data-testid="text-search-trend">
                 {signals.search.deltaPct > 5 ? (
