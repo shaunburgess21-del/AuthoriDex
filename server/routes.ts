@@ -2454,12 +2454,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const negativeDeltas = allDeltas.filter(v => v < 0).sort((a, b) => a - b);
 
       const p5Idx = (arr: number[]) => Math.max(0, Math.ceil(arr.length * 0.05) - 1);
+      const p10Idx = (arr: number[]) => Math.max(0, Math.ceil(arr.length * 0.10) - 1);
 
       const canonicalThresholds = {
         rankChangeP90: positiveRC.length > 0 ? positiveRC[p5Idx(positiveRC)] : 999,
         deltaP90: positiveDeltas.length > 0 ? positiveDeltas[p5Idx(positiveDeltas)] : 999,
-        negRankChangeP10: negativeRC.length > 0 ? negativeRC[p5Idx(negativeRC)] : -999,
-        negDeltaP10: negativeDeltas.length > 0 ? negativeDeltas[p5Idx(negativeDeltas)] : -999,
+        negRankChangeP10: negativeRC.length > 0 ? negativeRC[p10Idx(negativeRC)] : -999,
+        negDeltaP10: negativeDeltas.length > 0 ? negativeDeltas[p10Idx(negativeDeltas)] : -999,
       };
 
       const leaderboard = results.map((person, index) => {

@@ -647,7 +647,7 @@ export default function HomePage() {
     const candidates = displayPeople
       .filter(p => {
         const ind = getExceptionalIndicator(p as any, percentileThresholds);
-        return ind?.triggersHotMover === true;
+        return ind != null;
       })
       .map(p => p.id);
     return new Set(candidates);
