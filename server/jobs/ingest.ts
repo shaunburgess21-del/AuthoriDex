@@ -1189,17 +1189,18 @@ export async function runDataIngestion(): Promise<IngestResult> {
         
         let newsEmaHeld = false;
         let newsHoldDiag: Record<string, any> | null = null;
-        if (!newsUsedFallback && !newsNeedsOutageFallback && !hasPerPersonFallback && news) {
+        const isMediastackRefreshTick = newsSource === "mediastack" ? (mediastackCadence?.shouldRefresh ?? true) : true;
+        if (!newsUsedFallback && !newsNeedsOutageFallback && !hasPerPersonFallback && news && isMediastackRefreshTick) {
           const isProviderHealthy = newsHealth.state === "HEALTHY" || newsHealth.state === "RECOVERY";
           if (isProviderHealthy) {
             const rawNewsCount = newsCount;
             const bp50 = newsBaselineMap.get(person.id);
-            const hasBaseline = bp50 !== undefined && bp50 >= 2;
+            const hasBaseline = bp50 !== undefined && bp50 >= 5;
             const baselineHold = hasBaseline &&
               rawNewsCount <= bp50! * 0.1 &&
-              prevNewsCount >= bp50! * 0.6;
-            const floorHold = !hasBaseline && prevNewsCount >= 8 &&
-              rawNewsCount < prevNewsCount * 0.2;
+              prevNewsCount >= bp50! * 0.5;
+            const floorHold = !hasBaseline && prevNewsCount >= 12 &&
+              rawNewsCount < prevNewsCount * 0.15;
 
             if (baselineHold || floorHold) {
               newsCount = prevNewsCount;
