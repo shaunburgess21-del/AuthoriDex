@@ -711,19 +711,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             const top = sources.find(s => s.status === "active");
             if (top) {
-              const moverEntry = result.find(m => m.id === id);
-              const isUp = (moverEntry?.change24h ?? 0) >= 0;
-              const upLabels: Record<string, string> = {
+              const driverLabels: Record<string, string> = {
                 news: "News coverage up",
                 wiki: "Wiki views up",
                 search: "Search interest up",
               };
-              const downLabels: Record<string, string> = {
-                news: "News coverage shifting",
-                wiki: "Wiki views shifting",
-                search: "Search interest shifting",
-              };
-              dominantDriver = (isUp ? upLabels : downLabels)[top.key] ?? null;
+              dominantDriver = driverLabels[top.key] ?? null;
             }
 
             sourceAttribution.set(id, { sources, activeSources: sources.filter(s => s.status === "active").length, dominantDriver });
