@@ -1,0 +1,105 @@
+Overall: this is a big upgrade for Phase 1. It looks premium, it’s coherent with your “explain the movement” positioning, and it avoids the “fake social stats” trap.
+
+That said, there are 2–3 UX issues in what I’m seeing that you should fix before launch.
+
+What’s strong (keep)
+
+Momentum Signals section exists and feels intentional (not like a random widget dump).
+
+Section-level freshness + source list is exactly right (“Updated 1h ago · Sources: Wikipedia, News, Search”).
+
+News Activity card is great: count + headlines + provider attribution = real value.
+
+Wikipedia Pulse is simple and credible.
+
+Category rank chips (“#1 in Creator / #1 Overall”) add authority with basically no extra cost.
+
+Official profiles as link chips is perfect for Phase 1.
+
+The main issue: Score Drivers is currently confusing
+
+On your Jake Paul screenshot the Score Drivers shows Search 0%, News 0%, Wiki 100% while the other cards show meaningful values (Search activity 69, News 15 articles, Wiki 16.3k views).
+
+To a user, that reads like:
+
+“Only Wikipedia matters; search and news contributed nothing”
+…which is almost certainly not the story — it’s more likely that the “drivers” are based on change over time, and in this specific 24h window your wiki delta dominated or the driver calculation is falling back weirdly when deltas are small.
+
+Fix the framing (fast, high impact)
+
+Rename the card title to “Score Drivers (24h change)”.
+
+Add a sublabel “Based on what changed, not raw totals” (tiny tooltip icon works).
+
+Fix when it’s “stable / no movement”
+
+If the person’s score didn’t move much, don’t show 0/0/100 bars.
+Instead show:
+
+“Stable — no major signal shift”
+
+and optionally a link: “Show details” for power users.
+
+You already planned a threshold—make sure it triggers here.
+
+Second issue: “no change” labels look odd
+
+Search Interest says “no change” but shows an activity score of 69. Wiki and News also say “no change.”
+
+If “no change” means “no delta computed,” it reads like a bug.
+
+Better label options
+
+If you have a delta: show “+X% (24h)” or “▲ +X pts”
+
+If you don’t have a delta or it’s below threshold: show “stable” or “flat”
+
+If data is cached: show “cached” (only in admin / debug view)
+
+In general, “no change” is too absolute.
+
+Third: you’re missing the most “viral” part
+
+You wanted Related Searches + People Also Ask. I don’t see them displayed in this screenshot (maybe they’re not populated yet). When you add them, keep them super tight:
+
+Search Interest card
+
+“Top searches” (3–5 items, short)
+
+“People ask” (2 items max)
+
+Make them clickable if you can (even if it just runs an on-site search).
+
+This is the part people screenshot.
+
+Layout nitpicks (small polish)
+
+Momentum Signals is below the chart, which is fine, but consider:
+
+On mobile, the chart is heavy. Many users will never reach Momentum Signals.
+
+A small “Jump to Signals” anchor under the hero could help.
+
+Official Profiles currently looks a bit bare (only X handle). If only one profile exists, consider:
+
+show it inline in the header area (near Share/Favorite), OR
+
+keep the section but add a “More profiles coming” subtle hint only if you’re confident you’ll populate more.
+
+Quick “launch-ready” checklist I’d give Replit
+
+Score Drivers → rename to (24h change) + tooltip explanation
+
+Replace “no change” → “stable/flat” + show delta when available
+
+Driver bars: don’t show 0/0/100 unless the movement is real and meaningful
+
+Add Top Searches + PAA display (trimmed + deduped)
+
+Standardize naming: Trend Score everywhere (good call)
+
+Answer to “is it good?”
+
+Yes — directionally excellent. It already feels more trustworthy than platform stats. Just fix the driver interpretation / labeling, because that’s the one piece that can confuse users and undermine trust.
+
+If you want, paste one example JSON payload from the new momentum endpoint for Jake Paul (just the drivers + deltas fields), and I’ll tell you whether the 0/0/100 is correct or a calculation/threshold bug.
