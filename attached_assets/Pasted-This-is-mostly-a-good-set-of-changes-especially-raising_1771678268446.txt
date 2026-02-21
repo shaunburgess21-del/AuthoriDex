@@ -1,0 +1,94 @@
+This is mostly a good set of changes — especially raising the baseline minimum and re-applying DB guardrails. But there’s one part I’d flag as a potential mistake:
+
+✅ Good / high-confidence improvements
+1) Baseline minimum: 2 → 5
+
+Yes. This will immediately cut a lot of false holds where “baseline is tiny, so 0 triggers hold constantly.” For Mediastack’s uneven coverage, bp50>=5 is a much saner “this person is expected to have regular news.”
+
+2) Floor hold threshold tightened: 8→12 and drop ratio tighter
+
+Also reasonable. Floor-based holds are meant for clearly high-volume people. Raising the floor reduces spammy holds on mid-tier names.
+
+3) DB constraints re-applied
+
+Great. This prevents silent analytics corruption and makes your 24h logic more trustworthy.
+
+4) Lock breaker already exists (10 min)
+
+Perfect. Even better than 15 min as long as your longest runs are well under that (you reported ~127 seconds). No issue.
+
+⚠️ The red flag: “Skip hold evaluation on cache-reuse ticks”
+
+This one is probably wrong (or at least risky) given how your system behaves.
+
+Replit’s reasoning: “counts aren’t changing on cache-reuse ticks — so no point evaluating.”
+
+But in practice, cache-reuse ticks are exactly when bad/zero cached values can persist and poison downstream unless you have defensive logic.
+
+Two scenarios where skipping hold on reuse can hurt:
+
+Scenario A: a refresh tick returns a bad low count, then reuse repeats it
+
+Refresh gets 0 (or very low) due to a transient Mediastack gap.
+
+Next hour is cache-reuse: you reuse that bad 0.
+If you skip hold evaluation on reuse, you allow that bad value to keep impacting the score/EMA across reuse ticks.
+
+Scenario B: widening chooses a value on refresh, but reuse uses chosen value (good) — OK
+
+This is fine after you fixed cache keys. But scenario A still exists if refresh itself is poor.
+
+Better rule than “skip on reuse”:
+
+Only evaluate hold when the raw reading changed OR when the reading is suspiciously low relative to baseline even if unchanged.
+
+Or simpler: evaluate hold on refresh ticks (primary), but if the cached value is 0 and bp50 is high, still allow hold on reuse as a “sticky zero guard.”
+
+Because otherwise, a single bad refresh can cause 2 hours of damage.
+
+My recommended tweak (minimal change)
+
+Tell Replit to adjust from:
+
+“skip hold evaluation entirely on cache-reuse ticks”
+
+to:
+
+✅ Evaluate holds normally on refresh ticks
+✅ On cache-reuse ticks, do only one special check:
+
+If cached rawNewsCount == 0 AND baselineP50 >= 8 (or your floor threshold) → allow hold protection (or trigger per-person Serper patch depending on your design)
+
+That preserves the spirit (“don’t waste logic when nothing changed”) while preventing “sticky zero” damage.
+
+Smaller note: changing prev >= bp50*0.6 to *0.5
+
+This might slightly increase holds (because it’s easier to satisfy “prev was healthy”). But since you raised bp50 min and tightened other floors, it’s probably fine. Just watch the next health summary.
+
+What to verify after the next run
+
+After the next ingestion, check:
+
+News EMA held rate
+
+If it drops from ~39% to something like 5–15%, you’re in a healthy zone.
+
+Any big score whiplash returning
+
+If whiplash increases, holds got too weak.
+
+If holds still high, your root issue is still coverage variance, and you may need better widening phrases or fallback triggers.
+
+Zero-news in top-25
+
+If top-25 ever shows 0 news for multiple people at once on refresh ticks, widen logic or provider has issues.
+
+Bottom line
+
+✅ baseline min + DB constraints = definitely good
+
+✅ tightening floors = good
+
+⚠️ “skip holds on cache-reuse ticks” = I’d revise to a narrower guard rather than skipping entirely
+
+If you paste the exact block of the revised hold logic (even just the conditions), I’ll suggest the cleanest “reuse-tick guard” that keeps stability without causing hold spam.
