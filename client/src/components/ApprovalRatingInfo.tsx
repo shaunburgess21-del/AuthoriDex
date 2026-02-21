@@ -3,7 +3,7 @@ import { TouchTooltip } from "@/components/ui/touch-tooltip";
 
 function ApprovalRatingInfoContent() {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 normal-case tracking-normal">
       <p className="font-semibold text-sm">How Approval Rating Works</p>
       <p className="text-xs text-muted-foreground">
         Approval Rating is based only on votes from verified AuthoriDex users — not external public sentiment or APIs.

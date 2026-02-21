@@ -3,7 +3,7 @@ import { TouchTooltip } from "@/components/ui/touch-tooltip";
 
 function TrendScoreInfoContent() {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 normal-case tracking-normal">
       <p className="font-semibold text-sm">How Trend Score Works</p>
       <p className="text-xs text-muted-foreground">
         Trend Score measures real-world attention using three independent signals:
