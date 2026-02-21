@@ -1,0 +1,103 @@
+Yeah — good idea overall, and it’s the kind of “explainability” feature that makes an index feel legit. But there’s one important nuance: how you compute the percentages determines whether users trust it or get confused.
+
+Why it’s a good idea
+
+It makes the score understandable. “Why did this person move?” is the #1 question users have.
+
+It increases engagement. People click popovers; it’s sticky.
+
+It builds credibility. You’re not hiding behind a magic number.
+
+So conceptually: ✅
+
+The one thing I’d challenge in Replit’s implementation
+
+Replit said they compute attribution by:
+
+“calculates how much each source contributed to the velocity change, weights them by scoring allocation (40/35/25), and returns percentages.”
+
+That can be okay, but it risks being misleading depending on what you want the breakdown to mean.
+
+Two different (valid) meanings — pick one
+
+A) “What moved the most in the real world?” (signal-driven attribution)
+This is what Grok’s example implies: if search doubled while news stayed flat, search should dominate.
+Method: compute contributions from the actual normalized deltas (after your per-source normalization), without re-applying fixed weights, and then show %.
+
+B) “What contributed most to the score change?” (model-driven attribution)
+This is what Replit implemented: apply the model weights so it reflects how the engine actually produced the score move.
+Method: compute each source’s contribution as it enters the score (normalized delta × model weight × any governor factors), then show %.
+
+Both are defensible — but the label must match.
+
+Why the weights matter
+
+If search surges, but your model weight or governor dampens it, users might see:
+
+“Search surge everywhere on social,” yet your popover says “Search 0%”
+That feels wrong unless you explain it.
+
+Replit noted “search % is 0 for all results” and called it legitimate. It might be legitimate, but it’s also a red flag that:
+
+search deltas are tiny / not being captured, or
+
+the method is masking search impact, or
+
+search is being held/flattened by smoothing, rate caps, or data cadence.
+
+My recommendation (best UX + trust)
+
+Do both, but keep the UI simple:
+
+Default display: “Score Drivers”
+
+Show the model-driven attribution (weighted), because that answers:
+
+“Why did the score move?”
+
+Label it clearly:
+
+Score drivers (last 24h): Search 12% • News 71% • Wiki 17%
+
+Optional toggle (tiny): “Raw Signals”
+
+If you want geeky users to love it, add a small toggle or secondary text:
+
+Raw signal change: Search +80% • News +12% • Wiki +4%
+
+This avoids arguments like “why is search 0% when I know search spiked?”
+
+Quick improvements I’d suggest to Replit
+
+Rename the section
+Instead of “Source Breakdown,” use:
+
+Score Drivers (24h)
+because it’s weighted-by-model.
+
+Use absolute contribution for percentage math
+If one source is negative and another positive, naive division can create weird results. Use:
+
+abs(contribution_i) / sum(abs(contribution_all))
+and optionally show a tiny arrow or sign per source.
+
+Guardrail for “all zeros”
+If total delta is ~0, show:
+
+“No strong driver (movement is minimal)”
+
+Investigate why Search is showing ~0%
+Even if “legit,” you want to confirm it’s not a pipeline artifact:
+
+is searchDelta actually being computed and stored?
+
+is it being overwritten/held often?
+
+is the governor reducing search impact?
+
+Verdict
+
+Yes: good idea.
+But: make sure the breakdown is labeled as “score drivers” (model attribution), and consider adding a lightweight “raw signal” line so users don’t feel gaslit when they know search/news is spiking.
+
+If you paste one sample mover’s current + 24h snapshots fields (just the deltas), I can tell you whether the search=0% outcome is truly expected or a sign something’s off.
