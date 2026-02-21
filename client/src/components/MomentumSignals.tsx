@@ -93,13 +93,20 @@ function extractTopics(headlines: string[]): string[] {
     "surgery", "money", "team", "game", "show", "fight", "deal", "talk",
     "star", "fans", "world", "time", "year", "life", "man", "woman",
   ]);
+  const acronymWhitelist = new Set([
+    "AI", "NBA", "NFL", "UFC", "MLB", "NHL", "FIFA", "F1",
+    "EU", "US", "UK", "UN", "NATO", "GOP",
+    "XRP", "BTC", "ETH", "SOL", "NFT", "CEO", "IPO",
+    "MMA", "MVP", "KO", "GDP", "FBI", "CIA", "SEC",
+  ]);
   const freq = new Map<string, number>();
   const seen = new Set<string>();
   for (const h of headlines) {
     const words = h.replace(/[^a-zA-Z\s'-]/g, "").split(/\s+/).filter(Boolean);
     for (const w of words) {
       const lower = w.toLowerCase();
-      if (lower.length < 4 || stopWords.has(lower)) continue;
+      const isWhitelisted = acronymWhitelist.has(w.toUpperCase());
+      if (!isWhitelisted && (lower.length < 4 || stopWords.has(lower))) continue;
       if (genericWords.has(lower)) continue;
       if (seen.has(lower)) {
         const existing = Array.from(freq.keys()).find(k => k.toLowerCase() === lower);
@@ -395,7 +402,7 @@ export function MomentumSignals({ personId }: { personId: string }) {
                       </p>
                     )}
                     <p className="text-[10px] text-muted-foreground/40" data-testid="text-drivers-clarifier">
-                      Drivers explain today's change, not total attention
+                      Drivers explain today's change, not total attention · Compared to ~24h ago
                     </p>
                     <Badge variant="outline" className="text-[9px] px-1.5 py-0" data-testid="badge-drivers-method">
                       {signals.drivers.isExact ? "Exact (from score components)" : "Estimate (from signal changes)"}
