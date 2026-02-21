@@ -1,0 +1,177 @@
+Yep — this is a very solid alignment, and that “Final Build Spec” is basically Phase-1 gold.
+
+A couple small tweaks I’d suggest before you treat it as the canonical spec (these are polish + risk-reduction, not major changes):
+
+What I’d keep exactly as-is
+
+Remove Polymarket + Additional Insights placeholders ✅
+
+Momentum Signals as the “hero” section ✅
+
+Use Serper Related Searches + People Also Ask ✅ (super engaging, zero extra calls if already fetched)
+
+Official Profiles as link cards (no metrics) ✅
+
+One consolidated backend endpoint ✅
+
+Tweaks I’d make to the spec (worth doing)
+1) Rename “Fame Score” vs “Trend Score” consistency
+
+In your screenshot the stat says Fame Score, elsewhere you call it Trend Score.
+
+Pick one naming scheme across:
+
+leaderboard column title
+
+profile hero “big number”
+
+chart title
+
+Suggested:
+
+Trend Score (main number)
+
+optional small label: “Authority Index” (brand) or “AuthoriDex Score”
+
+2) Add “Data freshness” at the section level (not per card)
+
+Rather than repeating “Powered by…” and timestamps inside each tile, do one compact line under the Momentum Signals header:
+
+Updated 52m ago · Sources: Search, News, Wikipedia
+
+Cleaner + feels more premium.
+
+3) Be careful with the “one-sentence insight: more news-driven than average”
+
+This is great, but it can accidentally become misleading unless you define “average.”
+
+Make it deterministic:
+
+Compare last 24h drivers vs 7-day median drivers (or last 7 days)
+Then the sentence is factual:
+
+“More news-driven than your 7-day norm.”
+
+If you don’t have the 7-day driver baseline yet, skip the sentence for Phase 1 and add it later.
+
+4) “delta24h: 184” should be expressed as % or points
+
+That example could confuse users. Use:
+
+delta24hPct or delta24hPoints
+And format consistently in UI:
+
++18% search interest (24h) or +12 pts
+
+5) Add a “Coverage note” when sources are partially missing
+
+You already built “2/3 sources” logic. Great.
+Also add a tiny tooltip:
+
+“Some sources may be delayed or unavailable.”
+
+This prevents support headaches.
+
+6) Official Profiles: avoid “verified” unless you truly verify it
+
+Unless you’re explicitly storing a verified handle or doing a verification step, don’t label as “verified.” Just say:
+
+Official profile (if you curated it)
+or
+
+Profile link
+
+7) Don’t show 24h/7d change if snapshot gaps exist
+
+You already saw issues when Replit sleeps. So:
+
+If last run > 2–3 hours old, show a small banner: Data delayed
+
+If no “near 24h snapshot,” show “—” and a tooltip (“insufficient data”)
+
+That keeps trust high.
+
+Backend endpoint: one improvement
+
+Your GET /api/person/:id/momentum response should include:
+
+asOf timestamp
+
+activeSources array (["news","wiki","search"])
+
+staleFlags (if any)
+
+optionally sourceHealth snapshot
+
+Example addition:
+
+{
+  "asOf": "2026-02-21T13:02:00Z",
+  "activeSources": ["news","wiki","search"],
+  "signals": {...}
+}
+Final verdict
+
+This spec is very good and Phase-1 appropriate. With the few tweaks above, it becomes:
+
+clearer
+
+more consistent
+
+less likely to overpromise
+
+If you want, paste this to Replit as the final instruction:
+
+“Build Momentum Signals + Official Profiles. Remove Polymarket + Additional Insights placeholders. Add section-level freshness line and consistent naming (Trend Score). Avoid ‘verified’ unless curated. Include asOf + activeSources in /momentum endpoint.”
+
+2 questions:
+How is score drivers interesting to our users e.g 40% news, 30% search, 30% wiki? 
+
+also, will this data be fresh for the bottom half of the people on our leaderbaord, who don't trend as much?
+1) Why “Score Drivers” is interesting (to normal users)
+
+It’s interesting because it answers the only question people really have when they see a number move:
+
+“Why did this person jump (or drop)?”
+
+Without drivers, your score can feel like a black box. With drivers, it becomes a story:
+
+News-heavy (e.g., 70% News): “They’re in the headlines right now.”
+
+Search-heavy (e.g., 70% Search): “People are suddenly curious—something sparked attention.”
+
+Wiki-heavy (e.g., 50% Wiki): “People are researching them (curiosity spike), even if news isn’t huge.”
+
+That creates:
+
+trust (it’s not random)
+
+shareability (“look, this move was 80% search-driven”)
+
+differentiation (you’re not just ranking—you’re explaining)
+
+Also: drivers are not your fixed weights (40/35/25). They’re the attribution of what changed over the time window. So it won’t always look like “40/30/30.” It’ll often be lopsided when something real happens (e.g., 85% News after a scandal, or 90% Search after a viral moment).
+
+2) Will it be fresh for the bottom half of the leaderboard?
+
+It’ll be fresh in the sense that it updates on the same schedule, but it may be less “interesting” because low-trending people often have small or flat signals.
+
+What you should expect for the bottom half:
+
+Smaller deltas → drivers might show “No strong driver” (which is fine and honest)
+
+More zeros/low counts especially for news → but your caching + widening + holds should prevent obvious weirdness
+
+Still updated hourly (with news refreshing every 2 hours), but movement is naturally slower
+
+How to keep it useful for low-trend people:
+
+Show drivers only when movement crosses a threshold, e.g.:
+
+display Score Drivers if abs(change_24h) >= 1.5% or if sum(abs(contributions)) exceeds a minimum
+
+otherwise show: “Stable (no major signal shift)”
+
+Or keep it collapsed behind “Why did this change?” so it doesn’t clutter.
+
+So yes: fresh, but often quiet—and that’s actually a good signal in itself.
