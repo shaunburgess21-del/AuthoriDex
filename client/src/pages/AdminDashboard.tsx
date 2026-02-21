@@ -1320,6 +1320,12 @@ export default function AdminDashboard() {
   const [nativeVisFilter, setNativeVisFilter] = useState("all");
   const [nativeCatFilter, setNativeCatFilter] = useState("all");
   const [nativeSearchQuery, setNativeSearchQuery] = useState("");
+  const [rwMarketSearch, setRwMarketSearch] = useState("");
+  const [h2hMarketSearch, setH2hMarketSearch] = useState("");
+  const [gainerMarketSearch, setGainerMarketSearch] = useState("");
+  const [pollSearchQuery, setPollSearchQuery] = useState("");
+  const [matchupSearchQuery, setMatchupSearchQuery] = useState("");
+  const [matchupVisFilter, setMatchupVisFilter] = useState("all");
   const [selectedNativeIds, setSelectedNativeIds] = useState<Set<string>>(new Set());
   const [h2hModalOpen, setH2hModalOpen] = useState(false);
   const [gainerModalOpen, setGainerModalOpen] = useState(false);
@@ -2396,6 +2402,16 @@ export default function AdminDashboard() {
     }
     if (pollFilter !== "all" && poll.status !== pollFilter) return false;
     if (pollCategoryFilter !== "all" && poll.category !== pollCategoryFilter) return false;
+    if (pollSearchQuery && !poll.headline?.toLowerCase().includes(pollSearchQuery.toLowerCase()) && !poll.subjectText?.toLowerCase().includes(pollSearchQuery.toLowerCase())) return false;
+    return true;
+  });
+
+  const filteredMatchups = (matchups || []).filter((matchup) => {
+    if (matchupVisFilter !== "all" && matchup.visibility !== matchupVisFilter) return false;
+    if (matchupSearchQuery) {
+      const q = matchupSearchQuery.toLowerCase();
+      if (!matchup.title?.toLowerCase().includes(q) && !matchup.optionAText?.toLowerCase().includes(q) && !matchup.optionBText?.toLowerCase().includes(q) && !matchup.category?.toLowerCase().includes(q)) return false;
+    }
     return true;
   });
 
@@ -2899,12 +2915,21 @@ export default function AdminDashboard() {
                     </Button>
                   </CardHeader>
                   <CardContent>
+                    <div className="flex items-center gap-2 mb-4 flex-wrap">
+                      <Input
+                        placeholder="Search..."
+                        value={rwMarketSearch}
+                        onChange={(e) => setRwMarketSearch(e.target.value)}
+                        className="w-[200px]"
+                        data-testid="input-rw-market-search"
+                      />
+                    </div>
                     {marketsLoading ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                       </div>
                     ) : (() => {
-                      const rwMarkets = (markets || []).filter(m => m.marketType === "community");
+                      const rwMarkets = (markets || []).filter(m => m.marketType === "community").filter(m => !rwMarketSearch || m.title?.toLowerCase().includes(rwMarketSearch.toLowerCase()));
                       return rwMarkets.length > 0 ? (
                         <div className="space-y-3">
                           {rwMarkets.map((market) => (
@@ -3203,10 +3228,19 @@ export default function AdminDashboard() {
                     </Button>
                   </CardHeader>
                   <CardContent>
+                    <div className="flex items-center gap-2 mb-4 flex-wrap">
+                      <Input
+                        placeholder="Search..."
+                        value={h2hMarketSearch}
+                        onChange={(e) => setH2hMarketSearch(e.target.value)}
+                        className="w-[200px]"
+                        data-testid="input-h2h-search"
+                      />
+                    </div>
                     {marketsLoading ? (
                       <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
                     ) : (() => {
-                      const h2hList = (markets || []).filter(m => m.marketType === "h2h");
+                      const h2hList = (markets || []).filter(m => m.marketType === "h2h").filter(m => !h2hMarketSearch || m.title?.toLowerCase().includes(h2hMarketSearch.toLowerCase()));
                       return h2hList.length > 0 ? (
                         <div className="space-y-2">
                           {h2hList.map((market) => (
@@ -3263,10 +3297,19 @@ export default function AdminDashboard() {
                     </Button>
                   </CardHeader>
                   <CardContent>
+                    <div className="flex items-center gap-2 mb-4 flex-wrap">
+                      <Input
+                        placeholder="Search..."
+                        value={gainerMarketSearch}
+                        onChange={(e) => setGainerMarketSearch(e.target.value)}
+                        className="w-[200px]"
+                        data-testid="input-gainer-search"
+                      />
+                    </div>
                     {marketsLoading ? (
                       <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
                     ) : (() => {
-                      const gainerList = (markets || []).filter(m => m.marketType === "gainer");
+                      const gainerList = (markets || []).filter(m => m.marketType === "gainer").filter(m => !gainerMarketSearch || m.title?.toLowerCase().includes(gainerMarketSearch.toLowerCase()) || m.category?.toLowerCase().includes(gainerMarketSearch.toLowerCase()));
                       return gainerList.length > 0 ? (
                         <div className="space-y-2">
                           {gainerList.map((market) => (
@@ -3519,6 +3562,13 @@ export default function AdminDashboard() {
                           <SelectItem value="Custom Topic">Custom Topic</SelectItem>
                         </SelectContent>
                       </Select>
+                      <Input
+                        placeholder="Search..."
+                        value={pollSearchQuery}
+                        onChange={(e) => setPollSearchQuery(e.target.value)}
+                        className="w-[200px]"
+                        data-testid="input-poll-search"
+                      />
                     </div>
                     {pollsLoading ? (
                       <div className="flex items-center justify-center py-8">
@@ -3659,13 +3709,35 @@ export default function AdminDashboard() {
                     </Button>
                   </CardHeader>
                   <CardContent>
+                    <div className="flex items-center gap-2 mb-4 flex-wrap">
+                      <Select value={matchupVisFilter} onValueChange={setMatchupVisFilter}>
+                        <SelectTrigger className="w-[140px]" data-testid="select-matchup-vis-filter">
+                          <SelectValue placeholder="Visibility" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Visibility</SelectItem>
+                          <SelectItem value="live">Live</SelectItem>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                          <SelectItem value="archived">Archived</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        placeholder="Search..."
+                        value={matchupSearchQuery}
+                        onChange={(e) => setMatchupSearchQuery(e.target.value)}
+                        className="w-[200px]"
+                        data-testid="input-matchup-search"
+                      />
+                      <span className="text-xs text-muted-foreground ml-auto">{filteredMatchups.length} total</span>
+                    </div>
                     {matchupsLoading ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                       </div>
-                    ) : matchups && matchups.length > 0 ? (
+                    ) : filteredMatchups.length > 0 ? (
                       <div className="space-y-3" data-testid="matchup-list">
-                        {matchups.map((matchup) => (
+                        {filteredMatchups.map((matchup) => (
                           <div
                             key={matchup.id}
                             className="flex items-center justify-between p-3 rounded-lg border"
@@ -3715,20 +3787,22 @@ export default function AdminDashboard() {
                     ) : (
                       <div className="text-center py-8 text-muted-foreground">
                         <ArrowUpDown className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p>No matchups yet</p>
-                        <Button 
-                          className="mt-4" 
-                          onClick={() => {
-                            setEditingMatchup(null);
-                            setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
-                            setMatchupSearchA(""); setMatchupSearchB("");
-                            setShowMatchupModal(true);
-                          }}
-                          data-testid="button-create-first-matchup"
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Create First Matchup
-                        </Button>
+                        <p>{matchupSearchQuery || matchupVisFilter !== "all" ? "No matchups match your filters" : "No matchups yet"}</p>
+                        {!matchupSearchQuery && matchupVisFilter === "all" && (
+                          <Button 
+                            className="mt-4" 
+                            onClick={() => {
+                              setEditingMatchup(null);
+                              setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
+                              setMatchupSearchA(""); setMatchupSearchB("");
+                              setShowMatchupModal(true);
+                            }}
+                            data-testid="button-create-first-matchup"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Create First Matchup
+                          </Button>
+                        )}
                       </div>
                     )}
                   </CardContent>
