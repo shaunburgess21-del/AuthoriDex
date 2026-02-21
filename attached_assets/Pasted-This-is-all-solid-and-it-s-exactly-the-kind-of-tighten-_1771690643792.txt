@@ -1,0 +1,67 @@
+This is all solid — and it’s exactly the kind of “tighten the bolts” iteration that makes the product feel trustworthy.
+
+What Replit just did right ✅
+
+1) driversModel: "velocity_components_v1"
+
+This is quietly huge for debugging and future upgrades.
+
+It lets you change attribution logic later without mystery regressions (“why did drivers change last week?”).
+
+2) “Exact” vs “Estimate” badge + anti-flip-flop rule
+
+This directly addresses user trust.
+
+Requiring both snapshots to have velocity components before showing “Exact” is the correct guardrail.
+
+The badges are understandable and don’t feel defensive.
+
+3) Topic chip cleanup
+
+Capping at 4 chips, deduping, and filtering generic words will make the Search card feel curated instead of noisy.
+
+This is the difference between “cheap fallback” and “polished feature.”
+
+The one thing I’d still sanity-check
+
+Topic extraction rules can accidentally remove useful tokens for certain people/topics (e.g., “trial”, “war”, “AI”, “UFC”, “NBA” are short but meaningful).
+
+So instead of a strict “4+ characters” rule, I’d do:
+
+allow short whitelist tokens: AI, NBA, UFC, EU, US, UK, XRP, BTC, ETH
+
+and/or allow uppercase acronyms even if <4 chars
+
+This avoids making the fallback feel oddly empty for some profiles.
+
+What I’d do next (practical)
+
+Run one verification day
+
+Pick 10 people across the leaderboard (top 5 + bottom 5).
+
+Check that within 24h:
+
+Drivers turn to Exact for most
+
+Search card shows either Serper queries or clean topic chips
+
+The “Exact/Estimate” badge doesn’t oscillate
+
+Add one more microcopy improvement
+On the drivers card, show a tiny line like:
+
+“Compared to ~24h ago” (or “vs. yesterday”)
+It helps users instantly grok what “drivers” means.
+
+Bottom line
+
+Yes — this is a good build decision. It upgrades:
+
+trust (exact vs estimate)
+
+debuggability (driversModel)
+
+UX richness (non-empty search card that’s honest)
+
+If you paste a single example of the new momentum endpoint output (for Jake Paul + one “quiet” person lower on the leaderboard), I can quickly tell you if the “Exact” gating + driver math + topic fallback look correct.
