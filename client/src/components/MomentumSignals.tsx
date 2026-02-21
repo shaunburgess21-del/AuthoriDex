@@ -139,7 +139,7 @@ function SignalSkeleton() {
   );
 }
 
-export function MomentumSignals({ personId }: { personId: string }) {
+export function MomentumSignals({ personId, wikiSlug }: { personId: string; wikiSlug?: string | null }) {
   const [driversExpanded, setDriversExpanded] = useState(false);
 
   const { data, isLoading, error } = useQuery<MomentumData>({
@@ -360,6 +360,17 @@ export function MomentumSignals({ personId }: { personId: string }) {
               <div className="flex items-center gap-2">
                 <BookOpen className="h-4 w-4 text-muted-foreground" />
                 <span className="font-semibold text-sm">Wikipedia Pulse</span>
+                {wikiSlug && (
+                  <a
+                    href={`https://en.wikipedia.org/wiki/${encodeURIComponent(wikiSlug)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group inline-flex"
+                    data-testid="link-wiki-page"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-60 group-hover:opacity-100 transition-opacity" />
+                  </a>
+                )}
               </div>
               <DeltaBadge pct={signals.wiki.deltaPct} />
             </div>

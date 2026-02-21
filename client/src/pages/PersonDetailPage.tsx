@@ -830,7 +830,7 @@ export default function PersonDetailPage() {
             <TrendChart personId={person.id} personName={person.name} />
             
             {/* 6. Momentum Signals + Official Profiles */}
-            <MomentumSignals personId={person.id} />
+            <MomentumSignals personId={person.id} wikiSlug={person.wikiSlug} />
           </>
         )}
 
