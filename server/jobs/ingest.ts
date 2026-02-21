@@ -1402,6 +1402,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
             peopleAlsoAsk: (serper?.peopleAlsoAsk ?? []).slice(0, 5),
           },
           velocityComponents: scoreResult.velocityComponents,
+          driversModel: "velocity_components_v1",
           stab: scoreResult.stabDetail ? {
             ...scoreResult.stabDetail,
             capPct: scoreResult.stabDetail.capUsed,

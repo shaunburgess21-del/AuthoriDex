@@ -86,19 +86,33 @@ function extractTopics(headlines: string[]): string[] {
     "those", "it", "its", "he", "she", "they", "them", "his", "her", "their",
     "our", "your", "my", "me", "us", "we", "him", "i", "says", "said",
     "new", "also", "over", "per", "get", "gets", "got", "set", "amid",
+    "back", "last", "first", "now", "top", "big", "day", "may", "make",
+    "report", "reports", "news", "update", "updates", "latest", "video",
+  ]);
+  const genericWords = new Set([
+    "surgery", "money", "team", "game", "show", "fight", "deal", "talk",
+    "star", "fans", "world", "time", "year", "life", "man", "woman",
   ]);
   const freq = new Map<string, number>();
+  const seen = new Set<string>();
   for (const h of headlines) {
-    const words = h.replace(/[^a-zA-Z\s]/g, "").split(/\s+/).filter(Boolean);
+    const words = h.replace(/[^a-zA-Z\s'-]/g, "").split(/\s+/).filter(Boolean);
     for (const w of words) {
       const lower = w.toLowerCase();
-      if (lower.length < 3 || stopWords.has(lower)) continue;
+      if (lower.length < 4 || stopWords.has(lower)) continue;
+      if (genericWords.has(lower)) continue;
+      if (seen.has(lower)) {
+        const existing = Array.from(freq.keys()).find(k => k.toLowerCase() === lower);
+        if (existing) freq.set(existing, (freq.get(existing) || 0) + 1);
+        continue;
+      }
+      seen.add(lower);
       freq.set(w, (freq.get(w) || 0) + 1);
     }
   }
-  return [...freq.entries()]
+  return Array.from(freq.entries())
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
+    .slice(0, 4)
     .map(([word]) => word);
 }
 
@@ -381,8 +395,11 @@ export function MomentumSignals({ personId }: { personId: string }) {
                       </p>
                     )}
                     <p className="text-[10px] text-muted-foreground/40" data-testid="text-drivers-clarifier">
-                      Drivers explain today's change, not total attention{signals.drivers.isExact ? "" : " (estimate)"}
+                      Drivers explain today's change, not total attention
                     </p>
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0" data-testid="badge-drivers-method">
+                      {signals.drivers.isExact ? "Exact (from score components)" : "Estimate (from signal changes)"}
+                    </Badge>
                   </div>
                   <Button
                     variant="ghost"
