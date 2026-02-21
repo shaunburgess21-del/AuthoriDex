@@ -1,0 +1,62 @@
+Nice — that tooltip is exactly the right level of clarity. It feels “confident + credible” without giving away anything you don’t want to.
+
+If you want to make it even stronger (optional, tiny tweaks):
+
+Mention update cadence explicitly: add one short line like
+“Updates hourly as new data comes in.”
+(People love knowing it’s “live”.)
+
+Make the “third-party” part explicit (without sounding defensive):
+change “We combine these third-party signals…” → “We combine these independent signals from public sources…”
+That reads cleaner than “third-party” but still conveys legitimacy.
+
+Consistency check: you’ve got “Trend Score” in the tooltip, but you said you’re standardizing from “Fame Score” → “Trend Score”. Make sure the profile stat card label matches (so users aren’t like “are these different?”).
+
+But honestly: as-is, it’s a big trust win.
+
+Mention update cadence explicitly: add one short line like
+“Updates hourly as new data comes in.”
+(People love knowing it’s “live”.)
+
+
+I'm not sure we need to do this, as hourly sounds slow, and we put the "fast lane" in to make it feel live. Remember we added the fast lane? Do you remember what it is from our previous chats or must I remind you?
+Thought for 10s
+
+Yep — the “fast lane” is the 10-minute refresh loop that uses internal signals (votes + profile views) to keep the leaderboard feeling live without external API calls. It’s basically a local momentum layer on top of the slower “full data” refresh.
+
+So I agree with you: writing “Updates hourly” is actually worse for perception, because it contradicts what users are already seeing (“Live: 1m ago / Full: 3m ago” + fast lane tooltip).
+
+What to do instead (copy that matches your reality)
+
+Option A (best, minimal, true):
+
+Live: updates every ~10 minutes (votes + views)
+
+Full: updates as new external data arrives (search/news/wiki)
+
+Example tooltip / microcopy (tight):
+
+Live updates every ~10 min using votes + profile views.
+Full refresh pulls Search, News & Wikipedia as new data comes in.
+
+Option B (even tighter):
+
+Live: ~10 min (votes + views) · Full: external data refresh
+
+Where to put it
+
+Keep it exactly where you already have it: near Live / Full.
+
+In the Trend Score info popover, add one line at the bottom (optional):
+
+Live ranking updates every ~10 min via votes + views. Full score refresh uses Search/News/Wikipedia.
+
+Why this works
+
+It preserves the “live” feeling.
+
+It doesn’t lock you into promising a strict hourly cadence.
+
+It explains the two speeds without over-explaining the algorithm.
+
+If you want, I can suggest the cleanest single sentence that fits your current tooltip styling (so it doesn’t look wordy).
