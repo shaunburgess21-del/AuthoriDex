@@ -1018,12 +1018,12 @@ export default function HomePage() {
                         <>
                           <div className="text-right w-[120px] shrink-0 flex items-center justify-end gap-1">Trend Score <TrendScoreInfoIcon testId="icon-trend-score-header" className="h-3 w-3 text-muted-foreground/40 cursor-help" /></div>
                           <div className="text-right w-[72px] shrink-0">24h</div>
-                          <div className="text-right w-[72px] shrink-0">Approval</div>
+                          <div className="text-right w-[72px] shrink-0 flex items-center justify-end gap-1">Approval <ApprovalRatingInfoIcon testId="icon-approval-header-fame" className="h-3 w-3 text-muted-foreground/40 cursor-help" /></div>
                         </>
                       ) : (
                         <>
                           <div className="text-right w-[120px] shrink-0 flex items-center justify-end gap-1">Approval <ApprovalRatingInfoIcon testId="icon-approval-header" className="h-3 w-3 text-muted-foreground/40 cursor-help" /></div>
-                          <div className="text-right w-[120px] shrink-0">Trend Score</div>
+                          <div className="text-right w-[120px] shrink-0 flex items-center justify-end gap-1">Trend Score <TrendScoreInfoIcon testId="icon-trend-score-header-approval" className="h-3 w-3 text-muted-foreground/40 cursor-help" /></div>
                         </>
                       )}
                       <div className="w-9 shrink-0" />
