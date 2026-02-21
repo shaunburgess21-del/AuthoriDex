@@ -902,7 +902,6 @@ export default function HomePage() {
                           : "text-muted-foreground hover:bg-primary/20 hover:text-primary border border-transparent hover:border-primary/30"
                       }`}
                       data-testid="tab-leaderboard-fame"
-                      title="Sort by Trend Score"
                     >
                       <Crown className="h-3.5 w-3.5" />
                       Trend Score
@@ -919,7 +918,6 @@ export default function HomePage() {
                           : "text-muted-foreground hover:bg-cyan-500/20 hover:text-cyan-400 border border-transparent hover:border-cyan-500/30"
                       }`}
                       data-testid="tab-leaderboard-approval"
-                      title="Sort by community approval rating"
                     >
                       <ThumbsUp className="h-3.5 w-3.5" />
                       Approval Rating
