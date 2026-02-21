@@ -1401,6 +1401,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
             relatedSearches: (serper?.relatedSearches ?? []).slice(0, 5),
             peopleAlsoAsk: (serper?.peopleAlsoAsk ?? []).slice(0, 5),
           },
+          velocityComponents: scoreResult.velocityComponents,
           stab: scoreResult.stabDetail ? {
             ...scoreResult.stabDetail,
             capPct: scoreResult.stabDetail.capUsed,

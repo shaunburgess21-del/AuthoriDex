@@ -461,5 +461,15 @@ export function computeTrendScore(
     drivers,
     change24h: change24h !== null ? Math.round(change24h * 10) / 10 : null,
     change7d: change7d !== null ? Math.round(change7d * 10) / 10 : null,
+    velocityComponents: {
+      search: Math.round(searchVelocityScore * 100) / 100,
+      news: Math.round(newsVelocityScore * 100) / 100,
+      wiki: Math.round(wikiVelocityScore * 100) / 100,
+      weights: {
+        search: Math.round(velocityWeights.search * 1000) / 1000,
+        news: Math.round(velocityWeights.news * 1000) / 1000,
+        wiki: Math.round(velocityWeights.wiki * 1000) / 1000,
+      },
+    },
   };
 }

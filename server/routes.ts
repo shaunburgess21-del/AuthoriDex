@@ -1149,9 +1149,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let driverSourceCount = 3;
       let quietSources: string[] = [];
       let driversStatus: "active" | "stable" = "stable";
+      let driversIsExact = false;
+
       if (hasSignificantMovement) {
+        const currentVC = diag?.velocityComponents;
+
         const [snap24hAgo] = await db
           .select({
+            diagnostics: trendSnapshots.diagnostics,
             searchVolume: trendSnapshots.searchVolume,
             newsCount: trendSnapshots.newsCount,
             wikiPageviews: trendSnapshots.wikiPageviews,
@@ -1166,30 +1171,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .limit(1);
 
         if (snap24hAgo) {
-          const searchChange = Math.abs(latest.searchVolume - snap24hAgo.searchVolume);
-          const newsChange = Math.abs(latest.newsCount - snap24hAgo.newsCount);
-          const wikiChange = Math.abs((latest.wikiPageviews ?? 0) - (snap24hAgo.wikiPageviews ?? 0));
+          const prevDiag = snap24hAgo.diagnostics as Record<string, any> | null;
+          const prevVC = prevDiag?.velocityComponents;
 
-          const searchContrib = searchChange * 0.40;
-          const newsContrib = newsChange * 0.35;
-          const wikiContrib = wikiChange * 0.25;
-          const totalContrib = searchContrib + newsContrib + wikiContrib;
+          if (currentVC && prevVC && currentVC.weights && prevVC.weights) {
+            const searchDelta = Math.abs(
+              (currentVC.search * currentVC.weights.search) -
+              (prevVC.search * prevVC.weights.search)
+            );
+            const newsDelta = Math.abs(
+              (currentVC.news * currentVC.weights.news) -
+              (prevVC.news * prevVC.weights.news)
+            );
+            const wikiDelta = Math.abs(
+              (currentVC.wiki * currentVC.weights.wiki) -
+              (prevVC.wiki * prevVC.weights.wiki)
+            );
+            const totalDelta = searchDelta + newsDelta + wikiDelta;
 
-          const searchBase = Math.max(snap24hAgo.searchVolume, 1);
-          const newsBase = Math.max(snap24hAgo.newsCount, 1);
-          const wikiBase = Math.max(snap24hAgo.wikiPageviews ?? 1, 1);
-          if (searchChange / searchBase < 0.05) quietSources.push("Search");
-          if (newsChange / newsBase < 0.05) quietSources.push("News");
-          if (wikiChange / wikiBase < 0.05) quietSources.push("Wikipedia");
-          driverSourceCount = 3 - quietSources.length;
+            if (searchDelta / Math.max(currentVC.search * currentVC.weights.search, 1) < 0.05) quietSources.push("Search");
+            if (newsDelta / Math.max(currentVC.news * currentVC.weights.news, 1) < 0.05) quietSources.push("News");
+            if (wikiDelta / Math.max(currentVC.wiki * currentVC.weights.wiki, 1) < 0.05) quietSources.push("Wikipedia");
+            driverSourceCount = 3 - quietSources.length;
 
-          if (totalContrib > 0) {
-            driverBreakdown = {
-              search: Math.round((searchContrib / totalContrib) * 100),
-              news: Math.round((newsContrib / totalContrib) * 100),
-              wiki: Math.round((wikiContrib / totalContrib) * 100),
-            };
-            driversStatus = "active";
+            if (totalDelta > 0) {
+              driverBreakdown = {
+                search: Math.round((searchDelta / totalDelta) * 100),
+                news: Math.round((newsDelta / totalDelta) * 100),
+                wiki: Math.round((wikiDelta / totalDelta) * 100),
+              };
+              driversStatus = "active";
+              driversIsExact = true;
+            }
+          } else {
+            const searchChange = Math.abs(latest.searchVolume - snap24hAgo.searchVolume);
+            const newsChange = Math.abs(latest.newsCount - snap24hAgo.newsCount);
+            const wikiChange = Math.abs((latest.wikiPageviews ?? 0) - (snap24hAgo.wikiPageviews ?? 0));
+
+            const searchContrib = searchChange * 0.40;
+            const newsContrib = newsChange * 0.35;
+            const wikiContrib = wikiChange * 0.25;
+            const totalContrib = searchContrib + newsContrib + wikiContrib;
+
+            const searchBase = Math.max(snap24hAgo.searchVolume, 1);
+            const newsBase = Math.max(snap24hAgo.newsCount, 1);
+            const wikiBase = Math.max(snap24hAgo.wikiPageviews ?? 1, 1);
+            if (searchChange / searchBase < 0.05) quietSources.push("Search");
+            if (newsChange / newsBase < 0.05) quietSources.push("News");
+            if (wikiChange / wikiBase < 0.05) quietSources.push("Wikipedia");
+            driverSourceCount = 3 - quietSources.length;
+
+            if (totalContrib > 0) {
+              driverBreakdown = {
+                search: Math.round((searchContrib / totalContrib) * 100),
+                news: Math.round((newsContrib / totalContrib) * 100),
+                wiki: Math.round((wikiContrib / totalContrib) * 100),
+              };
+              driversStatus = "active";
+            }
           }
         }
       }
@@ -1240,6 +1279,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             breakdown: driverBreakdown,
             activeSources: driversStatus === "active" ? driverSourceCount : activeSources.length,
             quietSources: driversStatus === "active" ? quietSources : [],
+            isExact: driversIsExact,
           },
         },
         categoryRank: trending ? {

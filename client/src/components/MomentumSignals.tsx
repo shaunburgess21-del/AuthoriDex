@@ -35,6 +35,7 @@ interface MomentumData {
       breakdown: { search: number; news: number; wiki: number } | null;
       activeSources: number;
       quietSources: string[];
+      isExact?: boolean;
     };
   } | null;
   categoryRank: {
@@ -69,6 +70,36 @@ function DeltaBadge({ pct }: { pct: number }) {
       {isUp ? "+" : ""}{pct}%
     </Badge>
   );
+}
+
+function extractTopics(headlines: string[]): string[] {
+  const stopWords = new Set([
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "shall", "can", "to", "of", "in", "for",
+    "on", "with", "at", "by", "from", "as", "into", "through", "during",
+    "before", "after", "above", "below", "and", "but", "or", "nor", "not",
+    "so", "yet", "both", "either", "neither", "each", "every", "all", "any",
+    "few", "more", "most", "other", "some", "such", "no", "only", "own",
+    "same", "than", "too", "very", "just", "about", "up", "out", "how",
+    "what", "when", "where", "who", "which", "why", "this", "that", "these",
+    "those", "it", "its", "he", "she", "they", "them", "his", "her", "their",
+    "our", "your", "my", "me", "us", "we", "him", "i", "says", "said",
+    "new", "also", "over", "per", "get", "gets", "got", "set", "amid",
+  ]);
+  const freq = new Map<string, number>();
+  for (const h of headlines) {
+    const words = h.replace(/[^a-zA-Z\s]/g, "").split(/\s+/).filter(Boolean);
+    for (const w of words) {
+      const lower = w.toLowerCase();
+      if (lower.length < 3 || stopWords.has(lower)) continue;
+      freq.set(w, (freq.get(w) || 0) + 1);
+    }
+  }
+  return [...freq.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([word]) => word);
 }
 
 function SignalSkeleton() {
@@ -188,12 +219,37 @@ export function MomentumSignals({ personId }: { personId: string }) {
                   ))}
                 </div>
               </div>
+            ) : signals.search.peopleAlsoAsk.length > 0 ? (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">People ask</p>
+                <ul className="space-y-1">
+                  {signals.search.peopleAlsoAsk.slice(0, 3).map((q, i) => (
+                    <li key={i} className="text-xs text-muted-foreground" data-testid={`text-paa-${i}`}>
+                      {q}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : signals.news.headlines.length > 0 && extractTopics(signals.news.headlines).length > 0 ? (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">Topics in the news</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {extractTopics(signals.news.headlines).slice(0, 4).map((topic, i) => (
+                    <Badge key={i} variant="outline" className="text-xs font-normal" data-testid={`badge-news-topic-${i}`}>
+                      {topic}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
             ) : (
-              <p className="text-[10px] text-muted-foreground/60" data-testid="text-search-empty">
-                {signals.search.volume > 0 ? "Search interest steady" : "Collecting search data..."}
-              </p>
+              <div data-testid="text-search-empty">
+                <p className="text-xs text-muted-foreground">
+                  {signals.search.volume > 0 ? "Search interest steady" : "Collecting search data..."}
+                </p>
+                <p className="text-[10px] text-muted-foreground/60 mt-1">Top searches will appear as we collect more data.</p>
+              </div>
             )}
-            {signals.search.peopleAlsoAsk.length > 0 && (
+            {signals.search.relatedSearches.length > 0 && signals.search.peopleAlsoAsk.length > 0 && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1.5">People ask</p>
                 <ul className="space-y-1">
@@ -318,11 +374,16 @@ export function MomentumSignals({ personId }: { personId: string }) {
                     <DriverBar label="News" pct={signals.drivers.breakdown.news} color="bg-red-500" />
                     <DriverBar label="Wiki" pct={signals.drivers.breakdown.wiki} color="bg-gray-400" />
                   </div>
-                  {signals.drivers.quietSources.length > 0 && (
-                    <p className="text-[10px] text-muted-foreground/60" data-testid="text-quiet-sources">
-                      Based on {signals.drivers.activeSources}/3 sources ({signals.drivers.quietSources.join(" & ")} quiet)
+                  <div className="space-y-0.5">
+                    {signals.drivers.quietSources.length > 0 && (
+                      <p className="text-[10px] text-muted-foreground/60" data-testid="text-quiet-sources">
+                        Based on {signals.drivers.activeSources}/3 sources ({signals.drivers.quietSources.join(" & ")} quiet)
+                      </p>
+                    )}
+                    <p className="text-[10px] text-muted-foreground/40" data-testid="text-drivers-clarifier">
+                      Drivers explain today's change, not total attention{signals.drivers.isExact ? "" : " (estimate)"}
                     </p>
-                  )}
+                  </div>
                   <Button
                     variant="ghost"
                     size="sm"
