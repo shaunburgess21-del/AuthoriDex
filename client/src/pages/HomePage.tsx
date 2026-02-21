@@ -10,6 +10,7 @@ import { CategoryPill } from "@/components/CategoryPill";
 import { VoteDeckView } from "@/components/home/VoteDeckView";
 import { PredictDeckView } from "@/components/home/PredictDeckView";
 import { TrendingNowFeed } from "@/components/TrendingNowFeed";
+import { TrendScoreInfoIcon } from "@/components/TrendScoreInfo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -904,6 +905,7 @@ export default function HomePage() {
                     >
                       <Crown className="h-3.5 w-3.5" />
                       Trend Score
+                      <TrendScoreInfoIcon testId="icon-trend-score-tab" className="h-3 w-3 text-muted-foreground/40 cursor-help" />
                       {leaderboardTab === "fame" && (
                         <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                       )}
@@ -1014,7 +1016,7 @@ export default function HomePage() {
                       <div className="flex-1" />
                       {leaderboardTab === "fame" ? (
                         <>
-                          <div className="text-right w-[120px] shrink-0">Trend Score</div>
+                          <div className="text-right w-[120px] shrink-0 flex items-center justify-end gap-1">Trend Score <TrendScoreInfoIcon testId="icon-trend-score-header" className="h-3 w-3 text-muted-foreground/40 cursor-help" /></div>
                           <div className="text-right w-[72px] shrink-0">24h</div>
                           <div className="text-right w-[72px] shrink-0">Approval</div>
                         </>

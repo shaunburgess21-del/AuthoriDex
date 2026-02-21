@@ -13,6 +13,7 @@ import { ProfileTabs } from "@/components/ProfileTabs";
 import { PredictTab } from "@/components/PredictTab";
 import { CelebrityInfoModal } from "@/components/CelebrityInfoModal";
 import { CategoryPill } from "@/components/CategoryPill";
+import { TrendScoreInfoIcon } from "@/components/TrendScoreInfo";
 import { ArrowLeft, Share2, Star, TrendingUp, Users, MessageSquare, Trophy, Zap, Camera, Check, X, Search, ThumbsUp, ThumbsDown, Minus, HelpCircle, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -751,9 +752,12 @@ export default function PersonDetailPage() {
         {/* 2. Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card className="text-center p-4">
-            <p className="text-sm text-muted-foreground uppercase tracking-wide mb-1">
-              Fame Score
-            </p>
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <p className="text-sm text-muted-foreground uppercase tracking-wide">
+                Fame Score
+              </p>
+              <TrendScoreInfoIcon testId="icon-trend-score-profile" className="h-3 w-3 text-muted-foreground/40 cursor-help" />
+            </div>
             <p className="text-3xl font-mono font-bold" data-testid="text-trend-score">
               {(person.fameIndex ?? Math.round(person.trendScore / 100)).toLocaleString()}
             </p>
