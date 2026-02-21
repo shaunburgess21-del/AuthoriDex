@@ -1190,7 +1190,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
         let newsEmaHeld = false;
         let newsHoldDiag: Record<string, any> | null = null;
         const isMediastackRefreshTick = newsSource === "mediastack" ? (mediastackCadence?.shouldRefresh ?? true) : true;
-        if (!newsUsedFallback && !newsNeedsOutageFallback && !hasPerPersonFallback && news && isMediastackRefreshTick) {
+        const stickyZeroGuard = !isMediastackRefreshTick && newsCount === 0 && (newsBaselineMap.get(person.id) ?? 0) >= 8;
+        if (!newsUsedFallback && !newsNeedsOutageFallback && !hasPerPersonFallback && news && (isMediastackRefreshTick || stickyZeroGuard)) {
           const isProviderHealthy = newsHealth.state === "HEALTHY" || newsHealth.state === "RECOVERY";
           if (isProviderHealthy) {
             const rawNewsCount = newsCount;
@@ -1213,6 +1214,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
                 currentCount: rawNewsCount,
                 baselineP50: bp50 ?? null,
                 dropRatio: prevNewsCount > 0 ? +(rawNewsCount / prevNewsCount).toFixed(3) : 0,
+                stickyZeroGuard,
               };
             }
           }
