@@ -238,7 +238,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           <CardContent className="pt-4 space-y-3">
             <div className="flex items-baseline justify-between gap-2 flex-wrap" data-testid="text-search-volume">
               <div className="text-2xl font-bold">
-                {signals.search.volume}<span className="text-sm font-normal text-muted-foreground ml-1">/ 100 search activity</span>
+                {signals.search.volume}<span className="text-sm font-normal text-muted-foreground ml-1">/ 100 search activity score</span>
               </div>
               <div className="flex items-center gap-1 text-xs" data-testid="text-search-trend">
                 {signals.search.deltaPct > 5 ? (
