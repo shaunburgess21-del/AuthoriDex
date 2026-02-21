@@ -51,7 +51,7 @@ interface MomentumData {
 function formatNum(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return n.toLocaleString();
+  return n.toLocaleString('en-US');
 }
 
 function DeltaBadge({ pct }: { pct: number }) {

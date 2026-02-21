@@ -290,7 +290,7 @@ function FeaturedPollCard({
     >
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
         <Users className="h-3.5 w-3.5 text-cyan-400" />
-        <span>{poll.totalVotes.toLocaleString()} votes</span>
+        <span>{poll.totalVotes.toLocaleString('en-US')} votes</span>
       </div>
       <h3 className="font-serif font-bold text-lg mb-1">{poll.headline}</h3>
       <p className="text-sm text-muted-foreground mb-5 flex-grow">{poll.description}</p>
@@ -760,7 +760,7 @@ export default function PersonDetailPage() {
               <TrendScoreInfoIcon testId="icon-trend-score-profile" className="h-3 w-3 text-muted-foreground/40 cursor-help" />
             </div>
             <p className="text-3xl font-mono font-bold" data-testid="text-trend-score">
-              {(person.fameIndex ?? Math.round(person.trendScore / 100)).toLocaleString()}
+              {(person.fameIndex ?? Math.round(person.trendScore / 100)).toLocaleString('en-US')}
             </p>
           </Card>
           <Card className="text-center p-4">

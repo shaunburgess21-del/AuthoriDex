@@ -66,7 +66,7 @@ export function BattleCard({ battle, compact = false }: BattleCardProps) {
         
         <div className="text-center mb-3">
           <span className="text-sm font-semibold text-primary">
-            Pool: {battle.totalPool.toLocaleString()} credits
+            Pool: {battle.totalPool.toLocaleString('en-US')} credits
           </span>
         </div>
         

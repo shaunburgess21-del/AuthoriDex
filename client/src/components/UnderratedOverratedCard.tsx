@@ -117,7 +117,7 @@ export function UnderratedOverratedCard({
       
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
         <Users className="h-3.5 w-3.5 text-cyan-400" />
-        <span>{totalVotes.toLocaleString()} votes</span>
+        <span>{totalVotes.toLocaleString('en-US')} votes</span>
       </div>
       
       <div 
@@ -134,7 +134,7 @@ export function UnderratedOverratedCard({
             {person.name}
           </h3>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Trend Score: <span className="font-mono text-foreground">{(person.fameIndex ?? 0).toLocaleString()}</span>
+            Trend Score: <span className="font-mono text-foreground">{(person.fameIndex ?? 0).toLocaleString('en-US')}</span>
           </p>
           {person.approvalPct != null && (
             <p className="text-xs text-muted-foreground mt-0.5">

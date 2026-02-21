@@ -97,7 +97,7 @@ function CelebritySearchModal({
                     <p className="font-medium text-sm">{person.name}</p>
                     <p className="text-xs text-muted-foreground">Rank #{person.rank}</p>
                   </div>
-                  <span className="text-xs font-mono text-muted-foreground">{Math.round(person.trendScore).toLocaleString()}</span>
+                  <span className="text-xs font-mono text-muted-foreground">{Math.round(person.trendScore).toLocaleString('en-US')}</span>
                 </button>
               ))
             )}

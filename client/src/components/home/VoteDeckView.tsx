@@ -80,7 +80,7 @@ function VersusCard({
         <div className="flex items-center justify-between mb-4 gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5 text-cyan-400" />
-            <span>{matchup.totalVotes.toLocaleString()} votes</span>
+            <span>{matchup.totalVotes.toLocaleString('en-US')} votes</span>
           </div>
           <CategoryPill category={matchup.category} />
         </div>
@@ -208,7 +208,7 @@ function PollCard({
         <div className="flex items-center justify-between mb-3 gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5 text-cyan-400" />
-            <span>{topic.totalVotes.toLocaleString()} votes</span>
+            <span>{topic.totalVotes.toLocaleString('en-US')} votes</span>
           </div>
           <CategoryPill category={topic.category} />
         </div>
@@ -299,7 +299,7 @@ function InductionCard({
       <div className="relative p-4">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
           <Users className="h-3.5 w-3.5 text-cyan-400" />
-          <span>{candidate.votes.toLocaleString()} votes</span>
+          <span>{candidate.votes.toLocaleString('en-US')} votes</span>
         </div>
         
         <div className="flex flex-col items-center text-center mb-4">
@@ -355,14 +355,14 @@ function ValueCard({
       <div className="relative p-4">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
           <BarChart3 className="h-3.5 w-3.5 text-cyan-400" />
-          <span>{totalVotes.toLocaleString()} votes</span>
+          <span>{totalVotes.toLocaleString('en-US')} votes</span>
         </div>
         
         <div className="flex flex-col items-center text-center mb-4">
           <PersonAvatar name={person.name} avatar={person.avatar} size="xl" />
           <h3 className="font-semibold text-base mt-3">{person.name}</h3>
           <div className="text-sm font-mono text-cyan-400 mt-1">
-            {person.fameIndex?.toLocaleString() ?? 'N/A'} Fame
+            {person.fameIndex?.toLocaleString('en-US') ?? 'N/A'} Trend Score
           </div>
         </div>
         

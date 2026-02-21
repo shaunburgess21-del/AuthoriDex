@@ -455,7 +455,7 @@ function WeeklyUpDownCard({
           <div>
             <p className="font-semibold text-sm">{market.personName}</p>
             <p className="text-xs text-muted-foreground font-mono">
-              {market.currentScore.toLocaleString()} pts
+              {market.currentScore.toLocaleString('en-US')} pts
             </p>
           </div>
         </div>
@@ -480,7 +480,7 @@ function WeeklyUpDownCard({
       
       <div className="flex items-center justify-between text-xs mb-3">
         <span className="text-green-500">Up {market.upMultiplier}x</span>
-        <span className="text-muted-foreground">Pool: {market.totalPool.toLocaleString()}</span>
+        <span className="text-muted-foreground">Pool: {market.totalPool.toLocaleString('en-US')}</span>
         <span className="text-red-500">Down {market.downMultiplier}x</span>
       </div>
       
@@ -584,7 +584,7 @@ function HeadToHeadCard({
         
         <div className="flex items-center justify-center mb-3">
           <span className="text-sm font-semibold text-violet-500">
-            Pool: {market.totalPool.toLocaleString()}
+            Pool: {market.totalPool.toLocaleString('en-US')}
           </span>
         </div>
         
@@ -655,7 +655,7 @@ function TopGainerCard({
           <PersonAvatar name={personName} avatar="" size="sm" />
           <span className="text-sm flex-1 truncate font-medium">{personName}</span>
           <div className="text-right">
-            <p className="text-xs font-mono font-bold text-green-500">+{personLeader.currentGain.toLocaleString()}</p>
+            <p className="text-xs font-mono font-bold text-green-500">+{personLeader.currentGain.toLocaleString('en-US')}</p>
             <p className="text-[10px] font-mono text-muted-foreground">+{personLeader.percentGain}%</p>
           </div>
         </div>
@@ -680,7 +680,7 @@ function TopGainerCard({
             <PersonAvatar name={leader.name} avatar={leader.avatar} size="xs" />
             <span className="text-sm flex-1 truncate">{leader.name}</span>
             <div className="text-right">
-              <p className="text-xs font-mono font-bold text-green-500">+{leader.currentGain.toLocaleString()} pts</p>
+              <p className="text-xs font-mono font-bold text-green-500">+{leader.currentGain.toLocaleString('en-US')} pts</p>
               <p className="text-[10px] font-mono text-muted-foreground">+{leader.percentGain}%</p>
             </div>
           </div>
@@ -689,7 +689,7 @@ function TopGainerCard({
       
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-semibold text-violet-500">
-          Pool: {market.totalPool.toLocaleString()}
+          Pool: {market.totalPool.toLocaleString('en-US')}
         </span>
       </div>
       
@@ -744,7 +744,7 @@ function CommunityCard({
       </div>
       
       <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-        <span className="text-violet-500 font-semibold">Pool: {market.totalPool.toLocaleString()}</span>
+        <span className="text-violet-500 font-semibold">Pool: {market.totalPool.toLocaleString('en-US')}</span>
         <span>{market.participants} participants</span>
       </div>
       
@@ -967,7 +967,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
               <div>
                 <p className="font-semibold">{personName}</p>
                 <p className="text-xs text-muted-foreground font-mono">
-                  Current: {currentScore.toLocaleString()} pts
+                  Current: {currentScore.toLocaleString('en-US')} pts
                 </p>
               </div>
             </div>
@@ -977,7 +977,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Pot</p>
               <p className="text-xl font-mono font-bold text-amber-500">
-                {BASE_JACKPOT_POOL.toLocaleString()}
+                {BASE_JACKPOT_POOL.toLocaleString('en-US')}
                 <span className="text-xs ml-1 text-muted-foreground">credits</span>
               </p>
             </div>
@@ -1028,7 +1028,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
               <div>
                 <p className="font-semibold">{personName}</p>
                 <p className="text-xs text-muted-foreground font-mono">
-                  Current: {currentScore.toLocaleString()} pts
+                  Current: {currentScore.toLocaleString('en-US')} pts
                 </p>
               </div>
             </div>

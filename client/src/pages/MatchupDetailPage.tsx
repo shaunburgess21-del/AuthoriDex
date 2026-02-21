@@ -196,7 +196,7 @@ export default function MatchupDetailPage() {
           <div className="relative p-6">
             <div className="flex items-center gap-2 mb-4">
               <Users className="h-4 w-4 text-cyan-400" />
-              <span className="text-sm text-muted-foreground">{matchup.totalVotes.toLocaleString()} votes</span>
+              <span className="text-sm text-muted-foreground">{matchup.totalVotes.toLocaleString('en-US')} votes</span>
               <span className="text-xs text-muted-foreground ml-auto">Created {formatDate(matchup.createdAt)}</span>
             </div>
             
@@ -346,15 +346,15 @@ export default function MatchupDetailPage() {
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-cyan-400" data-testid="stat-total-votes">{matchup.totalVotes.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-cyan-400" data-testid="stat-total-votes">{matchup.totalVotes.toLocaleString('en-US')}</div>
               <div className="text-xs text-muted-foreground">Total Votes</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-cyan-400" data-testid="stat-option-a-votes">{matchup.optionAVotes.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-cyan-400" data-testid="stat-option-a-votes">{matchup.optionAVotes.toLocaleString('en-US')}</div>
               <div className="text-xs text-muted-foreground">{matchup.optionAText}</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-sky-500" data-testid="stat-option-b-votes">{matchup.optionBVotes.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-sky-500" data-testid="stat-option-b-votes">{matchup.optionBVotes.toLocaleString('en-US')}</div>
               <div className="text-xs text-muted-foreground">{matchup.optionBText}</div>
             </div>
           </div>

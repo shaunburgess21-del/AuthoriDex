@@ -284,7 +284,7 @@ export default function PollDetailPage() {
             </span>
             <span className="flex items-center gap-1.5">
               <Users className="h-4 w-4" />
-              {poll.totalVotes.toLocaleString()} votes
+              {poll.totalVotes.toLocaleString('en-US')} votes
             </span>
             {poll.deadlineAt && (
               <span className="flex items-center gap-1.5 text-amber-400">
@@ -449,7 +449,7 @@ export default function PollDetailPage() {
                 <span className="text-xs font-medium">Support</span>
               </div>
               <p className="text-lg font-bold font-mono text-[#00C853]" data-testid="text-support-percent">{poll.approvePercent}%</p>
-              <p className="text-xs text-muted-foreground">{poll.supportCount.toLocaleString()} votes</p>
+              <p className="text-xs text-muted-foreground">{poll.supportCount.toLocaleString('en-US')} votes</p>
             </div>
             <div>
               <div className="flex items-center justify-center gap-1.5 mb-1">
@@ -457,7 +457,7 @@ export default function PollDetailPage() {
                 <span className="text-xs font-medium">Neutral</span>
               </div>
               <p className="text-lg font-bold font-mono text-slate-300" data-testid="text-neutral-percent">{poll.neutralPercent}%</p>
-              <p className="text-xs text-muted-foreground">{poll.neutralCount.toLocaleString()} votes</p>
+              <p className="text-xs text-muted-foreground">{poll.neutralCount.toLocaleString('en-US')} votes</p>
             </div>
             <div>
               <div className="flex items-center justify-center gap-1.5 mb-1">
@@ -465,13 +465,13 @@ export default function PollDetailPage() {
                 <span className="text-xs font-medium">Oppose</span>
               </div>
               <p className="text-lg font-bold font-mono text-[#FF0000]" data-testid="text-oppose-percent">{poll.disapprovePercent}%</p>
-              <p className="text-xs text-muted-foreground">{poll.opposeCount.toLocaleString()} votes</p>
+              <p className="text-xs text-muted-foreground">{poll.opposeCount.toLocaleString('en-US')} votes</p>
             </div>
           </div>
 
           <div className="mt-4 pt-3 border-t border-border/30 text-center">
             <p className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">{poll.totalVotes.toLocaleString()}</span> total votes
+              <span className="font-semibold text-foreground">{poll.totalVotes.toLocaleString('en-US')}</span> total votes
             </p>
           </div>
         </Card>
@@ -480,7 +480,7 @@ export default function PollDetailPage() {
         <div className="grid grid-cols-3 gap-3 mb-6" data-testid="section-stats">
           <Card className="p-3 text-center">
             <Users className="h-4 w-4 text-cyan-500 mx-auto mb-1" />
-            <p className="text-lg font-bold font-mono" data-testid="text-total-votes">{poll.totalVotes.toLocaleString()}</p>
+            <p className="text-lg font-bold font-mono" data-testid="text-total-votes">{poll.totalVotes.toLocaleString('en-US')}</p>
             <p className="text-xs text-muted-foreground">Total Votes</p>
           </Card>
           <Card className="p-3 text-center">

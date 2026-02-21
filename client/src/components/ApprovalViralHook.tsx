@@ -131,7 +131,7 @@ function ApprovalCard({
           
           <div className="flex items-center gap-1 text-[10px] text-slate-500">
             <Star className="h-3 w-3" />
-            <span>{person.voteCount.toLocaleString()} votes</span>
+            <span>{person.voteCount.toLocaleString('en-US')} votes</span>
           </div>
           
           <Button

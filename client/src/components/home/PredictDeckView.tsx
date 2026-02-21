@@ -102,7 +102,7 @@ function UpDownCard({
           <div>
             <p className="font-semibold text-base">{market.personName}</p>
             <p className="text-sm text-muted-foreground font-mono">
-              {market.currentScore.toLocaleString()} pts
+              {market.currentScore.toLocaleString('en-US')} pts
             </p>
           </div>
         </div>
@@ -120,7 +120,7 @@ function UpDownCard({
         
         <div className="flex items-center justify-between text-xs mb-3">
           <span className="text-green-500">Up {market.upMultiplier}x</span>
-          <span className="text-muted-foreground">Pool: {market.totalPool.toLocaleString()}</span>
+          <span className="text-muted-foreground">Pool: {market.totalPool.toLocaleString('en-US')}</span>
           <span className="text-red-500">Down {market.downMultiplier}x</span>
         </div>
         
@@ -213,7 +213,7 @@ function H2HCard({
         
         <div className="flex items-center justify-center mb-3">
           <span className="text-sm font-semibold text-violet-500">
-            Pool: {market.totalPool.toLocaleString()}
+            Pool: {market.totalPool.toLocaleString('en-US')}
           </span>
         </div>
         
@@ -315,7 +315,7 @@ function CommunityCard({
         )}
         
         <div className="flex items-center justify-center mb-3">
-          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
+          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString('en-US')}</span>
         </div>
         
         <Button 
@@ -375,7 +375,7 @@ function GainerCard({
               </div>
               <div className="text-right">
                 <div className="text-sm font-semibold text-green-400">
-                  +{leader.currentGain.toLocaleString()} pts
+                  +{leader.currentGain.toLocaleString('en-US')} pts
                 </div>
                 <div className="text-xs text-green-500/70">
                   +{leader.percentGain}%
@@ -387,7 +387,7 @@ function GainerCard({
         
         <div className="flex items-center justify-center mb-3">
           <span className="text-sm font-semibold text-violet-400">
-            Pool: {market.totalPool.toLocaleString()}
+            Pool: {market.totalPool.toLocaleString('en-US')}
           </span>
         </div>
         
@@ -438,7 +438,7 @@ function StakeModal({
         <div className="space-y-4 py-4">
           <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/30">
             <span className="text-sm text-muted-foreground">Your Balance</span>
-            <span className="font-semibold text-violet-400">{userCredits.toLocaleString()} credits</span>
+            <span className="font-semibold text-violet-400">{userCredits.toLocaleString('en-US')} credits</span>
           </div>
           
           <div>
@@ -460,7 +460,7 @@ function StakeModal({
           
           <div className="flex items-center justify-between p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
             <span className="text-sm">Potential Win</span>
-            <span className="font-bold text-lg text-green-400">+{potentialWin.toLocaleString()}</span>
+            <span className="font-bold text-lg text-green-400">+{potentialWin.toLocaleString('en-US')}</span>
           </div>
         </div>
         

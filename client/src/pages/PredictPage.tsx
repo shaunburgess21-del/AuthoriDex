@@ -771,7 +771,7 @@ function WeeklyUpDownCard({
         <div>
           <p className="font-semibold text-sm">{market.personName}</p>
           <p className="text-xs text-muted-foreground font-mono">
-            {market.currentScore.toLocaleString()} pts
+            {market.currentScore.toLocaleString('en-US')} pts
           </p>
         </div>
       </div>
@@ -799,7 +799,7 @@ function WeeklyUpDownCard({
       </div>
       
       <div className="flex items-center justify-center mb-1.5">
-        <span className="text-sm font-semibold text-violet-500">Pool: {market.totalPool.toLocaleString()}</span>
+        <span className="text-sm font-semibold text-violet-500">Pool: {market.totalPool.toLocaleString('en-US')}</span>
       </div>
       
       <div className="mt-auto">
@@ -903,7 +903,7 @@ function HeadToHeadCard({
         
         <div className="flex items-center justify-center mb-3">
           <span className="text-sm font-semibold text-violet-500">
-            Pool: {market.totalPool.toLocaleString()}
+            Pool: {market.totalPool.toLocaleString('en-US')}
           </span>
         </div>
         
@@ -994,7 +994,7 @@ function TopGainerCard({
             <PersonAvatar name={leader.name} avatar={leader.avatar} size="sm" />
             <span className="text-sm flex-1 truncate">{leader.name}</span>
             <div className="text-right">
-              <p className="text-xs font-mono font-bold text-green-500">+{leader.currentGain.toLocaleString()} pts</p>
+              <p className="text-xs font-mono font-bold text-green-500">+{leader.currentGain.toLocaleString('en-US')} pts</p>
               <p className="text-[10px] font-mono text-muted-foreground">+{leader.percentGain}%</p>
             </div>
           </div>
@@ -1003,7 +1003,7 @@ function TopGainerCard({
       
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-semibold text-violet-500">
-          Pool: {market.totalPool.toLocaleString()}
+          Pool: {market.totalPool.toLocaleString('en-US')}
         </span>
       </div>
       
@@ -1109,7 +1109,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
       
       <div>
         <div className="flex items-center justify-center mb-1.5">
-          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
+          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString('en-US')}</span>
         </div>
         
         {isMarketClosed ? (
@@ -1185,7 +1185,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
       
       <div className="mt-auto">
         <div className="flex items-center justify-center mb-1.5">
-          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
+          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString('en-US')}</span>
         </div>
         
         <Button className="w-full bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20" onClick={() => onNavigate(market.slug)} disabled={isMarketClosed} data-testid={`button-predict-${market.slug}`}>
@@ -1227,7 +1227,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
           <TrendingUp className="h-4 w-4 text-violet-500" />
           <div className="text-xs">
             <span className="text-muted-foreground">{market.underlying} {market.metric}: </span>
-            <span className="font-semibold">{market.unit}{Number(market.strike).toLocaleString()}</span>
+            <span className="font-semibold">{market.unit}{Number(market.strike).toLocaleString('en-US')}</span>
           </div>
         </div>
       )}
@@ -1251,7 +1251,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
       
       <div>
         <div className="flex items-center justify-center mb-1.5">
-          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString()}</span>
+          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString('en-US')}</span>
         </div>
         
         {isMarketClosed ? (
@@ -1485,13 +1485,13 @@ function StakeModal({
               {selection.startScore && (
                 <Card className="p-2.5 bg-muted/30">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Start Score</p>
-                  <p className="font-mono font-bold text-sm">{selection.startScore.toLocaleString()}</p>
+                  <p className="font-mono font-bold text-sm">{selection.startScore.toLocaleString('en-US')}</p>
                 </Card>
               )}
               {selection.currentScore && (
                 <Card className="p-2.5 bg-muted/30">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Score</p>
-                  <p className="font-mono font-bold text-sm">{selection.currentScore.toLocaleString()}</p>
+                  <p className="font-mono font-bold text-sm">{selection.currentScore.toLocaleString('en-US')}</p>
                 </Card>
               )}
             </div>
@@ -1539,12 +1539,12 @@ function StakeModal({
           <div className="flex items-center justify-between text-xs pt-2 border-t">
             <div>
               <span className="text-muted-foreground">Current Balance: </span>
-              <span className="font-mono font-medium">{walletBalance.toLocaleString()}</span>
+              <span className="font-mono font-medium">{walletBalance.toLocaleString('en-US')}</span>
             </div>
             <div>
               <span className="text-muted-foreground">After Stake: </span>
               <span className={`font-mono font-medium ${balanceAfter < 0 ? 'text-red-500' : 'text-green-500'}`}>
-                {balanceAfter >= 0 ? balanceAfter.toLocaleString() : 'Insufficient'}
+                {balanceAfter >= 0 ? balanceAfter.toLocaleString('en-US') : 'Insufficient'}
               </span>
             </div>
           </div>
@@ -1757,7 +1757,7 @@ function CelebritySearchModal({
                     <p className="font-medium text-sm">{person.name}</p>
                     <p className="text-xs text-muted-foreground">Rank #{person.rank}</p>
                   </div>
-                  <span className="text-xs font-mono text-muted-foreground">{Math.round(person.trendScore).toLocaleString()}</span>
+                  <span className="text-xs font-mono text-muted-foreground">{Math.round(person.trendScore).toLocaleString('en-US')}</span>
                 </button>
               ))
             )}
@@ -2344,7 +2344,7 @@ export default function PredictPage() {
         <div className="flex items-center gap-4 mb-6 md:hidden">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/30">
             <Wallet className="h-4 w-4 text-violet-500" />
-            <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString()}</span>
+            <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString('en-US')}</span>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/30 text-violet-500">TEST</Badge>
           </div>
           <div className="flex items-center gap-2">

@@ -138,7 +138,7 @@ function CommunityResultsView({ personName, personId, userVote, onBackToVoting }
             <span className="text-sm text-muted-foreground">Total Votes</span>
           </div>
           <p className="text-2xl font-bold" data-testid="text-total-votes">
-            {displayStats.totalVotes.toLocaleString()}
+            {displayStats.totalVotes.toLocaleString('en-US')}
           </p>
         </div>
         <div className="bg-muted/50 rounded-xl p-4 text-center">

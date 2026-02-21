@@ -94,7 +94,7 @@ export function CurateViewResultsOverlay({
                 <CategoryPill category={person.category} />
               </div>
               <span className="text-sm text-muted-foreground">
-                {totalVotes.toLocaleString()} total votes
+                {totalVotes.toLocaleString('en-US')} total votes
               </span>
             </div>
           </div>
@@ -183,7 +183,7 @@ export function CurateViewResultsOverlay({
                         />
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {image.votesUp.toLocaleString()} votes
+                        {image.votesUp.toLocaleString('en-US')} votes
                       </p>
                     </div>
                     
@@ -241,7 +241,7 @@ export function CurateViewResultsOverlay({
             />
             
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/60 backdrop-blur-sm rounded-lg px-4 py-2">
-              <span className="text-white font-medium">{expandedImage.votesUp.toLocaleString()} votes</span>
+              <span className="text-white font-medium">{expandedImage.votesUp.toLocaleString('en-US')} votes</span>
               <Button
                 size="sm"
                 onClick={(e) => {

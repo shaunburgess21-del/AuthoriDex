@@ -126,7 +126,7 @@ export function OverratedUnderratedWidget({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <BarChart3 className="h-3.5 w-3.5 text-cyan-400" />
-            <span>{totalVotes.toLocaleString()} votes</span>
+            <span>{totalVotes.toLocaleString('en-US')} votes</span>
           </div>
           <h3 className="font-semibold text-sm">Is {personName} fairly rated?</h3>
         </div>

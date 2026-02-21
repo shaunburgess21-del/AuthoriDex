@@ -151,7 +151,7 @@ function getEntryPercentages(entries: MarketEntry[]) {
 function formatNumber(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return n.toLocaleString();
+  return n.toLocaleString('en-US');
 }
 
 function formatDate(dateStr: string): string {
@@ -334,7 +334,7 @@ function UpDownOutcomes({
         <div className="text-center">
           <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{underlying} {metric}</p>
           <p className="text-3xl font-bold font-mono text-violet-400">
-            {unit}{Number(strike).toLocaleString()}
+            {unit}{Number(strike).toLocaleString('en-US')}
           </p>
           <p className="text-xs text-muted-foreground mt-1">Strike Price</p>
         </div>

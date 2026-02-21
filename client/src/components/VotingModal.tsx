@@ -155,7 +155,7 @@ export function VotingModal({ open, onOpenChange, initialPersonId, peopleList }:
                       
                       <div className="flex flex-col items-end gap-1">
                         <span className="text-sm font-mono font-semibold" data-testid={`text-score-${person.id}`}>
-                          {(person.fameIndex ?? Math.round(person.trendScore / 100)).toLocaleString()}
+                          {(person.fameIndex ?? Math.round(person.trendScore / 100)).toLocaleString('en-US')}
                         </span>
                         <TrendBadge value={person.change24h} size="sm" />
                       </div>

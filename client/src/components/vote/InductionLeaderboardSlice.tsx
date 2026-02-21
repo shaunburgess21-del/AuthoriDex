@@ -112,9 +112,9 @@ function InductionCandidateRow({
           </div>
           <span className="text-xs text-muted-foreground shrink-0">
             {rank === 1 ? (
-              <span className="text-yellow-400">{candidate.votes.toLocaleString()}</span>
+              <span className="text-yellow-400">{candidate.votes.toLocaleString('en-US')}</span>
             ) : (
-              <span>-{gap.toLocaleString()}</span>
+              <span>-{gap.toLocaleString('en-US')}</span>
             )}
           </span>
         </div>
@@ -206,7 +206,7 @@ export function InductionLeaderboardSlice({
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Users className="h-3.5 w-3.5 text-cyan-400" />
-          <span>{totalVoters.toLocaleString()} votes</span>
+          <span>{totalVoters.toLocaleString('en-US')} votes</span>
         </div>
       </div>
       

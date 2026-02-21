@@ -120,7 +120,7 @@ export default function MePage() {
                       Level {xpLevel}
                     </Badge>
                     <Badge variant="outline" className="text-amber-400">
-                      {(profile?.xpPoints || 0).toLocaleString()} XP
+                      {(profile?.xpPoints || 0).toLocaleString('en-US')} XP
                     </Badge>
                   </div>
                 </div>
@@ -206,7 +206,7 @@ export default function MePage() {
                   <span className="text-muted-foreground">Balance</span>
                 </div>
                 <span className="font-mono font-bold text-2xl text-violet-400">
-                  {(profile?.predictCredits || 0).toLocaleString()}
+                  {(profile?.predictCredits || 0).toLocaleString('en-US')}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-3">

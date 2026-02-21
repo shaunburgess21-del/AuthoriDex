@@ -22,7 +22,7 @@ function formatMetricValue(value: number): string {
   } else if (value >= 1000) {
     return `${(value / 1000).toFixed(1)}K`;
   }
-  return value.toLocaleString();
+  return value.toLocaleString('en-US');
 }
 
 export function InsightCard({ insightType, metricName, topItem, onClick }: InsightCardProps) {

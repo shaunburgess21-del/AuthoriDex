@@ -165,7 +165,7 @@ export function CurateProfileCard({
             <div className="flex-1 min-w-0 flex flex-col justify-center">
               <h3 className="font-semibold text-base truncate">{person.name}</h3>
               <span className="text-xs text-muted-foreground">
-                {totalVotes.toLocaleString()} votes
+                {totalVotes.toLocaleString('en-US')} votes
               </span>
             </div>
           </div>
@@ -200,7 +200,7 @@ export function CurateProfileCard({
               </motion.div>
               <p className="font-medium text-green-400 mb-1">Vote recorded!</p>
               <p className="text-xs text-muted-foreground mb-4">
-                {totalVotes.toLocaleString()} total votes
+                {totalVotes.toLocaleString('en-US')} total votes
               </p>
               <div className="flex gap-2 justify-center">
                 <Button

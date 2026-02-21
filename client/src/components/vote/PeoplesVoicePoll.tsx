@@ -67,7 +67,7 @@ export function PeoplesVoicePoll({
       
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
         <Users className="h-3.5 w-3.5 text-violet-400" />
-        <span>{topic.totalVotes.toLocaleString()} votes</span>
+        <span>{topic.totalVotes.toLocaleString('en-US')} votes</span>
       </div>
       
       <h4 className="font-serif font-bold text-base mb-1">{topic.headline}</h4>

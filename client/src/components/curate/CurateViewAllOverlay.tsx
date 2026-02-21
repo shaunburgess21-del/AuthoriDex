@@ -100,7 +100,7 @@ function CelebCard({
             <p className="font-medium text-sm truncate">{person.name}</p>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <Users className="h-3 w-3" />
-              <span>{totalVotes.toLocaleString()} votes</span>
+              <span>{totalVotes.toLocaleString('en-US')} votes</span>
             </div>
           </div>
         </div>

@@ -271,7 +271,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
           <>
             <div className="text-right hidden sm:block w-[120px] shrink-0">
               <p className={`font-mono font-bold text-2xl tabular-nums ${scoreFlash ? 'number-flash' : ''}`} data-testid={`text-score-${person.id}`}>
-                {fameScore.toLocaleString()}
+                {fameScore.toLocaleString('en-US')}
               </p>
               <p className="text-xs text-muted-foreground uppercase tracking-wide lg:hidden">
                 Trend Score
@@ -359,7 +359,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             </div>
             <div className="hidden md:block text-right w-[120px] shrink-0">
               <p className="font-mono font-bold text-xl tabular-nums text-muted-foreground">
-                {fameScore.toLocaleString()}
+                {fameScore.toLocaleString('en-US')}
               </p>
               <p className="text-xs text-muted-foreground uppercase tracking-wide lg:hidden">
                 Trend Score

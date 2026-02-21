@@ -107,7 +107,7 @@ function XPProgressBar({ xp, level }: { xp: number; level: number }) {
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">Level {level}</span>
-        <span className="font-mono text-amber-400">{xp.toLocaleString()} XP</span>
+        <span className="font-mono text-amber-400">{xp.toLocaleString('en-US')} XP</span>
       </div>
       <div className="h-2 bg-muted/50 rounded-full overflow-hidden">
         <div 
@@ -238,7 +238,7 @@ function UserMenuContent({
             <span className="text-sm text-muted-foreground">Predict Credits</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-mono font-bold text-sm">{(profile?.predictCredits || 0).toLocaleString()}</span>
+            <span className="font-mono font-bold text-sm">{(profile?.predictCredits || 0).toLocaleString('en-US')}</span>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/30 text-violet-400">VIRTUAL</Badge>
           </div>
         </div>

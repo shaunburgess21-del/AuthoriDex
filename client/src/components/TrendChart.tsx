@@ -90,7 +90,7 @@ function CustomTooltip({ active, payload, startScore, timeRange }: CustomTooltip
         {formatTooltipDate(dataPoint.timestamp, timeRange)}
       </p>
       <p className="font-mono font-bold text-lg">
-        {currentScore.toLocaleString()}
+        {currentScore.toLocaleString('en-US')}
       </p>
       <p className={`text-sm font-semibold ${isPositive ? 'text-green-500' : 'text-red-500'}`}>
         {isPositive ? '+' : ''}{delta.toFixed(2)}% from start

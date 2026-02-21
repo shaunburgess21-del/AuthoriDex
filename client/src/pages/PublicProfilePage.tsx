@@ -236,7 +236,7 @@ export default function PublicProfilePage() {
             <div className="flex-1">
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-muted-foreground">Level {xpLevel}</span>
-                <span className="font-mono text-amber-400">{profile.xpPoints?.toLocaleString() || 0} XP</span>
+                <span className="font-mono text-amber-400">{profile.xpPoints?.toLocaleString('en-US') || 0} XP</span>
               </div>
               <div className="h-2 bg-muted rounded-full overflow-hidden">
                 <div 

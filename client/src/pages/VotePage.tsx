@@ -253,7 +253,7 @@ function VersusCard({
         <div className="flex items-center mb-3 gap-2 px-4">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5 text-cyan-400" />
-            <span>{matchup.totalVotes.toLocaleString()} votes</span>
+            <span>{matchup.totalVotes.toLocaleString('en-US')} votes</span>
           </div>
         </div>
         
@@ -513,14 +513,14 @@ function InductionCandidateCard({
               <Crown className="h-3 w-3 text-yellow-400" />
               <span className="text-yellow-400/80">Leader</span>
               <span className="mx-1">•</span>
-              <span className="text-slate-400">{candidate.votes.toLocaleString()} votes</span>
+              <span className="text-slate-400">{candidate.votes.toLocaleString('en-US')} votes</span>
             </span>
           ) : (
             <span>
               <span className="text-slate-500">Gap: </span>
-              <span className="text-slate-400">-{gap.toLocaleString()}</span>
+              <span className="text-slate-400">-{gap.toLocaleString('en-US')}</span>
               <span className="mx-1 text-slate-500">•</span>
-              <span className="text-slate-400">{candidate.votes.toLocaleString()} votes</span>
+              <span className="text-slate-400">{candidate.votes.toLocaleString('en-US')} votes</span>
             </span>
           )}
         </div>
@@ -698,7 +698,7 @@ function CurateProfileCard({
               <Check className="h-6 w-6 text-green-400" />
             </motion.div>
             <p className="font-medium text-green-400 mb-1">Vote recorded!</p>
-            <p className="text-xs text-muted-foreground mb-4">{totalVotes.toLocaleString()} total votes</p>
+            <p className="text-xs text-muted-foreground mb-4">{totalVotes.toLocaleString('en-US')} total votes</p>
             <div className="flex gap-2 justify-center">
               <Button
                 size="sm"
@@ -843,7 +843,7 @@ function DiscourseCard({
       </div>
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
         <Users className="h-3.5 w-3.5 text-cyan-400" />
-        <span>{topic.totalVotes.toLocaleString()} votes</span>
+        <span>{topic.totalVotes.toLocaleString('en-US')} votes</span>
       </div>
       <div className="flex items-start gap-3 mb-3">
         {(topic.personAvatar || topic.imageUrl) ? (
@@ -947,7 +947,7 @@ function DiscourseCard({
           <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Zap className="h-3.5 w-3.5" />
-              <span>{topic.totalVotes.toLocaleString()} total votes</span>
+              <span>{topic.totalVotes.toLocaleString('en-US')} total votes</span>
             </div>
             <div 
               className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
