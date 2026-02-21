@@ -528,7 +528,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         change24h: number | null;
         rankChange: number | null;
         badge: { label: string; color: string; description: string };
-        sourceBreakdown?: { searchPct: number; newsPct: number; wikiPct: number } | null;
+        sourceBreakdown?: { sources: Array<{ key: string; pct: number }>; activeSources: number } | null;
       }> = [];
 
       for (const p of enriched) {
@@ -590,9 +590,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const result = hotMovers.slice(0, 8);
 
-      // Compute per-source attribution for top movers
+      // Compute per-source score driver attribution for top movers
       const moverIds = result.map(m => m.id);
-      const sourceAttribution = new Map<string, { searchPct: number; newsPct: number; wikiPct: number }>();
+      const sourceAttribution = new Map<string, { sources: Array<{ key: string; pct: number }>; activeSources: number }>();
       if (moverIds.length > 0) {
         try {
           const now = new Date();
@@ -648,23 +648,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const prev = prevByPerson.get(id);
             if (!curr) continue;
 
-            const searchChange = Math.abs((curr.searchDelta ?? 0) - (prev?.searchDelta ?? 0));
-            const newsChange = Math.abs((curr.newsDelta ?? 0) - (prev?.newsDelta ?? 0));
-            const wikiChange = Math.abs((curr.wikiDelta ?? 0) - (prev?.wikiDelta ?? 0));
+            const rawSources = [
+              { key: "search", currVal: curr.searchDelta ?? 0, prevVal: prev?.searchDelta ?? 0, weight: 0.40 },
+              { key: "news", currVal: curr.newsDelta ?? 0, prevVal: prev?.newsDelta ?? 0, weight: 0.35 },
+              { key: "wiki", currVal: curr.wikiDelta ?? 0, prevVal: prev?.wikiDelta ?? 0, weight: 0.25 },
+            ];
 
-            // Weight changes by velocity allocation weights
-            const wSearch = searchChange * 0.40;
-            const wNews = newsChange * 0.35;
-            const wWiki = wikiChange * 0.25;
-            const total = wSearch + wNews + wWiki;
+            // Exclude sources with no data flowing (both current and prev are 0)
+            const activeSources = rawSources.filter(s => s.currVal !== 0 || s.prevVal !== 0);
+            if (activeSources.length === 0) continue;
 
-            if (total > 0) {
-              sourceAttribution.set(id, {
-                searchPct: Math.round((wSearch / total) * 100),
-                newsPct: Math.round((wNews / total) * 100),
-                wikiPct: Math.round((wWiki / total) * 100),
-              });
-            }
+            // Use abs-value of weighted change for attribution
+            const contributions = activeSources.map(s => ({
+              key: s.key,
+              absContrib: Math.abs(s.currVal - s.prevVal) * s.weight,
+            }));
+
+            const total = contributions.reduce((sum, c) => sum + c.absContrib, 0);
+
+            // Zero-total guardrail: if total weighted change is negligible, skip
+            if (total < 0.001) continue;
+
+            const sources = contributions
+              .map(c => ({ key: c.key, pct: Math.round((c.absContrib / total) * 100) }))
+              .sort((a, b) => b.pct - a.pct);
+
+            sourceAttribution.set(id, { sources, activeSources: activeSources.length });
           }
         } catch (e) {
           console.warn("[hot-movers] Source attribution computation failed:", e);
