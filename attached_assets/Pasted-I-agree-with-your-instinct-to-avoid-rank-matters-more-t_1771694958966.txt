@@ -1,0 +1,57 @@
+I agree with your instinct to avoid “rank matters more than the number” (it can feel like you’re dodging), but I wouldn’t go too vague either — if it’s too vague, it can trigger the opposite reaction: “so it’s made up?”
+
+The sweet spot is:
+
+Clear inputs (3 signals)
+
+Clear provenance (“third-party data sources”)
+
+Clear cadence (updates regularly / hourly)
+
+Clear meaning (“higher = more attention right now”)
+
+No formula details (no normalization, weights, proprietary steps)
+
+My recommended copy (tight, credible, non-gameable)
+
+How Trend Score Works
+
+Trend Score measures real-world attention using three independent signals:
+
+Search interest — how often people search for them
+
+News coverage — how often they appear in recent articles
+
+Wikipedia activity — how often people read about them
+
+We combine these third-party signals into a single score that updates as new data comes in. A higher score means more attention right now.
+
+Sources: Search • News • Wikipedia
+
+That last line (“higher score means more attention right now”) is important. It answers the significance question without explaining how you got 368,443.
+
+Why I like this more than your draft
+
+Your draft:
+
+“combined and aggregated… affect rank and movement…”
+
+It describes the mechanism (leaderboard movement) but not the meaning of the score. People still go: “okay… but what does 368,443 mean?”
+
+Adding one plain-English meaning sentence fixes that.
+
+UI suggestion (small but high impact)
+
+Put the ⓘ next to the Trend Score column header and also next to the Trend Score on the profile hero (same modal content). New users often land on a profile from a share link, not the leaderboard.
+
+If you want to keep it ultra-clean, make “Sources: …” a subtle footer in smaller text.
+
+Optional line if you want a “proprietary” hint without sounding defensive
+
+Add one sentence at the bottom (optional):
+
+“We don’t publish the exact weighting to prevent gaming, but the sources above are the inputs.”
+
+That frames it as integrity, not secrecy. Only add it if you feel people are still skeptical.
+
+If you paste your current UI modal constraints (max lines / character limits), I’ll compress it to fit perfectly.

@@ -1,0 +1,238 @@
+a concern that I have is that a user might come to our site, see the trend scores, in the hundreds of thousands, and think what is that, why that number, how is that calculated, what is the significance of that, where did they get that from etc? What do you think?
+
+Yeah — that concern is real. Big absolute numbers (368,443) with no immediate legend triggers “made-up metric” suspicion, even if your engine is solid. Most users need (1) meaning, (2) source trust, (3) comparability in under 5 seconds.
+
+Here are the cleanest fixes (pick 2–3 for Phase 1):
+
+1) Make the score feel interpretable at a glance
+
+Best move: keep your internal score, but display a human scale.
+
+Option A (strongly recommended): Display a 0–100 “Index” + keep big number in details
+
+Show: Trend Index: 92
+
+In tooltip / details: “Raw score: 368,443”
+
+Users instantly understand 0–100.
+
+Option B: Convert to “Index points” with a clear baseline
+
+Show: 368.4k
+
+Add microcopy: “Indexed score (higher = more attention)”
+
+Still not as intuitive as 0–100, but better.
+
+Option C: Percentile-based display
+
+Show: Top 1% today
+
+Secondary: “Trend score: 368k”
+
+This is super legible and naturally answers “so what?”
+
+2) Add a one-line definition right where the user looks
+
+Right under “Trend Score” in the leaderboard header:
+
+Trend Score = real-time attention index from Search + News + Wikipedia (last 24h).
+
+That single sentence massively reduces doubt.
+
+3) Give an instant “Why is this person here?” explanation
+
+On each row (or on hover/tap), show a tiny breakdown:
+
+Drivers: Search ↑, News ↑, Wiki →
+
+Or “Why #1: Search spike + News surge”
+
+You already built Momentum Signals + Score Drivers — reuse that concept on leaderboard rows as a mini tooltip.
+
+4) Make the source-of-truth obvious (trust)
+
+Add a small “Sources” chip near the score label:
+
+“Sources: Serper • Mediastack • Wikipedia”
+
+Even better: make it clickable to a “How it works” modal.
+
+5) Use a “How it’s calculated” modal (simple, not math-heavy)
+
+Keep it plain English:
+
+What it measures: “attention / momentum”
+
+Time window: “compared to ~24h ago”
+
+Inputs: “search interest, news activity, wiki views”
+
+What it’s not: “not follower count, not net worth”
+
+A simple diagram: Search + News + Wiki → Trend Index
+
+My recommended Phase 1 combo (fast, high impact)
+
+Change leaderboard display to Trend Index (0–100)
+
+Add the one-line definition under the tab
+
+Add a hover/tap tooltip: Drivers (Search/News/Wiki) + “Compared to ~24h ago”
+
+That solves “WTF is 368,443?” without rewriting your engine.
+
+If you want, paste what you currently call the metric internally (trendScore vs fameScore etc.), and I’ll give you exact UI copy + tooltip text that matches your tone (vox populi / authority vibe) and avoids over-promising.
+
+With regards to the 0-100, i'm not sure that would work, as we have the weekly jackpot, and we want to make it hard for people to guess the exact number it will land on. Perhaps a 1000-50000 scale will work better. 
+Also we already have mentioned what our sources are (API's). We can make it more obvious and mention it again. But i'm not sure that will solve the issue of someone thinking "how did they get to that number. Perhaps I need to go back to replit and get an understanding of how the raw scores end up at those number ranges, not much more or much less. Like understanding first principles and then finding a way of explaining it to our users.
+
+Anyway, I have attached several screenshots for you to see the latest changes we have done to the site over the last few days, just for interest and context :)
+Thought for 26s
+
+Yeah — that concern is real, and it’s one of those “trust-killer” moments for a first-time user:
+
+“368,443… okay… is that dollars? followers? votes? why is it so big? can I trust it?”
+
+The good news: you don’t need to reveal your whole formula (and you shouldn’t, because of the jackpot / gaming). You just need to anchor meaning and show provenance in a way that feels intuitive.
+
+What the Trend Score needs to communicate (without exposing the recipe)
+
+Users don’t actually need the full math. They need 4 things:
+
+What it is: “An attention index (points), not followers, not money.”
+
+What it compares: “Comparable across people. Higher = more attention right now.”
+
+Where it comes from: “Search + News + Wikipedia (updated hourly).”
+
+Why it moved: “Driven by X/Y/Z (Momentum Signals + Score Drivers).”
+
+If you nail those, the big number stops feeling arbitrary.
+
+Keep big numbers (for jackpot), but make them feel interpretable
+
+A 0–100 score is intuitive, but you’re right: it makes jackpot guessing easier.
+
+A better compromise is exactly what you suggested: a wider “index points” range (e.g., 1,000–50,000 or 1,000–500,000) plus extra context that gives meaning without giving predictability.
+
+The trick: show meaning next to the number, not instead of it
+
+On the leaderboard row and on the person page, add one small line like:
+
+“#1 Today • Top 0.3% • Updated 19m ago”
+
+“Attention Index (points) • Based on Search, News, Wikipedia”
+
+Now the number is “just a unit”, and the rank + percentile carry the intuitive meaning.
+
+Percentile is huge here because it answers the user’s real question:
+
+“Is this big or small?”
+
+The best “What is this score?” explanation (simple, non-gameable)
+
+Add an ⓘ tooltip / modal next to “Trend Score” with wording like:
+
+Trend Score = Attention Index
+
+We track how much attention someone is getting from:
+
+Search interest
+
+News coverage
+
+Wikipedia curiosity
+
+We normalize these signals and combine them into a single index score.
+
+The score is designed to be comparable across people, and updates hourly.
+
+What matters most is rank + change, not the absolute number.
+
+Then include a tiny “Sources” footer and a “Last updated” timestamp (you already do this nicely).
+
+This explains first principles without telling anyone how to reverse-engineer the jackpot.
+
+Make the number feel “earned” with 2 tiny UI additions
+1) Add a “score meaning strip” everywhere the score appears
+
+Example under the number:
+
+“Attention Index points”
+
+“#1 Overall • Top 1% today”
+
+2) Add a “how it changed” sentence that ties to Momentum Signals
+
+Example:
+
+“Up +9.1% in 24h — driven by Search + News.”
+
+That makes the score feel grounded in reality.
+
+About your “why is it always in this range?” point (your instinct is right)
+
+You should ask Replit for the “first principles” of your numeric range. Specifically:
+
+What’s the final scaling constant / mapping that turns the internal model into ~200k–400k?
+
+Is it tied to:
+
+distribution of the top 100?
+
+a baseline anchor person?
+
+a normalization target (mean/median)?
+
+Does the range drift as your dataset grows?
+
+Once you understand that, you can confidently message users with:
+
+“Scores typically range between X and Y”
+
+“A +10% move is meaningful”
+
+Even better: you can lock the range with a stable mapping (percentile/log-based) while keeping unpredictability.
+
+Recommended approach for the new scale (keeps jackpot hard)
+
+If you do decide to move from hundreds of thousands:
+
+Best option: Percentile → Points mapping
+
+Compute each person’s percentile each run (or daily).
+
+Map percentile to a points range (e.g., 1,000–50,000) using a curve (log-ish).
+
+Display integer points.
+
+This keeps:
+
+interpretability (bounded range)
+
+comparability
+
+anti-gaming (still hard to nail an exact value)
+
+And it avoids “why is this 368,443?” because users already understand bounded “index points”.
+
+Quick thoughts on the latest UI (from your screenshots)
+
+The Momentum Signals section is the right direction — it’s exactly what makes your score believable.
+
+The “Live / Full” timestamps on the leaderboard are excellent trust cues. I’d just add one more cue: “Attention Index points” + ⓘ tooltip.
+
+Your “Predict” experience looks polished — so it’s worth protecting the jackpot difficulty, but don’t let that force confusing score UX.
+
+What I’d tell Replit to do next (short task list)
+
+Add ⓘ “What is Trend Score?” modal (first principles + sources + update cadence).
+
+Add Percentile + Rank line next to score (leaderboard + profile).
+
+Add “Attention Index points” label under the score number everywhere.
+
+Optional: plan a controlled migration to 1,000–50,000 using percentile mapping (keeps jackpot hard, improves intuition).
+
+If you want, paste Replit’s current “how the score gets into the 200k–400k range” explanation (even rough) and I’ll help you turn it into user-facing copy that’s clear, credible, and non-gameable.
