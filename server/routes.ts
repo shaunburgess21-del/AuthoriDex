@@ -861,6 +861,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const lastScoredAt = fullRefresh || liveUpdatedAt;
 
+      let runInProgress: { runId: string; startedAt: string; startedAtFormatted: string } | null = null;
+      try {
+        const [activeRun] = await db.select({
+          id: ingestionRuns.id,
+          startedAt: ingestionRuns.startedAt,
+        })
+          .from(ingestionRuns)
+          .where(eq(ingestionRuns.status, "running"))
+          .orderBy(desc(ingestionRuns.startedAt))
+          .limit(1);
+        if (activeRun) {
+          runInProgress = {
+            runId: activeRun.id,
+            startedAt: activeRun.startedAt.toISOString(),
+            startedAtFormatted: formatRelativeTime(activeRun.startedAt),
+          };
+        }
+      } catch (e) {}
+
       res.json({
         freshness,
         systemStatus: Object.values(freshness).every(f => f.status !== "stale") ? "healthy" : "degraded",
@@ -870,6 +889,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         liveUpdatedAtFormatted: formatRelativeTime(liveUpdatedAt),
         fullRefreshAt: fullRefresh?.toISOString() || null,
         fullRefreshAtFormatted: formatRelativeTime(fullRefresh),
+        runInProgress,
       });
     } catch (error) {
       console.error("Error fetching system freshness:", error);
@@ -6161,20 +6181,29 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   // These endpoints can be triggered by external schedulers (Vercel Cron, GitHub Actions, etc.)
   // They use API key authentication instead of user session auth for serverless compatibility
   
+  const cronCallLog: { endpoint: string; callerIp: string; at: string }[] = [];
+  const CRON_CALL_LOG_MAX = 50;
+
   const verifyCronSecret = (req: any, res: any, next: any) => {
     const authHeader = req.headers.authorization;
     const cronSecret = process.env.CRON_SECRET;
-    
-    // If CRON_SECRET is not set, allow access (development mode)
+    const callerIp = req.headers['x-forwarded-for'] || req.ip || 'unknown';
+    const endpoint = req.path;
+
+    cronCallLog.push({ endpoint, callerIp, at: new Date().toISOString() });
+    if (cronCallLog.length > CRON_CALL_LOG_MAX) cronCallLog.shift();
+
     if (!cronSecret) {
       console.warn('[Cron] Warning: CRON_SECRET not set. Cron endpoints are unprotected.');
       return next();
     }
     
     if (!authHeader || authHeader !== `Bearer ${cronSecret}`) {
+      console.warn(`[Cron] Unauthorized attempt on ${endpoint} from ${callerIp}`);
       return res.status(401).json({ error: 'Unauthorized: Invalid or missing cron secret' });
     }
     
+    console.log(`[Cron] Authenticated call to ${endpoint} from ${callerIp}`);
     next();
   };
   
@@ -6262,12 +6291,12 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
   
-  // Health check for cron jobs (useful for monitoring)
   app.get("/api/cron/health", (req, res) => {
     res.json({
       status: "ok",
       serverTime: new Date().toISOString(),
       cronSecretConfigured: !!process.env.CRON_SECRET,
+      recentCalls: cronCallLog.slice(-10),
     });
   });
 
