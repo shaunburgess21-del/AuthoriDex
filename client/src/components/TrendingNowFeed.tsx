@@ -194,9 +194,6 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                               const driverMeta = topActiveSource ? driverIconMeta[topActiveSource.key] : null;
                               const driverLabel = sb?.dominantDriver;
                               const hasData = sb && sb.sources && sb.sources.some(s => s.status !== "no-data");
-                              const statusLabels: Record<string, string> = {
-                                news: "News", wiki: "Wiki", search: "Search",
-                              };
                               return (
                                 <>
                                   <div className="border-t border-slate-700/40 my-1.5" />
@@ -212,20 +209,6 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                                     </div>
                                   ) : (
                                     <p className="text-[10px] text-muted-foreground italic" data-testid={`score-drivers-label-${person.id}`}>Driver data not yet available</p>
-                                  )}
-                                  {sb?.sources && sb.sources.length > 0 && (
-                                    <div className="flex items-center gap-2 flex-wrap" data-testid={`source-status-${person.id}`}>
-                                      {["news", "wiki", "search"].map(key => {
-                                        const src = sb.sources.find(s => s.key === key);
-                                        const st = src?.status ?? "no-data";
-                                        const label = st === "active" ? "active" : st === "quiet" ? "quiet" : "no data";
-                                        return (
-                                          <span key={key} className={`text-[9px] ${st === "active" ? "text-slate-300" : "text-slate-600"}`}>
-                                            {statusLabels[key]}: {label}
-                                          </span>
-                                        );
-                                      })}
-                                    </div>
                                   )}
                                 </>
                               );
