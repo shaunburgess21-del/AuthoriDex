@@ -23,7 +23,7 @@ function TrendScoreInfoContent() {
         </li>
       </ul>
       <p className="text-xs text-muted-foreground">
-        We combine these third-party signals into a single score that updates as new data comes in. A higher score means more attention right now.
+        We combine these independent signals from public sources into a single score that updates as new data comes in. A higher score means more attention right now.
       </p>
       <p className="text-[10px] text-muted-foreground/60 pt-1 border-t border-border/50">
         Sources: Search · News · Wikipedia
