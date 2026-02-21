@@ -5,7 +5,7 @@ import { generateMockPlatformInsights } from "./api-integrations";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
 import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, ingestionRuns, inductionCandidates, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
-import { eq, desc, and, gt, sql, count, gte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
+import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
@@ -528,6 +528,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         change24h: number | null;
         rankChange: number | null;
         badge: { label: string; color: string; description: string };
+        sourceBreakdown?: { searchPct: number; newsPct: number; wikiPct: number } | null;
       }> = [];
 
       for (const p of enriched) {
@@ -588,11 +589,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const result = hotMovers.slice(0, 8);
+
+      // Compute per-source attribution for top movers
+      const moverIds = result.map(m => m.id);
+      const sourceAttribution = new Map<string, { searchPct: number; newsPct: number; wikiPct: number }>();
+      if (moverIds.length > 0) {
+        try {
+          const now = new Date();
+          const window30h = new Date(now.getTime() - 30 * 60 * 60 * 1000);
+          const window18h = new Date(now.getTime() - 18 * 60 * 60 * 1000);
+          const time24h = now.getTime() - 24 * 60 * 60 * 1000;
+
+          const [currentSnaps, prevSnaps] = await Promise.all([
+            db.select({
+              personId: trendSnapshots.personId,
+              searchDelta: trendSnapshots.searchDelta,
+              newsDelta: trendSnapshots.newsDelta,
+              wikiDelta: trendSnapshots.wikiDelta,
+              timestamp: trendSnapshots.timestamp,
+            })
+              .from(trendSnapshots)
+              .where(and(
+                inArray(trendSnapshots.personId, moverIds),
+                gte(trendSnapshots.timestamp, window18h),
+              ))
+              .orderBy(desc(trendSnapshots.timestamp)),
+
+            db.select({
+              personId: trendSnapshots.personId,
+              searchDelta: trendSnapshots.searchDelta,
+              newsDelta: trendSnapshots.newsDelta,
+              wikiDelta: trendSnapshots.wikiDelta,
+              timestamp: trendSnapshots.timestamp,
+            })
+              .from(trendSnapshots)
+              .where(and(
+                inArray(trendSnapshots.personId, moverIds),
+                gte(trendSnapshots.timestamp, window30h),
+                lte(trendSnapshots.timestamp, window18h),
+              ))
+              .orderBy(desc(trendSnapshots.timestamp)),
+          ]);
+
+          const latestByPerson = new Map<string, typeof currentSnaps[0]>();
+          for (const s of currentSnaps) {
+            if (!latestByPerson.has(s.personId)) latestByPerson.set(s.personId, s);
+          }
+          const prevByPerson = new Map<string, typeof prevSnaps[0]>();
+          for (const s of prevSnaps) {
+            const existing = prevByPerson.get(s.personId);
+            if (!existing || Math.abs(new Date(s.timestamp).getTime() - time24h) < Math.abs(new Date(existing.timestamp).getTime() - time24h)) {
+              prevByPerson.set(s.personId, s);
+            }
+          }
+
+          for (const id of moverIds) {
+            const curr = latestByPerson.get(id);
+            const prev = prevByPerson.get(id);
+            if (!curr) continue;
+
+            const searchChange = Math.abs((curr.searchDelta ?? 0) - (prev?.searchDelta ?? 0));
+            const newsChange = Math.abs((curr.newsDelta ?? 0) - (prev?.newsDelta ?? 0));
+            const wikiChange = Math.abs((curr.wikiDelta ?? 0) - (prev?.wikiDelta ?? 0));
+
+            // Weight changes by velocity allocation weights
+            const wSearch = searchChange * 0.40;
+            const wNews = newsChange * 0.35;
+            const wWiki = wikiChange * 0.25;
+            const total = wSearch + wNews + wWiki;
+
+            if (total > 0) {
+              sourceAttribution.set(id, {
+                searchPct: Math.round((wSearch / total) * 100),
+                newsPct: Math.round((wNews / total) * 100),
+                wikiPct: Math.round((wWiki / total) * 100),
+              });
+            }
+          }
+        } catch (e) {
+          console.warn("[hot-movers] Source attribution computation failed:", e);
+        }
+      }
+
       const baselineMeta = await getBaselineDiagnostics(people.length);
       const baselineDegraded = baselineMeta.baseline24hStatus !== "normal";
       const safeResult = baselineDegraded
-        ? result.map(p => ({ ...p, change24h: null }))
-        : result;
+        ? result.map(p => ({ ...p, change24h: null, sourceBreakdown: null }))
+        : result.map(p => ({
+            ...p,
+            sourceBreakdown: sourceAttribution.get(p.id) ?? null,
+          }));
       const responseWithMeta = {
         data: safeResult,
         meta: {
