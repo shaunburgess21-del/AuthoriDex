@@ -6,7 +6,7 @@ function ApprovalRatingInfoContent() {
     <div className="space-y-3">
       <p className="font-semibold text-sm">How Approval Rating Works</p>
       <p className="text-xs text-muted-foreground">
-        Approval Rating is based only on votes from AuthoriDex users — not public sentiment or external APIs.
+        Approval Rating is based only on votes from signed-in AuthoriDex users — not public sentiment or external APIs.
       </p>
       <ul className="space-y-1.5">
         <li className="flex items-center gap-2 text-xs">
@@ -18,6 +18,9 @@ function ApprovalRatingInfoContent() {
           <span><span className="font-medium">One vote</span> per user, per person, per day</span>
         </li>
       </ul>
+      <p className="text-[10px] text-muted-foreground/60 pt-1 border-t border-border/50">
+        Shown as a % based on community ratings.
+      </p>
     </div>
   );
 }
