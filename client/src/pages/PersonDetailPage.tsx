@@ -14,6 +14,7 @@ import { PredictTab } from "@/components/PredictTab";
 import { CelebrityInfoModal } from "@/components/CelebrityInfoModal";
 import { CategoryPill } from "@/components/CategoryPill";
 import { TrendScoreInfoIcon } from "@/components/TrendScoreInfo";
+import { ApprovalRatingInfoIcon } from "@/components/ApprovalRatingInfo";
 import { ArrowLeft, Share2, Star, TrendingUp, Users, MessageSquare, Trophy, Zap, Camera, Check, X, Search, ThumbsUp, ThumbsDown, Minus, HelpCircle, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -779,9 +780,12 @@ export default function PersonDetailPage() {
             </div>
           </Card>
           <Card className="text-center p-4">
-            <p className="text-sm text-muted-foreground uppercase tracking-wide mb-1">
-              Approval
-            </p>
+            <div className="flex items-center justify-center gap-1 mb-1">
+              <p className="text-sm text-muted-foreground uppercase tracking-wide">
+                Approval
+              </p>
+              <ApprovalRatingInfoIcon testId="icon-approval-profile" className="h-3 w-3 text-muted-foreground/40 cursor-help" />
+            </div>
             {(person as any).approvalPct != null ? (
               <p className="text-3xl font-mono font-bold" style={{ color: getApprovalColor((person as any).approvalPct) }} data-testid="text-approval-pct">
                 {Math.round((person as any).approvalPct)}%
