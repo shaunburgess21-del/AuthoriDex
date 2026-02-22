@@ -1351,7 +1351,7 @@ export default function AdminDashboard() {
     imageUrl: "",
     featured: false,
     visibility: "draft" as "draft" | "live" | "archived",
-    options: [{ name: "", imageUrl: "", personId: "" }, { name: "", imageUrl: "", personId: "" }, { name: "", imageUrl: "", personId: "" }] as Array<{ name: string; imageUrl: string; personId: string }>,
+    options: [{ name: "", imageUrl: "", personId: "", seedCount: 0 }, { name: "", imageUrl: "", personId: "", seedCount: 0 }, { name: "", imageUrl: "", personId: "", seedCount: 0 }] as Array<{ name: string; imageUrl: string; personId: string; seedCount: number }>,
   });
   const [opOptionSearchInputs, setOpOptionSearchInputs] = useState<string[]>(["", "", ""]);
   const [opOptionSearchResults, setOpOptionSearchResults] = useState<any[][]>([[], [], []]);
@@ -2506,7 +2506,7 @@ export default function AdminDashboard() {
       imageUrl: "",
       featured: false,
       visibility: "draft",
-      options: [{ name: "", imageUrl: "", personId: "" }, { name: "", imageUrl: "", personId: "" }, { name: "", imageUrl: "", personId: "" }],
+      options: [{ name: "", imageUrl: "", personId: "", seedCount: 0 }, { name: "", imageUrl: "", personId: "", seedCount: 0 }, { name: "", imageUrl: "", personId: "", seedCount: 0 }],
     });
     setOpOptionSearchInputs(["", "", ""]);
     setOpOptionSearchResults([[], [], []]);
@@ -2519,8 +2519,9 @@ export default function AdminDashboard() {
       name: o.name || "",
       imageUrl: o.imageUrl || "",
       personId: o.personId || "",
+      seedCount: o.seedCount || 0,
     }));
-    while (opts.length < 3) opts.push({ name: "", imageUrl: "", personId: "" });
+    while (opts.length < 3) opts.push({ name: "", imageUrl: "", personId: "", seedCount: 0 });
     setOpinionPollForm({
       title: poll.title || "",
       slug: poll.slug || "",
@@ -2550,7 +2551,7 @@ export default function AdminDashboard() {
     if (opinionPollForm.options.length >= 20) return;
     setOpinionPollForm(prev => ({
       ...prev,
-      options: [...prev.options, { name: "", imageUrl: "", personId: "" }],
+      options: [...prev.options, { name: "", imageUrl: "", personId: "", seedCount: 0 }],
     }));
     setOpOptionSearchInputs(prev => [...prev, ""]);
     setOpOptionSearchResults(prev => [...prev, []]);
@@ -2568,7 +2569,7 @@ export default function AdminDashboard() {
     setOpOptionShowDropdown(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const updateOpinionOption = (idx: number, field: string, value: string) => {
+  const updateOpinionOption = (idx: number, field: string, value: string | number) => {
     setOpinionPollForm(prev => ({
       ...prev,
       options: prev.options.map((o, i) => i === idx ? { ...o, [field]: value } : o),
@@ -6106,6 +6107,15 @@ export default function AdminDashboard() {
                         placeholder="Option name"
                         className="flex-1"
                         data-testid={`input-opinion-option-name-${idx}`}
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        value={opt.seedCount}
+                        onChange={(e) => updateOpinionOption(idx, "seedCount", parseInt(e.target.value) || 0)}
+                        placeholder="Seed"
+                        className="w-20 text-xs"
+                        data-testid={`input-opinion-option-seed-${idx}`}
                       />
                     </div>
                     <div className="ml-6">

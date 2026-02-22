@@ -6527,6 +6527,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
             imageUrl: opinionPollOptions.imageUrl,
             personId: opinionPollOptions.personId,
             orderIndex: opinionPollOptions.orderIndex,
+            seedCount: opinionPollOptions.seedCount,
             personName: trackedPeople.name,
             personAvatar: trackedPeople.avatar,
           })
@@ -6541,10 +6542,16 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           .from(opinionPollOptions)
           .where(eq(opinionPollOptions.pollId, poll.id));
 
-        const [totalVotes] = await db
+        const [realVoteCount] = await db
           .select({ cnt: count() })
           .from(opinionPollVotes)
           .where(eq(opinionPollVotes.pollId, poll.id));
+
+        const allOptions = await db
+          .select({ seedCount: opinionPollOptions.seedCount })
+          .from(opinionPollOptions)
+          .where(eq(opinionPollOptions.pollId, poll.id));
+        const totalSeedVotes = allOptions.reduce((sum, o) => sum + (o.seedCount || 0), 0);
 
         return {
           ...poll,
@@ -6556,7 +6563,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
             personName: o.personName || null,
           })),
           totalOptions: Number(totalOptions?.cnt || 0),
-          totalVotes: Number(totalVotes?.cnt || 0),
+          totalVotes: Number(realVoteCount?.cnt || 0) + totalSeedVotes,
         };
       }));
 
@@ -6590,6 +6597,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           imageUrl: opinionPollOptions.imageUrl,
           personId: opinionPollOptions.personId,
           orderIndex: opinionPollOptions.orderIndex,
+          seedCount: opinionPollOptions.seedCount,
           personName: trackedPeople.name,
           personAvatar: trackedPeople.avatar,
         })
@@ -6608,7 +6616,14 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         .groupBy(opinionPollVotes.optionId);
 
       const voteMap = new Map(voteCounts.map(v => [v.optionId, Number(v.cnt)]));
-      const totalVotes = voteCounts.reduce((sum, v) => sum + Number(v.cnt), 0);
+
+      const optionsWithVotes = options.map(o => {
+        const realVotes = voteMap.get(o.id) || 0;
+        const seedVotes = o.seedCount || 0;
+        const displayVotes = realVotes + seedVotes;
+        return { ...o, realVotes, seedVotes, displayVotes };
+      });
+      const totalDisplayVotes = optionsWithVotes.reduce((sum, o) => sum + o.displayVotes, 0);
 
       let userVote: string | null = null;
       if (userId) {
@@ -6627,17 +6642,19 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
 
       res.json({
         ...poll,
-        options: options.map(o => ({
+        options: optionsWithVotes.map(o => ({
           id: o.id,
           name: o.name,
           imageUrl: o.personAvatar || o.imageUrl || null,
           personId: o.personId,
           personName: o.personName || null,
           orderIndex: o.orderIndex,
-          votes: voteMap.get(o.id) || 0,
-          percent: totalVotes > 0 ? Math.round(((voteMap.get(o.id) || 0) / totalVotes) * 100) : 0,
+          votes: o.displayVotes,
+          realVotes: o.realVotes,
+          seedVotes: o.seedVotes,
+          percent: totalDisplayVotes > 0 ? Math.round((o.displayVotes / totalDisplayVotes) * 100) : 0,
         })),
-        totalVotes,
+        totalVotes: totalDisplayVotes,
         userVote,
         commentCount: Number(commentCount?.cnt || 0),
       });
@@ -6833,17 +6850,20 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
             imageUrl: opinionPollOptions.imageUrl,
             personId: opinionPollOptions.personId,
             orderIndex: opinionPollOptions.orderIndex,
+            seedCount: opinionPollOptions.seedCount,
           })
           .from(opinionPollOptions)
           .where(eq(opinionPollOptions.pollId, poll.id))
           .orderBy(asc(opinionPollOptions.orderIndex));
 
-        const [totalVotes] = await db
+        const [realVoteCount] = await db
           .select({ cnt: count() })
           .from(opinionPollVotes)
           .where(eq(opinionPollVotes.pollId, poll.id));
 
-        return { ...poll, options, totalVotes: Number(totalVotes?.cnt || 0) };
+        const totalSeedVotes = options.reduce((sum, o) => sum + (o.seedCount || 0), 0);
+
+        return { ...poll, options, totalVotes: Number(realVoteCount?.cnt || 0) + totalSeedVotes };
       }));
       res.json(result);
     } catch (error: any) {
@@ -6885,6 +6905,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           imageUrl: opt.imageUrl || null,
           personId: opt.personId || null,
           orderIndex: i,
+          seedCount: opt.seedCount || 0,
         });
       }
 
@@ -6942,6 +6963,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
             imageUrl: opt.imageUrl || null,
             personId: opt.personId || null,
             orderIndex: i,
+            seedCount: opt.seedCount || 0,
           });
         }
       }
