@@ -354,7 +354,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           </CardContent>
         </Card>
 
-        <Card data-testid="card-wiki-pulse">
+        <Card className="col-span-1 md:col-span-2" data-testid="card-wiki-pulse">
           <CardHeader className="pb-2 bg-muted/50">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">
@@ -413,7 +413,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
             </Badge>
           </div>
         ) : (
-          <Card data-testid="card-score-drivers">
+          <Card className="col-span-1 md:col-span-2" data-testid="card-score-drivers">
             <CardHeader className="pb-2 bg-primary/5">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
