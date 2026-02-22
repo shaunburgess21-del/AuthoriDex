@@ -3964,32 +3964,30 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   app.post("/api/profile/sync", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
+      const jwtEmail = req.userEmail || null;
       
-      // Get user details from Supabase with retry logic
-      let user = null;
-      let userError = null;
+      // Try to get user details from Supabase Admin API, but don't block on failure
+      let email = jwtEmail;
+      let fullName: string | null = null;
+      let avatarUrl: string | null = null;
       
-      for (let attempt = 0; attempt < 3; attempt++) {
+      try {
         const result = await supabaseServer.auth.admin.getUserById(userId);
-        user = result.data?.user;
-        userError = result.error;
-        
-        if (user) break;
-        
-        // Wait before retry (100ms, 200ms, 400ms)
-        if (attempt < 2) {
-          await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, attempt)));
+        if (result.data?.user) {
+          email = result.data.user.email || email;
+          fullName = result.data.user.user_metadata?.full_name || result.data.user.user_metadata?.name || null;
+          avatarUrl = result.data.user.user_metadata?.avatar_url || result.data.user.user_metadata?.picture || null;
+        } else {
+          console.warn(`[Profile] Admin API getUserById failed for ${userId}, falling back to JWT email: ${jwtEmail}`);
         }
+      } catch (adminErr: any) {
+        console.warn(`[Profile] Admin API error for ${userId}, falling back to JWT email: ${jwtEmail}`, adminErr?.message);
       }
       
-      if (userError || !user) {
-        console.error(`[Profile] Failed to fetch user ${userId}:`, userError?.message || "User not found");
-        return res.status(400).json({ error: "Could not fetch user details", details: userError?.message });
+      if (!email) {
+        console.error(`[Profile] No email available for user ${userId} from JWT or Admin API`);
+        return res.status(400).json({ error: "Could not determine user email" });
       }
-      
-      const email = user.email;
-      const fullName = user.user_metadata?.full_name || user.user_metadata?.name || null;
-      const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
       
       // Check if profile exists
       const existing = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
@@ -4271,37 +4269,38 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       console.log(`[requireAdmin] Step 3 - DB Role value: "${dbRole}" (type: ${typeof dbRole})`);
       console.log(`[requireAdmin] Step 4 - isDbAdmin check (role === "admin"): ${isDbAdmin}`);
 
-      // Check 2: Look at Supabase Auth Metadata
-      const { data: { user }, error: authError } = await supabaseServer.auth.admin.getUserById(userId);
-      if (authError) {
-        console.log(`[requireAdmin] Step 5 - Supabase auth error: ${authError.message}`);
-      }
-      const authEmail = user?.email || "NO_EMAIL";
-      const authEmailLower = authEmail.toLowerCase();
-      const authMetaRole = user?.user_metadata?.role || "NOT_SET";
-      const isAuthAdmin = user?.user_metadata?.role === 'admin';
+      // Check 2: Look at Supabase Auth Metadata (with fallback to JWT email)
+      let authEmail = (req as AuthRequest).userEmail || "NO_EMAIL";
+      let isAuthAdmin = false;
       
-      console.log(`[requireAdmin] Step 5 - Supabase Auth email: "${authEmail}"`);
-      console.log(`[requireAdmin] Step 6 - Email (lowercase): "${authEmailLower}"`);
-      console.log(`[requireAdmin] Step 7 - Supabase Auth metadata role: "${authMetaRole}"`);
-      console.log(`[requireAdmin] Step 8 - isAuthAdmin check: ${isAuthAdmin}`);
+      try {
+        const { data: { user }, error: authError } = await supabaseServer.auth.admin.getUserById(userId);
+        if (!authError && user) {
+          authEmail = user.email || authEmail;
+          isAuthAdmin = user.user_metadata?.role === 'admin';
+        } else {
+          console.log(`[requireAdmin] Admin API failed, using JWT email: ${authEmail}`);
+        }
+      } catch (adminErr: any) {
+        console.log(`[requireAdmin] Admin API error, using JWT email: ${authEmail}`, adminErr?.message);
+      }
+      
+      const authEmailLower = authEmail.toLowerCase();
       
       // Check against ADMIN_EMAILS list (case-insensitive)
       const adminEmailsLower = ADMIN_EMAILS.map(e => e.toLowerCase());
       const isInAdminList = adminEmailsLower.includes(authEmailLower);
-      console.log(`[requireAdmin] Step 9 - ADMIN_EMAILS list: [${ADMIN_EMAILS.join(", ")}]`);
-      console.log(`[requireAdmin] Step 10 - Is email in ADMIN_EMAILS (case-insensitive)? ${isInAdminList}`);
       
-      console.log(`[requireAdmin] SUMMARY: isDbAdmin=${isDbAdmin}, isAuthAdmin=${isAuthAdmin}, isInAdminList=${isInAdminList}`);
+      console.log(`[requireAdmin] SUMMARY: isDbAdmin=${isDbAdmin}, isAuthAdmin=${isAuthAdmin}, isInAdminList=${isInAdminList}, email=${authEmailLower}`);
 
-      // If EITHER is true, let them in
-      if (isDbAdmin || isAuthAdmin) {
-        console.log(`[requireAdmin] ACCESS GRANTED - Reason: ${isDbAdmin ? "DB_ROLE" : "AUTH_METADATA"}`);
+      // If ANY check passes, let them in
+      if (isDbAdmin || isAuthAdmin || isInAdminList) {
+        console.log(`[requireAdmin] ACCESS GRANTED - Reason: ${isDbAdmin ? "DB_ROLE" : isInAdminList ? "EMAIL_LIST" : "AUTH_METADATA"}`);
         console.log(`==========================================\n`);
         return next();
       }
 
-      console.log(`[requireAdmin] ACCESS DENIED - Neither DB role nor Auth metadata is 'admin'`);
+      console.log(`[requireAdmin] ACCESS DENIED - No admin role or email match`);
       console.log(`==========================================\n`);
       return res.status(403).json({ error: "Admin access required" });
     } catch (error: any) {

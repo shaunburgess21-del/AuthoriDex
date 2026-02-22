@@ -8,6 +8,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export interface AuthRequest extends Request {
   userId?: string;
+  userEmail?: string;
   sessionId?: string;
   userRole?: string; // Added to track role
 }
@@ -30,9 +31,8 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
       return res.status(401).json({ error: "Unauthorized - Invalid token" });
     }
 
-    // Attach user ID and ROLE to the request
     req.userId = user.id;
-    // This reads the "admin" role we just added to your database
+    req.userEmail = user.email || undefined;
     req.userRole = user.user_metadata?.role || 'user';
 
     console.log(`User ${user.email} authenticated. Role: ${req.userRole}`); // Debug log
