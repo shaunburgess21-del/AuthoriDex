@@ -1136,6 +1136,7 @@ export const opinionPolls = pgTable("opinion_polls", {
   slug: text("slug").unique().notNull(),
   category: text("category").notNull(),
   description: text("description"),
+  summary: text("summary"),
   imageUrl: text("image_url"),
   featured: boolean("featured").default(false),
   visibility: text("visibility").default("draft"),
