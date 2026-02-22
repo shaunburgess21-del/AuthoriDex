@@ -1,0 +1,93 @@
+Nice — that’s exactly the trio of fixes I would have put in first place too. Based on what Replit found (sequential loop + Serper calls with no timeout), adding AbortController timeouts is the highest-leverage change. The other two are good “seatbelts” that stop one bad case poisoning the whole run.
+
+A few practical thoughts / refinements (so you don’t create new weird edge-cases):
+
+1) Serper 20s timeout: ✅ right, but add 2 small improvements
+
+a) Use a single helper everywhere (sounds like you did)
+Just confirm it covers all Serper calls (including “related searches”, PAA, etc.) and that you didn’t leave any hidden fetch() in other providers.
+
+b) Consider 2-stage timeouts
+
+Connect/TTFB timeout: e.g. 8–10s
+
+Overall timeout: 20s
+Because “hangs” often happen before headers, and you want to cut those quickly.
+
+c) Add 1 retry with jitter for 429/5xx
+Timeouts stop hangs, but transient failures will increase “holes” unless you retry once.
+
+Retry once for: 429, 500, 502, 503, 504 + network errors
+
+Backoff: random 300–900ms
+
+Don’t retry for 4xx other than 429.
+
+That alone can bump your uptime noticeably.
+
+2) 30s per-person timeout: ✅ good idea, but watch the “half-written” risk
+
+The main danger with Promise.race(timeout) is it doesn’t cancel the underlying async work unless you propagate an AbortController / cancellation token down into DB operations (which you usually can’t fully do).
+
+So this can lead to:
+
+Person “timed out” according to your code…
+
+…but the underlying DB writes finish later anyway (or partially fail)
+That can cause confusing logs and occasionally partial/inconsistent per-person state.
+
+Safer pattern (if you want to tighten it)
+
+Keep the 30s timeout as a circuit breaker, but scope writes:
+
+Ensure each person’s DB writes are either:
+
+in a small transaction that completes quickly, or
+
+idempotent (safe to re-run)
+
+Log it clearly as: person_timeout_soft (meaning “we moved on; work may still finish”)
+
+If possible, avoid doing big multi-step DB work inside a timed section.
+
+If Replit wrapped the whole per-person body inside an async IIFE raced against timeout, it’s fine as a first pass — just be aware it’s a skip-and-continue guard, not true cancellation.
+
+3) Stale lock cleanup 10 → 5 min: ✅ good, but align heartbeat + thresholds
+
+You said heartbeat updates every 2 minutes.
+
+A 5-minute stale threshold is fine, but make sure you allow for:
+
+brief GC pauses / deploy hiccups
+
+slow DB moments
+A good rule: stale threshold ≥ 2.5× heartbeat interval.
+2 min heartbeat → 5 min threshold is right on the edge but OK.
+
+If you see false cleanups later, bump to 6–7 minutes.
+
+4) Add one simple “success KPI” so you can prove it worked
+
+Right now you know “43% uptime last 72h”. After these changes, you want a quick dashboard metric:
+
+Hourly run success rate (last 24h / 72h)
+
+Median run duration and p95 run duration
+
+Top failure reason counts (timeout vs 429 vs DB timeout)
+
+Even a basic log summary gives you confidence the fix is real.
+
+5) One more easy reliability win: degrade gracefully, don’t fail the whole run
+
+If Serper times out for a person:
+
+still write a snapshot using wiki+news (with diagnostics flags)
+
+so that hourly cadence stays intact even if one source has trouble
+
+This keeps “Data may be delayed” from triggering as often.
+
+Bottom line
+
+Replit’s plan is solid and directly targets the most likely root cause (Serper hangs). If you add (1) one retry w/ jitter for Serper and (2) clearer logging around per-person timeout not truly cancelling, you’ll avoid the two most common “v2 bugs” that show up after this sort of patch.
