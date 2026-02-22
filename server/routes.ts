@@ -1454,6 +1454,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(eq(celebrityImages.id, imageId));
       }
       
+      // Sync winning avatar to tracked_people and trending_people
+      await syncWinningAvatarForPerson(personId);
+
       // Fetch updated image
       const [updatedImage] = await db.select()
         .from(celebrityImages)
@@ -9036,6 +9039,20 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
 
+  async function syncWinningAvatarForPerson(personId: string) {
+    const [topImage] = await db
+      .select()
+      .from(celebrityImages)
+      .where(eq(celebrityImages.personId, personId))
+      .orderBy(desc(celebrityImages.isPrimary), desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`))
+      .limit(1);
+
+    if (topImage) {
+      await db.update(trackedPeople).set({ avatar: topImage.imageUrl }).where(eq(trackedPeople.id, personId));
+      await db.update(trendingPeople).set({ avatar: topImage.imageUrl }).where(eq(trendingPeople.id, personId));
+    }
+  }
+
   // PATCH /api/admin/vote/curate-profile/images/:imageId/seed-votes - Set seed votes for an image
   app.patch("/api/admin/vote/curate-profile/images/:imageId/seed-votes", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
@@ -9044,9 +9061,15 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       if (typeof votesUp !== 'number' || votesUp < 0) {
         return res.status(400).json({ error: "votesUp must be a non-negative number" });
       }
+      const [image] = await db.select().from(celebrityImages).where(eq(celebrityImages.id, imageId));
+      if (!image) return res.status(404).json({ error: "Image not found" });
+
       await db.update(celebrityImages)
         .set({ votesUp })
         .where(eq(celebrityImages.id, imageId));
+
+      await syncWinningAvatarForPerson(image.personId);
+
       res.json({ success: true });
     } catch (error: any) {
       console.error("Error setting seed votes:", error);
