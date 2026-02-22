@@ -1480,8 +1480,13 @@ export async function runDataIngestion(): Promise<IngestResult> {
             setTimeout(() => reject(new Error(`Per-person timeout (${PER_PERSON_TIMEOUT_MS / 1000}s) exceeded`)), PER_PERSON_TIMEOUT_MS)
           ),
         ]);
-      } catch (error) {
-        console.error(`[Ingest] Error processing ${person.name}:`, error);
+      } catch (error: any) {
+        const isTimeout = error?.message?.includes("Per-person timeout");
+        if (isTimeout) {
+          console.warn(`[Ingest] SOFT TIMEOUT for ${person.name}: skipped after 30s (underlying DB writes may still complete). Continuing with next person.`);
+        } else {
+          console.error(`[Ingest] Error processing ${person.name}:`, error);
+        }
         errors++;
       }
     }

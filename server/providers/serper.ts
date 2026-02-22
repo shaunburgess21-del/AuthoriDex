@@ -7,15 +7,35 @@ const SERPER_API_KEY = process.env.SERPER_API_KEY;
 const SERPER_BASE_URL = "https://google.serper.dev/search";
 const SERPER_REQUEST_TIMEOUT_MS = 20_000;
 
+const SERPER_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
 async function serperFetch(url: string, options: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), SERPER_REQUEST_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    return response;
-  } finally {
-    clearTimeout(timeoutId);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SERPER_REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (attempt === 0 && SERPER_RETRYABLE_STATUS.has(response.status)) {
+        const jitter = 300 + Math.random() * 600;
+        console.warn(`[Serper] Got ${response.status}, retrying in ${jitter.toFixed(0)}ms`);
+        await new Promise(r => setTimeout(r, jitter));
+        continue;
+      }
+      return response;
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (attempt === 0) {
+        const jitter = 300 + Math.random() * 600;
+        const reason = err?.name === "AbortError" ? "timeout" : err?.message ?? "network error";
+        console.warn(`[Serper] Request failed (${reason}), retrying in ${jitter.toFixed(0)}ms`);
+        await new Promise(r => setTimeout(r, jitter));
+        continue;
+      }
+      throw err;
+    }
   }
+  throw new Error("[Serper] Unreachable: retry loop exited without return or throw");
 }
 
 async function getCachedResponse(cacheKey: string): Promise<{ responseData: string; fetchedAt: Date } | null> {
