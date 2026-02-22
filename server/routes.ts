@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -3522,11 +3522,12 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         ))
         .groupBy(votes.value);
         
-        const optionAVotes = voteResults.find(v => v.value === 'option_a')?.count || 0;
-        const optionBVotes = voteResults.find(v => v.value === 'option_b')?.count || 0;
-        const totalVotes = Number(optionAVotes) + Number(optionBVotes);
+        const realAVotes = Number(voteResults.find(v => v.value === 'option_a')?.count || 0);
+        const realBVotes = Number(voteResults.find(v => v.value === 'option_b')?.count || 0);
+        const displayAVotes = realAVotes + (matchup.seedVotesA || 0);
+        const displayBVotes = realBVotes + (matchup.seedVotesB || 0);
+        const totalVotes = displayAVotes + displayBVotes;
         
-        // Resolve avatars: linked celebrity ID > custom upload > name-based lookup
         const optionAImageResolved = (matchup.personAId && avatarById[matchup.personAId]) || matchup.optionAImage || avatarByName[matchup.optionAText.toLowerCase()] || null;
         const optionBImageResolved = (matchup.personBId && avatarById[matchup.personBId]) || matchup.optionBImage || avatarByName[matchup.optionBText.toLowerCase()] || null;
         
@@ -3534,11 +3535,11 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           ...matchup,
           optionAImage: optionAImageResolved,
           optionBImage: optionBImageResolved,
-          optionAVotes: Number(optionAVotes),
-          optionBVotes: Number(optionBVotes),
+          optionAVotes: displayAVotes,
+          optionBVotes: displayBVotes,
           totalVotes,
-          optionAPercent: totalVotes > 0 ? Math.round((Number(optionAVotes) / totalVotes) * 100) : 50,
-          optionBPercent: totalVotes > 0 ? Math.round((Number(optionBVotes) / totalVotes) * 100) : 50,
+          optionAPercent: totalVotes > 0 ? Math.round((displayAVotes / totalVotes) * 100) : 50,
+          optionBPercent: totalVotes > 0 ? Math.round((displayBVotes / totalVotes) * 100) : 50,
         };
       }));
       
@@ -3586,9 +3587,11 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       ))
       .groupBy(votes.value);
       
-      const optionAVotes = voteResults.find(v => v.value === 'option_a')?.count || 0;
-      const optionBVotes = voteResults.find(v => v.value === 'option_b')?.count || 0;
-      const totalVotes = Number(optionAVotes) + Number(optionBVotes);
+      const realAVotes = Number(voteResults.find(v => v.value === 'option_a')?.count || 0);
+      const realBVotes = Number(voteResults.find(v => v.value === 'option_b')?.count || 0);
+      const displayAVotes = realAVotes + (matchup.seedVotesA || 0);
+      const displayBVotes = realBVotes + (matchup.seedVotesB || 0);
+      const totalVotes = displayAVotes + displayBVotes;
       
       const optionAImageResolved = (matchup.personAId && avatarById[matchup.personAId]) || matchup.optionAImage || avatarByName[matchup.optionAText.toLowerCase()] || null;
       const optionBImageResolved = (matchup.personBId && avatarById[matchup.personBId]) || matchup.optionBImage || avatarByName[matchup.optionBText.toLowerCase()] || null;
@@ -3597,11 +3600,11 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         ...matchup,
         optionAImage: optionAImageResolved,
         optionBImage: optionBImageResolved,
-        optionAVotes: Number(optionAVotes),
-        optionBVotes: Number(optionBVotes),
+        optionAVotes: displayAVotes,
+        optionBVotes: displayBVotes,
         totalVotes,
-        optionAPercent: totalVotes > 0 ? Math.round((Number(optionAVotes) / totalVotes) * 100) : 50,
-        optionBPercent: totalVotes > 0 ? Math.round((Number(optionBVotes) / totalVotes) * 100) : 50,
+        optionAPercent: totalVotes > 0 ? Math.round((displayAVotes / totalVotes) * 100) : 50,
+        optionBPercent: totalVotes > 0 ? Math.round((displayBVotes / totalVotes) * 100) : 50,
       });
     } catch (error: any) {
       console.error("Error fetching matchup by slug:", error.message);
@@ -3681,18 +3684,20 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         ))
         .groupBy(votes.value);
         
-        const optionAVotes = voteResults.find(v => v.value === 'option_a')?.count || 0;
-        const optionBVotes = voteResults.find(v => v.value === 'option_b')?.count || 0;
-        const totalVotes = Number(optionAVotes) + Number(optionBVotes);
+        const realA = Number(voteResults.find(v => v.value === 'option_a')?.count || 0);
+        const realB = Number(voteResults.find(v => v.value === 'option_b')?.count || 0);
+        const dispA = realA + (matchup.seedVotesA || 0);
+        const dispB = realB + (matchup.seedVotesB || 0);
+        const totalVotes = dispA + dispB;
         
         return res.json({
           success: true,
           removed: true,
-          optionAVotes: Number(optionAVotes),
-          optionBVotes: Number(optionBVotes),
+          optionAVotes: dispA,
+          optionBVotes: dispB,
           totalVotes,
-          optionAPercent: totalVotes > 0 ? Math.round((Number(optionAVotes) / totalVotes) * 100) : 50,
-          optionBPercent: totalVotes > 0 ? Math.round((Number(optionBVotes) / totalVotes) * 100) : 50,
+          optionAPercent: totalVotes > 0 ? Math.round((dispA / totalVotes) * 100) : 50,
+          optionBPercent: totalVotes > 0 ? Math.round((dispB / totalVotes) * 100) : 50,
           votedOption: null,
         });
       }
@@ -3746,23 +3751,119 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       ))
       .groupBy(votes.value);
       
-      const optionAVotes = voteResults.find(v => v.value === 'option_a')?.count || 0;
-      const optionBVotes = voteResults.find(v => v.value === 'option_b')?.count || 0;
-      const totalVotes = Number(optionAVotes) + Number(optionBVotes);
+      const realA2 = Number(voteResults.find(v => v.value === 'option_a')?.count || 0);
+      const realB2 = Number(voteResults.find(v => v.value === 'option_b')?.count || 0);
+      const dispA2 = realA2 + (matchup.seedVotesA || 0);
+      const dispB2 = realB2 + (matchup.seedVotesB || 0);
+      const totalVotes = dispA2 + dispB2;
       
       res.json({
         success: true,
-        optionAVotes: Number(optionAVotes),
-        optionBVotes: Number(optionBVotes),
+        optionAVotes: dispA2,
+        optionBVotes: dispB2,
         totalVotes,
-        optionAPercent: totalVotes > 0 ? Math.round((Number(optionAVotes) / totalVotes) * 100) : 50,
-        optionBPercent: totalVotes > 0 ? Math.round((Number(optionBVotes) / totalVotes) * 100) : 50,
+        optionAPercent: totalVotes > 0 ? Math.round((dispA2 / totalVotes) * 100) : 50,
+        optionBPercent: totalVotes > 0 ? Math.round((dispB2 / totalVotes) * 100) : 50,
         votedOption: option,
         xpAwarded: xpResult?.success ? xpResult.xpAwarded : 0,
       });
     } catch (error: any) {
       console.error("Error submitting matchup vote:", error.message);
       res.status(500).json({ error: "Failed to submit vote" });
+    }
+  });
+
+  // ============================================================================
+  // MATCHUP COMMENTS
+  // ============================================================================
+
+  app.get("/api/matchups/:slug/comments", async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const [matchup] = await db.select().from(matchups).where(eq(matchups.slug, slug));
+      if (!matchup) {
+        return res.status(404).json({ error: "Matchup not found" });
+      }
+      const comments = await db.select().from(matchupComments)
+        .where(eq(matchupComments.matchupId, matchup.id))
+        .orderBy(desc(matchupComments.createdAt));
+      res.json(comments);
+    } catch (error: any) {
+      console.error("Error fetching matchup comments:", error.message);
+      res.status(500).json({ error: "Failed to fetch comments" });
+    }
+  });
+
+  app.post("/api/matchups/:slug/comments", optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const { slug } = req.params;
+      const { body } = req.body;
+      if (!req.userId) {
+        return res.status(401).json({ error: "Must be signed in to comment" });
+      }
+      if (!body || !body.trim()) {
+        return res.status(400).json({ error: "Comment body is required" });
+      }
+      const [matchup] = await db.select().from(matchups).where(eq(matchups.slug, slug));
+      if (!matchup) {
+        return res.status(404).json({ error: "Matchup not found" });
+      }
+      const [profile] = await db.select().from(profiles).where(eq(profiles.userId, req.userId));
+      const [comment] = await db.insert(matchupComments).values({
+        matchupId: matchup.id,
+        userId: req.userId,
+        username: profile?.username || null,
+        avatarUrl: profile?.avatarUrl || null,
+        body: body.trim(),
+      }).returning();
+      res.json(comment);
+    } catch (error: any) {
+      console.error("Error posting matchup comment:", error.message);
+      res.status(500).json({ error: "Failed to post comment" });
+    }
+  });
+
+  app.post("/api/matchups/comments/:commentId/vote", optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      if (!req.userId) {
+        return res.status(401).json({ error: "Must be signed in to vote" });
+      }
+      const { commentId } = req.params;
+      const { voteType } = req.body;
+      if (!voteType || (voteType !== 'up' && voteType !== 'down')) {
+        return res.status(400).json({ error: "Invalid vote type" });
+      }
+      const [existing] = await db.select().from(matchupCommentVotes)
+        .where(and(eq(matchupCommentVotes.userId, req.userId), eq(matchupCommentVotes.commentId, commentId)));
+      if (existing) {
+        if (existing.voteType === voteType) {
+          await db.delete(matchupCommentVotes).where(eq(matchupCommentVotes.id, existing.id));
+          if (voteType === 'up') {
+            await db.update(matchupComments).set({ upvotes: sql`GREATEST(upvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
+          } else {
+            await db.update(matchupComments).set({ downvotes: sql`GREATEST(downvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
+          }
+        } else {
+          await db.update(matchupCommentVotes).set({ voteType }).where(eq(matchupCommentVotes.id, existing.id));
+          if (voteType === 'up') {
+            await db.update(matchupComments).set({ upvotes: sql`upvotes + 1`, downvotes: sql`GREATEST(downvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
+          } else {
+            await db.update(matchupComments).set({ downvotes: sql`downvotes + 1`, upvotes: sql`GREATEST(upvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
+          }
+        }
+      } else {
+        await db.insert(matchupCommentVotes).values({ commentId, userId: req.userId, voteType });
+        if (voteType === 'up') {
+          await db.update(matchupComments).set({ upvotes: sql`upvotes + 1` }).where(eq(matchupComments.id, commentId));
+        } else {
+          await db.update(matchupComments).set({ downvotes: sql`downvotes + 1` }).where(eq(matchupComments.id, commentId));
+        }
+      }
+      const [updated] = await db.select().from(matchupComments).where(eq(matchupComments.id, commentId));
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error voting on matchup comment:", error.message);
+      res.status(500).json({ error: "Failed to vote on comment" });
     }
   });
 
@@ -5770,7 +5871,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
 
   app.post("/api/admin/matchups", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, visibility, featured, slug, personAId, personBId, promptText } = req.body;
+      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, visibility, featured, slug, personAId, personBId, promptText, seedVotesA, seedVotesB } = req.body;
       const adminId = req.userId!;
       
       if (!title || !optionAText || !optionBText) {
@@ -5797,6 +5898,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         personAId: personAId || null,
         personBId: personBId || null,
         promptText: promptText || null,
+        seedVotesA: parseInt(seedVotesA) || 0,
+        seedVotesB: parseInt(seedVotesB) || 0,
       }).returning();
       
       // Audit log
@@ -5833,7 +5936,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   app.patch("/api/admin/matchups/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, displayOrder, visibility, featured, slug, personAId, personBId, promptText } = req.body;
+      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, displayOrder, visibility, featured, slug, personAId, personBId, promptText, seedVotesA, seedVotesB } = req.body;
       const adminId = req.userId!;
       
       const [existing] = await db.select().from(matchups).where(eq(matchups.id, id));
@@ -5856,6 +5959,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       if (personAId !== undefined) updates.personAId = personAId;
       if (personBId !== undefined) updates.personBId = personBId;
       if (promptText !== undefined) updates.promptText = promptText;
+      if (seedVotesA !== undefined) updates.seedVotesA = parseInt(seedVotesA) || 0;
+      if (seedVotesB !== undefined) updates.seedVotesB = parseInt(seedVotesB) || 0;
       
       await db.update(matchups).set(updates).where(eq(matchups.id, id));
       

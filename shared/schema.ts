@@ -615,6 +615,50 @@ export const trendingPollCommentVotes = pgTable("trending_poll_comment_votes", {
 
 export type TrendingPollCommentVote = typeof trendingPollCommentVotes.$inferSelect;
 
+// ============================================================================
+// MATCHUP COMMENTS — Discussion on matchup detail pages
+// ============================================================================
+
+export const matchupComments = pgTable("matchup_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  matchupId: varchar("matchup_id").notNull().references(() => matchups.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  username: text("username"),
+  avatarUrl: text("avatar_url"),
+  body: text("body").notNull(),
+  parentId: varchar("parent_id"),
+  upvotes: integer("upvotes").notNull().default(0),
+  downvotes: integer("downvotes").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  matchupIdx: index("matchup_comments_matchup_idx").on(table.matchupId),
+}));
+
+export const insertMatchupCommentSchema = createInsertSchema(matchupComments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  upvotes: true,
+  downvotes: true,
+});
+
+export type MatchupComment = typeof matchupComments.$inferSelect;
+export type InsertMatchupComment = z.infer<typeof insertMatchupCommentSchema>;
+
+export const matchupCommentVotes = pgTable("matchup_comment_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  commentId: varchar("comment_id").notNull().references(() => matchupComments.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  voteType: text("vote_type").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueUserComment: unique("mc_votes_user_comment_unique").on(table.userId, table.commentId),
+  commentIdx: index("mc_votes_comment_idx").on(table.commentId),
+}));
+
+export type MatchupCommentVote = typeof matchupCommentVotes.$inferSelect;
+
 // Relations for new tables
 export const celebrityImagesRelations = relations(celebrityImages, ({ one }) => ({
   person: one(trackedPeople, {

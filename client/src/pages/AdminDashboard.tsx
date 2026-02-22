@@ -212,6 +212,8 @@ interface Matchup {
   personAId: string | null;
   personBId: string | null;
   displayOrder: number;
+  seedVotesA: number;
+  seedVotesB: number;
   createdAt: string;
 }
 
@@ -1268,6 +1270,8 @@ export default function AdminDashboard() {
     visibility: "live",
     featured: false,
     slug: "",
+    seedVotesA: 0,
+    seedVotesB: 0,
   });
   const [matchupSearchA, setMatchupSearchA] = useState("");
   const [matchupSearchB, setMatchupSearchB] = useState("");
@@ -1829,7 +1833,7 @@ export default function AdminDashboard() {
       toast({ title: "Matchup Created", description: "New matchup added successfully" });
       setShowMatchupModal(false);
       setEditingMatchup(null);
-      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
+      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
       setMatchupSearchA(""); setMatchupSearchB("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
@@ -1851,7 +1855,7 @@ export default function AdminDashboard() {
       toast({ title: "Matchup Updated", description: "Matchup updated successfully" });
       setShowMatchupModal(false);
       setEditingMatchup(null);
-      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
+      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
       setMatchupSearchA(""); setMatchupSearchB("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
@@ -2359,6 +2363,8 @@ export default function AdminDashboard() {
       visibility: matchup.visibility || "live",
       featured: matchup.featured || false,
       slug: matchup.slug || "",
+      seedVotesA: matchup.seedVotesA || 0,
+      seedVotesB: matchup.seedVotesB || 0,
     });
     setMatchupSearchA("");
     setMatchupSearchB("");
@@ -4063,7 +4069,7 @@ export default function AdminDashboard() {
                       size="sm"
                       onClick={() => {
                         setEditingMatchup(null);
-                        setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
+                        setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
                         setMatchupSearchA(""); setMatchupSearchB("");
                         setShowMatchupModal(true);
                       }}
@@ -4158,7 +4164,7 @@ export default function AdminDashboard() {
                             className="mt-4" 
                             onClick={() => {
                               setEditingMatchup(null);
-                              setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "" });
+                              setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
                               setMatchupSearchA(""); setMatchupSearchB("");
                               setShowMatchupModal(true);
                             }}
@@ -5896,6 +5902,32 @@ export default function AdminDashboard() {
                   slugOrId="option-b"
                   placeholder="Upload or paste image URL"
                   disabled={!!matchupForm.personBId}
+                />
+              </div>
+            </div>
+
+            <Label className="text-sm font-medium">Seed Votes</Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Option A Seed Votes</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={matchupForm.seedVotesA}
+                  onChange={(e) => setMatchupForm({ ...matchupForm, seedVotesA: parseInt(e.target.value) || 0 })}
+                  placeholder="0"
+                  data-testid="input-seed-votes-a"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Option B Seed Votes</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={matchupForm.seedVotesB}
+                  onChange={(e) => setMatchupForm({ ...matchupForm, seedVotesB: parseInt(e.target.value) || 0 })}
+                  placeholder="0"
+                  data-testid="input-seed-votes-b"
                 />
               </div>
             </div>
