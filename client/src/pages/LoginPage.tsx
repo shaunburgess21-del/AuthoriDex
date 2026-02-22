@@ -12,7 +12,8 @@ import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [isLogin, setIsLogin] = useState(true);
+  const params = new URLSearchParams(window.location.search);
+  const [isLogin, setIsLogin] = useState(params.get("mode") !== "signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);

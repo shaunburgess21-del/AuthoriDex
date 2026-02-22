@@ -129,6 +129,7 @@ interface UserMenuContentProps {
   onToggleTheme: () => void;
   onNavigate: (path: string) => void;
   onSignIn: () => void;
+  onCreateAccount: () => void;
   onSignOut: () => void;
   onClose?: () => void;
 }
@@ -140,6 +141,7 @@ function UserMenuContent({
   onToggleTheme,
   onNavigate,
   onSignIn,
+  onCreateAccount,
   onSignOut,
   onClose,
 }: UserMenuContentProps) {
@@ -172,7 +174,7 @@ function UserMenuContent({
           <Button 
             variant="outline" 
             className="w-full"
-            onClick={onSignIn}
+            onClick={onCreateAccount}
             data-testid="button-create-account"
           >
             Create Account
@@ -382,6 +384,11 @@ export function UserMenu() {
     setSheetOpen(false);
   };
   
+  const handleCreateAccount = () => {
+    setLocation("/login?mode=signup");
+    setSheetOpen(false);
+  };
+  
   const handleSignOut = async () => {
     await signOut();
     setSheetOpen(false);
@@ -449,6 +456,7 @@ export function UserMenu() {
               onToggleTheme={toggleTheme}
               onNavigate={handleNavigate}
               onSignIn={handleSignIn}
+              onCreateAccount={handleCreateAccount}
               onSignOut={handleSignOut}
               onClose={() => setSheetOpen(false)}
             />
@@ -471,6 +479,7 @@ export function UserMenu() {
           onToggleTheme={toggleTheme}
           onNavigate={handleNavigate}
           onSignIn={handleSignIn}
+          onCreateAccount={handleCreateAccount}
           onSignOut={handleSignOut}
         />
       </DropdownMenuContent>
