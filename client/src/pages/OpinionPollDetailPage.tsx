@@ -23,6 +23,7 @@ import {
   ArrowUpDown,
   Share2,
   Vote,
+  Info,
 } from "lucide-react";
 
 function formatTimeAgo(dateStr: string): string {
@@ -192,6 +193,18 @@ export default function OpinionPollDetailPage() {
             </Button>
           </div>
         </div>
+
+        {poll.summary && (
+          <Card className="mb-6 overflow-visible border-cyan-500/20" data-testid="card-poll-summary">
+            <div className="p-4 sm:p-5">
+              <h2 className="text-sm font-semibold mb-2 flex items-center gap-2 text-cyan-400">
+                <Info className="h-4 w-4" />
+                Context
+              </h2>
+              <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-poll-summary">{poll.summary}</p>
+            </div>
+          </Card>
+        )}
 
         <Card className="mb-8 overflow-visible">
           <div className="p-4 sm:p-6">

@@ -1347,6 +1347,7 @@ export default function AdminDashboard() {
     slug: "",
     category: "Tech",
     description: "",
+    summary: "",
     imageUrl: "",
     featured: false,
     visibility: "draft" as "draft" | "live" | "archived",
@@ -2501,6 +2502,7 @@ export default function AdminDashboard() {
       slug: "",
       category: "Tech",
       description: "",
+      summary: "",
       imageUrl: "",
       featured: false,
       visibility: "draft",
@@ -2524,6 +2526,7 @@ export default function AdminDashboard() {
       slug: poll.slug || "",
       category: poll.category || "Tech",
       description: poll.description || "",
+      summary: poll.summary || "",
       imageUrl: poll.imageUrl || "",
       featured: poll.featured ?? false,
       visibility: poll.visibility || "draft",
@@ -6048,12 +6051,23 @@ export default function AdminDashboard() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Image URL</Label>
-              <Input
+              <Label>Summary (detail page context)</Label>
+              <Textarea
+                value={opinionPollForm.summary}
+                onChange={(e) => setOpinionPollForm(prev => ({ ...prev, summary: e.target.value }))}
+                placeholder="Extended context shown on the poll's dedicated page (optional)"
+                rows={3}
+                data-testid="input-opinion-poll-summary"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Image</Label>
+              <UploadImageInput
                 value={opinionPollForm.imageUrl}
-                onChange={(e) => setOpinionPollForm(prev => ({ ...prev, imageUrl: e.target.value }))}
-                placeholder="Optional header image URL"
-                data-testid="input-opinion-poll-image"
+                onChange={(url) => setOpinionPollForm(prev => ({ ...prev, imageUrl: url }))}
+                moduleName="opinion-polls"
+                slugOrId={opinionPollForm.slug || "new"}
+                placeholder="Upload or paste header image URL"
               />
             </div>
             <div className="flex items-center gap-2">
@@ -6094,13 +6108,13 @@ export default function AdminDashboard() {
                         data-testid={`input-opinion-option-name-${idx}`}
                       />
                     </div>
-                    <div className="flex items-center gap-2 ml-6">
-                      <Input
+                    <div className="ml-6">
+                      <UploadImageInput
                         value={opt.imageUrl}
-                        onChange={(e) => updateOpinionOption(idx, "imageUrl", e.target.value)}
-                        placeholder="Image URL (optional)"
-                        className="flex-1 text-xs"
-                        data-testid={`input-opinion-option-image-${idx}`}
+                        onChange={(url) => updateOpinionOption(idx, "imageUrl", url)}
+                        moduleName="opinion-poll-options"
+                        slugOrId={`${opinionPollForm.slug || "new"}-opt-${idx}`}
+                        placeholder="Upload or paste option image"
                       />
                     </div>
                     <div className="relative ml-6">

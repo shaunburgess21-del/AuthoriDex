@@ -6854,7 +6854,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
 
   app.post("/api/admin/opinion-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { title, slug, category, description, imageUrl, featured, visibility, options } = req.body;
+      const { title, slug, category, description, summary, imageUrl, featured, visibility, options } = req.body;
       const adminId = req.userId!;
 
       if (!title || !slug || !category) {
@@ -6870,6 +6870,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         slug,
         category,
         description: description || null,
+        summary: summary || null,
         imageUrl: imageUrl || null,
         featured: featured ?? false,
         visibility: visibility || 'draft',
@@ -6912,7 +6913,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     try {
       const { id } = req.params;
       const adminId = req.userId!;
-      const { title, slug, category, description, imageUrl, featured, visibility, options } = req.body;
+      const { title, slug, category, description, summary, imageUrl, featured, visibility, options } = req.body;
 
       const [existing] = await db.select().from(opinionPolls).where(eq(opinionPolls.id, id));
       if (!existing) {
@@ -6924,6 +6925,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       if (slug !== undefined) updates.slug = slug;
       if (category !== undefined) updates.category = category;
       if (description !== undefined) updates.description = description || null;
+      if (summary !== undefined) updates.summary = summary || null;
       if (imageUrl !== undefined) updates.imageUrl = imageUrl || null;
       if (featured !== undefined) updates.featured = featured;
       if (visibility !== undefined) updates.visibility = visibility;
