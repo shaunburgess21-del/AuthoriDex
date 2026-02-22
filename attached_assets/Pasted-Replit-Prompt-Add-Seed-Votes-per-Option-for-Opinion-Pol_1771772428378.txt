@@ -1,0 +1,115 @@
+Replit Prompt: Add “Seed Votes” per Option for Opinion Polls (stored separately, displayed combined)
+
+Context
+We added a new “Opinion Polls” (multi-option) section with:
+
+Options (3–20) per poll
+
+Voting + results on detail page
+
+Admin create/edit modal for Opinion Polls
+
+We now need to support seed votes per option to avoid empty-state at launch, consistent with how seed votes were implemented in other Vote sections (seed + real votes stored separately but displayed together).
+
+Goal
+
+Add a Seed Votes field for each option in the Opinion Poll create/edit UI, store it separately from real votes in the database, and ensure the frontend adds seed + real votes together when displaying:
+
+vote counts per option
+
+total votes
+
+percentages in Results
+
+Requirements
+1) Admin UI (Create/Edit Opinion Poll modal)
+
+For each option row (Option name + option image + linked celebrity):
+
+Add an input field: Seed votes (integer)
+
+Placement: directly under the option name field OR beside it (whichever fits best in the existing layout)
+
+Default: 0
+
+Validation:
+
+must be integer
+
+min 0
+
+optional (blank = 0)
+
+Persist values when saving/editing.
+
+2) Backend storage (separate from real votes)
+
+Implement seed votes the same way as other vote sections:
+
+Seed votes must NOT be stored as user votes.
+
+Seed votes must be stored separately from real votes so we can track:
+
+seedVotes
+
+realVotes
+But frontend should display combinedVotes = seedVotes + realVotes
+
+Implementation note:
+Please check how seed votes are currently modeled for existing polls (e.g. Sentiment Polls / Matchups / Underrated-Overrated). Reuse the same pattern (same field names / schema approach) so the reporting logic stays consistent.
+
+Likely approaches (choose the one that matches existing implementation):
+
+Add a seed_votes column per option record, OR
+
+Add separate seed columns on the poll record keyed by option, OR
+
+Seed counts stored in an aggregate stats table (preferred if already used)
+
+3) Results calculations (combined)
+
+Update Opinion Poll results to compute using combined totals:
+
+For each option:
+
+displayVotes = realVotes + seedVotes
+
+Total votes:
+
+displayTotalVotes = sum(displayVotes)
+
+Percent per option:
+
+percent = displayVotes / displayTotalVotes
+
+If displayTotalVotes = 0:
+
+show 0% across (or existing empty-state behavior)
+
+4) Frontend display
+
+Wherever vote totals appear for Opinion Polls, show combined totals (seed + real):
+
+Vote card preview (if it shows counts/percents)
+
+Dedicated detail page results bars/rows
+
+Total votes in header on detail page
+
+Any sorting (Trending/Featured) logic should use combined totals if other sections do that (match existing convention).
+
+5) Guardrails
+
+Do not break any existing poll types.
+
+Keep real votes immutable and accurate.
+
+Seed votes should be editable in admin without affecting real vote history.
+
+Ensure the API payloads returned to frontend include both:
+
+seedVotes
+
+realVotes
+
+and/or computed displayVotes (whichever is standard in current codebase)
