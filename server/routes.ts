@@ -8915,6 +8915,140 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
 
+  // GET /api/admin/vote/curate-profile/:id/images - List all images for a celebrity
+  app.get("/api/admin/vote/curate-profile/:id/images", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const images = await db
+        .select()
+        .from(celebrityImages)
+        .where(eq(celebrityImages.personId, id))
+        .orderBy(desc(celebrityImages.votesUp));
+      res.json({ data: images });
+    } catch (error: any) {
+      console.error("Error fetching celebrity images:", error);
+      res.status(500).json({ error: "Failed to fetch images" });
+    }
+  });
+
+  // PATCH /api/admin/vote/curate-profile/images/:imageId/seed-votes - Set seed votes for an image
+  app.patch("/api/admin/vote/curate-profile/images/:imageId/seed-votes", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { imageId } = req.params;
+      const { votesUp } = req.body;
+      if (typeof votesUp !== 'number' || votesUp < 0) {
+        return res.status(400).json({ error: "votesUp must be a non-negative number" });
+      }
+      await db.update(celebrityImages)
+        .set({ votesUp })
+        .where(eq(celebrityImages.id, imageId));
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error setting seed votes:", error);
+      res.status(500).json({ error: "Failed to set seed votes" });
+    }
+  });
+
+  // POST /api/admin/vote/curate-profile/:id/images - Add a new image for a celebrity
+  app.post("/api/admin/vote/curate-profile/:id/images", requireAuth, requireAdmin, upload.single('file'), async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const file = req.file;
+
+      if (!file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const ext = path.extname(file.originalname).toLowerCase() || '.png';
+      const timestamp = Date.now();
+      const filePath = `curate-profile/${id}/${timestamp}${ext}`;
+      const bucketName = "public-images";
+
+      const { data: buckets } = await supabaseServer.storage.listBuckets();
+      const bucketExists = buckets?.some(b => b.name === bucketName);
+      if (!bucketExists) {
+        const { error: createError } = await supabaseServer.storage.createBucket(bucketName, {
+          public: true,
+          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
+          fileSizeLimit: 2 * 1024 * 1024,
+        });
+        if (createError) {
+          console.error("Failed to create bucket:", createError);
+          return res.status(500).json({ error: "Failed to create storage bucket" });
+        }
+      }
+
+      const { error: uploadError } = await supabaseServer.storage
+        .from(bucketName)
+        .upload(filePath, file.buffer, {
+          contentType: file.mimetype,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error("Supabase upload error:", uploadError);
+        return res.status(500).json({ error: "Failed to upload image" });
+      }
+
+      const { data: urlData } = supabaseServer.storage
+        .from(bucketName)
+        .getPublicUrl(filePath);
+
+      const source = (req.body.source as string) || "admin_upload";
+
+      const [newImage] = await db.insert(celebrityImages).values({
+        personId: id,
+        imageUrl: urlData.publicUrl,
+        source,
+        isPrimary: false,
+        votesUp: 0,
+        votesDown: 0,
+      }).returning();
+
+      res.json({ success: true, image: newImage });
+    } catch (error: any) {
+      console.error("Error adding celebrity image:", error);
+      if (error.message?.includes('Only PNG')) {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: "Failed to add image" });
+    }
+  });
+
+  // DELETE /api/admin/vote/curate-profile/images/:imageId - Delete a celebrity image
+  app.delete("/api/admin/vote/curate-profile/images/:imageId", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { imageId } = req.params;
+
+      const [image] = await db.select().from(celebrityImages).where(eq(celebrityImages.id, imageId)).limit(1);
+      if (!image) return res.status(404).json({ error: "Image not found" });
+
+      if (image.imageUrl.includes('supabase')) {
+        try {
+          const publicPrefix = '/storage/v1/object/public/';
+          const idx = image.imageUrl.indexOf(publicPrefix);
+          if (idx !== -1) {
+            const afterPrefix = image.imageUrl.substring(idx + publicPrefix.length);
+            const slashIdx = afterPrefix.indexOf('/');
+            if (slashIdx !== -1) {
+              const bucketName = afterPrefix.substring(0, slashIdx);
+              const objectPath = afterPrefix.substring(slashIdx + 1);
+              await supabaseServer.storage.from(bucketName).remove([objectPath]);
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to delete from Supabase storage:", e);
+        }
+      }
+
+      await db.delete(celebrityImages).where(eq(celebrityImages.id, imageId));
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting celebrity image:", error);
+      res.status(500).json({ error: "Failed to delete image" });
+    }
+  });
+
   // ============ ADMIN: INDUCTION QUEUE MANAGEMENT ============
 
   // GET /api/vote/induction - Public: list induction candidates (pending/approved)

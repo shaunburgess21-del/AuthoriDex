@@ -1,0 +1,148 @@
+Here’s a clean Replit prompt you can paste to cover both items: (1) seed votes in Matchups create modal and (2) overhaul the Matchups detail page UI to the same quality bar as Sentiment Polls / improved Opinion Polls.
+
+Replit Prompt: Add Seed Votes to Matchups + Upgrade Matchups Detail Page UI
+Context
+
+In the backend admin portal, the Create/Edit modal for Matchups currently does not include seed vote fields per option. We need seed votes to mitigate “empty restaurant” at launch.
+
+Also, the Matchups dedicated detail page (the page you land on when clicking a Matchup card) needs a major design/UX upgrade, similar to what we required for Opinion Polls: reuse proven layout/components from Sentiment Polls where possible, while keeping the Matchups voting mechanic (A vs B).
+
+Part 1 — Seed Votes for Matchups (Admin + Backend + Frontend display)
+1) Admin Modal: Add “Seed votes” per option
+
+In the Matchups Create/Edit modal, for Option A and Option B, add:
+
+Field label: Seed votes
+
+Placement: directly below or beside each option’s name/image inputs (consistent layout)
+
+Type: integer
+
+Default: 0
+
+Validation: min 0, integers only, blank treated as 0
+
+Must save and persist when editing.
+
+2) Data model: Store seed separately from real votes
+
+Implement seed votes using the same approach already used in other Vote sections:
+
+Store seed counts separately from real user votes (don’t create fake user votes)
+
+Maintain clear separation in DB/columns:
+
+e.g. seed_votes_a, seed_votes_b (or whatever the existing pattern is)
+
+real votes remain in existing vote tables / aggregates
+
+The frontend must display combined totals:
+
+displayVotesA = seedVotesA + realVotesA
+
+displayVotesB = seedVotesB + realVotesB
+
+3) Results math (combined)
+
+Total votes shown = displayVotesA + displayVotesB
+
+Percentages = each side’s displayVotes / displayTotalVotes
+
+If total = 0, show 0%/0% (or existing empty state)
+
+4) Sorting / Trending / Featured consistency
+
+If Matchups has any “trending” or ordering logic based on votes, apply the same convention you use elsewhere:
+
+If other sections use combined totals for trending, do the same for Matchups.
+
+Keep consistent across the Vote page.
+
+Acceptance tests
+
+Create matchup with seed A=40, seed B=10 → card/detail show 50 total, 80/20%.
+
+Add 1 real vote for B → totals become 51, percentages update correctly.
+
+Editing seed later changes displayed totals but does not affect real vote history.
+
+Part 2 — Improve Matchups Detail Page (Dedicated URL) drastically
+Goal
+
+The Matchups detail page must feel like the same “premium” template quality as Sentiment Polls / improved Opinion Polls, while keeping the A vs B mechanic.
+
+1) Layout parity with Sentiment Poll detail page
+
+Match the overall structure and polish:
+
+Header area: category chips (correct placement/colors), title, short description, metadata row (date, votes, comments), share control alignment
+
+Consistent spacing, typography, cards, shadows, borders
+
+2) Voting widget at the top (like “Cast Your Vote”)
+
+Place an improved voting module near the top:
+
+Show Option A and Option B as two selectable panels/cards (with images)
+
+Voting must be obvious and 1-click
+
+After vote:
+
+show selected state
+
+show immediate results feedback (bars/percentages) without needing to scroll
+
+3) Results widget (beautiful + consistent)
+
+Add a separate Results module (like Sentiment Polls):
+
+Bar/percentage style consistent with existing results components
+
+Show:
+
+A % and votes
+
+B % and votes
+
+total votes (combined)
+
+Must use combined seed+real totals.
+
+4) Context + Discussion sections
+
+Include Context block (if matchup has context/description fields; otherwise add them or keep minimal)
+
+Include Discussion section using the same discussion component used in other poll detail pages
+
+5) Consistency guardrails (non-negotiable)
+
+Category label positioning and coloring must match the established standard across all Vote sections.
+
+Avatars/images should follow the same shape rules used elsewhere (no random circles if standard is square rounded corners).
+
+Do not introduce new badge styles; reuse existing components.
+
+Acceptance criteria
+
+Matchups detail page feels like the same template system as Sentiment Polls
+
+Voting widget is near top and clearly actionable
+
+Results are presented in a polished module and update after voting
+
+Seed + real vote blending works everywhere (detail page + cards + totals)
+
+Mobile responsiveness is clean
+
+Deliverables
+
+PR(s) with clear commits
+
+Screenshots of:
+
+Matchups Create/Edit modal showing seed fields
+
+Matchups detail page before/after (or final only)
+
+Example results with seed votes applied
