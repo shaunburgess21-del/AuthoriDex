@@ -251,7 +251,7 @@ export interface IngestResult {
   lockedOut?: boolean;
 }
 
-const HEARTBEAT_STALE_MS = 10 * 60 * 1000; // 10 minutes without heartbeat = stale
+const HEARTBEAT_STALE_MS = 5 * 60 * 1000; // 5 minutes without heartbeat = stale
 const HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000; // update heartbeat every 2 minutes
 
 const heartbeatTimers = new Map<string, ReturnType<typeof setInterval>>();
@@ -1109,6 +1109,10 @@ export async function runDataIngestion(): Promise<IngestResult> {
 
     for (const person of people) {
       try {
+        const PER_PERSON_TIMEOUT_MS = 30_000;
+        await Promise.race([
+          (async () => {
+
         const wiki = wikiData.get(person.id);
         const news = newsData.get(person.id);
         const serper = serperData.get(person.id);
@@ -1470,6 +1474,12 @@ export async function runDataIngestion(): Promise<IngestResult> {
 
         scoreResults.push({ person, score: scoreResult });
         processed++;
+
+          })(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`Per-person timeout (${PER_PERSON_TIMEOUT_MS / 1000}s) exceeded`)), PER_PERSON_TIMEOUT_MS)
+          ),
+        ]);
       } catch (error) {
         console.error(`[Ingest] Error processing ${person.name}:`, error);
         errors++;
