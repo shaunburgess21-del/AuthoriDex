@@ -1165,6 +1165,7 @@ export const opinionPollOptions = pgTable("opinion_poll_options", {
   imageUrl: text("image_url"),
   personId: varchar("person_id").references(() => trackedPeople.id),
   orderIndex: integer("order_index").notNull().default(0),
+  seedCount: integer("seed_count").notNull().default(0),
 }, (table) => ({
   pollIdx: index("opinion_poll_options_poll_idx").on(table.pollId),
   orderIdx: index("opinion_poll_options_order_idx").on(table.pollId, table.orderIndex),
