@@ -129,7 +129,7 @@ export default function OpinionPollDetailPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
+        <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
       </div>
     );
   }
@@ -171,7 +171,7 @@ export default function OpinionPollDetailPage() {
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             <Badge variant="outline" className="text-xs">{poll.category}</Badge>
-            {poll.featured && <Badge className="text-xs bg-violet-500/20 text-violet-400 border-violet-500/30">Featured</Badge>}
+            {poll.featured && <Badge className="text-xs bg-cyan-500/20 text-cyan-400 border-cyan-500/30">Featured</Badge>}
           </div>
           <h1 className="text-2xl font-serif font-bold mb-2" data-testid="text-poll-title">{poll.title}</h1>
           {poll.description && (
@@ -196,7 +196,7 @@ export default function OpinionPollDetailPage() {
         <Card className="mb-8 overflow-visible">
           <div className="p-4 sm:p-6">
             <h2 className="font-semibold mb-4 flex items-center gap-2">
-              <Vote className="h-5 w-5 text-violet-400" />
+              <Vote className="h-5 w-5 text-cyan-400" />
               {hasVoted ? "Results" : "Cast your vote"}
             </h2>
             <div className="space-y-3">
@@ -209,7 +209,7 @@ export default function OpinionPollDetailPage() {
                     key={option.id}
                     className={`w-full text-left p-3 rounded-lg border transition-all relative overflow-hidden ${
                       isSelected
-                        ? "border-violet-500/50 bg-violet-500/10"
+                        ? "border-cyan-500/50 bg-cyan-500/10"
                         : hasVoted
                         ? "border-border/50 bg-muted/20"
                         : "border-border/50 hover-elevate cursor-pointer"
@@ -226,7 +226,7 @@ export default function OpinionPollDetailPage() {
                   >
                     {hasVoted && (
                       <div
-                        className="absolute inset-0 bg-violet-500/10 transition-all"
+                        className="absolute inset-0 bg-cyan-500/10 transition-all"
                         style={{ width: `${percent}%` }}
                       />
                     )}
@@ -234,8 +234,8 @@ export default function OpinionPollDetailPage() {
                       {option.imageUrl ? (
                         <img src={option.imageUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
                       ) : (
-                        <div className="w-8 h-8 rounded-full bg-violet-500/20 flex items-center justify-center shrink-0">
-                          <span className="text-sm font-medium text-violet-400">{option.orderIndex + 1}</span>
+                        <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0">
+                          <span className="text-sm font-medium text-cyan-400">{option.orderIndex + 1}</span>
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
@@ -251,7 +251,7 @@ export default function OpinionPollDetailPage() {
                         </div>
                       )}
                       {isSelected && (
-                        <CheckCircle2 className="h-4 w-4 text-violet-400 shrink-0" />
+                        <CheckCircle2 className="h-4 w-4 text-cyan-400 shrink-0" />
                       )}
                     </div>
                   </button>
@@ -260,7 +260,7 @@ export default function OpinionPollDetailPage() {
             </div>
             {voteMutation.isPending && (
               <div className="flex items-center justify-center mt-3">
-                <Loader2 className="h-4 w-4 animate-spin text-violet-400 mr-2" />
+                <Loader2 className="h-4 w-4 animate-spin text-cyan-400 mr-2" />
                 <span className="text-sm text-muted-foreground">Recording vote...</span>
               </div>
             )}

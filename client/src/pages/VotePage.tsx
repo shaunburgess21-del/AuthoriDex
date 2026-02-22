@@ -39,6 +39,7 @@ import {
   ImageIcon,
   Globe,
   BarChart3,
+  ListChecks,
   Upload,
   Cpu,
   Landmark,
@@ -1613,12 +1614,14 @@ export default function VotePage() {
   const dragScrollRef5 = useDragScroll<HTMLDivElement>();
   const dragScrollRef6 = useDragScroll<HTMLDivElement>();
   const dragScrollRef7 = useDragScroll<HTMLDivElement>();
+  const dragScrollRef8 = useDragScroll<HTMLDivElement>();
 
   useScrollHint(dragScrollRef3);
   useScrollHint(dragScrollRef4);
   useScrollHint(dragScrollRef5);
   useScrollHint(dragScrollRef6);
   useScrollHint(dragScrollRef7);
+  useScrollHint(dragScrollRef8);
 
   const [currentCurateIndex, setCurrentCurateIndex] = useState(0);
   
@@ -1698,6 +1701,16 @@ export default function VotePage() {
   const [valuePerceptionSearchQuery, setValuePerceptionSearchQuery] = useState("");
   const [curateSearchQuery, setCurateSearchQuery] = useState("");
 
+  const [opinionPollsCategoryFilter, setOpinionPollsCategoryFilter] = useState<FilterCategory>("All");
+  const [opinionPollsSearchQuery, setOpinionPollsSearchQuery] = useState("");
+  const [opinionSuggestOpen, setOpinionSuggestOpen] = useState(false);
+  const [opinionSuggestTitle, setOpinionSuggestTitle] = useState("");
+  const [opinionSuggestDescription, setOpinionSuggestDescription] = useState("");
+  const [opinionSuggestCategory, setOpinionSuggestCategory] = useState("misc");
+  const [opinionSuggestDuration, setOpinionSuggestDuration] = useState<string>("none");
+  const [opinionSuggestCustomDate, setOpinionSuggestCustomDate] = useState("");
+  const [opinionSuggestOptions, setOpinionSuggestOptions] = useState<string[]>(["", "", ""]);
+
   const enrichedCandidates = dbInductionCandidates;
   
   const filteredCandidates = enrichedCandidates.filter(c => {
@@ -1726,6 +1739,13 @@ export default function VotePage() {
                          (t.description || '').toLowerCase().includes(topicsSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   }).sort((a: any, b: any) => topicsCategoryFilter === "Trending" ? (b.totalVotes ?? 0) - (a.totalVotes ?? 0) : 0);
+
+  const filteredOpinionPolls = opinionPolls.filter((p: any) => {
+    const matchesCategory = opinionPollsCategoryFilter === "All" || opinionPollsCategoryFilter === "Trending" || (p.category || '').toLowerCase() === opinionPollsCategoryFilter.toLowerCase();
+    const matchesSearch = (p.title || '').toLowerCase().includes(opinionPollsSearchQuery.toLowerCase()) ||
+                         (p.description || '').toLowerCase().includes(opinionPollsSearchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   const { data: detailImages = [] } = useQuery<CelebrityImage[]>({
     queryKey: ['/api/people', selectedCuratePerson?.personId, 'images'],
@@ -2363,27 +2383,87 @@ export default function VotePage() {
         {/* ZONE 1.5: Opinion Polls - Multi-option community polls */}
         {(activeSection === "All" || activeSection === "Opinion Polls") && (
         <section className="mb-10">
-          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20">
+          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-                  <Vote className="h-5 w-5 text-violet-400" />
+                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                  <ListChecks className="h-5 w-5 text-cyan-400" />
                 </div>
                 <div>
                   <h2 className="text-xl font-serif font-bold">Opinion Polls</h2>
                   <p className="text-sm text-muted-foreground">Pick your choice on hot topics</p>
                 </div>
               </div>
+              <div className="flex items-center gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRulesModalOpen("opinion")}
+                      className="text-cyan-400 hover:text-cyan-300"
+                      data-testid="button-rules-opinion"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                    How it works
+                  </TooltipContent>
+                </Tooltip>
+                <Button
+                  onClick={() => setOpinionSuggestOpen(true)}
+                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hidden md:flex"
+                  data-testid="button-suggest-opinion"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Suggest
+                </Button>
+                <Button
+                  size="icon"
+                  onClick={() => setOpinionSuggestOpen(true)}
+                  className="rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 md:hidden"
+                  data-testid="button-suggest-opinion-mobile"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div ref={dragScrollRef8} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:min-w-0 sm:flex-1">
+              {getFilterCategories(true).map((cat) => (
+                <FilterChip
+                  key={cat}
+                  category={cat}
+                  isActive={opinionPollsCategoryFilter === cat}
+                  onClick={() => setOpinionPollsCategoryFilter(cat as FilterCategory)}
+                  testIdPrefix="filter-opinion"
+                  user={user}
+                  onAuthRequired={handleAuthRequired}
+                />
+              ))}
+            </div>
+            <div className="relative w-full sm:w-[184px] sm:flex-none">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search polls..."
+                value={opinionPollsSearchQuery}
+                onChange={(e) => setOpinionPollsSearchQuery(e.target.value)}
+                className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
+                data-testid="input-opinion-search"
+              />
             </div>
           </div>
 
           {opinionPollsLoading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="h-8 w-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+              <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : opinionPolls.length > 0 ? (
+          ) : filteredOpinionPolls.length > 0 ? (
             <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="section-opinion-polls">
-              {opinionPolls.map((poll: any) => (
+              {filteredOpinionPolls.map((poll: any) => (
                 <Card
                   key={poll.id}
                   className="hover-elevate cursor-pointer overflow-visible"
@@ -2411,8 +2491,8 @@ export default function VotePage() {
                           {option.imageUrl ? (
                             <img src={option.imageUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
                           ) : (
-                            <div className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center shrink-0">
-                              <span className="text-xs font-medium text-violet-400">{idx + 1}</span>
+                            <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0">
+                              <span className="text-xs font-medium text-cyan-400">{idx + 1}</span>
                             </div>
                           )}
                           <span className="text-sm truncate">{option.name}</span>
@@ -2432,7 +2512,7 @@ export default function VotePage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-violet-400 hover:text-violet-300 text-xs"
+                        className="text-cyan-400 text-xs"
                         data-testid={`button-vote-opinion-poll-${poll.id}`}
                       >
                         Vote
@@ -2445,7 +2525,7 @@ export default function VotePage() {
             </CardSection>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
-              <Vote className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <ListChecks className="h-12 w-12 mx-auto mb-3 opacity-50" />
               <p>No opinion polls available yet</p>
             </div>
           )}
@@ -3201,6 +3281,174 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Suggest Opinion Poll Modal */}
+      <Dialog open={opinionSuggestOpen} onOpenChange={setOpinionSuggestOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ListChecks className="h-5 w-5 text-cyan-400" />
+              Suggest an Opinion Poll
+            </DialogTitle>
+            <DialogDescription>
+              Create a multi-option poll for the community to vote on.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm font-medium">Question / Title *</label>
+                <span className={`text-xs ${opinionSuggestTitle.length > 100 ? 'text-red-400' : 'text-muted-foreground'}`}>
+                  {opinionSuggestTitle.length}/100
+                </span>
+              </div>
+              <Input
+                value={opinionSuggestTitle}
+                onChange={(e) => setOpinionSuggestTitle(e.target.value.slice(0, 100))}
+                placeholder="e.g. Who will win Album of the Year?"
+                data-testid="input-opinion-title"
+              />
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm font-medium">Options * (min 3, max 20)</label>
+                <span className="text-xs text-muted-foreground">{opinionSuggestOptions.length} options</span>
+              </div>
+              <div className="space-y-2">
+                {opinionSuggestOptions.map((opt, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-medium text-cyan-400">{idx + 1}</span>
+                    </div>
+                    <Input
+                      value={opt}
+                      onChange={(e) => {
+                        const updated = [...opinionSuggestOptions];
+                        updated[idx] = e.target.value;
+                        setOpinionSuggestOptions(updated);
+                      }}
+                      placeholder={`Option ${idx + 1}`}
+                      className="flex-1"
+                      data-testid={`input-opinion-option-${idx}`}
+                    />
+                    {opinionSuggestOptions.length > 3 && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const updated = opinionSuggestOptions.filter((_, i) => i !== idx);
+                          setOpinionSuggestOptions(updated);
+                        }}
+                        data-testid={`button-remove-opinion-option-${idx}`}
+                      >
+                        <X className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {opinionSuggestOptions.length < 20 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setOpinionSuggestOptions([...opinionSuggestOptions, ""])}
+                  className="mt-2 text-cyan-400"
+                  data-testid="button-add-opinion-option"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Option
+                </Button>
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Category</label>
+              <Select value={opinionSuggestCategory} onValueChange={setOpinionSuggestCategory}>
+                <SelectTrigger data-testid="select-opinion-category">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="misc">General</SelectItem>
+                  <SelectItem value="tech">Tech</SelectItem>
+                  <SelectItem value="music">Music</SelectItem>
+                  <SelectItem value="sports">Sports</SelectItem>
+                  <SelectItem value="politics">Politics</SelectItem>
+                  <SelectItem value="business">Business</SelectItem>
+                  <SelectItem value="entertainment">Entertainment</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Timeline</label>
+              <div className="flex flex-wrap gap-2">
+                {DURATION_PRESETS.map((preset) => (
+                  <button
+                    key={preset.value}
+                    onClick={() => setOpinionSuggestDuration(preset.value)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                      opinionSuggestDuration === preset.value
+                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
+                        : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+                    }`}
+                    data-testid={`opinion-duration-${preset.value}`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              {opinionSuggestDuration === "custom" && (
+                <Input
+                  type="datetime-local"
+                  value={opinionSuggestCustomDate}
+                  onChange={(e) => setOpinionSuggestCustomDate(e.target.value)}
+                  className="mt-2"
+                  data-testid="input-opinion-custom-date"
+                />
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Short description (max 140 characters)</label>
+              <Input
+                value={opinionSuggestDescription}
+                onChange={(e) => setOpinionSuggestDescription(e.target.value.slice(0, 140))}
+                placeholder="Brief context for voters..."
+                data-testid="input-opinion-description"
+              />
+              <p className="text-xs text-muted-foreground mt-1">{opinionSuggestDescription.length}/140</p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setOpinionSuggestOpen(false)} data-testid="button-cancel-opinion-suggest">Cancel</Button>
+            <Button
+              onClick={() => {
+                const filledOptions = opinionSuggestOptions.filter(o => o.trim());
+                if (filledOptions.length < 3) {
+                  toast({
+                    title: "Not enough options",
+                    description: "Please provide at least 3 options.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                toast({
+                  title: "Poll Suggested!",
+                  description: "Your opinion poll has been submitted for review.",
+                });
+                setOpinionSuggestTitle("");
+                setOpinionSuggestDescription("");
+                setOpinionSuggestOptions(["", "", ""]);
+                setOpinionSuggestCategory("misc");
+                setOpinionSuggestDuration("none");
+                setOpinionSuggestCustomDate("");
+                setOpinionSuggestOpen(false);
+              }}
+              disabled={!opinionSuggestTitle || opinionSuggestOptions.filter(o => o.trim()).length < 3}
+              className="bg-cyan-500 text-white"
+              data-testid="button-submit-opinion-suggest"
+            >
+              Submit Poll
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={!!rulesModalOpen} onOpenChange={() => setRulesModalOpen(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -3211,6 +3459,7 @@ export default function VotePage() {
               {rulesModalOpen === "voice" && "Sentiment Polls Rules"}
               {rulesModalOpen === "matchups" && "Matchups Rules"}
               {rulesModalOpen === "value" && "How It Works"}
+              {rulesModalOpen === "opinion" && "Opinion Polls Rules"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4 text-sm">
@@ -3325,6 +3574,29 @@ export default function VotePage() {
                   <div className="flex items-start gap-2">
                     <BarChart3 className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
                     <span>Your vote updates the Underrated/Overrated split in real time.</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {rulesModalOpen === "opinion" && (
+              <div className="space-y-3">
+                <p className="text-muted-foreground">Choose your pick from multiple options on community-created polls.</p>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <ListChecks className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Pick <span className="text-cyan-400 font-medium">one option</span> from multiple choices on each poll</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Users className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>See live results and how the community voted</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Earn <span className="text-cyan-400 font-medium">+15 XP</span> for each vote</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Plus className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
+                    <span>Suggest your own opinion polls for the community</span>
                   </div>
                 </div>
               </div>
