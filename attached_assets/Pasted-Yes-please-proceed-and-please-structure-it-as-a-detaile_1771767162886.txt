@@ -1,0 +1,114 @@
+Yes, please proceed — and please structure it as a detailed task list with clear acceptance criteria.
+
+A) Rename “Trending Polls” → “Sentiment Polls” (display label only)
+
+Update UI labels everywhere (Vote section header, filter chip text, detail page badge/tag, any “Trending Poll” labels).
+
+Update admin panel labels similarly.
+
+Confirm underlying type/DB values remain unchanged (no migration required).
+
+Regression test: existing stance polls (Support/Neutral/Oppose) still create, render, vote, and load via existing slugs/URLs.
+
+Acceptance
+
+No broken routes
+
+No missing data
+
+All previous “Trending Poll” labels now show “Sentiment Polls”
+
+B) Create new “Opinion Polls” (OPINION_POLL)
+Vote Page
+
+Add new section placed between Sentiment Polls and Underrated/Overrated.
+
+Add filter chip in the top filter row in the same order.
+
+Section header matches existing (tooltip + “+ Suggest” button).
+
+Cards
+4. Each card renders:
+
+Title + category chips
+
+Exactly 3 option rows by default:
+
+avatar (left) + option name + vote button (right)
+
+If more than 3 options, show “+X more” (dynamic)
+
+Clicking title OR “+X more” opens the detail page
+
+Detail Page (must mimic Sentiment Poll detail page layout)
+5. Dedicated URL: /vote/opinion-polls/:slug
+6. Layout should mirror Sentiment Poll detail page:
+
+Header area (title, tags, date, vote count, share if used)
+
+“Cast Your Vote” list showing all options (3–20) with voting CTA
+
+Results module showing per-option % + vote counts
+
+Context block
+
+Discussion module (reuse same discussion component/logic)
+
+Backend / Admin
+7. Create new poll type: OPINION_POLL
+8. Data model:
+
+Poll: title, slug, category/tags, featured, createdAt, createdBy, context/description
+
+Options: 3–20, each: name, avatarImage OR linkedCelebrityId, orderIndex
+
+Voting:
+
+Single-select vote per user per poll (reuse existing auth + vote pattern)
+
+Support “change vote” behavior consistent with Sentiment Polls (same rule as existing)
+
+Admin CRUD:
+
+Create/edit/delete polls
+
+Add/remove/reorder options
+
+Validate min/max options (3–20)
+
+Prevent duplicate option names per poll (or handle gracefully)
+
+Performance
+11. On Vote page, cards query only:
+
+first 3 options + total options count + basic poll fields
+
+full options list only loads on detail page
+
+Testing checklist (please run & confirm)
+
+Sentiment Polls still function exactly as before (vote, results, discussion, slugs).
+
+Opinion Polls:
+
+Create in admin ✅
+
+Render in Vote page ✅
+
+Vote on card + on detail page ✅
+
+“+X more” correct ✅
+
+Results update correctly ✅
+
+Discussion works ✅
+
+Filter chips show/hide correct sections ✅
+
+Deliverables
+
+PR(s) with clear commit messages
+
+Screenshot/video of Vote page sections + Opinion Poll detail page
+
+Brief note on any schema changes

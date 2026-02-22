@@ -1,0 +1,206 @@
+Replit Prompt: Rename “Trending Polls” + Add New “Opinion Polls” Section (Multi-Option)
+
+Context
+On the AuthoriDex Vote page we currently have:
+
+Matchups (binary choice: Option A vs Option B)
+
+Trending Polls (3-way stance choice: Support / Neutral / Oppose)
+
+Underrated / Overrated
+
+Other sections (Induction Queue, Curate Profile, etc.)
+
+We want to:
+
+Rename “Trending Polls” to “Sentiment Polls” globally (functionality + design unchanged)
+
+Create a brand-new multi-option poll section called “Opinion Polls” (minimum 3 options, max 20)
+
+Objective 1 — Rename “Trending Polls” to “Sentiment Polls” (NO functionality changes)
+
+Requirements
+
+Rename the section label from “Trending Polls” → “Sentiment Polls” everywhere it appears:
+
+Vote page section header
+
+Vote page top filter row (tab/chip)
+
+Dedicated poll detail page label(s) and any breadcrumbs/tags/badges
+
+Backend admin panel labels/menus
+
+Backend tables/types/enums/constants (if applicable)
+
+Do NOT break existing data or routes.
+
+If the system uses a stored type like trending_poll, keep the underlying type stable and only change the display label (preferred), OR provide a safe migration + backwards compatibility if you rename the type.
+
+Confirm any existing dedicated URL pages still work as-is.
+
+Acceptance
+
+Existing stance polls behave exactly the same (Support/Neutral/Oppose).
+
+Any existing links/slug routes for these polls still work.
+
+Admin still can create/manage these polls exactly as before.
+
+Objective 2 — Add new section “Opinion Polls” (Multi-Option)
+2.1 Placement (Vote Page)
+
+Add a new section “Opinion Polls” on the Vote page:
+
+Placed between “Sentiment Polls” (renamed from Trending Polls) and “Underrated / Overrated”
+
+Add a corresponding filter in the top filter row:
+
+Order should be: Matchups → Sentiment Polls → Opinion Polls → Underrated/Overrated (and any existing items remain in their current order)
+
+2.2 Functionality (Multi-Option Voting)
+
+Each Opinion Poll has 3 to 20 options.
+
+Users can vote for one option (single-select).
+
+Support “change vote” behavior should match how other voting works on the site (if voting is changeable elsewhere, keep consistent).
+
+Track votes per option and display results on the detail page (see 2.4).
+
+2.3 Card Design (Vote Page)
+
+Goal: Card sizing/layout should be consistent with other Vote page sections, but with unique internal layout.
+
+On each Opinion Poll card:
+
+Show poll title and category chips consistent with existing styles.
+
+Display at least 3 options by default inside the card.
+
+Each displayed option row must include:
+
+Avatar on the left
+
+Option name
+
+Vote button on the right (clear CTA)
+
+If there are more than 3 options:
+
+Under the displayed options show text like: “+4 more” (dynamic count)
+
+Clicking “+X more” opens the dedicated poll detail page
+
+Clicking the card title also opens the dedicated poll detail page.
+
+2.4 Dedicated URL Detail Page (Must mimic existing Sentiment Poll detail page)
+
+Create a dedicated poll detail page for Opinion Polls that closely matches the layout/UX of the existing Sentiment Poll detail page (the one that currently exists for Trending Polls). This includes:
+
+Header area with: title, category tags, created date, vote count, share action (if applicable)
+
+A “Cast Your Vote” style area (but for multi options):
+
+Render ALL options (3–20) with avatar + name + vote CTA
+
+A “Results” area:
+
+Show results per option (percentage + vote count)
+
+Should feel consistent with the existing results styling
+
+A “Context” block (if present in Sentiment Poll details, also include here)
+
+A “Discussion” section at the bottom (same component/logic used in Sentiment Poll details)
+
+2.5 Backend/Admin + Data Model
+
+Add backend support + admin portal functionality so we can create and manage Opinion Polls.
+
+Minimum fields for Opinion Poll:
+
+title
+
+slug (unique, used for dedicated URL)
+
+category / tags (consistent with existing taxonomy)
+
+featured flag (if supported elsewhere)
+
+createdAt
+
+createdBy (if used)
+
+context / description text (optional but recommended)
+
+options[] array (3–20), each option includes:
+
+name
+
+avatarImage OR “linked celebrity” reference (recommended)
+
+orderIndex
+
+Voting tables:
+
+Store votes per user per poll to prevent duplicate voting.
+
+Store vote counts aggregated per option (either computed or cached).
+
+Important: Don’t break existing vote systems—reuse existing auth/user vote patterns.
+
+2.6 Routing / URLs
+
+Opinion Polls must have dedicated URLs similar to other polls:
+
+Example: /vote/opinion-polls/:slug (or match your current routing conventions)
+
+Ensure clicking from card → detail page works.
+
+Ensure direct access via URL works.
+
+Deliverables
+
+Rename “Trending Polls” → “Sentiment Polls” globally without breakage.
+
+Vote page shows new “Opinion Polls” section in the correct position.
+
+Opinion Poll cards show 3 options by default + “+X more” link.
+
+Dedicated Opinion Poll detail pages mimic Sentiment Poll detail UX, including Discussion.
+
+Admin panel supports creation/editing of Opinion Polls with 3–20 options.
+
+Add filter chip for Opinion Polls and update existing filter chip name to Sentiment Polls.
+
+Testing Checklist (Must pass)
+
+Existing Sentiment Polls still work (Support/Neutral/Oppose, results, discussion, URL, admin).
+
+Opinion Poll creation works in admin.
+
+Opinion Poll voting works (one vote per user per poll).
+
+Card links + “+X more” both open detail page.
+
+Results display correctly and update after voting.
+
+Vote page filters show/hide sections correctly.
+
+Extra suggestions (high value to avoid problems)
+
+Keep internal type names stable
+If your backend has type = "TRENDING_POLL" or trending_poll, keep it for now and only change UI labels to “Sentiment Polls”. This avoids migrations and breaking old records.
+
+Define a new type cleanly
+Add OPINION_POLL as a new type so it doesn’t collide with Matchups or Sentiment Polls.
+
+Decide vote rules now
+
+Can users change their vote after voting? (Match your existing poll rules)
+
+Can users vote if not logged in? (likely no—match existing behavior)
+
+Performance
+If the Vote page loads many cards, don’t fetch full 20-option arrays for every card—fetch only first 3 options + total count, and load the full list on the detail page.
