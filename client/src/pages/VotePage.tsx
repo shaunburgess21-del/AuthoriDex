@@ -165,7 +165,7 @@ const isGovernanceSection = (section: SectionToggle) =>
   section === "Induction Queue" || section === "Curate Profile";
 
 const isPublicOpinionSection = (section: SectionToggle) =>
-  section === "Matchups" || section === "Sentiment Polls" || section === "Opinion Polls";
+  section === "Matchups" || section === "Sentiment Polls" || section === "Opinion Polls" || section === "Underrated/Overrated";
 
 const SECTION_RULES = {
   induction: {
