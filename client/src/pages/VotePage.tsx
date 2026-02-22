@@ -2547,7 +2547,7 @@ export default function VotePage() {
                 </div>
                 <div>
                   <h2 className="text-xl font-serif font-bold">Opinion Polls</h2>
-                  <p className="text-sm text-muted-foreground">Pick your choice on hot topics</p>
+                  <p className="text-sm text-muted-foreground">Choose who leads the pack</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
