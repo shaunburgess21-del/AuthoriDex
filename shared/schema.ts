@@ -1125,3 +1125,115 @@ export const insertIngestionRunSchema = createInsertSchema(ingestionRuns).omit({
 
 export type IngestionRun = typeof ingestionRuns.$inferSelect;
 export type InsertIngestionRun = z.infer<typeof insertIngestionRunSchema>;
+
+// ============================================================================
+// OPINION POLLS — Multi-option polls (3–20 options, single-select vote)
+// ============================================================================
+
+export const opinionPolls = pgTable("opinion_polls", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  slug: text("slug").unique().notNull(),
+  category: text("category").notNull(),
+  description: text("description"),
+  imageUrl: text("image_url"),
+  featured: boolean("featured").default(false),
+  visibility: text("visibility").default("draft"),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  slugIdx: index("opinion_polls_slug_idx").on(table.slug),
+  categoryIdx: index("opinion_polls_category_idx").on(table.category),
+  visibilityIdx: index("opinion_polls_visibility_idx").on(table.visibility),
+}));
+
+export const insertOpinionPollSchema = createInsertSchema(opinionPolls).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type OpinionPoll = typeof opinionPolls.$inferSelect;
+export type InsertOpinionPoll = z.infer<typeof insertOpinionPollSchema>;
+
+export const opinionPollOptions = pgTable("opinion_poll_options", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pollId: varchar("poll_id").notNull().references(() => opinionPolls.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  imageUrl: text("image_url"),
+  personId: varchar("person_id").references(() => trackedPeople.id),
+  orderIndex: integer("order_index").notNull().default(0),
+}, (table) => ({
+  pollIdx: index("opinion_poll_options_poll_idx").on(table.pollId),
+  orderIdx: index("opinion_poll_options_order_idx").on(table.pollId, table.orderIndex),
+}));
+
+export const insertOpinionPollOptionSchema = createInsertSchema(opinionPollOptions).omit({
+  id: true,
+});
+
+export type OpinionPollOption = typeof opinionPollOptions.$inferSelect;
+export type InsertOpinionPollOption = z.infer<typeof insertOpinionPollOptionSchema>;
+
+export const opinionPollVotes = pgTable("opinion_poll_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pollId: varchar("poll_id").notNull().references(() => opinionPolls.id, { onDelete: "cascade" }),
+  optionId: varchar("option_id").notNull().references(() => opinionPollOptions.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueUserPoll: unique("opinion_poll_votes_user_poll_unique").on(table.userId, table.pollId),
+  pollIdx: index("opinion_poll_votes_poll_idx").on(table.pollId),
+  optionIdx: index("opinion_poll_votes_option_idx").on(table.optionId),
+}));
+
+export const insertOpinionPollVoteSchema = createInsertSchema(opinionPollVotes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type OpinionPollVote = typeof opinionPollVotes.$inferSelect;
+export type InsertOpinionPollVote = z.infer<typeof insertOpinionPollVoteSchema>;
+
+export const opinionPollComments = pgTable("opinion_poll_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pollId: varchar("poll_id").notNull().references(() => opinionPolls.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  username: text("username"),
+  avatarUrl: text("avatar_url"),
+  body: text("body").notNull(),
+  parentId: varchar("parent_id"),
+  upvotes: integer("upvotes").notNull().default(0),
+  downvotes: integer("downvotes").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  pollIdx: index("opinion_poll_comments_poll_idx").on(table.pollId),
+}));
+
+export const insertOpinionPollCommentSchema = createInsertSchema(opinionPollComments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  upvotes: true,
+  downvotes: true,
+});
+
+export type OpinionPollComment = typeof opinionPollComments.$inferSelect;
+export type InsertOpinionPollComment = z.infer<typeof insertOpinionPollCommentSchema>;
+
+export const opinionPollCommentVotes = pgTable("opinion_poll_comment_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  commentId: varchar("comment_id").notNull().references(() => opinionPollComments.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  voteType: text("vote_type").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueUserComment: unique("opc_votes_user_comment_unique").on(table.userId, table.commentId),
+  commentIdx: index("opc_votes_comment_idx").on(table.commentId),
+}));
+
+export type OpinionPollCommentVote = typeof opinionPollCommentVotes.$inferSelect;

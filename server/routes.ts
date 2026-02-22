@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, ingestionRuns, inductionCandidates, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -6504,6 +6504,489 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error seeding trending polls:", error.message);
       res.status(500).json({ error: "Failed to seed trending polls" });
+    }
+  });
+
+  // ===========================================
+  // PUBLIC: OPINION POLLS (Multi-option polls)
+  // ===========================================
+
+  app.get("/api/opinion-polls", async (req, res) => {
+    try {
+      const polls = await db
+        .select()
+        .from(opinionPolls)
+        .where(eq(opinionPolls.visibility, 'live'))
+        .orderBy(desc(opinionPolls.createdAt));
+
+      const result = await Promise.all(polls.map(async (poll) => {
+        const options = await db
+          .select({
+            id: opinionPollOptions.id,
+            name: opinionPollOptions.name,
+            imageUrl: opinionPollOptions.imageUrl,
+            personId: opinionPollOptions.personId,
+            orderIndex: opinionPollOptions.orderIndex,
+            personName: trackedPeople.name,
+            personAvatar: trackedPeople.avatar,
+          })
+          .from(opinionPollOptions)
+          .leftJoin(trackedPeople, eq(opinionPollOptions.personId, trackedPeople.id))
+          .where(eq(opinionPollOptions.pollId, poll.id))
+          .orderBy(asc(opinionPollOptions.orderIndex))
+          .limit(3);
+
+        const [totalOptions] = await db
+          .select({ cnt: count() })
+          .from(opinionPollOptions)
+          .where(eq(opinionPollOptions.pollId, poll.id));
+
+        const [totalVotes] = await db
+          .select({ cnt: count() })
+          .from(opinionPollVotes)
+          .where(eq(opinionPollVotes.pollId, poll.id));
+
+        return {
+          ...poll,
+          options: options.map(o => ({
+            id: o.id,
+            name: o.name,
+            imageUrl: o.personAvatar || o.imageUrl || null,
+            personId: o.personId,
+            personName: o.personName || null,
+          })),
+          totalOptions: Number(totalOptions?.cnt || 0),
+          totalVotes: Number(totalVotes?.cnt || 0),
+        };
+      }));
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error fetching opinion polls:", error.message);
+      res.status(500).json({ error: "Failed to fetch opinion polls" });
+    }
+  });
+
+  app.get("/api/opinion-polls/:slug", optionalAuth, async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const authReq = req as AuthRequest;
+      const userId = authReq.userId || null;
+
+      const [poll] = await db
+        .select()
+        .from(opinionPolls)
+        .where(eq(opinionPolls.slug, slug))
+        .limit(1);
+
+      if (!poll) {
+        return res.status(404).json({ error: "Opinion poll not found" });
+      }
+
+      const options = await db
+        .select({
+          id: opinionPollOptions.id,
+          name: opinionPollOptions.name,
+          imageUrl: opinionPollOptions.imageUrl,
+          personId: opinionPollOptions.personId,
+          orderIndex: opinionPollOptions.orderIndex,
+          personName: trackedPeople.name,
+          personAvatar: trackedPeople.avatar,
+        })
+        .from(opinionPollOptions)
+        .leftJoin(trackedPeople, eq(opinionPollOptions.personId, trackedPeople.id))
+        .where(eq(opinionPollOptions.pollId, poll.id))
+        .orderBy(asc(opinionPollOptions.orderIndex));
+
+      const voteCounts = await db
+        .select({
+          optionId: opinionPollVotes.optionId,
+          cnt: count(),
+        })
+        .from(opinionPollVotes)
+        .where(eq(opinionPollVotes.pollId, poll.id))
+        .groupBy(opinionPollVotes.optionId);
+
+      const voteMap = new Map(voteCounts.map(v => [v.optionId, Number(v.cnt)]));
+      const totalVotes = voteCounts.reduce((sum, v) => sum + Number(v.cnt), 0);
+
+      let userVote: string | null = null;
+      if (userId) {
+        const [uv] = await db
+          .select({ optionId: opinionPollVotes.optionId })
+          .from(opinionPollVotes)
+          .where(and(eq(opinionPollVotes.pollId, poll.id), eq(opinionPollVotes.userId, userId)))
+          .limit(1);
+        if (uv) userVote = uv.optionId;
+      }
+
+      const [commentCount] = await db
+        .select({ cnt: count() })
+        .from(opinionPollComments)
+        .where(eq(opinionPollComments.pollId, poll.id));
+
+      res.json({
+        ...poll,
+        options: options.map(o => ({
+          id: o.id,
+          name: o.name,
+          imageUrl: o.personAvatar || o.imageUrl || null,
+          personId: o.personId,
+          personName: o.personName || null,
+          orderIndex: o.orderIndex,
+          votes: voteMap.get(o.id) || 0,
+          percent: totalVotes > 0 ? Math.round(((voteMap.get(o.id) || 0) / totalVotes) * 100) : 0,
+        })),
+        totalVotes,
+        userVote,
+        commentCount: Number(commentCount?.cnt || 0),
+      });
+    } catch (error: any) {
+      console.error("Error fetching opinion poll:", error.message);
+      res.status(500).json({ error: "Failed to fetch opinion poll" });
+    }
+  });
+
+  app.post("/api/opinion-polls/:slug/vote", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { slug } = req.params;
+      const { optionId } = req.body;
+      const userId = req.userId!;
+
+      if (!optionId) {
+        return res.status(400).json({ error: "optionId is required" });
+      }
+
+      const [poll] = await db
+        .select({ id: opinionPolls.id })
+        .from(opinionPolls)
+        .where(eq(opinionPolls.slug, slug))
+        .limit(1);
+
+      if (!poll) {
+        return res.status(404).json({ error: "Poll not found" });
+      }
+
+      const [option] = await db
+        .select({ id: opinionPollOptions.id })
+        .from(opinionPollOptions)
+        .where(and(eq(opinionPollOptions.id, optionId), eq(opinionPollOptions.pollId, poll.id)))
+        .limit(1);
+
+      if (!option) {
+        return res.status(400).json({ error: "Invalid option for this poll" });
+      }
+
+      const [existing] = await db
+        .select({ id: opinionPollVotes.id })
+        .from(opinionPollVotes)
+        .where(and(eq(opinionPollVotes.pollId, poll.id), eq(opinionPollVotes.userId, userId)))
+        .limit(1);
+
+      if (existing) {
+        await db.update(opinionPollVotes)
+          .set({ optionId, updatedAt: new Date() })
+          .where(eq(opinionPollVotes.id, existing.id));
+      } else {
+        await db.insert(opinionPollVotes).values({
+          pollId: poll.id,
+          optionId,
+          userId,
+        });
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error voting on opinion poll:", error.message);
+      res.status(500).json({ error: "Failed to vote" });
+    }
+  });
+
+  // Opinion Poll Comments
+  app.get("/api/opinion-polls/:slug/comments", async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const sort = (req.query.sort as string) || 'top';
+
+      const [poll] = await db
+        .select({ id: opinionPolls.id })
+        .from(opinionPolls)
+        .where(eq(opinionPolls.slug, slug))
+        .limit(1);
+
+      if (!poll) return res.status(404).json({ error: "Poll not found" });
+
+      const orderClause = sort === 'newest'
+        ? desc(opinionPollComments.createdAt)
+        : desc(opinionPollComments.upvotes);
+
+      const comments = await db
+        .select()
+        .from(opinionPollComments)
+        .where(eq(opinionPollComments.pollId, poll.id))
+        .orderBy(orderClause);
+
+      res.json(comments);
+    } catch (error: any) {
+      console.error("Error fetching opinion poll comments:", error.message);
+      res.status(500).json({ error: "Failed to fetch comments" });
+    }
+  });
+
+  app.post("/api/opinion-polls/:slug/comments", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { slug } = req.params;
+      const userId = req.userId!;
+      const { body, parentId } = req.body;
+
+      if (!body?.trim()) {
+        return res.status(400).json({ error: "Comment body is required" });
+      }
+
+      const [poll] = await db
+        .select({ id: opinionPolls.id })
+        .from(opinionPolls)
+        .where(eq(opinionPolls.slug, slug))
+        .limit(1);
+
+      if (!poll) return res.status(404).json({ error: "Poll not found" });
+
+      let username = "Anonymous";
+      let avatarUrl = null;
+      const [profile] = await db.select().from(profiles).where(eq(profiles.userId, userId)).limit(1);
+      if (profile) {
+        username = profile.displayName || profile.username || "Anonymous";
+        avatarUrl = profile.avatarUrl || null;
+      }
+
+      const [created] = await db.insert(opinionPollComments).values({
+        pollId: poll.id,
+        userId,
+        username,
+        avatarUrl,
+        body: body.trim(),
+        parentId: parentId || null,
+      }).returning();
+
+      res.json(created);
+    } catch (error: any) {
+      console.error("Error posting opinion poll comment:", error.message);
+      res.status(500).json({ error: "Failed to post comment" });
+    }
+  });
+
+  app.post("/api/opinion-polls/comments/:commentId/vote", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { commentId } = req.params;
+      const { voteType } = req.body;
+      const userId = req.userId!;
+
+      if (!['up', 'down'].includes(voteType)) {
+        return res.status(400).json({ error: "voteType must be 'up' or 'down'" });
+      }
+
+      const [existing] = await db
+        .select()
+        .from(opinionPollCommentVotes)
+        .where(and(eq(opinionPollCommentVotes.commentId, commentId), eq(opinionPollCommentVotes.userId, userId)))
+        .limit(1);
+
+      if (existing) {
+        if (existing.voteType === voteType) {
+          await db.delete(opinionPollCommentVotes).where(eq(opinionPollCommentVotes.id, existing.id));
+          const col = voteType === 'up' ? opinionPollComments.upvotes : opinionPollComments.downvotes;
+          await db.update(opinionPollComments).set({ [voteType === 'up' ? 'upvotes' : 'downvotes']: sql`${col} - 1` }).where(eq(opinionPollComments.id, commentId));
+        } else {
+          await db.update(opinionPollCommentVotes).set({ voteType }).where(eq(opinionPollCommentVotes.id, existing.id));
+          const oldCol = existing.voteType === 'up' ? 'upvotes' : 'downvotes';
+          const newCol = voteType === 'up' ? 'upvotes' : 'downvotes';
+          await db.update(opinionPollComments).set({
+            [oldCol]: sql`${existing.voteType === 'up' ? opinionPollComments.upvotes : opinionPollComments.downvotes} - 1`,
+            [newCol]: sql`${voteType === 'up' ? opinionPollComments.upvotes : opinionPollComments.downvotes} + 1`,
+          }).where(eq(opinionPollComments.id, commentId));
+        }
+      } else {
+        await db.insert(opinionPollCommentVotes).values({ commentId, userId, voteType });
+        const col = voteType === 'up' ? 'upvotes' : 'downvotes';
+        await db.update(opinionPollComments).set({ [col]: sql`${voteType === 'up' ? opinionPollComments.upvotes : opinionPollComments.downvotes} + 1` }).where(eq(opinionPollComments.id, commentId));
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error voting on opinion poll comment:", error.message);
+      res.status(500).json({ error: "Failed to vote on comment" });
+    }
+  });
+
+  // ===========================================
+  // ADMIN: OPINION POLLS CRUD
+  // ===========================================
+
+  app.get("/api/admin/opinion-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const polls = await db.select().from(opinionPolls).orderBy(desc(opinionPolls.createdAt));
+      const result = await Promise.all(polls.map(async (poll) => {
+        const options = await db
+          .select({
+            id: opinionPollOptions.id,
+            name: opinionPollOptions.name,
+            imageUrl: opinionPollOptions.imageUrl,
+            personId: opinionPollOptions.personId,
+            orderIndex: opinionPollOptions.orderIndex,
+          })
+          .from(opinionPollOptions)
+          .where(eq(opinionPollOptions.pollId, poll.id))
+          .orderBy(asc(opinionPollOptions.orderIndex));
+
+        const [totalVotes] = await db
+          .select({ cnt: count() })
+          .from(opinionPollVotes)
+          .where(eq(opinionPollVotes.pollId, poll.id));
+
+        return { ...poll, options, totalVotes: Number(totalVotes?.cnt || 0) };
+      }));
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error fetching admin opinion polls:", error.message);
+      res.status(500).json({ error: "Failed to fetch opinion polls" });
+    }
+  });
+
+  app.post("/api/admin/opinion-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { title, slug, category, description, imageUrl, featured, visibility, options } = req.body;
+      const adminId = req.userId!;
+
+      if (!title || !slug || !category) {
+        return res.status(400).json({ error: "Title, slug, and category are required" });
+      }
+
+      if (!options || !Array.isArray(options) || options.length < 3 || options.length > 20) {
+        return res.status(400).json({ error: "Between 3 and 20 options are required" });
+      }
+
+      const [created] = await db.insert(opinionPolls).values({
+        title,
+        slug,
+        category,
+        description: description || null,
+        imageUrl: imageUrl || null,
+        featured: featured ?? false,
+        visibility: visibility || 'draft',
+        createdBy: adminId,
+      }).returning();
+
+      for (let i = 0; i < options.length; i++) {
+        const opt = options[i];
+        await db.insert(opinionPollOptions).values({
+          pollId: created.id,
+          name: opt.name,
+          imageUrl: opt.imageUrl || null,
+          personId: opt.personId || null,
+          orderIndex: i,
+        });
+      }
+
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'create_opinion_poll',
+        targetTable: 'opinion_polls',
+        targetId: created.id,
+        newData: { ...created, options },
+      });
+
+      res.json(created);
+    } catch (error: any) {
+      console.error("Error creating opinion poll:", error.message, error.detail || "");
+      const detail = error.detail || error.message || "Unknown error";
+      if (detail.includes("unique") || detail.includes("duplicate")) {
+        res.status(400).json({ error: "A poll with this slug already exists. Please choose a different slug." });
+      } else {
+        res.status(500).json({ error: `Failed to create opinion poll: ${detail}` });
+      }
+    }
+  });
+
+  app.patch("/api/admin/opinion-polls/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const adminId = req.userId!;
+      const { title, slug, category, description, imageUrl, featured, visibility, options } = req.body;
+
+      const [existing] = await db.select().from(opinionPolls).where(eq(opinionPolls.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Opinion poll not found" });
+      }
+
+      const updates: any = { updatedAt: new Date() };
+      if (title !== undefined) updates.title = title;
+      if (slug !== undefined) updates.slug = slug;
+      if (category !== undefined) updates.category = category;
+      if (description !== undefined) updates.description = description || null;
+      if (imageUrl !== undefined) updates.imageUrl = imageUrl || null;
+      if (featured !== undefined) updates.featured = featured;
+      if (visibility !== undefined) updates.visibility = visibility;
+
+      const [updated] = await db.update(opinionPolls).set(updates).where(eq(opinionPolls.id, id)).returning();
+
+      if (options && Array.isArray(options)) {
+        await db.delete(opinionPollOptions).where(eq(opinionPollOptions.pollId, id));
+        for (let i = 0; i < options.length; i++) {
+          const opt = options[i];
+          await db.insert(opinionPollOptions).values({
+            pollId: id,
+            name: opt.name,
+            imageUrl: opt.imageUrl || null,
+            personId: opt.personId || null,
+            orderIndex: i,
+          });
+        }
+      }
+
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'update_opinion_poll',
+        targetTable: 'opinion_polls',
+        targetId: id,
+        previousData: existing,
+        newData: updated,
+      });
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating opinion poll:", error.message, error.detail || "");
+      const detail = error.detail || error.message || "Unknown error";
+      res.status(500).json({ error: `Failed to update opinion poll: ${detail}` });
+    }
+  });
+
+  app.delete("/api/admin/opinion-polls/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const adminId = req.userId!;
+
+      const [existing] = await db.select().from(opinionPolls).where(eq(opinionPolls.id, id));
+      if (!existing) {
+        return res.status(404).json({ error: "Opinion poll not found" });
+      }
+
+      await db.delete(opinionPolls).where(eq(opinionPolls.id, id));
+
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: 'delete_opinion_poll',
+        targetTable: 'opinion_polls',
+        targetId: id,
+        previousData: existing,
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting opinion poll:", error.message);
+      res.status(500).json({ error: "Failed to delete opinion poll" });
     }
   });
 

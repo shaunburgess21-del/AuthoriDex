@@ -1337,6 +1337,24 @@ export default function AdminDashboard() {
   const [gainerCategory, setGainerCategory] = useState("tech");
   const [gainerPersonIds, setGainerPersonIds] = useState<string[]>([]);
   const [gainerPersonSearch, setGainerPersonSearch] = useState("");
+  const [showOpinionPollModal, setShowOpinionPollModal] = useState(false);
+  const [editingOpinionPoll, setEditingOpinionPoll] = useState<any | null>(null);
+  const [opinionPollFilter, setOpinionPollFilter] = useState<string>("all");
+  const [opinionPollCategoryFilter, setOpinionPollCategoryFilter] = useState<string>("all");
+  const [opinionPollSearchQuery, setOpinionPollSearchQuery] = useState("");
+  const [opinionPollForm, setOpinionPollForm] = useState({
+    title: "",
+    slug: "",
+    category: "Tech",
+    description: "",
+    imageUrl: "",
+    featured: false,
+    visibility: "draft" as "draft" | "live" | "archived",
+    options: [{ name: "", imageUrl: "", personId: "" }, { name: "", imageUrl: "", personId: "" }, { name: "", imageUrl: "", personId: "" }] as Array<{ name: string; imageUrl: string; personId: string }>,
+  });
+  const [opOptionSearchInputs, setOpOptionSearchInputs] = useState<string[]>(["", "", ""]);
+  const [opOptionSearchResults, setOpOptionSearchResults] = useState<any[][]>([[], [], []]);
+  const [opOptionShowDropdown, setOpOptionShowDropdown] = useState<boolean[]>([false, false, false]);
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS (React rules of hooks)
   
@@ -1438,6 +1456,16 @@ export default function AdminDashboard() {
     queryFn: async () => {
       const res = await fetchWithAuth("/api/admin/trending-polls");
       if (!res.ok) throw new Error("Failed to fetch trending polls");
+      return res.json();
+    },
+    enabled: isAdmin && activeSection === "voting",
+  });
+
+  const { data: opinionPollsList, isLoading: opinionPollsLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/opinion-polls"],
+    queryFn: async () => {
+      const res = await fetchWithAuth("/api/admin/opinion-polls");
+      if (!res.ok) throw new Error("Failed to fetch opinion polls");
       return res.json();
     },
     enabled: isAdmin && activeSection === "voting",
@@ -2002,7 +2030,7 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Poll Created", description: "New trending poll added successfully" });
+      toast({ title: "Poll Created", description: "New sentiment poll added successfully" });
       setShowPollModal(false);
       setEditingPoll(null);
       resetPollForm();
@@ -2036,7 +2064,7 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Poll Updated", description: "Trending poll updated successfully" });
+      toast({ title: "Poll Updated", description: "Sentiment poll updated successfully" });
       setShowPollModal(false);
       setEditingPoll(null);
       resetPollForm();
@@ -2054,10 +2082,81 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Poll Deleted", description: "Trending poll removed successfully" });
+      toast({ title: "Poll Deleted", description: "Sentiment poll removed successfully" });
       setShowDeleteConfirm(false);
       setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const createOpinionPollMutation = useMutation({
+    mutationFn: async (data: typeof opinionPollForm) => {
+      const res = await fetchWithAuth("/api/admin/opinion-polls", {
+        method: "POST",
+        body: JSON.stringify({
+          ...data,
+          options: data.options.filter(o => o.name.trim()),
+        }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errBody.error || `Server error ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Opinion Poll Created" });
+      setShowOpinionPollModal(false);
+      setEditingOpinionPoll(null);
+      resetOpinionPollForm();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/opinion-polls"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Create Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateOpinionPollMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const res = await fetchWithAuth(`/api/admin/opinion-polls/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          ...data,
+          options: data.options.filter((o: any) => o.name.trim()),
+        }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(errBody.error || `Server error ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Opinion Poll Updated" });
+      setShowOpinionPollModal(false);
+      setEditingOpinionPoll(null);
+      resetOpinionPollForm();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/opinion-polls"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteOpinionPollMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetchWithAuth(`/api/admin/opinion-polls/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete opinion poll");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Opinion Poll Deleted" });
+      setShowDeleteConfirm(false);
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/opinion-polls"] });
     },
     onError: (error: any) => {
       toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
@@ -2396,6 +2495,134 @@ export default function AdminDashboard() {
     }
   };
 
+  const resetOpinionPollForm = () => {
+    setOpinionPollForm({
+      title: "",
+      slug: "",
+      category: "Tech",
+      description: "",
+      imageUrl: "",
+      featured: false,
+      visibility: "draft",
+      options: [{ name: "", imageUrl: "", personId: "" }, { name: "", imageUrl: "", personId: "" }, { name: "", imageUrl: "", personId: "" }],
+    });
+    setOpOptionSearchInputs(["", "", ""]);
+    setOpOptionSearchResults([[], [], []]);
+    setOpOptionShowDropdown([false, false, false]);
+  };
+
+  const openEditOpinionPoll = (poll: any) => {
+    setEditingOpinionPoll(poll);
+    const opts = (poll.options || []).map((o: any) => ({
+      name: o.name || "",
+      imageUrl: o.imageUrl || "",
+      personId: o.personId || "",
+    }));
+    while (opts.length < 3) opts.push({ name: "", imageUrl: "", personId: "" });
+    setOpinionPollForm({
+      title: poll.title || "",
+      slug: poll.slug || "",
+      category: poll.category || "Tech",
+      description: poll.description || "",
+      imageUrl: poll.imageUrl || "",
+      featured: poll.featured ?? false,
+      visibility: poll.visibility || "draft",
+      options: opts,
+    });
+    setOpOptionSearchInputs(opts.map((o: any) => o.name || ""));
+    setOpOptionSearchResults(opts.map(() => []));
+    setOpOptionShowDropdown(opts.map(() => false));
+    setShowOpinionPollModal(true);
+  };
+
+  const handleSaveOpinionPoll = () => {
+    if (editingOpinionPoll) {
+      updateOpinionPollMutation.mutate({ id: editingOpinionPoll.id, data: opinionPollForm });
+    } else {
+      createOpinionPollMutation.mutate(opinionPollForm);
+    }
+  };
+
+  const addOpinionOption = () => {
+    if (opinionPollForm.options.length >= 20) return;
+    setOpinionPollForm(prev => ({
+      ...prev,
+      options: [...prev.options, { name: "", imageUrl: "", personId: "" }],
+    }));
+    setOpOptionSearchInputs(prev => [...prev, ""]);
+    setOpOptionSearchResults(prev => [...prev, []]);
+    setOpOptionShowDropdown(prev => [...prev, false]);
+  };
+
+  const removeOpinionOption = (idx: number) => {
+    if (opinionPollForm.options.length <= 3) return;
+    setOpinionPollForm(prev => ({
+      ...prev,
+      options: prev.options.filter((_, i) => i !== idx),
+    }));
+    setOpOptionSearchInputs(prev => prev.filter((_, i) => i !== idx));
+    setOpOptionSearchResults(prev => prev.filter((_, i) => i !== idx));
+    setOpOptionShowDropdown(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateOpinionOption = (idx: number, field: string, value: string) => {
+    setOpinionPollForm(prev => ({
+      ...prev,
+      options: prev.options.map((o, i) => i === idx ? { ...o, [field]: value } : o),
+    }));
+  };
+
+  const searchCelebrityForOption = async (idx: number, query: string) => {
+    const newInputs = [...opOptionSearchInputs];
+    newInputs[idx] = query;
+    setOpOptionSearchInputs(newInputs);
+
+    if (!query.trim()) {
+      updateOpinionOption(idx, "personId", "");
+      const newResults = [...opOptionSearchResults];
+      newResults[idx] = [];
+      setOpOptionSearchResults(newResults);
+      const newDropdown = [...opOptionShowDropdown];
+      newDropdown[idx] = false;
+      setOpOptionShowDropdown(newDropdown);
+      return;
+    }
+
+    try {
+      const res = await fetchWithAuth(`/api/admin/celebrities?search=${encodeURIComponent(query)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const newResults = [...opOptionSearchResults];
+        newResults[idx] = data.slice(0, 8);
+        setOpOptionSearchResults(newResults);
+        const newDropdown = [...opOptionShowDropdown];
+        newDropdown[idx] = true;
+        setOpOptionShowDropdown(newDropdown);
+      }
+    } catch {}
+  };
+
+  const selectCelebrityForOption = (idx: number, celeb: any) => {
+    updateOpinionOption(idx, "personId", celeb.id);
+    updateOpinionOption(idx, "name", celeb.name);
+    const newInputs = [...opOptionSearchInputs];
+    newInputs[idx] = celeb.name;
+    setOpOptionSearchInputs(newInputs);
+    const newDropdown = [...opOptionShowDropdown];
+    newDropdown[idx] = false;
+    setOpOptionShowDropdown(newDropdown);
+    const newResults = [...opOptionSearchResults];
+    newResults[idx] = [];
+    setOpOptionSearchResults(newResults);
+  };
+
+  const filteredOpinionPolls = (opinionPollsList || []).filter((poll: any) => {
+    if (opinionPollFilter !== "all" && poll.visibility !== opinionPollFilter) return false;
+    if (opinionPollCategoryFilter !== "all" && poll.category !== opinionPollCategoryFilter) return false;
+    if (opinionPollSearchQuery && !poll.title?.toLowerCase().includes(opinionPollSearchQuery.toLowerCase())) return false;
+    return true;
+  });
+
   const filteredPolls = trendingPollsList?.filter((poll) => {
     if (pollFilter === "missing_image") {
       return poll.status === "draft" && !poll.personId && !poll.imageUrl;
@@ -2427,6 +2654,8 @@ export default function AdminDashboard() {
       deleteCommentMutation.mutate(deleteTarget.id);
     } else if (deleteTarget.type === "poll") {
       deletePollMutation.mutate(deleteTarget.id);
+    } else if (deleteTarget.type === "opinion-poll") {
+      deleteOpinionPollMutation.mutate(deleteTarget.id);
     }
   };
 
@@ -3497,7 +3726,10 @@ export default function AdminDashboard() {
             <Tabs defaultValue="polls" className="w-full">
               <TabsList className="flex-wrap">
                 <TabsTrigger value="polls" data-testid="tab-polls">
-                  Trending Polls
+                  Sentiment Polls
+                </TabsTrigger>
+                <TabsTrigger value="opinion-polls" data-testid="tab-opinion-polls">
+                  Opinion Polls
                 </TabsTrigger>
                 <TabsTrigger value="matchups" data-testid="tab-matchups">
                   Matchups
@@ -3517,7 +3749,7 @@ export default function AdminDashboard() {
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between gap-2">
                     <div>
-                      <CardTitle>Trending Polls</CardTitle>
+                      <CardTitle>Sentiment Polls</CardTitle>
                       <CardDescription>Manage community polling questions</CardDescription>
                     </div>
                     <Button
@@ -3668,7 +3900,7 @@ export default function AdminDashboard() {
                     ) : (
                       <div className="text-center py-8 text-muted-foreground">
                         <Vote className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p>No trending polls yet</p>
+                        <p>No sentiment polls yet</p>
                         <Button
                           className="mt-4"
                           onClick={() => {
@@ -3680,6 +3912,135 @@ export default function AdminDashboard() {
                         >
                           <Plus className="h-4 w-4 mr-2" />
                           Create First Poll
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="opinion-polls" className="mt-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2">
+                    <div>
+                      <CardTitle>Opinion Polls</CardTitle>
+                      <CardDescription>Multi-option polls for community voting</CardDescription>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setEditingOpinionPoll(null);
+                        resetOpinionPollForm();
+                        setShowOpinionPollModal(true);
+                      }}
+                      data-testid="button-add-opinion-poll"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Opinion Poll
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2 mb-4 flex-wrap">
+                      <Select value={opinionPollFilter} onValueChange={setOpinionPollFilter}>
+                        <SelectTrigger className="w-[140px]" data-testid="select-opinion-poll-status-filter">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Status</SelectItem>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="live">Live</SelectItem>
+                          <SelectItem value="archived">Archived</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={opinionPollCategoryFilter} onValueChange={setOpinionPollCategoryFilter}>
+                        <SelectTrigger className="w-[140px]" data-testid="select-opinion-poll-category-filter">
+                          <SelectValue placeholder="Category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Categories</SelectItem>
+                          <SelectItem value="Tech">Tech</SelectItem>
+                          <SelectItem value="Music">Music</SelectItem>
+                          <SelectItem value="Sports">Sports</SelectItem>
+                          <SelectItem value="Politics">Politics</SelectItem>
+                          <SelectItem value="Business">Business</SelectItem>
+                          <SelectItem value="Creator">Creator</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        placeholder="Search..."
+                        value={opinionPollSearchQuery}
+                        onChange={(e) => setOpinionPollSearchQuery(e.target.value)}
+                        className="w-[200px]"
+                        data-testid="input-opinion-poll-search"
+                      />
+                    </div>
+                    {opinionPollsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : filteredOpinionPolls.length > 0 ? (
+                      <div className="space-y-3" data-testid="opinion-poll-list">
+                        {filteredOpinionPolls.map((poll: any) => (
+                          <div
+                            key={poll.id}
+                            className="flex items-center justify-between p-3 rounded-lg border"
+                            data-testid={`opinion-poll-row-${poll.id}`}
+                          >
+                            <div className="flex-1">
+                              <p className="font-medium">{poll.title}</p>
+                              <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">{poll.description}</p>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <Badge variant="outline" className="text-xs">{poll.category}</Badge>
+                                <Badge
+                                  variant={poll.visibility === "live" ? "default" : poll.visibility === "draft" ? "secondary" : "outline"}
+                                  className="text-xs"
+                                >
+                                  {poll.visibility}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">{poll.options?.length || 0} options</span>
+                                <span className="text-xs text-muted-foreground">{poll.totalVotes || 0} votes</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openEditOpinionPoll(poll)}
+                                data-testid={`button-edit-opinion-poll-${poll.id}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => {
+                                  setDeleteTarget({ type: "opinion-poll", id: poll.id, name: poll.title });
+                                  setShowDeleteConfirm(true);
+                                }}
+                                data-testid={`button-delete-opinion-poll-${poll.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Vote className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p>No opinion polls yet</p>
+                        <Button
+                          className="mt-4"
+                          onClick={() => {
+                            setEditingOpinionPoll(null);
+                            resetOpinionPollForm();
+                            setShowOpinionPollModal(true);
+                          }}
+                          data-testid="button-create-first-opinion-poll"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create First Opinion Poll
                         </Button>
                       </div>
                     )}
@@ -5612,13 +5973,218 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
+      {/* Opinion Poll Create/Edit Dialog */}
+      <Dialog open={showOpinionPollModal} onOpenChange={setShowOpinionPollModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingOpinionPoll ? "Edit Opinion Poll" : "Create Opinion Poll"}</DialogTitle>
+            <DialogDescription>
+              {editingOpinionPoll ? "Update opinion poll details and options" : "Create a multi-option poll for community voting"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Visibility</Label>
+                <Select
+                  value={opinionPollForm.visibility}
+                  onValueChange={(value) => setOpinionPollForm(prev => ({ ...prev, visibility: value as any }))}
+                >
+                  <SelectTrigger data-testid="select-opinion-poll-visibility">
+                    <SelectValue placeholder="Select visibility" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="live">Live</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Select
+                  value={opinionPollForm.category}
+                  onValueChange={(value) => setOpinionPollForm(prev => ({ ...prev, category: value }))}
+                >
+                  <SelectTrigger data-testid="select-opinion-poll-modal-category">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Tech">Tech</SelectItem>
+                    <SelectItem value="Music">Music</SelectItem>
+                    <SelectItem value="Sports">Sports</SelectItem>
+                    <SelectItem value="Politics">Politics</SelectItem>
+                    <SelectItem value="Business">Business</SelectItem>
+                    <SelectItem value="Creator">Creator</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Title</Label>
+              <Input
+                value={opinionPollForm.title}
+                onChange={(e) => setOpinionPollForm(prev => ({ ...prev, title: e.target.value }))}
+                placeholder="Poll question or title"
+                data-testid="input-opinion-poll-title"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Slug</Label>
+              <Input
+                value={opinionPollForm.slug}
+                onChange={(e) => setOpinionPollForm(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") }))}
+                placeholder="url-friendly-slug"
+                data-testid="input-opinion-poll-slug"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Input
+                value={opinionPollForm.description}
+                onChange={(e) => setOpinionPollForm(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Optional description"
+                data-testid="input-opinion-poll-description"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Image URL</Label>
+              <Input
+                value={opinionPollForm.imageUrl}
+                onChange={(e) => setOpinionPollForm(prev => ({ ...prev, imageUrl: e.target.value }))}
+                placeholder="Optional header image URL"
+                data-testid="input-opinion-poll-image"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={opinionPollForm.featured}
+                onChange={(e) => setOpinionPollForm(prev => ({ ...prev, featured: e.target.checked }))}
+                data-testid="checkbox-opinion-poll-featured"
+              />
+              <Label>Featured</Label>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Options ({opinionPollForm.options.length}/20)</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={addOpinionOption}
+                  disabled={opinionPollForm.options.length >= 20}
+                  data-testid="button-add-opinion-option"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Option
+                </Button>
+              </div>
+              {opinionPollForm.options.map((opt, idx) => (
+                <div key={idx} className="flex items-start gap-2 p-3 rounded-lg border">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-muted-foreground w-4">{idx + 1}</span>
+                      <Input
+                        value={opt.name}
+                        onChange={(e) => updateOpinionOption(idx, "name", e.target.value)}
+                        placeholder="Option name"
+                        className="flex-1"
+                        data-testid={`input-opinion-option-name-${idx}`}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 ml-6">
+                      <Input
+                        value={opt.imageUrl}
+                        onChange={(e) => updateOpinionOption(idx, "imageUrl", e.target.value)}
+                        placeholder="Image URL (optional)"
+                        className="flex-1 text-xs"
+                        data-testid={`input-opinion-option-image-${idx}`}
+                      />
+                    </div>
+                    <div className="relative ml-6">
+                      <Input
+                        value={opOptionSearchInputs[idx] || ""}
+                        onChange={(e) => searchCelebrityForOption(idx, e.target.value)}
+                        placeholder="Link celebrity (search...)"
+                        className="text-xs"
+                        data-testid={`input-opinion-option-celebrity-${idx}`}
+                      />
+                      {opt.personId && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-1 top-1/2 -translate-y-1/2"
+                          onClick={() => {
+                            updateOpinionOption(idx, "personId", "");
+                            const newInputs = [...opOptionSearchInputs];
+                            newInputs[idx] = "";
+                            setOpOptionSearchInputs(newInputs);
+                          }}
+                          data-testid={`button-clear-opinion-option-celebrity-${idx}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      )}
+                      {opOptionShowDropdown[idx] && opOptionSearchResults[idx]?.length > 0 && (
+                        <div className="absolute z-50 top-full mt-1 w-full bg-popover border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                          {opOptionSearchResults[idx].map((celeb: any) => (
+                            <button
+                              key={celeb.id}
+                              className="w-full px-3 py-2 text-left text-sm hover-elevate flex items-center gap-2"
+                              onClick={() => selectCelebrityForOption(idx, celeb)}
+                              data-testid={`option-celebrity-result-${idx}-${celeb.id}`}
+                            >
+                              {celeb.avatar && <img src={celeb.avatar} alt="" className="w-5 h-5 rounded-full" />}
+                              <span>{celeb.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {opinionPollForm.options.length > 3 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeOpinionOption(idx)}
+                      data-testid={`button-remove-opinion-option-${idx}`}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowOpinionPollModal(false)} data-testid="button-cancel-opinion-poll">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveOpinionPoll}
+              disabled={!opinionPollForm.title.trim() || !opinionPollForm.slug.trim() || opinionPollForm.options.filter(o => o.name.trim()).length < 3 || createOpinionPollMutation.isPending || updateOpinionPollMutation.isPending}
+              data-testid="button-save-opinion-poll"
+            >
+              {createOpinionPollMutation.isPending || updateOpinionPollMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              {editingOpinionPoll ? "Update Poll" : "Create Poll"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Poll Create/Edit Dialog */}
       <Dialog open={showPollModal} onOpenChange={setShowPollModal}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingPoll ? "Edit Poll" : "Create Poll"}</DialogTitle>
             <DialogDescription>
-              {editingPoll ? "Update trending poll details" : "Create a new trending poll question"}
+              {editingPoll ? "Update sentiment poll details" : "Create a new sentiment poll question"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">

@@ -157,14 +157,14 @@ const curateProfilePolls: CurateProfilePoll[] = [
 ];
 
 
-const SECTION_TOGGLES = ["All", "Matchups", "Trending Polls", "Underrated/Overrated", "Induction Queue", "Curate Profile"] as const;
+const SECTION_TOGGLES = ["All", "Matchups", "Sentiment Polls", "Opinion Polls", "Underrated/Overrated", "Induction Queue", "Curate Profile"] as const;
 type SectionToggle = typeof SECTION_TOGGLES[number];
 
 const isGovernanceSection = (section: SectionToggle) => 
   section === "Induction Queue" || section === "Curate Profile";
 
 const isPublicOpinionSection = (section: SectionToggle) =>
-  section === "Matchups" || section === "Trending Polls";
+  section === "Matchups" || section === "Sentiment Polls" || section === "Opinion Polls";
 
 const SECTION_RULES = {
   induction: {
@@ -180,7 +180,7 @@ const SECTION_RULES = {
     content: "Pick your side in head-to-head matchups! Vote for your favorite in classic A vs B showdowns. Each vote earns XP and contributes to the community consensus."
   },
   voice: {
-    title: "Trending Polls Rules",
+    title: "Sentiment Polls Rules",
     content: "The ultimate community pulse check. Weigh in on current events and controversies. Evergreen polls remain open; timed polls resolve at the specified deadline."
   },
   value: {
@@ -1715,6 +1715,11 @@ export default function VotePage() {
     staleTime: 60 * 1000,
   });
 
+  const { data: opinionPolls = [], isLoading: opinionPollsLoading } = useQuery<any[]>({
+    queryKey: ['/api/opinion-polls'],
+    staleTime: 60 * 1000,
+  });
+
   const filteredTopics = dbPolls.filter((t: any) => {
     const matchesCategory = topicsCategoryFilter === "All" || topicsCategoryFilter === "Trending" || t.category === topicsCategoryFilter;
     const matchesSearch = t.headline.toLowerCase().includes(topicsSearchQuery.toLowerCase()) ||
@@ -2066,7 +2071,8 @@ export default function VotePage() {
                 data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
               >
                 {section === "Matchups" && <Swords className="h-4 w-4" />}
-                {section === "Trending Polls" && <MessageSquare className="h-4 w-4" />}
+                {section === "Sentiment Polls" && <MessageSquare className="h-4 w-4" />}
+                {section === "Opinion Polls" && <Vote className="h-4 w-4" />}
                 {section === "Underrated/Overrated" && <BarChart3 className="h-4 w-4" />}
                 {section === "Induction Queue" && <UserPlus className="h-4 w-4" />}
                 {section === "Curate Profile" && <ImageIcon className="h-4 w-4" />}
@@ -2247,8 +2253,8 @@ export default function VotePage() {
         </section>
         )}
 
-        {/* ZONE 1: Public Opinion - Trending Polls Section (Second) */}
-        {(activeSection === "All" || activeSection === "Trending Polls") && (
+        {/* ZONE 1: Public Opinion - Sentiment Polls Section (Second) */}
+        {(activeSection === "All" || activeSection === "Sentiment Polls") && (
         <section className="mb-10">
           <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
             <div className="flex items-center justify-between">
@@ -2257,7 +2263,7 @@ export default function VotePage() {
                   <MessageSquare className="h-5 w-5 text-cyan-400" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-serif font-bold">Trending Polls</h2>
+                  <h2 className="text-xl font-serif font-bold">Sentiment Polls</h2>
                   <p className="text-sm text-muted-foreground">Weigh in on current events</p>
                 </div>
               </div>
@@ -2354,6 +2360,98 @@ export default function VotePage() {
         </section>
         )}
 
+        {/* ZONE 1.5: Opinion Polls - Multi-option community polls */}
+        {(activeSection === "All" || activeSection === "Opinion Polls") && (
+        <section className="mb-10">
+          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+                  <Vote className="h-5 w-5 text-violet-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-serif font-bold">Opinion Polls</h2>
+                  <p className="text-sm text-muted-foreground">Pick your choice on hot topics</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {opinionPollsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="h-8 w-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : opinionPolls.length > 0 ? (
+            <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="section-opinion-polls">
+              {opinionPolls.map((poll: any) => (
+                <Card
+                  key={poll.id}
+                  className="hover-elevate cursor-pointer overflow-visible"
+                  onClick={() => window.location.href = `/vote/opinion-polls/${poll.slug}`}
+                  data-testid={`opinion-poll-card-${poll.id}`}
+                >
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="flex-1">
+                        <Badge variant="outline" className="text-xs mb-2">{poll.category}</Badge>
+                        <h3 className="font-semibold text-sm leading-tight line-clamp-2">{poll.title}</h3>
+                        {poll.description && (
+                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{poll.description}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {(poll.options || []).slice(0, 3).map((option: any, idx: number) => (
+                        <div
+                          key={option.id}
+                          className="flex items-center gap-2 p-2 rounded-md border border-border/50 bg-muted/30"
+                          data-testid={`opinion-poll-option-${poll.id}-${idx}`}
+                        >
+                          {option.imageUrl ? (
+                            <img src={option.imageUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center shrink-0">
+                              <span className="text-xs font-medium text-violet-400">{idx + 1}</span>
+                            </div>
+                          )}
+                          <span className="text-sm truncate">{option.name}</span>
+                        </div>
+                      ))}
+                      {poll.totalOptions > 3 && (
+                        <p className="text-xs text-muted-foreground text-center">
+                          +{poll.totalOptions - 3} more options
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/30">
+                      <span className="text-xs text-muted-foreground">
+                        {(poll.totalVotes || 0).toLocaleString()} votes
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-violet-400 hover:text-violet-300 text-xs"
+                        data-testid={`button-vote-opinion-poll-${poll.id}`}
+                      >
+                        Vote
+                        <ChevronRight className="h-3 w-3 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </CardSection>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Vote className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p>No opinion polls available yet</p>
+            </div>
+          )}
+        </section>
+        )}
+
         {/* ZONE 2: Value Perception - Underrated/Overrated Section */}
         {(activeSection === "All" || activeSection === "Underrated/Overrated") && (
         <section className="mb-10">
@@ -2447,7 +2545,7 @@ export default function VotePage() {
 
         {/* GOVERNANCE HEADER DIVIDER - Shows between Zone 1 and Zone 3 */}
         {/* Show when: All, Induction Queue, or Curate Profile is selected */}
-        {/* Hide when: Matchups or Trending Polls is selected */}
+        {/* Hide when: Matchups or Sentiment Polls is selected */}
         {(activeSection === "All" || isGovernanceSection(activeSection)) && (
         <div className="relative overflow-hidden mb-6">
           <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
@@ -3110,7 +3208,7 @@ export default function VotePage() {
               <HelpCircle className="h-5 w-5 text-cyan-400" />
               {rulesModalOpen === "induction" && "Induction Queue Rules"}
               {rulesModalOpen === "curate" && "Curate the Profile Rules"}
-              {rulesModalOpen === "voice" && "Trending Polls Rules"}
+              {rulesModalOpen === "voice" && "Sentiment Polls Rules"}
               {rulesModalOpen === "matchups" && "Matchups Rules"}
               {rulesModalOpen === "value" && "How It Works"}
             </DialogTitle>
@@ -3251,7 +3349,7 @@ export default function VotePage() {
                 </div>
                 <div>
                   <span className="font-medium text-cyan-400">Cut Through the Noise:</span>
-                  <span className="text-muted-foreground"> Headlines only tell half the story. Use Trending Polls to capture what the world actually thinks about today's news.</span>
+                  <span className="text-muted-foreground"> Headlines only tell half the story. Use Sentiment Polls to capture what the world actually thinks about today's news.</span>
                 </div>
               </div>
               <div className="flex items-start gap-3">

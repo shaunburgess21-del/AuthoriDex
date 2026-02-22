@@ -260,7 +260,7 @@ export default function PollDetailPage() {
           <div className="flex items-center gap-2 flex-wrap mb-3">
             <CategoryPill category={poll.category} />
             <Badge variant="outline" className="text-xs border-cyan-500/30 text-cyan-400">
-              Trending Poll
+              Sentiment Poll
             </Badge>
             {poll.featured && (
               <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-400">

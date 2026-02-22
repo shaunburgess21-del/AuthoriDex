@@ -50,8 +50,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { ValueVotePerson } from "@/components/UnderratedOverratedCard";
 
-type VoteSection = "All" | "Matchups" | "Trending Polls" | "Underrated / Overrated" | "Induction Queue" | "Curate Profile";
-const SECTION_TOGGLES: VoteSection[] = ["All", "Matchups", "Trending Polls", "Underrated / Overrated", "Induction Queue", "Curate Profile"];
+type VoteSection = "All" | "Matchups" | "Sentiment Polls" | "Underrated / Overrated" | "Induction Queue" | "Curate Profile";
+const SECTION_TOGGLES: VoteSection[] = ["All", "Matchups", "Sentiment Polls", "Underrated / Overrated", "Induction Queue", "Curate Profile"];
 
 interface VoteDeckViewProps {
   onExplore: () => void;
@@ -579,7 +579,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   const dragScrollRef2 = useDragScroll<HTMLDivElement>();
 
   const showMatchups = activeSection === "All" || activeSection === "Matchups";
-  const showPolls = activeSection === "All" || activeSection === "Trending Polls";
+  const showPolls = activeSection === "All" || activeSection === "Sentiment Polls";
   const showInduction = activeSection === "All" || activeSection === "Induction Queue";
   const showCurate = activeSection === "All" || activeSection === "Curate Profile";
   const showValue = activeSection === "All" || activeSection === "Underrated / Overrated";
@@ -604,7 +604,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
             data-testid={`toggle-vote-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
           >
             {section === "Matchups" && <Swords className="h-3 w-3" />}
-            {section === "Trending Polls" && <MessageSquare className="h-3 w-3" />}
+            {section === "Sentiment Polls" && <MessageSquare className="h-3 w-3" />}
             {section === "Induction Queue" && <UserPlus className="h-3 w-3" />}
             {section === "Curate Profile" && <ImageIcon className="h-3 w-3" />}
             {section === "Underrated / Overrated" && <BarChart3 className="h-3 w-3" />}
@@ -692,9 +692,9 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
           <HomeSectionHeader
             theme="vote"
             icon={MessageSquare}
-            title="Trending Polls"
+            title="Sentiment Polls"
             subtitle="Weigh in on current topics."
-            help={{ title: "How Trending Polls Work", bullets: ["The ultimate community pulse check on current events.", "Evergreen polls remain open; timed polls resolve at a deadline.", "Your vote updates the results in real time."] }}
+            help={{ title: "How Sentiment Polls Work", bullets: ["The ultimate community pulse check on current events.", "Evergreen polls remain open; timed polls resolve at a deadline.", "Your vote updates the results in real time."] }}
             onViewAll={onExplore}
           />
           <CardDeckContainer

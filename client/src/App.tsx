@@ -21,6 +21,7 @@ import PublicProfilePage from "@/pages/PublicProfilePage";
 import AdminDashboard from "@/pages/AdminDashboard";
 import MarketDetailPage from "@/pages/MarketDetailPage";
 import PollDetailPage from "@/pages/PollDetailPage";
+import OpinionPollDetailPage from "@/pages/OpinionPollDetailPage";
 import MatchupDetailPage from "@/pages/MatchupDetailPage";
 import NotFound from "@/pages/not-found";
 
@@ -41,6 +42,7 @@ function Router() {
       <Route path="/u/:username" component={PublicProfilePage} />
       <Route path="/markets/:slug" component={MarketDetailPage} />
       <Route path="/polls/:slug" component={PollDetailPage} />
+      <Route path="/vote/opinion-polls/:slug" component={OpinionPollDetailPage} />
       <Route path="/vote/matchups/:slug" component={MatchupDetailPage} />
       <Route path="/admin" component={AdminDashboard} />
       <Route component={NotFound} />
