@@ -111,18 +111,51 @@ export function CardSection({
             </button>
 
             <div className="flex items-center gap-1.5" data-testid={`${testIdPrefix}-dots`}>
-              {items.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => goTo(i)}
-                  className={`rounded-full transition-all duration-200 ${
-                    i === currentIndex
-                      ? `w-6 h-2 ${dotActiveColor}`
-                      : 'w-2 h-2 bg-slate-600 hover:bg-slate-500'
-                  }`}
-                  data-testid={`${testIdPrefix}-dot-${i}`}
-                />
-              ))}
+              {(() => {
+                const total = items.length;
+                const MAX_DOTS = 5;
+                if (total <= MAX_DOTS) {
+                  return items.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => goTo(i)}
+                      className={`rounded-full transition-all duration-200 ${
+                        i === currentIndex
+                          ? `w-6 h-2 ${dotActiveColor}`
+                          : 'w-2 h-2 bg-slate-600 hover:bg-slate-500'
+                      }`}
+                      data-testid={`${testIdPrefix}-dot-${i}`}
+                    />
+                  ));
+                }
+                const half = Math.floor(MAX_DOTS / 2);
+                let start = currentIndex - half;
+                let end = currentIndex + half;
+                if (start < 0) { end -= start; start = 0; }
+                if (end >= total) { start -= (end - total + 1); end = total - 1; }
+                start = Math.max(0, start);
+                const visible: number[] = [];
+                for (let i = start; i <= end; i++) visible.push(i);
+                return visible.map((i) => {
+                  const isActive = i === currentIndex;
+                  const isEdge = i === visible[0] || i === visible[visible.length - 1];
+                  const isOuter = !isActive && isEdge && total > MAX_DOTS;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => goTo(i)}
+                      className={`rounded-full transition-all duration-200 ${
+                        isActive
+                          ? `w-6 h-2 ${dotActiveColor}`
+                          : isOuter
+                            ? 'w-1.5 h-1.5 bg-slate-700 hover:bg-slate-500'
+                            : 'w-2 h-2 bg-slate-600 hover:bg-slate-500'
+                      }`}
+                      data-testid={`${testIdPrefix}-dot-${i}`}
+                    />
+                  );
+                });
+              })()}
             </div>
 
             <button
