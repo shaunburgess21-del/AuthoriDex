@@ -1,0 +1,73 @@
+Yep — this is a good addition, and it’s the right shape of metric.
+
+A few quick notes so you and Replit don’t accidentally “measure the wrong thing”:
+
+1) serperCallsAttempted is the right denominator
+
+Now you can tell the difference between:
+
+“2 retries sounds scary” (but it was 2 / 300 = 0.7%, totally fine)
+vs
+
+“2 retries” when it was 2 / 20 = 10%, which is a real reliability problem.
+
+2) Make sure “attempted” means what you think it means
+
+There are two common ways this can be counted:
+
+A. Count per HTTP request attempt (best)
+
+First call increments attempted
+
+If it retries, the retry increments attempted again
+
+In that case, retry rate should be computed as:
+
+retryRate = retriesUsed / (callsAttempted - retriesUsed) (or log both raw)
+
+because callsAttempted already includes the retries
+
+B. Count per logical Serper operation (acceptable)
+
+Only increment once per “operation”, even if it retries
+
+Then retry rate is simply:
+
+retryRate = retriesUsed / callsAttempted
+
+Replit said “increment at the start of each call attempt” which sounds like A.
+If so, their example 2 / 87 = 2.3% is fine only if 87 is “logical calls” not “attempts including retries”. Otherwise it slightly under/overstates. Not a crisis—just be consistent and name it clearly:
+
+If it’s A, name it serperHttpAttempts
+
+If it’s B, name it serperCalls (logical)
+
+3) Add one more counter if you want this to be bulletproof
+
+Not necessary, but incredibly useful:
+
+serperFailuresFinal = requests that still failed after the retry
+
+serperSuccess = succeeded (including success-on-retry)
+
+Because “retryRate low” doesn’t guarantee “successRate high”.
+
+4) On the snapshot uniqueness point
+
+What Replit described (“ORDER BY timestamp DESC LIMIT 1”) will return the newest hour, but if you ever have two snapshots in the same hour it might return either unless you also order by id DESC (or created_at) as a tiebreaker.
+
+Tiny fix, worth doing:
+
+ORDER BY timestamp DESC, id DESC LIMIT 1
+
+That makes it deterministic and always picks the most recently inserted snapshot.
+
+What I’d tell Replit (copy/paste)
+
+Add ORDER BY timestamp DESC, id DESC everywhere we pick “latest”.
+
+Confirm whether serperCallsAttempted counts HTTP attempts (includes retries) or logical calls (excludes retries). Rename accordingly, or adjust retryRate formula so it’s mathematically correct.
+
+Optional: add serperFinalFailures so we can see success rate, not only retry rate.
+
+If you paste one of your new health summaries after a couple runs, I’ll interpret it and tell you what it implies about Serper vs DB vs scheduler.
