@@ -1,0 +1,153 @@
+Totally fair to be irritated — the Sentiment Polls detail page is clearly the quality bar, and Opinion Polls should feel like the same product system, not a “new random layout.”
+
+Here’s a strong, specific Replit prompt you can paste to force alignment + prevent “creative interpretation”.
+
+Replit Prompt: Opinion Polls UI/UX overhaul to match Sentiment Polls standard
+
+Context
+The current Opinion Polls card + detail page UI is not acceptable. It looks inconsistent vs the established design language used across AuthoriDex, especially compared to the Sentiment Polls detail page (which is the benchmark we want to mimic).
+
+We need a drastic improvement by reusing proven layout/components from Sentiment Polls and adapting only what’s necessary for multi-option voting.
+
+A) Opinion Poll Cards – Fix layout + voting behavior
+A1) Category badge placement + styling consistency
+
+Move the category label (e.g. “Tech”) to the top-right corner of the card (not top-left).
+
+Apply the correct category color styling exactly like all other cards across Vote sections (Tech/Business/Politics/etc).
+
+This must match the same badge component used elsewhere (do not create a new badge style).
+
+A2) Primary avatar beside the title
+
+On the card header, display the poll’s main avatar image to the left of the title (consistent with other card patterns).
+
+If no main avatar image exists, use the same placeholder rules you use elsewhere (not a new one).
+
+A3) Avatar shape consistency
+
+All avatars in Opinion Polls (card + detail page) must be square with rounded corners (same radius as elsewhere).
+
+Remove circular avatars entirely.
+
+A4) Show 4 options by default (not 3)
+
+On the Opinion Poll card, display 4 options by default.
+
+If there are more than 4, show “+X more options” text below (dynamic count).
+
+A5) Inline voting must work from the card (no forced navigation)
+
+Current behavior is wrong: clicking an option opens the detail page. We need:
+
+Clicking an option row’s Vote button should cast the vote immediately from the card.
+
+Do NOT navigate away when voting from the card.
+
+After voting:
+
+show results on the card for the visible options (the 4 shown)
+
+show % (and/or bars) for those visible options, consistent with your Results styling
+
+optionally highlight the user’s selected option
+
+Navigation rules:
+
+Clicking the title opens the detail page
+
+Clicking “+X more options” opens the detail page
+
+Clicking whitespace on the card (optional) can open detail page, but vote buttons must not.
+
+B) Opinion Poll Detail Page – Must mimic Sentiment Poll detail page layout + quality
+
+The Opinion Poll detail page currently feels like a basic list. We want it to mirror the structure and polish of the Sentiment Poll detail page, adapted for multi-option voting.
+
+B1) Header section (copy Sentiment Polls structure)
+
+Match Sentiment Poll detail header layout:
+
+category chips/tags styling and placement
+
+title + description
+
+metadata row (date, vote count, comments count)
+
+share control alignment
+
+B2) “Cast Your Vote” widget placement + behavior (must be near top)
+
+Place the voting widget directly below the header/context area, like Sentiment Polls.
+
+In this widget, list all options with:
+
+square rounded avatar
+
+option name
+
+vote button or selectable row UI consistent with AuthoriDex
+
+After user votes, this widget should reflect the voted state (highlight selection, disable/enable change vote per existing rule).
+
+B3) Results widget (beautiful + consistent)
+
+Add a dedicated Results component that looks and feels like Sentiment Polls Results:
+
+bars / percentages
+
+per-option vote counts
+
+total votes
+
+Percentages must be computed from combined votes logic (real + seed if enabled).
+
+Results must update immediately after voting.
+
+B4) Context + Discussion (keep consistent)
+
+Keep the Context block styling consistent with Sentiment Polls.
+
+Keep the Discussion component exactly the same component used on Sentiment Polls detail pages.
+
+C) Quality / Consistency guardrails (non-negotiable)
+
+Do not invent new UI patterns. Reuse the existing Sentiment Polls components wherever possible:
+
+Card header layout patterns
+
+badges / category chips
+
+avatar styling
+
+results bar styling
+
+typography, spacing, shadows, borders
+
+Opinion Polls should look like it shipped with the rest of AuthoriDex from day one.
+
+D) Acceptance criteria
+
+Category badge is top-right and category color matches other sections.
+
+Main poll avatar displays left of the title on card.
+
+All avatars are square with rounded corners (no circles).
+
+Card shows 4 options by default + “+X more options”.
+
+Voting works directly on the card without navigating.
+
+Detail page layout matches Sentiment Poll detail page structure:
+
+Vote widget near top
+
+Results widget with bars/percentages and total votes
+
+Context + Discussion consistent
+
+Everything remains responsive on mobile.
+
+Extra note (important)
+
+The current inconsistencies (badge position, missing category color, circular avatars, no card voting) are basic pattern breaks vs the rest of AuthoriDex. Please treat this as a UI parity fix, not a new design exploration.
