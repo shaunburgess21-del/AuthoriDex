@@ -1,0 +1,119 @@
+Replit’s health check reads mostly healthy on data + scoring, with one real problem: the ingestion runner sometimes hangs / times out, causing missing hourly snapshots.
+
+If you want to sanity-check and improve this fast, here’s how I’d interpret it + what I’d do next (and what to share with ChatGPT).
+
+What looks “not broken”
+
+Snapshot math/volume is consistent: 100 snapshots per successful hourly run, 10 days history, total count lines up.
+
+Score distribution looks sane (bell-ish curve, no insane spikes, top names plausible).
+
+Source coverage is broadly fine:
+
+Wikipedia + Search at 100% is great.
+
+News coverage varying 57–98% is normal (not everyone appears in news every hour).
+
+Governor factor at 0.75 is a normal stabilization knob.
+
+So: the algorithm isn’t obviously mis-scaling or corrupting data.
+
+What is broken (and why it matters)
+1) “Stuck running” runs + stale lock cleanups
+
+That’s the big red flag. It means the job starts, grabs a lock, then stops making progress (no heartbeat), blocking the next run until a cleanup kicks in.
+
+Symptoms you have:
+
+“running” with no finish time
+
+“stale lock auto-cleaned”
+
+multi-hour run then cleaned
+
+“connection terminated due to connection timeout”
+
+This usually points to one of these:
+
+An external API call is hanging (no timeout / no abort controller), so the run never reaches “finish”.
+
+DB connection leak / pool exhaustion (a few runs consume all connections; next queries stall; then timeout).
+
+A slow query or transaction lock that blocks (especially if you do “select … for update” style locking).
+
+The run does too much in one transaction; one failure/slow step holds everything hostage.
+
+2) Missing hourly windows
+
+The gaps (6h+ windows) aren’t “cosmetic”—they reduce the quality of:
+
+24h deltas that rely on “nearest snapshot”
+
+driver attribution (needs comparison snapshot)
+
+any EMA / smoothing that benefits from consistent cadence
+
+Your “fast lane” might keep the UI feeling live, but the underlying time-series loses fidelity when hourly ingest isn’t reliable.
+
+What I’d do next (practical checklist)
+A) Make hangs impossible
+
+Put hard timeouts on every external request (Serper, Mediastack, Wikipedia).
+
+Example: connect timeout + overall timeout (e.g., 10s/20s).
+
+If using fetch, use an AbortController so you can actually cancel.
+
+Add a per-person timeout too (e.g., “if processing one person takes >N seconds, skip + continue”).
+
+B) Ensure the lock always releases
+
+Wrap the whole run in try/finally where finally always:
+
+marks run as failed/success
+
+releases lock
+
+writes final heartbeat
+
+Add a watchdog: if heartbeat hasn’t updated in X minutes, force-fail the run and release lock (you already do cleanup, but make it more deterministic).
+
+C) Reduce DB timeout failures
+
+Check DB pool sizing + concurrency:
+
+If you do parallel per-person processing, you may be opening too many DB connections.
+
+Throttle concurrency (e.g., 5–10 workers) instead of 100 at once.
+
+Add DB-side guardrails:
+
+statement_timeout
+
+idle_in_transaction_session_timeout (prevents zombie transactions)
+
+D) Instrument what’s actually hanging
+
+Add structured logs/timers per stage:
+
+fetch_search, fetch_news, fetch_wiki, compute_score, write_snapshot
+
+log duration + personId
+Then you’ll instantly see: “it always hangs on Mediastack” or “DB insert batch stalls”.
+
+E) Backfill missing hours (optional but nice)
+
+Once stability is fixed:
+
+run a backfill job for missing hourly timestamps (last 48h) so drivers and deltas normalize quickly.
+
+“Message to ChatGPT” you can paste
+
+Here’s a clean summary you can send:
+
+Trend Score Engine appears logically healthy (score distribution looks sane, top ranks plausible, v2 used consistently, 100 snapshots written per successful hourly run; wiki+search coverage 100%, news variable but expected).
+Main issue is ingestion reliability: multiple missing hourly windows due to runs hanging (“running” with no finish/heartbeat), stale lock auto-cleanups, and DB connection timeout failures. This degrades time-series granularity and can misalign 24h comparisons/driver attribution even if UI looks live via fast-lane updates.
+Likely causes: external API calls without hard timeouts, DB pool exhaustion/connection leaks, slow queries or long transactions, overly high concurrency.
+Next fixes: enforce request timeouts + aborts, ensure lock release in finally, throttle concurrency, add DB statement/idle timeouts, add per-stage timing logs to identify the hang point, and optionally backfill missing hours.
+
+If you tell me (roughly) how the ingestion runner is scheduled (cron, queue worker, serverless, etc.) and whether it processes people in parallel or sequentially, I can point to the most likely culprit immediately (pool exhaustion vs hanging fetch vs lock/transaction).
