@@ -150,7 +150,7 @@ export async function getTrendContext(personId: string): Promise<TrendContext> {
       sql`${trendSnapshots.timestamp} = date_trunc('hour', ${trendSnapshots.timestamp})`,
       eq(trendSnapshots.snapshotOrigin, 'ingest')
     ))
-    .orderBy(desc(trendSnapshots.timestamp))
+    .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id))
     .limit(1);
   
   const cacheKeys = [
@@ -251,7 +251,7 @@ export async function getTrendContextBatch(personIds: string[]): Promise<Map<str
       sql`${trendSnapshots.timestamp} = date_trunc('hour', ${trendSnapshots.timestamp})`,
       eq(trendSnapshots.snapshotOrigin, 'ingest')
     ))
-    .orderBy(desc(trendSnapshots.timestamp));
+    .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id));
   const allCache = await db.select().from(apiCache);
   
   const snapshotMap = new Map<string, typeof allSnapshots[0]>();

@@ -615,7 +615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 inArray(trendSnapshots.personId, moverIds),
                 gte(trendSnapshots.timestamp, window18h),
               ))
-              .orderBy(desc(trendSnapshots.timestamp)),
+              .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id)),
 
             db.select({
               personId: trendSnapshots.personId,
@@ -633,7 +633,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 gte(trendSnapshots.timestamp, window30h),
                 lte(trendSnapshots.timestamp, window18h),
               ))
-              .orderBy(desc(trendSnapshots.timestamp)),
+              .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id)),
           ]);
 
           const latestByPerson = new Map<string, typeof currentSnaps[0]>();
@@ -848,7 +848,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           sql`${trendSnapshots.timestamp} = date_trunc('hour', ${trendSnapshots.timestamp})`,
           eq(trendSnapshots.snapshotOrigin, 'ingest')
         ))
-        .orderBy(desc(trendSnapshots.timestamp))
+        .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id))
         .limit(daysNum * 24); // Max one per hour for requested days
       
       // Transform for graph display
@@ -1150,7 +1150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           eq(trendSnapshots.snapshotOrigin, 'ingest'),
           sql`${trendSnapshots.timestamp} = date_trunc('hour', ${trendSnapshots.timestamp})`
         ))
-        .orderBy(desc(trendSnapshots.timestamp))
+        .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id))
         .limit(2);
 
       if (latestSnapshots.length === 0) {
@@ -1221,7 +1221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             eq(trendSnapshots.snapshotOrigin, 'ingest'),
             sql`${trendSnapshots.timestamp} BETWEEN NOW() - INTERVAL '28 hours' AND NOW() - INTERVAL '20 hours'`,
           ))
-          .orderBy(desc(trendSnapshots.timestamp))
+          .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id))
           .limit(1);
 
         if (snap24hAgo) {
@@ -4657,7 +4657,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       
       const snapshots = await db.select().from(trendSnapshots)
         .where(eq(trendSnapshots.personId, personId))
-        .orderBy(desc(trendSnapshots.timestamp))
+        .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id))
         .limit(10);
       
       const healthSnapshot = getCurrentHealthSnapshot();
@@ -5283,7 +5283,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           sql`${trendSnapshots.timestamp} = date_trunc('hour', ${trendSnapshots.timestamp})`,
           eq(trendSnapshots.snapshotOrigin, 'ingest')
         ))
-        .orderBy(desc(trendSnapshots.timestamp))
+        .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id))
         .limit(2);
       
       const latestSnapshot = recentSnapshots[0];

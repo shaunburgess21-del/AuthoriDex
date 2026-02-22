@@ -181,7 +181,7 @@ async function getHistoricalSnapshot(personId: string, hoursAgo: number): Promis
       eq(trendSnapshots.personId, personId),
       sql`${trendSnapshots.timestamp} <= ${cutoffTime}`
     ))
-    .orderBy(desc(trendSnapshots.timestamp))
+    .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id))
     .limit(1);
   
   return snapshot?.trendScore || null;

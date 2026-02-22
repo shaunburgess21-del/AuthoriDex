@@ -174,7 +174,7 @@ export async function runEntityDiagnostic(personId: string): Promise<EntityDiagn
         sql`timestamp = date_trunc('hour', timestamp)`
       )
     )
-    .orderBy(desc(trendSnapshots.timestamp))
+    .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id))
     .limit(1);
 
   const snapshot = latestSnapshot[0];
@@ -205,7 +205,7 @@ export async function runEntityDiagnostic(personId: string): Promise<EntityDiagn
         FROM trend_snapshots
         WHERE snapshot_origin = 'ingest'
           AND timestamp = date_trunc('hour', timestamp)
-        ORDER BY person_id, timestamp DESC
+        ORDER BY person_id, timestamp DESC, id DESC
       ) latest
       WHERE fame_index > ${snapshot.fameIndex}
     `);

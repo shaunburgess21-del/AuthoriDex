@@ -791,7 +791,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
           gte(trendSnapshots.timestamp, new Date(now.getTime() - streakLookbackMs)),
           eq(trendSnapshots.snapshotOrigin, 'ingest'),
         )
-      ).orderBy(desc(trendSnapshots.timestamp));
+      ).orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id));
 
       const streakMap = new Map<string, number>();
       const snapsByPerson = new Map<string, Array<{ newsCount: number | null; diagnostics: any; timestamp: Date }>>();
@@ -1754,6 +1754,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
           serperCallsAttempted: ss.callsAttempted,
           serperRetriesUsed: ss.retriesUsed,
           serperRetryRate: ss.callsAttempted > 0 ? `${((ss.retriesUsed / ss.callsAttempted) * 100).toFixed(1)}%` : "0%",
+          serperFinalFailures: ss.finalFailures,
           serperTimeoutCount: ss.timeoutCount,
           softTimeoutPeople: softTimeoutPeopleCount,
           peopleProcessed: processed,
@@ -1981,7 +1982,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
 export async function getLastIngestionTime(): Promise<Date | null> {
   const lastSnapshot = await db.query.trendSnapshots.findFirst({
     where: eq(trendSnapshots.snapshotOrigin, 'ingest'),
-    orderBy: [desc(trendSnapshots.timestamp)],
+    orderBy: [desc(trendSnapshots.timestamp), desc(trendSnapshots.id)],
   });
 
   return lastSnapshot?.timestamp || null;

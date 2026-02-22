@@ -12,13 +12,15 @@ const SERPER_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 let _serperRetryCount = 0;
 let _serperTimeoutCount = 0;
 let _serperCallsAttempted = 0;
+let _serperFinalFailures = 0;
 export function getSerperRunStats() {
-  return { retriesUsed: _serperRetryCount, timeoutCount: _serperTimeoutCount, callsAttempted: _serperCallsAttempted };
+  return { retriesUsed: _serperRetryCount, timeoutCount: _serperTimeoutCount, callsAttempted: _serperCallsAttempted, finalFailures: _serperFinalFailures };
 }
 export function resetSerperRunStats() {
   _serperRetryCount = 0;
   _serperTimeoutCount = 0;
   _serperCallsAttempted = 0;
+  _serperFinalFailures = 0;
 }
 
 async function serperFetch(url: string, options: RequestInit): Promise<Response> {
@@ -48,6 +50,7 @@ async function serperFetch(url: string, options: RequestInit): Promise<Response>
         await new Promise(r => setTimeout(r, jitter));
         continue;
       }
+      _serperFinalFailures++;
       throw err;
     }
   }
