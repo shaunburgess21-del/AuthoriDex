@@ -6513,6 +6513,17 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
 
   app.get("/api/opinion-polls", async (req, res) => {
     try {
+      const userId = (() => {
+        try {
+          const authHeader = req.headers.authorization;
+          if (!authHeader?.startsWith('Bearer ')) return null;
+          const token = authHeader.split(' ')[1];
+          const jwt = require('jsonwebtoken');
+          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'authoridex-secret-key');
+          return (decoded as any).userId || null;
+        } catch { return null; }
+      })();
+
       const polls = await db
         .select()
         .from(opinionPolls)
@@ -6534,36 +6545,51 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           .from(opinionPollOptions)
           .leftJoin(trackedPeople, eq(opinionPollOptions.personId, trackedPeople.id))
           .where(eq(opinionPollOptions.pollId, poll.id))
-          .orderBy(asc(opinionPollOptions.orderIndex))
-          .limit(3);
+          .orderBy(asc(opinionPollOptions.orderIndex));
 
-        const [totalOptions] = await db
-          .select({ cnt: count() })
-          .from(opinionPollOptions)
-          .where(eq(opinionPollOptions.pollId, poll.id));
-
-        const [realVoteCount] = await db
-          .select({ cnt: count() })
+        const voteCounts = await db
+          .select({
+            optionId: opinionPollVotes.optionId,
+            cnt: count(),
+          })
           .from(opinionPollVotes)
-          .where(eq(opinionPollVotes.pollId, poll.id));
+          .where(eq(opinionPollVotes.pollId, poll.id))
+          .groupBy(opinionPollVotes.optionId);
 
-        const allOptions = await db
-          .select({ seedCount: opinionPollOptions.seedCount })
-          .from(opinionPollOptions)
-          .where(eq(opinionPollOptions.pollId, poll.id));
-        const totalSeedVotes = allOptions.reduce((sum, o) => sum + (o.seedCount || 0), 0);
+        const voteMap = new Map(voteCounts.map(v => [v.optionId, Number(v.cnt)]));
+
+        const optionsWithVotes = options.map(o => {
+          const realVotes = voteMap.get(o.id) || 0;
+          const seedVotes = o.seedCount || 0;
+          const displayVotes = realVotes + seedVotes;
+          return { ...o, displayVotes };
+        });
+        const totalDisplayVotes = optionsWithVotes.reduce((sum, o) => sum + o.displayVotes, 0);
+
+        let userVote: string | null = null;
+        if (userId) {
+          const [uv] = await db
+            .select({ optionId: opinionPollVotes.optionId })
+            .from(opinionPollVotes)
+            .where(and(eq(opinionPollVotes.pollId, poll.id), eq(opinionPollVotes.userId, userId)))
+            .limit(1);
+          if (uv) userVote = uv.optionId;
+        }
 
         return {
           ...poll,
-          options: options.map(o => ({
+          options: optionsWithVotes.map(o => ({
             id: o.id,
             name: o.name,
             imageUrl: o.personAvatar || o.imageUrl || null,
             personId: o.personId,
             personName: o.personName || null,
+            votes: o.displayVotes,
+            percent: totalDisplayVotes > 0 ? Math.round((o.displayVotes / totalDisplayVotes) * 100) : 0,
           })),
-          totalOptions: Number(totalOptions?.cnt || 0),
-          totalVotes: Number(realVoteCount?.cnt || 0) + totalSeedVotes,
+          totalOptions: options.length,
+          totalVotes: totalDisplayVotes,
+          userVote,
         };
       }));
 

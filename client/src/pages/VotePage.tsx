@@ -978,6 +978,161 @@ function DiscourseCard({
   );
 }
 
+function OpinionPollCard({
+  poll,
+  onVote,
+}: {
+  poll: any;
+  onVote: (pollSlug: string, optionId: string) => void;
+}) {
+  const [voted, setVoted] = useState<string | null>(poll.userVote || null);
+  const options = poll.options || [];
+  const visibleOptions = options.slice(0, 4);
+  const remainingCount = options.length - 4;
+
+  const handleVote = (optionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!voted) {
+      setVoted(optionId);
+      onVote(poll.slug, optionId);
+    }
+  };
+
+  const handleChangeVote = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setVoted(null);
+  };
+
+  const hasVoted = !!voted;
+  const totalVotes = poll.totalVotes || 0;
+
+  return (
+    <div className="relative group h-full">
+      <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100" />
+      <Card
+        className="relative pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col border-slate-700/50 group-hover:shadow-lg group-hover:shadow-cyan-500/20"
+        data-testid={`opinion-poll-card-${poll.id}`}
+      >
+        <div className="absolute top-3 right-3">
+          <CategoryPill category={poll.category} data-testid={`badge-opinion-category-${poll.id}`} />
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+          <Users className="h-3.5 w-3.5 text-cyan-400" />
+          <span>{totalVotes.toLocaleString('en-US')} votes</span>
+        </div>
+        <div className="flex items-start gap-3 mb-3">
+          {poll.imageUrl ? (
+            <div className="h-12 w-12 rounded-md overflow-hidden shrink-0 border border-cyan-500/30 bg-slate-800">
+              <img
+                src={poll.imageUrl}
+                alt={poll.title}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="h-12 w-12 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0 border border-slate-600/30">
+              <ListChecks className="h-5 w-5 text-slate-400" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <Link href={`/vote/opinion-polls/${poll.slug}`} data-testid={`link-opinion-detail-${poll.id}`}>
+              <h3 className="font-serif font-bold text-lg leading-tight hover:text-cyan-400 transition-colors cursor-pointer">{poll.title}</h3>
+            </Link>
+          </div>
+        </div>
+        {poll.description && (
+          <p className="text-sm text-muted-foreground mb-4 flex-grow line-clamp-1">{poll.description}</p>
+        )}
+        {!poll.description && <div className="flex-grow" />}
+
+        {!hasVoted ? (
+          <div className="space-y-2">
+            {visibleOptions.map((option: any) => (
+              <button
+                key={option.id}
+                onClick={(e) => handleVote(option.id, e)}
+                className="w-full flex items-center gap-2.5 p-2.5 rounded-md border border-border/50 bg-muted/30 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10"
+                data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
+              >
+                {option.imageUrl ? (
+                  <img src={option.imageUrl} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" />
+                ) : (
+                  <div className="w-6 h-6 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
+                    <ListChecks className="h-3 w-3 text-cyan-400" />
+                  </div>
+                )}
+                <span className="text-sm truncate">{option.name}</span>
+              </button>
+            ))}
+            {remainingCount > 0 && (
+              <Link href={`/vote/opinion-polls/${poll.slug}`}>
+                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-1" data-testid={`link-more-options-${poll.id}`}>
+                  +{remainingCount} more options
+                </p>
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {visibleOptions.map((option: any) => {
+              const isSelected = voted === option.id;
+              const percent = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
+              return (
+                <div
+                  key={option.id}
+                  className={`relative p-2.5 rounded-md border overflow-hidden ${
+                    isSelected ? 'border-cyan-500/50 bg-cyan-500/10' : 'border-border/30 bg-muted/20'
+                  }`}
+                  data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
+                >
+                  <div
+                    className="absolute inset-0 bg-cyan-500/10 transition-all duration-500"
+                    style={{ width: `${percent}%` }}
+                  />
+                  <div className="relative flex items-center gap-2.5">
+                    {option.imageUrl ? (
+                      <img src={option.imageUrl} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" />
+                    ) : (
+                      <div className="w-6 h-6 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
+                        <ListChecks className="h-3 w-3 text-cyan-400" />
+                      </div>
+                    )}
+                    <span className="text-sm truncate flex-1">{option.name}</span>
+                    <span className="text-xs font-semibold text-muted-foreground shrink-0">{percent}%</span>
+                  </div>
+                </div>
+              );
+            })}
+            {remainingCount > 0 && (
+              <Link href={`/vote/opinion-polls/${poll.slug}`}>
+                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-1" data-testid={`link-more-options-${poll.id}`}>
+                  +{remainingCount} more options
+                </p>
+              </Link>
+            )}
+            <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Zap className="h-3.5 w-3.5" />
+                <span>{totalVotes.toLocaleString('en-US')} total votes</span>
+              </div>
+              <div className="px-2 py-0.5 rounded-full text-xs font-medium border bg-cyan-500/10 border-cyan-500/40 text-cyan-400" data-testid={`badge-voted-opinion-${poll.id}`}>
+                You voted
+              </div>
+            </div>
+            <button
+              onClick={handleChangeVote}
+              className="text-xs text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline text-center w-full"
+              data-testid={`button-change-vote-opinion-${poll.id}`}
+            >
+              Change your vote
+            </button>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function CarouselSection({ 
   title, 
   subtitle, 
@@ -1703,6 +1858,7 @@ export default function VotePage() {
 
   const [opinionPollsCategoryFilter, setOpinionPollsCategoryFilter] = useState<FilterCategory>("All");
   const [opinionPollsSearchQuery, setOpinionPollsSearchQuery] = useState("");
+  const [opinionPollsOverlayOpen, setOpinionPollsOverlayOpen] = useState(false);
   const [opinionSuggestOpen, setOpinionSuggestOpen] = useState(false);
   const [opinionSuggestTitle, setOpinionSuggestTitle] = useState("");
   const [opinionSuggestDescription, setOpinionSuggestDescription] = useState("");
@@ -1886,13 +2042,13 @@ export default function VotePage() {
   }).sort((a: any, b: any) => matchupsCategoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
 
   useEffect(() => {
-    if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen || matchupsOverlayOpen || inductionSuggestOpen || matchupSuggestOpen || valuePerceptionOverlayOpen) {
+    if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen || matchupsOverlayOpen || inductionSuggestOpen || matchupSuggestOpen || valuePerceptionOverlayOpen || opinionPollsOverlayOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen, matchupsOverlayOpen, inductionSuggestOpen, matchupSuggestOpen, valuePerceptionOverlayOpen]);
+  }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen, matchupsOverlayOpen, inductionSuggestOpen, matchupSuggestOpen, valuePerceptionOverlayOpen, opinionPollsOverlayOpen]);
 
   const addXP = (amount: number, event?: React.MouseEvent) => {
     setXp(prev => prev + amount);
@@ -2464,63 +2620,18 @@ export default function VotePage() {
           ) : filteredOpinionPolls.length > 0 ? (
             <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="section-opinion-polls">
               {filteredOpinionPolls.map((poll: any) => (
-                <Card
+                <OpinionPollCard
                   key={poll.id}
-                  className="hover-elevate cursor-pointer overflow-visible"
-                  onClick={() => window.location.href = `/vote/opinion-polls/${poll.slug}`}
-                  data-testid={`opinion-poll-card-${poll.id}`}
-                >
-                  <div className="p-4">
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <div className="flex-1">
-                        <Badge variant="outline" className="text-xs mb-2">{poll.category}</Badge>
-                        <h3 className="font-semibold text-sm leading-tight line-clamp-2">{poll.title}</h3>
-                        {poll.description && (
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{poll.description}</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      {(poll.options || []).slice(0, 3).map((option: any, idx: number) => (
-                        <div
-                          key={option.id}
-                          className="flex items-center gap-2 p-2 rounded-md border border-border/50 bg-muted/30"
-                          data-testid={`opinion-poll-option-${poll.id}-${idx}`}
-                        >
-                          {option.imageUrl ? (
-                            <img src={option.imageUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
-                          ) : (
-                            <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0">
-                              <span className="text-xs font-medium text-cyan-400">{idx + 1}</span>
-                            </div>
-                          )}
-                          <span className="text-sm truncate">{option.name}</span>
-                        </div>
-                      ))}
-                      {poll.totalOptions > 3 && (
-                        <p className="text-xs text-muted-foreground text-center">
-                          +{poll.totalOptions - 3} more options
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/30">
-                      <span className="text-xs text-muted-foreground">
-                        {(poll.totalVotes || 0).toLocaleString()} votes
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-cyan-400 text-xs"
-                        data-testid={`button-vote-opinion-poll-${poll.id}`}
-                      >
-                        Vote
-                        <ChevronRight className="h-3 w-3 ml-1" />
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
+                  poll={poll}
+                  onVote={async (pollSlug, optionId) => {
+                    try {
+                      await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                      queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
+                    } catch (err: any) {
+                      console.error("Opinion poll vote error:", err);
+                    }
+                  }}
+                />
               ))}
             </CardSection>
           ) : (
@@ -2529,6 +2640,18 @@ export default function VotePage() {
               <p>No opinion polls available yet</p>
             </div>
           )}
+
+          <div className="text-center mt-6">
+            <Button
+              variant="ghost"
+              onClick={() => setOpinionPollsOverlayOpen(true)}
+              className="text-cyan-400 hover:text-cyan-300"
+              data-testid="button-view-all-opinion-polls"
+            >
+              View all opinion polls
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
         </section>
         )}
 
@@ -3894,6 +4017,85 @@ export default function VotePage() {
               {filteredMatchups.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
                   No matchups match your filter criteria.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {opinionPollsOverlayOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
+          >
+            <div className="flex items-center justify-between p-4 border-b border-cyan-500/20">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+                  <ListChecks className="h-4 w-4 text-cyan-400" />
+                </div>
+                <h2 className="text-xl font-serif font-bold">All Opinion Polls</h2>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setOpinionPollsOverlayOpen(false)}
+                data-testid="button-close-opinion-polls-overlay"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            <div className="sticky top-0 z-10 p-4 border-b border-cyan-500/10 bg-background/95 backdrop-blur-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                {getFilterCategories(true).map((cat) => (
+                  <FilterChip
+                    key={cat}
+                    category={cat}
+                    isActive={opinionPollsCategoryFilter === cat}
+                    onClick={() => setOpinionPollsCategoryFilter(cat as FilterCategory)}
+                    testIdPrefix="filter-overlay-opinion"
+                    user={user}
+                    onAuthRequired={handleAuthRequired}
+                  />
+                ))}
+                <div className="ml-auto">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search polls..."
+                      value={opinionPollsSearchQuery}
+                      onChange={(e) => setOpinionPollsSearchQuery(e.target.value)}
+                      className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
+                      data-testid="input-overlay-opinion-search"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
+                {filteredOpinionPolls.map((poll: any) => (
+                  <OpinionPollCard
+                    key={poll.id}
+                    poll={poll}
+                    onVote={async (pollSlug, optionId) => {
+                      try {
+                        await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                        queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
+                      } catch (err: any) {
+                        console.error("Opinion poll vote error:", err);
+                      }
+                    }}
+                  />
+                ))}
+              </div>
+              {filteredOpinionPolls.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground">
+                  No opinion polls match your filter criteria.
                 </div>
               )}
             </div>
