@@ -3954,7 +3954,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   // ==================== PROFILE ENDPOINTS ====================
   
   // Admin emails that get special privileges
-  const ADMIN_EMAILS = ["shaun.burgess21@gmail.com"];
+  const ADMIN_EMAILS = ["shaun.burgess21@gmail.com", "andrewdburgess001@gmail.com"];
   
   // Sync profile after Supabase auth - creates profile if doesn't exist
   // Implements admin backdoor for specific emails
