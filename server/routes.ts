@@ -9043,10 +9043,13 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       .select()
       .from(celebrityImages)
       .where(eq(celebrityImages.personId, personId))
-      .orderBy(desc(celebrityImages.isPrimary), desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`))
+      .orderBy(desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`))
       .limit(1);
 
     if (topImage) {
+      console.log(`[AvatarSync] Person ${personId}: winning image ${topImage.id} (votesUp=${topImage.votesUp}, votesDown=${topImage.votesDown}, url=${topImage.imageUrl.substring(0, 60)}...)`);
+      await db.update(celebrityImages).set({ isPrimary: false }).where(eq(celebrityImages.personId, personId));
+      await db.update(celebrityImages).set({ isPrimary: true }).where(eq(celebrityImages.id, topImage.id));
       await db.update(trackedPeople).set({ avatar: topImage.imageUrl }).where(eq(trackedPeople.id, personId));
       await db.update(trendingPeople).set({ avatar: topImage.imageUrl }).where(eq(trendingPeople.id, personId));
     }

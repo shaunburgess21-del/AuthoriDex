@@ -68,7 +68,11 @@ export function AdminCurateProfile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/curate-profile', editingCard?.id, 'images'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/curate-profile'] });
-      toast({ title: "Seed votes updated" });
+      queryClient.invalidateQueries({ queryKey: ['/api/trending'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/tracked-people'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/person'] });
+      toast({ title: "Seed votes updated & avatar synced" });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to update votes", variant: "destructive" });
