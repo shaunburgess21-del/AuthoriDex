@@ -9,6 +9,16 @@ const SERPER_REQUEST_TIMEOUT_MS = 20_000;
 
 const SERPER_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
+let _serperRetryCount = 0;
+let _serperTimeoutCount = 0;
+export function getSerperRunStats() {
+  return { retriesUsed: _serperRetryCount, timeoutCount: _serperTimeoutCount };
+}
+export function resetSerperRunStats() {
+  _serperRetryCount = 0;
+  _serperTimeoutCount = 0;
+}
+
 async function serperFetch(url: string, options: RequestInit): Promise<Response> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const controller = new AbortController();
@@ -17,6 +27,7 @@ async function serperFetch(url: string, options: RequestInit): Promise<Response>
       const response = await fetch(url, { ...options, signal: controller.signal });
       clearTimeout(timeoutId);
       if (attempt === 0 && SERPER_RETRYABLE_STATUS.has(response.status)) {
+        _serperRetryCount++;
         const jitter = 300 + Math.random() * 600;
         console.warn(`[Serper] Got ${response.status}, retrying in ${jitter.toFixed(0)}ms`);
         await new Promise(r => setTimeout(r, jitter));
@@ -26,6 +37,8 @@ async function serperFetch(url: string, options: RequestInit): Promise<Response>
     } catch (err: any) {
       clearTimeout(timeoutId);
       if (attempt === 0) {
+        _serperRetryCount++;
+        if (err?.name === "AbortError") _serperTimeoutCount++;
         const jitter = 300 + Math.random() * 600;
         const reason = err?.name === "AbortError" ? "timeout" : err?.message ?? "network error";
         console.warn(`[Serper] Request failed (${reason}), retrying in ${jitter.toFixed(0)}ms`);

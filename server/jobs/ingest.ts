@@ -4,7 +4,7 @@ import { desc, eq, sql, gte, and, inArray } from "drizzle-orm";
 import { getBaselineDiagnostics } from "../utils/baseline";
 import { fetchBatchWikiPageviews } from "../providers/wiki";
 import { fetchBatchGdeltNews, GdeltBatchOptions, GdeltBatchStats } from "../providers/gdelt";
-import { fetchSerperBatch, fetchSerperNewsBatch } from "../providers/serper";
+import { fetchSerperBatch, fetchSerperNewsBatch, getSerperRunStats, resetSerperRunStats } from "../providers/serper";
 import { fetchMediastackBatch, isMediastackConfigured, MediastackBatchStats, shouldRefreshMediastack } from "../providers/mediastack";
 import { computeTrendScore } from "../scoring/trendScore";
 import { refreshSourceStats } from "../scoring/sourceStats";
@@ -373,6 +373,8 @@ export async function runDataIngestion(): Promise<IngestResult> {
   const startTime = Date.now();
   let processed = 0;
   let errors = 0;
+  let softTimeoutPeopleCount = 0;
+  resetSerperRunStats();
   const sourceTimings: Record<string, number> = {};
   const sourceStatuses: Record<string, string> = {};
 
@@ -1483,6 +1485,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
       } catch (error: any) {
         const isTimeout = error?.message?.includes("Per-person timeout");
         if (isTimeout) {
+          softTimeoutPeopleCount++;
           console.warn(`[Ingest] SOFT TIMEOUT for ${person.name}: skipped after 30s (underlying DB writes may still complete). Continuing with next person.`);
         } else {
           console.error(`[Ingest] Error processing ${person.name}:`, error);
@@ -1744,6 +1747,13 @@ export async function runDataIngestion(): Promise<IngestResult> {
           patched: perPersonFallbackStats.patchedPeople,
           topTriggered: perPersonFallbackStats.topTriggered.slice(0, 5),
         },
+      },
+      reliability: {
+        serperRetriesUsed: getSerperRunStats().retriesUsed,
+        serperTimeoutCount: getSerperRunStats().timeoutCount,
+        softTimeoutPeople: softTimeoutPeopleCount,
+        peopleProcessed: processed,
+        peopleTotal: people.length,
       },
       coverage: {
         newsPct: `${newsCoveragePctActual.toFixed(0)}%`,
