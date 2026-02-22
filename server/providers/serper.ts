@@ -11,15 +11,18 @@ const SERPER_RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
 let _serperRetryCount = 0;
 let _serperTimeoutCount = 0;
+let _serperCallsAttempted = 0;
 export function getSerperRunStats() {
-  return { retriesUsed: _serperRetryCount, timeoutCount: _serperTimeoutCount };
+  return { retriesUsed: _serperRetryCount, timeoutCount: _serperTimeoutCount, callsAttempted: _serperCallsAttempted };
 }
 export function resetSerperRunStats() {
   _serperRetryCount = 0;
   _serperTimeoutCount = 0;
+  _serperCallsAttempted = 0;
 }
 
 async function serperFetch(url: string, options: RequestInit): Promise<Response> {
+  _serperCallsAttempted++;
   for (let attempt = 0; attempt < 2; attempt++) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), SERPER_REQUEST_TIMEOUT_MS);

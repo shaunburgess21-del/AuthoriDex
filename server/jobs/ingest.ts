@@ -1748,13 +1748,18 @@ export async function runDataIngestion(): Promise<IngestResult> {
           topTriggered: perPersonFallbackStats.topTriggered.slice(0, 5),
         },
       },
-      reliability: {
-        serperRetriesUsed: getSerperRunStats().retriesUsed,
-        serperTimeoutCount: getSerperRunStats().timeoutCount,
-        softTimeoutPeople: softTimeoutPeopleCount,
-        peopleProcessed: processed,
-        peopleTotal: people.length,
-      },
+      reliability: (() => {
+        const ss = getSerperRunStats();
+        return {
+          serperCallsAttempted: ss.callsAttempted,
+          serperRetriesUsed: ss.retriesUsed,
+          serperRetryRate: ss.callsAttempted > 0 ? `${((ss.retriesUsed / ss.callsAttempted) * 100).toFixed(1)}%` : "0%",
+          serperTimeoutCount: ss.timeoutCount,
+          softTimeoutPeople: softTimeoutPeopleCount,
+          peopleProcessed: processed,
+          peopleTotal: people.length,
+        };
+      })(),
       coverage: {
         newsPct: `${newsCoveragePctActual.toFixed(0)}%`,
         searchPct: `${searchCoveragePctActual.toFixed(0)}%`,
