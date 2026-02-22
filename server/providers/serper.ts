@@ -5,6 +5,18 @@ import pLimit from "p-limit";
 
 const SERPER_API_KEY = process.env.SERPER_API_KEY;
 const SERPER_BASE_URL = "https://google.serper.dev/search";
+const SERPER_REQUEST_TIMEOUT_MS = 20_000;
+
+async function serperFetch(url: string, options: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), SERPER_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 async function getCachedResponse(cacheKey: string): Promise<{ responseData: string; fetchedAt: Date } | null> {
   const cached = await db.query.apiCache.findFirst({
@@ -94,7 +106,7 @@ export async function fetchSerperData(name: string, searchQueryOverride?: string
       .where(eq(apiCache.cacheKey, cacheKey))
       .limit(1);
 
-    const response = await fetch(SERPER_BASE_URL, {
+    const response = await serperFetch(SERPER_BASE_URL, {
       method: "POST",
       headers: {
         "X-API-KEY": SERPER_API_KEY,
@@ -245,7 +257,7 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
       return JSON.parse(cached.responseData);
     }
 
-    const response24h = await fetch("https://google.serper.dev/news", {
+    const response24h = await serperFetch("https://google.serper.dev/news", {
       method: "POST",
       headers: {
         "X-API-KEY": SERPER_API_KEY,
@@ -262,7 +274,7 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
 
     await new Promise(r => setTimeout(r, 300));
 
-    const response7d = await fetch("https://google.serper.dev/news", {
+    const response7d = await serperFetch("https://google.serper.dev/news", {
       method: "POST",
       headers: {
         "X-API-KEY": SERPER_API_KEY,
@@ -352,7 +364,7 @@ export async function fetchWebSearchContext(name: string): Promise<WebSearchCont
 
   try {
     // Search for recent news about the person
-    const newsResponse = await fetch("https://google.serper.dev/news", {
+    const newsResponse = await serperFetch("https://google.serper.dev/news", {
       method: "POST",
       headers: {
         "X-API-KEY": SERPER_API_KEY,
@@ -368,7 +380,7 @@ export async function fetchWebSearchContext(name: string): Promise<WebSearchCont
     });
 
     // Also search for general info
-    const searchResponse = await fetch(SERPER_BASE_URL, {
+    const searchResponse = await serperFetch(SERPER_BASE_URL, {
       method: "POST",
       headers: {
         "X-API-KEY": SERPER_API_KEY,
@@ -440,7 +452,7 @@ export async function fetchTrendingNewsContext(name: string): Promise<TrendingNe
     }
 
     // Search for recent news about the person (last week)
-    const response = await fetch("https://google.serper.dev/news", {
+    const response = await serperFetch("https://google.serper.dev/news", {
       method: "POST",
       headers: {
         "X-API-KEY": SERPER_API_KEY,
@@ -505,7 +517,7 @@ export async function fetchNetWorthContext(name: string): Promise<NetWorthContex
   try {
     // Search specifically for net worth with current year
     const currentYear = new Date().getFullYear();
-    const response = await fetch(SERPER_BASE_URL, {
+    const response = await serperFetch(SERPER_BASE_URL, {
       method: "POST",
       headers: {
         "X-API-KEY": SERPER_API_KEY,
