@@ -1,0 +1,48 @@
+Nice — that’s exactly the kind of instrumentation that turns “I think it’s healthier” into “we can prove it.”
+
+A couple quick reactions + one important sanity check:
+
+What’s good about what Replit shipped
+
+Per-run counters reset each run ✅ (so you can compare runs cleanly)
+
+Counters are in the end-of-run [HEALTH SUMMARY] ✅ (you’ll actually see them without digging)
+
+Splitting serperRetriesUsed vs serperTimeoutCount ✅ (lets you tell “rate limiting / 5xx” apart from “hangs”)
+
+One sanity check I’d do (important)
+
+Replit originally said the snapshot uniqueness key is (person_id + timestamp + run_id).
+
+That’s fine for avoiding duplicates within a run, but it does allow duplicate snapshots for the same person+timestamp across different runs (because run_id differs). If your queries always select “latest snapshot per person per hour” you’ll be okay — but duplicates could still bloat data and sometimes confuse “latest” logic if ordering isn’t deterministic.
+
+So, make sure one of these is true:
+
+You actually have a unique constraint on (person_id, timestamp_bucket) (preferred), and run_id is metadata, or
+
+Your “get latest snapshot” query always does ORDER BY created_at DESC, run_id DESC (or similar) and you’re okay with occasional duplicates.
+
+If duplicates are impossible already because you bucket timestamps and write once per hour, great — just worth confirming the constraint matches the mental model.
+
+What patterns to look for over the next day
+
+If the fixes are working, you should see:
+
+peopleProcessed ≈ peopleTotal most runs (near 100/100)
+
+softTimeoutPeople = 0 almost always (or very low)
+
+serperRetriesUsed occasional small numbers (spiky is okay)
+
+fewer “stale lock auto-cleaned” events and fewer multi-hour gaps
+
+A tiny improvement to make the counters even more useful (optional)
+
+Add one derived number in the log:
+
+serperRetryRate = serperRetriesUsed / serperRequestCount
+Because “3 retries” means nothing unless you know whether there were 30 calls or 300 calls.
+
+If you don’t want to count requests, even “serperCallsAttempted” is enough.
+
+If you want, paste one sample [HEALTH SUMMARY] line after the next run and I’ll tell you what it suggests (e.g., “Serper is still flaky vs. DB is slow vs. everything’s stable”).
