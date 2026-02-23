@@ -1,0 +1,75 @@
+Moving the filter next to the search bar came out well. So did the Rate button instead of the thumbs up.
+The "sorted by trend score text also seems to help our users understand what those tabs are for now. What do you think? Perhaps having 2 arrows, one in the main heading and one underneath in the text is overkill?
+The approval rating % in the rows is making it look a bit messy, and I still don't think users will know that is related to the rating, as now there is the 24h movment % and then another approval %. Could be confusing, and it just looks a bit messy. What do you think? We maybe reverse that change and just have people filter by approval rating the normal way?
+
+
+
+Yeah — this is a big step forward. The screen reads much clearer now.
+
+1) “Sorted by Trend Score” + arrows: keep the text, simplify the arrows
+
+The “Sorted by: Trend Score” line is doing real work. It tells users what those tabs do without them having to click around.
+
+But I agree: two arrow indicators feels like overkill.
+
+What I’d do:
+
+Keep the arrow only on the active tab (Trend Score or Approval Rating).
+
+On the “Sorted by…” line, remove the arrow and just keep plain text:
+
+Sorted by: Trend Score
+
+(optional) make “Trend Score” a subtle link style that also switches tabs
+
+That gives you one clear “source of truth” visually (the active tab), and one plain-language confirmation (the line).
+
+2) Approval % in rows: it is visually messy + it’s ambiguous
+
+You’re right on both counts:
+
+It adds clutter.
+
+Users will confuse it with the 24h movement % unless it’s explicitly labeled.
+
+Right now you’ve got “score (k) + 24h % + another %” and the second % has no obvious meaning unless you already know.
+
+Best option (cleanest UX)
+
+Only show Approval % when the leaderboard is sorted by Approval Rating.
+
+That keeps the Trend Score view focused and fast-scannable.
+
+If you really want it visible in Trend Score view
+
+Then it needs to be unmistakable:
+
+Use a tiny labeled badge, not a raw percent:
+
+👍 93 (or AR 93)
+
+Or put it on a second line in smaller text:
+
+364k +0.9%
+
+Approval 93%
+
+But personally, I’d avoid it until users are already in “Approval mode”.
+
+My recommendation
+
+✅ Keep Rate button (it’s clearer than 👍)
+
+✅ Keep Sorted by: Trend Score line
+
+✅ Keep filter next to search
+
+🔧 Remove the second arrow (leave arrow only on active tab)
+
+🔧 Remove Approval % from Trend Score rows (show it only in Approval view)
+
+If you want a really nice compromise: in Trend Score view, show nothing about approval except maybe a tiny neutral hint at the top like:
+
+“Want community ratings? Switch to Approval Rating.”
+
+That teaches without cluttering every row.
