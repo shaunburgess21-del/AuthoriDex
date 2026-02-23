@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
-import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Rocket, Flame } from "lucide-react";
+import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Rocket, Flame, Star } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
@@ -859,7 +859,6 @@ export default function HomePage() {
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <CardTitle className="text-2xl font-serif">Leaderboards</CardTitle>
-                        <FilterDropdown value={category} onChange={setCategory} />
                       </div>
                       <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap" data-testid="text-leaderboard-freshness">
                         <TouchTooltip
@@ -887,13 +886,9 @@ export default function HomePage() {
                     </div>
                   </div>
                   
-                  <div className="flex items-center justify-between gap-2" data-testid="text-mode-microcopy">
-                    <p className="text-[11px] text-muted-foreground/50">
-                      {leaderboardTab === "fame" ? "Ranked by real-world trending data" : "Ranked by community votes"}
-                    </p>
-                  </div>
                 </CardHeader>
-                <div className="sticky top-16 z-30 flex items-center gap-2 border-b border-border px-6 pb-2 pt-2 bg-card/95 backdrop-blur-sm">
+                <div className="sticky top-16 z-30 border-b border-border px-6 pb-2 pt-2 bg-card/95 backdrop-blur-sm">
+                  <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleTabClick("fame")}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
@@ -926,14 +921,23 @@ export default function HomePage() {
                         <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                       )}
                     </button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/50 mt-1.5" data-testid="text-mode-microcopy">
+                    Sorted by: {leaderboardTab === "fame" ? "Trend Score" : "Approval Rating"} {sortDirection === "desc" ? "↓" : "↑"}
+                  </p>
                 </div>
                 <CardContent className="p-0">
                   <div className="px-6 py-4 border-b bg-muted/30">
                     <div className="space-y-3">
-                      <SearchBar 
-                        onSearch={setSearchQuery} 
-                        placeholder="Search by name or category..."
-                      />
+                      <div className="flex items-center gap-2">
+                        <FilterDropdown value={category} onChange={setCategory} />
+                        <div className="flex-1">
+                          <SearchBar 
+                            onSearch={setSearchQuery} 
+                            placeholder="Search..."
+                          />
+                        </div>
+                      </div>
                       {hasActiveFilters && (
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm text-muted-foreground">Active filters:</span>
@@ -992,8 +996,8 @@ export default function HomePage() {
                   {showVoteTip && (
                     <div className="mx-4 sm:mx-6 my-2 px-3 py-2.5 rounded-md bg-primary/5 border border-primary/15 flex items-center justify-between gap-3" data-testid="vote-tip-banner">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <ThumbsUp className="h-3.5 w-3.5 text-primary shrink-0" />
-                        <span>Tap <span className="font-medium text-foreground">the thumbs-up</span> next to any name to cast your vote</span>
+                        <Star className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span>Tap <span className="font-medium text-foreground">Rate</span> next to any name to cast your vote</span>
                       </div>
                       <Button
                         variant="ghost"

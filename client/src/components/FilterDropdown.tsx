@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Filter } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 
 interface FilterDropdownProps {
   value: string;
@@ -16,6 +16,7 @@ interface FilterDropdownProps {
 }
 
 export function FilterDropdown({ value, onChange }: FilterDropdownProps) {
+  const isFiltered = value !== "all";
   const categories = [
     { value: "all", label: "All Categories" },
     { value: "favorites", label: "Favorites" },
@@ -31,12 +32,11 @@ export function FilterDropdown({ value, onChange }: FilterDropdownProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2" data-testid="button-filter">
-          <Filter className="h-4 w-4" />
-          Filter
+        <Button variant="outline" size="icon" className={`shrink-0 ${isFiltered ? "border-primary/50 text-primary" : ""}`} data-testid="button-filter">
+          <SlidersHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48 z-50">
+      <DropdownMenuContent align="start" className="w-48 z-50">
         <DropdownMenuLabel>Category</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={value} onValueChange={onChange}>

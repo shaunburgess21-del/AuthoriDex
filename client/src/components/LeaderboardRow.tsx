@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { useState, useEffect, useRef } from "react";
 import { compactNumber, formatDelta, compactVotes } from "@/lib/formatNumber";
-import { ThumbsUp, Rocket, Zap, TrendingUp, TrendingDown, Flame } from "lucide-react";
+import { ThumbsUp, Star, Rocket, Zap, TrendingUp, TrendingDown, Flame } from "lucide-react";
 
 const SEGMENT_COLORS_5 = [
   '#FF0000',
@@ -241,6 +241,14 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                     {' '}{delta24h}
                   </span>
                 )}
+                {person.approvalPct != null && (
+                  <span className="text-muted-foreground/70">
+                    {' '}&middot;{' '}
+                    <span style={{ color: getApprovalColor(person.approvalPct) }} className="opacity-70">
+                      {Math.round(person.approvalPct)}%
+                    </span>
+                  </span>
+                )}
               </span>
             )}
             {activeTab === "approval" && (
@@ -309,16 +317,17 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             </div>
             <Button
               variant={hasVoted ? "ghost" : "outline"}
-              size="icon"
-              className={`md:hidden no-default-hover-elevate no-default-active-elevate ${hasVoted ? "bg-[#22D3EE]/20 border border-[#22D3EE]/40 text-[#22D3EE] backdrop-blur-sm hover:bg-[#22D3EE]/30" : "hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE]"} ${showVotePulse ? "vote-cta-pulse" : ""}`}
-              aria-label={`Vote for ${person.name}`}
+              size="sm"
+              className={`md:hidden no-default-hover-elevate no-default-active-elevate gap-1 text-xs ${hasVoted ? "bg-[#22D3EE]/20 border border-[#22D3EE]/40 text-[#22D3EE] backdrop-blur-sm hover:bg-[#22D3EE]/30" : "hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE]"} ${showVotePulse ? "vote-cta-pulse" : ""}`}
+              aria-label={`Rate ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onVoteClick?.();
               }}
               data-testid={`button-vote-icon-${person.id}`}
             >
-              <ThumbsUp className="h-4 w-4" />
+              <Star className="h-3.5 w-3.5" />
+              Rate
             </Button>
             <Button
               variant={hasVoted ? "ghost" : "outline"}
@@ -367,16 +376,17 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             </div>
             <Button
               variant={hasVoted ? "ghost" : "outline"}
-              size="icon"
-              className={`md:hidden no-default-hover-elevate no-default-active-elevate ${hasVoted ? "bg-[#22D3EE]/20 border border-[#22D3EE]/40 text-[#22D3EE] backdrop-blur-sm hover:bg-[#22D3EE]/30" : "hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE]"} ${showVotePulse ? "vote-cta-pulse" : ""}`}
-              aria-label={`Vote for ${person.name}`}
+              size="sm"
+              className={`md:hidden no-default-hover-elevate no-default-active-elevate gap-1 text-xs ${hasVoted ? "bg-[#22D3EE]/20 border border-[#22D3EE]/40 text-[#22D3EE] backdrop-blur-sm hover:bg-[#22D3EE]/30" : "hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE]"} ${showVotePulse ? "vote-cta-pulse" : ""}`}
+              aria-label={`Rate ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onVoteClick?.();
               }}
               data-testid={`button-vote-icon-${person.id}`}
             >
-              <ThumbsUp className="h-4 w-4" />
+              <Star className="h-3.5 w-3.5" />
+              Rate
             </Button>
             <Button
               variant={hasVoted ? "ghost" : "outline"}
