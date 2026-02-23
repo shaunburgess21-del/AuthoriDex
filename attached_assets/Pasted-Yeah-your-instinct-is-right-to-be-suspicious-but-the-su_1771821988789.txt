@@ -1,0 +1,145 @@
+Yeah — your instinct is right to be suspicious, but the suspicion should be aimed at “the diagnostics / labeling” more than at “Trump has zero news.”
+
+Because in Replit’s own summary they say news_count is moving (e.g., 133 → 204 → 361). So Trump’s news is not zero. What’s “zero” is news_delta, and possibly some missing instrumentation fields.
+
+Here are the real red flags in Replit’s latest reply (and what I’d do next).
+
+1) The “velocity component percentages” are impossible as written
+
+“News 99.85%, Wiki 100%, Search 24.91%”
+
+Those can’t be normalized percentages of one thing (they sum > 100). That almost certainly means one of these is true:
+
+They’re raw sub-scores mislabeled with “%”
+
+They’re per-source normalized-to-itself metrics (e.g., each scaled 0–100)
+
+They’re weights or multipliers being read from the wrong field
+
+Or there’s a bug in how those values are computed/stored
+
+✅ Ask Replit to show the exact JSON stored in diagnostics for velocity_components_v1 for one Trump snapshot (current and ~24h-ago).
+We need to see field names and ranges, not a paraphrase.
+
+Fix: Whatever is being displayed to users must come from a clearly normalized object like:
+
+{ "search": 12, "news": 71, "wiki": 17, "method": "exact" }
+
+If the stored numbers aren’t in that form, do the normalization in the endpoint before returning it.
+
+2) driversMethod is NULL across all snapshots (but driversModel exists)
+
+That’s a straightforward instrumentation bug:
+
+You added driversModel: "velocity_components_v1"
+
+But you’re not writing driversMethod (or you renamed it and the frontend still checks the old key)
+
+✅ This matters because it’s exactly why you keep getting confusing “Exact/Estimate” behavior and inconsistent UI messaging.
+
+Fix: In ingest, write one consistent set of fields every time:
+
+driversModel
+
+driversMethod (e.g., "exact_velocity_components" or "estimate_signal_change")
+
+driversWindowHours (e.g., 24)
+
+asOf
+
+…and make the frontend read only those.
+
+3) “All EMA holds and governor factors are NULL”
+
+This is the biggest practical issue: you can’t debug the engine if your safety mechanisms are not observable.
+
+Either:
+
+the holds/governors aren’t running for Trump (unlikely), or
+
+you’re not persisting those diagnostics anymore (more likely), or
+
+the code writes them to a different place/key than the dashboard/health-check expects.
+
+✅ Ask Replit: do we see non-null holds/governors for anyone? Or is it NULL across the board?
+If it’s NULL for everyone, it’s a global instrumentation regression.
+
+Fix: Ensure every run writes:
+
+newsEmaHeld, searchEmaHeld, stickyZeroGuard
+
+newsGovernorFactor (or whatever name is current)
+
+and ideally the “inputs” that triggered them (baselineP50, rawCount, etc. — even if only for debug builds)
+
+4) news_delta stuck at 0 while news_count changes
+
+This is not necessarily a product issue if you no longer rely on news_delta for scoring — but it is a code-quality issue if:
+
+any UI/tooltip still uses it (Hot Movers drivers used to)
+
+any health report interprets it
+
+any attribution fallback uses it when velocity components missing
+
+✅ Confirm: is news_delta used anywhere for UI or drivers fallback anymore?
+If yes, fix it. If no, stop surfacing it or stop treating it as meaningful.
+
+Best practice: If you’ve moved to “exact velocity components,” then:
+
+either remove news_delta from anything user-facing,
+
+or compute it correctly from snapshots (like you did for searchDelta).
+
+5) “Trump chart looks flat” may just be chart scaling
+
+Replit says there’s a huge range (245k–371k), but “it looks flat”.
+
+That screams UI chart scaling / smoothing / sampling, not engine failure.
+
+✅ Check:
+
+Are you plotting only the last N points with a compressed y-axis range?
+
+Are you using a smoothing curve that flattens?
+
+Are you snapping to hours and missing midpoints?
+
+Fix: Add an optional toggle in chart:
+
+“Auto scale” vs “Tight scale (show small moves)”
+
+Or show min/max range label on the chart
+
+What I would tell Replit to do next (in order)
+Step 1 — Prove what “velocity components” actually are
+
+Print the raw diagnostics object for two snapshots (current + ~24h).
+
+Confirm ranges and intended meaning.
+
+Step 2 — Normalize and label drivers cleanly
+
+Endpoint returns a single normalized breakdown that sums to 100.
+
+Include method: exact|estimate and windowHours.
+
+Step 3 — Fix missing diagnostics fields
+
+Holds/governors/stickyZeroGuard must not be NULL.
+
+If you intentionally stopped writing them, update health-check to reflect that.
+
+Step 4 — Decide what to do with news_delta
+
+If used anywhere: fix it.
+
+If not used: stop referencing it and remove “suspicious” alerts.
+
+Quick note on your original suspicion
+
+You were right to question it — but the right wording is:
+
+“Trump isn’t ‘zero news.’ The news signal is present, but either (a) the model treats his baseline as steady so the change is small, or (b) our delta/instrumentation fields are misleading or broken.”
+
+That’s a much stronger, more accurate diagnosis.

@@ -1,0 +1,113 @@
+Replit’s conclusion (“likely organic”) could be right — Trump is a high-baseline figure, so your model will naturally look “flat” unless there’s a breakout event — but there are a couple yellow flags in his explanation that are worth validating, because they can also describe a subtle pipeline/math issue.
+
+What sounds plausible
+
+High-baseline people flatten: If someone always has “some” news/search/wiki, then your EMA + governors + clamps will damp small swings. The chart can sit in a tight band and “Score Drivers” can often say no major signal shift.
+
+SearchVolume staying 63–64: That’s believable for a composite score, especially if Serper is stable.
+
+Yellow flags in Replit’s reasoning
+1) “news_count fluctuates… but news_delta has been exactly 0 since Feb 20”
+
+That’s the one I’d double-click.
+
+Depending on your current architecture, news_delta being 0 might be totally irrelevant (if you now compute drivers from score components / stored velocity components), or it might indicate you’re not actually computing/storing the news velocity delta the way you think.
+
+You’ve already discovered earlier that:
+
+Serper delta used to be structurally broken, and you fixed it by deriving from snapshot history.
+
+Mediastack’s own delta field was hardcoded 0, and you were recomputing news behavior elsewhere.
+
+So: “news_delta = 0” could be:
+
+Expected (because delta columns are no longer used for drivers / trend movement), or
+
+A sign the delta path for news is still effectively a no-op, and your stability is coming from other parts of the model.
+
+2) “percentile ranking” mention
+
+If your score engine doesn’t actually do percentile ranking (some engines do, some don’t), that statement may just be hand-wavy. Not a bug — just a sign the explanation wasn’t grounded strictly in the implemented math.
+
+Quick checks I’d ask Replit to run (low effort, high signal)
+A) Confirm which “drivers” method Trump is using
+
+On Trump’s profile, does the Score Drivers card show “Exact (from score components)” or “Estimate (from signal changes)”?
+
+If Exact, then news_delta being 0 is basically irrelevant — the drivers should be coming from stored velocity component sub-scores (current vs ~24h).
+
+If Estimate, then you should validate that the estimate inputs aren’t stale or clamped into meaninglessness.
+
+✅ Ask Replit: “For Trump’s last 5 days, what % of snapshots have driversMethod=Exact vs Estimate?”
+
+B) Validate “flatline” is not just missing ingests / gaps
+
+If ingestion uptime is ~40–50% some days, your chart can look flat because you’re simply sampling fewer points.
+
+✅ Ask: “How many Trump snapshots exist per day for the last 5 days? Any >3h gaps?”
+
+C) Check actual variability (not just visual)
+
+Have Replit compute:
+
+min/median/max Trend Score for Trump in last 5 days
+
+standard deviation (or just max–min range)
+
+same for velocityScore and massScore
+
+If velocityScore is dead flat but massScore moves, or vice versa, that tells you where to look.
+
+✅ Ask: “Trump last 5 days: range/stddev of totalScore, velocityScore, massScore.”
+
+D) News inputs are moving — but are they being governed/held?
+
+For Trump specifically, in the same period:
+
+How often did news EMA hold trigger?
+
+How often did stickyZeroGuard trigger?
+
+What was newsGovernorFactor doing?
+
+If holds are frequent, that can make “no shift” show up a lot.
+
+✅ Ask: “Trump: count of newsEmaHeld, stickyZeroGuard, and governorFactor time series over last 5 days.”
+
+E) If searchVolume is stuck 63–64, confirm it’s not a caching artifact
+
+Serper now has timeouts and retries — good — but you still want to be sure you aren’t repeatedly reusing the same cached Serper response.
+
+✅ Ask: “For Trump: how often were Serper results served from cache vs fresh fetch? Any identical response fingerprints across days?”
+
+What I’d treat as “all good”
+
+If you see:
+
+Regular snapshots (no huge gaps),
+
+Low hold rates for Trump,
+
+Drivers method mostly Exact,
+
+Score range small but nonzero (e.g., a few % max–min over 5 days),
+
+And a stable governor factor,
+
+…then yes, the flatness is likely organic and even desirable.
+
+What I’d treat as “needs work”
+
+If you see:
+
+Drivers stuck on Estimate for top people,
+
+news_delta/search_delta mostly 0 because the underlying delta paths aren’t really feeding anything,
+
+frequent holds suppressing real movement,
+
+or Serper always cached/identical,
+
+…then the “flatness” might be a symptom, not the outcome.
+
+If you want, paste one Trump momentum endpoint response (and ideally the same endpoint for someone volatile like Taylor Swift on a spike day). I’ll tell you immediately whether your drivers + flatline behavior matches the intended math, or if the UI is being fed “stable” because a component is quietly dead.

@@ -1,0 +1,143 @@
+This is a good Replit diagnosis — and the fix plan is exactly the right order.
+
+If you want the “best trend score engine that works” and the UI to feel trustworthy, I’d absolutely tell Replit yes, proceed, with two key constraints:
+
+Do not change the core scoring behavior yet (avoid destabilizing the engine).
+
+Fix observability + display correctness first (so you can see what’s happening and explain it cleanly).
+
+Here’s how I’d frame the work so it doesn’t spiral.
+
+1) Fix Score Drivers normalization (do this first)
+
+Right now the velocity components are 0–100 sub-scores, not shares. That’s fine internally, but the UI must show shares.
+
+Correct approach for display:
+
+Take per-source velocity sub-scores (0–100 each)
+
+Multiply by effective weights (which already include governor degradation etc.)
+
+Convert to % of total contribution:
+
+Example:
+
+news = 99.85 * 0.288
+
+wiki = 100 * 0.274
+
+search = 24.91 * 0.438
+Then normalize: each / (sum) → percent.
+
+Output should be:
+
+breakdownPct: { news: 44, wiki: 38, search: 18 } (sums to 100)
+
+plus raw sub-scores optionally behind an “advanced” toggle
+
+Important UX rule:
+Label it as “Drivers of velocity” or “Drivers of change” (not “total attention”), and keep the clarifier line you already added.
+
+✅ This alone will remove the “99.85/100/24.91” confusion permanently.
+
+2) Restore diagnostics instrumentation (this is a must)
+
+If holds/governors are NULL for everyone, you’re flying blind. Even if the engine is “working”, you can’t prove it or debug it.
+
+Minimum fields to write every snapshot:
+
+newsEmaHeld: boolean
+
+searchEmaHeld: boolean
+
+stickyZeroGuard: boolean
+
+newsGovernorFactor: number (or whichever governor factor is relevant)
+
+asOf timestamp
+
+driversModel and driversMethod
+
+If the mechanisms don’t apply, write false / 1.0 / empty — don’t leave NULL.
+
+✅ Once this is back, your health checks become reliable again.
+
+3) Decide what to do with news_delta (don’t rush this)
+
+Replit’s finding is plausible: high-baseline people can look “unchanged” under EMA logic.
+
+You have two clean options:
+
+Option A (best long-term): Stop using news_delta for anything user-facing
+
+If “Score Drivers” is now based on velocity components + weights, you no longer need news_delta for drivers.
+
+You can still keep news_delta as an internal diagnostic, but don’t let it drive UI messaging.
+
+Option B: Recompute news_delta from snapshot history (like searchDelta)
+
+Only do this if:
+
+you still use news_delta in some ranking/feature, or
+
+you want it as a true comparable “velocity signal”.
+
+If you do it, use the same safety pattern:
+
+denominator floor
+
+clamp
+
+stale guard
+
+✅ My recommendation: Option A now, Option B later if needed.
+
+4) Add driversMethod consistently (small but important)
+
+This is a schema/consistency fix:
+
+If both snapshots in the ~24h window have velocity components → driversMethod = "exact_velocity_components"
+
+Else → driversMethod = "estimate_signal_change"
+
+And only show “Exact” badge if it’s exact for both snapshots in the comparison window (you already landed on this logic — keep it).
+
+What I’d tell Replit to implement (copy/paste to them)
+
+Phase 1 (safe, high impact, no scoring change):
+
+Normalize velocity components → percentages-of-total using effective weights, return breakdownPct that sums to 100
+
+Restore instrumentation fields (no NULLs)
+
+Write driversMethod consistently
+
+Phase 2 (optional):
+4) Either deprecate news_delta from any UI/driver logic or recompute from snapshot history with floor+clamp+stale guard.
+
+Acceptance checks:
+
+For a random sample of 20 people:
+
+Score Drivers shows % summing to 100
+
+“Exact vs Estimate” label matches data availability
+
+Diagnostics fields (holds/governors) are never NULL
+
+For Trump specifically:
+
+It’s okay if drivers are stable — but they should be understandable (“News 44%, Wiki 38%, Search 18%”) and consistent.
+
+One extra UX tip (tiny, but makes “stable” feel intentional)
+
+When it says “No major signal shift,” add a micro-line like:
+
+“Signals are steady at a high baseline.”
+
+That prevents users thinking “broken”.
+
+Bottom line
+
+Yes — tell Replit to go ahead.
+The plan is right. The only trap is letting “fix news_delta for high-baseline people” turn into a full scoring redesign. Don’t. Normalize drivers + restore diagnostics first, and you’ll immediately gain clarity, trust, and debuggability.
