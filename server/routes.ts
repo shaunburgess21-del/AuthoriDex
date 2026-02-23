@@ -4801,6 +4801,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
                   prev.fame_index as prev_fame,
                   RANK() OVER (PARTITION BY hp.current_hour ORDER BY cur.fame_index DESC) as current_rank,
                   RANK() OVER (PARTITION BY hp.current_hour ORDER BY prev.fame_index DESC) as prev_rank,
+                  -- IMPORTANT: cast to numeric to avoid integer division truncating to 0
                   CASE WHEN prev.fame_index > 0 
                     THEN ROUND(((cur.fame_index::numeric - prev.fame_index::numeric) / prev.fame_index::numeric * 100), 4)
                     ELSE NULL END as pct_change
@@ -4815,6 +4816,9 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
                 COUNT(CASE WHEN current_rank != prev_rank THEN 1 END)::int as rank_changes,
                 ROUND(AVG(ABS(current_rank - prev_rank))::numeric, 2) as avg_rank_move,
                 MAX(ABS(current_rank - prev_rank))::int as max_rank_move,
+                ROUND(MIN(pct_change) FILTER (WHERE pct_change IS NOT NULL)::numeric, 4) as min_pct_change,
+                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY pct_change) FILTER (WHERE pct_change IS NOT NULL)::numeric, 4) as median_pct_change,
+                ROUND(MAX(pct_change) FILTER (WHERE pct_change IS NOT NULL)::numeric, 4) as max_pct_change,
                 ROUND(STDDEV(pct_change) FILTER (WHERE pct_change IS NOT NULL)::numeric, 4) as score_volatility_stddev,
                 COUNT(CASE WHEN ABS(pct_change) > 5 THEN 1 END)::int as big_movers_5pct,
                 COUNT(CASE WHEN ABS(pct_change) > 0.5 OR ABS(current_rank - prev_rank) >= 3 THEN 1 END)::int as meaningful_changes,
@@ -4830,6 +4834,9 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
               rankChanges: Number(r.rank_changes),
               avgRankMove: Number(r.avg_rank_move) || 0,
               maxRankMove: Number(r.max_rank_move) || 0,
+              minPctChange: Number(r.min_pct_change) || 0,
+              medianPctChange: Number(r.median_pct_change) || 0,
+              maxPctChange: Number(r.max_pct_change) || 0,
               scoreVolatilityStddev: Number(r.score_volatility_stddev) || 0,
               bigMovers5pct: Number(r.big_movers_5pct) || 0,
               meaningfulChanges: Number(r.meaningful_changes) || 0,
