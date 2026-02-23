@@ -310,7 +310,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             <Button
               variant={hasVoted ? "ghost" : "outline"}
               size="sm"
-              className={`md:hidden no-default-hover-elevate no-default-active-elevate gap-1 text-xs ${hasVoted ? "bg-[#22D3EE]/20 border border-[#22D3EE]/40 text-[#22D3EE] backdrop-blur-sm hover:bg-[#22D3EE]/30" : "hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE]"} ${showVotePulse ? "vote-cta-pulse" : ""}`}
+              className={`no-default-hover-elevate no-default-active-elevate gap-1 text-xs ${hasVoted ? "bg-[#22D3EE]/20 border border-[#22D3EE]/40 text-[#22D3EE] backdrop-blur-sm hover:bg-[#22D3EE]/30" : "hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE]"} ${showVotePulse ? "vote-cta-pulse" : ""}`}
               aria-label={`Rate ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -320,19 +320,6 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             >
               <Star className="h-3.5 w-3.5" />
               Rate
-            </Button>
-            <Button
-              variant={hasVoted ? "ghost" : "outline"}
-              size="icon"
-              className={`hidden md:inline-flex no-default-hover-elevate no-default-active-elevate ${hasVoted ? "bg-[#22D3EE]/20 border border-[#22D3EE]/40 text-[#22D3EE] backdrop-blur-sm hover:bg-[#22D3EE]/30" : "hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE]"} ${showVotePulse ? "vote-cta-pulse" : ""}`}
-              aria-label={`Vote for ${person.name}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onVoteClick?.();
-              }}
-              data-testid={`button-expand-${person.id}`}
-            >
-              <ThumbsUp className="h-4 w-4" />
             </Button>
           </>
         )}
@@ -369,7 +356,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             <Button
               variant={hasVoted ? "ghost" : "outline"}
               size="sm"
-              className={`md:hidden no-default-hover-elevate no-default-active-elevate gap-1 text-xs ${hasVoted ? "bg-[#22D3EE]/20 border border-[#22D3EE]/40 text-[#22D3EE] backdrop-blur-sm hover:bg-[#22D3EE]/30" : "hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE]"} ${showVotePulse ? "vote-cta-pulse" : ""}`}
+              className={`no-default-hover-elevate no-default-active-elevate gap-1 text-xs ${hasVoted ? "bg-[#22D3EE]/20 border border-[#22D3EE]/40 text-[#22D3EE] backdrop-blur-sm hover:bg-[#22D3EE]/30" : "hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE]"} ${showVotePulse ? "vote-cta-pulse" : ""}`}
               aria-label={`Rate ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -379,19 +366,6 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             >
               <Star className="h-3.5 w-3.5" />
               Rate
-            </Button>
-            <Button
-              variant={hasVoted ? "ghost" : "outline"}
-              size="icon"
-              className={`hidden md:inline-flex no-default-hover-elevate no-default-active-elevate ${hasVoted ? "bg-[#22D3EE]/20 border border-[#22D3EE]/40 text-[#22D3EE] backdrop-blur-sm hover:bg-[#22D3EE]/30" : "hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE]"} ${showVotePulse ? "vote-cta-pulse" : ""}`}
-              aria-label={`Vote for ${person.name}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onVoteClick?.();
-              }}
-              data-testid={`button-expand-${person.id}`}
-            >
-              <ThumbsUp className="h-4 w-4" />
             </Button>
           </>
         )}
