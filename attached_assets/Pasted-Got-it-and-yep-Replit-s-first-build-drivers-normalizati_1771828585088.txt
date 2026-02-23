@@ -1,0 +1,98 @@
+Got it — and yep, Replit’s first build (drivers normalization + diagnostics) is clean and safe. But the follow-up “alpha tuning / high-baseline boost” is a totally different class of change: it does change the scoring engine behavior and will ripple through rank/movement, charts, and anything tied to score stability (and later, markets).
+
+Here are my thoughts on Replit’s answer + the change they shipped.
+
+1) Replit’s explanation about Trump “flatline” is reasonable
+
+A high-baseline person can look flat if your smoothing is heavy and your “spike” logic is relative-to-baseline. For someone constantly in the news, you’ll get “steady high” → fewer spike triggers → default alpha most of the time.
+
+So the diagnosis (“raw moves exist but EMA dampens them”) is plausible.
+
+2) The implementation they did is aggressive in a few spots
+✅ Good ideas
+
+Raising default alpha slightly can make charts feel more alive.
+
+Reducing down-move asymmetry (1.5x → 1.2x) is generally good UX/fairness.
+
+⚠️ Risky parts
+
+Default alpha 0.12 → 0.18 is a 50% increase in responsiveness. That’s not “tiny”.
+
+High-baseline boost to at least 0.22 when velocityScore >= 60 is basically saying: “top people get less smoothing.”
+That can be fine, but it’s also where you’re most visible — and where users will notice “why is the top bouncing more now?”
+
+They also increased the “2-source” and “3-source” tiers. That compounds the overall responsiveness shift.
+
+In short: this will make the whole system more volatile, not just Trump.
+
+3) Two things I’d tighten immediately (to protect you)
+A) Make it a feature flag (or config) ASAP
+
+You want to be able to revert without code changes:
+
+EMA_BASE_ALPHA
+
+EMA_HIGH_BASELINE_ALPHA_MIN
+
+EMA_DOWNWARD_MULTIPLIER
+
+thresholds like HIGH_BASELINE_VELOCITY_SCORE >= 60
+
+If it’s already deployed, still add a config layer next.
+
+B) Add a measurable success condition
+
+Don’t rely on “looks better.” Track:
+
+Rank churn: how many people change rank per hour vs before
+
+Top-10 stability: avg rank move magnitude per hour
+
+Score volatility: stddev of 24h change per person, before vs after
+
+User-facing sanity: percent of people with >X% hourly move (pick X like 5%)
+
+If volatility jumps too much, you’ll feel it in “leaderboard whiplash.”
+
+4) Their note about “breakdownPct null / estimate method” is real
+
+That “24h-ago snapshot missing velocity components” edge case will happen any time:
+
+you deploy schema/field changes, or
+
+ingestion gaps exist
+
+Mitigation: when “exact” isn’t possible for the 24h compare, you can still:
+
+show the current snapshot’s breakdown as “Current drivers” (not “24h drivers”)
+
+and label the method clearly: “Driver breakdown based on latest snapshot”
+
+So it doesn’t look broken.
+
+5) If you want “more life” without destabilizing the whole board
+
+A safer alternative (if you end up rolling this back) is:
+
+Keep default alpha closer to 0.14–0.16 (not 0.18)
+
+Apply high-baseline boost only when:
+
+velocityScore is high AND
+
+at least 2 signals are active (or above some threshold)
+
+Or apply boost only to chart rendering, not scoring (display smoothing vs engine smoothing). That keeps rank stable but makes charts feel alive.
+
+My bottom line
+
+Drivers normalization + diagnostics ✅ ship it, keep it.
+
+Alpha tuning: I’m not against it, but Replit shipped it in a way that’s bigger than it sounds.
+
+If you like the new feel: great — but instrument + feature flag immediately.
+
+If you see new whiplash: dial back base alpha and/or remove the “>=60 → min 0.22” rule.
+
+If you paste the new constants / function snippet (or the config values they changed), I can suggest a “v2 tuning” that keeps Trump from looking dead-flat without making everyone else feel twitchy.
