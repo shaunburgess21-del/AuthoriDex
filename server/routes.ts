@@ -4824,7 +4824,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
                 ROUND(STDDEV(pct_change) FILTER (WHERE pct_change IS NOT NULL)::numeric, 4) as score_volatility_stddev,
                 COUNT(CASE WHEN ABS(pct_change) > 5 THEN 1 END)::int as big_movers_5pct,
                 COUNT(CASE WHEN ABS(pct_change) > 0.5 OR ABS(current_rank - prev_rank) >= 3 THEN 1 END)::int as meaningful_changes,
-                COUNT(CASE WHEN current_rank != prev_rank AND ABS(pct_change) <= 0.5 AND ABS(current_rank - prev_rank) < 3 THEN 1 END)::int as noise_shuffles
+                COUNT(CASE WHEN current_rank != prev_rank AND ABS(pct_change) <= 0.5 AND ABS(current_rank - prev_rank) < 3 THEN 1 END)::int as noise_shuffles,
+                COUNT(CASE WHEN ABS(pct_change) >= 2 THEN 1 END)::int as movers_2pct
               FROM cohort_ranked
               GROUP BY hour
               ORDER BY hour DESC
@@ -4845,6 +4846,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
               bigMovers5pct: Number(r.big_movers_5pct) || 0,
               meaningfulChanges: Number(r.meaningful_changes) || 0,
               noiseShuffles: Number(r.noise_shuffles) || 0,
+              movers2pct: Number(r.movers_2pct) || 0,
             }));
           } catch (err) {
             return { error: "Failed to compute rank churn" };
