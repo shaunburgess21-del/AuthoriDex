@@ -1,0 +1,101 @@
+This is a much better response from Replit. If I were reviewing this as your “risk manager,” I’d say: approve V2, with a couple of checks and one small tweak to the monitoring so you don’t get fooled by the numbers.
+
+What Replit did right in V2
+✅ 1) The tuning is now actually “small”
+
+0.12 → 0.15 is a sensible step (25% more responsive instead of 50%).
+
+Restoring the 2-source / 3-source tiers avoids compounding effects. Good call.
+
+Keeping downward multiplier at 1.2x is still a UX win.
+
+✅ 2) High-baseline boost is now gated properly
+
+Requiring:
+
+velocityScore >= 65 and
+
+2 of 3 sub-scores > 50
+
+…is the right shape. It prevents “one-signal wonders” from getting extra responsiveness and keeps this primarily for truly high-baseline, multi-signal people.
+
+✅ 3) Feature flags/env vars is exactly what you want
+
+This is huge. It means you can tune without redeploying, and you can revert instantly if leaderboard starts feeling twitchy.
+
+The 3 things I’d verify right now
+1) Are the env vars actually being read everywhere?
+
+Make sure:
+
+defaults are used when env missing
+
+values are parsed as numbers (not strings), and invalid values don’t silently become NaN
+
+the same values are used by both chart and rank calculations (no “half-old / half-new” behavior)
+
+Quick test: set EMA_BASE_ALPHA=0.12 and confirm you truly revert to prior behavior.
+
+2) The “rank churn” query must compare the same cohort
+
+This is the classic trap.
+
+If your “top 100 tracked people” is stable, fine. But if the set changes (new person added, person removed, missing snapshots, gaps), churn can look worse/better than it really is.
+
+Rank churn should be computed on:
+
+intersection of people present in both snapshots
+
+the same leaderboard slice (e.g., top 100 tracked)
+
+same timestamp alignment (hour-to-hour)
+
+If they didn’t do intersection logic, you’ll get fake churn during ingestion gaps or roster changes.
+
+3) Make sure you’re not measuring “rank churn from noise”
+
+Add one more stat (tiny but powerful):
+
+Churn excluding tiny moves (e.g., only count rank changes where score moved > 0.5% or rank moved ≥ 3 spots)
+
+Because a leaderboard can “shuffle” due to micro differences even when nothing meaningful is happening. That’s the stuff that creates “whiplash” perception.
+
+One copy-level / UX implication
+
+If Trump (and other top people) starts moving more visibly, you may want to ensure users have:
+
+the “Live / Full” timestamps (you already do)
+
+and your “Hot Movers” logic isn’t overly sensitive (so it doesn’t become “Hot Movers = everyone”)
+
+The monitoring “big movers >5% hourly” helps here — watch that number like a hawk.
+
+My recommended rollout approach (simple)
+
+Run V2 for 24 hours
+
+Compare against the previous 24 hours on:
+
+average rank changes per hour
+
+max rank move per hour
+
+count of >5% movers
+
+top-10 stability
+
+If any of these jump a lot, your immediate knobs are:
+
+EMA_BASE_ALPHA down from 0.15 → 0.14
+
+EMA_HIGH_BASELINE_MIN_ALPHA down from 0.20 → 0.18
+
+EMA_DOWNWARD_MULTIPLIER maybe down from 1.2 → 1.1 if you still see “fast drop slow recover” feelings
+
+My verdict
+
+Replit’s V2 plan is solid and much safer. The only thing I’d push for is:
+
+Make rank churn calculation cohort-safe (intersection, aligned timestamps), and add “meaningful churn” (exclude tiny moves) so you don’t overreact to noise.
+
+If you can paste the health endpoint output (just one run) or the churn metrics format, I’ll tell you whether it’s measuring the right thing or if it’s accidentally counting artifacts.
