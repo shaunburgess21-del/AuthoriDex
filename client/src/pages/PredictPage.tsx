@@ -2254,7 +2254,7 @@ export default function PredictPage() {
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
               data-testid="button-logo-home"
             >
-              <AuthoriDexLogo size={32} />
+              <AuthoriDexLogo size={32} variant="predict" />
               <span className="font-serif font-bold text-xl hidden sm:block">AuthoriDex</span>
             </button>
           </div>

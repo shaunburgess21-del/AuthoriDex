@@ -1,12 +1,21 @@
+type LogoVariant = "default" | "vote" | "predict";
+
+const VARIANT_STYLES: Record<LogoVariant, string> = {
+  default: "from-cyan-500 to-blue-600 shadow-cyan-500/25",
+  vote: "from-cyan-400 to-teal-600 shadow-cyan-400/25",
+  predict: "from-violet-500 to-purple-700 shadow-violet-500/25",
+};
+
 interface AuthoriDexLogoProps {
   size?: number;
+  variant?: LogoVariant;
   className?: string;
 }
 
-export function AuthoriDexLogo({ size = 32, className = "" }: AuthoriDexLogoProps) {
+export function AuthoriDexLogo({ size = 32, variant = "default", className = "" }: AuthoriDexLogoProps) {
   return (
     <div
-      className={`rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/25 ${className}`}
+      className={`rounded-lg bg-gradient-to-br ${VARIANT_STYLES[variant]} flex items-center justify-center shadow-lg ${className}`}
       style={{ width: size, height: size }}
       data-testid="logo-authoridex"
     >
