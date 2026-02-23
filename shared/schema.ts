@@ -37,6 +37,7 @@ export const trackedPeople = pgTable("tracked_people", {
   category: text("category").notNull(),
   displayOrder: integer("display_order").notNull().default(0),
   avatar: text("avatar"),
+  imageSlug: text("image_slug"),
   bio: text("bio"),
   youtubeId: text("youtube_id"),
   spotifyId: text("spotify_id"),
@@ -404,25 +405,16 @@ export type InsertVote = z.infer<typeof insertVoteSchema>;
 // Induction Candidates - potential new celebrities for community voting
 export const inductionCandidates = pgTable("induction_candidates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull().unique(),
+  displayName: text("display_name").notNull(),
   category: text("category").notNull(),
-  avatar: text("avatar"),
-  bio: text("bio"),
+  imageSlug: text("image_slug"),
+  seedVotes: integer("seed_votes").notNull().default(0),
   wikiSlug: text("wiki_slug"),
-  xHandle: text("x_handle"),
-  instagramHandle: text("instagram_handle"),
-  submittedBy: varchar("submitted_by"),
-  submittedAt: timestamp("submitted_at").notNull().defaultNow(),
-  votesFor: integer("votes_for").notNull().default(0),
-  votesAgainst: integer("votes_against").notNull().default(0),
-  status: text("status").notNull().default("pending"),
+  isActive: boolean("is_active").notNull().default(true),
 });
 
 export const insertInductionCandidateSchema = createInsertSchema(inductionCandidates).omit({
   id: true,
-  submittedAt: true,
-  votesFor: true,
-  votesAgainst: true,
 });
 
 export type InductionCandidate = typeof inductionCandidates.$inferSelect;

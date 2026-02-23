@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CategoryPill } from "@/components/CategoryPill";
+import { PersonAvatar } from "@/components/PersonAvatar";
 import { Vote, Crown, Check, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -12,6 +13,7 @@ export interface InductionCandidate {
   id: string;
   name: string;
   initials: string;
+  imageSlug?: string | null;
   category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics";
   votes: number;
 }
@@ -88,9 +90,7 @@ function InductionCandidateRow({
       </div>
       
       <div className="relative shrink-0">
-        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 flex items-center justify-center text-sm font-bold text-cyan-400 border border-cyan-500/30">
-          {candidate.initials}
-        </div>
+        <PersonAvatar name={candidate.name} imageSlug={candidate.imageSlug} size="sm" />
         {isVoted && (
           <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 flex items-center justify-center">
             <Check className="h-2.5 w-2.5 text-white" />
@@ -167,10 +167,11 @@ export function InductionLeaderboardSlice({
 
   const dbCandidates: InductionCandidate[] = (inductionData?.data || []).map((c: any) => ({
     id: c.id,
-    name: c.name,
-    initials: c.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
+    name: c.displayName,
+    initials: c.displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
+    imageSlug: c.imageSlug,
     category: c.category as InductionCandidate['category'],
-    votes: c.votesFor,
+    votes: c.seedVotes,
   }));
 
   const resolvedCandidates = candidates || dbCandidates;

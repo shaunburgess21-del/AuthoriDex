@@ -2417,6 +2417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           liveRank: trendingPeople.liveRank,
           fameIndexLive: trendingPeople.fameIndexLive,
           liveUpdatedAt: trendingPeople.liveUpdatedAt,
+          imageSlug: trackedPeople.imageSlug,
           approvalPct: celebrityMetrics.approvalPct,
           approvalVotesCount: celebrityMetrics.approvalVotesCount,
           underratedPct: celebrityMetrics.underratedPct,
@@ -2425,6 +2426,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           valueScore: celebrityMetrics.valueScore,
         })
         .from(trendingPeople)
+        .leftJoin(trackedPeople, eq(trendingPeople.id, trackedPeople.id))
         .leftJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId));
 
       if (conditions.length > 0) {
@@ -9304,15 +9306,14 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
 
   // ============ ADMIN: INDUCTION QUEUE MANAGEMENT ============
 
-  // GET /api/vote/induction - Public: list induction candidates (pending/approved)
+  // GET /api/vote/induction - Public: list active induction candidates
   app.get("/api/vote/induction", async (req, res) => {
     try {
-      const statusFilter = (req.query.status as string) || 'pending';
       const candidates = await db
         .select()
         .from(inductionCandidates)
-        .where(eq(inductionCandidates.status, statusFilter))
-        .orderBy(desc(inductionCandidates.votesFor));
+        .where(eq(inductionCandidates.isActive, true))
+        .orderBy(desc(inductionCandidates.seedVotes));
       res.json({ data: candidates, totalCount: candidates.length });
     } catch (error: any) {
       console.error("Error fetching induction candidates:", error);
@@ -9326,10 +9327,10 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const { id } = req.params;
       const [candidate] = await db.select().from(inductionCandidates).where(eq(inductionCandidates.id, id)).limit(1);
       if (!candidate) return res.status(404).json({ error: "Candidate not found" });
-      if (candidate.status !== 'pending') return res.status(400).json({ error: "Candidate is not in pending status" });
+      if (!candidate.isActive) return res.status(400).json({ error: "Candidate is not active" });
 
       await db.update(inductionCandidates)
-        .set({ votesFor: sql`${inductionCandidates.votesFor} + 1` })
+        .set({ seedVotes: sql`${inductionCandidates.seedVotes} + 1` })
         .where(eq(inductionCandidates.id, id));
 
       res.json({ success: true });
@@ -9345,7 +9346,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const candidates = await db
         .select()
         .from(inductionCandidates)
-        .orderBy(desc(inductionCandidates.submittedAt));
+        .orderBy(desc(inductionCandidates.seedVotes));
       res.json({ data: candidates, totalCount: candidates.length });
     } catch (error: any) {
       console.error("Error fetching admin induction candidates:", error);
@@ -9356,22 +9357,21 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   // POST /api/admin/induction - Admin: create a new induction candidate
   app.post("/api/admin/induction", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { name, category, avatar, bio, wikiSlug, xHandle, instagramHandle } = req.body;
-      if (!name || !category) return res.status(400).json({ error: "name and category are required" });
+      const { displayName, category, imageSlug, wikiSlug, seedVotes } = req.body;
+      if (!displayName || !category) return res.status(400).json({ error: "displayName and category are required" });
 
-      const existing = await db.select({ id: inductionCandidates.id }).from(inductionCandidates).where(eq(inductionCandidates.name, name)).limit(1);
+      const autoSlug = imageSlug || displayName.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
+
+      const existing = await db.select({ id: inductionCandidates.id }).from(inductionCandidates).where(eq(inductionCandidates.displayName, displayName)).limit(1);
       if (existing.length > 0) return res.status(409).json({ error: "Candidate with this name already exists" });
 
       const [created] = await db.insert(inductionCandidates).values({
-        name,
+        displayName,
         category,
-        avatar: avatar || null,
-        bio: bio || null,
+        imageSlug: autoSlug,
         wikiSlug: wikiSlug || null,
-        xHandle: xHandle || null,
-        instagramHandle: instagramHandle || null,
-        submittedBy: req.userId,
-        status: 'pending',
+        seedVotes: seedVotes || 0,
+        isActive: true,
       }).returning();
 
       res.json(created);
@@ -9385,19 +9385,15 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   app.patch("/api/admin/induction/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { name, category, avatar, bio, wikiSlug, xHandle, instagramHandle, status } = req.body;
+      const { displayName, category, imageSlug, wikiSlug, seedVotes, isActive } = req.body;
 
       const updates: any = {};
-      if (name !== undefined) updates.name = name;
+      if (displayName !== undefined) updates.displayName = displayName;
       if (category !== undefined) updates.category = category;
-      if (avatar !== undefined) updates.avatar = avatar;
-      if (bio !== undefined) updates.bio = bio;
+      if (imageSlug !== undefined) updates.imageSlug = imageSlug;
       if (wikiSlug !== undefined) updates.wikiSlug = wikiSlug;
-      if (xHandle !== undefined) updates.xHandle = xHandle;
-      if (instagramHandle !== undefined) updates.instagramHandle = instagramHandle;
-      if (status !== undefined && ['pending', 'approved', 'rejected', 'archived'].includes(status)) {
-        updates.status = status;
-      }
+      if (seedVotes !== undefined) updates.seedVotes = seedVotes;
+      if (isActive !== undefined) updates.isActive = isActive;
 
       if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });
 
@@ -9418,49 +9414,40 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const [candidate] = await db.select().from(inductionCandidates).where(eq(inductionCandidates.id, id)).limit(1);
       if (!candidate) return res.status(404).json({ error: "Candidate not found" });
 
-      // Check if person already exists on leaderboard
-      const existingPerson = await db.select({ id: trackedPeople.id }).from(trackedPeople).where(eq(trackedPeople.name, candidate.name)).limit(1);
+      const existingPerson = await db.select({ id: trackedPeople.id }).from(trackedPeople).where(eq(trackedPeople.name, candidate.displayName)).limit(1);
 
       let personId: string;
 
       if (existingPerson.length > 0) {
         personId = existingPerson[0].id;
       } else {
-        // Add to tracked_people
         const maxOrder = await db.select({ maxOrder: sql<number>`COALESCE(MAX(${trackedPeople.displayOrder}), 0)` }).from(trackedPeople);
         const [newPerson] = await db.insert(trackedPeople).values({
-          name: candidate.name,
+          name: candidate.displayName,
           category: candidate.category,
-          avatar: candidate.avatar,
-          bio: candidate.bio,
+          imageSlug: candidate.imageSlug,
           wikiSlug: candidate.wikiSlug,
-          xHandle: candidate.xHandle,
-          instagramHandle: candidate.instagramHandle,
           displayOrder: (maxOrder[0]?.maxOrder || 0) + 1,
           status: 'main_leaderboard',
         }).returning();
         personId = newPerson.id;
 
-        // Also create trending_people entry
         await db.insert(trendingPeople).values({
           id: personId,
-          name: candidate.name,
+          name: candidate.displayName,
           category: candidate.category,
-          avatar: candidate.avatar,
           rank: 999,
           trendScore: 0,
           fameIndex: 0,
         }).onConflictDoNothing();
       }
 
-      // Idempotent: ensure celebrity_metrics exists
       await db.insert(celebrityMetrics).values({
         celebrityId: personId,
         updatedAt: new Date(),
       }).onConflictDoNothing();
 
-      // Mark candidate as approved
-      await db.update(inductionCandidates).set({ status: 'approved' }).where(eq(inductionCandidates.id, id));
+      await db.update(inductionCandidates).set({ isActive: false }).where(eq(inductionCandidates.id, id));
 
       res.json({ success: true, personId, message: "Candidate approved and added to leaderboard" });
     } catch (error: any) {
@@ -9469,11 +9456,11 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
 
-  // POST /api/admin/induction/:id/reject - Admin: reject candidate
+  // POST /api/admin/induction/:id/reject - Admin: deactivate candidate
   app.post("/api/admin/induction/:id/reject", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const [updated] = await db.update(inductionCandidates).set({ status: 'rejected' }).where(eq(inductionCandidates.id, id)).returning();
+      const [updated] = await db.update(inductionCandidates).set({ isActive: false }).where(eq(inductionCandidates.id, id)).returning();
       if (!updated) return res.status(404).json({ error: "Candidate not found" });
       res.json({ success: true });
     } catch (error: any) {

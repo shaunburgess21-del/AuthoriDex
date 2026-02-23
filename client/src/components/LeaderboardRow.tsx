@@ -202,7 +202,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
         data-testid={`row-person-${person.id}`}
       >
         <RankBadge rank={person.leaderboardRank ?? (person as any).liveRank ?? person.rank} rankChange={person.rankChange} colorMode={activeTab} />
-        <PersonAvatar name={person.name} avatar={person.avatar} size="md" />
+        <PersonAvatar name={person.name} avatar={person.avatar} imageSlug={(person as any).imageSlug} size="md" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <h3 className="font-semibold text-base truncate" data-testid={`text-name-${person.id}`}>

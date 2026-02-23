@@ -83,7 +83,7 @@ interface InductionCandidate {
   id: string;
   name: string;
   initials: string;
-  avatar: string;
+  imageSlug: string | null;
   category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics";
   votes: number;
 }
@@ -491,7 +491,7 @@ function InductionCandidateCard({
 
       <div className="flex flex-col items-center text-center mb-4 flex-grow">
         <div className="relative">
-          <PersonAvatar name={candidate.name} avatar={candidate.avatar} className="h-32 w-32" />
+          <PersonAvatar name={candidate.name} imageSlug={candidate.imageSlug} className="h-32 w-32" />
           {isVoted && (
             <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center">
               <Check className="h-3 w-3 text-white" />
@@ -1785,12 +1785,12 @@ export default function VotePage() {
   interface InductionAPIResponse {
     data: Array<{
       id: string;
-      name: string;
+      displayName: string;
       category: string;
-      avatar: string | null;
-      votesFor: number;
-      votesAgainst: number;
-      status: string;
+      imageSlug: string | null;
+      seedVotes: number;
+      wikiSlug: string | null;
+      isActive: boolean;
     }>;
   }
   
@@ -1808,11 +1808,11 @@ export default function VotePage() {
 
   const dbInductionCandidates: InductionCandidate[] = (inductionData?.data || []).map(c => ({
     id: c.id,
-    name: c.name,
-    initials: c.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
-    avatar: c.avatar || '',
+    name: c.displayName,
+    initials: c.displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
+    imageSlug: c.imageSlug,
     category: c.category as InductionCandidate['category'],
-    votes: c.votesFor,
+    votes: c.seedVotes,
   }));
 
   const [inductionCategoryFilter, setInductionCategoryFilter] = useState<FilterCategory>("All");

@@ -6,27 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Check, X, Search, Trash2, Edit2 } from "lucide-react";
 
 interface InductionCandidate {
   id: string;
-  name: string;
+  displayName: string;
   category: string;
-  avatar: string | null;
-  bio: string | null;
+  imageSlug: string | null;
+  seedVotes: number;
   wikiSlug: string | null;
-  xHandle: string | null;
-  instagramHandle: string | null;
-  submittedBy: string | null;
-  submittedAt: string;
-  votesFor: number;
-  votesAgainst: number;
-  status: string;
+  isActive: boolean;
 }
 
 const CATEGORIES = ["Tech", "Music", "Creator", "Sports", "Business", "Politics"];
@@ -39,13 +32,11 @@ export function AdminInductionQueue() {
   const [editCandidate, setEditCandidate] = useState<InductionCandidate | null>(null);
 
   const [formData, setFormData] = useState({
-    name: "",
+    displayName: "",
     category: "Tech",
-    avatar: "",
-    bio: "",
+    imageSlug: "",
     wikiSlug: "",
-    xHandle: "",
-    instagramHandle: "",
+    seedVotes: 0,
   });
 
   const { data, isLoading } = useQuery<{ data: InductionCandidate[]; totalCount: number }>({
@@ -92,9 +83,9 @@ export function AdminInductionQueue() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/induction'] });
       queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
-      toast({ title: "Candidate Rejected" });
+      toast({ title: "Candidate Deactivated" });
     },
-    onError: () => toast({ title: "Failed to reject candidate", variant: "destructive" }),
+    onError: () => toast({ title: "Failed to deactivate candidate", variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -107,40 +98,29 @@ export function AdminInductionQueue() {
     onError: () => toast({ title: "Failed to delete candidate", variant: "destructive" }),
   });
 
-  const resetForm = () => setFormData({ name: "", category: "Tech", avatar: "", bio: "", wikiSlug: "", xHandle: "", instagramHandle: "" });
+  const resetForm = () => setFormData({ displayName: "", category: "Tech", imageSlug: "", wikiSlug: "", seedVotes: 0 });
 
   const openEdit = (c: InductionCandidate) => {
     setEditCandidate(c);
     setFormData({
-      name: c.name,
+      displayName: c.displayName,
       category: c.category,
-      avatar: c.avatar || "",
-      bio: c.bio || "",
+      imageSlug: c.imageSlug || "",
       wikiSlug: c.wikiSlug || "",
-      xHandle: c.xHandle || "",
-      instagramHandle: c.instagramHandle || "",
+      seedVotes: c.seedVotes,
     });
   };
 
   const candidates = data?.data || [];
   const filteredCandidates = candidates.filter(c => {
-    if (searchQuery && !c.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    if (statusFilter !== "all" && c.status !== statusFilter) return false;
+    if (searchQuery && !c.displayName.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (statusFilter === "active" && !c.isActive) return false;
+    if (statusFilter === "inactive" && c.isActive) return false;
     return true;
   });
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending': return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Pending</Badge>;
-      case 'approved': return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Approved</Badge>;
-      case 'rejected': return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">Rejected</Badge>;
-      case 'archived': return <Badge variant="outline" className="text-muted-foreground">Archived</Badge>;
-      default: return <Badge variant="secondary">{status}</Badge>;
-    }
-  };
-
   const handleSubmit = () => {
-    if (!formData.name || !formData.category) return;
+    if (!formData.displayName || !formData.category) return;
     if (editCandidate) {
       updateMutation.mutate({ id: editCandidate.id, ...formData });
     } else {
@@ -180,11 +160,9 @@ export function AdminInductionQueue() {
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -204,9 +182,8 @@ export function AdminInductionQueue() {
                   <tr className="border-b bg-muted/50">
                     <th className="text-left p-3 font-medium">Name</th>
                     <th className="text-left p-3 font-medium">Category</th>
-                    <th className="text-right p-3 font-medium">Votes For</th>
+                    <th className="text-right p-3 font-medium">Seed Votes</th>
                     <th className="text-center p-3 font-medium">Status</th>
-                    <th className="text-left p-3 font-medium">Submitted</th>
                     <th className="text-right p-3 font-medium">Actions</th>
                   </tr>
                 </thead>
@@ -215,27 +192,24 @@ export function AdminInductionQueue() {
                     <tr key={candidate.id} className="border-b last:border-b-0 hover-elevate" data-testid={`row-induction-${candidate.id}`}>
                       <td className="p-3">
                         <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8">
-                            <AvatarImage src={candidate.avatar || undefined} />
-                            <AvatarFallback className="text-xs">{candidate.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <span className="font-medium">{candidate.name}</span>
-                            {candidate.bio && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{candidate.bio}</p>}
-                          </div>
+                          <PersonAvatar name={candidate.displayName} imageSlug={candidate.imageSlug} size="xs" />
+                          <span className="font-medium">{candidate.displayName}</span>
                         </div>
                       </td>
                       <td className="p-3">
                         <Badge variant="outline" className="text-xs">{candidate.category}</Badge>
                       </td>
-                      <td className="p-3 text-right font-mono">{candidate.votesFor}</td>
-                      <td className="p-3 text-center">{getStatusBadge(candidate.status)}</td>
-                      <td className="p-3 text-muted-foreground text-xs">
-                        {new Date(candidate.submittedAt).toLocaleDateString()}
+                      <td className="p-3 text-right font-mono">{candidate.seedVotes}</td>
+                      <td className="p-3 text-center">
+                        {candidate.isActive ? (
+                          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Active</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-muted-foreground">Inactive</Badge>
+                        )}
                       </td>
                       <td className="p-3">
                         <div className="flex items-center justify-end gap-1">
-                          {candidate.status === 'pending' && (
+                          {candidate.isActive && (
                             <>
                               <Button
                                 size="icon"
@@ -296,10 +270,10 @@ export function AdminInductionQueue() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Name *</Label>
+              <Label>Display Name *</Label>
               <Input
-                value={formData.name}
-                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                value={formData.displayName}
+                onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
                 placeholder="Full name"
                 data-testid="input-candidate-name"
               />
@@ -318,22 +292,14 @@ export function AdminInductionQueue() {
               </Select>
             </div>
             <div>
-              <Label>Avatar URL</Label>
+              <Label>Image Slug</Label>
               <Input
-                value={formData.avatar}
-                onChange={(e) => setFormData(prev => ({ ...prev, avatar: e.target.value }))}
-                placeholder="https://..."
-                data-testid="input-candidate-avatar"
+                value={formData.imageSlug}
+                onChange={(e) => setFormData(prev => ({ ...prev, imageSlug: e.target.value }))}
+                placeholder="auto-generated from name if blank"
+                data-testid="input-candidate-image-slug"
               />
-            </div>
-            <div>
-              <Label>Bio</Label>
-              <Textarea
-                value={formData.bio}
-                onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
-                placeholder="Short description..."
-                data-testid="input-candidate-bio"
-              />
+              <p className="text-xs text-muted-foreground mt-1">Used to resolve images from storage buckets</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -346,23 +312,15 @@ export function AdminInductionQueue() {
                 />
               </div>
               <div>
-                <Label>X Handle</Label>
+                <Label>Seed Votes</Label>
                 <Input
-                  value={formData.xHandle}
-                  onChange={(e) => setFormData(prev => ({ ...prev, xHandle: e.target.value }))}
-                  placeholder="@handle"
-                  data-testid="input-candidate-x"
+                  type="number"
+                  value={formData.seedVotes}
+                  onChange={(e) => setFormData(prev => ({ ...prev, seedVotes: parseInt(e.target.value) || 0 }))}
+                  placeholder="0"
+                  data-testid="input-candidate-seed-votes"
                 />
               </div>
-            </div>
-            <div>
-              <Label>Instagram Handle</Label>
-              <Input
-                value={formData.instagramHandle}
-                onChange={(e) => setFormData(prev => ({ ...prev, instagramHandle: e.target.value }))}
-                placeholder="@handle"
-                data-testid="input-candidate-ig"
-              />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => { setShowCreateDialog(false); setEditCandidate(null); }} data-testid="button-cancel-candidate">
@@ -370,7 +328,7 @@ export function AdminInductionQueue() {
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={!formData.name || !formData.category || createMutation.isPending || updateMutation.isPending}
+                disabled={!formData.displayName || !formData.category || createMutation.isPending || updateMutation.isPending}
                 data-testid="button-save-candidate"
               >
                 {editCandidate ? "Update" : "Create"}

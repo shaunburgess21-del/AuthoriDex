@@ -303,7 +303,7 @@ function InductionCard({
         </div>
         
         <div className="flex flex-col items-center text-center mb-4">
-          <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="xl" />
+          <PersonAvatar name={candidate.name} avatar={(candidate as any).avatar} imageSlug={(candidate as any).imageSlug} size="xl" />
           <h3 className="font-semibold text-base mt-3">{candidate.name}</h3>
         </div>
         
@@ -359,7 +359,7 @@ function ValueCard({
         </div>
         
         <div className="flex flex-col items-center text-center mb-4">
-          <PersonAvatar name={person.name} avatar={person.avatar} size="xl" />
+          <PersonAvatar name={person.name} avatar={person.avatar} imageSlug={(person as any).imageSlug} size="xl" />
           <h3 className="font-semibold text-base mt-3">{person.name}</h3>
           <div className="text-sm font-mono text-cyan-400 mt-1">
             {person.fameIndex?.toLocaleString('en-US') ?? 'N/A'} Trend Score

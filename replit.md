@@ -43,10 +43,20 @@ Preferred communication style: Simple, everyday language.
 - **Design**: Stateless, using Supabase Database for all state management.
 - **Cron Endpoints**: Authenticated API endpoints for scheduled tasks.
 
+### Image Storage Architecture
+- **Supabase Storage Buckets** (optimized WebP, replacing legacy 1.3MB PNGs):
+  - `celebrity-small` → `_compressed_small_100kb_webp/{slug}/{index}.webp` (~42KB, for tile/list views)
+  - `celebrity-large` → `_compressed_large_200kb_webp/{slug}/{index}.webp` (~101KB, for detail/expanded views)
+  - `leaders-small` → `_compressed_70kb/{slug}/{index}.webp` (~67KB, for induction candidates)
+  - `leaders-large` → `_compressed_150kb_expanded/{slug}/{index}.webp` (for expanded candidate views)
+  - Legacy: `celebrity_images/{slug}/{index}.png` (fallback)
+- **Image Resolver** (`client/src/lib/imageResolver.ts`): Cascading URL fallback system — optimized bucket → legacy bucket → placeholder. Configurable prefix constants. Uses `useResolvedImage` React hook with `onError` cascading.
+- **`image_slug`** field on both `tracked_people` (100 backfilled) and `induction_candidates` (116 pre-populated) for bucket path resolution.
+
 ### Data Storage
 - **Database**: Supabase-backed PostgreSQL with Drizzle ORM.
-- **Core Schemas**: `users`, `tracked_people`, `trending_people`, `trend_snapshots`, `api_cache`, `celebrity_profiles`.
-- **Gamification Schemas**: `xp_ledger`, `credit_ledger`, `xp_actions`, `ranks`, `votes`, `induction_candidates`, `celebrity_images`, `face_offs`, `profiles`.
+- **Core Schemas**: `users`, `tracked_people` (with `image_slug`), `trending_people`, `trend_snapshots`, `api_cache`, `celebrity_profiles`.
+- **Gamification Schemas**: `xp_ledger`, `credit_ledger`, `xp_actions`, `ranks`, `votes`, `induction_candidates` (lean: `display_name`, `category`, `image_slug`, `seed_votes`, `wiki_slug`, `is_active`), `celebrity_images`, `face_offs`, `profiles`.
 - **Prediction Markets Schemas**: `prediction_markets`, `market_entries`, `market_bets`, `open_market_comments`.
 - **Community Schemas**: `community_insights`, `insight_votes`, `insight_comments`, `platform_insights`, `insight_items`, `user_votes`, `user_favourites`.
 - **Value Voting**: `celebrity_value_votes`, `celebrity_metrics` for approval/value aggregation.
