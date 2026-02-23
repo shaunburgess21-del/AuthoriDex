@@ -997,7 +997,7 @@ export default function HomePage() {
                     <div className="mx-4 sm:mx-6 my-2 px-3 py-2.5 rounded-md bg-primary/5 border border-primary/15 flex items-center justify-between gap-3" data-testid="vote-tip-banner">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Star className="h-3.5 w-3.5 text-primary shrink-0" />
-                        <span>Tap <span className="font-medium text-foreground">Vote</span> next to any name to cast your vote</span>
+                        <span>Tap <span className="font-medium text-foreground">Rate</span> next to any name to cast your vote</span>
                       </div>
                       <Button
                         variant="ghost"
