@@ -354,7 +354,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           </CardContent>
         </Card>
 
-        <Card className="col-span-1 md:col-span-2" data-testid="card-wiki-pulse">
+        <Card data-testid="card-wiki-pulse">
           <CardHeader className="pb-2 bg-muted/50">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">
@@ -397,23 +397,32 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
         </Card>
 
         {signals.drivers.status === "stable" ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground col-span-1 md:col-span-2 py-2" data-testid="card-score-drivers-collapsed">
-            <BarChart3 className="h-4 w-4" />
-            <span>Score Drivers (24h): Stable — no major signal shift</span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Info className="h-3.5 w-3.5 cursor-help shrink-0" />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs max-w-[220px]">Based on what changed in the last 24 hours, not raw totals. Shows which signals drove movement.</p>
-              </TooltipContent>
-            </Tooltip>
-            <Badge variant="outline" className="text-xs ml-auto">
-              {signals.drivers.activeSources}/3 sources
-            </Badge>
-          </div>
+          <Card data-testid="card-score-drivers-collapsed">
+            <CardHeader className="pb-2 bg-primary/5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-primary" />
+                  <span className="font-semibold text-sm">Score Drivers (24h)</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs max-w-[220px]">Based on what changed in the last 24 hours, not raw totals. Shows which signals drove movement.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Badge variant="outline" className="text-xs">
+                  {signals.drivers.activeSources}/3 sources
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <p className="text-sm text-muted-foreground">Stable — no major signal shift</p>
+            </CardContent>
+          </Card>
         ) : (
-          <Card className="col-span-1 md:col-span-2" data-testid="card-score-drivers">
+          <Card data-testid="card-score-drivers">
             <CardHeader className="pb-2 bg-primary/5">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
