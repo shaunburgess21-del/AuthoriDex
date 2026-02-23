@@ -2259,16 +2259,6 @@ export default function PredictPage() {
             </button>
           </div>
           
-          <div className="flex items-center gap-2 md:hidden">
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-violet-500/10 border border-violet-500/30">
-              <Wallet className="h-3.5 w-3.5 text-violet-500" />
-              <span className="font-mono font-bold text-xs">{walletCredits.toLocaleString('en-US')}</span>
-            </div>
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <ListChecks className="h-3.5 w-3.5" />
-              <span className="text-xs">{activePredictions}</span>
-            </div>
-          </div>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-4">
               <Link href="/#leaderboard">
@@ -2280,6 +2270,16 @@ export default function PredictPage() {
               <Link href="/predict">
                 <Button variant="ghost" size="sm" className="text-violet-500">Predict</Button>
               </Link>
+            </div>
+            <div className="flex items-center gap-2.5 md:hidden">
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-violet-500/10 border border-violet-500/30">
+                <Wallet className="h-[14px] w-[14px] text-violet-500" />
+                <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString('en-US')}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <ListChecks className="h-[14px] w-[14px]" />
+                <span className="text-sm">{activePredictions}</span>
+              </div>
             </div>
             <UserMenu />
           </div>
