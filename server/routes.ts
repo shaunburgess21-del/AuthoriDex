@@ -4769,58 +4769,71 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         rankChurn: await (async () => {
           try {
             const churnRows = await db.execute(sql`
-              WITH hourly_ranks AS (
+              WITH hourly_latest AS (
                 SELECT 
                   ts.person_id,
                   date_trunc('hour', ts.timestamp) as hour,
+                  ts.fame_index,
                   ROW_NUMBER() OVER (
                     PARTITION BY ts.person_id, date_trunc('hour', ts.timestamp)
                     ORDER BY ts.timestamp DESC
-                  ) as rn,
-                  RANK() OVER (
-                    PARTITION BY date_trunc('hour', ts.timestamp)
-                    ORDER BY ts.fame_index DESC
-                  ) as hourly_rank,
-                  ts.fame_index,
-                  ROUND(((ts.fame_index - LAG(ts.fame_index) OVER (PARTITION BY ts.person_id ORDER BY ts.timestamp)) 
-                    / NULLIF(LAG(ts.fame_index) OVER (PARTITION BY ts.person_id ORDER BY ts.timestamp), 0) * 100)::numeric, 2) as pct_change
+                  ) as rn
                 FROM trend_snapshots ts
                 WHERE ts.timestamp > ${h48Ago}
               ),
               deduped AS (
-                SELECT * FROM hourly_ranks WHERE rn = 1
+                SELECT person_id, hour, fame_index FROM hourly_latest WHERE rn = 1
               ),
-              rank_changes AS (
+              hours_list AS (
+                SELECT DISTINCT hour FROM deduped ORDER BY hour
+              ),
+              hour_pairs AS (
                 SELECT 
-                  d.hour,
-                  d.person_id,
-                  d.hourly_rank as current_rank,
-                  LAG(d.hourly_rank) OVER (PARTITION BY d.person_id ORDER BY d.hour) as prev_rank,
-                  d.pct_change
-                FROM deduped d
+                  h.hour as current_hour,
+                  LAG(h.hour) OVER (ORDER BY h.hour) as prev_hour
+                FROM hours_list h
+              ),
+              cohort_ranked AS (
+                SELECT 
+                  hp.current_hour as hour,
+                  cur.person_id,
+                  cur.fame_index as current_fame,
+                  prev.fame_index as prev_fame,
+                  RANK() OVER (PARTITION BY hp.current_hour ORDER BY cur.fame_index DESC) as current_rank,
+                  RANK() OVER (PARTITION BY hp.current_hour ORDER BY prev.fame_index DESC) as prev_rank,
+                  CASE WHEN prev.fame_index > 0 
+                    THEN ROUND(((cur.fame_index - prev.fame_index) / prev.fame_index * 100)::numeric, 2)
+                    ELSE NULL END as pct_change
+                FROM hour_pairs hp
+                INNER JOIN deduped cur ON cur.hour = hp.current_hour
+                INNER JOIN deduped prev ON prev.hour = hp.prev_hour AND prev.person_id = cur.person_id
+                WHERE hp.prev_hour IS NOT NULL
               )
               SELECT 
                 hour,
-                COUNT(CASE WHEN prev_rank IS NOT NULL AND current_rank != prev_rank THEN 1 END)::int as rank_changes,
-                COUNT(CASE WHEN prev_rank IS NOT NULL THEN 1 END)::int as total_compared,
-                ROUND(AVG(ABS(current_rank - prev_rank)) FILTER (WHERE prev_rank IS NOT NULL)::numeric, 2) as avg_rank_move,
-                MAX(ABS(current_rank - prev_rank)) FILTER (WHERE prev_rank IS NOT NULL)::int as max_rank_move,
+                COUNT(*)::int as cohort_size,
+                COUNT(CASE WHEN current_rank != prev_rank THEN 1 END)::int as rank_changes,
+                ROUND(AVG(ABS(current_rank - prev_rank))::numeric, 2) as avg_rank_move,
+                MAX(ABS(current_rank - prev_rank))::int as max_rank_move,
                 ROUND(STDDEV(pct_change) FILTER (WHERE pct_change IS NOT NULL)::numeric, 2) as score_volatility_stddev,
-                COUNT(CASE WHEN ABS(pct_change) > 5 THEN 1 END)::int as big_movers_5pct
-              FROM rank_changes
-              WHERE hour > ${h48Ago}
+                COUNT(CASE WHEN ABS(pct_change) > 5 THEN 1 END)::int as big_movers_5pct,
+                COUNT(CASE WHEN ABS(pct_change) > 0.5 OR ABS(current_rank - prev_rank) >= 3 THEN 1 END)::int as meaningful_changes,
+                COUNT(CASE WHEN current_rank != prev_rank AND ABS(pct_change) <= 0.5 AND ABS(current_rank - prev_rank) < 3 THEN 1 END)::int as noise_shuffles
+              FROM cohort_ranked
               GROUP BY hour
               ORDER BY hour DESC
               LIMIT 48
             `);
             return (churnRows.rows || []).map((r: any) => ({
               hour: new Date(r.hour).toISOString(),
+              cohortSize: Number(r.cohort_size),
               rankChanges: Number(r.rank_changes),
-              totalCompared: Number(r.total_compared),
               avgRankMove: Number(r.avg_rank_move) || 0,
               maxRankMove: Number(r.max_rank_move) || 0,
               scoreVolatilityStddev: Number(r.score_volatility_stddev) || 0,
               bigMovers5pct: Number(r.big_movers_5pct) || 0,
+              meaningfulChanges: Number(r.meaningful_changes) || 0,
+              noiseShuffles: Number(r.noise_shuffles) || 0,
             }));
           } catch (err) {
             return { error: "Failed to compute rank churn" };
