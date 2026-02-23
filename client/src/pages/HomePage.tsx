@@ -905,7 +905,7 @@ export default function HomePage() {
                     >
                       <Crown className="h-3.5 w-3.5" />
                       Trend Score
-                      <TrendScoreInfoIcon testId="icon-trend-score-tab" className="h-3 w-3 text-muted-foreground/40 cursor-help" />
+                      <TrendScoreInfoIcon testId="icon-trend-score-tab" className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
                       {leaderboardTab === "fame" && (
                         <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                       )}
@@ -921,7 +921,7 @@ export default function HomePage() {
                     >
                       <ThumbsUp className="h-3.5 w-3.5" />
                       Approval Rating
-                      <ApprovalRatingInfoIcon testId="icon-approval-tab" className="h-3 w-3 text-muted-foreground/40 cursor-help" />
+                      <ApprovalRatingInfoIcon testId="icon-approval-tab" className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
                       {leaderboardTab === "approval" && (
                         <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                       )}

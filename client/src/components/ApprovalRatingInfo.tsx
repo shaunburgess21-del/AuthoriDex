@@ -32,6 +32,7 @@ export function ApprovalRatingInfoIcon({ className, testId }: { className?: stri
       side="bottom"
       align="start"
       contentClassName="max-w-[280px]"
+      showCloseButton
     >
       <Info
         className={className ?? "h-3.5 w-3.5 text-muted-foreground/50 cursor-help"}

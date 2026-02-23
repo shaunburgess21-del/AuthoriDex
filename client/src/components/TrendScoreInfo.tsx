@@ -39,6 +39,7 @@ export function TrendScoreInfoIcon({ className, testId }: { className?: string; 
       side="bottom"
       align="start"
       contentClassName="max-w-[300px]"
+      showCloseButton
     >
       <Info
         className={className ?? "h-3.5 w-3.5 text-muted-foreground/50 cursor-help"}

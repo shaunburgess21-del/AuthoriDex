@@ -4,46 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search, Newspaper, BookOpen, BarChart3, Trophy, AlertTriangle, Clock, ChevronDown, ChevronUp, ExternalLink, Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-
-function TapTooltip({ children, content, side, className }: { children: React.ReactNode; content: React.ReactNode; side?: "top" | "bottom" | "left" | "right"; className?: string }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  const handleOutsideClick = useCallback((e: MouseEvent | TouchEvent) => {
-    if (ref.current && !ref.current.contains(e.target as Node)) {
-      setOpen(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (open) {
-      document.addEventListener("mousedown", handleOutsideClick);
-      document.addEventListener("touchstart", handleOutsideClick);
-      return () => {
-        document.removeEventListener("mousedown", handleOutsideClick);
-        document.removeEventListener("touchstart", handleOutsideClick);
-      };
-    }
-  }, [open, handleOutsideClick]);
-
-  return (
-    <div ref={ref} className="inline-flex">
-      <Tooltip open={open} onOpenChange={setOpen}>
-        <TooltipTrigger asChild>
-          <span onClick={(e) => { e.preventDefault(); setOpen(o => !o); }} onTouchEnd={(e) => { e.preventDefault(); setOpen(o => !o); }}>
-            {children}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side={side} className={className}>
-          {content}
-        </TooltipContent>
-      </Tooltip>
-    </div>
-  );
-}
+import { TouchTooltip } from "@/components/ui/touch-tooltip";
 
 interface MomentumData {
   asOf: string | null;
@@ -262,9 +225,9 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-blue-500" />
                 <span className="font-semibold text-sm">Search Interest</span>
-                <TapTooltip side="top" className="max-w-[220px] text-xs normal-case tracking-normal" content="How actively people are searching for this person on Google right now, scored from 0 to 100. Higher means more search buzz.">
+                <TouchTooltip side="top" contentClassName="max-w-[220px] text-xs normal-case tracking-normal" content="How actively people are searching for this person on Google right now, scored from 0 to 100. Higher means more search buzz.">
                   <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-search-tooltip" />
-                </TapTooltip>
+                </TouchTooltip>
               </div>
               <DeltaBadge pct={signals.search.deltaPct} />
             </div>
@@ -416,11 +379,11 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
             {signals.wiki.views < 100 && signals.wiki.deltaPct === 0 ? (
               <p className="text-[10px] text-muted-foreground/60 mt-2" data-testid="text-wiki-quiet">Low curiosity signal today</p>
             ) : (
-              <TapTooltip content={<p className="text-xs max-w-[200px]">Wikipedia page views spike when public curiosity increases — often before or alongside news cycles.</p>}>
+              <TouchTooltip content={<p className="text-xs max-w-[200px]">Wikipedia page views spike when public curiosity increases — often before or alongside news cycles.</p>}>
                 <p className="text-[10px] text-muted-foreground/60 mt-2 cursor-help underline decoration-dotted">
                   Wikipedia views as curiosity proxy
                 </p>
-              </TapTooltip>
+              </TouchTooltip>
             )}
           </CardContent>
         </Card>
@@ -432,9 +395,9 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                 <div className="flex items-center gap-2">
                   <BarChart3 className="h-4 w-4 text-primary" />
                   <span className="font-semibold text-sm">Score Drivers</span>
-                  <TapTooltip content={<p className="text-xs max-w-[220px]">Current velocity composition — how each signal contributes to the overall score right now.</p>}>
+                  <TouchTooltip content={<p className="text-xs max-w-[220px]">Current velocity composition — how each signal contributes to the overall score right now.</p>}>
                     <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                  </TapTooltip>
+                  </TouchTooltip>
                 </div>
                 <Badge variant="outline" className="text-xs">
                   {signals.drivers.quietSources.length === 3 ? "steady" : `${3 - signals.drivers.quietSources.length}/3 active`}
@@ -470,9 +433,9 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                 <div className="flex items-center gap-2">
                   <BarChart3 className="h-4 w-4 text-primary" />
                   <span className="font-semibold text-sm">Score Drivers (24h change)</span>
-                  <TapTooltip content={<p className="text-xs max-w-[220px]">Based on what changed, not raw totals. Shows which signals drove the most movement.</p>}>
+                  <TouchTooltip content={<p className="text-xs max-w-[220px]">Based on what changed, not raw totals. Shows which signals drove the most movement.</p>}>
                     <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                  </TapTooltip>
+                  </TouchTooltip>
                 </div>
                 <Badge variant="outline" className="text-xs">
                   {signals.drivers.activeSources}/3 sources
