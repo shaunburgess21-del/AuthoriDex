@@ -2259,6 +2259,16 @@ export default function PredictPage() {
             </button>
           </div>
           
+          <div className="flex items-center gap-2 md:hidden">
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-violet-500/10 border border-violet-500/30">
+              <Wallet className="h-3.5 w-3.5 text-violet-500" />
+              <span className="font-mono font-bold text-xs">{walletCredits.toLocaleString('en-US')}</span>
+            </div>
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <ListChecks className="h-3.5 w-3.5" />
+              <span className="text-xs">{activePredictions}</span>
+            </div>
+          </div>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-4">
               <Link href="/#leaderboard">
@@ -2341,17 +2351,6 @@ export default function PredictPage() {
           </HorizontalScroll>
         </div>
 
-        <div className="flex items-center gap-4 mb-6 md:hidden">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/30">
-            <Wallet className="h-4 w-4 text-violet-500" />
-            <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString('en-US')}</span>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/30 text-violet-500">Credits</Badge>
-          </div>
-          <div className="flex items-center gap-2">
-            <ListChecks className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm">{activePredictions} active</span>
-          </div>
-        </div>
       </div>
       <div className="container mx-auto px-4 max-w-7xl">
         {/* SECTION HEADER: Open Markets (Real-World Predictions) */}
