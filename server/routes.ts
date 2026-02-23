@@ -4815,7 +4815,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
                 COUNT(CASE WHEN current_rank != prev_rank THEN 1 END)::int as rank_changes,
                 ROUND(AVG(ABS(current_rank - prev_rank))::numeric, 2) as avg_rank_move,
                 MAX(ABS(current_rank - prev_rank))::int as max_rank_move,
-                ROUND(STDDEV(pct_change) FILTER (WHERE pct_change IS NOT NULL)::numeric, 2) as score_volatility_stddev,
+                ROUND(STDDEV(pct_change) FILTER (WHERE pct_change IS NOT NULL)::numeric, 4) as score_volatility_stddev,
                 COUNT(CASE WHEN ABS(pct_change) > 5 THEN 1 END)::int as big_movers_5pct,
                 COUNT(CASE WHEN ABS(pct_change) > 0.5 OR ABS(current_rank - prev_rank) >= 3 THEN 1 END)::int as meaningful_changes,
                 COUNT(CASE WHEN current_rank != prev_rank AND ABS(pct_change) <= 0.5 AND ABS(current_rank - prev_rank) < 3 THEN 1 END)::int as noise_shuffles
