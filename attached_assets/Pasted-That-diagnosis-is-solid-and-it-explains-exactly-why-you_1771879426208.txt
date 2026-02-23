@@ -1,0 +1,75 @@
+That diagnosis is solid — and it explains exactly why you’re seeing initials.
+
+You’ve now confirmed the real issue is component behavior + resolver order, not the 5-image setup.
+
+What Replit should do next (fix)
+1) For Induction Queue cards, do not try celebrity-small first
+
+Induction candidates should resolve directly from the induction bucket first:
+
+leaders-small/_compressed_70kb/{image_slug}/1.webp
+
+This avoids an unnecessary first failure for every card.
+
+2) Stop using Radix AvatarImage for multi-step fallback cascade
+
+Use a plain <img> (or a custom image component) for the induction card avatar, because Radix Avatar’s internal error state is breaking the retry chain.
+
+You can still keep Radix AvatarFallback styling if you want, but the actual image loading should be controlled manually.
+
+3) Keep placeholder fallback for missing slugs (like rupert-lowe)
+
+That’s correct behavior until you upload that image.
+
+Copy/paste this to Replit
+Great diagnosis — that makes sense.
+
+Please implement the induction queue avatar fix as follows:
+
+1) Induction Queue cards should resolve images from `leaders-small` FIRST (not `celebrity-small`)
+Path pattern:
+- `leaders-small/_compressed_70kb/{image_slug}/1.webp`
+
+2) Do NOT use Radix `AvatarImage` for the induction queue card image fallback cascade.
+Use a plain `<img>` (or a custom controlled image component) so we can reliably handle `onError` and advance fallback URLs.
+
+3) Fallback order for induction queue cards:
+- leaders-small/_compressed_70kb/{image_slug}/1.webp
+- leaders-small/_compressed_70kb/{image_slug}/2.webp (optional)
+- placeholder avatar / initials
+
+4) Use `image_slug` from `induction_candidates` directly (do not derive from display_name).
+
+5) Keep support for 5 images per candidate for future Curate Profile, but induction queue cards must only display the first image (`1.webp`).
+
+6) Rupert Lowe currently has no uploaded image in the bucket, so placeholder is expected for that candidate until the image is uploaded.
+Please ensure missing images do not break layout or voting UI.
+Suggested architecture (clean and future-proof)
+
+Use context-specific resolvers instead of one generic “try everything” resolver:
+
+Induction Queue resolver
+
+leaders-small only
+
+Leaderboard tile resolver
+
+celebrity-small first
+
+Curate Profile resolver
+
+thumbnails: leaders-small or celebrity-small (depending on source)
+
+expanded: leaders-large or celebrity-large
+
+That will prevent this exact class of bug again.
+
+Rupert Lowe note
+
+Since Replit confirmed rupert-lowe is missing in all buckets:
+
+placeholder is expected for now
+
+once uploaded, it should render immediately if the path matches exactly:
+
+leaders-small/_compressed_70kb/rupert-lowe/1.webp

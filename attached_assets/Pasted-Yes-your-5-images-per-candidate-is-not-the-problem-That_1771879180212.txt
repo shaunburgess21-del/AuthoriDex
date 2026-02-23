@@ -1,0 +1,57 @@
+Yes — your 5 images per candidate is not the problem. That setup is actually ideal for future Curate Profile.
+
+For the Induction Queue card avatar, Replit should simply use:
+
+first image only → 1.webp
+
+So your logic is correct:
+
+Induction Queue card = first image only
+
+Curate Profile (later) = all 5 images for voting/selection
+
+Why images are likely not showing right now
+
+The most likely cause is path mismatch, not image count.
+
+Earlier, we confirmed your induction bucket uses a wrapper folder:
+
+leaders-small/_compressed_70kb/{slug}/1.webp
+
+If Replit coded it as:
+
+leaders-small/{slug}/1.webp
+
+…then the cards will fail to load (and you’ll get placeholders/initials like RL, MJ, KP — exactly what your screenshot shows).
+
+What to tell Replit (copy/paste)
+The 5 images per candidate are intentional for Curate Profile later, but for the Induction Queue card avatar please use only the first image.
+
+Please update Induction Queue card image resolution to use:
+- bucket: leaders-small
+- path: _compressed_70kb/{image_slug}/1.webp
+
+Important:
+- We do have 5 images per candidate, but the card avatar should only load `1.webp`
+- The additional images are for Curate Profile after induction (image voting / main profile image selection)
+
+Please also add fallback logic:
+1) _compressed_70kb/{image_slug}/1.webp
+2) _compressed_70kb/{image_slug}/2.webp (optional fallback)
+3) placeholder avatar (do not break card)
+
+Also confirm the resolver is using `image_slug` from `induction_candidates` (not deriving slug from display_name).
+Extra thing to check (very likely edge case)
+
+Make sure the slug folder names in Supabase match image_slug exactly (case-sensitive style matters in practice):
+
+rupert-lowe ✅
+
+not Rupert-Lowe ❌ (if DB has lowercase slug)
+
+From your earlier Rupert Lowe folder example, there was a capitalized folder at one point. If that specific candidate is failing while others work later, this will be why.
+
+Good news
+
+Your current UI proves the DB data is already wired correctly (names/categories/votes are showing).
+So this is almost certainly just the storage path string (wrapper folder + 1.webp) and/or slug casing.
