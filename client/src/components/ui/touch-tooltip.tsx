@@ -34,7 +34,7 @@ export function TouchTooltip({ children, content, side = "top", align = "center"
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 cursor-help text-inherit font-inherit text-left min-w-[44px] min-h-[44px] -m-3"
+            className="relative inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 cursor-help text-inherit font-inherit text-left before:absolute before:inset-[-12px] before:content-['']"
             aria-label="More info"
             onClick={(e) => e.stopPropagation()}
           >

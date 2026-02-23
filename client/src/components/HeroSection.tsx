@@ -11,20 +11,20 @@ interface HeroSectionProps {
 export function HeroSection({ onCastVoteClick, onPredictClick }: HeroSectionProps) {
   const [, navigate] = useLocation();
   return (
-    <div className="relative h-96 md:h-[500px] w-full overflow-hidden">
+    <div className="relative min-h-[22rem] md:h-[500px] w-full overflow-hidden">
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: `url(${heroImage})` }}
       />
       <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/70 to-background" />
-      <div className="relative h-full flex flex-col items-center justify-center px-4 text-center">
-        <h1 className="text-5xl md:text-7xl font-serif font-bold mb-6 tracking-tight max-w-4xl">
+      <div className="relative h-full flex flex-col items-center justify-center px-4 pt-4 pb-6 text-center">
+        <h1 className="text-5xl md:text-7xl font-serif font-bold mb-4 md:mb-6 tracking-tight max-w-4xl">
           <span>Authority</span> <span className="text-primary">Index</span>
         </h1>
         
-        <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl">Discover real-time insights, cast your vote and make your prediction on the world's most influential people</p>
+        <p className="text-lg md:text-xl text-muted-foreground mb-5 md:mb-8 max-w-2xl">Discover real-time insights, cast your vote and make your prediction on the world's most influential people</p>
         
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           <button
             onClick={() => document.getElementById('leaderboard')?.scrollIntoView({ behavior: 'smooth' })}
             className="group relative inline-flex items-center justify-center gap-2 rounded-md px-8 min-h-10 text-sm font-semibold border border-[#4C5567] text-white transition-all duration-300 overflow-hidden"
