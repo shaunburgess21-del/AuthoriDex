@@ -1,0 +1,80 @@
+This is a strong health check. If you send it to ChatGPT, I’d frame it as: engine is operational + sources are healthy, but there are two likely instrumentation/metrics issues and one real product/score-dynamics question.
+
+Here’s how I’d interpret each flagged item (and what I’d ask ChatGPT to focus on):
+
+What looks healthy / “green”
+
+Latest snapshot freshness + run time: last run ~2 min, 100/100 processed, lock acquired/released normally → the ingest loop is behaving.
+
+Sources marked HEALTHY: no consecutive failures; Serper timeouts/retries now observable → good.
+
+Score distribution: no zero scores, reasonable spread, top ranks make sense → no obvious corruption.
+
+Cohort-safe churn: cohort size 100 consistently → the churn query logic isn’t being poisoned by missing-people hours.
+
+Red flags that are real (worth investigation)
+1) EMA hold discrepancy (instrumentation mismatch)
+
+You have:
+
+health summary says 15 newsEmaHeld this run
+
+per-snapshot diagnostics show 0 holds across hours
+
+That almost certainly means one of these:
+
+the “newsEmaHeld” counter is incrementing in the run summary but not being persisted per snapshot, or
+
+holds occur in a layer that doesn’t annotate the snapshot (e.g., applied during aggregation / post-processing), or
+
+a naming/path mismatch (e.g., hold is computed but written to a different field than what the diagnostics reader expects).
+
+What to ask ChatGPT:
+“Can you trace exactly where newsEmaHeld is incremented and where it’s written into snapshot diagnostics, and confirm they’re the same execution path? If not, patch so the per-run counters are derived from persisted per-snapshot flags (single source of truth).”
+
+This is important because if you can’t trust diagnostics, you can’t safely tune.
+
+2) Volatility stddev = 0.0000 across all hours
+
+This can happen if:
+
+the stddev is computed over a field that’s effectively constant (e.g., rounded pct_change, clamped to 0, or computed from the wrong column), or
+
+your EMA + caps have genuinely made hour-to-hour % changes nearly identical (e.g., everyone’s change is like 0.10% ± tiny noise that rounds away).
+
+Given you’re still seeing meaningfulChanges ~15–30/hr, a true 0.0000 stddev is slightly suspicious unless:
+
+“meaningfulChanges” is being driven mostly by rank moves, not score moves, and/or
+
+score change threshold is computed differently than what stddev uses.
+
+What to ask ChatGPT:
+“Please validate the churn pipeline: what exact value is stddev computed from (raw vs smoothed score? pct_change of which score?), what rounding is applied pre-stddev, and whether values are clamped. Confirm stddev should be non-zero given meaningfulChanges > 0.”
+
+A quick sanity test: log the min/median/max hourly pct_change alongside stddev. If min/max are identical to 4 decimals, 0.0000 is legit. If min/max differ, the stddev computation is wrong.
+
+Yellow flags (probably explainable, but watch them)
+3) Ingestion gaps 24–36h ago
+
+If your timeout + lock cleanup changes were deployed around then, gaps are expected. Since last 12 hours are clean, I’d call this “resolved unless it returns.”
+
+4) Mediastack non-zero coverage 43% (Top-25 at 72%)
+
+This is a product/data limitation more than a bug. You already have a governor reducing news weight, so the engine is responding as designed. The only question is whether you want to:
+
+increase fallback usage (Serper/GDELT) for the mid/long tail, or
+
+accept that news is mostly a top-cohort signal.
+
+One product-level question (not a “bug”)
+5) High noise-to-signal in rank churn
+
+If 60–70% are “noise shuffles,” that’s pretty normal when people are bunched. It matters only if the UI makes the leaderboard feel jumpy. Your “meaningful vs noise” split is the right solution. If you want it calmer:
+
+show “movement badges” only for meaningful changes, and/or
+
+add a “rank stability” view (7D rank range, or “avg rank last 24h”).
+
+If you want the tight summary to share with ChatGPT
+
+“Engine is healthy: ingest running ~2min, 100/100 snapshots, sources healthy, score spread looks normal. Main concerns: (1) instrumentation mismatch—run summary reports 15 news EMA holds but per-snapshot diagnostics show 0; likely a persistence/path mismatch. (2) rank churn shows meaningful changes but volatility stddev is 0.0000 across all hours—either a metric bug (rounding/clamping/wrong field) or smoothing makes hourly pct changes nearly identical; need to validate min/median/max pct_change and stddev inputs. Mediastack non-zero coverage is low but expected; governor is working. Old ingest gaps likely due to deployments; last 12h clean.”
