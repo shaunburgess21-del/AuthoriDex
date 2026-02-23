@@ -2327,7 +2327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         overratedPct: null,
         fairlyRatedPct: null,
         valueScore: null,
-        leaderboardRank: offset + idx + 1,
+        leaderboardRank: sortDir === 'asc' ? totalCount - offset - idx : offset + idx + 1,
         userValueVote: null,
         rankChange: 0,
       }));
@@ -2504,7 +2504,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const prevRank = prevRankLookup.get(person.id) ?? person.rank;
         return {
           ...person,
-          leaderboardRank: offset + index + 1,
+          leaderboardRank: sortDir === 'asc' ? totalCount - offset - index : offset + index + 1,
           userValueVote: userValueVotes[person.id] || null,
           rankChange: prevRank - person.rank,
         };
