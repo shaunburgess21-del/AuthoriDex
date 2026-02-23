@@ -1,0 +1,73 @@
+Yep — that diagnosis + fix is the right class of solution.
+
+What was happening (in plain English)
+
+Radix <Tooltip> is hover-first. On phones there’s no “hover”, so tapping the little (i) often does nothing (or it flashes and immediately closes depending on focus/blur behavior). So your mobile users feel like the UI is “broken”.
+
+Is Replit’s fix good?
+
+Yes. Making those info icons behave like a tap-to-toggle popover on mobile is exactly what you want.
+
+The only thing I’d tighten is how you implement it so it stays consistent everywhere.
+
+My recommended “best” approach
+1) One reusable component (so you never fight this again)
+
+Instead of patching each tooltip instance, create something like:
+
+TouchTooltip / InfoPopover (global component)
+
+Behavior:
+
+Desktop: hover shows it (tooltip behavior)
+
+Mobile/touch: tap toggles it (popover behavior)
+
+Tap outside closes
+
+Then replace all “info (i)” tooltips across the app with this single component.
+
+This prevents future pages from reintroducing “hover-only” tooltips.
+
+2) Make the tap target bigger
+
+On mobile the icon is tiny. Add:
+
+a 44x44px hit area (invisible padding is fine)
+
+aria-label="More info" on the button
+
+This one change boosts usability a lot.
+
+3) Don’t let taps bubble into the row click
+
+If the info icon sits inside a clickable card/row, you must:
+
+e.stopPropagation() on the icon click/tap
+Otherwise users tap (i) and accidentally navigate.
+
+4) Positioning + overflow
+
+On mobile, tooltips can get clipped by containers.
+Make sure the popover:
+
+renders in a portal (Radix supports this)
+
+uses collision padding so it stays onscreen
+
+5) Micro-copy polish (what your screenshot shows)
+
+Your “Score Drivers” card is already much clearer now.
+Two small copy tweaks I’d consider:
+
+Replace “Exact (from score components)” with “Calculated from live signals” (more user-friendly)
+
+“Signals are steady — no major shift in the last 24h” is good; you could shorten to “No major shift in 24h.” if you want it tighter
+
+Quick verdict
+
+✅ Replit’s fix direction: correct
+
+✅ Your UI is getting cleaner and more understandable (especially the drivers)
+
+🔧 Next step: centralize this into one TouchTooltip/InfoPopover component + increase tap target + stopPropagation
