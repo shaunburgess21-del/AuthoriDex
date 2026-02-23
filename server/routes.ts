@@ -4802,7 +4802,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
                   RANK() OVER (PARTITION BY hp.current_hour ORDER BY cur.fame_index DESC) as current_rank,
                   RANK() OVER (PARTITION BY hp.current_hour ORDER BY prev.fame_index DESC) as prev_rank,
                   CASE WHEN prev.fame_index > 0 
-                    THEN ROUND(((cur.fame_index - prev.fame_index) / prev.fame_index * 100)::numeric, 2)
+                    THEN ROUND(((cur.fame_index::numeric - prev.fame_index::numeric) / prev.fame_index::numeric * 100), 4)
                     ELSE NULL END as pct_change
                 FROM hour_pairs hp
                 INNER JOIN deduped cur ON cur.hour = hp.current_hour
