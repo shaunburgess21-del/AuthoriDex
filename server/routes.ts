@@ -4766,6 +4766,76 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           uniquePeople: Number(r.unique_people),
           origin: r.origin,
         })),
+        rankChurn: await (async () => {
+          try {
+            const churnRows = await db.execute(sql`
+              WITH hourly_ranks AS (
+                SELECT 
+                  ts.person_id,
+                  date_trunc('hour', ts.timestamp) as hour,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY ts.person_id, date_trunc('hour', ts.timestamp)
+                    ORDER BY ts.timestamp DESC
+                  ) as rn,
+                  RANK() OVER (
+                    PARTITION BY date_trunc('hour', ts.timestamp)
+                    ORDER BY ts.fame_index DESC
+                  ) as hourly_rank,
+                  ts.fame_index,
+                  ROUND(((ts.fame_index - LAG(ts.fame_index) OVER (PARTITION BY ts.person_id ORDER BY ts.timestamp)) 
+                    / NULLIF(LAG(ts.fame_index) OVER (PARTITION BY ts.person_id ORDER BY ts.timestamp), 0) * 100)::numeric, 2) as pct_change
+                FROM trend_snapshots ts
+                WHERE ts.timestamp > ${h48Ago}
+              ),
+              deduped AS (
+                SELECT * FROM hourly_ranks WHERE rn = 1
+              ),
+              rank_changes AS (
+                SELECT 
+                  d.hour,
+                  d.person_id,
+                  d.hourly_rank as current_rank,
+                  LAG(d.hourly_rank) OVER (PARTITION BY d.person_id ORDER BY d.hour) as prev_rank,
+                  d.pct_change
+                FROM deduped d
+              )
+              SELECT 
+                hour,
+                COUNT(CASE WHEN prev_rank IS NOT NULL AND current_rank != prev_rank THEN 1 END)::int as rank_changes,
+                COUNT(CASE WHEN prev_rank IS NOT NULL THEN 1 END)::int as total_compared,
+                ROUND(AVG(ABS(current_rank - prev_rank)) FILTER (WHERE prev_rank IS NOT NULL)::numeric, 2) as avg_rank_move,
+                MAX(ABS(current_rank - prev_rank)) FILTER (WHERE prev_rank IS NOT NULL)::int as max_rank_move,
+                ROUND(STDDEV(pct_change) FILTER (WHERE pct_change IS NOT NULL)::numeric, 2) as score_volatility_stddev,
+                COUNT(CASE WHEN ABS(pct_change) > 5 THEN 1 END)::int as big_movers_5pct
+              FROM rank_changes
+              WHERE hour > ${h48Ago}
+              GROUP BY hour
+              ORDER BY hour DESC
+              LIMIT 48
+            `);
+            return (churnRows.rows || []).map((r: any) => ({
+              hour: new Date(r.hour).toISOString(),
+              rankChanges: Number(r.rank_changes),
+              totalCompared: Number(r.total_compared),
+              avgRankMove: Number(r.avg_rank_move) || 0,
+              maxRankMove: Number(r.max_rank_move) || 0,
+              scoreVolatilityStddev: Number(r.score_volatility_stddev) || 0,
+              bigMovers5pct: Number(r.big_movers_5pct) || 0,
+            }));
+          } catch (err) {
+            return { error: "Failed to compute rank churn" };
+          }
+        })(),
+        emaTuningConfig: {
+          EMA_BASE_ALPHA: parseFloat(process.env.EMA_BASE_ALPHA || '0.15'),
+          EMA_2_SOURCE_ALPHA: parseFloat(process.env.EMA_2_SOURCE_ALPHA || '0.15'),
+          EMA_3_SOURCE_ALPHA: parseFloat(process.env.EMA_3_SOURCE_ALPHA || '0.22'),
+          EMA_HIGH_BASELINE_MIN_ALPHA: parseFloat(process.env.EMA_HIGH_BASELINE_MIN_ALPHA || '0.20'),
+          EMA_HIGH_BASELINE_VELOCITY_THRESHOLD: parseFloat(process.env.EMA_HIGH_BASELINE_VELOCITY_THRESHOLD || '65'),
+          EMA_HIGH_BASELINE_MIN_STRONG_SOURCES: parseFloat(process.env.EMA_HIGH_BASELINE_MIN_STRONG_SOURCES || '2'),
+          EMA_DOWNWARD_MULTIPLIER: parseFloat(process.env.EMA_DOWNWARD_MULTIPLIER || '1.2'),
+          source: 'env_with_defaults',
+        },
       });
     } catch (error: any) {
       console.error("Error fetching engine health:", error.message);

@@ -19,7 +19,9 @@ import {
   SpikeDetectionInputs,
   getRecoveryRateBoost,
   getVelocityTaperMultiplier,
-  SourceHealthStates, // Kept for interface compatibility, but not used for weight redistribution
+  SourceHealthStates,
+  EMA_DOWNWARD_MULTIPLIER,
+  VelocitySubScores,
 } from "./normalize";
 import { 
   normalizeMass, 
@@ -346,16 +348,22 @@ export function computeTrendScore(
     }
     afterRateLimiting = Math.round(afterRateLimiting);
     
+    const velSubScores: VelocitySubScores = {
+      wiki: wikiVelocityScore,
+      news: newsVelocityScore,
+      search: searchVelocityScore,
+    };
+
     let usedAlpha: number;
     let isAsymmetric = false;
     if (afterRateLimiting < previousFameIndex) {
-      const baseAlpha = getDynamicAlpha(spikingSourceCount, velocityScore);
-      usedAlpha = Math.min(0.30, baseAlpha * 1.2);
+      const baseAlpha = getDynamicAlpha(spikingSourceCount, velocityScore, velSubScores);
+      usedAlpha = Math.min(0.30, baseAlpha * EMA_DOWNWARD_MULTIPLIER);
       isAsymmetric = true;
       fameIndex = Math.round((usedAlpha * afterRateLimiting) + ((1 - usedAlpha) * previousFameIndex));
     } else {
-      usedAlpha = getDynamicAlpha(spikingSourceCount, velocityScore);
-      fameIndex = Math.round(applyDynamicEmaSmoothing(afterRateLimiting, previousFameIndex, spikingSourceCount, velocityScore));
+      usedAlpha = getDynamicAlpha(spikingSourceCount, velocityScore, velSubScores);
+      fameIndex = Math.round(applyDynamicEmaSmoothing(afterRateLimiting, previousFameIndex, spikingSourceCount, velocityScore, velSubScores));
     }
 
     const prevF = previousFameIndex;

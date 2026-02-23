@@ -43,11 +43,22 @@ export const ANTI_SPAM_BASE = 0.35;
 export const ANTI_SPAM_MASS_FACTOR = 0.65;
 
 // EMA smoothing alpha - lower = smoother curves (stock market style)
-// Default 0.10 provides balanced responsiveness: smooth enough to filter noise,
-// fast enough to show real breakouts within hours (not days)
-export const EMA_ALPHA_DEFAULT = 0.18;  // Raised from 0.12 - lets more real signal through for high-baseline people
-export const EMA_ALPHA_2_SOURCES = 0.22;  // When 2 sources spike together (raised from 0.15)
-export const EMA_ALPHA_3_SOURCES = 0.28;  // When 3 sources spike (genuine viral, raised from 0.22)
+// Configurable via environment variables for live tuning without code changes.
+// v2 tuning: conservative 25% increase from original 0.12 base.
+const parseEnvFloat = (key: string, fallback: number): number => {
+  const val = process.env[key];
+  if (!val) return fallback;
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? fallback : parsed;
+};
+
+export const EMA_ALPHA_DEFAULT = parseEnvFloat('EMA_BASE_ALPHA', 0.15);
+export const EMA_ALPHA_2_SOURCES = parseEnvFloat('EMA_2_SOURCE_ALPHA', 0.15);
+export const EMA_ALPHA_3_SOURCES = parseEnvFloat('EMA_3_SOURCE_ALPHA', 0.22);
+export const EMA_HIGH_BASELINE_MIN_ALPHA = parseEnvFloat('EMA_HIGH_BASELINE_MIN_ALPHA', 0.20);
+export const EMA_HIGH_BASELINE_VELOCITY_THRESHOLD = parseEnvFloat('EMA_HIGH_BASELINE_VELOCITY_THRESHOLD', 65);
+export const EMA_HIGH_BASELINE_MIN_STRONG_SOURCES = parseEnvFloat('EMA_HIGH_BASELINE_MIN_STRONG_SOURCES', 2);
+export const EMA_DOWNWARD_MULTIPLIER = parseEnvFloat('EMA_DOWNWARD_MULTIPLIER', 1.2);
 
 // Rate limiting - maximum change per hour
 // Default 8% cap (raised from 5%), increases with multi-source breakouts
@@ -351,16 +362,24 @@ export function applyEmaSmoothing(newScore: number, previousScore: number | null
   return (EMA_ALPHA * newScore) + ((1 - EMA_ALPHA) * previousScore);
 }
 
+export interface VelocitySubScores {
+  wiki: number;
+  news: number;
+  search: number;
+}
+
 /**
  * Get dynamic EMA alpha based on number of spiking sources.
  * More sources spiking = faster response (higher alpha).
  * Also applies recalibration and catch-up boosts if active.
  * 
- * High-baseline boost: When velocityScore >= 60, the person is consistently
- * at a high level across sources. Noise is proportionally smaller relative to
- * their signal, so we can afford a faster alpha without introducing instability.
+ * High-baseline boost (v2): Only activates when BOTH conditions are met:
+ *   1. Aggregate velocityScore >= threshold (default 65)
+ *   2. At least N sub-scores (wiki/news/search) are above 50 (default N=2)
+ * This ensures only genuinely high-baseline people (strong across multiple signals)
+ * get faster smoothing, not mid-tier people with one strong source.
  */
-export function getDynamicAlpha(spikingCount: number, velocityScore?: number): number {
+export function getDynamicAlpha(spikingCount: number, velocityScore?: number, subScores?: VelocitySubScores): number {
   let baseAlpha: number;
   switch (spikingCount) {
     case 3:
@@ -372,8 +391,12 @@ export function getDynamicAlpha(spikingCount: number, velocityScore?: number): n
     default:
       baseAlpha = EMA_ALPHA_DEFAULT;
   }
-  if (velocityScore !== undefined && velocityScore >= 60) {
-    baseAlpha = Math.max(baseAlpha, 0.22);
+  if (velocityScore !== undefined && velocityScore >= EMA_HIGH_BASELINE_VELOCITY_THRESHOLD && subScores) {
+    const strongSourceCount = [subScores.wiki, subScores.news, subScores.search]
+      .filter(s => s >= 50).length;
+    if (strongSourceCount >= EMA_HIGH_BASELINE_MIN_STRONG_SOURCES) {
+      baseAlpha = Math.max(baseAlpha, EMA_HIGH_BASELINE_MIN_ALPHA);
+    }
   }
   const recalBoosted = getRecalibrationAlphaBoost(baseAlpha);
   return Math.min(recalBoosted * getCatchUpAlphaMultiplier(), 0.40);
@@ -387,10 +410,11 @@ export function applyDynamicEmaSmoothing(
   newScore: number, 
   previousScore: number | null,
   spikingCount: number,
-  velocityScore?: number
+  velocityScore?: number,
+  subScores?: VelocitySubScores
 ): number {
   if (previousScore === null) return newScore;
-  const alpha = getDynamicAlpha(spikingCount, velocityScore);
+  const alpha = getDynamicAlpha(spikingCount, velocityScore, subScores);
   return (alpha * newScore) + ((1 - alpha) * previousScore);
 }
 
