@@ -35,9 +35,11 @@ interface MomentumData {
     drivers: {
       status: "active" | "stable";
       breakdown: { search: number; news: number; wiki: number } | null;
+      breakdownPct: { search: number; news: number; wiki: number } | null;
       activeSources: number;
       quietSources: string[];
       isExact?: boolean;
+      method?: string;
     };
   } | null;
   categoryRank: {
@@ -402,23 +404,41 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
                   <BarChart3 className="h-4 w-4 text-primary" />
-                  <span className="font-semibold text-sm">Score Drivers (24h)</span>
+                  <span className="font-semibold text-sm">Score Drivers</span>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p className="text-xs max-w-[220px]">Based on what changed in the last 24 hours, not raw totals. Shows which signals drove movement.</p>
+                      <p className="text-xs max-w-[220px]">Current velocity composition — how each signal contributes to the overall score right now.</p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
                 <Badge variant="outline" className="text-xs">
-                  {signals.drivers.activeSources}/3 sources
+                  {signals.drivers.quietSources.length === 3 ? "steady" : `${3 - signals.drivers.quietSources.length}/3 active`}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="pt-4">
-              <p className="text-sm text-muted-foreground">Stable — no major signal shift</p>
+              {signals.drivers.breakdownPct ? (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <DriverBar label="Search" pct={signals.drivers.breakdownPct.search} color="bg-blue-500" />
+                    <DriverBar label="News" pct={signals.drivers.breakdownPct.news} color="bg-red-500" />
+                    <DriverBar label="Wiki" pct={signals.drivers.breakdownPct.wiki} color="bg-gray-400" />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/60" data-testid="text-stable-context">
+                    Signals are steady — no major shift in the last 24h
+                  </p>
+                  {signals.drivers.method && (
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0" data-testid="badge-drivers-method-stable">
+                      {signals.drivers.method === "exact_velocity_components" ? "Exact (from score components)" : "Estimate (from signal changes)"}
+                    </Badge>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground" data-testid="text-stable-no-data">Signals are steady — no major shift in the last 24h</p>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -460,7 +480,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                       Drivers explain today's change, not total attention · Compared to ~24h ago
                     </p>
                     <Badge variant="outline" className="text-[9px] px-1.5 py-0" data-testid="badge-drivers-method">
-                      {signals.drivers.isExact ? "Exact (from score components)" : "Estimate (from signal changes)"}
+                      {(signals.drivers.method === "exact_velocity_components" || signals.drivers.isExact) ? "Exact (from score components)" : "Estimate (from signal changes)"}
                     </Badge>
                   </div>
                   <Button

@@ -1392,8 +1392,13 @@ export async function runDataIngestion(): Promise<IngestResult> {
             newsSource: hasPerPersonFallback ? "serper_news" : newsSource,
             newsIsRefresh: newsSource === "mediastack" ? (mediastackCadence?.shouldRefresh ?? true) : true,
             ...(hasPerPersonFallback ? { fallbackReason: news?._fallbackReason ?? "per_person_zero_streak" } : {}),
-            ...(newsEmaHeld ? { newsEmaHeld: true, newsRawCount: news?.articleCount24h ?? 0, newsHoldDetail: newsHoldDiag } : {}),
-            ...(searchEmaHeld ? { searchEmaHeld: true, searchRawVolume: serper?.searchVolume ?? 0, searchHoldDetail: searchHoldDiag } : {}),
+            newsEmaHeld,
+            searchEmaHeld,
+            stickyZeroGuard,
+            newsGovernorFactor,
+            searchGovernorFactor,
+            ...(newsEmaHeld ? { newsRawCount: news?.articleCount24h ?? 0, newsHoldDetail: newsHoldDiag } : {}),
+            ...(searchEmaHeld ? { searchRawVolume: serper?.searchVolume ?? 0, searchHoldDetail: searchHoldDiag } : {}),
             ...(searchDeltaStale ? { searchDeltaStale: true, snapshotAgeHours: Math.round(snapshotAgeHours * 10) / 10 } : {}),
           },
           change: {
@@ -1409,6 +1414,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
           },
           velocityComponents: scoreResult.velocityComponents,
           driversModel: "velocity_components_v1",
+          driversMethod: scoreResult.velocityComponents ? "exact_velocity_components" : "estimate_signal_change",
           stab: scoreResult.stabDetail ? {
             ...scoreResult.stabDetail,
             capPct: scoreResult.stabDetail.capUsed,
