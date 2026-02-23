@@ -2345,7 +2345,7 @@ export default function PredictPage() {
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/30">
             <Wallet className="h-4 w-4 text-violet-500" />
             <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString('en-US')}</span>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/30 text-violet-500">TEST</Badge>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/30 text-violet-500">Credits</Badge>
           </div>
           <div className="flex items-center gap-2">
             <ListChecks className="h-4 w-4 text-muted-foreground" />

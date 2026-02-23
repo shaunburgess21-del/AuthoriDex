@@ -1,0 +1,62 @@
+This table is super useful — you can absolutely send it on. My verdict: you’re in the pocket overall, with a couple “spiky hours” that are still within acceptable bounds for a “live” trending product.
+
+Quick verdict
+
+Not too damped: You have plenty of movement hours (movers ≥2% often in the 20–40 range).
+
+Not too loose: p90 mostly sits between ~1% and ~3.5%, and stddev mostly ~1–3. That’s “active” without looking chaotic.
+
+Looks “plausibly lively”: Exactly what you want.
+
+What the percentiles say (the most important part)
+
+Most hours:
+
+median stays near 0 (good — no systemic drift)
+
+p10 mostly around -1% to -2.5%
+
+p90 mostly around +1% to +3.5%
+
+That implies: the typical person is moving a bit each hour, but not violently.
+
+The “spiky” hours (still okay)
+
+01:00: min -10.97%, max +5.57%, p90 3.45, movers≥2% = 41, stddev 2.97
+→ Busy hour, but p90 at 3.45% means the tail isn’t insane; it’s not everybody whiplashing.
+
+00:00 and 06:00 are similar “eventful” hours.
+
+This pattern is fine if it correlates with real-world bursts (news cycle, searches, etc.). If it happens every day at the same hour, that can hint at a pipeline/cadence artifact — but from the 12h sample alone it doesn’t scream “bug”.
+
+One thing does look off: “Meaningful” is way too high
+
+You’ve got Meaningful = 55–81 almost every hour, even when movers≥2% is low (e.g., 23:00 movers≥2% = 0 but meaningful = 81).
+
+That suggests your “meaningful” definition is currently dominated by rank move ≥ 3 (or it’s being computed against a rank that is more jittery than the score thresholds imply). In other words: your “meaningful” metric is likely over-counting.
+
+What to do: keep “movers ≥2%” as the headline stability signal, and treat “meaningful” as “rank churn” (rename it), or tighten it.
+
+A simple fix:
+
+“Meaningful” = (|pct_change| ≥ 0.5%) AND (|rank_move| ≥ 3)
+instead of OR.
+
+Or make two metrics:
+
+meaningfulByScore (score-based)
+
+meaningfulByRank (rank-based)
+
+What I’d change (optional, low-risk)
+
+Nothing urgent. If you want a tiny improvement:
+
+Keep the EMA V2 tuning as-is for now.
+
+Fix / rename the “Meaningful” churn metric (it’s currently misleading).
+
+Copy-paste message you can send to Replit
+
+Your 12h churn stats look “in the pocket”: p10/p90 mostly within ~(-2.5%, +3.5%), stddev ~1–3, and movers≥2% frequently 20–40 on active hours. Not too damped, not too whippy.
+One issue: “Meaningful” is way too high even when movers≥2% is low (e.g., 23:00 movers≥2%=0 but meaningful=81). That suggests the OR logic (score>0.5% OR rank≥3) is dominated by rank jitter. Recommend either tightening to AND, or splitting into meaningfulByScore vs meaningfulByRank (or renaming it to rankChurn3+).
