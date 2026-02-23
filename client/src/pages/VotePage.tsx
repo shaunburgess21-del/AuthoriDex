@@ -491,7 +491,7 @@ function InductionCandidateCard({
 
       <div className="flex flex-col items-center text-center mb-4 flex-grow">
         <div className="relative">
-          <PersonAvatar name={candidate.name} imageSlug={candidate.imageSlug} className="h-32 w-32" />
+          <PersonAvatar name={candidate.name} imageSlug={candidate.imageSlug} imageContext="induction" className="h-32 w-32" />
           {isVoted && (
             <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center">
               <Check className="h-3 w-3 text-white" />

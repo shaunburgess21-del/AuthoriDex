@@ -303,7 +303,7 @@ function InductionCard({
         </div>
         
         <div className="flex flex-col items-center text-center mb-4">
-          <PersonAvatar name={candidate.name} avatar={(candidate as any).avatar} imageSlug={(candidate as any).imageSlug} size="xl" />
+          <PersonAvatar name={candidate.name} avatar={(candidate as any).avatar} imageSlug={(candidate as any).imageSlug} imageContext="induction" size="xl" />
           <h3 className="font-semibold text-base mt-3">{candidate.name}</h3>
         </div>
         

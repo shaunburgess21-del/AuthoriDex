@@ -90,7 +90,7 @@ function InductionCandidateRow({
       </div>
       
       <div className="relative shrink-0">
-        <PersonAvatar name={candidate.name} imageSlug={candidate.imageSlug} size="sm" />
+        <PersonAvatar name={candidate.name} imageSlug={candidate.imageSlug} imageContext="induction" size="sm" />
         {isVoted && (
           <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 flex items-center justify-center">
             <Check className="h-2.5 w-2.5 text-white" />

@@ -50,7 +50,7 @@ Preferred communication style: Simple, everyday language.
   - `leaders-small` → `_compressed_70kb/{slug}/{index}.webp` (~67KB, for induction candidates)
   - `leaders-large` → `_compressed_150kb_expanded/{slug}/{index}.webp` (for expanded candidate views)
   - Legacy: `celebrity_images/{slug}/{index}.png` (fallback)
-- **Image Resolver** (`client/src/lib/imageResolver.ts`): Cascading URL fallback system — optimized bucket → legacy bucket → placeholder. Configurable prefix constants. Uses `useResolvedImage` React hook with `onError` cascading.
+- **Image Resolver** (`client/src/lib/imageResolver.ts`): Context-specific cascading URL fallback system. Three contexts: `"tile"` (celebrity-small → leaders-small → legacy), `"expanded"` (celebrity-large → leaders-large → celebrity-small → legacy), `"induction"` (leaders-small only, 1.webp → 2.webp). Uses `useResolvedImage` React hook with `key`-based Radix Avatar re-mounting for reliable fallback cascading.
 - **`image_slug`** field on both `tracked_people` (100 backfilled) and `induction_candidates` (116 pre-populated) for bucket path resolution.
 
 ### Data Storage

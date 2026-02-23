@@ -32,7 +32,7 @@ export function PersonAvatar({ name, avatar, imageSlug, imageContext = "tile", i
 
   return (
     <Avatar className={`${sizeClass} rounded-md`} data-testid={`avatar-${name.toLowerCase().replace(/\s/g, '-')}`}>
-      {displaySrc && <AvatarImage src={displaySrc} alt={name} className="object-cover" onError={resolvedSrc ? onResolvedError : undefined} />}
+      {displaySrc && <AvatarImage key={displaySrc} src={displaySrc} alt={name} className="object-cover" onError={resolvedSrc ? onResolvedError : undefined} />}
       <AvatarFallback className="bg-primary/10 text-primary font-semibold rounded-md">
         {initials}
       </AvatarFallback>

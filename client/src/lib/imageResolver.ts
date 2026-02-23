@@ -6,7 +6,7 @@ const CELEBRITY_LARGE_PREFIX = "_compressed_large_200kb_webp";
 const LEADERS_SMALL_PREFIX = "_compressed_70kb";
 const LEADERS_LARGE_PREFIX = "_compressed_150kb_expanded";
 
-export type ImageContext = "tile" | "expanded";
+export type ImageContext = "tile" | "expanded" | "induction";
 
 export function getImageCandidates(
   supabaseUrl: string,
@@ -17,7 +17,10 @@ export function getImageCandidates(
   const base = `${supabaseUrl}/storage/v1/object/public`;
   const candidates: string[] = [];
 
-  if (context === "tile") {
+  if (context === "induction") {
+    candidates.push(`${base}/leaders-small/${LEADERS_SMALL_PREFIX}/${slug}/1.webp`);
+    candidates.push(`${base}/leaders-small/${LEADERS_SMALL_PREFIX}/${slug}/2.webp`);
+  } else if (context === "tile") {
     candidates.push(`${base}/celebrity-small/${CELEBRITY_SMALL_PREFIX}/${slug}/${index}.webp`);
     candidates.push(`${base}/leaders-small/${LEADERS_SMALL_PREFIX}/${slug}/${index}.webp`);
     if (index > 1) {

@@ -192,7 +192,7 @@ export function AdminInductionQueue() {
                     <tr key={candidate.id} className="border-b last:border-b-0 hover-elevate" data-testid={`row-induction-${candidate.id}`}>
                       <td className="p-3">
                         <div className="flex items-center gap-2">
-                          <PersonAvatar name={candidate.displayName} imageSlug={candidate.imageSlug} size="xs" />
+                          <PersonAvatar name={candidate.displayName} imageSlug={candidate.imageSlug} imageContext="induction" size="xs" />
                           <span className="font-medium">{candidate.displayName}</span>
                         </div>
                       </td>
