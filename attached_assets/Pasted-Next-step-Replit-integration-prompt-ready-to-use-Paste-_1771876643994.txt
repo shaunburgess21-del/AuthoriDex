@@ -1,0 +1,78 @@
+Next step: Replit integration prompt (ready to use)
+
+Paste this into Replit (or your Replit AI agent) so it wires the induction queue correctly:
+
+Please update the Induction Queue data source and image sourcing as follows:
+
+DATA SOURCE
+- Use Supabase table: public.induction_candidates
+- Fields to use:
+  - id
+  - display_name
+  - category
+  - image_slug
+  - wiki_slug
+  - seed_votes
+  - is_active
+- Only show records where is_active = true
+
+INDUCTION QUEUE CARD IMAGES (small)
+- Use Supabase Storage bucket: leaders-small (public)
+- Image path pattern:
+  _compressed_70kb/{image_slug}/1.webp
+- Example:
+  _compressed_70kb/robert-downey-jr/1.webp
+  _compressed_70kb/pitbull/1.webp
+
+FALLBACKS
+- If image 1.webp is missing, fallback to:
+  _compressed_70kb/{image_slug}/2.webp
+- If still missing, show placeholder avatar
+
+SORTING / DISPLAY
+- Default sort by total displayed votes descending (seed + real votes)
+- Display name and category on each card
+
+VOTING LOGIC (seed + real votes)
+- Keep seed votes separate from real user votes in DB logic
+- Frontend should display combined total:
+  displayed_votes = seed_votes + real_votes
+- Percentages / rankings should be based on displayed total (seed + real)
+- Real user votes must still be stored separately from seed votes
+
+WEEKLY INDUCTION AUTOMATION (already planned)
+- At weekly countdown end (Sunday 11:59pm UTC), induct the highest-voted candidate from the queue into the main leaderboard
+- Preserve separate seed vs real vote accounting for auditability
+One correction to your earlier note (important)
+
+You asked how real user votes are counted if you removed older columns like votes_for.
+
+That’s the right concern, and the answer is:
+
+induction_candidates should not necessarily store live vote counts directly (except seed_votes)
+
+Real votes are usually better stored in a separate table (e.g. induction_votes) and then aggregated
+
+The frontend/API can compute:
+
+real_votes = count(*) or sum from votes table
+
+displayed_total = seed_votes + real_votes
+
+So deleting a votes_for column is not automatically a problem, as long as Replit stores real votes in a dedicated votes table.
+
+What to do right now
+
+Verify seed_votes and is_active columns are correct.
+
+Paste the Replit prompt above.
+
+Ask Replit to confirm:
+
+which table stores real induction votes
+
+how it computes combined totals
+
+whether it’s using leaders-small path exactly
+
+If you want, after Replit responds, send me the reply and I’ll help refine the implementation prompt for the weekly induction automation + seed vote handling.

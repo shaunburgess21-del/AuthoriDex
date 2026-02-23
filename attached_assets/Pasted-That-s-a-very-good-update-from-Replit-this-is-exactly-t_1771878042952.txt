@@ -1,0 +1,167 @@
+That’s a very good update from Replit — this is exactly the kind of correction you wanted. ✅
+
+They’ve now correctly identified the important realities:
+
+bucket paths + wrapper folders
+
+huge image size savings
+
+induction_candidates is populated
+
+image_slug exists there
+
+tracked_people still needs image_slug
+
+Drizzle schema is out of sync and must be aligned
+
+That means they’re now planning from the real system state, not assumptions.
+
+What to tell Replit before they write the revised plan
+
+Ask them to include these items explicitly in the revised plan (so nothing gets missed):
+
+1) Do not break current production while migrating
+
+They should implement fallbacks in this order for leaderboard images during rollout:
+
+new optimized bucket path (small/large)
+
+old celebrity_images/{slug}/1.png legacy path
+
+placeholder
+
+This lets you switch safely without broken cards.
+
+2) Add image_slug to tracked_people
+
+This is a key migration step. Tell them to plan for:
+
+DB migration to add image_slug column to tracked_people
+
+backfill image_slug from current naming convention (lowercase hyphenated names) where possible
+
+manual override for edge cases later
+
+Without this, main leaderboard image routing will stay brittle.
+
+3) Align Drizzle schema to actual DB schema
+
+This is essential. Tell them to treat the DB as source-of-truth and update Drizzle accordingly for induction_candidates:
+
+Expected lean fields:
+
+id
+
+display_name
+
+category
+
+image_slug
+
+seed_votes
+
+wiki_slug
+
+is_active
+
+If they keep old code expecting votesFor, avatar, etc., it’ll fail.
+
+4) Keep seed votes separate from real votes
+
+They already seem aware, but ask them to state exactly:
+
+where real induction votes are stored
+
+how combined totals are computed
+
+whether weekly induction selects by combined total
+
+This avoids hidden logic mistakes.
+
+5) Configurable path prefixes (not hardcoded)
+
+Since you now have wrapper folders, ask them to build path prefixes as config constants, e.g.:
+
+CELEBRITY_SMALL_PREFIX = "_compressed_small_100kb_webp"
+
+CELEBRITY_LARGE_PREFIX = "_compressed_large_200kb_webp"
+
+LEADERS_SMALL_PREFIX = "_compressed_70kb"
+
+LEADERS_LARGE_PREFIX = "_compressed_150kb_expanded"
+
+This will save headaches later if you rename folders or change caps.
+
+Short message you can send now (copy/paste)
+Perfect — this is the correct picture now. Please proceed with the revised plan.
+
+Please include these requirements explicitly in the plan:
+
+1) Safe rollout / no breakage:
+- Use fallback image resolution during migration:
+  new optimized path -> legacy celebrity_images/{slug}/1.png -> placeholder
+
+2) tracked_people migration:
+- Add image_slug to tracked_people
+- Backfill from current slug convention where possible
+- Allow manual overrides for edge cases
+
+3) Drizzle schema alignment:
+- Update Drizzle schema for induction_candidates to match the actual DB lean schema
+  (id, display_name, category, image_slug, seed_votes, wiki_slug, is_active)
+
+4) Voting logic:
+- Keep seed_votes separate from real votes
+- Frontend displays combined totals
+- Confirm weekly induction winner selection uses the intended total (combined vs real-only)
+
+5) Configurable storage prefixes:
+- Don’t hardcode root-level paths
+- Use configurable wrapper-folder prefixes for all four buckets
+
+Please also include the exact migration steps/order (DB migration first, schema update, resolver/fallbacks, UI wiring, then cleanup).
+My recommendation on rollout order (so you can sanity-check their plan)
+
+The revised plan should roughly follow this sequence:
+
+DB migrations
+
+add image_slug to tracked_people
+
+any needed indexes / defaults
+
+Drizzle schema update
+
+fix induction_candidates
+
+add tracked_people.image_slug
+
+Image resolver utilities
+
+bucket + prefix aware
+
+small/large + fallback chain
+
+Induction Queue wiring
+
+use induction_candidates
+
+leaders-small/_compressed_70kb/{image_slug}/1.webp
+
+Leaderboard / Curate image migration
+
+small bucket for list/tile
+
+large bucket for expanded
+
+fallback to legacy PNG during transition
+
+Admin seed vote editing + combined totals
+
+if not already implemented
+
+Weekly induction automation checks
+
+preserve image_slug on promotion to leaderboard
+
+If their plan follows that shape, you’re in a strong position.

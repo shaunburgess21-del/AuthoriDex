@@ -1,0 +1,138 @@
+Yes — 100% yes. That should be included now. ✅
+
+If you don’t ask Replit to switch the existing main leaderboard image sourcing, your app may still be loading the old ~1MB images from celebrity_images, which can slow list/grid pages.
+
+What to ask Replit to do now
+
+Ask Replit to handle both in one pass:
+
+Induction Queue (from leaders-small)
+
+Main Leaderboard existing celebrities (from celebrity-small + celebrity-large)
+
+That gives you a clean, consistent image strategy across the app.
+
+Recommended rule set (simple + clean)
+Induction Queue (pre-induction)
+
+Card/list image → leaders-small/_compressed_70kb/{image_slug}/1.webp
+
+No expanded image needed (for now)
+
+Main Leaderboard (existing celebrities)
+
+Card/list/tile image → celebrity-small/{slug}/{index}.webp
+
+Expanded/profile/curate image → celebrity-large/{slug}/{index}.webp
+
+Newly inducted candidates (after promotion)
+
+You need to choose one rule (I recommend this one):
+
+Recommended: keep newly inducted people using the leaders-* buckets initially (fastest), then optionally migrate later.
+
+OR (more uniform, but more work):
+
+Replit/automation copies them into celebrity-* paths when inducted.
+
+For now, the easiest/lowest-risk is:
+
+allow leaderboard image resolver to check celebrity-* first, then fallback to leaders-*.
+
+Best approach for Replit (important)
+
+Ask Replit to build a central image URL resolver instead of hardcoding paths in multiple components.
+
+That way:
+
+all tiles/cards use the same logic
+
+all expanded/profile views use the same logic
+
+future bucket/path changes are easy
+
+Updated Replit prompt (include this now)
+
+Paste this in addition to (or replacing) the earlier prompt:
+
+Please update image sourcing across the app to use the new optimized Supabase Storage buckets for BOTH the Induction Queue and the Main Leaderboard.
+
+INDUCTION QUEUE (pre-induction)
+- Source candidates from Supabase table: public.induction_candidates (is_active = true)
+- Card images must use bucket: leaders-small
+- Path pattern: _compressed_70kb/{image_slug}/1.webp
+- Fallbacks:
+  1) _compressed_70kb/{image_slug}/2.webp
+  2) placeholder avatar
+- No expanded image needed for induction queue right now
+
+MAIN LEADERBOARD (existing celebrities)
+- Replace legacy 1MB image sourcing from `celebrity_images` in list/tile/card contexts
+- Use optimized buckets instead:
+
+Cards / tiles / leaderboard list:
+- bucket: celebrity-small
+- path pattern: {image_slug}/{index}.webp
+- default index = 1
+
+Expanded / profile / curate modal:
+- bucket: celebrity-large
+- path pattern: {image_slug}/{index}.webp
+- default index = 1
+
+IMAGE RESOLVER (important)
+- Implement a shared image resolver/helper function for all celebrity images
+- It should support:
+  - context = "tile" | "expanded"
+  - slug
+  - index (default 1)
+- Tile context preference:
+  1) celebrity-small/{slug}/{index}.webp
+  2) leaders-small/_compressed_70kb/{slug}/{index}.webp
+  3) fallback to index 1
+  4) placeholder
+- Expanded context preference:
+  1) celebrity-large/{slug}/{index}.webp
+  2) leaders-large/_compressed_150kb_expanded/{slug}/{index}.webp
+  3) celebrity-small/{slug}/{index}.webp
+  4) placeholder
+
+NEWLY INDUCTED CANDIDATES
+- When a candidate is inducted into the main leaderboard, preserve and carry forward `image_slug`
+- Ensure main leaderboard components can render their images even if only leaders-* images exist initially (using resolver fallbacks above)
+
+PERFORMANCE GOAL
+- No leaderboard grid/list should load legacy ~1MB images
+- Use optimized buckets for all card/tile contexts
+
+VOTING / INDUCTION (unchanged)
+- Keep seed_votes separate from real votes
+- Frontend displays combined totals
+- Weekly induction at countdown end selects highest-voted active candidate
+One thing to verify before sending to Replit
+
+Make sure your celebrity-small and celebrity-large buckets do not include extra wrapper folder names unless intended.
+
+You previously uploaded:
+
+_compressed_small_100kb_webp
+
+_compressed_large_200kb_webp
+
+So actual paths may be either:
+
+Option A (preferred)
+
+celebrity-small/{slug}/1.webp
+celebrity-large/{slug}/1.webp
+
+Option B (if uploaded with wrapper folder preserved)
+
+celebrity-small/_compressed_small_100kb_webp/{slug}/1.webp
+celebrity-large/_compressed_large_200kb_webp/{slug}/1.webp
+
+If you’re not sure, open one file in Supabase Storage and check the exact path. Then tweak the prompt path pattern accordingly.
+
+Short answer to your question
+
+Yes — ask Replit now to repoint the main leaderboard to the new celebrity-small / celebrity-large buckets, otherwise the old 1MB images may continue hurting performance.

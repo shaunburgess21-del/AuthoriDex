@@ -1,0 +1,104 @@
+Yes — definitely revise it before they start building. ✅
+
+They’ve made a few assumptions that are now outdated / incorrect (because your latest screenshot proves the buckets are not empty and the path includes a wrapper folder).
+
+If you don’t correct it now, they may build the resolver around the wrong path logic and you’ll end up with unnecessary rework.
+
+What changed that Replit needs to know
+
+Their current assumptions (based on earlier checks):
+
+new buckets are empty ❌
+
+no candidates in table ❌ (you imported them)
+
+no image_slug field ❌ (you added it)
+
+slug derived from name ❌ (you now have explicit image_slug)
+
+likely checking root-level bucket paths ❌ (your celebrity buckets use wrapper folders)
+
+Your latest state:
+
+induction_candidates is populated
+
+image_slug exists
+
+new buckets have images
+
+celebrity buckets use wrapper folder paths like:
+
+_compressed_small_100kb_webp/{slug}/1.webp
+
+_compressed_large_200kb_webp/{slug}/1.webp
+
+Best move right now
+
+Yes — send a correction/update message (before they finalize implementation) and ask them to revise the plan accordingly.
+
+Copy/paste to Replit (updated correction)
+Please revise the plan based on updated state (your earlier checks are now outdated):
+
+UPDATED CURRENT STATE
+1) The new Supabase storage buckets are NOT empty anymore (images have been uploaded).
+2) The `induction_candidates` table is populated (lean CSV has been imported).
+3) The `induction_candidates` table DOES include `image_slug`.
+4) Please use `image_slug` as the source of truth for image path resolution (do not derive slug from name if `image_slug` exists).
+
+IMPORTANT: BUCKET PATH STRUCTURE (wrapper folders)
+The celebrity buckets are not flat root-level slug folders.
+
+Use these exact path prefixes:
+- celebrity-small: `_compressed_small_100kb_webp/{slug}/1.webp`
+- celebrity-large: `_compressed_large_200kb_webp/{slug}/1.webp`
+
+Induction buckets should support:
+- leaders-small: `_compressed_70kb/{slug}/1.webp`
+- leaders-large: `_compressed_150kb_expanded/{slug}/1.webp`
+
+INDUCTION DATA SOURCE
+Use `public.induction_candidates` as source of truth for induction queue cards.
+Fields:
+- id
+- display_name
+- category
+- image_slug
+- wiki_slug
+- seed_votes
+- is_active
+
+Only show `is_active = true`.
+
+IMAGE RESOLVER REQUIREMENTS
+Please make image path prefixes configurable per bucket (not hardcoded root-level slug folders), and support fallback:
+1.webp -> 2.webp -> placeholder
+
+VOTING LOGIC
+Keep `seed_votes` separate from real user votes.
+Frontend shows combined totals (seed + real).
+Do not store real vote totals directly in `induction_candidates` unless intentionally caching.
+
+Also please re-check bucket contents using the correct wrapper-folder paths before finalizing the implementation plan.
+Why this matters
+
+If you let them continue with the old assumption:
+
+they may hardcode celebrity-small/{slug}/1.webp
+
+they may ignore image_slug
+
+they may build “fallback only” mode because they think buckets are empty
+
+they may wire induction queue from the wrong source
+
+That creates avoidable bugs.
+
+Small extra tip
+
+If you want to be extra clear, also send them one concrete example path from each bucket, e.g.:
+
+celebrity-large/_compressed_large_200kb_webp/adele/1.webp
+
+leaders-small/_compressed_70kb/rupert-lowe/1.webp
+
+That removes all ambiguity.
