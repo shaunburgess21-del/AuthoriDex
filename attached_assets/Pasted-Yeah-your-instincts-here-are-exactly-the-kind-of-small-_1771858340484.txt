@@ -1,0 +1,106 @@
+Yeah — your instincts here are exactly the kind of small “mobile friction” things that make an app feel either slick or annoying.
+
+Here are solid options (grouped to your 5 points), plus a few extra ideas that usually move the needle.
+
+1) Filter button gets tapped while scrolling (annoying)
+
+This is a classic “tap target in the thumb-swipe lane” problem.
+
+Best fixes (pick 1):
+
+Move Filter into the search bar row (left side)
+Put a small “sliders” icon inside the search field on the left (or immediately left of it). Users aren’t swiping there as much, and it feels “search/filter” cohesive.
+
+Make Filter a bottom-sheet handle instead of a top button
+Example: a small “Filters” chip that lives below the tabs, or a “Filter” row that expands as a sheet. Bottom sheets feel native on Android and reduce accidental taps because they’re more deliberate.
+
+Reduce accidental activation (if you keep it top-right)
+
+shrink the tap target slightly on mobile (still accessible, but less “fat finger”)
+
+or require a press + release delay of ~120ms (tiny “debounce” so a swipe doesn’t trigger it)
+
+My recommendation: move it next to search (or inside search). It’s the cleanest and most intuitive.
+
+2) Users might not realize sorting changes between Trend vs Approval
+
+Right now the “tab” style is subtle enough that some users won’t clock it as “Sort by”.
+
+Make the sorting state explicit:
+
+Add a small line/chip under tabs: “Sorted by: Trend Score” (updates to Approval Rating)
+
+Or rename the tab header to “Sort” / “Ranking”:
+
+“Ranking: Trend” | “Ranking: Approval”
+
+Make the active tab more obvious:
+
+stronger highlight
+
+a clear underline
+
+and a tiny label like “Default” under Trend Score for new users (could disappear after first interaction)
+
+Simple win: a “Sorted by …” chip removes ambiguity instantly.
+
+3) Thumbs-up icon = unclear that it opens 1–5 rating
+
+You’re right: thumbs-up reads like a single “like” action, not a 1–5 rating.
+
+Options:
+
+Change icon to ⭐ (star) or ★ + number (more “rating” mental model)
+
+Use a small pill that says Rate (best clarity)
+
+Or combine: ⭐ Rate (icon + word is the clearest)
+
+My recommendation: On mobile, use “Rate” (or “⭐ Rate”) as a small pill. Clarity beats minimalism here.
+
+4) Users don’t see Approval % in Trend view
+
+This is important: people should understand what they’re rating even if they’re browsing by Trend.
+
+Good fix without clutter:
+
+Show Approval % as a small secondary line on each row (subtle, not dominant), e.g.:
+
+under the name: “Approval: 93% (317 votes)”
+
+Or show it as a small badge on the right: 93%
+
+Or show it only after the user votes once (progressive disclosure)
+
+My recommendation: show Approval % in both views, but keep it visually “secondary” in Trend mode.
+
+5) Search bar takes too much space + placement
+
+This is where mobile UX can feel way cleaner.
+
+Best patterns:
+
+Collapsing search on scroll
+When user scrolls down, collapse search into a small icon (🔍). When they scroll up, it expands again.
+
+Shorter placeholder + smaller height
+Placeholder: “Search” is enough.
+Or “Search people…” (no “category” needed if filter handles category).
+
+Put Filter next to search (as you suggested)
+That solves both the thumb issue and the visual hierarchy.
+
+My recommendation: collapse-on-scroll + filter next to search.
+
+Extra ideas that would improve the leaderboard a lot
+A) Make “Trend vs Approval” feel like a mode toggle
+
+Right now it’s “tabs”, but it’s really “ranking mode”. Consider:
+
+Segmented control with clear labels and a strong selected state.
+
+B) Add a tiny “hint” the first time
+
+One-time helper text under the tabs:
+
+“Tap Approval Rating to sort by community votes.”
