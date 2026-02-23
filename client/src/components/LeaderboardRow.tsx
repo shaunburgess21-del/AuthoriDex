@@ -241,14 +241,6 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                     {' '}{delta24h}
                   </span>
                 )}
-                {person.approvalPct != null && (
-                  <span className="text-muted-foreground/70">
-                    {' '}&middot;{' '}
-                    <span style={{ color: getApprovalColor(person.approvalPct) }} className="opacity-70">
-                      {Math.round(person.approvalPct)}%
-                    </span>
-                  </span>
-                )}
               </span>
             )}
             {activeTab === "approval" && (

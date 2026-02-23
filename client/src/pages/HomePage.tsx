@@ -923,7 +923,7 @@ export default function HomePage() {
                     </button>
                   </div>
                   <p className="text-[11px] text-muted-foreground/50 mt-1.5" data-testid="text-mode-microcopy">
-                    Sorted by: {leaderboardTab === "fame" ? "Trend Score" : "Approval Rating"} {sortDirection === "desc" ? "↓" : "↑"}
+                    Sorted by: {leaderboardTab === "fame" ? "Trend Score" : "Approval Rating"}
                   </p>
                 </div>
                 <CardContent className="p-0">
