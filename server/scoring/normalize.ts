@@ -45,9 +45,9 @@ export const ANTI_SPAM_MASS_FACTOR = 0.65;
 // EMA smoothing alpha - lower = smoother curves (stock market style)
 // Default 0.10 provides balanced responsiveness: smooth enough to filter noise,
 // fast enough to show real breakouts within hours (not days)
-export const EMA_ALPHA_DEFAULT = 0.12;  // Raised from 0.10 - base tier was doing most rate limiting
-export const EMA_ALPHA_2_SOURCES = 0.15;  // When 2 sources spike together
-export const EMA_ALPHA_3_SOURCES = 0.22;  // When 3 sources spike (genuine viral)
+export const EMA_ALPHA_DEFAULT = 0.18;  // Raised from 0.12 - lets more real signal through for high-baseline people
+export const EMA_ALPHA_2_SOURCES = 0.22;  // When 2 sources spike together (raised from 0.15)
+export const EMA_ALPHA_3_SOURCES = 0.28;  // When 3 sources spike (genuine viral, raised from 0.22)
 
 // Rate limiting - maximum change per hour
 // Default 8% cap (raised from 5%), increases with multi-source breakouts
@@ -355,18 +355,25 @@ export function applyEmaSmoothing(newScore: number, previousScore: number | null
  * Get dynamic EMA alpha based on number of spiking sources.
  * More sources spiking = faster response (higher alpha).
  * Also applies recalibration and catch-up boosts if active.
+ * 
+ * High-baseline boost: When velocityScore >= 60, the person is consistently
+ * at a high level across sources. Noise is proportionally smaller relative to
+ * their signal, so we can afford a faster alpha without introducing instability.
  */
-export function getDynamicAlpha(spikingCount: number): number {
+export function getDynamicAlpha(spikingCount: number, velocityScore?: number): number {
   let baseAlpha: number;
   switch (spikingCount) {
     case 3:
-      baseAlpha = EMA_ALPHA_3_SOURCES; // 0.22
+      baseAlpha = EMA_ALPHA_3_SOURCES;
       break;
     case 2:
-      baseAlpha = EMA_ALPHA_2_SOURCES; // 0.15
+      baseAlpha = EMA_ALPHA_2_SOURCES;
       break;
     default:
-      baseAlpha = EMA_ALPHA_DEFAULT;   // 0.10
+      baseAlpha = EMA_ALPHA_DEFAULT;
+  }
+  if (velocityScore !== undefined && velocityScore >= 60) {
+    baseAlpha = Math.max(baseAlpha, 0.22);
   }
   const recalBoosted = getRecalibrationAlphaBoost(baseAlpha);
   return Math.min(recalBoosted * getCatchUpAlphaMultiplier(), 0.40);
@@ -379,10 +386,11 @@ export function getDynamicAlpha(spikingCount: number): number {
 export function applyDynamicEmaSmoothing(
   newScore: number, 
   previousScore: number | null,
-  spikingCount: number
+  spikingCount: number,
+  velocityScore?: number
 ): number {
   if (previousScore === null) return newScore;
-  const alpha = getDynamicAlpha(spikingCount);
+  const alpha = getDynamicAlpha(spikingCount, velocityScore);
   return (alpha * newScore) + ((1 - alpha) * previousScore);
 }
 

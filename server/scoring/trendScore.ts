@@ -349,13 +349,13 @@ export function computeTrendScore(
     let usedAlpha: number;
     let isAsymmetric = false;
     if (afterRateLimiting < previousFameIndex) {
-      const baseAlpha = getDynamicAlpha(spikingSourceCount);
-      usedAlpha = Math.min(0.30, baseAlpha * 1.5);
+      const baseAlpha = getDynamicAlpha(spikingSourceCount, velocityScore);
+      usedAlpha = Math.min(0.30, baseAlpha * 1.2);
       isAsymmetric = true;
       fameIndex = Math.round((usedAlpha * afterRateLimiting) + ((1 - usedAlpha) * previousFameIndex));
     } else {
-      usedAlpha = getDynamicAlpha(spikingSourceCount);
-      fameIndex = Math.round(applyDynamicEmaSmoothing(afterRateLimiting, previousFameIndex, spikingSourceCount));
+      usedAlpha = getDynamicAlpha(spikingSourceCount, velocityScore);
+      fameIndex = Math.round(applyDynamicEmaSmoothing(afterRateLimiting, previousFameIndex, spikingSourceCount, velocityScore));
     }
 
     const prevF = previousFameIndex;
