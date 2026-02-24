@@ -1,7 +1,7 @@
 import { Info, Search, Newspaper, BookOpen } from "lucide-react";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 
-function TrendScoreInfoContent() {
+export function TrendScoreInfoContent() {
   return (
     <div className="space-y-3 normal-case tracking-normal">
       <p className="font-semibold text-sm">How Trend Score Works</p>

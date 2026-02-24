@@ -1,7 +1,7 @@
 import { Info, Star, Users } from "lucide-react";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 
-function ApprovalRatingInfoContent() {
+export function ApprovalRatingInfoContent() {
   return (
     <div className="space-y-3 normal-case tracking-normal">
       <p className="font-semibold text-sm">How Approval Rating Works</p>

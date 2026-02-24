@@ -10,13 +10,13 @@ import { CategoryPill } from "@/components/CategoryPill";
 import { VoteDeckView } from "@/components/home/VoteDeckView";
 import { PredictDeckView } from "@/components/home/PredictDeckView";
 import { TrendingNowFeed } from "@/components/TrendingNowFeed";
-import { TrendScoreInfoIcon } from "@/components/TrendScoreInfo";
-import { ApprovalRatingInfoIcon } from "@/components/ApprovalRatingInfo";
+import { TrendScoreInfoIcon, TrendScoreInfoContent } from "@/components/TrendScoreInfo";
+import { ApprovalRatingInfoIcon, ApprovalRatingInfoContent } from "@/components/ApprovalRatingInfo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
-import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Crown, Check, ThumbsUp, ThumbsDown, Minus, Rocket, Flame, Star } from "lucide-react";
+import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Check, ThumbsDown, Minus, Rocket, Flame, Star, Info } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
@@ -887,44 +887,51 @@ export default function HomePage() {
                   </div>
                   
                 </CardHeader>
-                <div className="sticky top-16 z-30 border-b border-border px-6 pb-2 pt-2 bg-card/95 backdrop-blur-sm">
+                <div className="sticky top-16 z-30 border-b border-border/60 px-4 sm:px-6 py-2 bg-card/95 backdrop-blur-md">
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleTabClick("fame")}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                        leaderboardTab === "fame"
-                          ? "bg-primary/20 text-primary border border-primary/30"
-                          : "text-muted-foreground hover:bg-primary/20 hover:text-primary border border-transparent hover:border-primary/30"
-                      }`}
-                      data-testid="tab-leaderboard-fame"
+                    <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5" data-testid="toggle-leaderboard-tabs">
+                      <button
+                        onClick={() => handleTabClick("fame")}
+                        className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-[13px] font-medium transition-all ${
+                          leaderboardTab === "fame"
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground"
+                        }`}
+                        data-testid="tab-leaderboard-fame"
+                      >
+                        Trending
+                        {leaderboardTab === "fame" && (
+                          <span className="text-[11px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleTabClick("approval")}
+                        className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-[13px] font-medium transition-all ${
+                          leaderboardTab === "approval"
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground"
+                        }`}
+                        data-testid="tab-leaderboard-approval"
+                      >
+                        Approval
+                        {leaderboardTab === "approval" && (
+                          <span className="text-[11px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                        )}
+                      </button>
+                    </div>
+                    <TouchTooltip
+                      content={leaderboardTab === "fame" ? <TrendScoreInfoContent /> : <ApprovalRatingInfoContent />}
+                      side="bottom"
+                      align="start"
+                      contentClassName="max-w-[300px]"
+                      showCloseButton
                     >
-                      <Crown className="h-3.5 w-3.5" />
-                      Trend Score
-                      <TrendScoreInfoIcon testId="icon-trend-score-tab" className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
-                      {leaderboardTab === "fame" && (
-                        <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => handleTabClick("approval")}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                        leaderboardTab === "approval"
-                          ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
-                          : "text-muted-foreground hover:bg-cyan-500/20 hover:text-cyan-400 border border-transparent hover:border-cyan-500/30"
-                      }`}
-                      data-testid="tab-leaderboard-approval"
-                    >
-                      <ThumbsUp className="h-3.5 w-3.5" />
-                      Approval Rating
-                      <ApprovalRatingInfoIcon testId="icon-approval-tab" className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
-                      {leaderboardTab === "approval" && (
-                        <span className="text-xs opacity-70">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                      )}
-                    </button>
+                      <Info
+                        className="h-3.5 w-3.5 text-muted-foreground/50 cursor-help shrink-0"
+                        data-testid="icon-leaderboard-info"
+                      />
+                    </TouchTooltip>
                   </div>
-                  <p className="text-[11px] text-muted-foreground/50 mt-1.5" data-testid="text-mode-microcopy">
-                    Sorted by: {leaderboardTab === "fame" ? "Trend Score" : "Approval Rating"}
-                  </p>
                 </div>
                 <CardContent className="p-0">
                   <div className="px-6 py-4 border-b bg-muted/30">
