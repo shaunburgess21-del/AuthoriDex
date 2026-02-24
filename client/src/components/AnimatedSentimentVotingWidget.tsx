@@ -499,7 +499,7 @@ export function AnimatedSentimentVotingWidget({
                 )}
               </div>
 
-              <div className="flex justify-between gap-2 px-2 mt-[12px] mb-[8px]">
+              <div className="flex justify-between gap-2 px-2 mt-[16px] mb-[8px]">
                 {[1, 2, 3, 4, 5].map((num) => (
                   <div
                     key={num}
