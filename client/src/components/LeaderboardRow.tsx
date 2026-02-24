@@ -313,9 +313,9 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               </p>
             </div>
             <Button
-              variant={hasVoted ? "ghost" : "outline"}
+              variant="outline"
               size="sm"
-              className={`no-default-hover-elevate no-default-active-elevate gap-1 text-xs ${hasVoted ? "bg-[#22D3EE]/20 border border-[#22D3EE]/40 text-[#22D3EE] backdrop-blur-sm hover:bg-[#22D3EE]/30" : "hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE]"} ${showVotePulse ? "vote-cta-pulse" : ""}`}
+              className={`no-default-hover-elevate no-default-active-elevate gap-1 text-xs hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE] ${showVotePulse ? "vote-cta-pulse" : ""}`}
               aria-label={hasVoted ? `Rated ${person.name} ${sentimentScore}/5` : `Rate ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -368,9 +368,9 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               </p>
             </div>
             <Button
-              variant={hasVoted ? "ghost" : "outline"}
+              variant="outline"
               size="sm"
-              className={`no-default-hover-elevate no-default-active-elevate gap-1 text-xs ${hasVoted ? "bg-[#22D3EE]/20 border border-[#22D3EE]/40 text-[#22D3EE] backdrop-blur-sm hover:bg-[#22D3EE]/30" : "hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE]"} ${showVotePulse ? "vote-cta-pulse" : ""}`}
+              className={`no-default-hover-elevate no-default-active-elevate gap-1 text-xs hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE] ${showVotePulse ? "vote-cta-pulse" : ""}`}
               aria-label={hasVoted ? `Rated ${person.name} ${sentimentScore}/5` : `Rate ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
