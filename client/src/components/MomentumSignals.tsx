@@ -478,7 +478,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                       <p>Search activity score: {signals.search.volume}/100</p>
                       <p>News articles (24h): {formatNum(signals.news.count)}</p>
                       <p>Wiki page views (24h): {formatNum(signals.wiki.views)}</p>
-                      <p className="text-[10px] mt-1">Attribution based on actual 24h signal changes, weighted: Search 40%, News 35%, Wiki 25%</p>
+                      <p className="text-[10px] mt-1">Attribution based on actual 24h signal changes.</p>
                     </div>
                   )}
                 </div>
