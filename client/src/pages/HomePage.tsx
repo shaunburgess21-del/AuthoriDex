@@ -892,7 +892,7 @@ export default function HomePage() {
                     <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5" data-testid="toggle-leaderboard-tabs">
                       <button
                         onClick={() => handleTabClick("fame")}
-                        className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-[13px] font-medium transition-all overflow-hidden ${
+                        className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-[13px] font-medium transition-all ${
                           leaderboardTab === "fame"
                             ? "bg-background shadow-sm text-foreground"
                             : "text-muted-foreground"
@@ -900,9 +900,9 @@ export default function HomePage() {
                         data-testid="tab-leaderboard-fame"
                       >
                         {leaderboardTab === "fame" && (
-                          <span className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-cyan-500" />
+                          <span className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-[#3C83F6]" />
                         )}
-                        <Crown className={`h-3.5 w-3.5 ${leaderboardTab === "fame" ? "text-cyan-500" : "text-muted-foreground/60"}`} />
+                        <Crown className={`h-3.5 w-3.5 ${leaderboardTab === "fame" ? "text-[#3C83F6]" : "text-muted-foreground/60"}`} />
                         Trending
                         {leaderboardTab === "fame" && (
                           <span className="text-[11px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
@@ -912,12 +912,12 @@ export default function HomePage() {
                             <TouchTooltip
                               content={<TrendScoreInfoContent />}
                               side="bottom"
-                              align="start"
-                              contentClassName="max-w-[300px]"
+                              align="center"
+                              contentClassName="max-w-[280px]"
                               showCloseButton
                             >
                               <Info
-                                className="h-3 w-3 text-cyan-500/60 cursor-help"
+                                className="h-3 w-3 text-[#3C83F6]/60 cursor-help"
                                 data-testid="icon-leaderboard-info"
                               />
                             </TouchTooltip>
@@ -926,7 +926,7 @@ export default function HomePage() {
                       </button>
                       <button
                         onClick={() => handleTabClick("approval")}
-                        className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-[13px] font-medium transition-all overflow-hidden ${
+                        className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-[13px] font-medium transition-all ${
                           leaderboardTab === "approval"
                             ? "bg-background shadow-sm text-foreground"
                             : "text-muted-foreground"
@@ -934,9 +934,9 @@ export default function HomePage() {
                         data-testid="tab-leaderboard-approval"
                       >
                         {leaderboardTab === "approval" && (
-                          <span className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-teal-500" />
+                          <span className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-[#22D3EE]" />
                         )}
-                        <Star className={`h-3.5 w-3.5 ${leaderboardTab === "approval" ? "text-teal-500" : "text-muted-foreground/60"}`} />
+                        <Star className={`h-3.5 w-3.5 ${leaderboardTab === "approval" ? "text-[#22D3EE]" : "text-muted-foreground/60"}`} />
                         Approval
                         {leaderboardTab === "approval" && (
                           <span className="text-[11px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
@@ -946,12 +946,12 @@ export default function HomePage() {
                             <TouchTooltip
                               content={<ApprovalRatingInfoContent />}
                               side="bottom"
-                              align="start"
-                              contentClassName="max-w-[300px]"
+                              align="center"
+                              contentClassName="max-w-[280px]"
                               showCloseButton
                             >
                               <Info
-                                className="h-3 w-3 text-teal-500/60 cursor-help"
+                                className="h-3 w-3 text-[#22D3EE]/60 cursor-help"
                                 data-testid="icon-leaderboard-info"
                               />
                             </TouchTooltip>
