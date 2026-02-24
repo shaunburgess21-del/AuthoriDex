@@ -325,12 +325,12 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             >
               {hasVoted && sentimentScore != null ? (
                 <>
-                  <span className="font-mono font-bold text-xs" style={{ color: getRatingColor(sentimentScore) }}>{sentimentScore}/5</span>
                   Rated
+                  <span className="font-mono font-bold text-xs" style={{ color: getRatingColor(sentimentScore) }}>{sentimentScore}/5</span>
                 </>
               ) : (
                 <>
-                  <Star className="h-2.5 w-2.5" />
+                  <Star className="h-[6px] w-[6px]" />
                   Rate
                 </>
               )}
@@ -380,12 +380,12 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             >
               {hasVoted && sentimentScore != null ? (
                 <>
-                  <span className="font-mono font-bold text-xs" style={{ color: getRatingColor(sentimentScore) }}>{sentimentScore}/5</span>
                   Rated
+                  <span className="font-mono font-bold text-xs" style={{ color: getRatingColor(sentimentScore) }}>{sentimentScore}/5</span>
                 </>
               ) : (
                 <>
-                  <Star className="h-2.5 w-2.5" />
+                  <Star className="h-[6px] w-[6px]" />
                   Rate
                 </>
               )}
