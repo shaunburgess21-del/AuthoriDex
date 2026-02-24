@@ -69,6 +69,24 @@ import { CurateSection } from "@/components/curate";
 import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
 import { CardSection } from "@/components/CardSection";
 import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { FilterDropdown } from "@/components/FilterDropdown";
+
+const VOTE_CATEGORIES = [
+  { value: "All", label: "All Categories" },
+  { value: "Favorites", label: "Favorites" },
+  { value: "Trending", label: "Trending" },
+  { value: "Tech", label: "Tech" },
+  { value: "Politics", label: "Politics" },
+  { value: "Business", label: "Business" },
+  { value: "Music", label: "Music" },
+  { value: "Sports", label: "Sports" },
+  { value: "Creator", label: "Creator" },
+];
+
+const VOTE_CATEGORIES_WITH_CUSTOM = [
+  ...VOTE_CATEGORIES,
+  { value: "misc", label: "Custom Topic" },
+];
 
 const mockCelebrityList = [
   "Taylor Swift", "Elon Musk", "Keanu Reeves", "Beyoncé", "Dwayne Johnson",
@@ -3831,30 +3849,24 @@ export default function VotePage() {
               </Button>
             </div>
             
-            <div className="sticky top-0 z-10 p-4 border-b bg-background/95 backdrop-blur-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                {getFilterCategories(false).map((cat) => (
-                  <FilterChip
-                    key={cat}
-                    category={cat}
-                    isActive={inductionCategoryFilter === cat}
-                    onClick={() => setInductionCategoryFilter(cat as FilterCategory)}
-                    testIdPrefix="filter-overlay-induction"
-                    user={user}
-                    onAuthRequired={handleAuthRequired}
+            <div className="sticky top-0 z-10 px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
+              <div className="flex items-center gap-2">
+                <FilterDropdown
+                  value={inductionCategoryFilter}
+                  onChange={(v) => setInductionCategoryFilter(v as FilterCategory)}
+                  categories={VOTE_CATEGORIES}
+                  allValue="All"
+                  testId="button-filter-overlay-induction"
+                />
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search..."
+                    value={inductionSearchQuery}
+                    onChange={(e) => setInductionSearchQuery(e.target.value)}
+                    className="pl-10"
+                    data-testid="input-overlay-induction-search"
                   />
-                ))}
-                <div className="ml-auto">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search by name..."
-                      value={inductionSearchQuery}
-                      onChange={(e) => setInductionSearchQuery(e.target.value)}
-                      className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
-                      data-testid="input-overlay-induction-search"
-                    />
-                  </div>
                 </div>
               </div>
             </div>
@@ -3902,30 +3914,24 @@ export default function VotePage() {
               </Button>
             </div>
             
-            <div className="sticky top-0 z-10 p-4 border-b bg-background/95 backdrop-blur-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                {getFilterCategories(true).map((cat) => (
-                  <FilterChip
-                    key={cat}
-                    category={cat}
-                    isActive={topicsCategoryFilter === cat}
-                    onClick={() => setTopicsCategoryFilter(cat as FilterCategory)}
-                    testIdPrefix="filter-overlay-topics"
-                    user={user}
-                    onAuthRequired={handleAuthRequired}
+            <div className="sticky top-0 z-10 px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
+              <div className="flex items-center gap-2">
+                <FilterDropdown
+                  value={topicsCategoryFilter}
+                  onChange={(v) => setTopicsCategoryFilter(v as FilterCategory)}
+                  categories={VOTE_CATEGORIES_WITH_CUSTOM}
+                  allValue="All"
+                  testId="button-filter-overlay-topics"
+                />
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search..."
+                    value={topicsSearchQuery}
+                    onChange={(e) => setTopicsSearchQuery(e.target.value)}
+                    className="pl-10"
+                    data-testid="input-overlay-topics-search"
                   />
-                ))}
-                <div className="ml-auto">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search topics..."
-                      value={topicsSearchQuery}
-                      onChange={(e) => setTopicsSearchQuery(e.target.value)}
-                      className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
-                      data-testid="input-overlay-topics-search"
-                    />
-                  </div>
                 </div>
               </div>
             </div>
@@ -3974,30 +3980,24 @@ export default function VotePage() {
               </Button>
             </div>
             
-            <div className="sticky top-0 z-10 p-4 border-b border-cyan-500/10 bg-background/95 backdrop-blur-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                {getFilterCategories(true).map((cat) => (
-                  <FilterChip
-                    key={cat}
-                    category={cat}
-                    isActive={matchupsCategoryFilter === cat}
-                    onClick={() => setMatchupsCategoryFilter(cat as FilterCategory)}
-                    testIdPrefix="filter-overlay-matchups"
-                    user={user}
-                    onAuthRequired={handleAuthRequired}
+            <div className="sticky top-0 z-10 px-4 py-3 border-b border-cyan-500/10 bg-background/95 backdrop-blur-sm">
+              <div className="flex items-center gap-2">
+                <FilterDropdown
+                  value={matchupsCategoryFilter}
+                  onChange={(v) => setMatchupsCategoryFilter(v as FilterCategory)}
+                  categories={VOTE_CATEGORIES_WITH_CUSTOM}
+                  allValue="All"
+                  testId="button-filter-overlay-matchups"
+                />
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search..."
+                    value={matchupsSearchQuery}
+                    onChange={(e) => setMatchupsSearchQuery(e.target.value)}
+                    className="pl-10"
+                    data-testid="input-overlay-matchups-search"
                   />
-                ))}
-                <div className="ml-auto">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search matchups..."
-                      value={matchupsSearchQuery}
-                      onChange={(e) => setMatchupsSearchQuery(e.target.value)}
-                      className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
-                      data-testid="input-overlay-matchups-search"
-                    />
-                  </div>
                 </div>
               </div>
             </div>
@@ -4048,30 +4048,24 @@ export default function VotePage() {
               </Button>
             </div>
             
-            <div className="sticky top-0 z-10 p-4 border-b border-cyan-500/10 bg-background/95 backdrop-blur-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                {getFilterCategories(true).map((cat) => (
-                  <FilterChip
-                    key={cat}
-                    category={cat}
-                    isActive={opinionPollsCategoryFilter === cat}
-                    onClick={() => setOpinionPollsCategoryFilter(cat as FilterCategory)}
-                    testIdPrefix="filter-overlay-opinion"
-                    user={user}
-                    onAuthRequired={handleAuthRequired}
+            <div className="sticky top-0 z-10 px-4 py-3 border-b border-cyan-500/10 bg-background/95 backdrop-blur-sm">
+              <div className="flex items-center gap-2">
+                <FilterDropdown
+                  value={opinionPollsCategoryFilter}
+                  onChange={(v) => setOpinionPollsCategoryFilter(v as FilterCategory)}
+                  categories={VOTE_CATEGORIES_WITH_CUSTOM}
+                  allValue="All"
+                  testId="button-filter-overlay-opinion"
+                />
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search..."
+                    value={opinionPollsSearchQuery}
+                    onChange={(e) => setOpinionPollsSearchQuery(e.target.value)}
+                    className="pl-10"
+                    data-testid="input-overlay-opinion-search"
                   />
-                ))}
-                <div className="ml-auto">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search polls..."
-                      value={opinionPollsSearchQuery}
-                      onChange={(e) => setOpinionPollsSearchQuery(e.target.value)}
-                      className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
-                      data-testid="input-overlay-opinion-search"
-                    />
-                  </div>
                 </div>
               </div>
             </div>
@@ -4127,19 +4121,25 @@ export default function VotePage() {
               </Button>
             </div>
             
-            <div className="sticky top-0 z-10 p-4 border-b bg-background/95 backdrop-blur-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                {getFilterCategories(true).map((cat) => (
-                  <FilterChip
-                    key={cat}
-                    category={cat}
-                    isActive={valuePerceptionCategoryFilter === cat}
-                    onClick={() => setValuePerceptionCategoryFilter(cat as FilterCategory)}
-                    testIdPrefix="filter-overlay-value"
-                    user={user}
-                    onAuthRequired={handleAuthRequired}
+            <div className="sticky top-0 z-10 px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
+              <div className="flex items-center gap-2">
+                <FilterDropdown
+                  value={valuePerceptionCategoryFilter}
+                  onChange={(v) => setValuePerceptionCategoryFilter(v as FilterCategory)}
+                  categories={VOTE_CATEGORIES_WITH_CUSTOM}
+                  allValue="All"
+                  testId="button-filter-overlay-value"
+                />
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search..."
+                    value={valuePerceptionSearchQuery}
+                    onChange={(e) => setValuePerceptionSearchQuery(e.target.value)}
+                    className="pl-10"
+                    data-testid="input-overlay-value-search"
                   />
-                ))}
+                </div>
               </div>
             </div>
             
