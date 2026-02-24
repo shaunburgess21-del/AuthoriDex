@@ -1,0 +1,58 @@
+Replit prompt (copy/paste)
+
+You can paste this into Replit (adjust file paths if needed):
+
+Goal: Update existing Matchups in the database by matching on slug and setting optionASeedVotes + optionBSeedVotes. Also set image URLs from Supabase Storage bucket matchups (public) using a predictable path per slug.
+
+Prompt:
+
+I already have Matchups created in my app DB. They are missing seed votes and image URLs.
+
+Please write a Node.js script (TypeScript if the repo uses TS) that:
+1) Reads a CSV file named `matchups_seed_votes.csv` from the project root with columns:
+   - slug
+   - option_a_seed_votes
+   - option_b_seed_votes
+
+2) For each row, find the matchup record by `slug` and update:
+   - optionASeedVotes = option_a_seed_votes
+   - optionBSeedVotes = option_b_seed_votes
+
+3) Also populate image URLs from Supabase Storage.
+   - Supabase bucket name: `matchups` (public)
+   - Each matchup has its own folder named exactly the slug.
+   - Inside each folder there are two images:
+       optionA.webp
+       optionB.webp
+   - Build URLs as:
+     https://<PROJECT_REF>.supabase.co/storage/v1/object/public/matchups/<slug>/optionA.webp
+     https://<PROJECT_REF>.supabase.co/storage/v1/object/public/matchups/<slug>/optionB.webp
+   - Update the matchup fields:
+       optionAImageUrl
+       optionBImageUrl
+     (If the schema uses different names, map them accordingly.)
+
+4) The script should:
+   - Print progress (updated/skip/not found).
+   - Fail gracefully if a slug is missing.
+   - Run in dry-run mode by default, and only write updates if I set DRY_RUN=false in env.
+
+Assumptions:
+- I am using Supabase Postgres. Use the existing DB client in the repo if present; otherwise use `@supabase/supabase-js`.
+- Use environment variables:
+   SUPABASE_URL
+   SUPABASE_SERVICE_ROLE_KEY
+   DRY_RUN
+
+Output:
+- Provide the full script file contents.
+- Provide exact run commands.
+Two quick things to confirm in Supabase
+
+Project ref: replace <PROJECT_REF> in the URL with your Supabase project ref (or have the script build URLs from SUPABASE_URL automatically).
+
+File names: make sure each slug folder contains exactly:
+
+optionA.webp
+
+optionB.webp
