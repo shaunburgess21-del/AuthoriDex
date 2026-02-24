@@ -892,7 +892,7 @@ export default function HomePage() {
                     <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5" data-testid="toggle-leaderboard-tabs">
                       <button
                         onClick={() => handleTabClick("fame")}
-                        className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-[13px] font-medium transition-all ${
+                        className={`relative flex items-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-[15px] font-medium transition-all ${
                           leaderboardTab === "fame"
                             ? "bg-background shadow-sm text-foreground"
                             : "text-muted-foreground"
@@ -902,15 +902,15 @@ export default function HomePage() {
                         {leaderboardTab === "fame" && (
                           <span className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-[#3C83F6]" />
                         )}
-                        <Crown className={`h-3.5 w-3.5 ${leaderboardTab === "fame" ? "text-[#3C83F6]" : "text-muted-foreground/60"}`} />
+                        <Crown className={`h-[18px] w-[18px] ${leaderboardTab === "fame" ? "text-[#3C83F6]" : "text-muted-foreground/60"}`} />
                         Trending
                         {leaderboardTab === "fame" && (
-                          <span className="text-[11px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                          <span className="text-[13px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                         )}
                       </button>
                       <button
                         onClick={() => handleTabClick("approval")}
-                        className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-[13px] font-medium transition-all ${
+                        className={`relative flex items-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-[15px] font-medium transition-all ${
                           leaderboardTab === "approval"
                             ? "bg-background shadow-sm text-foreground"
                             : "text-muted-foreground"
@@ -920,10 +920,10 @@ export default function HomePage() {
                         {leaderboardTab === "approval" && (
                           <span className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-[#22D3EE]" />
                         )}
-                        <Star className={`h-3.5 w-3.5 ${leaderboardTab === "approval" ? "text-[#22D3EE]" : "text-muted-foreground/60"}`} />
+                        <Star className={`h-[18px] w-[18px] ${leaderboardTab === "approval" ? "text-[#22D3EE]" : "text-muted-foreground/60"}`} />
                         Approval
                         {leaderboardTab === "approval" && (
-                          <span className="text-[11px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                          <span className="text-[13px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                         )}
                       </button>
                     </div>
@@ -935,7 +935,7 @@ export default function HomePage() {
                       showCloseButton
                     >
                       <Info
-                        className={`h-3.5 w-3.5 cursor-help shrink-0 ${leaderboardTab === "fame" ? "text-[#3C83F6]/60" : "text-[#22D3EE]/60"}`}
+                        className={`h-4 w-4 cursor-help shrink-0 ${leaderboardTab === "fame" ? "text-[#3C83F6]/60" : "text-[#22D3EE]/60"}`}
                         data-testid="icon-leaderboard-info"
                       />
                     </TouchTooltip>

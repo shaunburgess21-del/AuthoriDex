@@ -15,6 +15,11 @@ const SEGMENT_COLORS_5 = [
   '#00C853',
 ];
 
+const getRatingColor = (rating: number): string => {
+  const idx = Math.max(0, Math.min(4, rating - 1));
+  return SEGMENT_COLORS_5[idx];
+};
+
 const getApprovalColor = (approvalPct: number): string => {
   const normalizedPct = approvalPct <= 1 ? approvalPct * 100 : approvalPct;
   const rating = Math.round((normalizedPct / 100) * 4) + 1;
@@ -311,15 +316,24 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               variant={hasVoted ? "ghost" : "outline"}
               size="sm"
               className={`no-default-hover-elevate no-default-active-elevate gap-1 text-xs ${hasVoted ? "bg-[#22D3EE]/20 border border-[#22D3EE]/40 text-[#22D3EE] backdrop-blur-sm hover:bg-[#22D3EE]/30" : "hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE]"} ${showVotePulse ? "vote-cta-pulse" : ""}`}
-              aria-label={`Rate ${person.name}`}
+              aria-label={hasVoted ? `Rated ${person.name} ${sentimentScore}/5` : `Rate ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onVoteClick?.();
               }}
               data-testid={`button-vote-icon-${person.id}`}
             >
-              <Star className="h-3.5 w-3.5" />
-              Rate
+              {hasVoted && sentimentScore != null ? (
+                <>
+                  <span className="font-mono font-bold text-xs" style={{ color: getRatingColor(sentimentScore) }}>{sentimentScore}/5</span>
+                  Rated
+                </>
+              ) : (
+                <>
+                  <Star className="h-3 w-3" />
+                  Rate
+                </>
+              )}
             </Button>
           </>
         )}
@@ -357,15 +371,24 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               variant={hasVoted ? "ghost" : "outline"}
               size="sm"
               className={`no-default-hover-elevate no-default-active-elevate gap-1 text-xs ${hasVoted ? "bg-[#22D3EE]/20 border border-[#22D3EE]/40 text-[#22D3EE] backdrop-blur-sm hover:bg-[#22D3EE]/30" : "hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE]"} ${showVotePulse ? "vote-cta-pulse" : ""}`}
-              aria-label={`Rate ${person.name}`}
+              aria-label={hasVoted ? `Rated ${person.name} ${sentimentScore}/5` : `Rate ${person.name}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onVoteClick?.();
               }}
               data-testid={`button-vote-icon-${person.id}`}
             >
-              <Star className="h-3.5 w-3.5" />
-              Rate
+              {hasVoted && sentimentScore != null ? (
+                <>
+                  <span className="font-mono font-bold text-xs" style={{ color: getRatingColor(sentimentScore) }}>{sentimentScore}/5</span>
+                  Rated
+                </>
+              ) : (
+                <>
+                  <Star className="h-3 w-3" />
+                  Rate
+                </>
+              )}
             </Button>
           </>
         )}
