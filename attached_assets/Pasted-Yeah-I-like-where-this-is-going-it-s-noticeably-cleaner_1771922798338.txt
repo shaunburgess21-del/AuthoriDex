@@ -1,0 +1,85 @@
+Yeah I like where this is going — it’s noticeably cleaner, and the thinner “control strip” makes the leaderboard feel more like the hero, which is exactly what you want on mobile.
+
+Here are my thoughts on your 3 points, plus what I’d tell Replit to build.
+
+1) Bringing back the glass colors (blue / teal)
+
+Do it — but keep it subtle so it doesn’t re-bloat the height.
+
+Best pattern:
+
+Keep the segmented control “neutral glass” by default
+
+When selected:
+
+add a colored underline / glow (2–3px) + slight tint to the selected pill
+
+don’t make the whole pill aggressively blue/teal (that’s what makes it feel chunky)
+
+This preserves the “cool” vibe without sacrificing the sleekness you just gained.
+
+2) “Unused width” + icons (crown + star)
+
+Agree with your brother: you can use a bit more width and still stay slim.
+
+What I’d do:
+
+Add small leading icons inside each tab:
+
+Trending: crown ✅
+
+Approval: star ✅ (ties perfectly to the “Rate” star)
+
+Keep icons tiny (like 14–16px) and align baseline with text
+
+Keep labels single-line: “Trending” and “Approval” (not “Trend Score / Approval Rating”) to prevent wrapping
+
+That will “fill” the width visually and make the control feel intentional, not empty.
+
+3) The (i) placement + “which tab is this info for?”
+
+You’re right: a single (i) sitting near one tab can confuse attribution.
+
+Three good options, in order:
+
+Option A (cleanest): Info icon belongs to the active tab
+
+Put a small (i) inside the selected pill, on the right side.
+
+When user switches tabs, the (i) moves with the active tab.
+
+Color the (i) to match the active tab’s accent (blue/teal).
+
+This solves the “which tab does this refer to?” problem with zero extra UI.
+
+Option B: One (i), but it opens a 2-tab info sheet
+
+If you want one central info entry:
+
+Tap (i) opens a small modal/bottom-sheet with:
+
+two mini tabs: “Trending” | “Approval”
+
+each explains that ranking method
+
+Default to whichever leaderboard tab is currently active.
+
+This is very “modern app”.
+
+Option C: “1/2, Next” onboarding
+
+This is cool only if you treat it as onboarding, not everyday UX.
+
+I’d do it like:
+
+First time user only (or first time they open Leaderboards):
+
+a short “How ranking works” overlay
+
+Step 1 highlights Trending tab + explains it
+
+Step 2 highlights Approval tab + explains it
+
+done forever after (store in localStorage)
+
+If it appears every time someone taps info, it’ll feel heavy.
