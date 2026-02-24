@@ -907,22 +907,6 @@ export default function HomePage() {
                         {leaderboardTab === "fame" && (
                           <span className="text-[11px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                         )}
-                        {leaderboardTab === "fame" && (
-                          <span onClick={(e) => e.stopPropagation()}>
-                            <TouchTooltip
-                              content={<TrendScoreInfoContent />}
-                              side="bottom"
-                              align="center"
-                              contentClassName="max-w-[280px]"
-                              showCloseButton
-                            >
-                              <Info
-                                className="h-3 w-3 text-[#3C83F6]/60 cursor-help"
-                                data-testid="icon-leaderboard-info"
-                              />
-                            </TouchTooltip>
-                          </span>
-                        )}
                       </button>
                       <button
                         onClick={() => handleTabClick("approval")}
@@ -941,24 +925,20 @@ export default function HomePage() {
                         {leaderboardTab === "approval" && (
                           <span className="text-[11px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                         )}
-                        {leaderboardTab === "approval" && (
-                          <span onClick={(e) => e.stopPropagation()}>
-                            <TouchTooltip
-                              content={<ApprovalRatingInfoContent />}
-                              side="bottom"
-                              align="center"
-                              contentClassName="max-w-[280px]"
-                              showCloseButton
-                            >
-                              <Info
-                                className="h-3 w-3 text-[#22D3EE]/60 cursor-help"
-                                data-testid="icon-leaderboard-info"
-                              />
-                            </TouchTooltip>
-                          </span>
-                        )}
                       </button>
                     </div>
+                    <TouchTooltip
+                      content={leaderboardTab === "fame" ? <TrendScoreInfoContent /> : <ApprovalRatingInfoContent />}
+                      side="bottom"
+                      align="end"
+                      contentClassName="max-w-[280px]"
+                      showCloseButton
+                    >
+                      <Info
+                        className={`h-3.5 w-3.5 cursor-help shrink-0 ${leaderboardTab === "fame" ? "text-[#3C83F6]/60" : "text-[#22D3EE]/60"}`}
+                        data-testid="icon-leaderboard-info"
+                      />
+                    </TouchTooltip>
                   </div>
                 </div>
                 <CardContent className="p-0">
