@@ -330,7 +330,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 </>
               ) : (
                 <>
-                  <Star style={{ width: 12, height: 12 }} strokeWidth={1.5} />
+                  <Star style={{ width: 14, height: 14 }} strokeWidth={1.5} />
                   Rate
                 </>
               )}
@@ -385,7 +385,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 </>
               ) : (
                 <>
-                  <Star style={{ width: 12, height: 12 }} strokeWidth={1.5} />
+                  <Star style={{ width: 14, height: 14 }} strokeWidth={1.5} />
                   Rate
                 </>
               )}
