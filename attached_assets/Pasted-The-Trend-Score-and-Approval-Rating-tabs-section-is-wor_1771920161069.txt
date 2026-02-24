@@ -1,0 +1,68 @@
+The Trend Score and Approval Rating tabs section is working well (functionality) but due to it scrolling with the page down the leaderboard, my brother feels it is too thick (height). It limits the screen space of the actual leaderboard rows which is most important. This is likely due to the text wrapping and not on a single line. My brother also feels that the info icons (i) are oddly placed in the glass toggles. In order to reduce the height and overall appearance, I'm looking for ideas to use the space better. Perhaps removing the icons to the left of the text, as they are not necessary (especially the thumbs up). Also maybe moving the info icon outside of the glass toggles. And somehow making the text on a single line, not wrapped. What are your thoughts on this? I want to chat to Replit about it.
+
+Totally agree with your brother on both points:
+
+It’s eating vertical real estate while you scroll (and on mobile, height is everything).
+
+The (i) inside the pill feels like a random extra element inside a control that should be “tap anywhere to switch ranking”.
+
+Here are a few strong design options (from simplest → cleanest), plus wording you can send to Replit.
+
+What I’d change (high confidence)
+1) Make each tab a single-line “chip”
+
+Right now the height is mainly coming from wrapped labels (“Trend / Score”, “Approval / Rating”).
+
+Fix:
+
+Force no wrap: whitespace-nowrap
+
+Reduce font size slightly on mobile: text-sm (or even text-[13px])
+
+Use shorter labels:
+
+Trend (or “Trend Score” but one-line)
+
+Approval (instead of “Approval Rating”)
+
+If you still want full meaning, you can keep the full label but shrink the font.
+
+Result: tabs drop to a single row with consistent height.
+
+2) Remove the left-side icons inside tabs (crown / thumbs-up)
+
+They’re not adding clarity anymore, and they cost space + create visual noise.
+
+Recommendation: remove them entirely from the tabs.
+
+If you really want an icon, keep it only on the active tab (subtle), but I’d try no icons first.
+
+3) Move the info (i) OUTSIDE the toggle pills
+
+This is the biggest “feels weird” fix.
+
+Instead of each pill containing its own (i), do:
+
+Tabs = only switching
+
+One small info icon to the right of the whole control (or in the “Sorted by” line)
+
+Example layout:
+
+[ Trend ] [ Approval ] (i)
+
+Then the info tooltip content can change based on active tab:
+
+If Trend is active: explain Trend Score
+
+If Approval is active: explain Approval Rating
+
+That gives you:
+
+cleaner toggle
+
+fewer targets
+
+less clutter
+
+less height
