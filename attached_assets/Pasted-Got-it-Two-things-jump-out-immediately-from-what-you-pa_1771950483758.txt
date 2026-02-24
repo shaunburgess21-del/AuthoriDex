@@ -1,0 +1,263 @@
+Got it. Two things jump out immediately from what you pasted (even before we see the rest of the table):
+
+1) “App seems to have crashed” is itself a red flag (separate from engine health)
+
+Even if the DB shows fresh snapshots, an app crash means:
+
+your health endpoint/UI can’t be trusted to reflect engine state in real time, and
+
+you may be one restart away from discovering the ingestion runner isn’t actually stable (or a memory leak / unhandled promise is killing the process).
+
+So: treat this report as “DB-level engine looks OK” but “runtime reliability is questionable until the app is back up.”
+
+2) Mixed score versions (v2 + v1 legacy) is normal short-term, but must be cohort-safe everywhere
+
+Replit says:
+
+v2: 11,300 snapshots
+
+v1 legacy: 5,462 snapshots
+
+That’s fine if you recently switched scoring versions, but only if every query/feature that compares snapshots does one of these:
+
+filters to score_version = v2, or
+
+ensures both snapshots in a comparison are the same version, or
+
+explicitly handles cross-version comparisons (rarely worth it).
+
+Otherwise you’ll get subtle bugs like:
+
+flat/odd charts when the window crosses the v1→v2 boundary
+
+drivers switching method unexpectedly
+
+churn stats being skewed if the cohorts include mixed versions
+
+This is the #1 thing I’d ask Replit/ChatGPT to verify in code.
+
+What I’d ask Replit to add to the report (so you can share with ChatGPT cleanly)
+A) Confirm engine is “healthy” despite app crash
+
+Ask for:
+
+last N ingestion runs (success/fail, duration, error type)
+
+whether the cron trigger is still firing on schedule
+
+whether any runs are being skipped because of locks
+
+any recent OOM / unhandled rejection / node crash logs (the cause of “app needs restart”)
+
+B) Snapshot cadence: prove it’s truly hourly and complete
+
+Ask for a simple DB query-style summary:
+
+last 72h: expected 72 hours, actual hours present, list missing hours
+
+per hour: count snapshots (should be 100)
+
+max gap between snapshots per person (p95 / max)
+
+C) Source coverage quality (not just “healthy”)
+
+For each run:
+
+wiki: % coverage (should be ~100%)
+
+search: % coverage + Serper retries/failures (you already added counters—use them)
+
+news: % non-zero coverage overall + top-25 non-zero coverage
+
+governor factor values if you still use them
+
+D) Version boundaries
+
+Ask:
+
+when did v2 start (timestamp of first v2 snapshot)
+
+do charts/health queries filter on v2
+
+do “latest snapshot” queries order by timestamp desc, id desc (you already fixed ordering—confirm all endpoints use it)
+
+Quick message you can paste back to Replit (to tighten the report)
+
+You can send this verbatim:
+
+Please extend the health report with (1) app crash root-cause (logs / error), and last 20 ingestion runs success/fail + duration, (2) snapshot cadence audit for last 72h: missing hours + per-hour snapshot counts (expect 100), (3) source quality metrics per run: wiki/search coverage %, news non-zero coverage overall + top-25, Serper retries/final failures, and (4) v1/v2 boundary: first v2 timestamp and confirmation that charts/churn/driver comparisons never compare v1 vs v2 snapshots (or explicitly filter to v2). Also confirm latest queries order by timestamp desc, id desc.
+
+If you want my “sanity verdict” based on what we have so far
+
+DB-level ingestion is running (latest snapshot exists at Feb 24 16:00 UTC, 100 people processed, run duration ~150s).
+
+But the app crash means you still have a reliability issue in the running service (not necessarily the scoring math).
+
+Mixed v1/v2 snapshots is the biggest potential “silent correctness” trap—make sure every comparison is cohort-safe.
+
+If you paste the rest of the report (especially the News provider section + any gap stats), I’ll point out anything else that looks off or worth tightening.
+
+Sorry there was more, it got cut off. Please see second half of the previous message:
+3. NEWS PROVIDER — MEDIASTACK
+Metric	Value
+Provider	Mediastack (primary)
+Last Refresh	Feb 24, 14:31 UTC (~1.5 hours before latest run)
+Refresh Cadence	2-hour persisted cadence
+Is Refresh Tick?	No (cache-reuse tick)
+Success Coverage %	100% (API responded for all)
+Non-Zero Coverage %	65% (65 of 100 had articles > 0)
+Top-25 Non-Zero Coverage %	76% (19 of 25 top-ranked had articles > 0)
+Median Articles	1
+Mean Articles	7
+News Quality	Not low (threshold: 3)
+News Governor Factor	75% (velocity weight tapered due to non-refresh tick)
+Budget Tracking (Mediastack API calls):
+
+Date	API Calls
+Feb 20	311
+Feb 21	545
+Feb 22	719
+Feb 23	634
+Feb 24 (so far)	393
+5-Day Total	2,602
+Monthly plan: 50,000 calls. Projected usage is well within limits.
+
+4. CANARY PEOPLE (Early Warning System)
+10 canaries monitored. No alert triggered.
+
+Canary	News Count	Search Volume	News OK	Search OK
+Donald Trump	285	63.0	Yes	Yes
+LeBron James	40	64.5	Yes	Yes
+Vladimir Putin	20	64.5	Yes	Yes
+Elon Musk	15	65.5	Yes	Yes
+Bad Bunny	13	64.0	Yes	Yes
+Narendra Modi	10	67.0	Yes	Yes
+Cristiano Ronaldo	6	69.0	Yes	Yes
+Mark Zuckerberg	5	69.5	Yes	Yes
+Kendrick Lamar	1	65.5	No	Yes
+Alexandria Ocasio-Cortez	1	62.0	No	Yes
+2 canary news failures (Kendrick, AOC) — below the 4-canary threshold so no accelerated degradation.
+
+5. FALLBACK & EMA HOLD STATS
+Metric	Value
+Per-Person News Fallbacks Triggered	0
+Per-Person Fallbacks Succeeded	0
+News EMA Held (artifact protection)	13 people
+Search EMA Held	0
+Serper Calls Attempted	0
+Serper Retries Used	0
+13 people had their news EMA held (prior value kept) to prevent leaderboard whiplash from provider blind spots during a cache-reuse tick.
+
+6. STABILIZATION & CONVERGENCE
+Metric	Value
+Catch-Up Mode	OFF
+Median Gap %	0.6% (very stable)
+P90 Gap %	5.4%
+Rate Limited People	7 (7.0%)
+Cap Used (base)	8.0%
+Alpha Used (base)	0.150
+Baseline References:
+
+24h baseline: Run e0b5bf31 (24 hours ago) — normal
+7d baseline: Run 442c9fc6 (168 hours ago) — normal
+7. CHURN (Leaderboard Stability)
+Metric	Value
+Top 10 Churn	+0 / -0 (no changes)
+Top 20 Churn	+0 / -0 (no changes)
+Leaderboard is stable — no entries moving in or out of top 10 or top 20.
+
+8. CURRENT TOP 15 LEADERBOARD
+Rank	Name	Category	Trend Score	Fame Index	24h Change
+1	Cristiano Ronaldo	Sports	370,447	369,396	+7.9%
+2	Donald Trump	Politics	362,297	363,798	0%
+3	Narendra Modi	Politics	362,792	362,736	+1.7%
+4	Keir Starmer	Politics	356,189	354,612	+35.0%
+5	Elon Musk	Tech	340,152	340,058	+5.8%
+6	Benjamin Netanyahu	Politics	327,269	326,102	+22.5%
+7	Bad Bunny	Music	325,024	325,619	-8.6%
+8	Lionel Messi	Sports	319,860	319,771	-1.2%
+9	Mark Zuckerberg	Tech	319,547	318,227	+17.0%
+10	Kash Patel	Politics	316,531	316,936	+31.5%
+11	Kylie Jenner	Creator	319,705	316,810	+10.5%
+12	LeBron James	Sports	316,239	316,301	+7.8%
+13	Taylor Swift	Music	316,435	316,007	+2.3%
+14	Gavin Newsom	Politics	314,482	314,262	+10.6%
+15	Demis Hassabis	Tech	314,189	314,067	+5.3%
+9. NOTABLE OBSERVATIONS
+Keir Starmer (+35%) and Kash Patel (+31.5%) have the largest 24h jumps — likely driven by news spikes
+Bad Bunny (-8.6%) is the biggest decliner in the top 10
+News provider preference is set to preferSerper: true with consecutiveGoodGdeltRuns: 0 — GDELT is not being used as primary fallback
+The engine uses a velocity-weighted scoring model: Wiki 25%, News 35%, Search 40% of velocity component (which is 60% of total score; Mass is 40%)
+Snapshot diagnostics include raw evidence (news headlines, People Also Ask, related searches) for debugging
+10. KNOWN ISSUE (Non-Engine)
+Browser console shows "Could not find the 'personId' column of 'user_votes' in the schema cache" errors when saving votes to Supabase — this is a Supabase schema cache mismatch (column naming), not an engine issue.
+
+Nice — this second half is the “meat.” Overall it reads mostly healthy, with a couple of real flags and one likely reporting mistake.
+
+What looks healthy / “organic”
+
+Mediastack coverage: 65% non-zero overall and 76% for top-25 is actually decent for a general news API. Median=1, mean=7 is exactly what you’d expect (long tail).
+
+Budget: 2,602 calls over 5 days vs 50k/month is safe.
+
+Canaries: 2/10 canaries low news (Kendrick, AOC) isn’t alarming.
+
+Stabilization metrics: median gap 0.6% + P90 gap 5.4% + 7% rate-limited people = “sane smoothing,” not chaos.
+
+Top10/Top20 churn = 0: that can be normal even with volatility beneath (top ranks can stay while scores move).
+
+The two things I would definitely flag to ChatGPT
+1) “Serper Calls Attempted = 0” looks wrong (or mislabeled)
+
+It says:
+
+Search source is healthy, 100/100 got fresh search data
+…but then:
+
+Serper Calls Attempted: 0
+
+Serper Retries Used: 0
+
+Those can only both be true if either:
+
+you’re not counting Serper calls in this report (e.g., counter resets in a different code path, or only counts one Serper method and not the ones used in ingest), or
+
+search data came entirely from cache (but then it shouldn’t say “fresh search data via Serper” unless “fresh” means “present,” not “fetched”).
+
+Actionable ask to Replit: confirm what “Serper Calls Attempted” is measuring (per run? per refresh tick? only specific endpoints?), and whether search uses cache on non-refresh ticks. If search really is calling Serper, that number shouldn’t be 0.
+
+2) “News governor factor 75% because non-refresh tick” is suspicious reasoning
+
+A governor factor could be reduced due to low coverage/quality — but tying it to non-refresh tick feels odd. A cache reuse tick should still have coverage/quality stats; it shouldn’t automatically dampen news just because it didn’t refresh.
+
+Actionable ask to Replit: what is the exact rule that sets newsGovernorFactor? (coverage threshold? median articles? “refresh tick”?). Make sure it’s driven by signal quality, not the refresh schedule itself.
+
+The “yellow flags” (not necessarily broken, but worth sanity-checking)
+A) 13 News EMA holds on a cache-reuse tick
+
+That can be perfectly valid (“artifact protection”), but it’s worth confirming:
+
+The hold logic isn’t being triggered by a systematic issue (e.g., using cached news data with different normalization, or a bug that interprets “no refresh” as “drop”).
+
+Ask: Which 13 people? Are they clustered by category, or random? If it’s always the same people, it may be a baseline/threshold problem.
+
+B) Top-15 list shows some odd rank/score ordering
+
+Example: #1 Ronaldo Trend Score 370,447 with Fame Index 369,396; #2 Trump Trend Score 362,297 with Fame Index 363,798.
+That’s possible (depending on how “Trend Score” vs “Fame Index” differ), but it invites confusion and is worth ensuring:
+
+“Trend Score” column is actually the ranking metric being shown, and not mixing fields.
+
+C) Big 24h jumps (Starmer +35%, Kash Patel +31.5%)
+
+These can be organic, but if you want to be rigorous, ask for:
+
+the 3 drivers (search/news/wiki deltas or velocity component changes)
+
+a snippet of top headlines/evidence for each (you say diagnostics include it—great)
+
+confirmation no EMA holds / clamping affected them (because big jumps + holds can mask artifacts)
+
+Not engine, but important: Supabase “personId column” schema cache mismatch
+
+This is non-engine, but it will hurt credibility if voting breaks. It’s worth fixing soon because people will hit “Rate” and nothing persists.

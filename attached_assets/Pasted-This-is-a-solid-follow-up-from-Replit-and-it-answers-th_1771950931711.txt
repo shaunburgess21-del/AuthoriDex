@@ -1,0 +1,81 @@
+This is a solid follow-up from Replit — and it answers the two biggest “wtf” items cleanly. A few notes I’d send back (both praise + a couple of things still worth tightening).
+
+What looks good / convincing
+✅ Serper Calls = 0 confusion is resolved
+
+If that counter is only for per-person news fallback (not normal Serper search volume), then “0” is totally fine.
+One ask: rename it in the health output to avoid future confusion:
+
+serperFallbackCallsAttempted (instead of serperCallsAttempted)
+
+and optionally add serperSearchCallsAttempted (should be ~100/run if you want it later)
+
+✅ News governor logic rationale makes sense if your goal is “freshness weighting”
+
+Dampening cached news so old headlines don’t keep pumping velocity is defensible.
+
+But… I’d phrase it carefully: it’s not “quality,” it’s “freshness.”
+
+If it’s truly “cache reuse ⇒ 0.75,” then it’s schedule/state driven, not purely “signal quality driven.” That’s okay — just call it what it is:
+
+freshness governor (vs “news governor factor”)
+
+✅ EMA hold cohort pattern is coherent
+
+Tech/business skew + news_raw = 0 on cache-reuse tick is exactly the sort of artifact protection you want. That looks organic, not broken.
+
+✅ Starmer/Patel drivers are plausible
+
+Starmer: high news + strong search + decent wiki = believable jump.
+Patel: high wiki + news + weak search = “news/wiki driven” story checks out.
+
+✅ Snapshot cadence audit is useful
+
+87.5% coverage over 72h with complete hours when present is a real diagnostic. The “split run 81+19” and still 100 total is actually reassuring.
+
+Things I’d still flag (not “broken,” but worth tightening)
+1) The governor rule should be explicit in the health response
+
+Right now it reads “signal-quality-driven,” but then defines a hard rule:
+
+refresh tick → 100%
+
+cache reuse → 75%
+
+That’s fine — just make it explicit and name it correctly. Otherwise it sounds contradictory.
+
+Suggestion for wording (for ChatGPT):
+
+“News weight is governed by a freshness multiplier: 1.0 on refresh ticks, 0.75 on cache-reuse ticks to prevent stale headlines from repeatedly contributing.”
+
+2) Those missing hours: the “no failed runs in last 20” doesn’t explain gaps
+
+If 9 hours are missing in 72, but last 20 runs are clean, then the gaps are simply older. That’s okay.
+
+Still, I’d want a one-liner explanation in the report:
+
+Were those gaps caused by port conflicts / deploy windows / lock stalls / cron misses?
+
+Or do we just not know yet?
+
+Even “unknown, likely deployment window” is better than silence.
+
+3) Starmer & Patel “evidence headlines” — sanity check the Patel ones
+
+The Patel headlines Replit listed sound… a bit odd (hockey / partying). Not impossible, but it’s the kind of thing I’d double-check is not:
+
+entity confusion (another Patel)
+
+weak query match returning junk headlines
+
+If you want a quick robustness check: confirm Patel’s news articles include at least 2–3 sources that clearly refer to the right person (context strings like “Kash Patel, [role]”).
+
+4) Approval vs Trend score in report
+
+Minor, but the report uses “Trend Score” and “Fame Index” side by side. If users see both, make sure Replit’s report uses consistent naming:
+
+whichever is the actual ranking field should be clearly labeled.
+
+TL;DR verdict you can paste to ChatGPT
+
+“Extended diagnostics look credible. SerperCalls=0 was a labeling issue (it counts only Serper news fallback calls, not normal Serper search-volume calls). Cached-news governor is intentionally a freshness multiplier (1.0 on refresh ticks, 0.75 on cache reuse ticks) to prevent stale articles from repeatedly contributing. 13 news EMA holds were concentrated in tech/business names with Mediastack news=0 on a cache reuse tick — consistent with artifact protection, not a bug. Starmer/Patel jumps have plausible driver components (Starmer: strong search+news; Patel: news+wiki). Snapshot cadence last 72h is 87.5% with complete hours when present; one split run still produced total 100 snapshots.”
