@@ -331,7 +331,7 @@ export function AnimatedSentimentVotingWidget({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <div className="text-center mb-6">
+            <div className="text-center mb-3">
               <h3 
                 className="text-2xl font-bold mb-2"
                 style={{
@@ -348,8 +348,8 @@ export function AnimatedSentimentVotingWidget({
               </p>
             </div>
 
-            <div className="space-y-6">
-              <div className="relative mb-3 h-16 flex items-center pointer-events-none">
+            <div className="space-y-4">
+              <div className="relative mb-2 h-16 flex items-center pointer-events-none">
                 {ZONE_LABELS.map((label, index) => {
                   const isActive = activeZone === label;
                   const labelPosition = (index + 0.5) / 5;
@@ -499,11 +499,11 @@ export function AnimatedSentimentVotingWidget({
                 )}
               </div>
 
-              <div className="flex justify-between gap-2 px-2 mt-[25px] mb-[25px]">
+              <div className="flex justify-between gap-2 px-2 mt-[12px] mb-[8px]">
                 {[1, 2, 3, 4, 5].map((num) => (
                   <div
                     key={num}
-                    className={`flex-1 text-center text-muted-foreground mt-[7px] mb-[7px] ${
+                    className={`flex-1 text-center text-muted-foreground mt-[4px] mb-[4px] ${
                       num === displayValue ? 'font-bold text-[18px]' : 'font-medium text-[16px]'
                     }`}
                     data-testid={`number-label-${num}`}
@@ -521,12 +521,12 @@ export function AnimatedSentimentVotingWidget({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                     transition={{ duration: 0.3 }}
-                    className="pt-4"
+                    className="pt-2"
                   >
                     <Button
                       onClick={handleVoteSubmit}
                       disabled={!hasInteracted}
-                      className="w-full"
+                      className="w-full bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400/30 text-white shadow-lg shadow-blue-500/20"
                       size="lg"
                       data-testid="button-submit-vote"
                     >
@@ -539,7 +539,7 @@ export function AnimatedSentimentVotingWidget({
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4 }}
-                    className="text-center space-y-4 pt-4"
+                    className="text-center space-y-3 pt-2"
                   >
                     <div className="space-y-1">
                       <p className="text-lg font-semibold text-foreground">
@@ -560,33 +560,33 @@ export function AnimatedSentimentVotingWidget({
                         View Results
                       </Button>
                     ) : (
-                      <div className="space-y-3">
-                        <div className="flex gap-3">
-                          <Button
-                            onClick={onVoteNext}
-                            className="flex-1"
-                            size="lg"
-                            data-testid="button-vote-next"
-                          >
-                            Vote Next
-                          </Button>
-                          <Button
-                            onClick={handleViewResults}
-                            variant="outline"
-                            className="flex-1"
-                            size="lg"
-                            data-testid="button-view-results-modal"
-                          >
-                            View Results
-                          </Button>
-                        </div>
-                        <button
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <Button
+                          onClick={onVoteNext}
+                          className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400/30 text-white shadow-lg shadow-blue-500/20"
+                          size="lg"
+                          data-testid="button-vote-next"
+                        >
+                          Vote Next
+                        </Button>
+                        <Button
+                          onClick={handleViewResults}
+                          variant="outline"
+                          className="flex-1"
+                          size="lg"
+                          data-testid="button-view-results-modal"
+                        >
+                          View Results
+                        </Button>
+                        <Button
                           onClick={handleVisitProfile}
-                          className="w-full text-center text-sm text-primary hover:underline py-2"
+                          variant="outline"
+                          className="flex-1"
+                          size="lg"
                           data-testid="link-visit-profile"
                         >
                           Visit Profile
-                        </button>
+                        </Button>
                       </div>
                     )}
                   </motion.div>
