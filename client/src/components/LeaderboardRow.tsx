@@ -197,7 +197,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
   return (
     <div className="border-b">
       <div
-        className="flex items-center gap-3 sm:gap-4 p-3 py-4 sm:p-4 sm:py-5 hover-elevate active-elevate-2 cursor-pointer"
+        className="flex items-center gap-3 sm:gap-4 lg:gap-6 p-3 py-4 sm:p-4 sm:py-5 hover-elevate active-elevate-2 cursor-pointer"
         onClick={onVisitProfile}
         data-testid={`row-person-${person.id}`}
       >
