@@ -330,7 +330,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 </>
               ) : (
                 <>
-                  <Star className="h-3 w-3" />
+                  <Star className="h-2.5 w-2.5" />
                   Rate
                 </>
               )}
@@ -385,7 +385,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 </>
               ) : (
                 <>
-                  <Star className="h-3 w-3" />
+                  <Star className="h-2.5 w-2.5" />
                   Rate
                 </>
               )}
