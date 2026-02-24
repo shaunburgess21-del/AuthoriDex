@@ -13,15 +13,21 @@ let _serperRetryCount = 0;
 let _serperTimeoutCount = 0;
 let _serperCallsAttempted = 0;
 let _serperFinalFailures = 0;
+let _serperSearchCallsAttempted = 0;
+let _serperFallbackCallsAttempted = 0;
 export function getSerperRunStats() {
-  return { retriesUsed: _serperRetryCount, timeoutCount: _serperTimeoutCount, callsAttempted: _serperCallsAttempted, finalFailures: _serperFinalFailures };
+  return { retriesUsed: _serperRetryCount, timeoutCount: _serperTimeoutCount, callsAttempted: _serperCallsAttempted, finalFailures: _serperFinalFailures, searchCallsAttempted: _serperSearchCallsAttempted, fallbackCallsAttempted: _serperFallbackCallsAttempted };
 }
 export function resetSerperRunStats() {
   _serperRetryCount = 0;
   _serperTimeoutCount = 0;
   _serperCallsAttempted = 0;
   _serperFinalFailures = 0;
+  _serperSearchCallsAttempted = 0;
+  _serperFallbackCallsAttempted = 0;
 }
+export function incrementSerperSearchCalls() { _serperSearchCallsAttempted++; }
+export function incrementSerperFallbackCalls() { _serperFallbackCallsAttempted++; }
 
 async function serperFetch(url: string, options: RequestInit): Promise<Response> {
   _serperCallsAttempted++;
