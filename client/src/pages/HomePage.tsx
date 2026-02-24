@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
-import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Check, ThumbsDown, Minus, Rocket, Flame, Star, Info } from "lucide-react";
+import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Check, ThumbsDown, Minus, Rocket, Flame, Star, Info, Crown } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
@@ -892,45 +892,73 @@ export default function HomePage() {
                     <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5" data-testid="toggle-leaderboard-tabs">
                       <button
                         onClick={() => handleTabClick("fame")}
-                        className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-[13px] font-medium transition-all ${
+                        className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-[13px] font-medium transition-all overflow-hidden ${
                           leaderboardTab === "fame"
-                            ? "bg-background text-foreground shadow-sm"
+                            ? "bg-background shadow-sm text-foreground"
                             : "text-muted-foreground"
                         }`}
                         data-testid="tab-leaderboard-fame"
                       >
+                        {leaderboardTab === "fame" && (
+                          <span className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-cyan-500" />
+                        )}
+                        <Crown className={`h-3.5 w-3.5 ${leaderboardTab === "fame" ? "text-cyan-500" : "text-muted-foreground/60"}`} />
                         Trending
                         {leaderboardTab === "fame" && (
                           <span className="text-[11px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                         )}
+                        {leaderboardTab === "fame" && (
+                          <span onClick={(e) => e.stopPropagation()}>
+                            <TouchTooltip
+                              content={<TrendScoreInfoContent />}
+                              side="bottom"
+                              align="start"
+                              contentClassName="max-w-[300px]"
+                              showCloseButton
+                            >
+                              <Info
+                                className="h-3 w-3 text-cyan-500/60 cursor-help"
+                                data-testid="icon-leaderboard-info"
+                              />
+                            </TouchTooltip>
+                          </span>
+                        )}
                       </button>
                       <button
                         onClick={() => handleTabClick("approval")}
-                        className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-[13px] font-medium transition-all ${
+                        className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1 rounded-md text-[13px] font-medium transition-all overflow-hidden ${
                           leaderboardTab === "approval"
-                            ? "bg-background text-foreground shadow-sm"
+                            ? "bg-background shadow-sm text-foreground"
                             : "text-muted-foreground"
                         }`}
                         data-testid="tab-leaderboard-approval"
                       >
+                        {leaderboardTab === "approval" && (
+                          <span className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-teal-500" />
+                        )}
+                        <Star className={`h-3.5 w-3.5 ${leaderboardTab === "approval" ? "text-teal-500" : "text-muted-foreground/60"}`} />
                         Approval
                         {leaderboardTab === "approval" && (
                           <span className="text-[11px] text-muted-foreground/70">{sortDirection === "desc" ? "↓" : "↑"}</span>
                         )}
+                        {leaderboardTab === "approval" && (
+                          <span onClick={(e) => e.stopPropagation()}>
+                            <TouchTooltip
+                              content={<ApprovalRatingInfoContent />}
+                              side="bottom"
+                              align="start"
+                              contentClassName="max-w-[300px]"
+                              showCloseButton
+                            >
+                              <Info
+                                className="h-3 w-3 text-teal-500/60 cursor-help"
+                                data-testid="icon-leaderboard-info"
+                              />
+                            </TouchTooltip>
+                          </span>
+                        )}
                       </button>
                     </div>
-                    <TouchTooltip
-                      content={leaderboardTab === "fame" ? <TrendScoreInfoContent /> : <ApprovalRatingInfoContent />}
-                      side="bottom"
-                      align="start"
-                      contentClassName="max-w-[300px]"
-                      showCloseButton
-                    >
-                      <Info
-                        className="h-3.5 w-3.5 text-muted-foreground/50 cursor-help shrink-0"
-                        data-testid="icon-leaderboard-info"
-                      />
-                    </TouchTooltip>
                   </div>
                 </div>
                 <CardContent className="p-0">
