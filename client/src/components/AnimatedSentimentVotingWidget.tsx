@@ -285,10 +285,6 @@ export function AnimatedSentimentVotingWidget({
       savedToSupabase: !!user
     });
     
-    toast({
-      title: "Vote Submitted",
-      description: `You rated ${personName} as ${getZoneLabel(currentValue)}`,
-    });
   };
 
   const handleVisitProfile = () => {
