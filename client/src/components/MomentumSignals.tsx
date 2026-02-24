@@ -456,7 +456,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                         Based on {signals.drivers.activeSources}/3 sources ({signals.drivers.quietSources.join(" & ")} quiet)
                       </p>
                     )}
-                    <p className="text-[10px] text-muted-foreground/40" data-testid="text-drivers-clarifier">
+                    <p className="text-[10px] text-muted-foreground/60" data-testid="text-drivers-clarifier">
                       Drivers explain today's change, not total attention · Compared to ~24h ago
                     </p>
                     <Badge variant="outline" className="text-[9px] px-1.5 py-0" data-testid="badge-drivers-method">
