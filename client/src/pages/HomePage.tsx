@@ -858,7 +858,7 @@ export default function HomePage() {
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="text-2xl font-serif">Leaderboards</CardTitle>
+                        <CardTitle className="text-2xl font-serif">Leaderboard</CardTitle>
                       </div>
                       <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap" data-testid="text-leaderboard-freshness">
                         <TouchTooltip
