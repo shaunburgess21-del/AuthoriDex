@@ -1,0 +1,108 @@
+That’s a very solid answer from Replit — and I’m happy with both conclusions.
+
+1) Backfill / migration
+
+If market_bets is genuinely empty, then ✅ nothing to backfill and you’re clean.
+Keeping the COALESCE in the leaderboard query is still a good defensive move (it turns a future “weird null” into “still works”).
+
+2) Settle model clarity (pari-mutuel)
+
+Pari-mutuel is a great fit for virtual credits because it’s self-balancing and you don’t create “house liability” problems.
+
+The one thing you must get right is how you explain it in the UI, because users will otherwise assume fixed odds.
+
+The UX/wording that prevents confusion
+
+Wherever you show potentialPayout (or any “estimated return”), label it as:
+
+“Estimated payout” (not “you will win”)
+
+Add a tiny helper line: “Estimate changes as the pool changes.”
+
+A simple line you can use everywhere:
+
+Estimated payout — updates as more people bet.
+
+What to show on the market card (simple version)
+
+Pool size (total credits)
+
+Your stake
+
+“Estimated payout if correct” (dynamic)
+
+Optional: “Share of winning pool” as a percent (nice mental model)
+
+What to show on the bet confirmation (important)
+
+Before confirming a bet:
+
+“You’re staking: 50 credits”
+
+“Current estimate if correct: ~120 credits”
+
+“This may change as more bets are placed.”
+
+That one sentence prevents 90% of future complaints.
+
+One product call to make now: do you want “profit” or “net profit” on Top Predictors?
+
+With pari-mutuel, a user might see “333 credits back” and think they “won 333,” but they staked 100. So net is +233.
+
+For leaderboards, I strongly recommend:
+
+Top Predictors ranked by Net P&L (payout − stake)
+
+Display as +233 (not 333)
+
+Then inside the bet history you can show both:
+
+Stake: 100
+
+Payout: 333
+
+Net: +233
+
+This keeps the leaderboard intuitive and comparable.
+
+If you want to seed: yes — do it now
+
+Since you have zero bets, the fastest way to “see the whole machine run” is:
+
+Seeding plan (minimal but effective)
+
+Create 3–5 test accounts (you, brother, two friends).
+
+Create 3 markets across categories (Politics / Sports / Pop culture).
+
+Place a spread of bets (important: have people bet both sides so payouts are interesting).
+
+Resolve one market → verify:
+
+payoutAmount set for all bets
+
+credits updated correctly
+
+Top Predictors populates
+
+/me shows P&L and history correctly (if wired)
+
+What to sanity-check after first resolution
+
+Sum of all payouts ≈ total pool (or equals it, depending on whether you take a fee/commission — sounds like you don’t yet)
+
+No one gets paid on the losing side
+
+Net P&L matches what the leaderboard shows
+
+Deterministic ordering holds with ties
+
+One tiny improvement I’d consider for launch polish
+
+On the Top Predictors page, add a tiny tooltip next to “Profit”:
+
+Net credits won (payouts minus stakes) — virtual credits only.
+
+It removes any ambiguity immediately.
+
+If you want, paste a screenshot (or the text) of how you currently display “potential payout” on a market card + the bet confirmation modal, and I’ll give you the exact microcopy + layout tweaks so users instantly understand pari-mutuel without needing a tutorial.
