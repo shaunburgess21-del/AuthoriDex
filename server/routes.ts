@@ -2100,31 +2100,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalVotes = metrics.approvalVotesCount || 0;
       const avgRating = metrics.approvalAvgRating || 3.0;
 
-      // Generate consistent distribution based on average rating
-      // This creates a bell curve centered around the average rating
-      const generateDistribution = (avg: number) => {
+      const hashFromId = (id: string): number => {
+        let h = 0;
+        for (let i = 0; i < id.length; i++) {
+          h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+        }
+        return Math.abs(h);
+      };
+
+      const seededRandom = (seed: number, index: number): number => {
+        let x = Math.sin(seed * 9301 + index * 49297 + 233280) * 10000;
+        return x - Math.floor(x);
+      };
+
+      const generateDistribution = (avg: number, personId: string) => {
+        const seed = hashFromId(personId);
         const weights = [0, 0, 0, 0, 0];
-        
-        // Create a distribution that peaks at the rating closest to avg
+
         for (let i = 0; i < 5; i++) {
           const rating = i + 1;
           const distance = Math.abs(rating - avg);
-          // Higher weight for ratings closer to average
-          weights[i] = Math.exp(-distance * 0.8);
+          const base = Math.exp(-distance * 0.8);
+          const jitter = (seededRandom(seed, i) - 0.5) * 0.35 * base;
+          weights[i] = Math.max(base + jitter, 0.01);
         }
-        
-        // Normalize to 100%
+
         const total = weights.reduce((a, b) => a + b, 0);
         const normalized = weights.map(w => Math.round((w / total) * 100));
-        
-        // Adjust to ensure sum is exactly 100
+
         const sum = normalized.reduce((a, b) => a + b, 0);
         if (sum !== 100) {
-          // Add/subtract difference from the largest value
           const maxIdx = normalized.indexOf(Math.max(...normalized));
           normalized[maxIdx] += (100 - sum);
         }
-        
+
         return {
           Hate: normalized[0],
           Dislike: normalized[1],
@@ -2137,7 +2146,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         totalVotes,
         averageRating: parseFloat(avgRating.toFixed(1)),
-        distribution: generateDistribution(avgRating)
+        distribution: generateDistribution(avgRating, celebrityId)
       });
     } catch (error: any) {
       console.error("[sentiment-stats GET] Error:", error);
