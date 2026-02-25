@@ -1,0 +1,69 @@
+Replit’s conclusion (“organic, no red flags”) could be right — but the way it justified it has a couple of weak spots, and there are 2–3 very specific sanity checks worth doing before you fully trust it.
+
+First: things in Replit’s answer that are a bit shaky
+1) The “FBI Director confirmation” explanation is a narrative leap
+
+It might be true, but Replit didn’t prove causality — it’s guessing a reason. The data (news/search/wiki moving) is what matters.
+
+If you want a clean, shareable diagnostic, ask it to show:
+
+top news headlines + sources for Kash in that window (not a story)
+
+raw evidence that those articles are about the right person (entity disambiguation)
+
+2) “Search volume jumped from 64th to 74th percentile” — watch that wording
+
+If “search volume” is a percentile-like score, fine. If it’s an absolute volume metric, that phrasing is suspicious. Make sure you’re comparing apples to apples:
+
+raw search_volume (whatever unit you store)
+
+vs search_velocity_score (0–100 normalized)
+
+3) “Wikipedia views ~80k” is huge — confirm it isn’t a mapping bug
+
+80k daily pageviews can happen, but if that’s suddenly appearing, it’s worth verifying:
+
+correct Wikipedia page being tracked (not another Patel)
+
+no “pageviews API fallback returned nonsense”
+
+no stale pageviews from the wrong date being reused
+
+Second: the volatility itself doesn’t automatically mean “broken”
+
+If your engine is doing what you designed (velocity-heavy + multi-signal), then:
+
+one person spiking across news + search + wiki simultaneously
+
+while another cools off in news
+
+…can absolutely reshuffle #1–#5 within hours.
+
+But you want to check whether the jump was within expected guardrails (rate caps, alpha tiers, no artifacts).
+
+The exact checks I’d ask Replit to run (copy/paste)
+
+A) Verify it wasn’t just you looking at different sorts
+
+Confirm the leaderboard was sorted by the same mode both times (Trend Score vs Approval), and no category filter/search was applied. Also confirm the timestamp of the snapshot behind each view.
+
+B) “One-hour swing” sanity check
+
+Pull the two snapshots you’re comparing (the one from ~1 hour ago and the latest). For each person (Netanyahu and Kash), show:
+timestamp, rank, fame_index, raw_fame, velocity_score, mass_score, news_count, wiki_pageviews_24h, search_value, ema_alpha_used, cap_used, rate_limited_flag, newsEmaHeld/searchEmaHeld/stickyZeroGuard.
+
+That tells you immediately if the move was:
+
+real signal + normal smoothing
+
+or some clamp/hold/guard doing something weird
+
+C) Confirm it’s not entity confusion
+
+For Kash Patel and Netanyahu, print the exact Wikipedia page title/slug you’re using + the top 5 news headline URLs (or titles + sources) for the spike window to confirm the mentions are about the right person.
+
+D) Check if this is a broader “churn spike hour”
+
+In the engine health rank churn section for that hour, show:
+min, p10, median, p90, max pct_change, stddev, and movers |pct_change| >= 2%.
+If churn tails are wide across many people, it’s a systemic volatility hour. If it’s just 1–3 people, it’s an event spike (normal).

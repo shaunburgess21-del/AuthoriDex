@@ -1,0 +1,100 @@
+This is a really useful diagnostic — and it changes the story.
+
+What’s good / credible in Replit’s findings
+
+Entity disambiguation is clean (right wiki slugs, headlines clearly about the right Kash Patel and Netanyahu). ✅
+
+No obvious artifact protections firing (no EMA holds / no fallback weirdness) for the two people in question. ✅
+
+The Kash/Netanyahu movement by itself sounds plausible: one spiking (news + search), one cooling (news). ✅
+
+The part that is a red flag (even if “by design”)
+
+83/100 people moved ≥2% and 41/100 moved ≥10% in one hour because many snapped to/from exactly “40” on search.
+
+Even if you call it “mechanistically explainable,” that pattern is not organic in the real-world sense — it’s a systemic engine behavior caused by your search signal handling (staleness/floor + refresh).
+
+It’s the kind of thing users will interpret as “your leaderboard is glitchy” because it creates “mass teleportation” rank churn.
+
+What that “40” floor likely means
+
+Replit is basically describing a classic missing-data sentinel (a default/fallback value) being injected into scoring:
+
+When search data is stale/missing → set search score to a baseline (40)
+
+When refresh happens → people jump up/down depending on new values
+
+Since search is a heavy velocity weight, that causes broad score shifts
+
+So yes, it’s explainable — but it’s also a design bug from a product/trust perspective.
+
+What I’d recommend as “the way forward”
+
+You don’t need to redesign the whole engine. You just need to stop hard snapping.
+
+Fix option A (best): “Carry forward + decay” instead of snapping to 40
+
+When fresh search data is unavailable:
+
+keep last known search value (carry forward)
+
+apply a gentle decay over time if it stays stale (e.g., drift toward baseline slowly, not instantly)
+
+This prevents the entire leaderboard from lurching on refresh hours.
+
+Fix option B (simple): Search EMA hold when missing/stale
+
+You already have the concept of EMA holds for artifacts.
+Do the same for search:
+
+if search freshness is bad → hold previous EMA’d search component
+
+do not inject a raw default into the scoring path
+
+Fix option C (quick UI mitigation): “Data refresh hour” dampener
+
+If you detect an hour where an unusually high % of people changed search values (like the hour Replit found):
+
+temporarily reduce search weight for that tick (like the news governor concept)
+
+or mark it as a “refresh tick” and smooth harder
+
+That’s not as clean as A/B, but it can be a fast patch.
+
+The one question I’d push Replit on (important)
+
+Replit said:
+
+“The 40 value is a floor/baseline that people fall to when they have no fresh search data.”
+
+But then it also said:
+
+“search_volume scores refreshed across the board…”
+
+Those two statements imply your search system is mixing freshness with normalization in a way that can cause mass redistribution.
+
+So I’d ask Replit to confirm explicitly:
+
+Is 40 coming from:
+
+a “no data / stale data” fallback, or
+
+the real normalized score for some people?
+
+What fraction of those “40s” had:
+
+serperFetchedAt stale?
+
+searchFresh=false?
+
+searchEmaHeld?
+
+If 40 is being used as a sentinel, you want it never to enter the scoring as a normal number.
+
+What you should tell ChatGPT (clean summary)
+
+Here’s a shareable summary you can paste:
+
+Replit confirmed the Kash/Netanyahu shift is entity-correct and has no EMA-hold/fallback anomalies for those two.
+However, the hour’s churn was systemic: 83/100 moved ≥2% and 41/100 moved ≥10%, correlated with many people snapping to/from a search score of exactly “40.” That strongly suggests a missing/stale-search fallback value is entering normalization/scoring and causing mass rank churn on refresh ticks.
+This isn’t “organic volatility” — it’s an engine behavior. Recommend replacing hard snap-to-40 with carry-forward + decay or an EMA-hold for stale search, and/or adding a search-governor on refresh ticks.
