@@ -1,0 +1,210 @@
+AuthoriDex — Admin Panel for Prediction Operations
+Context
+The prediction engine auto-resolves internal markets (Up/Down, H2H, Top Gainer) and flags real-world/community markets as CLOSED_PENDING for manual resolution. The pari-mutuel payout system is built. We now need admin tooling to operate predictions without running SQL queries.
+Before building anything new: Tell me what admin routes and pages already exist, so we don't duplicate work.
+All admin endpoints must have server-side auth checks (not just hidden in UI). Verify the user's role is 'admin' on the server before returning data or executing actions.
+
+Phase 1 — Market Management Dashboard
+Route: /admin/markets
+This is the ops home screen — the single page admins visit most.
+Main view: filterable market list
+
+Filter tabs: All | Open | Closing Soon (<24h) | Needs Resolution (CLOSED_PENDING) | Resolved | Voided
+Each row shows:
+
+Market title + type badge (Up/Down, H2H, Gainer, Jackpot, Real-World)
+Category (Politics, Sports, Tech, etc.)
+Status with color coding
+Opens/Closes dates (relative: "closes in 3h" or "closed 2d ago")
+Pool size (total credits staked)
+Bet count + unique bettors
+Outcome split (visual bar showing % on each side)
+
+
+Sort by: closing soonest, largest pool, most bets, most recent
+Search by market title
+
+Market detail drawer (click any row):
+
+Full market info: title, description, type, category, dates, status
+Outcome breakdown: each entry with stake total, bet count, current odds/multiplier
+Bet list: who bet, how much, on what, when (paginated)
+Resolution evidence (for resolved markets):
+
+Opening score, closing score, % change, outcome
+Resolver source: "auto" or admin username
+Resolved at timestamp
+Payout summary: total pool, total payouts, remainder, winner count, loser count
+
+
+Actions available based on status:
+
+OPEN → "Pause Betting" toggle, "Void Market" (with reason)
+CLOSED_PENDING → "Resolve" button (opens resolution flow — see Phase 2), "Void Market"
+RESOLVED → "View Payout Details" (read-only), "Flag for Review"
+Any status → "View Audit Log" for this market
+
+
+
+Sanity warnings (show as colored badges/banners on relevant markets):
+
+"Closes in <1h with 0 bets" (wasted market)
+"Should have auto-resolved but stuck in CLOSED_PENDING" (resolver issue)
+"Pool ≠ Payouts beyond rounding tolerance" (payout integrity)
+"Single user holds >50% of pool" (concentration risk)
+
+
+Phase 2 — Manual Resolution Queue
+Route: /admin/resolve (or a dedicated tab within /admin/markets)
+Purpose: Process real-world/community markets that need human judgment.
+Queue view:
+
+Shows only markets with status CLOSED_PENDING where type is 'community' or 'real_world'
+Sorted by oldest first (longest waiting = most urgent)
+Each card shows: market title, close date, pool size, bet count, how long it's been pending
+
+Resolution flow (click a market):
+
+Display the market question and all possible outcomes
+Show current bet distribution (how much on each side)
+"Preview Payouts" button — shows what each outcome would distribute before committing:
+
+If Outcome A wins: X users paid, total Y credits distributed, remainder Z
+If Outcome B wins: X users paid, total Y credits distributed, remainder Z
+
+
+Select winning outcome
+Required: "Resolution notes" text field (e.g., "Confirmed via AP News report on Feb 25")
+Confirm button with a clear warning: "This will distribute [X] credits to [Y] winners. This action is logged and cannot be easily undone."
+On confirm: settle the market, update all bets, distribute payouts, log to audit trail
+
+Void flow (alternative to resolution):
+
+"Void Market" button available on any pending market
+Required: reason text field
+On confirm: refund all stakes to all bettors, mark market as VOIDED, log to audit trail
+
+
+Phase 3 — User Lookup + Credit Management
+Route: /admin/users
+User search:
+
+Search by username, email, or userId
+Results show: avatar, username, email, level, credit balance, member since, role
+
+User detail view (click a user):
+
+Profile summary: avatar, display name, username, email, role, level, XP, member since
+Credit balance (current)
+Stats: Votes cast, predictions made, resolved predictions, win rate, net P&L, leaderboard rank
+Active bets: list of open bets (market title, stake, position, current odds)
+Resolved bets: list of settled bets (market title, stake, payout, net, won/lost)
+Credit transaction history: scrollable list of all ledger entries:
+
+Type: initial_grant, stake, payout, refund, admin_adjustment, bonus
+Amount (+/-)
+Balance after
+Timestamp
+For admin_adjustment: who did it + reason
+
+
+
+Admin credit adjustment:
+
+"Adjust Credits" button opens a modal:
+
+Amount field (positive = grant, negative = deduct)
+Reason field (required)
+Preview: "This will change [username]'s balance from [current] to [new]"
+Confirm button
+
+
+On confirm: update user balance, write to credit_transactions table with type 'admin_adjustment', adminId, reason, timestamp
+This is the ONLY way admins should adjust credits — never direct SQL
+
+
+Phase 4 — Audit Log
+Route: /admin/audit
+Purpose: Immutable record of every admin action and every market resolution.
+Log entries include:
+
+Market resolutions (auto and manual):
+
+Market ID + title
+Resolver: "auto-resolver" or admin username
+Outcome chosen
+Evidence: opening score, closing score (for internal markets) or admin notes (for manual)
+Payout summary: pool, total distributed, remainder, winners, losers
+Timestamp
+
+
+Market voids:
+
+Market ID + title, admin who voided, reason, total refunded, timestamp
+
+
+Credit adjustments:
+
+User affected, admin who adjusted, amount, reason, timestamp
+
+
+Market creation/editing:
+
+What was created/changed, by whom, when
+
+
+
+View:
+
+Reverse chronological (newest first)
+Filterable by: action type (resolution, void, credit adjustment, etc.), admin user, date range, market ID
+Searchable
+Read-only — nobody can edit or delete log entries
+
+
+Phase 5 — Operational Shortcuts
+Bulk Weekly Market Generator
+
+"Generate Week [N] Markets" button on the market dashboard
+Creates Up/Down markets for all 100 tracked people, plus Jackpot, using current trend scores as opening baselines
+Pre-fills titles, descriptions, open/close dates based on the weekly schedule
+Shows a preview of what will be created before confirming
+One-click creation, not 100 manual form submissions
+
+Resolver Health Panel (add to /admin/markets or engine health)
+
+Last resolver run time + status
+Markets processed / blocked / errored in last run
+Queue sizes: pending manual, stuck, awaiting data
+Latest snapshot age (already exists in engine health — surface it here too)
+Alert banner if: resolver hasn't run in >10 min, or markets stuck in CLOSED_PENDING for >1h
+
+Global Safety Toggles
+
+"Pause All Betting" — disables new bet placement site-wide (markets still visible, just can't bet)
+"Maintenance Banner" — show a dismissible banner to all users with custom text
+Both toggleable from the admin dashboard header
+
+
+Data Requirements
+credit_transactions table (if not already exists)
+
+id, userId, type (enum: initial_grant, stake, payout, refund, admin_adjustment, bonus), amount, balanceAfter, marketId (nullable), betId (nullable), adminId (nullable), reason (nullable), createdAt
+This table is append-only — no updates, no deletes
+Every credit movement goes through this table
+
+admin_audit_log table (if not already exists)
+
+id, adminId, actionType (enum: market_resolve, market_void, credit_adjustment, market_create, market_edit), targetType (market/user), targetId, details (JSONB — flexible for different action types), createdAt
+Append-only
+
+
+Build Order
+
+Phase 1 (Market Dashboard) — gives immediate visibility into all markets
+Phase 2 (Resolution Queue) — enables operating real-world markets
+Phase 3 (User/Credit Management) — enables support and credit ops
+Phase 4 (Audit Log) — makes all actions traceable
+Phase 5 (Shortcuts) — efficiency improvements once the basics work
+
+Test each phase before moving on. After Phase 2, manually resolve one market and verify payouts distribute correctly.
