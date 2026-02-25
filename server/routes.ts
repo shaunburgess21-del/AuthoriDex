@@ -2427,6 +2427,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           liveUpdatedAt: trendingPeople.liveUpdatedAt,
           imageSlug: trackedPeople.imageSlug,
           approvalPct: celebrityMetrics.approvalPct,
+          approvalAvgRating: celebrityMetrics.approvalAvgRating,
           approvalVotesCount: celebrityMetrics.approvalVotesCount,
           underratedPct: celebrityMetrics.underratedPct,
           overratedPct: celebrityMetrics.overratedPct,
@@ -2441,24 +2442,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         query = query.where(and(...conditions)) as typeof query;
       }
 
-      let orderByColumn: any;
-      switch (tab) {
-        case 'approval':
-          orderByColumn = celebrityMetrics.approvalPct;
-          break;
-        case 'value':
-          orderByColumn = celebrityMetrics.valueScore;
-          break;
-        case 'fame':
-        default:
-          orderByColumn = sql`COALESCE(${trendingPeople.fameIndexLive}, ${trendingPeople.fameIndex})`;
-          break;
-      }
-
-      if (sortDir === 'asc') {
-        query = query.orderBy(sql`${orderByColumn} ASC NULLS LAST, ${trendingPeople.name} ASC`) as typeof query;
+      if (tab === 'approval') {
+        if (sortDir === 'asc') {
+          query = query.orderBy(sql`${celebrityMetrics.approvalAvgRating} ASC NULLS LAST, ${celebrityMetrics.approvalVotesCount} ASC NULLS LAST, ${trendingPeople.name} ASC`) as typeof query;
+        } else {
+          query = query.orderBy(sql`${celebrityMetrics.approvalAvgRating} DESC NULLS LAST, ${celebrityMetrics.approvalVotesCount} DESC NULLS LAST, ${trendingPeople.name} ASC`) as typeof query;
+        }
       } else {
-        query = query.orderBy(sql`${orderByColumn} DESC NULLS LAST, ${trendingPeople.name} ASC`) as typeof query;
+        let orderByColumn: any;
+        switch (tab) {
+          case 'value':
+            orderByColumn = celebrityMetrics.valueScore;
+            break;
+          case 'fame':
+          default:
+            orderByColumn = sql`COALESCE(${trendingPeople.fameIndexLive}, ${trendingPeople.fameIndex})`;
+            break;
+        }
+
+        if (sortDir === 'asc') {
+          query = query.orderBy(sql`${orderByColumn} ASC NULLS LAST, ${trendingPeople.name} ASC`) as typeof query;
+        } else {
+          query = query.orderBy(sql`${orderByColumn} DESC NULLS LAST, ${trendingPeople.name} ASC`) as typeof query;
+        }
       }
 
       query = query.limit(limit).offset(offset) as typeof query;
