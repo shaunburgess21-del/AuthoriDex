@@ -1,0 +1,100 @@
+I asked this to claude and it's response:
+
+Me:
+Just a question. The markets for weekly up down, and our jackpot, should resolve autmatically right? It's only the "real world markets" that we would need to resolve manually?
+
+Claude:
+
+Exactly right. You have two fundamentally different categories of markets:
+Auto-resolvable (your data, your system knows the answer):
+Weekly Up/Down — the system already has the trend score at the start of the week and at close. At market close, compare the two numbers. Higher = "Up" wins, lower = "Down" wins. No human needed.
+Weekly Jackpot — the system knows who's ranked #1 at close. Compare to the predictions. Done.
+Head-to-Head — same logic, compare two people's scores at close.
+Top Gainer — whoever had the biggest positive % change over the period. The data is already in your snapshots.
+All of these should have a scheduled job that runs at market close time (whenever the weekly countdown hits zero), queries the current trend scores, determines the outcome, and calls the settle endpoint automatically. The data to resolve them is entirely within your own database.
+Manual resolution (external events you don't have data for):
+Real-World markets — "Will X happen?" type questions about events outside your system. These need an admin to click "resolve" and pick the winning outcome, because your engine has no way to know whether a real-world event occurred.
+The implementation is straightforward: You likely already have a closesAt timestamp on each market. Add a scheduled job (can run every 5-10 minutes) that checks for markets where closesAt has passed and status is still open. For market types tied to your trend data, it auto-resolves by querying the relevant scores. For real-world markets, it just marks them as pending_resolution and flags them for admin attention.
+The key thing to get right: make sure the auto-resolver captures the exact score values at close time and stores them with the resolution record. If someone disputes the outcome later, you want to be able to point to "Elon Musk's score was 368,572 at market open and 371,204 at close — Up wins." That's your audit trail.
+Worth asking Replit whether any of this auto-resolution logic already exists, or if it needs to be built from scratch.
+
+Yep — Claude’s framing is correct, and it’s the cleanest way to split your markets.
+
+Auto-resolve (internal truth)
+
+Anything where AuthoriDex can compute the answer from your own data should resolve automatically:
+
+Weekly Up/Down (start vs close trend score)
+
+Weekly Jackpot (#1 at close)
+
+Head-to-head (A vs B at close, or biggest % change, etc.)
+
+Top gainer / biggest mover over a window
+
+That should be a scheduled resolver that:
+
+detects markets past closesAt with status = open
+
+computes the winner from snapshots
+
+calls the same settle path you already built
+
+Manual resolve (external truth)
+
+“Real world” event markets (Will X happen?) should not auto-resolve unless you have a trusted data feed + deterministic rule. For now:
+
+mark them pending_resolution
+
+show them in an admin “Resolve queue”
+
+admin chooses outcome, then settle runs
+
+The two important “gotchas” to get right (before you tell Replit “just auto-resolve”)
+1) Pick a deterministic “close snapshot”
+
+Because you’ve had missed hours + backfills, you need a clear rule for which snapshot defines “close”.
+
+Use something like:
+
+closeSnapshot = latest snapshot timestamp ≤ closesAt within a tolerance window (e.g. within the last 2 hours)
+
+If none exists, fall back to first snapshot after closesAt within a short window (e.g. 1 hour)
+
+If still none, mark as resolution_blocked and alert (don’t guess)
+
+Same for “open snapshot” (market start): define it as the snapshot at/just after opensAt.
+
+This avoids disputes and weirdness when snapshots are missing or backfilled.
+
+2) Store an audit trail at resolution time
+
+Claude is spot on here. When auto-resolving, persist a resolutionEvidence JSON blob, e.g.:
+
+openSnapshotAt / closeSnapshotAt
+
+openScore / closeScore (or ranks)
+
+derived % change
+
+winner outcome key
+
+any tie-breaker used
+
+Then you can show it in UI (“Why did Up win?”) and you’re bulletproof if users question a result.
+
+A tie policy you should decide now (quick)
+
+Some markets will tie (score unchanged, exact same % change, etc.). Decide one of these upfront:
+
+Refund/void on tie (simplest, fairest)
+
+House rule: tie → “No” wins / or “Down” wins (simple but will annoy people)
+
+Extend market (more complex)
+
+I’d choose refund/void on tie for v1.
+
+What I’d tell Replit (short prompt you can paste)
+
+“Please implement auto-resolution for internal markets (weekly up/down, jackpot, head-to-head, top gainer) using closesAt. Add a resolver job that runs every 5–10 minutes, finds open markets past closesAt, computes the outcome from trend snapshots using a deterministic snapshot selection rule (latest ≤ closesAt within X minutes, else first after). Settle via existing pari-mutuel settle path. For real-world markets, set status to pending_resolution for admin. Persist a resolutionEvidence JSON record with open/close snapshot timestamps and values. Add tie handling (void/refund). Add alerts if no suitable snapshot exists.”
