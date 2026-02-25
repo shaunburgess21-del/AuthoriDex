@@ -8457,32 +8457,49 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const entryShare = entryPool / totalPool;
       const potentialPayout = Math.round(stakeAmount / Math.max(entryShare, 0.01));
 
-      await db
-        .update(profiles)
-        .set({ predictCredits: profile.predictCredits - stakeAmount })
-        .where(eq(profiles.id, authReq.userId!));
+      const newBalance = profile.predictCredits - stakeAmount;
 
-      const [bet] = await db
-        .insert(marketBets)
-        .values({
-          marketId: market.id,
-          entryId,
+      const [bet] = await db.transaction(async (tx) => {
+        await tx
+          .update(profiles)
+          .set({ predictCredits: newBalance })
+          .where(eq(profiles.id, authReq.userId!));
+
+        const [insertedBet] = await tx
+          .insert(marketBets)
+          .values({
+            marketId: market.id,
+            entryId,
+            userId: authReq.userId!,
+            stakeAmount,
+            potentialPayout,
+            status: "active",
+          })
+          .returning();
+
+        await tx.insert(creditLedger).values({
           userId: authReq.userId!,
-          stakeAmount,
-          potentialPayout,
-          status: "active",
-        })
-        .returning();
+          txnType: 'prediction_stake',
+          amount: -stakeAmount,
+          walletType: 'VIRTUAL',
+          balanceAfter: newBalance,
+          source: 'user_action',
+          idempotencyKey: `stake_${market.id}_${insertedBet.id}`,
+          metadata: { marketId: market.id, entryId, betId: insertedBet.id },
+        });
 
-      await db
-        .update(marketEntries)
-        .set({ totalStake: entry.totalStake + stakeAmount })
-        .where(eq(marketEntries.id, entryId));
+        await tx
+          .update(marketEntries)
+          .set({ totalStake: entry.totalStake + stakeAmount })
+          .where(eq(marketEntries.id, entryId));
+
+        return [insertedBet];
+      });
 
       res.json({
         ...bet,
         potentialPayout,
-        remainingCredits: profile.predictCredits - stakeAmount,
+        remainingCredits: newBalance,
       });
     } catch (error) {
       console.error("[Open Markets] Bet error:", error);
@@ -9209,6 +9226,9 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   });
 
   app.post("/api/admin/test-payout-pipeline", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    if (process.env.ENABLE_TEST_ENDPOINTS !== 'true') {
+      return res.status(403).json({ error: "Test endpoints disabled. Set ENABLE_TEST_ENDPOINTS=true to enable." });
+    }
     try {
       const { settleMarketBets } = await import("./jobs/market-resolver");
 
@@ -9222,6 +9242,9 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const userA = testProfileRows[0];
       const userB = testProfileRows[1];
       const creditsBefore = { userA: userA.predictCredits, userB: userB.predictCredits };
+      const stakeA = 100;
+      const stakeB = 100;
+      const totalPool = stakeA + stakeB;
 
       const testSlug = `test-payout-${Date.now()}`;
       const [testMarket] = await db.insert(predictionMarkets).values({
@@ -9253,30 +9276,124 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         displayOrder: 1,
       }).returning();
 
-      await db.insert(marketBets).values([
-        { marketId: testMarket.id, entryId: upEntry.id, userId: userA.id, stakeAmount: 100, status: "active" },
-        { marketId: testMarket.id, entryId: downEntry.id, userId: userB.id, stakeAmount: 100, status: "active" },
+      await db.update(profiles).set({ predictCredits: creditsBefore.userA - stakeA }).where(eq(profiles.id, userA.id));
+      await db.update(profiles).set({ predictCredits: creditsBefore.userB - stakeB }).where(eq(profiles.id, userB.id));
+
+      const [betA] = await db.insert(marketBets).values({
+        marketId: testMarket.id, entryId: upEntry.id, userId: userA.id, stakeAmount: stakeA, status: "active",
+      }).returning();
+      const [betB] = await db.insert(marketBets).values({
+        marketId: testMarket.id, entryId: downEntry.id, userId: userB.id, stakeAmount: stakeB, status: "active",
+      }).returning();
+
+      await db.insert(creditLedger).values([
+        {
+          userId: userA.id, txnType: 'prediction_stake', amount: -stakeA, walletType: 'VIRTUAL',
+          balanceAfter: creditsBefore.userA - stakeA, source: 'user_action',
+          idempotencyKey: `stake_${testMarket.id}_${betA.id}`, metadata: { marketId: testMarket.id, entryId: upEntry.id, betId: betA.id },
+        },
+        {
+          userId: userB.id, txnType: 'prediction_stake', amount: -stakeB, walletType: 'VIRTUAL',
+          balanceAfter: creditsBefore.userB - stakeB, source: 'user_action',
+          idempotencyKey: `stake_${testMarket.id}_${betB.id}`, metadata: { marketId: testMarket.id, entryId: downEntry.id, betId: betB.id },
+        },
       ]);
 
       const settlement = await settleMarketBets(testMarket.id, upEntry.id);
 
-      const updatedProfileA = await db.select({ predictCredits: profiles.predictCredits }).from(profiles).where(eq(profiles.id, userA.id));
-      const updatedProfileB = await db.select({ predictCredits: profiles.predictCredits }).from(profiles).where(eq(profiles.id, userB.id));
+      const invariants: Record<string, { passed: boolean; detail: string }> = {};
 
-      const bets = await db.select().from(marketBets).where(eq(marketBets.marketId, testMarket.id));
-
-      const results = {
-        testMarketId: testMarket.id,
-        settlement,
-        bets: bets.map(b => ({ id: b.id, entryId: b.entryId, userId: b.userId, status: b.status, payoutAmount: b.payoutAmount, stakeAmount: b.stakeAmount })),
-        credits: {
-          userA: { before: creditsBefore.userA, after: updatedProfileA[0]?.predictCredits, delta: (updatedProfileA[0]?.predictCredits ?? 0) - (creditsBefore.userA ?? 0) },
-          userB: { before: creditsBefore.userB, after: updatedProfileB[0]?.predictCredits, delta: (updatedProfileB[0]?.predictCredits ?? 0) - (creditsBefore.userB ?? 0) },
-        },
-        expectedWinner: "userA (bet on Up entry)",
-        expectedPayout: 200,
+      invariants.poolConservation = {
+        passed: Math.abs(settlement.remainder) <= 1,
+        detail: `pool=${settlement.totalPool}, payouts=${settlement.payoutsDistributed}, remainder=${settlement.remainder}`,
       };
 
+      invariants.winnersCount = {
+        passed: settlement.winnersCount === 1,
+        detail: `expected=1, actual=${settlement.winnersCount}`,
+      };
+
+      invariants.losersCount = {
+        passed: settlement.losersCount === 1,
+        detail: `expected=1, actual=${settlement.losersCount}`,
+      };
+
+      const betsAfter = await db.select().from(marketBets).where(eq(marketBets.marketId, testMarket.id));
+      const winnerBet = betsAfter.find(b => b.entryId === upEntry.id);
+      const loserBet = betsAfter.find(b => b.entryId === downEntry.id);
+
+      invariants.losersGetNothing = {
+        passed: loserBet?.payoutAmount === 0,
+        detail: `loserPayout=${loserBet?.payoutAmount}`,
+      };
+
+      invariants.winnerGetsTotalPool = {
+        passed: winnerBet?.payoutAmount === totalPool,
+        detail: `winnerPayout=${winnerBet?.payoutAmount}, totalPool=${totalPool}`,
+      };
+
+      const updatedA = await db.select({ predictCredits: profiles.predictCredits }).from(profiles).where(eq(profiles.id, userA.id));
+      const updatedB = await db.select({ predictCredits: profiles.predictCredits }).from(profiles).where(eq(profiles.id, userB.id));
+
+      const expectedABalance = creditsBefore.userA - stakeA + totalPool;
+      const expectedBBalance = creditsBefore.userB - stakeB;
+      invariants.winnerBalanceIntegrity = {
+        passed: updatedA[0]?.predictCredits === expectedABalance,
+        detail: `expected=${expectedABalance}, actual=${updatedA[0]?.predictCredits}`,
+      };
+      invariants.loserBalanceIntegrity = {
+        passed: updatedB[0]?.predictCredits === expectedBBalance,
+        detail: `expected=${expectedBBalance}, actual=${updatedB[0]?.predictCredits}`,
+      };
+
+      const ledgerEntries = await db.select().from(creditLedger)
+        .where(sql`${creditLedger.idempotencyKey} LIKE ${'%' + testMarket.id + '%'}`);
+      const stakeEntries = ledgerEntries.filter(e => e.txnType === 'prediction_stake');
+      const payoutEntries = ledgerEntries.filter(e => e.txnType === 'prediction_payout');
+
+      invariants.stakeLedgerEntries = {
+        passed: stakeEntries.length === 2,
+        detail: `expected=2 stake entries, actual=${stakeEntries.length}`,
+      };
+      invariants.payoutLedgerEntries = {
+        passed: payoutEntries.length === 1,
+        detail: `expected=1 payout entry, actual=${payoutEntries.length}`,
+      };
+
+      await db.update(predictionMarkets).set({ status: "OPEN" as any }).where(eq(predictionMarkets.id, testMarket.id));
+      await db.update(marketBets).set({ status: "active", settledAt: null, payoutAmount: 0 }).where(eq(marketBets.marketId, testMarket.id));
+      await db.update(profiles).set({ predictCredits: updatedA[0]?.predictCredits }).where(eq(profiles.id, userA.id));
+
+      const settlement2 = await settleMarketBets(testMarket.id, upEntry.id);
+
+      invariants.idempotency = {
+        passed: settlement2.alreadySettled !== true && settlement2.totalPool === totalPool,
+        detail: `secondSettle: alreadySettled=${settlement2.alreadySettled}, pool=${settlement2.totalPool}`,
+      };
+
+      await db.update(predictionMarkets).set({ status: "RESOLVED" as any }).where(eq(predictionMarkets.id, testMarket.id));
+      const settlement3 = await settleMarketBets(testMarket.id, upEntry.id);
+      invariants.resolvedIdempotency = {
+        passed: settlement3.alreadySettled === true,
+        detail: `thirdSettle on RESOLVED: alreadySettled=${settlement3.alreadySettled}`,
+      };
+
+      const allPassed = Object.values(invariants).every(i => i.passed);
+
+      const results = {
+        passed: allPassed,
+        testMarketId: testMarket.id,
+        invariants,
+        settlement,
+        bets: betsAfter.map(b => ({ id: b.id, entryId: b.entryId, userId: b.userId, status: b.status, payoutAmount: b.payoutAmount, stakeAmount: b.stakeAmount })),
+        ledgerSummary: { stakeEntries: stakeEntries.length, payoutEntries: payoutEntries.length, totalLedger: ledgerEntries.length },
+        credits: {
+          userA: { before: creditsBefore.userA, staked: stakeA, afterStake: creditsBefore.userA - stakeA, afterPayout: updatedA[0]?.predictCredits },
+          userB: { before: creditsBefore.userB, staked: stakeB, afterStake: creditsBefore.userB - stakeB, afterPayout: updatedB[0]?.predictCredits },
+        },
+      };
+
+      await db.delete(creditLedger).where(sql`${creditLedger.idempotencyKey} LIKE ${'%' + testMarket.id + '%'}`);
       await db.delete(marketBets).where(eq(marketBets.marketId, testMarket.id));
       await db.delete(marketEntries).where(eq(marketEntries.marketId, testMarket.id));
       await db.delete(predictionMarkets).where(eq(predictionMarkets.id, testMarket.id));
@@ -9284,9 +9401,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       await db.update(profiles).set({ predictCredits: creditsBefore.userA }).where(eq(profiles.id, userA.id));
       await db.update(profiles).set({ predictCredits: creditsBefore.userB }).where(eq(profiles.id, userB.id));
 
-      const passed = settlement.totalPool === 200 && settlement.winnersCount === 1 && settlement.losersCount === 1 && settlement.payoutsDistributed === 200;
-
-      res.json({ passed, ...results });
+      res.json(results);
     } catch (error: any) {
       console.error("Error in payout pipeline test:", error.message);
       res.status(500).json({ error: "Payout pipeline test failed", details: error.message });

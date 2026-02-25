@@ -708,7 +708,7 @@ export type InsertXpLedger = z.infer<typeof insertXpLedgerSchema>;
 // Credit Ledger - Immutable transaction log for virtual/real credits (Source of Truth)
 export const creditLedger = pgTable("credit_ledger", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
   txnType: text("txn_type").notNull(), // 'prediction_stake', 'prediction_payout', 'bonus', 'admin_adjustment'
   amount: integer("amount").notNull(), // Positive = credit, Negative = debit
   walletType: text("wallet_type").notNull().default("VIRTUAL"), // 'VIRTUAL' (Phase 1), 'REAL' (Phase 2)

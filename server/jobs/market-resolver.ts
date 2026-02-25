@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { predictionMarkets, marketEntries, marketBets, trendSnapshots, profiles } from "@shared/schema";
+import { predictionMarkets, marketEntries, marketBets, trendSnapshots, profiles, creditLedger } from "@shared/schema";
 import { eq, and, sql, inArray, lte, gte, desc, asc } from "drizzle-orm";
 import { log } from "../vite";
 
@@ -12,6 +12,8 @@ interface SettlementResult {
   winnersCount: number;
   losersCount: number;
   payoutsDistributed: number;
+  remainder: number;
+  alreadySettled?: boolean;
 }
 
 interface ResolverStats {
@@ -39,6 +41,12 @@ export function getResolverStats(): ResolverStats {
 }
 
 export async function settleMarketBets(marketId: string, winnerEntryId: string): Promise<SettlementResult> {
+  const [market] = await db.select({ status: predictionMarkets.status })
+    .from(predictionMarkets).where(eq(predictionMarkets.id, marketId)).limit(1);
+  if (market && (market.status === "RESOLVED" || market.status === "VOID")) {
+    return { totalPool: 0, winnersCount: 0, losersCount: 0, payoutsDistributed: 0, remainder: 0, alreadySettled: true };
+  }
+
   const allBets = await db
     .select({
       id: marketBets.id,
@@ -50,7 +58,7 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string):
     .where(and(eq(marketBets.marketId, marketId), eq(marketBets.status, "active")));
 
   if (allBets.length === 0) {
-    return { totalPool: 0, winnersCount: 0, losersCount: 0, payoutsDistributed: 0 };
+    return { totalPool: 0, winnersCount: 0, losersCount: 0, payoutsDistributed: 0, remainder: 0 };
   }
 
   const totalPool = allBets.reduce((sum, b) => sum + b.stakeAmount, 0);
@@ -68,6 +76,20 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string):
       await db.update(profiles)
         .set({ predictCredits: sql`${profiles.predictCredits} + ${payout}` })
         .where(eq(profiles.id, bet.userId));
+
+      const [updatedProfile] = await db.select({ predictCredits: profiles.predictCredits })
+        .from(profiles).where(eq(profiles.id, bet.userId)).limit(1);
+      await db.insert(creditLedger).values({
+        userId: bet.userId,
+        txnType: 'prediction_payout',
+        amount: payout,
+        walletType: 'VIRTUAL',
+        balanceAfter: updatedProfile?.predictCredits ?? 0,
+        source: 'market_settlement',
+        idempotencyKey: `payout_${marketId}_${bet.id}`,
+        metadata: { marketId, entryId: bet.entryId, betId: bet.id, stakeAmount: bet.stakeAmount, payout },
+      }).onConflictDoNothing();
+
       payoutsDistributed += payout;
     } else {
       await db.update(marketBets)
@@ -83,15 +105,26 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string):
     .set({ resolutionStatus: "loser" })
     .where(and(eq(marketEntries.marketId, marketId), sql`${marketEntries.id} != ${winnerEntryId}`));
 
+  const remainder = totalPool - payoutsDistributed;
+  log(`[MarketResolver] Settlement: market=${marketId}, pool=${totalPool}, payouts=${payoutsDistributed}, remainder=${remainder}, winners=${winnerBets.length}, losers=${allBets.length - winnerBets.length}`);
+
   return {
     totalPool,
     winnersCount: winnerBets.length,
     losersCount: allBets.length - winnerBets.length,
     payoutsDistributed,
+    remainder,
   };
 }
 
 export async function voidMarketBets(marketId: string): Promise<number> {
+  const [market] = await db.select({ status: predictionMarkets.status })
+    .from(predictionMarkets).where(eq(predictionMarkets.id, marketId)).limit(1);
+  if (market && market.status === "VOID") {
+    log(`[MarketResolver] Void skipped: market=${marketId} already VOID`);
+    return 0;
+  }
+
   const allBets = await db
     .select({ id: marketBets.id, userId: marketBets.userId, stakeAmount: marketBets.stakeAmount })
     .from(marketBets)
@@ -107,12 +140,26 @@ export async function voidMarketBets(marketId: string): Promise<number> {
     await db.update(profiles)
       .set({ predictCredits: sql`${profiles.predictCredits} + ${bet.stakeAmount}` })
       .where(eq(profiles.id, bet.userId));
+
+    const [updatedProfile] = await db.select({ predictCredits: profiles.predictCredits })
+      .from(profiles).where(eq(profiles.id, bet.userId)).limit(1);
+    await db.insert(creditLedger).values({
+      userId: bet.userId,
+      txnType: 'prediction_refund',
+      amount: bet.stakeAmount,
+      walletType: 'VIRTUAL',
+      balanceAfter: updatedProfile?.predictCredits ?? 0,
+      source: 'market_void',
+      idempotencyKey: `refund_${marketId}_${bet.id}`,
+      metadata: { marketId, betId: bet.id, stakeAmount: bet.stakeAmount },
+    }).onConflictDoNothing();
   }
 
   await db.update(marketEntries)
     .set({ resolutionStatus: "void" })
     .where(eq(marketEntries.marketId, marketId));
 
+  log(`[MarketResolver] Void: market=${marketId}, refunded=${allBets.length} bets`);
   return allBets.length;
 }
 
