@@ -1789,7 +1789,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         newsPct: `${newsCoveragePctActual.toFixed(0)}%`,
         searchPct: `${searchCoveragePctActual.toFixed(0)}%`,
         newsFreshnessGovernor: `${(newsGovernorFactor * 100).toFixed(0)}%`,
-        searchGovernor: `${(searchGovernorFactor * 100).toFixed(0)}%`,
+        searchFreshnessGovernor: `${(searchGovernorFactor * 100).toFixed(0)}%`,
         newsProviderUsed: newsSource,
         newsFreshCoveragePct: `${newsCoveragePctActual.toFixed(0)}%`,
         newsLiveApiFetched: newsSource === "mediastack"

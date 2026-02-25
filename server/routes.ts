@@ -4983,6 +4983,24 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
             return { error: "Failed to compute rank churn" };
           }
         })(),
+        marketResolver: await (async () => {
+          try {
+            const { getResolverStats } = await import("./jobs/market-resolver");
+            const stats = getResolverStats();
+            const statusCounts = await db.execute(sql`
+              SELECT status, COUNT(*)::int as count
+              FROM prediction_markets
+              GROUP BY status
+            `);
+            const byStatus: Record<string, number> = {};
+            for (const row of (statusCounts.rows || [])) {
+              byStatus[String(row.status)] = Number(row.count);
+            }
+            return { ...stats, marketsByStatus: byStatus };
+          } catch {
+            return { error: "Failed to load resolver stats" };
+          }
+        })(),
         emaTuningConfig: {
           EMA_BASE_ALPHA: parseFloat(process.env.EMA_BASE_ALPHA || '0.15'),
           EMA_2_SOURCE_ALPHA: parseFloat(process.env.EMA_2_SOURCE_ALPHA || '0.15'),
@@ -8422,11 +8440,28 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         ));
       const existingPersonIds = new Set(existing.map(e => e.personId));
 
+      const openingSnapRows = await db.execute(sql`
+        SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
+        FROM trend_snapshots
+        WHERE person_id = ANY(${people.map(p => p.id)}::uuid[])
+        ORDER BY person_id, timestamp DESC
+      `);
+      const openingScoreMap = new Map<string, { score: number; snapshotAt: string }>();
+      for (const row of (openingSnapRows.rows || [])) {
+        if (row.fame_index != null) {
+          openingScoreMap.set(String(row.person_id), {
+            score: Number(row.fame_index),
+            snapshotAt: new Date(row.timestamp as string).toISOString(),
+          });
+        }
+      }
+
       let created = 0;
       for (const person of people) {
         if (existingPersonIds.has(person.id)) continue;
 
         const slug = `updown-${person.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
+        const openScore = openingScoreMap.get(person.id);
 
         try {
           const [market] = await db.insert(predictionMarkets).values({
@@ -8442,6 +8477,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
             weekNumber,
             seedParticipants: 0,
             seedVolume: "0",
+            metadata: openScore ? { openingScore: { personId: person.id, score: openScore.score, snapshotAt: openScore.snapshotAt } } : undefined,
             seedConfig: {
               enabled: true,
               targetParticipantsMin: 30,
@@ -8487,6 +8523,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
               weekNumber,
               seedParticipants: 0,
               seedVolume: "0",
+              metadata: openScore ? { openingScore: { personId: person.id, score: openScore.score, snapshotAt: openScore.snapshotAt } } : undefined,
               seedConfig: {
                 enabled: true,
                 targetParticipantsMin: 30,
@@ -8647,6 +8684,20 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const title = `${personA.name} vs ${personB.name}`;
       let slug = `h2h-${personA.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-vs-${personB.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
 
+      const h2hSnapRows = await db.execute(sql`
+        SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
+        FROM trend_snapshots
+        WHERE person_id IN (${personAId}::uuid, ${personBId}::uuid)
+        ORDER BY person_id, timestamp DESC
+      `);
+      const h2hOpeningScores: any[] = [];
+      for (const row of (h2hSnapRows.rows || [])) {
+        if (row.fame_index != null) {
+          h2hOpeningScores.push({ personId: String(row.person_id), score: Number(row.fame_index), snapshotAt: new Date(row.timestamp as string).toISOString() });
+        }
+      }
+      const h2hMetadata = h2hOpeningScores.length > 0 ? { openingScores: h2hOpeningScores } : undefined;
+
       const defaultSeedConfig = {
         enabled: true,
         targetParticipantsMin: 40,
@@ -8671,6 +8722,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           weekNumber,
           seedParticipants: 0,
           seedVolume: "0",
+          metadata: h2hMetadata,
           seedConfig: seedConfig || defaultSeedConfig,
         }).returning();
       } catch (slugErr: any) {
@@ -8689,6 +8741,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
             weekNumber,
             seedParticipants: 0,
             seedVolume: "0",
+            metadata: h2hMetadata,
             seedConfig: seedConfig || defaultSeedConfig,
           }).returning();
         } else {
@@ -8778,6 +8831,20 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const title = `Top Gainer: ${category.charAt(0).toUpperCase() + category.slice(1)}`;
       let slug = `gainer-${category}-week-${weekNumber}`;
 
+      const gainerSnapRows = await db.execute(sql`
+        SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
+        FROM trend_snapshots
+        WHERE person_id = ANY(${personIds}::uuid[])
+        ORDER BY person_id, timestamp DESC
+      `);
+      const gainerOpeningScores: any[] = [];
+      for (const row of (gainerSnapRows.rows || [])) {
+        if (row.fame_index != null) {
+          gainerOpeningScores.push({ personId: String(row.person_id), score: Number(row.fame_index), snapshotAt: new Date(row.timestamp as string).toISOString() });
+        }
+      }
+      const gainerMetadata = gainerOpeningScores.length > 0 ? { openingScores: gainerOpeningScores } : undefined;
+
       const defaultSeedConfig = {
         enabled: true,
         targetParticipantsMin: 25,
@@ -8802,6 +8869,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           weekNumber,
           seedParticipants: 0,
           seedVolume: "0",
+          metadata: gainerMetadata,
           seedConfig: seedConfig || defaultSeedConfig,
         }).returning();
       } catch (slugErr: any) {
@@ -8820,6 +8888,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
             weekNumber,
             seedParticipants: 0,
             seedVolume: "0",
+            metadata: gainerMetadata,
             seedConfig: seedConfig || defaultSeedConfig,
           }).returning();
         } else {
@@ -8987,6 +9056,91 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error settling market:", error.message);
       res.status(500).json({ error: "Failed to settle market" });
+    }
+  });
+
+  app.post("/api/admin/test-payout-pipeline", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { settleMarketBets } = await import("./jobs/market-resolver");
+
+      const testPersonRows = await db.select({ id: trackedPeople.id, name: trackedPeople.name }).from(trackedPeople).limit(1);
+      if (testPersonRows.length === 0) return res.status(500).json({ error: "No tracked people found" });
+      const testPerson = testPersonRows[0];
+
+      const testProfileRows = await db.select({ id: profiles.id, predictCredits: profiles.predictCredits }).from(profiles).limit(2);
+      if (testProfileRows.length < 2) return res.status(500).json({ error: "Need at least 2 profiles for test" });
+
+      const userA = testProfileRows[0];
+      const userB = testProfileRows[1];
+      const creditsBefore = { userA: userA.predictCredits, userB: userB.predictCredits };
+
+      const testSlug = `test-payout-${Date.now()}`;
+      const [testMarket] = await db.insert(predictionMarkets).values({
+        marketType: "updown",
+        title: "[TEST] Payout Pipeline Test",
+        slug: testSlug,
+        personId: testPerson.id,
+        category: "test",
+        visibility: "hidden",
+        status: "OPEN",
+        startAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        endAt: new Date(Date.now() - 60 * 1000),
+        weekNumber: 0,
+        seedParticipants: 0,
+        seedVolume: "0",
+      }).returning();
+
+      const [upEntry] = await db.insert(marketEntries).values({
+        marketId: testMarket.id,
+        entryType: "custom",
+        label: "Up",
+        displayOrder: 0,
+      }).returning();
+
+      const [downEntry] = await db.insert(marketEntries).values({
+        marketId: testMarket.id,
+        entryType: "custom",
+        label: "Down",
+        displayOrder: 1,
+      }).returning();
+
+      await db.insert(marketBets).values([
+        { marketId: testMarket.id, entryId: upEntry.id, userId: userA.id, stakeAmount: 100, status: "active" },
+        { marketId: testMarket.id, entryId: downEntry.id, userId: userB.id, stakeAmount: 100, status: "active" },
+      ]);
+
+      const settlement = await settleMarketBets(testMarket.id, upEntry.id);
+
+      const updatedProfileA = await db.select({ predictCredits: profiles.predictCredits }).from(profiles).where(eq(profiles.id, userA.id));
+      const updatedProfileB = await db.select({ predictCredits: profiles.predictCredits }).from(profiles).where(eq(profiles.id, userB.id));
+
+      const bets = await db.select().from(marketBets).where(eq(marketBets.marketId, testMarket.id));
+
+      const results = {
+        testMarketId: testMarket.id,
+        settlement,
+        bets: bets.map(b => ({ id: b.id, entryId: b.entryId, userId: b.userId, status: b.status, payoutAmount: b.payoutAmount, stakeAmount: b.stakeAmount })),
+        credits: {
+          userA: { before: creditsBefore.userA, after: updatedProfileA[0]?.predictCredits, delta: (updatedProfileA[0]?.predictCredits ?? 0) - (creditsBefore.userA ?? 0) },
+          userB: { before: creditsBefore.userB, after: updatedProfileB[0]?.predictCredits, delta: (updatedProfileB[0]?.predictCredits ?? 0) - (creditsBefore.userB ?? 0) },
+        },
+        expectedWinner: "userA (bet on Up entry)",
+        expectedPayout: 200,
+      };
+
+      await db.delete(marketBets).where(eq(marketBets.marketId, testMarket.id));
+      await db.delete(marketEntries).where(eq(marketEntries.marketId, testMarket.id));
+      await db.delete(predictionMarkets).where(eq(predictionMarkets.id, testMarket.id));
+
+      await db.update(profiles).set({ predictCredits: creditsBefore.userA }).where(eq(profiles.id, userA.id));
+      await db.update(profiles).set({ predictCredits: creditsBefore.userB }).where(eq(profiles.id, userB.id));
+
+      const passed = settlement.totalPool === 200 && settlement.winnersCount === 1 && settlement.losersCount === 1 && settlement.payoutsDistributed === 200;
+
+      res.json({ passed, ...results });
+    } catch (error: any) {
+      console.error("Error in payout pipeline test:", error.message);
+      res.status(500).json({ error: "Payout pipeline test failed", details: error.message });
     }
   });
 
