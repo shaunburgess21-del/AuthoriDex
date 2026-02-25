@@ -7,6 +7,9 @@ const RESOLVER_INTERVAL_MS = 5 * 60 * 1000;
 const RESOLVER_STARTUP_DELAY_MS = 2 * 60 * 1000;
 const SNAPSHOT_TOLERANCE_HOURS = 3;
 
+let _lastResolverRunAt: Date | null = null;
+export function getLastResolverRunAt(): Date | null { return _lastResolverRunAt; }
+
 interface SettlementResult {
   totalPool: number;
   winnersCount: number;
@@ -548,6 +551,7 @@ export async function resolveExpiredMarkets(): Promise<void> {
       }
     }
 
+    _lastResolverRunAt = now;
     _resolverStats = {
       lastRunAt: now.toISOString(),
       marketsFound: expiredMarkets.length,

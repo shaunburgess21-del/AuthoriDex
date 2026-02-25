@@ -9335,6 +9335,55 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
 
+  app.get("/api/admin/ops-summary", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const [{ pendingCount }] = await db.select({ pendingCount: sql<number>`count(*)::int` })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.status, "CLOSED_PENDING"));
+
+      const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000);
+      const [{ closingSoonCount }] = await db.select({ closingSoonCount: sql<number>`count(*)::int` })
+        .from(predictionMarkets)
+        .where(and(
+          eq(predictionMarkets.status, "OPEN"),
+          lte(predictionMarkets.endAt, twoHoursFromNow),
+        ));
+
+      const { getLastResolverRunAt } = await import("./jobs/market-resolver");
+      const resolverLastRunAt = getLastResolverRunAt();
+      const resolverAgeMinutes = resolverLastRunAt
+        ? Math.floor((Date.now() - resolverLastRunAt.getTime()) / (1000 * 60))
+        : null;
+
+      const allProfiles = await db.select({ id: profiles.id, predictCredits: profiles.predictCredits }).from(profiles);
+      const ledgerSums = await db
+        .select({
+          userId: creditLedger.userId,
+          ledgerSum: sql<number>`COALESCE(SUM(${creditLedger.amount}), 0)::int`,
+        })
+        .from(creditLedger)
+        .groupBy(creditLedger.userId);
+      const ledgerMap = new Map(ledgerSums.map(l => [l.userId, l.ledgerSum]));
+      let driftUserCount = 0;
+      for (const p of allProfiles) {
+        const sum = ledgerMap.get(p.id);
+        if (sum !== undefined && p.predictCredits !== sum) driftUserCount++;
+      }
+
+      res.json({
+        pendingCount,
+        closingSoonCount,
+        resolverLastRunAt: resolverLastRunAt?.toISOString() ?? null,
+        resolverAgeMinutes,
+        resolverHealthy: resolverAgeMinutes !== null && resolverAgeMinutes <= 10,
+        driftUserCount,
+      });
+    } catch (error: any) {
+      console.error("Error fetching ops summary:", error.message);
+      res.status(500).json({ error: "Failed to fetch ops summary" });
+    }
+  });
+
   app.get("/api/admin/markets/pending", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const pendingMarkets = await db.select().from(predictionMarkets)
@@ -9386,13 +9435,14 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const result = pendingMarkets.map(m => {
         const stats = betStats[m.id] || { pool: 0, betCount: 0, uniqueBettors: 0, maxStakeUser: null };
         const pendingMs = m.endAt ? now - new Date(m.endAt).getTime() : 0;
+        const pendingMinutes = Math.floor(pendingMs / (1000 * 60));
         const pendingHours = Math.floor(pendingMs / (1000 * 60 * 60));
         const concentration = stats.pool > 0 && stats.maxStakeUser ? stats.maxStakeUser.total / stats.pool : 0;
         
         const warnings: string[] = [];
         if (stats.betCount === 0) warnings.push("no_bets");
-        if (pendingHours > 1) warnings.push("stuck");
-        if (concentration > 0.5) warnings.push("concentration");
+        if (pendingMinutes > 30) warnings.push("stuck");
+        if (concentration > 0.6) warnings.push("concentration");
 
         return {
           ...m,
@@ -9546,15 +9596,26 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   app.get("/api/admin/users/:id/credit-history", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const pageSize = 50;
+      const offset = (page - 1) * pageSize;
+
       const [profile] = await db.select().from(profiles).where(eq(profiles.id, id)).limit(1);
       if (!profile) return res.status(404).json({ error: "User not found" });
+
+      const [{ count: totalCount }] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(creditLedger)
+        .where(eq(creditLedger.userId, id));
 
       const history = await db.select().from(creditLedger)
         .where(eq(creditLedger.userId, id))
         .orderBy(desc(creditLedger.createdAt))
-        .limit(200);
+        .limit(pageSize)
+        .offset(offset);
 
-      const ledgerSum = history.reduce((s, h) => s + h.amount, 0);
+      const allEntries = await db.select({ amount: creditLedger.amount }).from(creditLedger)
+        .where(eq(creditLedger.userId, id));
+      const ledgerSum = allEntries.reduce((s, h) => s + h.amount, 0);
       const drift = profile.predictCredits - ledgerSum;
 
       res.json({
@@ -9574,6 +9635,10 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         ledgerSum,
         drift,
         entries: history,
+        total: totalCount,
+        page,
+        pageSize,
+        totalPages: Math.ceil(totalCount / pageSize),
       });
     } catch (error: any) {
       console.error("Error fetching credit history:", error.message);

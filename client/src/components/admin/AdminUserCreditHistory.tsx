@@ -15,6 +15,8 @@ import {
   TrendingDown,
   History,
   AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -59,6 +61,10 @@ interface CreditHistoryResponse {
   ledgerSum: number;
   drift: number;
   entries: CreditHistoryEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 function TxnTypeBadge({ type }: { type: string }) {
@@ -88,21 +94,26 @@ export function AdminUserCreditHistory({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data, isLoading } = useQuery<CreditHistoryResponse>({
-    queryKey: ["/api/admin/users", userId, "credit-history"],
+  const [page, setPage] = useState(1);
+
+  const { data, isLoading, error } = useQuery<CreditHistoryResponse>({
+    queryKey: ["/api/admin/users", userId, "credit-history", page],
     queryFn: async () => {
-      const res = await fetchWithAuth(`/api/admin/users/${userId}/credit-history`);
-      if (!res.ok) throw new Error("Failed");
+      const res = await fetchWithAuth(`/api/admin/users/${userId}/credit-history?page=${page}`);
+      if (!res.ok) throw new Error("Failed to load credit history");
       return res.json();
     },
     enabled: open,
   });
 
+  const startEntry = data ? (data.page - 1) * data.pageSize + 1 : 0;
+  const endEntry = data ? Math.min(data.page * data.pageSize, data.total) : 0;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) setPage(1); onOpenChange(v); }}>
       <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2" data-testid="text-credit-history-title">
             <History className="h-5 w-5" />
             User Details
           </DialogTitle>
@@ -112,39 +123,45 @@ export function AdminUserCreditHistory({
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
+        ) : error ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <AlertTriangle className="h-12 w-12 mx-auto mb-3 text-destructive opacity-50" />
+            <p className="text-destructive">Failed to load credit history</p>
+            <p className="text-sm mt-1">Check your connection and try again</p>
+          </div>
         ) : data ? (
           <div className="space-y-5">
             <div className="space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-lg font-bold">{data.profile.username || data.profile.fullName || "Unknown"}</p>
+                <p className="text-lg font-bold" data-testid="text-user-display-name">{data.profile.username || data.profile.fullName || "Unknown"}</p>
                 <Badge variant="outline" className="text-xs">{data.profile.role}</Badge>
                 <Badge variant="secondary" className="text-xs">{data.profile.rank}</Badge>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                 <div className="p-3 rounded-md bg-muted/50">
                   <p className="text-muted-foreground text-xs">Credits</p>
-                  <p className="text-lg font-bold flex items-center gap-1">
+                  <p className="text-lg font-bold flex items-center gap-1" data-testid="text-user-credits">
                     <Coins className="h-4 w-4 text-amber-500" />
                     {data.profile.predictCredits}
                   </p>
                 </div>
                 <div className="p-3 rounded-md bg-muted/50">
                   <p className="text-muted-foreground text-xs">XP</p>
-                  <p className="text-lg font-bold">{data.profile.xpPoints}</p>
+                  <p className="text-lg font-bold" data-testid="text-user-xp">{data.profile.xpPoints}</p>
                 </div>
                 <div className="p-3 rounded-md bg-muted/50">
                   <p className="text-muted-foreground text-xs">Predictions</p>
-                  <p className="text-lg font-bold">{data.profile.totalPredictions}</p>
+                  <p className="text-lg font-bold" data-testid="text-user-predictions">{data.profile.totalPredictions}</p>
                 </div>
                 <div className="p-3 rounded-md bg-muted/50">
                   <p className="text-muted-foreground text-xs">Win Rate</p>
-                  <p className="text-lg font-bold">{data.profile.winRate}%</p>
+                  <p className="text-lg font-bold" data-testid="text-user-winrate">{data.profile.winRate}%</p>
                 </div>
               </div>
             </div>
 
             {data.drift !== 0 && (
-              <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20 text-sm">
+              <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20 text-sm" data-testid="alert-credit-drift">
                 <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
                 <div>
                   <p className="font-medium text-destructive">Credit Drift Detected</p>
@@ -158,7 +175,9 @@ export function AdminUserCreditHistory({
             <div>
               <div className="flex items-center justify-between mb-3">
                 <p className="text-sm font-medium">Credit History</p>
-                <p className="text-xs text-muted-foreground">{data.entries.length} entries</p>
+                <p className="text-xs text-muted-foreground" data-testid="text-entry-count">
+                  {data.total > 0 ? `${startEntry}–${endEntry} of ${data.total}` : "0 entries"}
+                </p>
               </div>
               {data.entries.length > 0 ? (
                 <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
@@ -196,6 +215,34 @@ export function AdminUserCreditHistory({
               ) : (
                 <div className="text-center py-6 text-muted-foreground text-sm">
                   <p>No credit history entries</p>
+                </div>
+              )}
+
+              {data.totalPages > 1 && (
+                <div className="flex items-center justify-between mt-3 pt-3 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page <= 1}
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    data-testid="button-prev-page"
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    Previous
+                  </Button>
+                  <span className="text-xs text-muted-foreground" data-testid="text-page-indicator">
+                    Page {data.page} of {data.totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page >= data.totalPages}
+                    onClick={() => setPage(p => p + 1)}
+                    data-testid="button-next-page"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
                 </div>
               )}
             </div>

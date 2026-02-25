@@ -1417,6 +1417,24 @@ export default function AdminDashboard() {
     enabled: isAdmin && activeSection === "overview",
   });
 
+  const { data: opsSummary } = useQuery<{
+    pendingCount: number;
+    closingSoonCount: number;
+    resolverLastRunAt: string | null;
+    resolverAgeMinutes: number | null;
+    resolverHealthy: boolean;
+    driftUserCount: number;
+  }>({
+    queryKey: ["/api/admin/ops-summary"],
+    queryFn: async () => {
+      const res = await fetchWithAuth("/api/admin/ops-summary");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: isAdmin,
+    refetchInterval: 60000,
+  });
+
   // Fetch audit logs - only when admin and on overview section
   const { data: auditLogs, isLoading: auditLogsLoading } = useQuery<AuditLogEntry[]>({
     queryKey: ["/api/admin/audit-log"],
@@ -2781,6 +2799,71 @@ export default function AdminDashboard() {
 
       {/* Main content */}
       <main className="flex-1 p-6 pb-24 md:pb-6 overflow-auto">
+        {opsSummary && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <button
+              onClick={() => setActiveSection("settlement")}
+              className="rounded-md border p-3 text-left hover-elevate"
+              data-testid="card-ops-pending"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <div className={`p-1.5 rounded-md ${opsSummary.pendingCount > 0 ? "bg-amber-500/15" : "bg-muted/50"}`}>
+                  <Gavel className={`h-4 w-4 ${opsSummary.pendingCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
+                </div>
+                <span className="text-xs text-muted-foreground">Needs Resolution</span>
+              </div>
+              <p className={`text-xl font-bold ${opsSummary.pendingCount > 0 ? "text-amber-600 dark:text-amber-400" : ""}`} data-testid="text-ops-pending-count">
+                {opsSummary.pendingCount}
+              </p>
+            </button>
+            <button
+              onClick={() => setActiveSection("predictions")}
+              className="rounded-md border p-3 text-left hover-elevate"
+              data-testid="card-ops-closing-soon"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <div className={`p-1.5 rounded-md ${opsSummary.closingSoonCount > 0 ? "bg-blue-500/15" : "bg-muted/50"}`}>
+                  <Clock className={`h-4 w-4 ${opsSummary.closingSoonCount > 0 ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"}`} />
+                </div>
+                <span className="text-xs text-muted-foreground">Closing Soon</span>
+              </div>
+              <p className={`text-xl font-bold ${opsSummary.closingSoonCount > 0 ? "text-blue-600 dark:text-blue-400" : ""}`} data-testid="text-ops-closing-count">
+                {opsSummary.closingSoonCount}
+              </p>
+            </button>
+            <button
+              onClick={() => setActiveSection("tools")}
+              className="rounded-md border p-3 text-left hover-elevate"
+              data-testid="card-ops-resolver"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <div className={`p-1.5 rounded-md ${opsSummary.resolverHealthy ? "bg-green-500/15" : "bg-red-500/15"}`}>
+                  <Activity className={`h-4 w-4 ${opsSummary.resolverHealthy ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`} />
+                </div>
+                <span className="text-xs text-muted-foreground">Resolver</span>
+              </div>
+              <p className={`text-sm font-medium ${opsSummary.resolverHealthy ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-ops-resolver-status">
+                {opsSummary.resolverAgeMinutes !== null ? `${opsSummary.resolverAgeMinutes}m ago` : "Not yet run"}
+              </p>
+            </button>
+            <button
+              onClick={() => setActiveSection("users")}
+              className="rounded-md border p-3 text-left hover-elevate"
+              data-testid="card-ops-drift"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <div className={`p-1.5 rounded-md ${opsSummary.driftUserCount > 0 ? "bg-red-500/15" : "bg-green-500/15"}`}>
+                  <AlertTriangle className={`h-4 w-4 ${opsSummary.driftUserCount > 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`} />
+                </div>
+                <span className="text-xs text-muted-foreground">Credit Drift</span>
+              </div>
+              <p className={`text-xl font-bold ${opsSummary.driftUserCount > 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`} data-testid="text-ops-drift-count">
+                {opsSummary.driftUserCount}
+              </p>
+            </button>
+          </div>
+        )}
+
         {/* Overview Section */}
         {activeSection === "overview" && (
           <div className="space-y-6">

@@ -165,15 +165,25 @@ function ResolutionDialog({
       const res = await fetchWithAuth(url, { method: "POST", body: JSON.stringify(body) });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Unknown error" }));
-        throw new Error(err.error || "Failed to settle");
+        const msg = err.error || "Failed to settle";
+        const isAlreadySettled = /already (resolved|settled)/i.test(msg) || /not.*OPEN|not.*CLOSED_PENDING/i.test(msg);
+        if (isAlreadySettled) {
+          return { alreadySettled: true, message: msg };
+        }
+        throw new Error(msg);
       }
       return res.json();
     },
-    onSuccess: () => {
-      toast({ title: "Market Resolved", description: "Payouts distributed successfully" });
+    onSuccess: (data) => {
+      if (data?.alreadySettled) {
+        toast({ title: "Already Resolved", description: "This market was already settled — no action needed." });
+      } else {
+        toast({ title: "Market Resolved", description: "Payouts distributed successfully" });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets/pending"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets/resolved"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/ops-summary"] });
       onOpenChange(false);
     },
     onError: (err: Error) => toast({ title: "Settlement Failed", description: err.message, variant: "destructive" }),
@@ -195,6 +205,7 @@ function ResolutionDialog({
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets/pending"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets/resolved"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/ops-summary"] });
       onOpenChange(false);
     },
     onError: () => toast({ title: "Void Failed", description: "Could not void market", variant: "destructive" }),
