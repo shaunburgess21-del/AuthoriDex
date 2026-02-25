@@ -1,0 +1,59 @@
+Why this is the right fix (and why the churn happened)
+
+That “everyone snapping to ~40” hour is almost certainly:
+
+Serper returns 0 / missing for a chunk of people (stale, blocked, transient failure, etc.)
+
+That 0 gets fed into percentile normalization
+
+A bunch of people cluster into a “baseline-ish” percentile bucket → shows up as ~40
+
+Next refresh, they jump back to real values → mass churn
+
+So Replit’s “Option B” fix—hold the previous EMA when Serper returns 0 but we had a prior non-zero—directly prevents the snap-to-floor behavior. ✅
+
+This is exactly the kind of fix that improves trust in the leaderboard without changing your entire scoring model.
+
+One important nuance (make sure they got this right)
+
+Replit described it as “if Serper returns 0 AND previous known value was non-zero → hold EMA.”
+
+That’s correct only if “0” truly means “missing/invalid,” not “legitimately minimal search interest.”
+
+To avoid masking real drops, the condition should be something like:
+
+searchVolume === 0 AND (request failed / stale / empty payload / timeout / “no data” marker)
+
+OR at least: searchVolume === 0 AND serperResponseWasInvalidOrStale === true
+
+If they literally only check === 0, that might occasionally “hold” someone who genuinely crashed to near-zero attention (rare, but possible). The best version uses a freshness/validity flag, not just the number.
+
+If you want a simple safeguard without extra plumbing:
+
+Hold only when searchVolume === 0 AND previousSearchVolume >= (some small threshold) (e.g., 20 or 30 on your normalized scale), because a true public figure rarely hits absolute zero.
+
+What I’d ask Replit to verify (quick checks)
+
+These are the sanity checks that tell you the fix is working and not hiding real signals:
+
+Count “search zeroGuard holds” per run
+
+If it spikes sometimes, that’s fine (it correlates to Serper flakiness)
+
+If it’s constantly high, Serper data quality is the real issue
+
+“How many searchVolume=0 values made it into snapshots?”
+
+Ideally: near zero after this change (because you’re holding instead of writing 0 through)
+
+Churn metrics after the fix
+
+The “movers ≥2%” and p10/p90 tails should calm down on the hours that previously went crazy.
+
+Spot-check a couple of people who previously snapped to 40
+
+Confirm their search component now stays near prior EMA instead of falling off a cliff.
+
+About the renames (serperSearchCalls vs fallback calls, governor rename)
+
+Those are nice improvements for observability and clarity. Not essential, but they make your health readouts way more interpretable. 👍
