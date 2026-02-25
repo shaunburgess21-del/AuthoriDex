@@ -1,0 +1,51 @@
+Yeah — this is all sensible, and Replit’s response addresses the two real problems cleanly.
+
+1) The “zeroGuard” nuance
+
+Replit’s reasoning is mostly sound:
+
+If the zeroGuard block only runs when Serper returned a non-null response, and true “API failure/timeout” is routed elsewhere, then a 0 is very likely “no usable signal” rather than “the world stopped searching for this person.”
+
+Adding prevSearchVolume >= 5 as a guardrail is harmless and aligns with what we discussed: don’t “hold” someone who’s basically already at zero.
+
+One tiny improvement I’d still consider (optional, but makes debugging much easier):
+
+When you trigger zeroGuard, record a reason that’s unambiguous, e.g.
+searchEmaHeldReason: "zero_guard_serper_zero"
+so later you can distinguish it from baseline artifacts / floor artifacts / outage fallbacks.
+
+If you want to be extra careful, the “best practice” condition is still:
+
+hold only when serperResponseValid === true and serperReturnedZeroOrMissingSignal === true and prevSearchVolume >= 5
+
+But practically, what Replit did is fine.
+
+2) The EADDRINUSE fix (this is the bigger win)
+
+The workflow prefix:
+
+fuser -k 5000/tcp 2>/dev/null || true; npm run dev
+
+…is the right kind of fix for Replit’s “old process still holds the port” race.
+
+A couple of notes so you don’t get surprised later:
+
+It’s a dev-server/workflow fix, not an engine/scoring fix — but it does matter because a flapping server makes everything feel unreliable even if the cron ingestion is independent.
+
+fuser -k is blunt (kills whatever holds 5000). In Replit, that’s typically what you want. If you ever host anything else on 5000 in that same environment, it’ll get killed too (rare).
+
+A slightly “cleaner” version (not necessary if this works) is killing only the exact node process that owns the port, but honestly the one-liner is fine.
+
+3) How to verify the search churn is actually fixed (fast checklist)
+
+After you have a couple of ingestion cycles, you’re looking for:
+
+Fewer “movers ≥2%” spikes on hours when Serper refreshes
+
+p10/p90 tails less extreme (those were screaming during the snap-to-40 hour)
+
+searchEmaHeld count rises only on bad Serper moments (that’s expected)
+
+Spot-check 2–3 people who previously snapped to ~40 and confirm their search component now stays near prior EMA instead of cliff-diving.
+
+If those are true, you’ve solved the “systemic churn hour” issue.
