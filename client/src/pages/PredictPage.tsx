@@ -1064,12 +1064,20 @@ function PayoutDetails({ marketId }: { marketId: string }) {
       {isLoading ? (
         <span>Loading...</span>
       ) : data ? (
-        <>
-          <div className="flex items-center justify-between gap-2"><span>Total pool</span><span className="font-mono">{data.totalPool.toLocaleString()}</span></div>
-          <div className="flex items-center justify-between gap-2"><span>Your stake</span><span className="font-mono">{data.userStake.toLocaleString()}</span></div>
-          {data.winnerPoolTotal > 0 && <div className="flex items-center justify-between gap-2"><span>Winner pool</span><span className="font-mono">{data.winnerPoolTotal.toLocaleString()}</span></div>}
-          <div className="flex items-center justify-between gap-2"><span>Your payout</span><span className="font-mono font-semibold">{data.userPayout.toLocaleString()}</span></div>
-        </>
+        (() => {
+          const netPL = data.userPayout - data.userStake;
+          const plColor = netPL > 0 ? 'text-emerald-400' : netPL < 0 ? 'text-red-400' : 'text-muted-foreground';
+          const plSign = netPL > 0 ? '+' : '';
+          return (
+            <>
+              <div className="flex items-center justify-between gap-2"><span>Your stake</span><span className="font-mono">{data.userStake.toLocaleString()}</span></div>
+              <div className="flex items-center justify-between gap-2"><span>Your payout</span><span className="font-mono font-semibold">{data.userPayout.toLocaleString()}</span></div>
+              <div className="flex items-center justify-between gap-2"><span>Net P&L</span><span className={`font-mono font-semibold ${plColor}`}>{plSign}{netPL.toLocaleString()}</span></div>
+              <div className="flex items-center justify-between gap-2 pt-0.5 border-t border-border/30"><span>Total pool</span><span className="font-mono">{data.totalPool.toLocaleString()}</span></div>
+              {data.winnerPoolTotal > 0 && <div className="flex items-center justify-between gap-2"><span>Winner pool</span><span className="font-mono">{data.winnerPoolTotal.toLocaleString()}</span></div>}
+            </>
+          );
+        })()
       ) : (
         <span>Could not load details</span>
       )}
