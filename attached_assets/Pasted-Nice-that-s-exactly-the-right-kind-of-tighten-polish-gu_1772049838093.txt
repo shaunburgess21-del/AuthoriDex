@@ -1,0 +1,65 @@
+Nice — that’s exactly the right kind of “tighten + polish + guardrails” build.
+
+My read on Replit’s latest changes (quick audit)
+
+T001 “24h” label: ✅ Great. This is one of those tiny clarity fixes that prevents confusion instantly.
+
+T003 Predict skeletons: ✅ Also great. Markets feel “alive” even when loading.
+
+T004 onboarding banner: ✅ Good as a first step. Just make sure it’s:
+
+short (1–2 lines max),
+
+has one CTA (“Try Predict” / “Rate someone”),
+
+and doesn’t reappear once dismissed (they did localStorage, perfect).
+
+T005 rate limits + stake cap: ✅ High value. Two notes:
+
+In-memory limiter is fine for now, but if you ever run multiple instances you’ll want Redis/DB-backed. Not urgent.
+
+Make sure the error message is friendly (“You’re moving fast — try again in a moment”) and not “429” vibes.
+
+T002 show won/lost on cards + /api/me/predictions: ✅ This is a big UX win. People shouldn’t have to “go hunting” to see what happened.
+
+Two important follow-ups I’d ask Replit to sanity-check (worth doing now)
+1) Security / privacy on /api/me/predictions
+
+Make sure it is requireAuth and only returns the logged-in user’s bets (no userId param that could be spoofed).
+Also ensure it doesn’t leak anything sensitive (emails, internal IDs beyond what you need).
+
+2) Result mapping correctness on cards
+
+Edge cases to confirm:
+
+Void/refund shows “Refunded” and stake returned, not “Lost”.
+
+Pending stays pending until settled (don’t show “Closed” without outcome).
+
+If user placed multiple bets on same market (allowed?), decide: show latest bet, aggregate, or show “Multiple positions”.
+
+If you want one more enhancement that’s small but punches above its weight
+
+Ask Replit to add a “My Positions” filter on Predict:
+
+Toggle: All Markets | My Positions
+
+When on “My Positions”, show only markets the user has bet on (open or resolved).
+
+This massively improves usability once you have more than ~20 markets.
+
+Another high-ROI micro-feature
+
+Add a tiny “Explain payouts” drawer/modal on a resolved market card:
+
+Total pool
+
+Your stake
+
+Winner pool share
+
+Your payout
+
+Remainder policy (“rounding remainder burned”)
+
+You already have payout-summary admin endpoint logic—this can be a simplified user-facing version (no sensitive data, just the user’s own bet + pool totals).
