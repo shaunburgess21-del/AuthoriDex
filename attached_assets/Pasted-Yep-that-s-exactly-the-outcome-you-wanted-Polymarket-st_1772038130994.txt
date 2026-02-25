@@ -1,0 +1,109 @@
+Yep — that’s exactly the outcome you wanted: Polymarket-style discovery (leaderboard visible to everyone via menu), without stealing “glamour” from the main celebrity leaderboard. And Replit’s implementation choices sound sane.
+
+Here are my thoughts, plus a tight checklist of what to verify next so you don’t ship a “looks good but wrong math” leaderboard.
+
+What Replit built sounds ✅ correct
+
+Menu behavior: Logged-out hamburger + “Prediction Leaderboard” link = perfect. That fixes the “burger menu shouldn’t just nag sign-in” problem.
+
+Separate route: /predictions/leaderboard is clean. Keeps it distinct from the main leaderboard.
+
+Public profiles already separate: /u/:username being its own route is exactly what you want (and Replit confirmed it).
+
+The big thing to sanity-check: P&L math
+
+Replit said: “aggregates P&L per user from resolved market bets (won/lost).”
+
+You should confirm exactly what rows count and what the formula is. The safest universal approach is:
+
+Include resolved only: status IN ('won','lost')
+
+Exclude: active/open, and decide what to do with void/refund
+
+profitLoss = SUM(payoutAmount) - SUM(stakeAmount)
+
+Works for both winners and losers if losers have payoutAmount = 0.
+
+If your schema stores “lost” payout as null, coalesce it to 0.
+
+What about VOID / REFUND?
+
+Two reasonable options:
+
+Ignore voided bets entirely on leaderboard (cleanest).
+
+Count them in volume (stake activity) but not in P&L (profit 0).
+(I’d ignore them in both until you’ve got real users.)
+
+Ask Replit: Are voided bets excluded? If not, you may get weirdness.
+
+Period filters: make sure they’re not subtly wrong
+
+“Today / This Week / This Month / All Time” sounds great — but check:
+
+Are they using UTC or user local time? (Either is fine, just be consistent.)
+
+“This week” starts Monday vs Sunday? (Pick one; Monday is common outside US.)
+
+Does “Today” include last 24h or calendar day? Polymarket is usually “Today” (calendar day). If you want “last 24h”, label it “24h”.
+
+Ranking stability & ties
+
+You’ll hit ties early (same P&L). Decide tie-breakers:
+
+Higher P&L
+
+Higher win rate (or resolved count)
+
+Higher volume
+
+Earlier account created (or username alpha)
+
+Even if you don’t show that logic, the ordering shouldn’t feel random.
+
+UX tweaks worth considering (small, high ROI)
+1) Rename link copy in the menu
+
+“Prediction Leaderboard” is accurate, but “Top Predictors” often feels more exciting.
+
+Logged out: Top Predictors
+
+Logged in: Top Predictors
+
+Page title: “Top Predictors”
+
+Subtitle: “Ranked by virtual credit profit”
+
+2) Explain credits are virtual (one line)
+
+On the leaderboard page, add a tiny helper text under the title:
+
+“Virtual credits — no real money.”
+
+This prevents confusion immediately.
+
+3) Make the pinned “You” row unmissable but not loud
+
+Cyan badge + border is good. Also add:
+
+“Your Rank: #—” even if unranked
+
+If unranked: show “Unranked (no resolved predictions yet)”
+
+Security / privacy sanity checks
+
+If user profiles can be private: clicking a user row should still navigate to /u/:username, but that page should respect privacy and hide stats/activity.
+
+Don’t leak email or internal userId anywhere in the API response or UI.
+
+What I would do next (in order)
+
+Test with seeded data (even 10 fake users, 50 bets) so you can visually confirm ranking math.
+
+Confirm void/refund handling.
+
+Confirm period boundaries.
+
+Add a tiny empty-state improvement: show “No resolved markets yet” + link to “Predict” + maybe “How it works”.
+
+If you paste the API response shape (one example JSON from /api/leaderboard/users) and one example market_bets row (redact IDs), I’ll tell you immediately if the aggregation is mathematically safe or if there’s a likely bug lurking (null payout, double-counting, wrong statuses, etc.).
