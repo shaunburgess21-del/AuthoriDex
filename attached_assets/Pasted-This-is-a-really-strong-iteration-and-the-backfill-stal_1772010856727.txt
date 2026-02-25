@@ -1,0 +1,85 @@
+This is a really strong iteration, and the backfill + staleness monitor is exactly the kind of “boring reliability” work that makes everything feel professional.
+
+A few thoughts, aligned with Claude + adding some “gotchas” to watch for:
+
+What looks genuinely good
+Backfill approach (targetHour override) is correct
+
+You’re not trying to reconstruct history perfectly; you’re filling missing reference points so 24h/7d deltas don’t anchor to stale hours. That’s the right intent.
+
+Idempotency check is very important
+
+Skipping if either (a) snapshots exist for hour bucket or (b) an ingestionRuns record exists avoids the nastiest edge case: “run says it happened but snapshots didn’t land.”
+
+Staleness alerts are the right operational step
+
+Even if you don’t hook Discord yet, having the staleness state in the health endpoint is massive—because it makes notification wiring trivial later.
+
+The two concerns Claude raised are real (and worth addressing)
+1) “Backfilled hours will have identical cached values” → chart artifacts
+
+If your backfill is reusing cached data, then yes: you’ll often get:
+
+flat segment (identical points)
+
+then a step-change at the next real snapshot
+
+That’s not “wrong,” but it can look wrong if plotted naively.
+
+Best practice fixes (pick one):
+
+Don’t plot backfilled points on charts (but still store them for delta math).
+
+Or plot them but style them differently (dotted / lighter) and optionally interpolate.
+
+Or have chart API support includeBackfill=false while delta calc uses backfills internally.
+
+This is mostly a UI/API contract decision: backfill improves math; charts should remain visually honest.
+
+2) Backfill shouldn’t block the next primary ingest
+
+Your lock/cron system must behave like:
+
+primary run starts → completes
+
+backfill tries afterwards
+
+if primary run time arrives again, it should win or at least not be skipped repeatedly.
+
+If backfill holds the lock for long, you can accidentally trade “missing past hours” for “missing current hours.”
+
+Mitigations:
+
+Make backfill opportunistic: only run if there’s enough time before next cron tick (e.g., stop backfilling if minutes_to_next_hour < 5).
+
+Or run max 1 backfill per primary cycle until cadence stabilizes.
+
+Or allow primary ingest to preempt backfill (harder, but doable).
+
+The important new red flag in Replit’s follow-up
+
+“History API explicitly filters for snapshotOrigin = 'ingest' … need to check what backfilled snapshots get.”
+
+This is a big one.
+
+If your history/chart endpoints are filtering on origin/type and your backfills are not tagged the same way (or tagged differently), you can end up with:
+
+backfill helping delta calculations (maybe)
+
+but charts still missing points because the API excludes them
+
+or the reverse: charts include them but deltas ignore them
+
+So the key is: decide what backfill is meant to influence and enforce it consistently.
+
+My recommendation for semantics (clean and least confusing)
+
+Primary snapshots: origin = "ingest"
+
+Backfilled snapshots: origin = "backfill" (or keep "ingest" + isBackfill=true)
+
+Delta baseline selection: include backfilled snapshots (so 24h deltas don’t drift)
+
+Charts: default to excluding backfill or include but visually denote (your choice)
+
+This keeps math stable while avoiding “fake-looking” chart shapes.

@@ -646,7 +646,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     }).from(trendSnapshots).where(
       and(
         gte(trendSnapshots.timestamp, time7dAgo),
-        eq(trendSnapshots.snapshotOrigin, 'ingest')
+        inArray(trendSnapshots.snapshotOrigin, ['ingest', 'backfill'])
       )
     );
     
@@ -1465,7 +1465,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           diversityMultiplier: scoreResult.diversityMultiplier,
           momentum: scoreResult.momentum,
           drivers: scoreResult.drivers,
-          snapshotOrigin: 'ingest',
+          snapshotOrigin: isBackfill ? 'backfill' : 'ingest',
           diagnostics: diagnosticsData,
           runId: runId,
           scoreVersion: SCORE_VERSION,

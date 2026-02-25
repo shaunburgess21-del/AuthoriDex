@@ -103,8 +103,21 @@ async function detectAndBackfillGaps(): Promise<void> {
 
     log(`[Backfill] Found ${gaps.length} gap(s) in last ${BACKFILL_LOOKBACK_HOURS}h — filling sequentially`);
 
+    function minutesUntilNextPrimary(): number {
+      const n = new Date();
+      const next = new Date(n);
+      next.setMinutes(2, 0, 0);
+      if (next <= n) next.setHours(next.getHours() + 1);
+      return Math.round((next.getTime() - n.getTime()) / (1000 * 60));
+    }
+
     let filled = 0;
     for (const targetHour of gaps) {
+      const minsLeft = minutesUntilNextPrimary();
+      if (minsLeft < 15) {
+        log(`[Backfill] Stopping — primary run in ${minsLeft}m, skipping remaining gaps`);
+        break;
+      }
       try {
         log(`[Backfill] Filling ${targetHour.toISOString()}...`);
         const result = await runDataIngestion({ targetHour, isBackfill: true });
