@@ -33,9 +33,8 @@ import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
 import { MomentumSignals } from "@/components/MomentumSignals";
 
 const APPROVAL_COLORS = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
-const getApprovalColor = (approvalPct: number): string => {
-  const normalizedPct = approvalPct <= 1 ? approvalPct * 100 : approvalPct;
-  const rating = Math.round((normalizedPct / 100) * 4) + 1;
+const getApprovalColor = (ratingOrPct: number): string => {
+  const rating = ratingOrPct > 5 ? Math.round((ratingOrPct / 100) * 4) + 1 : Math.round(ratingOrPct);
   const clampedRating = Math.max(1, Math.min(5, rating));
   return APPROVAL_COLORS[clampedRating - 1];
 };
