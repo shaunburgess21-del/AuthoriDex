@@ -546,6 +546,19 @@ export function AnimatedSentimentVotingWidget({
                       </p>
                     </div>
 
+                    <Button
+                      onClick={() => {
+                        setIsSubmitted(false);
+                        setHasInteracted(true);
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="text-xs text-muted-foreground"
+                      data-testid="button-change-vote"
+                    >
+                      Change Vote
+                    </Button>
+
                     {isProfilePage ? (
                       <Button
                         onClick={handleViewResults}
