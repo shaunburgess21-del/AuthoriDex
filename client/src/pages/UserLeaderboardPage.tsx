@@ -268,9 +268,12 @@ export default function UserLeaderboardPage() {
             <Trophy className="h-6 w-6 text-amber-400" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Prediction Leaderboard</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Top Predictors</h1>
             <p className="text-muted-foreground text-sm mt-0.5">
-              Top predictors ranked by virtual credit profit
+              Ranked by virtual credit profit
+            </p>
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              Virtual credits — no real money.
             </p>
           </div>
         </div>
@@ -350,6 +353,28 @@ export default function UserLeaderboardPage() {
                 isCurrentUser={true}
                 onRowClick={handleRowClick}
               />
+            </div>
+          )}
+
+          {/* Unranked state for logged-in users with no resolved bets */}
+          {isLoggedIn && !userEntry && !isLoading && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border/50 bg-muted/20">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Your Rank:</span>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-muted-foreground/30 text-muted-foreground">
+                  Unranked
+                </Badge>
+                <span className="text-xs text-muted-foreground hidden sm:inline">— no resolved predictions yet</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setLocation("/predict")}
+                data-testid="button-unranked-predict"
+              >
+                <Target className="h-3.5 w-3.5 mr-1.5" />
+                Predict
+              </Button>
             </div>
           )}
         </div>

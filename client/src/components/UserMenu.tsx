@@ -183,7 +183,7 @@ function UserMenuContent({
           data-testid="link-prediction-leaderboard-loggedout"
         >
           <Trophy className="h-4 w-4 text-amber-400" />
-          <span className="text-sm">Prediction Leaderboard</span>
+          <span className="text-sm">Top Predictors</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
         </button>
 
@@ -297,7 +297,7 @@ function UserMenuContent({
           data-testid="link-leaderboard"
         >
           <Trophy className="h-4 w-4 text-amber-400" />
-          <span className="flex-1 text-sm">Prediction Leaderboard</span>
+          <span className="flex-1 text-sm">Top Predictors</span>
           <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
             <Zap className="h-2.5 w-2.5 mr-0.5" />
             {profile?.winRate}%

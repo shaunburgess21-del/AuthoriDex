@@ -2590,7 +2590,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .select({
           userId: marketBets.userId,
           profitLoss: sql<number>`
-            SUM(CASE WHEN ${marketBets.status} = 'won' THEN ${marketBets.payoutAmount}
+            SUM(CASE WHEN ${marketBets.status} = 'won' THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0)
                      WHEN ${marketBets.status} = 'lost' THEN -${marketBets.stakeAmount}
                      ELSE 0 END)`.as('profit_loss'),
           volume: sql<number>`SUM(${marketBets.stakeAmount})`.as('volume'),
@@ -2609,13 +2609,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ data: [], total: 0, userEntry: null });
       }
 
-      // Sort by profitLoss desc
-      statsRows.sort((a, b) => (Number(b.profitLoss) || 0) - (Number(a.profitLoss) || 0));
+      // Sort by profitLoss desc, then volume desc, then earliest account as tiebreaker
+      statsRows.sort((a, b) => {
+        const pnlDiff = (Number(b.profitLoss) || 0) - (Number(a.profitLoss) || 0);
+        if (pnlDiff !== 0) return pnlDiff;
+        const volDiff = (Number(b.volume) || 0) - (Number(a.volume) || 0);
+        if (volDiff !== 0) return volDiff;
+        return a.userId.localeCompare(b.userId);
+      });
 
       // Fetch profile info for all user IDs
       const userIds = statsRows.map(r => r.userId);
       const profileRows = await db
-        .select({ id: profiles.id, username: profiles.username, fullName: profiles.fullName, avatarUrl: profiles.avatarUrl, isPublic: profiles.isPublic, rank: profiles.rank })
+        .select({ id: profiles.id, username: profiles.username, fullName: profiles.fullName, avatarUrl: profiles.avatarUrl, isPublic: profiles.isPublic, rank: profiles.rank, createdAt: profiles.createdAt })
         .from(profiles)
         .where(inArray(profiles.id, userIds));
       const profileMap = new Map(profileRows.map(p => [p.id, p]));
@@ -8085,25 +8091,34 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           )
         );
 
-      await db
-        .update(marketBets)
-        .set({ status: "won", settledAt: new Date() })
-        .where(
-          and(
-            eq(marketBets.marketId, id),
-            eq(marketBets.entryId, winnerEntryId)
-          )
-        );
+      // Calculate actual payouts for winning bets based on pool distribution
+      const allBets = await db
+        .select({
+          id: marketBets.id,
+          entryId: marketBets.entryId,
+          stakeAmount: marketBets.stakeAmount,
+        })
+        .from(marketBets)
+        .where(and(eq(marketBets.marketId, id), eq(marketBets.status, "active")));
 
-      await db
-        .update(marketBets)
-        .set({ status: "lost", settledAt: new Date() })
-        .where(
-          and(
-            eq(marketBets.marketId, id),
-            ne(marketBets.entryId, winnerEntryId)
-          )
-        );
+      const totalPool = allBets.reduce((sum, b) => sum + b.stakeAmount, 0);
+      const winnerPool = allBets.filter(b => b.entryId === winnerEntryId).reduce((sum, b) => sum + b.stakeAmount, 0);
+
+      const now = new Date();
+      for (const bet of allBets) {
+        if (bet.entryId === winnerEntryId) {
+          const payout = winnerPool > 0 ? Math.round((bet.stakeAmount / winnerPool) * totalPool) : bet.stakeAmount;
+          await db
+            .update(marketBets)
+            .set({ status: "won", settledAt: now, payoutAmount: payout })
+            .where(eq(marketBets.id, bet.id));
+        } else {
+          await db
+            .update(marketBets)
+            .set({ status: "lost", settledAt: now, payoutAmount: 0 })
+            .where(eq(marketBets.id, bet.id));
+        }
+      }
 
       res.json(updatedMarket);
     } catch (error) {
