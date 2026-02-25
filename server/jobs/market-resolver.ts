@@ -107,6 +107,9 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string):
     .where(and(eq(marketEntries.marketId, marketId), sql`${marketEntries.id} != ${winnerEntryId}`));
 
   const remainder = totalPool - payoutsDistributed;
+  if (Math.abs(remainder) > 1) {
+    console.log(`[PAYOUT REMAINDER LARGE] marketId=${marketId} remainder=${remainder} pool=${totalPool} winners=${winnerBets.length}`);
+  }
   log(`[MarketResolver] Settlement: market=${marketId}, pool=${totalPool}, payouts=${payoutsDistributed}, remainder=${remainder} (burned), winners=${winnerBets.length}, losers=${allBets.length - winnerBets.length}`);
 
   return {

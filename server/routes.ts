@@ -4193,6 +4193,17 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       };
       
       await db.insert(profiles).values(newProfile);
+
+      await db.insert(creditLedger).values({
+        userId,
+        txnType: 'initial_grant',
+        amount: 1000,
+        walletType: 'VIRTUAL',
+        balanceAfter: 1000,
+        source: 'signup',
+        idempotencyKey: `initial_grant_${userId}`,
+        metadata: { reason: 'New account signup bonus' },
+      }).onConflictDoNothing();
       
       console.log(`Created profile for ${email} - Role: ${newProfile.role}, Rank: ${newProfile.rank}`);
       
@@ -9253,6 +9264,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         if (!ledger) continue;
         const delta = p.predictCredits - ledger.sum;
         if (delta !== 0) {
+          console.log(`[CREDIT DRIFT] userId=${p.id} cached=${p.predictCredits} ledger=${ledger.sum} drift=${delta}`);
           discrepancies.push({
             userId: p.id,
             profileBalance: p.predictCredits,
