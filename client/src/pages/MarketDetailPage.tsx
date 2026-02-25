@@ -685,11 +685,16 @@ export default function MarketDetailPage() {
                 </div>
 
                 {potentialPayout !== null && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-green-500/5 border border-green-500/20" data-testid="text-potential-payout">
-                    <span className="text-sm text-muted-foreground">Potential Payout</span>
-                    <span className="font-bold font-mono text-green-400">{formatNumber(potentialPayout)} credits</span>
+                  <div className="p-3 rounded-lg bg-green-500/5 border border-green-500/20" data-testid="text-potential-payout">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Est. payout if correct</span>
+                      <span className="font-bold font-mono text-green-400">{formatNumber(potentialPayout)} credits</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/60 mt-1">Estimate — updates as more people bet.</p>
                   </div>
                 )}
+
+                <p className="text-[10px] text-muted-foreground/50 text-center">Final payout may differ as the pool changes.</p>
 
                 <Button
                   className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"

@@ -2590,7 +2590,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .select({
           userId: marketBets.userId,
           profitLoss: sql<number>`
-            SUM(CASE WHEN ${marketBets.status} = 'won' THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0)
+            SUM(CASE WHEN ${marketBets.status} = 'won' THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0) - ${marketBets.stakeAmount}
                      WHEN ${marketBets.status} = 'lost' THEN -${marketBets.stakeAmount}
                      ELSE 0 END)`.as('profit_loss'),
           volume: sql<number>`SUM(${marketBets.stakeAmount})`.as('volume'),

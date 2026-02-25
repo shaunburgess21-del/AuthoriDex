@@ -8,6 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Trophy,
   Search,
   TrendingUp,
@@ -17,6 +22,7 @@ import {
   Target,
   ChevronRight,
   Zap,
+  Info,
 } from "lucide-react";
 
 type Period = "today" | "week" | "month" | "all";
@@ -317,7 +323,19 @@ export default function UserLeaderboardPage() {
             <div className="w-8 shrink-0 text-center">#</div>
             <div className="w-8 shrink-0" />
             <div className="flex-1">Predictor</div>
-            <div className="min-w-[90px] text-right shrink-0">P&L</div>
+            <div className="min-w-[90px] text-right shrink-0">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex items-center gap-1 cursor-help">
+                    P&L
+                    <Info className="h-3 w-3 text-muted-foreground/50" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[200px] text-xs">
+                  Net credits won (payouts minus stakes)
+                </TooltipContent>
+              </Tooltip>
+            </div>
             <div className="min-w-[70px] text-right shrink-0 hidden sm:block">Volume</div>
             <div className="min-w-[56px] text-right shrink-0 hidden md:block">Win Rate</div>
             <div className="min-w-[40px] text-right shrink-0 hidden lg:block">Bets</div>
