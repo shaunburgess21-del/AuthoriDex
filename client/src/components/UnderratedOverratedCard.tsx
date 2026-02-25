@@ -18,6 +18,7 @@ export interface ValueVotePerson {
   fameIndex: number | null;
   trendScore: number;
   approvalPct?: number | null;
+  approvalAvgRating?: number | null;
   underratedPct?: number | null;
   overratedPct?: number | null;
   fairlyRatedPct?: number | null;
@@ -136,9 +137,11 @@ export function UnderratedOverratedCard({
           <p className="text-sm text-muted-foreground mt-0.5">
             Trend Score: <span className="font-mono text-foreground">{(person.fameIndex ?? 0).toLocaleString('en-US')}</span>
           </p>
-          {person.approvalPct != null && (
+          {(person.approvalAvgRating ?? person.approvalPct) != null && (
             <p className="text-xs text-muted-foreground mt-0.5">
-              {Math.round(person.approvalPct)}% approval rating
+              {person.approvalAvgRating != null
+                ? `${person.approvalAvgRating.toFixed(1)}/5 community rating`
+                : `${Math.round(person.approvalPct!)}% approval`}
             </p>
           )}
         </div>

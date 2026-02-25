@@ -21,9 +21,9 @@ const getRatingColor = (rating: number): string => {
   return SEGMENT_COLORS_5[idx];
 };
 
-const getApprovalColor = (approvalPct: number): string => {
-  const normalizedPct = approvalPct <= 1 ? approvalPct * 100 : approvalPct;
-  const rating = Math.round((normalizedPct / 100) * 4) + 1;
+const getApprovalColor = (ratingOrPct: number): string => {
+  // Accept either a 1-5 rating or a 0-100 pct; normalise to 1-5 index
+  const rating = ratingOrPct > 5 ? Math.round((ratingOrPct / 100) * 4) + 1 : Math.round(ratingOrPct);
   const clampedRating = Math.max(1, Math.min(5, rating));
   return SEGMENT_COLORS_5[clampedRating - 1];
 };
@@ -32,6 +32,7 @@ type LeaderboardTab = "fame" | "approval";
 
 interface ExtendedPerson extends TrendingPerson {
   approvalPct?: number | null;
+  approvalAvgRating?: number | null;
   underratedPct?: number | null;
   overratedPct?: number | null;
   valueScore?: number | null;
@@ -254,13 +255,13 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             )}
             {activeTab === "approval" && (
               <span>
-                {person.approvalPct != null ? (
+                {person.approvalAvgRating != null ? (
                   <>
                     <span
                       className="font-mono"
-                      style={{ color: getApprovalColor(person.approvalPct) }}
+                      style={{ color: getApprovalColor(person.approvalAvgRating) }}
                     >
-                      {Math.round(person.approvalPct)}%
+                      {person.approvalAvgRating.toFixed(1)}/5
                     </span>
                     {person.approvalVotesCount != null && (
                       <span className="text-muted-foreground">
@@ -299,13 +300,13 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             </div>
             <div className="hidden md:block text-right w-[72px] shrink-0">
               <TouchTooltip
-                content={person.approvalPct != null ? `${person.name} has a ${Math.round(person.approvalPct)}% approval rating from community votes` : "No votes yet"}
+                content={person.approvalAvgRating != null ? `${person.name} has a ${person.approvalAvgRating.toFixed(1)}/5 community rating` : "No votes yet"}
                 side="top"
               >
                 <p className="font-mono font-semibold text-lg tabular-nums cursor-help" data-testid={`sentiment-score-${person.id}`}>
-                  {person.approvalPct != null ? (
-                    <span style={{ color: getApprovalColor(person.approvalPct) }}>
-                      {Math.round(person.approvalPct)}%
+                  {person.approvalAvgRating != null ? (
+                    <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>
+                      {person.approvalAvgRating.toFixed(1)}/5
                     </span>
                   ) : (
                     '—'
@@ -360,8 +361,8 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                       </PopoverClose>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {person.approvalPct != null ? (
-                        <>Community: <span className="font-semibold" style={{ color: getApprovalColor(person.approvalPct) }}>{Math.round(person.approvalPct)}%</span> approval</>
+                      {person.approvalAvgRating != null ? (
+                        <>Community: <span className="font-semibold" style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}/5</span></>
                       ) : (
                         'No community votes yet'
                       )}
@@ -408,9 +409,9 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 side="top"
               >
                 <p className="font-mono font-bold text-2xl tabular-nums cursor-help">
-                  {person.approvalPct != null ? (
-                    <span style={{ color: getApprovalColor(person.approvalPct) }}>
-                      {Math.round(person.approvalPct)}%
+                  {person.approvalAvgRating != null ? (
+                    <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>
+                      {person.approvalAvgRating.toFixed(1)}/5
                     </span>
                   ) : (
                     '—'
@@ -473,8 +474,8 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                       </PopoverClose>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {person.approvalPct != null ? (
-                        <>Community: <span className="font-semibold" style={{ color: getApprovalColor(person.approvalPct) }}>{Math.round(person.approvalPct)}%</span> approval</>
+                      {person.approvalAvgRating != null ? (
+                        <>Community: <span className="font-semibold" style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}/5</span></>
                       ) : (
                         'No community votes yet'
                       )}

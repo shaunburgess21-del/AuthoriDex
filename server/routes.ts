@@ -344,6 +344,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .select({
           celebrityId: celebrityMetrics.celebrityId,
           approvalPct: celebrityMetrics.approvalPct,
+          approvalAvgRating: celebrityMetrics.approvalAvgRating,
           approvalVotesCount: celebrityMetrics.approvalVotesCount,
           underratedPct: celebrityMetrics.underratedPct,
           overratedPct: celebrityMetrics.overratedPct,
@@ -381,6 +382,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return {
           ...p,
           approvalPct: m?.approvalPct ?? null,
+          approvalAvgRating: m?.approvalAvgRating ?? null,
           approvalVotesCount: m?.approvalVotesCount ?? null,
           underratedPct: m?.underratedPct ?? null,
           overratedPct: m?.overratedPct ?? null,
@@ -414,12 +416,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (sort === '7d') {
         enrichedPeople.sort((a, b) => (b.change7d ?? 0) - (a.change7d ?? 0));
       } else if (sort === 'approval') {
-        // Sort by approval percentage (highest first, nulls last)
+        // Sort by avg rating (highest first), tiebreak by vote count (more votes first), nulls last
         enrichedPeople.sort((a, b) => {
-          if (a.approvalPct === null && b.approvalPct === null) return 0;
-          if (a.approvalPct === null) return 1;
-          if (b.approvalPct === null) return -1;
-          return b.approvalPct - a.approvalPct;
+          const aRating = (a as any).approvalAvgRating ?? null;
+          const bRating = (b as any).approvalAvgRating ?? null;
+          if (aRating === null && bRating === null) return 0;
+          if (aRating === null) return 1;
+          if (bRating === null) return -1;
+          if (bRating !== aRating) return bRating - aRating;
+          // Tiebreak: more votes ranks higher
+          return ((b as any).approvalVotesCount ?? 0) - ((a as any).approvalVotesCount ?? 0);
         });
       }
 
@@ -786,6 +792,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const metrics = await db
         .select({
           approvalPct: celebrityMetrics.approvalPct,
+          approvalAvgRating: celebrityMetrics.approvalAvgRating,
           approvalVotesCount: celebrityMetrics.approvalVotesCount,
         })
         .from(celebrityMetrics)
@@ -803,6 +810,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         ...person,
         approvalPct: m?.approvalPct ?? null,
+        approvalAvgRating: m?.approvalAvgRating ?? null,
         approvalVotesCount: m?.approvalVotesCount ?? 0,
         wikiSlug: tracked[0]?.wikiSlug ?? null,
       });

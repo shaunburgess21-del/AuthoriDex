@@ -786,9 +786,9 @@ export default function PersonDetailPage() {
               </p>
               <ApprovalRatingInfoIcon testId="icon-approval-profile" className="h-3 w-3 text-muted-foreground/40 cursor-help" />
             </div>
-            {(person as any).approvalPct != null ? (
-              <p className="text-3xl font-mono font-bold" style={{ color: getApprovalColor((person as any).approvalPct) }} data-testid="text-approval-pct">
-                {Math.round((person as any).approvalPct)}%
+            {(person as any).approvalAvgRating != null ? (
+              <p className="text-3xl font-mono font-bold" style={{ color: getApprovalColor((person as any).approvalAvgRating) }} data-testid="text-approval-pct">
+                {((person as any).approvalAvgRating as number).toFixed(1)}/5
               </p>
             ) : (
               <p className="text-xl font-mono text-muted-foreground mt-1" data-testid="text-approval-pct">
