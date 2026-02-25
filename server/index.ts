@@ -5,6 +5,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { startSnapshotScheduler } from "./jobs/snapshot-scheduler";
 import { runDataIngestion, hydrateTrendingPeopleFromSnapshots } from "./jobs/ingest";
 import { startLiveTickScheduler, setLastFullRefreshAt, applySnapBackDampening } from "./jobs/live-tick";
+import { startMarketResolverScheduler } from "./jobs/market-resolver";
 import { pool } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
 
@@ -392,6 +393,11 @@ app.use((req, res, next) => {
     }
 
     startSeedEngineScheduler();
+
+    // Start market auto-resolver (resolves expired prediction markets every 5 min)
+    if (!SERVERLESS_MODE) {
+      startMarketResolverScheduler();
+    }
 
     // Start staleness monitor (alerts when snapshots are >2h old)
     startStalenessMonitor();

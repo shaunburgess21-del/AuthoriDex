@@ -465,7 +465,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               wiki: health.wiki.state,
               newsProviderUsed: runMeta?.newsProviderUsed ?? null,
               newsFreshCoveragePct: runMeta?.newsFreshCoveragePct ?? null,
-              newsGovernorFactor: runMeta?.newsGovernorFactor ?? null,
+              newsFreshnessGovernor: runMeta?.newsGovernorFactor ?? null,
               newsDegradedReason: health.news.state !== "HEALTHY" ? health.news.reason : null,
             };
           })(),
@@ -4755,8 +4755,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
                 newsProviderUsed: runMeta.newsProviderUsed,
                 newsFreshCoveragePct: Math.round(runMeta.newsFreshCoveragePct),
                 searchFreshCoveragePct: Math.round(runMeta.searchFreshCoveragePct),
-                newsGovernorFactor: Math.round(runMeta.newsGovernorFactor * 100),
-                searchGovernorFactor: Math.round(runMeta.searchGovernorFactor * 100),
+                newsFreshnessGovernor: Math.round(runMeta.newsGovernorFactor * 100),
+                searchFreshnessGovernor: Math.round(runMeta.searchGovernorFactor * 100),
                 newsMedianArticles: runMeta.newsMedianArticles,
                 newsMeanArticles: runMeta.newsMeanArticles,
                 newsQualityLow: runMeta.newsQualityLow,
@@ -8045,8 +8045,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         return res.status(404).json({ error: "Market not found" });
       }
 
-      if (market.status !== "OPEN") {
-        return res.status(400).json({ error: "Market is not OPEN" });
+      if (market.status !== "OPEN" && market.status !== "CLOSED_PENDING") {
+        return res.status(400).json({ error: "Market is not OPEN or CLOSED_PENDING" });
       }
 
       const [winnerEntry] = await db
@@ -8064,63 +8064,23 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         return res.status(400).json({ error: "Winner entry not found in this market" });
       }
 
+      const { settleMarketBets } = await import("./jobs/market-resolver");
+      const settlementResult = await settleMarketBets(id, winnerEntryId);
+
       const [updatedMarket] = await db
         .update(predictionMarkets)
         .set({
           status: "RESOLVED",
           resolvedAt: new Date(),
           settledBy: authReq.userId,
+          resolveMethod: "admin_manual",
           resolutionNotes: resolutionNotes || null,
           updatedAt: new Date(),
         })
         .where(eq(predictionMarkets.id, id))
         .returning();
 
-      await db
-        .update(marketEntries)
-        .set({ resolutionStatus: "winner" })
-        .where(eq(marketEntries.id, winnerEntryId));
-
-      await db
-        .update(marketEntries)
-        .set({ resolutionStatus: "loser" })
-        .where(
-          and(
-            eq(marketEntries.marketId, id),
-            ne(marketEntries.id, winnerEntryId)
-          )
-        );
-
-      // Calculate actual payouts for winning bets based on pool distribution
-      const allBets = await db
-        .select({
-          id: marketBets.id,
-          entryId: marketBets.entryId,
-          stakeAmount: marketBets.stakeAmount,
-        })
-        .from(marketBets)
-        .where(and(eq(marketBets.marketId, id), eq(marketBets.status, "active")));
-
-      const totalPool = allBets.reduce((sum, b) => sum + b.stakeAmount, 0);
-      const winnerPool = allBets.filter(b => b.entryId === winnerEntryId).reduce((sum, b) => sum + b.stakeAmount, 0);
-
-      const now = new Date();
-      for (const bet of allBets) {
-        if (bet.entryId === winnerEntryId) {
-          const payout = winnerPool > 0 ? Math.round((bet.stakeAmount / winnerPool) * totalPool) : bet.stakeAmount;
-          await db
-            .update(marketBets)
-            .set({ status: "won", settledAt: now, payoutAmount: payout })
-            .where(eq(marketBets.id, bet.id));
-        } else {
-          await db
-            .update(marketBets)
-            .set({ status: "lost", settledAt: now, payoutAmount: 0 })
-            .where(eq(marketBets.id, bet.id));
-        }
-      }
-
-      res.json(updatedMarket);
+      res.json({ ...updatedMarket, settlement: settlementResult });
     } catch (error) {
       console.error("[Open Markets] Settle error:", error);
       res.status(500).json({ error: "Failed to settle market" });
@@ -8994,22 +8954,25 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       if (!market) return res.status(404).json({ error: "Market not found" });
       if (market.status === "RESOLVED") return res.status(400).json({ error: "Market already resolved" });
 
-      await db.update(predictionMarkets).set({
-        status: "RESOLVED",
-        resolvedAt: new Date(),
-        settledBy: req.userId!,
-        resolutionNotes: notes,
-        updatedAt: new Date(),
-      }).where(eq(predictionMarkets.id, id));
+      const { settleMarketBets, voidMarketBets } = await import("./jobs/market-resolver");
+      let settlementResult = null;
 
       if (winnerEntryId) {
-        await db.update(marketEntries)
-          .set({ resolutionStatus: "loser" })
-          .where(and(eq(marketEntries.marketId, id), sql`${marketEntries.id} != ${winnerEntryId}`));
-        await db.update(marketEntries)
-          .set({ resolutionStatus: "winner" })
-          .where(eq(marketEntries.id, winnerEntryId));
+        settlementResult = await settleMarketBets(id, winnerEntryId);
+      } else {
+        const refunded = await voidMarketBets(id);
+        settlementResult = { voided: true, refunded };
       }
+
+      await db.update(predictionMarkets).set({
+        status: winnerEntryId ? "RESOLVED" : "VOID",
+        resolvedAt: new Date(),
+        settledBy: req.userId!,
+        resolveMethod: "admin_manual",
+        resolutionNotes: notes,
+        voidReason: winnerEntryId ? null : (notes || "Admin voided"),
+        updatedAt: new Date(),
+      }).where(eq(predictionMarkets.id, id));
 
       await db.insert(adminAuditLog).values({
         adminId: req.userId!,
@@ -9017,10 +8980,10 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         actionType: "update",
         targetTable: "prediction_markets",
         targetId: id,
-        metadata: { action: "settle", winnerEntryId, type: market.marketType },
+        metadata: { action: "settle", winnerEntryId, type: market.marketType, settlement: settlementResult },
       });
 
-      res.json({ success: true });
+      res.json({ success: true, settlement: settlementResult });
     } catch (error: any) {
       console.error("Error settling market:", error.message);
       res.status(500).json({ error: "Failed to settle market" });
