@@ -1,0 +1,529 @@
+I want to move on to the user accounts and user leaderboard. I sent this to Claude for advice and then it replied with a prompt. Let me know your thoughts:
+
+Me:
+Ok so moving over to UX/UI and functionality.
+When we first started building Authoridex, we put in draft user accounts as placeholders, but now that we are getting closer to launch we want to focus on this area, make it functional and useful to our users. 
+I have attached screenshots of what we have done so far, as well as screenshots of Polymarket as they seem to have done it right.
+I need your help putting a detailed prompt together for Replit, to build out this focus area.
+1. We need a leaderboard for our users, like Polymarket has for their users. As our prediction markets will be based on credits at this point, not real money, it needs to showcase who is winning in credits not dollars, but otherwise most of the overall idea stays the same.
+2. With regards to navigation, I like that Polymarket uses a burger menu for people who haven't signed up/logged in. Those users can still look at the leaderboard. Once a user signs in, it changes from the burger menu to the round circle like we have. 
+3. We need to make sure our users accounts are fully functional, they can see and access the relevant information based on their actions on the site.
+
+Claude suggested prompt for Replit:
+
+AuthoriDex — User System, Leaderboard & Navigation Overhaul
+Context
+We're preparing AuthoriDex for launch. The user account system was built as a placeholder and needs to become fully functional. We're using Polymarket as our primary UX reference — they've nailed the balance between anonymous browsing and authenticated engagement. Screenshots of both our current state and Polymarket's implementation have been reviewed.
+Key difference from Polymarket: Our prediction markets use virtual credits (not real money), so all dollar references become credit references. The fundamental UX patterns stay the same.
+
+PHASE 1: Navigation — Logged-Out vs Logged-In States
+Goal
+Match the Polymarket pattern: anonymous users get a hamburger/menu icon that opens a lightweight panel; authenticated users get their avatar circle that opens a richer account panel.
+T1.1 — Logged-Out Navigation (Desktop)
+Current: A generic person icon that opens a dropdown with "Welcome to AuthoriDex", Sign In, Create Account, Theme toggle.
+Target:
+
+Replace the person icon with a standard hamburger menu icon (☰) in the top-right corner of the navbar, positioned where the avatar circle currently sits for logged-in users
+Clicking it opens a dropdown panel (right-aligned, same position as the current logged-in dropdown) containing:
+
+Sign In button (primary/filled, prominent)
+Create Account button (secondary/outline)
+Divider line
+Leaderboard (link to user prediction leaderboard — see Phase 2)
+How It Works (link to a future info/about page — for now, can be a placeholder or link to the homepage)
+Theme toggle (Dark/Light, keep existing functionality)
+Divider line
+Terms of Use (link)
+Privacy Policy (link)
+
+
+The main nav links (Leaderboard, Vote, Predict) should remain visible in the header for all users, logged in or not
+On mobile: the hamburger menu should be the same icon, panel slides in or drops down as appropriate for mobile
+
+T1.2 — Logged-In Navigation (Desktop)
+Current: Avatar circle opens a dropdown with username, Hall of Famer badge, Level/XP, Predict Credits, Activity links (My Predictions, My Votes, Leaderboard), Settings (Theme), Support (Help Center, Documentation, Terms of Use), Discord/X icons, Log out.
+Target — streamline the dropdown to essentials:
+
+Avatar circle (keep as-is — shows user initials or uploaded photo)
+Clicking opens dropdown:
+
+Header section: Avatar + Display Name (or username if no display name set) + @username below it + Level badge + XP display (e.g., "Level 12 · 4,500 XP")
+Predict Credits: Show balance inline, e.g., "⟐ 1,000 Credits" with "VIRTUAL" badge — keep this prominent since it drives engagement
+Divider
+My Account → navigates to /me (the full account page)
+My Predictions → navigates to /me with predictions tab active (or /me/predictions)
+My Votes → navigates to /me with votes tab active (or /me/votes)
+Leaderboard → navigates to the user prediction leaderboard (Phase 2)
+Divider
+Theme toggle (Dark/Light)
+Divider
+Sign Out
+
+
+Remove from dropdown: Help Center, Documentation, Terms of Use, Discord/X icons (these belong in a footer or settings page, not in the primary nav dropdown — they're clutter)
+
+T1.3 — Logged-In Navigation (Mobile)
+
+Bottom tab bar should remain: Home, Vote, Predict (keep as-is)
+Avatar circle in top-right opens the same dropdown as desktop but sized/positioned for mobile
+Ensure the dropdown doesn't overflow the viewport on small screens
+
+
+PHASE 2: User Prediction Leaderboard
+Goal
+Build a leaderboard page that ranks AuthoriDex users by their prediction performance, similar to Polymarket's leaderboard but using virtual credits instead of dollars.
+T2.1 — Leaderboard Page (Route: /leaderboard/users or /predictions/leaderboard)
+Note: This is a SEPARATE leaderboard from the existing celebrity trend score leaderboard. This ranks users of the platform by their prediction success. Make sure routing and nav labels distinguish between the two clearly. The existing leaderboard (Leaderboard nav link) shows celebrities ranked by trend score. This new page shows users ranked by prediction profit.
+Page layout:
+Header area:
+
+Page title: "Prediction Leaderboard"
+Subtitle or description: "Top predictors ranked by virtual credit profit"
+
+Filters row:
+
+Time period dropdown: Today, Weekly, Monthly, All Time (default: All Time)
+Category dropdown: All Categories, Politics, Sports, Entertainment, Tech, etc. (maps to the categories used in your prediction markets)
+Search box: "Search by username" — filters the list client-side
+
+Leaderboard table:
+
+Columns: Rank (#), User (avatar + display name or username), Profit/Loss (in credits, formatted as +1,234 or -567, colored green/red), Volume (total credits wagered, optional secondary column)
+Rows: Paginated, 20 per page, or infinite scroll
+The currently logged-in user's row should be highlighted (subtle background color) if they appear on the current page
+If the logged-in user is NOT on the visible page, show a pinned row at the top or bottom: "You — Rank #47 — +230 credits" so they can always see where they stand
+
+Sidebar or callout (desktop only, optional but nice-to-have):
+
+"Biggest Wins Today" or "Hot Predictions" — a small list of 5-7 users who had the biggest single prediction wins in the current period. Shows: username, prediction market name, profit amount. This adds a "live" feel and encourages engagement.
+
+Empty state:
+
+If no prediction data exists yet (early days): "No predictions resolved yet. Be the first to make a prediction!" with a CTA button linking to the Predict section.
+
+T2.2 — Leaderboard Data Source
+Backend requirements:
+
+Create an API endpoint: GET /api/leaderboard/users
+Query parameters: period (today | weekly | monthly | all), category (optional), page, limit
+Response: array of { rank, userId, username, displayName, avatarUrl, profitLoss, volume, predictionCount, winRate }
+Profit/Loss calculation: sum of all resolved prediction payouts minus the credits spent on those predictions, for the selected time period
+
+A prediction that pays out = user receives credits → positive
+A prediction that doesn't pay out = user loses their stake → negative
+Net P&L = total payouts received - total stakes on losing predictions
+
+
+Volume = total credits staked across all predictions in the period (win or lose)
+Win Rate = (winning predictions / total resolved predictions) × 100
+Only include users who have at least 1 resolved prediction in the period
+Sort by profitLoss descending by default
+
+Data considerations:
+
+This should query from your existing predictions/markets tables — wherever resolved prediction outcomes are stored
+If predictions haven't been resolved yet (markets still open), those don't count toward the leaderboard
+Cache the leaderboard results (update every 5-10 minutes, not on every page load)
+
+T2.3 — User Row Click-Through
+
+Clicking a user's row on the leaderboard navigates to their public profile (/u/[username])
+If the user's profile is set to private, show a "This profile is private" message instead of their details
+
+
+PHASE 3: User Account & Profile Pages
+Goal
+Make the account pages fully functional — every link should work, every stat should pull real data, and the experience should feel complete rather than placeholder.
+T3.1 — My Account Page (/me)
+Current state: Shows username, Admin badge, Hall of Famer badge, Level/XP, stat cards (Votes Cast: 0, Predictions: 0, Win Rate: 0%), action links (View Public Profile, My Votes, My Predictions, My Favorites, Settings), Predict Credits section.
+Improvements:
+Profile header:
+
+Avatar (uploadable — should work, verify the upload flow functions correctly)
+Display Name (large, primary) — if not set, show username
+@username (secondary, smaller)
+Badges: Show any earned badges (Hall of Famer, Admin, etc.)
+Level + XP: "Level 12 · 4,500 XP" with a thin progress bar showing progress to next level
+Member since date
+
+Stats cards (must pull REAL data from the database):
+
+Votes Cast: Count of all sentiment votes the user has submitted (query the sentiment_votes or equivalent table for this user)
+Predictions Made: Count of all predictions placed (query predictions table)
+Predictions Won: Count of predictions that resolved in the user's favor
+Win Rate: (Predictions Won / Total Resolved Predictions) × 100. Show "—" if no resolved predictions yet
+Profit/Loss: Net credits gained or lost from resolved predictions. Green if positive, red if negative
+Prediction Leaderboard Rank: Their current rank on the all-time leaderboard. Show "Unranked" if they have no resolved predictions
+
+Predict Credits section:
+
+Balance: current credit balance (pull from database)
+"VIRTUAL" badge — keep this clear
+Brief note: "Virtual credits for predictions. No real money involved."
+History link or expandable section showing recent credit transactions (stake placed, payout received, daily bonus, etc.) — even a simple list of last 10 transactions would be useful
+
+Tab navigation or section links:
+
+My Votes — list of all their sentiment votes, grouped by date or person. Each row shows: person name + avatar, their rating (1-5), date voted. Should link to the person's profile page.
+My Predictions — list of all their predictions. Each row shows: market question, their position (what they bet on), stake amount, status (Active/Won/Lost/Pending), payout if resolved. Active predictions should be at the top.
+My Favorites — list of people they've favorited/bookmarked. Each row shows: person name + avatar, current trend score, last 24h change. Click navigates to person profile. (If favorites aren't implemented yet, show an empty state: "Favorite people from the leaderboard to track them here.")
+
+T3.2 — Public Profile Page (/u/[username])
+Current state: Shows username, @handle, Hall of Famer badge, Level badge, Member since date, stat cards (Votes Cast, Predictions, Win Rate), XP Progress.
+Improvements:
+Respect privacy settings:
+
+If profile is set to Private in settings: show only username, avatar, level, and member since date. Everything else shows "This user's profile is private."
+If Public: show full profile
+
+Public profile content:
+
+Avatar + Display Name + @username
+Badges (Hall of Famer, etc.)
+Level + Member since
+Stat cards: Votes Cast, Predictions, Win Rate, Profit/Loss (same data as /me but viewed by others)
+Recent Activity feed (public-facing):
+
+Recent votes: "[User] rated [Person] ⭐ 4/5" — only show the most recent 10-15
+Recent predictions: "[User] predicted [Market Question] — [Won/Lost]" — only show resolved predictions
+This gives the profile a sense of activity and makes it worth visiting
+
+
+Prediction Performance chart (nice-to-have): A simple line chart showing cumulative P&L over time, similar to Polymarket's "Profit/Loss" chart on user profiles. Time filters: 1W, 1M, All.
+
+T3.3 — Settings Page (/me/settings)
+Current state: Has Profile Information (avatar, username, display name), Privacy toggle, Notifications (Email Notifications, Prediction Alerts), Danger Zone (Sign Out).
+Improvements:
+
+Profile Information: Verify that username changes work (update all references), display name saves correctly, avatar upload works. Show the public profile URL preview: "Your public profile: authoridex.com/u/[username]"
+Privacy: "Public Profile" toggle should actually gate what's shown on /u/[username]. Make sure flipping this toggle immediately affects what others see.
+Notifications: Email Notifications and Prediction Alerts toggles — these can remain as toggles even if email sending isn't wired up yet. Just make sure the preference is saved to the database so it's ready when email is implemented.
+Danger Zone:
+
+Keep "Sign Out"
+Add "Delete Account" button with a confirmation modal: "This will permanently delete your account, votes, predictions, and all associated data. This action cannot be undone." Require typing their username to confirm.
+
+
+Move Sign Out out of the Danger Zone section — it's not a dangerous action. Put it at the bottom of the settings page as a simple link/button, or only have it in the nav dropdown (where it already exists). Danger Zone should only contain destructive actions like Delete Account.
+
+
+PHASE 4: Data Integrity & Wiring
+T4.1 — Verify All Stats Pull Real Data
+This is critical. Every number shown on account/profile pages must come from actual database queries, not hardcoded placeholder values.
+Checklist:
+
+ Votes Cast → COUNT from sentiment_votes (or equivalent) WHERE userId = current user
+ Predictions → COUNT from predictions WHERE userId = current user
+ Win Rate → calculated from resolved predictions
+ Profit/Loss → calculated from resolved prediction payouts vs stakes
+ Leaderboard Rank → derived from the leaderboard query
+ XP and Level → from the user record (these seem to already work)
+ Predict Credits balance → from the user record or a credits table
+ Member Since → from user.createdAt
+
+T4.2 — XP System Verification
+
+Verify that XP is actually being awarded for actions:
+
+Casting a vote → should award XP (e.g., 10 XP per vote)
+Making a prediction → should award XP (e.g., 25 XP per prediction)
+Winning a prediction → bonus XP (e.g., 50 XP)
+Daily login → XP bonus (if implemented)
+
+
+Level thresholds should be reasonable for early users — it should feel achievable to level up in the first few sessions
+The "500 XP to Level 202" shown in the current screenshots suggests you're at Level 201 with 100,000 XP — this is clearly test data. Make sure new users start at Level 1 with 0 XP.
+
+T4.3 — Credit Transaction Logging
+
+Every credit movement should be logged: initial grant (new users get 1,000 credits), prediction stakes, prediction payouts, any bonuses
+This log powers the credit history on the My Account page and ensures auditability
+
+
+Design Notes
+Visual style: Keep the existing dark theme. Follow the established card-based layout pattern with subtle border separators. Use the same blue (#3C83F6) and teal accent colors already in use.
+Responsive: All new pages must work on mobile. The leaderboard page especially needs a clean mobile layout — Polymarket's mobile leaderboard (see reference screenshots) does this well with a simple list: rank, avatar, username, profit.
+Empty states matter: For a new user who hasn't voted or predicted yet, every section should have a friendly empty state with a CTA. Not just "0" — something like "You haven't made any predictions yet. Head to the Predict section to get started!"
+Loading states: Every section that fetches data should show a skeleton/shimmer while loading, not flash empty then populate. This is especially important on the leaderboard page.
+
+Priority Order
+
+Phase 1 (Navigation) — Quick win, improves first impression for anonymous visitors
+Phase 4 (Data Wiring) — Make sure all stats are real before building more UI around them
+Phase 3 (Account/Profile) — Polish the user-facing pages now that data is real
+Phase 2 (User Leaderboard) — The biggest new feature, benefits from having the other pieces in place first
+
+Build phases sequentially. Test each phase before moving to the next. At the end of each phase, restart and verify — check both logged-in and logged-out states, desktop and mobile.
+
+Claude’s prompt is very solid — it hits the right product shape (Polymarket-like anonymous browsing + richer signed-in panel, plus a user P&L leaderboard and real account stats). If you hand that to Replit, you’ll get something usable.
+
+That said, I’d tweak it in a few important ways so you don’t accidentally build the wrong thing, or build too much too early.
+
+My key thoughts / adjustments
+1) Clarify naming so users don’t confuse the two “Leaderboards”
+
+Right now you have:
+
+People leaderboard (Trend Score / Approval Rating) — what you already call “Leaderboard”
+
+User leaderboard (prediction performance)
+
+If you keep both called “Leaderboard” in nav, users will get lost.
+
+Suggestion
+
+Nav label stays Leaderboard = People leaderboard
+
+In menus, call the new one Predictor Leaderboard (or Top Predictors)
+
+And route it like /predict/leaderboard (feels “inside Predict”) rather than /leaderboard/users which will confuse.
+
+2) Don’t build “Delete Account” until you’re 100% sure about data deletion semantics
+
+It’s doable, but it’s a foot-gun before launch because you’ll need to answer:
+
+Do we delete predictions? votes? transaction history?
+
+What about markets that already resolved? Do we keep aggregates?
+
+Better v1
+
+Keep “Sign out”
+
+Add “Request account deletion” (or hide Delete behind an admin flag) until you’ve nailed a policy.
+
+3) Make Profit/Loss definition crystal clear for credits
+
+Polymarket P&L is intuitive because money. With credits, people will ask “how is profit computed?”
+
+Define this once and use it everywhere:
+
+profitLoss = total_payout_credits - total_staked_credits on resolved predictions only.
+
+volume = total_staked_credits (resolved + active, or resolved-only — pick one and be consistent; I’d do resolved-only for leaderboard fairness, and show active separately).
+
+Also: don’t show win rate unless you also show “# resolved”, otherwise it looks weird early on.
+
+4) The “logged-out hamburger” change is good — but keep it minimal
+
+Claude’s menu items like Terms/Privacy/Docs can live in footer. If you add too many items, the panel turns into a junk drawer.
+
+Best logged-out hamburger content (v1)
+
+Sign In (primary)
+
+Create Account
+
+Predictor Leaderboard (optional)
+
+Theme toggle
+
+Everything else can go in footer later.
+
+5) Order of work: I’d swap Phase 2 and Phase 3 slightly
+
+Claude says: Navigation → Data Wiring → Account/Profile → User Leaderboard.
+
+I’d do:
+
+Navigation
+
+Data wiring + credit ledger
+
+User leaderboard (thin v1)
+
+Account pages (consume the same APIs)
+
+Because once you have the “leaderboard query” and “credit ledger”, the account pages become simple views of the same computed numbers. If you build /me first, you’ll likely duplicate logic and then refactor.
+
+6) One big missing piece: a proper credit transaction ledger
+
+Claude mentions it (good), but I’d make it a hard requirement.
+
+Without a ledger, you’ll constantly get “my credits changed, why?” support issues later. Even basic rows like:
+
+initial_grant
+
+stake
+
+payout
+
+refund (if market voided)
+
+bonus (daily/weekly)
+
+This also makes leaderboard auditing easy.
+
+7) Privacy / public profiles: don’t overcomplicate in v1
+
+“Public Profile” toggle should do exactly one thing:
+
+Public: show predictions summary + recent activity
+
+Private: show only username/avatar/level (no activity, no P&L)
+
+Keep it binary for launch.
+
+What I’d send Replit instead (cleaner + safer prompt)
+
+If you want, copy/paste this version — it’s the same intent as Claude’s, but tighter and with the “dangerous” items scoped.
+
+PROMPT TO REPLIT
+
+AuthoriDex — User Accounts + Predictor Leaderboard (Polymarket-style)
+
+Goal
+Make accounts real and useful for launch. Implement:
+
+Logged-out vs logged-in nav behavior (Polymarket pattern)
+
+A Predictor Leaderboard ranking users by virtual credit Profit/Loss
+
+Fully wired /me and /u/[username] pages with real stats
+
+A credit transaction ledger so all numbers are explainable
+
+Phase 1 — Navigation (Logged-out vs Logged-in)
+
+Logged-out
+
+Replace top-right user icon with hamburger menu.
+
+Menu items (minimal):
+
+Sign In (primary button)
+
+Create Account (secondary button)
+
+Top Predictors (link to predictor leaderboard)
+
+Theme toggle
+
+Logged-in
+
+Keep avatar circle.
+
+Dropdown should be streamlined:
+
+Header: avatar + displayName + @username + Level + XP
+
+Credits balance (prominent, “VIRTUAL” badge)
+
+Links: My Account (/me), My Predictions, My Votes, Top Predictors
+
+Theme toggle
+
+Sign out
+
+Avoid clutter items in dropdown (docs/terms/social). Put those in footer later.
+
+Phase 2 — Data foundation (must be correct before UI polish)
+
+Credit ledger
+
+Create credit_transactions (or equivalent) and log every credit movement:
+
+initial_grant
+
+stake
+
+payout
+
+refund/void
+
+bonus (optional)
+
+Credits balance should be derivable from ledger OR kept as cached balance with reconciliation.
+
+Prediction performance definitions (must be consistent everywhere)
+
+Only resolved predictions count for leaderboard and win rate.
+
+profitLoss = SUM(payoutCredits) - SUM(stakeCredits) (resolved only)
+
+volume = SUM(stakeCredits) (resolved only)
+
+winRate = wins / resolvedCount
+
+Phase 3 — Predictor Leaderboard page
+
+Route: /predict/leaderboard (name: Top Predictors)
+
+UI requirements (Polymarket-inspired):
+
+Filters:
+
+Period: Today / Weekly / Monthly / All-time (default All-time)
+
+Category (optional)
+
+Search username
+
+List/table:
+
+Rank, user (avatar + name), Profit/Loss (credits), Volume (credits), Win rate (optional)
+
+Pagination or infinite scroll (20 per page ok)
+
+Highlight current user row; if not visible, show a small “Your rank” summary row.
+
+API: GET /api/leaderboard/users?period=&category=&page=&limit=
+Return: { rank, userId, username, displayName, avatarUrl, profitLoss, volume, resolvedCount, winRate }
+
+Cache results 5–10 minutes.
+
+Phase 4 — Account pages
+
+/me
+
+Must show real stats from DB:
+
+Credits balance
+
+Votes cast
+
+Predictions made
+
+Resolved predictions count
+
+Wins
+
+Win rate
+
+Profit/Loss
+
+Predictor leaderboard rank (or “Unranked”)
+
+Tabs/sections:
+
+Predictions list (Active + Resolved)
+
+Votes list
+
+Credit transaction history (last 10–20)
+
+/u/[username]
+
+Respect privacy toggle:
+
+Public: show summary + last activity
+
+Private: show minimal profile only
+
+/me/settings
+
+Confirm avatar upload + display name saving works
+
+Privacy toggle actually changes /u page output
+
+Notification toggles can be stored even if not wired
+
+Defer “Delete account” for now (riskier semantics pre-launch).
+
+Final recommendation
+
+Yes: the direction is correct.
+
+Keep the prompt tighter, define credit P&L + ledger, and avoid implementing account deletion until after launch policy is set.
+
+Name the new page Top Predictors so it doesn’t collide with your existing “Leaderboard.”
