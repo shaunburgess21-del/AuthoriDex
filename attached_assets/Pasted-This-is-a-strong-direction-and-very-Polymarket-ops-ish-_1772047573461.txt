@@ -1,0 +1,129 @@
+This is a strong direction and very “Polymarket-ops-ish” in the right ways: fewer mystery SQL hunts, more “one screen tells you what’s going on,” and the two highest-value ops tools got tackled first:
+
+Settlement Center (real workflow, not placeholder)
+
+User credit history (support/debugging gold)
+
+A few thoughts + a practical “what to verify next” checklist so you and your brother can trust it.
+
+What looks right (big wins)
+1) “Preview payouts before committing”
+
+That’s the killer feature for manual resolution. If you can see pool size, winner count, biggest payout, remainder policy, etc. before clicking “Resolve,” you avoid 90% of “oops” moments.
+
+2) Credit history UI
+
+If it’s truly showing the ledger stream (initial grants, stakes, payouts, refunds, admin adjustments) in order, that makes support and debugging fast and auditable.
+
+3) Separate component files (thank goodness)
+
+AdminDashboard being 6,600+ lines was a “one wrong edit away from pain” situation. Splitting out Settlement Center + Credit History into their own components was the correct structural move.
+
+What I’d validate immediately (don’t skip this)
+
+Even if everything compiles, admin tooling needs behavioral checks:
+
+A) Manual resolve flow is safe + idempotent
+
+Test these behaviors:
+
+Clicking Preview does not mutate anything.
+
+Clicking Resolve changes market status exactly once.
+
+Re-clicking Resolve (or refreshing mid-action) doesn’t double-pay. You already hardened idempotency—just confirm the UI doesn’t make it “feel” like it’s doing something twice.
+
+B) Preview numbers match payout summary endpoint
+
+Pick one test market (even a fake one) and confirm:
+
+Pool total
+
+Sum of stakes
+
+Winner payout totals
+
+Remainder and remainder policy
+Match what /api/admin/markets/:id/payout-summary returns.
+
+C) User credit history performance + pagination
+
+Ledger tables grow fast. Make sure the UI:
+
+Loads latest 25–100 entries first
+
+Has pagination / “Load more”
+
+Doesn’t try to render thousands of rows in a modal (that will lag on mobile and older laptops)
+
+If Replit didn’t add pagination yet, ask for it early—this becomes painful later.
+
+D) “Sanity warnings” thresholds aren’t noisy
+
+Warnings are only helpful if they’re rare and meaningful. Start with simple, high-signal ones:
+
+0 bets and closes < 6 hours
+
+Stuck CLOSED_PENDING > 30 min
+
+Single user > 60% of pool (50% might be too sensitive early on)
+
+Remainder abs > 1 (you already added logging)
+
+Then tune once you’ve got real usage.
+
+UX suggestions (small tweaks that make it easier for your brother)
+
+If you want it “user-friendly” for non-technical admin use, these matter:
+
+A single “Ops Home” section
+Show 4 cards at the top:
+
+Needs Resolution (count)
+
+Closing Soon (count)
+
+Stale Resolver / last run time
+
+Credit Drift (count)
+
+One-click filters
+Buttons like:
+
+“Needs Resolution”
+
+“Closing Soon”
+
+“Resolved Today”
+
+“Voided”
+Instead of dropdowns only.
+
+Confirm dialog that’s not scary but clear
+When resolving a community market:
+
+Show outcome selected
+
+Pool total
+
+Winner count
+
+Largest payout
+
+“This action settles the market and pays winners”
+
+Search everywhere
+
+Search markets by title/person
+
+Search users by username/email
+
+One thing I’d ask Replit explicitly
+
+Because they said: “endpoints reject auth without admin token (expected)” — great — but confirm:
+
+These endpoints are protected by server-side admin checks (not just “logged in”)
+
+The “test-payout-pipeline” endpoint stays env-gated and is OFF in any production deployment
+
+That’s the only “security footgun” in this area.
