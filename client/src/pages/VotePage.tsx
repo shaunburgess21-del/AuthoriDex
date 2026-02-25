@@ -309,6 +309,24 @@ function VersusCard({
                     src={matchup.optionAImage} 
                     alt={matchup.optionAText}
                     className="w-full h-full object-cover"
+                    onLoad={(e) => {
+                      console.log(`[Matchup] A loaded: ${e.currentTarget.src}`);
+                    }}
+                    onError={(e) => {
+                      const img = e.currentTarget;
+                      const exts = ['.webp', '.png', '.jpg', '.jpeg'];
+                      const src = img.src;
+                      const currentExt = exts.find(ext => src.toLowerCase().endsWith(ext));
+                      const nextIdx = currentExt ? exts.indexOf(currentExt) + 1 : exts.length;
+                      if (nextIdx < exts.length) {
+                        const next = src.substring(0, src.length - (currentExt?.length ?? 0)) + exts[nextIdx];
+                        console.log(`[Matchup] A failed: ${src} → trying ${next}`);
+                        img.src = next;
+                      } else {
+                        console.log(`[Matchup] A all extensions failed: ${src}`);
+                        img.style.display = 'none';
+                      }
+                    }}
                   />
                 </div>
               ) : (
@@ -346,6 +364,24 @@ function VersusCard({
                     src={matchup.optionBImage} 
                     alt={matchup.optionBText}
                     className="w-full h-full object-cover"
+                    onLoad={(e) => {
+                      console.log(`[Matchup] B loaded: ${e.currentTarget.src}`);
+                    }}
+                    onError={(e) => {
+                      const img = e.currentTarget;
+                      const exts = ['.webp', '.png', '.jpg', '.jpeg'];
+                      const src = img.src;
+                      const currentExt = exts.find(ext => src.toLowerCase().endsWith(ext));
+                      const nextIdx = currentExt ? exts.indexOf(currentExt) + 1 : exts.length;
+                      if (nextIdx < exts.length) {
+                        const next = src.substring(0, src.length - (currentExt?.length ?? 0)) + exts[nextIdx];
+                        console.log(`[Matchup] B failed: ${src} → trying ${next}`);
+                        img.src = next;
+                      } else {
+                        console.log(`[Matchup] B all extensions failed: ${src}`);
+                        img.style.display = 'none';
+                      }
+                    }}
                   />
                 </div>
               ) : (
