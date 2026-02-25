@@ -4455,6 +4455,55 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
   
+  app.get("/api/markets/:id/my-payout", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { id } = req.params;
+
+      const [market] = await db.select({
+        id: predictionMarkets.id,
+        status: predictionMarkets.status,
+        winnerEntryId: predictionMarkets.winnerEntryId,
+      }).from(predictionMarkets).where(eq(predictionMarkets.id, id)).limit(1);
+
+      if (!market) return res.status(404).json({ error: "Market not found" });
+
+      const allBets = await db.select({
+        stakeAmount: marketBets.stakeAmount,
+        entryId: marketBets.entryId,
+      }).from(marketBets).where(eq(marketBets.marketId, id));
+
+      const myBets = await db.select({
+        stakeAmount: marketBets.stakeAmount,
+        entryId: marketBets.entryId,
+        payoutAmount: marketBets.payoutAmount,
+        status: marketBets.status,
+      }).from(marketBets).where(and(eq(marketBets.marketId, id), eq(marketBets.userId, userId)));
+
+      if (myBets.length === 0) return res.status(404).json({ error: "No bets found for this market" });
+
+      const totalPool = allBets.reduce((s, b) => s + b.stakeAmount, 0);
+      const userStake = myBets.reduce((s, b) => s + b.stakeAmount, 0);
+      const userPayout = myBets.reduce((s, b) => s + (b.payoutAmount ?? 0), 0);
+
+      let winnerPoolTotal = 0;
+      if (market.winnerEntryId) {
+        winnerPoolTotal = allBets.filter(b => b.entryId === market.winnerEntryId).reduce((s, b) => s + b.stakeAmount, 0);
+      }
+
+      res.json({
+        totalPool,
+        userStake,
+        winnerPoolTotal,
+        userPayout,
+        remainderPolicy: 'burned',
+      });
+    } catch (error: any) {
+      console.error("Error fetching user payout:", error.message);
+      res.status(500).json({ error: "Failed to fetch payout details" });
+    }
+  });
+
   // Get user's favorites
   app.get("/api/me/favorites", requireAuth, async (req: AuthRequest, res) => {
     try {
@@ -8492,7 +8541,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       }
 
       if (!checkBetRateLimit(authReq.userId!)) {
-        return res.status(429).json({ error: "Too many bets — please wait a moment" });
+        return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
       }
 
       const [market] = await db

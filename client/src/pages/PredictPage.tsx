@@ -1042,19 +1042,66 @@ function TopGainerCard({
   );
 }
 
-function UserBetResult({ betResult }: { betResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number } }) {
-  if (!betResult || betResult.result === 'pending') return null;
+function PayoutDetails({ marketId }: { marketId: string }) {
+  const [open, setOpen] = useState(false);
+  const { data, isLoading } = useQuery<{ totalPool: number; userStake: number; winnerPoolTotal: number; userPayout: number; remainderPolicy: string }>({
+    queryKey: ['/api/markets', marketId, 'my-payout'],
+    enabled: open,
+  });
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="text-[10px] text-muted-foreground underline underline-offset-2 mt-1" data-testid="button-payout-details">
+        View details
+      </button>
+    );
+  }
+
   return (
-    <div className={`flex items-center gap-2 text-xs font-semibold px-2 py-1.5 rounded-md mt-2 ${
-      betResult.result === 'won' ? 'bg-emerald-500/10 text-emerald-400' :
-      betResult.result === 'refunded' ? 'bg-yellow-500/10 text-yellow-400' :
-      'bg-red-500/10 text-red-400'
-    }`} data-testid="text-bet-result">
-      {betResult.result === 'won' && <Trophy className="h-3.5 w-3.5" />}
-      {betResult.result === 'won' ? `Won +${betResult.payout} credits` :
-       betResult.result === 'refunded' ? `Refunded ${betResult.stakeAmount} credits` :
-       `Lost ${betResult.stakeAmount} credits`}
-      <span className="text-muted-foreground font-normal ml-auto">Picked: {betResult.entryLabel}</span>
+    <div className="mt-1.5 text-[10px] text-muted-foreground space-y-0.5 border-t border-border/50 pt-1.5" data-testid="section-payout-details">
+      {isLoading ? (
+        <span>Loading...</span>
+      ) : data ? (
+        <>
+          <div className="flex items-center justify-between gap-2"><span>Total pool</span><span className="font-mono">{data.totalPool.toLocaleString()}</span></div>
+          <div className="flex items-center justify-between gap-2"><span>Your stake</span><span className="font-mono">{data.userStake.toLocaleString()}</span></div>
+          {data.winnerPoolTotal > 0 && <div className="flex items-center justify-between gap-2"><span>Winner pool</span><span className="font-mono">{data.winnerPoolTotal.toLocaleString()}</span></div>}
+          <div className="flex items-center justify-between gap-2"><span>Your payout</span><span className="font-mono font-semibold">{data.userPayout.toLocaleString()}</span></div>
+        </>
+      ) : (
+        <span>Could not load details</span>
+      )}
+    </div>
+  );
+}
+
+function UserBetResult({ betResult, isMarketClosed = false }: { betResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number; marketId?: string }; isMarketClosed?: boolean }) {
+  if (!betResult) return null;
+  if (betResult.result === 'pending') {
+    if (!isMarketClosed) return null;
+    return (
+      <div className="flex items-center gap-2 text-xs font-semibold px-2 py-1.5 rounded-md mt-2 bg-muted/50 text-muted-foreground" data-testid="text-bet-awaiting">
+        <Clock className="h-3.5 w-3.5" />
+        Awaiting Results
+        <span className="font-normal ml-auto">Picked: {betResult.entryLabel}</span>
+      </div>
+    );
+  }
+  const isResolved = betResult.result === 'won' || betResult.result === 'lost';
+  return (
+    <div>
+      <div className={`flex items-center gap-2 text-xs font-semibold px-2 py-1.5 rounded-md mt-2 ${
+        betResult.result === 'won' ? 'bg-emerald-500/10 text-emerald-400' :
+        betResult.result === 'refunded' ? 'bg-yellow-500/10 text-yellow-400' :
+        'bg-red-500/10 text-red-400'
+      }`} data-testid="text-bet-result">
+        {betResult.result === 'won' && <Trophy className="h-3.5 w-3.5" />}
+        {betResult.result === 'won' ? `Won +${betResult.payout} credits` :
+         betResult.result === 'refunded' ? `Refunded ${betResult.stakeAmount} credits` :
+         `Lost ${betResult.stakeAmount} credits`}
+        <span className="text-muted-foreground font-normal ml-auto">Picked: {betResult.entryLabel}</span>
+      </div>
+      {isResolved && betResult.marketId && <PayoutDetails marketId={betResult.marketId} />}
     </div>
   );
 }
@@ -1145,7 +1192,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
             </Button>
           </div>
         )}
-        <UserBetResult betResult={userBetResult} />
+        <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
       </div>
     </PredictCard>
   );
@@ -1210,7 +1257,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
         <Button className="w-full bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20" onClick={() => onNavigate(market.slug)} disabled={isMarketClosed} data-testid={`button-predict-${market.slug}`}>
           {isMarketClosed ? "Closed" : "Make Prediction"}
         </Button>
-        <UserBetResult betResult={userBetResult} />
+        <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
       </div>
     </PredictCard>
   );
@@ -1289,7 +1336,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
             </Button>
           </div>
         )}
-        <UserBetResult betResult={userBetResult} />
+        <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
       </div>
     </PredictCard>
   );
@@ -1913,6 +1960,7 @@ export default function PredictPage() {
   const { user } = useAuth();
   const [showFirstTimeModal, setShowFirstTimeModal] = useState(false);
   const [selectedType, setSelectedType] = useState<PredictionType>("all");
+  const [showMyPositions, setShowMyPositions] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [overlaySearchQuery, setOverlaySearchQuery] = useState("");
@@ -2013,11 +2061,26 @@ export default function PredictPage() {
     enabled: !!user,
   });
   const userBetsByMarket = useMemo(() => {
-    const map = new Map<string, { result: string; payout: number; entryLabel: string; stakeAmount: number }>();
+    const map = new Map<string, { result: string; payout: number; entryLabel: string; stakeAmount: number; marketId: string }>();
+    const grouped = new Map<string, any[]>();
     (userBetsData || []).forEach((b: any) => {
-      if (!map.has(b.marketId)) {
-        map.set(b.marketId, { result: b.result, payout: b.payout, entryLabel: b.entryLabel, stakeAmount: b.stakeAmount });
-      }
+      const arr = grouped.get(b.marketId) || [];
+      arr.push(b);
+      grouped.set(b.marketId, arr);
+    });
+    grouped.forEach((bets, marketId) => {
+      const totalStake = bets.reduce((s: number, b: any) => s + b.stakeAmount, 0);
+      const totalPayout = bets.reduce((s: number, b: any) => s + (b.payout || 0), 0);
+      const uniqueEntries = new Set(bets.map((b: any) => b.entryLabel));
+      const entryLabel = uniqueEntries.size === 1 ? bets[0].entryLabel : "Multiple positions";
+      const results = new Set(bets.map((b: any) => b.result));
+      let result = 'pending';
+      if (results.has('won') && !results.has('lost')) result = 'won';
+      else if (results.has('lost') && !results.has('won')) result = 'lost';
+      else if (results.has('won') && results.has('lost')) result = 'won';
+      else if (results.has('refunded') && results.size === 1) result = 'refunded';
+      else result = bets[0].result;
+      map.set(marketId, { result, payout: totalPayout, entryLabel, stakeAmount: totalStake, marketId });
     });
     return map;
   }, [userBetsData]);
@@ -2237,25 +2300,29 @@ export default function PredictPage() {
   // Section-specific filtering logic
   const filteredUpDown = hydratedMarkets.filter(m => 
     (updownCategory === "all" || updownCategory === "trending" || m.category === updownCategory) &&
-    (!updownSearch || m.personName.toLowerCase().includes(updownSearch.toLowerCase()))
+    (!updownSearch || m.personName.toLowerCase().includes(updownSearch.toLowerCase())) &&
+    (!showMyPositions || userBetsByMarket.has(m.id))
   ).sort((a: any, b: any) => updownCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
   const filteredH2H = hydratedH2H.filter(m => 
     (h2hCategory === "all" || h2hCategory === "trending" || m.category === h2hCategory) &&
     (!h2hSearch || m.title.toLowerCase().includes(h2hSearch.toLowerCase()) || 
      m.person1.name.toLowerCase().includes(h2hSearch.toLowerCase()) ||
-     m.person2.name.toLowerCase().includes(h2hSearch.toLowerCase()))
+     m.person2.name.toLowerCase().includes(h2hSearch.toLowerCase())) &&
+    (!showMyPositions || userBetsByMarket.has(m.id))
   ).sort((a: any, b: any) => h2hCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
   const filteredGainers = hydratedGainers.filter(m => 
     (gainerCategory === "all" || gainerCategory === "trending" || m.category === gainerCategory) &&
     (!gainerSearch || m.category.toLowerCase().includes(gainerSearch.toLowerCase()) ||
-     m.leaders.some(l => l.name.toLowerCase().includes(gainerSearch.toLowerCase())))
+     m.leaders.some(l => l.name.toLowerCase().includes(gainerSearch.toLowerCase()))) &&
+    (!showMyPositions || userBetsByMarket.has(m.id))
   ).sort((a: any, b: any) => gainerCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
   const filteredCommunity = openMarkets.filter((m: any) => 
     (communityCategory === "all" || communityCategory === "trending" || m.category === communityCategory) &&
-    (!communitySearch || m.title?.toLowerCase().includes(communitySearch.toLowerCase()))
+    (!communitySearch || m.title?.toLowerCase().includes(communitySearch.toLowerCase())) &&
+    (!showMyPositions || userBetsByMarket.has(m.id))
   ).sort((a: any, b: any) => communityCategory === "trending" ? ((b.seedVolume ?? 0) - (a.seedVolume ?? 0)) : 0);
 
   const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
@@ -2354,6 +2421,18 @@ export default function PredictPage() {
               data-testid="input-global-search"
             />
           </div>
+          {user && userBetsByMarket.size > 0 && (
+            <Button
+              variant={showMyPositions ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowMyPositions(!showMyPositions)}
+              className={`whitespace-nowrap ${showMyPositions ? 'bg-violet-500 hover:bg-violet-600 text-white' : ''}`}
+              data-testid="toggle-my-positions"
+            >
+              <Wallet className="h-3.5 w-3.5 mr-1.5" />
+              My Positions ({userBetsByMarket.size})
+            </Button>
+          )}
           
           <HorizontalScroll className="sm:pb-0">
             {CATEGORY_FILTERS.map((cat) => {
