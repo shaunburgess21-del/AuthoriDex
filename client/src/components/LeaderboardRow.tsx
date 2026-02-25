@@ -3,10 +3,10 @@ import { PersonAvatar } from "./PersonAvatar";
 import { RankBadge } from "./RankBadge";
 import { Button } from "@/components/ui/button";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Popover, PopoverTrigger, PopoverContent, PopoverClose } from "@/components/ui/popover";
 import { useState, useEffect, useRef } from "react";
 import { compactNumber, formatDelta, compactVotes } from "@/lib/formatNumber";
-import { ThumbsUp, Star, Rocket, Zap, TrendingUp, TrendingDown, Flame, Check } from "lucide-react";
+import { ThumbsUp, Star, Rocket, Zap, TrendingUp, TrendingDown, Flame, Check, X } from "lucide-react";
 
 const SEGMENT_COLORS_5 = [
   '#FF0000',
@@ -317,11 +317,11 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               </p>
             </div>
             {hasVoted && sentimentScore != null ? (
-              <Popover>
+              <Popover modal>
                 <PopoverTrigger asChild>
                   <Button
                     variant="ghost"
-                    size="icon"
+                    size="sm"
                     className="no-default-hover-elevate no-default-active-elevate"
                     aria-label={`Rated ${person.name} ${sentimentScore}/5`}
                     onClick={(e) => e.stopPropagation()}
@@ -340,10 +340,24 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                   align="center"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <p className="text-sm font-medium">
-                    You rated <span className="font-semibold">{person.name}</span>{' '}
-                    <span className="font-bold" style={{ color: getRatingColor(sentimentScore) }}>{sentimentScore}/5</span>
-                  </p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium">
+                      You rated <span className="font-semibold">{person.name}</span>{' '}
+                      <span className="font-bold" style={{ color: getRatingColor(sentimentScore) }}>{sentimentScore}/5</span>
+                    </p>
+                    <PopoverClose asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="no-default-hover-elevate no-default-active-elevate h-5 w-5 shrink-0"
+                        aria-label="Close"
+                        onClick={(e) => e.stopPropagation()}
+                        data-testid={`button-close-popover-${person.id}`}
+                      >
+                        <X style={{ width: 14, height: 14 }} />
+                      </Button>
+                    </PopoverClose>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {person.approvalPct != null ? (
                       <>Community: <span className="font-semibold" style={{ color: getApprovalColor(person.approvalPct) }}>{Math.round(person.approvalPct)}%</span> approval</>
@@ -414,11 +428,11 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               </p>
             </div>
             {hasVoted && sentimentScore != null ? (
-              <Popover>
+              <Popover modal>
                 <PopoverTrigger asChild>
                   <Button
                     variant="ghost"
-                    size="icon"
+                    size="sm"
                     className="no-default-hover-elevate no-default-active-elevate"
                     aria-label={`Rated ${person.name} ${sentimentScore}/5`}
                     onClick={(e) => e.stopPropagation()}
@@ -437,10 +451,24 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                   align="center"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <p className="text-sm font-medium">
-                    You rated <span className="font-semibold">{person.name}</span>{' '}
-                    <span className="font-bold" style={{ color: getRatingColor(sentimentScore) }}>{sentimentScore}/5</span>
-                  </p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium">
+                      You rated <span className="font-semibold">{person.name}</span>{' '}
+                      <span className="font-bold" style={{ color: getRatingColor(sentimentScore) }}>{sentimentScore}/5</span>
+                    </p>
+                    <PopoverClose asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="no-default-hover-elevate no-default-active-elevate h-5 w-5 shrink-0"
+                        aria-label="Close"
+                        onClick={(e) => e.stopPropagation()}
+                        data-testid={`button-close-popover-${person.id}`}
+                      >
+                        <X style={{ width: 14, height: 14 }} />
+                      </Button>
+                    </PopoverClose>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {person.approvalPct != null ? (
                       <>Community: <span className="font-semibold" style={{ color: getApprovalColor(person.approvalPct) }}>{Math.round(person.approvalPct)}%</span> approval</>
