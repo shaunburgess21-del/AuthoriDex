@@ -53,6 +53,165 @@ async function verifyDbConstraints() {
   }
 }
 
+// ─── BACKFILL: Gap detection and fill ────────────────────────────────────────
+// After each successful hourly run, check for missing hour slots in the last
+// 12 hours and fill up to 3 of the oldest gaps. Uses the same cached data as
+// a normal run — the goal is to have a reference point for delta calculations,
+// not perfect historical accuracy. Backfilled snapshots are tagged isBackfill=true.
+const BACKFILL_MAX_SLOTS = 3;
+const BACKFILL_LOOKBACK_HOURS = 12;
+
+async function detectAndBackfillGaps(): Promise<void> {
+  try {
+    const cutoff = new Date(Date.now() - BACKFILL_LOOKBACK_HOURS * 60 * 60 * 1000);
+
+    // Find hour buckets in the last 12h that have no snapshots AND no completed ingestion run
+    const result = await pool.query(`
+      WITH hour_series AS (
+        SELECT generate_series(
+          date_trunc('hour', $1::timestamptz),
+          date_trunc('hour', NOW() - INTERVAL '1 hour'),
+          '1 hour'::interval
+        ) AS hour_bucket
+      ),
+      covered_by_snapshot AS (
+        SELECT DISTINCT date_trunc('hour', timestamp) AS hour_bucket
+        FROM trend_snapshots
+        WHERE timestamp >= $1
+      ),
+      covered_by_run AS (
+        SELECT date_trunc('hour', hour_bucket) AS hour_bucket
+        FROM ingestion_runs
+        WHERE status IN ('success', 'completed')
+          AND hour_bucket >= $1
+      )
+      SELECT h.hour_bucket
+      FROM hour_series h
+      LEFT JOIN covered_by_snapshot s ON s.hour_bucket = h.hour_bucket
+      LEFT JOIN covered_by_run r ON r.hour_bucket = h.hour_bucket
+      WHERE s.hour_bucket IS NULL AND r.hour_bucket IS NULL
+      ORDER BY h.hour_bucket ASC
+      LIMIT $2
+    `, [cutoff, BACKFILL_MAX_SLOTS]);
+
+    const gaps: Date[] = result.rows.map((r: any) => new Date(r.hour_bucket));
+
+    if (gaps.length === 0) {
+      log(`[Backfill] No gaps found in last ${BACKFILL_LOOKBACK_HOURS}h`);
+      return;
+    }
+
+    log(`[Backfill] Found ${gaps.length} gap(s) in last ${BACKFILL_LOOKBACK_HOURS}h — filling sequentially`);
+
+    let filled = 0;
+    for (const targetHour of gaps) {
+      try {
+        log(`[Backfill] Filling ${targetHour.toISOString()}...`);
+        const result = await runDataIngestion({ targetHour, isBackfill: true });
+        if (!result.lockedOut && result.processed > 0) {
+          filled++;
+          log(`[Backfill] Filled ${targetHour.toISOString()} (${result.processed} snapshots, ${result.duration}ms)`);
+        } else if (result.lockedOut) {
+          log(`[Backfill] Skipped ${targetHour.toISOString()} — locked out by another run`);
+          break;
+        }
+      } catch (err) {
+        log(`[Backfill] Error filling ${targetHour.toISOString()}: ${err}`);
+      }
+    }
+
+    log(`[Backfill] Done — filled ${filled}/${gaps.length} gap(s)`);
+  } catch (err) {
+    log(`[Backfill] Gap detection error: ${err}`);
+  }
+}
+
+// ─── STALENESS MONITOR ────────────────────────────────────────────────────────
+// Runs every 30 minutes. Logs alerts when the latest snapshot is older than
+// expected. Exposes state via getStalenessState() for the health endpoint.
+// Optionally posts to Discord if DISCORD_WEBHOOK_URL is set.
+const STALENESS_WARN_MINUTES = 120;  // 2 hours
+const STALENESS_CRIT_MINUTES = 240;  // 4 hours
+const STALENESS_CHECK_INTERVAL_MS = 30 * 60 * 1000;
+
+interface StalenessState {
+  ageMinutes: number | null;
+  isStale: boolean;
+  isCritical: boolean;
+  latestSnapshotAt: string | null;
+  checkedAt: string;
+}
+
+let _stalenessState: StalenessState = {
+  ageMinutes: null,
+  isStale: false,
+  isCritical: false,
+  latestSnapshotAt: null,
+  checkedAt: new Date().toISOString(),
+};
+
+export function getStalenessState(): StalenessState {
+  return _stalenessState;
+}
+
+async function checkStaleness(): Promise<void> {
+  try {
+    const result = await pool.query(`SELECT MAX(timestamp) as latest FROM trend_snapshots`);
+    const latest: string | null = result.rows[0]?.latest ?? null;
+    const now = new Date();
+    const ageMinutes = latest
+      ? Math.round((now.getTime() - new Date(latest).getTime()) / (1000 * 60))
+      : null;
+
+    const isStale = ageMinutes !== null && ageMinutes >= STALENESS_WARN_MINUTES;
+    const isCritical = ageMinutes !== null && ageMinutes >= STALENESS_CRIT_MINUTES;
+
+    _stalenessState = {
+      ageMinutes,
+      isStale,
+      isCritical,
+      latestSnapshotAt: latest ? new Date(latest).toISOString() : null,
+      checkedAt: now.toISOString(),
+    };
+
+    if (isCritical) {
+      const h = Math.floor((ageMinutes ?? 0) / 60);
+      const m = (ageMinutes ?? 0) % 60;
+      log(`[STALENESS CRITICAL] Latest snapshot is ${h}h ${m}m old — ingestion may be stuck`);
+    } else if (isStale) {
+      const h = Math.floor((ageMinutes ?? 0) / 60);
+      const m = (ageMinutes ?? 0) % 60;
+      log(`[STALENESS ALERT] Latest snapshot is ${h}h ${m}m old — ingestion may be delayed`);
+    }
+
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+    if (webhookUrl && isStale && ageMinutes !== null) {
+      const level = isCritical ? "🔴 CRITICAL" : "🟡 WARNING";
+      const h = Math.floor(ageMinutes / 60);
+      const m = ageMinutes % 60;
+      fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: `**AuthoriDex Staleness ${level}**\nLatest snapshot is **${h}h ${m}m old**.\nIngestion may be stuck or failing. Latest: ${latest ?? "none"}`,
+        }),
+      }).catch(() => {});
+    }
+  } catch (err) {
+    log(`[Staleness Monitor] Check failed: ${err}`);
+  }
+}
+
+function startStalenessMonitor() {
+  if (SERVERLESS_MODE) return;
+  log("[Staleness Monitor] Starting (checks every 30 min)");
+  setTimeout(() => {
+    checkStaleness();
+    setInterval(checkStaleness, STALENESS_CHECK_INTERVAL_MS);
+  }, 5 * 60 * 1000);
+}
+
+// ─── SCHEDULED INGESTION ──────────────────────────────────────────────────────
 async function scheduledIngestion() {
   log("[Ingestion Scheduler] Starting scheduled data ingestion...");
   
@@ -61,6 +220,8 @@ async function scheduledIngestion() {
     log(`[Ingestion Scheduler] Complete: ${result.processed} processed, ${result.errors} errors, ${result.duration}ms`);
     setLastFullRefreshAt(new Date());
     applySnapBackDampening().catch(e => log(`[Ingestion Scheduler] Dampening error: ${e}`));
+    // After a successful primary run, automatically fill any gaps in the last 12h
+    detectAndBackfillGaps().catch(e => log(`[Backfill] Unexpected error: ${e}`));
   } catch (error) {
     log(`[Ingestion Scheduler] Error during ingestion: ${error}`);
   }
@@ -218,5 +379,8 @@ app.use((req, res, next) => {
     }
 
     startSeedEngineScheduler();
+
+    // Start staleness monitor (alerts when snapshots are >2h old)
+    startStalenessMonitor();
   });
 })();

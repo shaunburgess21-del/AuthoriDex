@@ -4661,6 +4661,12 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           withFameScore: Number(coverage.with_score),
           allHaveScores: Number(coverage.trending) === Number(coverage.with_score),
         },
+        staleness: {
+          ageMinutes: minutesSinceLastSnapshot,
+          isStale: minutesSinceLastSnapshot !== null && minutesSinceLastSnapshot >= 120,
+          isCritical: minutesSinceLastSnapshot !== null && minutesSinceLastSnapshot >= 240,
+          latestSnapshotAt: latestSnapshot ? new Date(latestSnapshot).toISOString() : null,
+        },
         gaps: {
           maxGapMinutes: Math.round(maxGapMinutes),
           gapsOver2hCount: gapsOver2h,

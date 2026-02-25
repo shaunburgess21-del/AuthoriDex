@@ -359,11 +359,14 @@ async function releaseIngestionLock(
   console.log(`[Ingest Lock] Released lock, run ${runId} => ${status}`);
 }
 
-export async function runDataIngestion(): Promise<IngestResult> {
+export async function runDataIngestion(options?: { targetHour?: Date; isBackfill?: boolean }): Promise<IngestResult> {
+  const isBackfill = options?.isBackfill ?? false;
+  const logPrefix = isBackfill ? `[Ingest BACKFILL]` : `[Ingest]`;
+
   const lockResult = await acquireIngestionLock();
   
   if (!lockResult.acquired) {
-    console.warn(`[Ingest] SKIPPED: Another ingestion is running (${lockResult.existingRunId}). Cannot overlap.`);
+    console.warn(`${logPrefix} SKIPPED: Another ingestion is running (${lockResult.existingRunId}). Cannot overlap.`);
     await db.insert(ingestionRuns)
       .values({ status: "locked_out", errorSummary: `Blocked by existing run ${lockResult.existingRunId}`, finishedAt: new Date(), scoreVersion: SCORE_VERSION });
     return { processed: 0, errors: 0, duration: 0, lockedOut: true };
@@ -381,25 +384,33 @@ export async function runDataIngestion(): Promise<IngestResult> {
   if (process.env.REQUIRE_DB_GUARDRAILS === 'true') {
     const { dbGuardrailsVerified } = await import('../guardrails');
     if (!dbGuardrailsVerified) {
-      console.error(`[Ingest] ABORT: REQUIRE_DB_GUARDRAILS=true but DB constraints are missing. Refusing to write to prevent data corruption.`);
+      console.error(`${logPrefix} ABORT: REQUIRE_DB_GUARDRAILS=true but DB constraints are missing. Refusing to write to prevent data corruption.`);
       await releaseIngestionLock(runId, "failed", { errorSummary: "DB guardrails not verified" });
       return { processed: 0, errors: 1, duration: Date.now() - startTime, runId };
     }
   }
 
-  // Truncate to the hour for idempotency - multiple runs within same hour will be deduplicated
-  // Using explicit truncation to prevent any race conditions or serialization issues
+  // Use targetHour if provided (backfill), otherwise truncate current time to the hour.
+  // Truncating to the hour ensures idempotency — multiple runs within the same hour are deduplicated.
   const now = new Date();
-  const hourTimestamp = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-    now.getUTCHours(),
-    0, 0, 0  // minutes, seconds, milliseconds all set to 0
-  ));
-  console.log(`[Ingest] Hour timestamp: ${hourTimestamp.toISOString()}`);
+  const hourTimestamp = options?.targetHour
+    ? new Date(Date.UTC(
+        options.targetHour.getUTCFullYear(),
+        options.targetHour.getUTCMonth(),
+        options.targetHour.getUTCDate(),
+        options.targetHour.getUTCHours(),
+        0, 0, 0
+      ))
+    : new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        now.getUTCHours(),
+        0, 0, 0
+      ));
+  console.log(`${logPrefix} Hour timestamp: ${hourTimestamp.toISOString()}${isBackfill ? " (backfill)" : ""}`);
 
-  console.log("[Ingest] Starting data ingestion...");
+  console.log(`${logPrefix} Starting data ingestion...`);
 
   await loadHealthFromDB();
   await loadCatchUpStateFromDB();
@@ -1729,6 +1740,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
     const healthSummary = {
       job: "ingest",
       hour: hourBucket,
+      isBackfill,
       duration: `${jobDuration}ms`,
       rows: processed,
       lock: "acquired",
