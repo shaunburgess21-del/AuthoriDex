@@ -1,0 +1,119 @@
+Thanks. besides what we've built this evening, is there anything else you can think of that will enhance the site that I can get Replit to build.
+
+Yep — if you want high-ROI enhancements that improve “launch readiness” without dragging you into a 2-week rabbit hole, here are the best ones to ask Replit for (in priority order).
+
+1) Onboarding that actually teaches the product (2–3 screens)
+
+Most users won’t “discover” Vote + Predict + Trend Score logic organically.
+
+First visit (or first login): a 3-step coachmark walkthrough:
+
+“This is the Trend Score leaderboard” (what it means)
+
+“Tap Rate to vote 1–5” (what that affects)
+
+“Predict with credits” (what the user leaderboard is)
+
+Add “Don’t show again” + “Replay tour” in settings.
+
+Why it matters: reduces confusion/support, increases first-session activation.
+
+2) “What changed?” mini-panel on each person (trust + engagement)
+
+On a person page, add a small, clean “Drivers (last 24h)” card:
+
+Search Interest: ↑/↓ and value
+
+News volume: ↑/↓ (plus top 1 headline)
+
+Wikipedia: ↑/↓
+
+Trend Score: Δ%
+
+You already store a lot of diagnostics — this is mostly UI wiring.
+
+Why it matters: makes jumps feel earned and reduces “is this organic?” doubts.
+
+3) Watchlist + alerts (simple version)
+
+Let users star people and get:
+
+A Watchlist page (just their favorites + rank + 24h change)
+
+Optional alerts:
+
+“Notify me if they enter Top 20”
+
+“Notify me if 24h change exceeds X%”
+
+“Notify me if rank changes by ≥ Y”
+
+Start with in-app notifications only; add email/Telegram later.
+
+Why it matters: retention loop. People come back for their list.
+
+4) Rate flow upgrade: “Rate distribution” + “your last rating”
+
+Inside the Rate modal:
+
+Show a tiny distribution bar (how community rated 1–5)
+
+Show “You rated: 4/5 (tap to change)”
+
+Add a “rating confidence” helper line: “Based on N community ratings”
+
+Why it matters: clarifies what approval % means, makes voting feel grounded.
+
+5) Anti-confusion labels on Leaderboard rows
+
+Keep rows clean, but add microcopy cues:
+
+“24h” label aligned with the 24h movement number (so it’s not ambiguous)
+
+If you ever show approval again in rows, display it as a subtle badge with label “Approval” — never as a naked %.
+
+Why it matters: prevents the “two percentages = huh?” issue.
+
+6) “Market lifecycle” polish (predict UX)
+
+On market cards:
+
+Show status clearly: Open / Closing Soon / Closed Pending / Resolved
+
+“Closes in …” countdown
+
+After resolution: show “Outcome + your result” immediately:
+
+Won + payout
+
+Lost + stake
+
+Add a “My position” strip on every market you’ve bet on.
+
+Why it matters: prediction products live/die on clarity.
+
+7) Lightweight abuse tripwires (credits economy)
+
+You already have ledger + reconciliation. Add:
+
+Simple rate limits: max X bets per minute, max stake per market, max stake per hour (configurable)
+
+Flag patterns:
+
+same user betting both sides (if allowed, show warning)
+
+new account placing large stake immediately
+
+Why it matters: avoids obvious exploits before they become drama.
+
+8) Performance/UX: skeletons + optimistic updates everywhere
+
+You’ve done some. Make it consistent:
+
+Leaderboard loads: skeleton rows
+
+Rate submission: optimistic “Your rating saved” + instant UI update
+
+Predict placement: optimistic stake deduction + “Pending” state until confirmed
+
+Why it matters: the site feels “fast” even when it isn’t.
