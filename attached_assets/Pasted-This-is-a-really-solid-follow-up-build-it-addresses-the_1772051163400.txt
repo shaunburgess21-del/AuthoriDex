@@ -1,0 +1,97 @@
+This is a really solid follow-up build — it addresses the exact “sharp edges” you’d otherwise discover only once real users start betting.
+
+Here’s my quick audit of what Replit shipped, plus the only things I’d double-check.
+
+✅ What’s great here
+T002 “Awaiting Results” strip
+
+Perfect UX. Users hate ambiguity more than losing. This makes the closed→resolved gap feel intentional, not broken.
+
+T003 “My Positions (N)” filter
+
+This is a big usability upgrade once there are many markets. Bonus points for only showing it when:
+
+user is logged in and
+
+they actually have bets
+
+That avoids clutter for new users.
+
+T001 Multiple bets aggregation
+
+This is important. Without it, you get confusing outcomes like:
+
+“Won” on one bet, “Lost” on another, and the UI lies depending on which row you happened to fetch.
+
+Summing stakes/payouts + “Multiple positions” is the right first version.
+
+T004 User-facing payout breakdown endpoint
+
+Also very good — and the right scoping:
+
+authenticated only
+
+returns just what that user needs (pool totals + their stake + payout)
+
+This is exactly how you build trust without exposing other users’ positions.
+
+T005 friendlier rate limit copy
+
+Nice polish. Keep it friendly.
+
+🔍 Two things I would verify (fast checks)
+1) Security of /api/markets/:id/my-payout
+
+Make sure it is requireAuth and uses the authenticated user ID server-side — not a passed parameter.
+
+Also make sure it doesn’t leak:
+
+other users’ stakes
+
+identities
+
+per-entry totals if you consider that sensitive (pool totals are fine; “winner pool share” is fine; just don’t reveal competitor lists)
+
+2) “My Positions” filter includes all bet states you want
+
+Decide the product behavior:
+
+Should it include resolved markets you participated in? (I think yes, for a short period.)
+
+Should it include closed-pending? (yes)
+
+Should it include voided/refunded? (maybe hide by default, but accessible in “History”)
+
+If the filter is strictly “active bets only,” you may confuse users who placed bets and then the market resolved—they toggle “My Positions” and their bet disappears. A good default is:
+
+show markets where user has any bet with status in {active, won, lost, refunded, pending_resolution}
+
+🎯 One small UX improvement to make this feel “premium”
+
+On the “View details” payout breakdown, show the numbers in the same order every time:
+
+Your stake: 120 credits
+
+Outcome: Won / Lost / Refunded
+
+Your payout: 240 credits
+
+Net P&L: +120 credits
+
+Total pool: 1,000 credits
+
+Remainder: 0 (rounding)
+
+Users think in “what did I win/lose?” first, not in pool mechanics.
+
+✅ Overall verdict
+
+This is exactly the kind of iteration that makes the prediction section feel trustworthy and easy to use:
+
+outcomes are visible on the card,
+
+ambiguity is handled (“Awaiting Results”),
+
+users can focus on their own positions,
+
+and the system explains payouts without oversharing.
