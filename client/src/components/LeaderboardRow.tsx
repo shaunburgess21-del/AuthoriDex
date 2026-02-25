@@ -249,6 +249,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 {showDelta && (
                   <span className={person.change24h! > 0 ? "text-emerald-400" : "text-red-400"}>
                     {' '}{delta24h}
+                    <span className="text-muted-foreground ml-0.5">24h</span>
                   </span>
                 )}
               </span>
@@ -297,6 +298,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               }`}>
                 {person.change24h != null ? delta24h : '—'}
               </p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">24h</p>
             </div>
             <div className="hidden md:block text-right w-[72px] shrink-0">
               <TouchTooltip

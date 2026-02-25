@@ -221,6 +221,33 @@ async function getSnapshotRankMap(): Promise<Map<string, number>> {
   return map;
 }
 
+const MAX_BET_STAKE = 500;
+const BET_RATE_WINDOW_MS = 60_000;
+const BET_RATE_MAX = 10;
+const betRateMap = new Map<string, number[]>();
+
+function checkBetRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const timestamps = betRateMap.get(userId) || [];
+  const recent = timestamps.filter(t => now - t < BET_RATE_WINDOW_MS);
+  if (recent.length >= BET_RATE_MAX) {
+    betRateMap.set(userId, recent);
+    return false;
+  }
+  recent.push(now);
+  betRateMap.set(userId, recent);
+  return true;
+}
+
+setInterval(() => {
+  const cutoff = Date.now() - BET_RATE_WINDOW_MS * 2;
+  for (const [uid, ts] of betRateMap) {
+    const filtered = ts.filter(t => t > cutoff);
+    if (filtered.length === 0) betRateMap.delete(uid);
+    else betRateMap.set(uid, filtered);
+  }
+}, 300_000);
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Using local PostgreSQL database instead of Supabase
   // Supabase seeding disabled while Supabase is paused
@@ -4369,8 +4396,59 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   // Get user's predictions (placeholder for now)
   app.get("/api/me/predictions", requireAuth, async (req: AuthRequest, res) => {
     try {
-      // For now, return empty array until predictions system is fully implemented
-      res.json([]);
+      const userId = req.userId!;
+      const bets = await db
+        .select({
+          betId: marketBets.id,
+          marketId: marketBets.marketId,
+          entryId: marketBets.entryId,
+          stakeAmount: marketBets.stakeAmount,
+          potentialPayout: marketBets.potentialPayout,
+          betStatus: marketBets.status,
+          createdAt: marketBets.createdAt,
+          marketSlug: predictionMarkets.slug,
+          marketTitle: predictionMarkets.title,
+          marketStatus: predictionMarkets.status,
+          marketType: predictionMarkets.marketType,
+          winnerEntryId: predictionMarkets.winnerEntryId,
+          entryLabel: marketEntries.label,
+        })
+        .from(marketBets)
+        .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
+        .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
+        .where(eq(marketBets.userId, userId))
+        .orderBy(desc(marketBets.createdAt))
+        .limit(100);
+
+      const results = bets.map(b => {
+        let result: 'won' | 'lost' | 'refunded' | 'pending' = 'pending';
+        let payout = 0;
+        if (b.marketStatus === 'RESOLVED') {
+          if (b.winnerEntryId && b.entryId === b.winnerEntryId) {
+            result = 'won';
+            payout = b.potentialPayout || 0;
+          } else {
+            result = 'lost';
+          }
+        } else if (b.marketStatus === 'VOID') {
+          result = 'refunded';
+          payout = b.stakeAmount;
+        }
+        return {
+          betId: b.betId,
+          marketId: b.marketId,
+          marketSlug: b.marketSlug,
+          marketTitle: b.marketTitle,
+          marketStatus: b.marketStatus,
+          marketType: b.marketType,
+          entryLabel: b.entryLabel,
+          stakeAmount: b.stakeAmount,
+          result,
+          payout,
+        };
+      });
+
+      res.json(results);
     } catch (error: any) {
       console.error("Error fetching user predictions:", error.message);
       res.status(500).json({ error: "Failed to fetch predictions" });
@@ -8407,6 +8485,14 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
 
       if (!entryId || !stakeAmount || typeof stakeAmount !== "number" || stakeAmount <= 0) {
         return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
+      }
+
+      if (stakeAmount > MAX_BET_STAKE) {
+        return res.status(400).json({ error: `Maximum stake is ${MAX_BET_STAKE} credits` });
+      }
+
+      if (!checkBetRateLimit(authReq.userId!)) {
+        return res.status(429).json({ error: "Too many bets — please wait a moment" });
       }
 
       const [market] = await db

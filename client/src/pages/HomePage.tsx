@@ -495,6 +495,11 @@ export default function HomePage() {
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
   const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    try {
+      return localStorage.getItem("authoridex-onboarding-dismissed") !== "1";
+    } catch { return false; }
+  });
   const [showVoteTip, setShowVoteTip] = useState(() => {
     try {
       return localStorage.getItem("authoridex-vote-tip-dismissed") !== "1" && localStorage.getItem("authoridex-has-ever-voted") !== "1";
@@ -813,6 +818,29 @@ export default function HomePage() {
         </div>
       </div>
       */}
+      {showOnboarding && (
+        <div className="container mx-auto px-4 pt-4 max-w-7xl">
+          <div className="flex items-start gap-3 p-4 rounded-md border bg-blue-500/5 border-blue-400/20" data-testid="banner-onboarding">
+            <Info className="h-5 w-5 text-blue-400 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-blue-300">Welcome to AuthoriDex</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Real-time celebrity attention tracking powered by Search, News, and Wikipedia data. Rate people to shape approval scores, and predict trend movements to earn credits and climb the leaderboard.</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0"
+              onClick={() => {
+                setShowOnboarding(false);
+                try { localStorage.setItem("authoridex-onboarding-dismissed", "1"); } catch {}
+              }}
+              data-testid="button-dismiss-onboarding"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="container mx-auto px-4 py-8 max-w-7xl" data-content-section>
                             <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2 mb-4 md:grid md:grid-cols-3 md:overflow-visible" data-testid="market-pulse-row">
                 <MarketPulseCard 
