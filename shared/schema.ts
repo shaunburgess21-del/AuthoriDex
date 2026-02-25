@@ -720,6 +720,7 @@ export const creditLedger = pgTable("credit_ledger", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
   uniqueIdempotency: unique().on(table.userId, table.idempotencyKey),
+  userHistoryIdx: index("credit_ledger_user_history_idx").on(table.userId, table.createdAt),
 }));
 
 export const insertCreditLedgerSchema = createInsertSchema(creditLedger).omit({

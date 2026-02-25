@@ -13,6 +13,7 @@ interface SettlementResult {
   losersCount: number;
   payoutsDistributed: number;
   remainder: number;
+  remainderPolicy: 'burned';
   alreadySettled?: boolean;
 }
 
@@ -44,7 +45,7 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string):
   const [market] = await db.select({ status: predictionMarkets.status })
     .from(predictionMarkets).where(eq(predictionMarkets.id, marketId)).limit(1);
   if (market && (market.status === "RESOLVED" || market.status === "VOID")) {
-    return { totalPool: 0, winnersCount: 0, losersCount: 0, payoutsDistributed: 0, remainder: 0, alreadySettled: true };
+    return { totalPool: 0, winnersCount: 0, losersCount: 0, payoutsDistributed: 0, remainder: 0, remainderPolicy: 'burned', alreadySettled: true };
   }
 
   const allBets = await db
@@ -58,7 +59,7 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string):
     .where(and(eq(marketBets.marketId, marketId), eq(marketBets.status, "active")));
 
   if (allBets.length === 0) {
-    return { totalPool: 0, winnersCount: 0, losersCount: 0, payoutsDistributed: 0, remainder: 0 };
+    return { totalPool: 0, winnersCount: 0, losersCount: 0, payoutsDistributed: 0, remainder: 0, remainderPolicy: 'burned' };
   }
 
   const totalPool = allBets.reduce((sum, b) => sum + b.stakeAmount, 0);
@@ -106,7 +107,7 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string):
     .where(and(eq(marketEntries.marketId, marketId), sql`${marketEntries.id} != ${winnerEntryId}`));
 
   const remainder = totalPool - payoutsDistributed;
-  log(`[MarketResolver] Settlement: market=${marketId}, pool=${totalPool}, payouts=${payoutsDistributed}, remainder=${remainder}, winners=${winnerBets.length}, losers=${allBets.length - winnerBets.length}`);
+  log(`[MarketResolver] Settlement: market=${marketId}, pool=${totalPool}, payouts=${payoutsDistributed}, remainder=${remainder} (burned), winners=${winnerBets.length}, losers=${allBets.length - winnerBets.length}`);
 
   return {
     totalPool,
@@ -114,6 +115,7 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string):
     losersCount: allBets.length - winnerBets.length,
     payoutsDistributed,
     remainder,
+    remainderPolicy: 'burned',
   };
 }
 

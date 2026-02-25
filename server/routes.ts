@@ -9225,6 +9225,104 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
 
+  app.get("/api/admin/credit-reconciliation", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const allProfiles = await db.select({ id: profiles.id, predictCredits: profiles.predictCredits }).from(profiles);
+
+      const ledgerSums = await db
+        .select({
+          userId: creditLedger.userId,
+          ledgerSum: sql<number>`COALESCE(SUM(${creditLedger.amount}), 0)::int`,
+          entryCount: sql<number>`COUNT(*)::int`,
+        })
+        .from(creditLedger)
+        .groupBy(creditLedger.userId);
+
+      const ledgerMap = new Map(ledgerSums.map(l => [l.userId, { sum: l.ledgerSum, count: l.entryCount }]));
+
+      const discrepancies: Array<{
+        userId: string;
+        profileBalance: number;
+        ledgerSum: number;
+        delta: number;
+        ledgerEntries: number;
+      }> = [];
+
+      for (const p of allProfiles) {
+        const ledger = ledgerMap.get(p.id);
+        if (!ledger) continue;
+        const delta = p.predictCredits - ledger.sum;
+        if (delta !== 0) {
+          discrepancies.push({
+            userId: p.id,
+            profileBalance: p.predictCredits,
+            ledgerSum: ledger.sum,
+            delta,
+            ledgerEntries: ledger.count,
+          });
+        }
+      }
+
+      res.json({
+        totalProfiles: allProfiles.length,
+        profilesWithLedger: ledgerSums.length,
+        reconciledCount: ledgerSums.length - discrepancies.length,
+        discrepancyCount: discrepancies.length,
+        discrepancies,
+      });
+    } catch (error: any) {
+      console.error("Error in credit reconciliation:", error.message);
+      res.status(500).json({ error: "Failed to run reconciliation" });
+    }
+  });
+
+  app.get("/api/admin/markets/:id/payout-summary", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+
+      const [market] = await db.select().from(predictionMarkets).where(eq(predictionMarkets.id, id)).limit(1);
+      if (!market) return res.status(404).json({ error: "Market not found" });
+
+      const bets = await db.select().from(marketBets).where(eq(marketBets.marketId, id));
+      const settledBets = bets.filter(b => b.status === 'won' || b.status === 'lost' || b.status === 'refunded');
+      const winnerBets = bets.filter(b => b.status === 'won');
+      const loserBets = bets.filter(b => b.status === 'lost');
+
+      const totalPool = bets.reduce((s, b) => s + b.stakeAmount, 0);
+      const totalPayouts = winnerBets.reduce((s, b) => s + (b.payoutAmount ?? 0), 0);
+      const remainder = totalPool - totalPayouts;
+      const largestPayout = winnerBets.length > 0 ? Math.max(...winnerBets.map(b => b.payoutAmount ?? 0)) : 0;
+
+      const ledgerEntries = await db.select({ id: creditLedger.id, txnType: creditLedger.txnType })
+        .from(creditLedger)
+        .where(sql`${creditLedger.idempotencyKey} LIKE ${'%' + id + '%'}`);
+
+      res.json({
+        marketId: id,
+        marketType: market.marketType,
+        status: market.status,
+        totalPool,
+        totalBets: bets.length,
+        settledBets: settledBets.length,
+        winnersCount: winnerBets.length,
+        losersCount: loserBets.length,
+        totalPayouts,
+        remainder,
+        remainderPolicy: 'burned',
+        largestPayout,
+        ledgerEntries: {
+          total: ledgerEntries.length,
+          stakes: ledgerEntries.filter(e => e.txnType === 'prediction_stake').length,
+          payouts: ledgerEntries.filter(e => e.txnType === 'prediction_payout').length,
+          refunds: ledgerEntries.filter(e => e.txnType === 'prediction_refund').length,
+        },
+      });
+    } catch (error: any) {
+      console.error("Error fetching payout summary:", error.message);
+      res.status(500).json({ error: "Failed to fetch payout summary" });
+    }
+  });
+
   app.post("/api/admin/test-payout-pipeline", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     if (process.env.ENABLE_TEST_ENDPOINTS !== 'true') {
       return res.status(403).json({ error: "Test endpoints disabled. Set ENABLE_TEST_ENDPOINTS=true to enable." });
