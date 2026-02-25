@@ -1,0 +1,77 @@
+Yep — that all sounds correct, and it’s exactly the “last 5%” that makes the reconciliation + ledger approach actually useful.
+
+A few notes (mostly just to sanity-check and make sure you’re truly locked-in):
+
+1) Initial grant ledger entry: ✅ correct fix
+
+Writing an initial_grant ledger entry during /api/profile/sync is the right move.
+
+Idempotency key like initial_grant_{userId} is perfect.
+
+Doing it in the same transaction as profile creation is ideal (so you never have profile credits without a ledger baseline).
+
+One tiny improvement to ask for (optional)
+
+Make sure that if profile already exists but ledger is missing (edge case), /api/profile/sync can safely “self-heal” by inserting the initial grant only if absent (idempotency already does this, so you’re basically covered).
+
+2) Backfill: ✅ correct, and the drift story makes sense
+
+The “-100 drift” caused by leftover E2E refund ledger entries is exactly the kind of thing reconciliation is supposed to reveal.
+
+Cleaning those test artifacts out is fine as long as:
+
+those were truly test-only entries (sounds like they were),
+
+and you didn’t delete legit real-user ledger entries (you don’t have real users yet, so this is safe).
+
+If you want to be extra safe: the cleanup query should target entries with a clear test marker (e.g., idempotency_key LIKE 'test_%' or a metadata.isTest=true). If Replit didn’t tag them that way, it’s worth adding going forward.
+
+3) Tripwire logs: ✅ good, with one nuance
+
+Both are useful and “greppable”:
+
+[CREDIT DRIFT] on reconciliation mismatch
+
+[PAYOUT REMAINDER LARGE] when abs(remainder) > 1
+
+Only nuance: if reconciliation logs per-user mismatches and you ever have a widespread bug, it could spam logs. That’s okay for now. Later you might want:
+
+one summary line per run + top N offenders
+
+plus per-user lines only in debug mode
+
+But for early-stage, this is totally fine.
+
+4) You’re now at “operator-ready”
+
+With:
+
+ledger baseline
+
+transactional bet placement + settlement ledger entries
+
+idempotency guards
+
+reconciliation endpoint
+
+payout summary endpoint
+
+E2E invariants passing
+
+…you’re in the zone where you can confidently start seeding markets and letting real usage happen.
+
+What I’d do next (quick)
+
+Ask Replit to run (or add) one tiny smoke test you can repeat anytime:
+
+“Ledger baseline check”
+
+Create a fresh test user
+
+Ensure profiles.predictCredits == 1000
+
+Ensure ledger sum for that user == 1000
+
+Reconciliation shows drift 0
+
+If that stays true, your foundation is solid.
