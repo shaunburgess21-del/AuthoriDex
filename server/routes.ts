@@ -2566,6 +2566,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/leaderboard/users - User prediction leaderboard ranked by P&L
+  app.get("/api/leaderboard/users", optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const period = (req.query.period as string) || 'all';
+      const search = (req.query.search as string) || '';
+      const page = parseInt(req.query.page as string) || 0;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const userId = req.userId;
+
+      // Build period filter on settledAt
+      let periodFilter = sql`TRUE`;
+      if (period === 'today') {
+        periodFilter = sql`${marketBets.settledAt} >= NOW() - INTERVAL '1 day'`;
+      } else if (period === 'week') {
+        periodFilter = sql`${marketBets.settledAt} >= NOW() - INTERVAL '7 days'`;
+      } else if (period === 'month') {
+        periodFilter = sql`${marketBets.settledAt} >= NOW() - INTERVAL '30 days'`;
+      }
+
+      // Aggregate P&L per user from resolved bets
+      const statsRows = await db
+        .select({
+          userId: marketBets.userId,
+          profitLoss: sql<number>`
+            SUM(CASE WHEN ${marketBets.status} = 'won' THEN ${marketBets.payoutAmount}
+                     WHEN ${marketBets.status} = 'lost' THEN -${marketBets.stakeAmount}
+                     ELSE 0 END)`.as('profit_loss'),
+          volume: sql<number>`SUM(${marketBets.stakeAmount})`.as('volume'),
+          winCount: sql<number>`COUNT(*) FILTER (WHERE ${marketBets.status} = 'won')`.as('win_count'),
+          totalResolved: sql<number>`COUNT(*) FILTER (WHERE ${marketBets.status} IN ('won', 'lost'))`.as('total_resolved'),
+        })
+        .from(marketBets)
+        .where(and(
+          inArray(marketBets.status, ['won', 'lost']),
+          periodFilter
+        ))
+        .groupBy(marketBets.userId)
+        .having(sql`COUNT(*) FILTER (WHERE ${marketBets.status} IN ('won', 'lost')) > 0`);
+
+      if (statsRows.length === 0) {
+        return res.json({ data: [], total: 0, userEntry: null });
+      }
+
+      // Sort by profitLoss desc
+      statsRows.sort((a, b) => (Number(b.profitLoss) || 0) - (Number(a.profitLoss) || 0));
+
+      // Fetch profile info for all user IDs
+      const userIds = statsRows.map(r => r.userId);
+      const profileRows = await db
+        .select({ id: profiles.id, username: profiles.username, fullName: profiles.fullName, avatarUrl: profiles.avatarUrl, isPublic: profiles.isPublic, rank: profiles.rank })
+        .from(profiles)
+        .where(inArray(profiles.id, userIds));
+      const profileMap = new Map(profileRows.map(p => [p.id, p]));
+
+      // Build ranked list, apply search filter
+      const searchLower = search.trim().toLowerCase();
+      const ranked = statsRows
+        .map((r, i) => {
+          const profile = profileMap.get(r.userId);
+          return {
+            rank: i + 1,
+            userId: r.userId,
+            username: profile?.username || null,
+            displayName: profile?.fullName || profile?.username || 'Anonymous',
+            avatarUrl: profile?.avatarUrl || null,
+            isPublic: profile?.isPublic ?? true,
+            userRank: profile?.rank || 'Citizen',
+            profitLoss: Number(r.profitLoss) || 0,
+            volume: Number(r.volume) || 0,
+            winCount: Number(r.winCount) || 0,
+            totalResolved: Number(r.totalResolved) || 0,
+            winRate: Number(r.totalResolved) > 0 ? Math.round((Number(r.winCount) / Number(r.totalResolved)) * 100) : 0,
+          };
+        })
+        .filter(r => !searchLower || (r.username || '').toLowerCase().includes(searchLower) || r.displayName.toLowerCase().includes(searchLower));
+
+      const total = ranked.length;
+
+      // Find logged-in user's entry (before pagination)
+      let userEntry = null;
+      if (userId) {
+        const found = ranked.find(r => r.userId === userId);
+        if (found) userEntry = found;
+      }
+
+      const data = ranked.slice(page * limit, page * limit + limit);
+
+      res.json({ data, total, userEntry });
+    } catch (error: any) {
+      console.error("[leaderboard/users] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch user leaderboard" });
+    }
+  });
+
   // POST /api/celebrity-metrics/sync - Sync all celebrity metrics (admin)
   app.post("/api/celebrity-metrics/sync", async (req, res) => {
     try {

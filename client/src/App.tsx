@@ -23,6 +23,7 @@ import MarketDetailPage from "@/pages/MarketDetailPage";
 import PollDetailPage from "@/pages/PollDetailPage";
 import OpinionPollDetailPage from "@/pages/OpinionPollDetailPage";
 import MatchupDetailPage from "@/pages/MatchupDetailPage";
+import UserLeaderboardPage from "@/pages/UserLeaderboardPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -44,6 +45,7 @@ function Router() {
       <Route path="/polls/:slug" component={PollDetailPage} />
       <Route path="/vote/opinion-polls/:slug" component={OpinionPollDetailPage} />
       <Route path="/vote/matchups/:slug" component={MatchupDetailPage} />
+      <Route path="/predictions/leaderboard" component={UserLeaderboardPage} />
       <Route path="/admin" component={AdminDashboard} />
       <Route component={NotFound} />
     </Switch>

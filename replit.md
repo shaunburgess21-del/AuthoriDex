@@ -12,7 +12,7 @@ Preferred communication style: Simple, everyday language.
 - **Technology Stack**: React 18 with TypeScript, Vite, Wouter, TanStack Query, Tailwind CSS.
 - **UI/UX**: Radix UI and shadcn/ui (New York style) with custom dark/light themes, HSL color tokens, and a glassy neon aesthetic. Features a mobile-first responsive design.
 - **Key Features**: Global Favorites Filter, Custom Topic Support, "+ Suggest" buttons, Bloomberg-style Compare Momentum Graph, and interactive elements.
-- **Page Structure**: Core pages include Home, Vote, Predict, Me, Public Profiles, and an Admin Panel for site management.
+- **Page Structure**: Core pages include Home, Vote, Predict, Me, Public Profiles, Prediction Leaderboard (`/predictions/leaderboard`), and an Admin Panel for site management.
 
 ### Backend
 - **Technology Stack**: Node.js with Express.js, TypeScript, Drizzle ORM.

@@ -4,9 +4,6 @@ import { useAuth, UserProfile } from "@/contexts/AuthContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -21,7 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { 
-  User, 
+  User,
+  Menu,
   Trophy, 
   Vote, 
   Settings, 
@@ -30,16 +28,12 @@ import {
   Moon, 
   Shield, 
   Sparkles,
-  HelpCircle,
-  FileText,
-  ExternalLink,
   ChevronRight,
   TrendingUp,
-  Target,
   Zap,
   Wallet,
+  LayoutDashboard,
 } from "lucide-react";
-import { SiDiscord, SiX } from "react-icons/si";
 
 function useTheme() {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
@@ -182,6 +176,18 @@ function UserMenuContent({
         </div>
 
         <Separator />
+
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
+          onClick={() => handleNavClick("/predictions/leaderboard")}
+          data-testid="link-prediction-leaderboard-loggedout"
+        >
+          <Trophy className="h-4 w-4 text-amber-400" />
+          <span className="text-sm">Prediction Leaderboard</span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
+        </button>
+
+        <Separator />
         
         <button
           className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors"
@@ -217,7 +223,13 @@ function UserMenuContent({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="font-semibold truncate">{displayName}</h3>
-              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" data-testid="button-settings">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 shrink-0"
+                data-testid="button-settings"
+                onClick={() => handleNavClick("/me/settings")}
+              >
                 <Settings className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -253,6 +265,15 @@ function UserMenuContent({
         <button
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
           onClick={() => handleNavClick("/me")}
+          data-testid="link-my-account"
+        >
+          <LayoutDashboard className="h-4 w-4 text-blue-400" />
+          <span className="flex-1 text-sm">My Account</span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </button>
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
+          onClick={() => handleNavClick("/me/predictions")}
           data-testid="link-my-predictions"
         >
           <TrendingUp className="h-4 w-4 text-violet-400" />
@@ -262,7 +283,7 @@ function UserMenuContent({
         </button>
         <button
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
-          onClick={() => handleNavClick("/me")}
+          onClick={() => handleNavClick("/me/votes")}
           data-testid="link-my-votes"
         >
           <Vote className="h-4 w-4 text-cyan-400" />
@@ -272,11 +293,11 @@ function UserMenuContent({
         </button>
         <button
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
-          onClick={() => handleNavClick("/me")}
+          onClick={() => handleNavClick("/predictions/leaderboard")}
           data-testid="link-leaderboard"
         >
           <Trophy className="h-4 w-4 text-amber-400" />
-          <span className="flex-1 text-sm">Leaderboard</span>
+          <span className="flex-1 text-sm">Prediction Leaderboard</span>
           <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
             <Zap className="h-2.5 w-2.5 mr-0.5" />
             {profile?.winRate}%
@@ -304,54 +325,7 @@ function UserMenuContent({
 
       <Separator className="my-1" />
 
-      <div className="px-2 py-1">
-        <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Support</p>
-        <button
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left text-sm text-muted-foreground"
-          data-testid="link-help"
-        >
-          <HelpCircle className="h-4 w-4" />
-          Help Center
-        </button>
-        <button
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left text-sm text-muted-foreground"
-          data-testid="link-docs"
-        >
-          <FileText className="h-4 w-4" />
-          Documentation
-        </button>
-        <button
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left text-sm text-muted-foreground"
-          data-testid="link-terms"
-        >
-          <ExternalLink className="h-4 w-4" />
-          Terms of Use
-        </button>
-      </div>
-
-      <Separator className="my-1" />
-
-      <div className="px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <a 
-            href="https://discord.gg" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="h-8 w-8 rounded-full bg-muted/50 flex items-center justify-center hover:bg-muted transition-colors"
-            data-testid="link-discord"
-          >
-            <SiDiscord className="h-4 w-4" />
-          </a>
-          <a 
-            href="https://x.com" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="h-8 w-8 rounded-full bg-muted/50 flex items-center justify-center hover:bg-muted transition-colors"
-            data-testid="link-twitter"
-          >
-            <SiX className="h-4 w-4" />
-          </a>
-        </div>
+      <div className="px-4 py-3 flex justify-end">
         <Button 
           variant="ghost" 
           size="sm" 
@@ -396,7 +370,8 @@ export function UserMenu() {
   };
 
   const avatarDisplayName = profile?.fullName || profile?.username || "User";
-  const avatarButton = (
+
+  const triggerButton = (
     <button
       className="h-9 w-9 rounded-full ring-2 ring-blue-500/30 hover:ring-blue-500/60 transition-all overflow-hidden flex items-center justify-center bg-muted"
       data-testid="button-user-menu"
@@ -414,7 +389,7 @@ export function UserMenu() {
           </div>
         )
       ) : (
-        <User className="h-4 w-4 text-muted-foreground" />
+        <Menu className="h-4 w-4 text-muted-foreground" />
       )}
     </button>
   );
@@ -440,7 +415,7 @@ export function UserMenu() {
               </div>
             )
           ) : (
-            <User className="h-4 w-4 text-muted-foreground" />
+            <Menu className="h-4 w-4 text-muted-foreground" />
           )}
         </button>
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -469,7 +444,7 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        {avatarButton}
+        {triggerButton}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[300px] p-0">
         <UserMenuContent
