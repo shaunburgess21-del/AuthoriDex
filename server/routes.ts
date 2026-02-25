@@ -9335,6 +9335,252 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
     }
   });
 
+  app.get("/api/admin/markets/pending", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const pendingMarkets = await db.select().from(predictionMarkets)
+        .where(eq(predictionMarkets.status, "CLOSED_PENDING"))
+        .orderBy(predictionMarkets.endAt);
+
+      const marketIds = pendingMarkets.map(m => m.id);
+      let betStats: Record<string, { pool: number; betCount: number; uniqueBettors: number; maxStakeUser: { userId: string; total: number } | null }> = {};
+      
+      if (marketIds.length > 0) {
+        const bets = await db.select().from(marketBets).where(sql`${marketBets.marketId} IN (${sql.join(marketIds.map(id => sql`${id}`), sql`, `)})`);
+        
+        for (const bet of bets) {
+          if (!betStats[bet.marketId]) {
+            betStats[bet.marketId] = { pool: 0, betCount: 0, uniqueBettors: 0, maxStakeUser: null };
+          }
+          betStats[bet.marketId].pool += bet.stakeAmount;
+          betStats[bet.marketId].betCount += 1;
+        }
+        
+        for (const mid of marketIds) {
+          if (!betStats[mid]) {
+            betStats[mid] = { pool: 0, betCount: 0, uniqueBettors: 0, maxStakeUser: null };
+          }
+          const mBets = bets.filter(b => b.marketId === mid);
+          const userTotals = new Map<string, number>();
+          for (const b of mBets) {
+            userTotals.set(b.userId, (userTotals.get(b.userId) || 0) + b.stakeAmount);
+          }
+          betStats[mid].uniqueBettors = userTotals.size;
+          let maxUser: { userId: string; total: number } | null = null;
+          for (const [uid, total] of userTotals) {
+            if (!maxUser || total > maxUser.total) maxUser = { userId: uid, total };
+          }
+          betStats[mid].maxStakeUser = maxUser;
+        }
+      }
+
+      const entries = marketIds.length > 0
+        ? await db.select().from(marketEntries).where(sql`${marketEntries.marketId} IN (${sql.join(marketIds.map(id => sql`${id}`), sql`, `)})`)
+        : [];
+      const entriesByMarket = new Map<string, typeof entries>();
+      for (const e of entries) {
+        if (!entriesByMarket.has(e.marketId)) entriesByMarket.set(e.marketId, []);
+        entriesByMarket.get(e.marketId)!.push(e);
+      }
+
+      const now = Date.now();
+      const result = pendingMarkets.map(m => {
+        const stats = betStats[m.id] || { pool: 0, betCount: 0, uniqueBettors: 0, maxStakeUser: null };
+        const pendingMs = m.endAt ? now - new Date(m.endAt).getTime() : 0;
+        const pendingHours = Math.floor(pendingMs / (1000 * 60 * 60));
+        const concentration = stats.pool > 0 && stats.maxStakeUser ? stats.maxStakeUser.total / stats.pool : 0;
+        
+        const warnings: string[] = [];
+        if (stats.betCount === 0) warnings.push("no_bets");
+        if (pendingHours > 1) warnings.push("stuck");
+        if (concentration > 0.5) warnings.push("concentration");
+
+        return {
+          ...m,
+          pool: stats.pool,
+          betCount: stats.betCount,
+          uniqueBettors: stats.uniqueBettors,
+          pendingHours,
+          warnings,
+          entries: entriesByMarket.get(m.id) || [],
+        };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error fetching pending markets:", error.message);
+      res.status(500).json({ error: "Failed to fetch pending markets" });
+    }
+  });
+
+  app.get("/api/admin/markets/resolved", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const resolvedMarkets = await db.select().from(predictionMarkets)
+        .where(sql`${predictionMarkets.status} IN ('RESOLVED', 'VOID')`)
+        .orderBy(desc(predictionMarkets.resolvedAt))
+        .limit(50);
+
+      const marketIds = resolvedMarkets.map(m => m.id);
+      let betStats: Record<string, { pool: number; betCount: number; uniqueBettors: number; winnersCount: number; losersCount: number; totalPayouts: number }> = {};
+      
+      if (marketIds.length > 0) {
+        const bets = await db.select().from(marketBets).where(sql`${marketBets.marketId} IN (${sql.join(marketIds.map(id => sql`${id}`), sql`, `)})`);
+        
+        for (const mid of marketIds) {
+          const mBets = bets.filter(b => b.marketId === mid);
+          const uniqueUsers = new Set(mBets.map(b => b.userId));
+          betStats[mid] = {
+            pool: mBets.reduce((s, b) => s + b.stakeAmount, 0),
+            betCount: mBets.length,
+            uniqueBettors: uniqueUsers.size,
+            winnersCount: mBets.filter(b => b.status === 'won').length,
+            losersCount: mBets.filter(b => b.status === 'lost').length,
+            totalPayouts: mBets.filter(b => b.status === 'won').reduce((s, b) => s + (b.payoutAmount ?? 0), 0),
+          };
+        }
+      }
+
+      const profilesMap = new Map<string, string>();
+      const settlerIds = resolvedMarkets.map(m => m.settledBy).filter(Boolean) as string[];
+      if (settlerIds.length > 0) {
+        const settlers = await db.select({ id: profiles.id, username: profiles.username }).from(profiles)
+          .where(sql`${profiles.id} IN (${sql.join(settlerIds.map(id => sql`${id}`), sql`, `)})`);
+        for (const s of settlers) {
+          profilesMap.set(s.id, s.username || s.id);
+        }
+      }
+
+      const result = resolvedMarkets.map(m => {
+        const stats = betStats[m.id] || { pool: 0, betCount: 0, uniqueBettors: 0, winnersCount: 0, losersCount: 0, totalPayouts: 0 };
+        const remainder = stats.pool - stats.totalPayouts;
+        return {
+          ...m,
+          pool: stats.pool,
+          betCount: stats.betCount,
+          uniqueBettors: stats.uniqueBettors,
+          winnersCount: stats.winnersCount,
+          losersCount: stats.losersCount,
+          totalPayouts: stats.totalPayouts,
+          remainder,
+          resolverName: m.resolveMethod === "admin_manual" && m.settledBy ? (profilesMap.get(m.settledBy) || "Admin") : "Auto",
+        };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error fetching resolved markets:", error.message);
+      res.status(500).json({ error: "Failed to fetch resolved markets" });
+    }
+  });
+
+  app.get("/api/admin/markets/:id/preview-resolution", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const [market] = await db.select().from(predictionMarkets).where(eq(predictionMarkets.id, id)).limit(1);
+      if (!market) return res.status(404).json({ error: "Market not found" });
+
+      const entries = await db.select().from(marketEntries).where(eq(marketEntries.marketId, id));
+      const bets = await db.select().from(marketBets).where(and(eq(marketBets.marketId, id), eq(marketBets.status, 'active')));
+
+      const totalPool = bets.reduce((s, b) => s + b.stakeAmount, 0);
+
+      const usernames = new Map<string, string>();
+      const userIds = [...new Set(bets.map(b => b.userId))];
+      if (userIds.length > 0) {
+        const profs = await db.select({ id: profiles.id, username: profiles.username }).from(profiles)
+          .where(sql`${profiles.id} IN (${sql.join(userIds.map(uid => sql`${uid}`), sql`, `)})`);
+        for (const p of profs) usernames.set(p.id, p.username || p.id.slice(0, 8));
+      }
+
+      const previews = entries.map(entry => {
+        const entryBets = bets.filter(b => b.entryId === entry.id);
+        const winnerPool = entryBets.reduce((s, b) => s + b.stakeAmount, 0);
+        const loserBets = bets.filter(b => b.entryId !== entry.id);
+
+        let payoutsDistributed = 0;
+        const payoutDetails: { userId: string; username: string; stake: number; payout: number }[] = [];
+
+        if (winnerPool > 0 && totalPool > 0) {
+          for (const wb of entryBets) {
+            const share = wb.stakeAmount / winnerPool;
+            const payout = Math.round(share * totalPool);
+            payoutsDistributed += payout;
+            payoutDetails.push({
+              userId: wb.userId,
+              username: usernames.get(wb.userId) || wb.userId.slice(0, 8),
+              stake: wb.stakeAmount,
+              payout,
+            });
+          }
+        }
+
+        const remainder = totalPool - payoutsDistributed;
+
+        return {
+          entryId: entry.id,
+          entryLabel: entry.label,
+          totalStaked: winnerPool,
+          betCount: entryBets.length,
+          winnersCount: entryBets.length,
+          losersCount: loserBets.length,
+          totalPayouts: payoutsDistributed,
+          remainder,
+          payoutDetails: payoutDetails.sort((a, b) => b.payout - a.payout).slice(0, 10),
+        };
+      });
+
+      res.json({
+        marketId: id,
+        title: market.title,
+        marketType: market.marketType,
+        totalPool,
+        totalBets: bets.length,
+        uniqueBettors: new Set(bets.map(b => b.userId)).size,
+        entries: previews,
+      });
+    } catch (error: any) {
+      console.error("Error previewing resolution:", error.message);
+      res.status(500).json({ error: "Failed to preview resolution" });
+    }
+  });
+
+  app.get("/api/admin/users/:id/credit-history", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const [profile] = await db.select().from(profiles).where(eq(profiles.id, id)).limit(1);
+      if (!profile) return res.status(404).json({ error: "User not found" });
+
+      const history = await db.select().from(creditLedger)
+        .where(eq(creditLedger.userId, id))
+        .orderBy(desc(creditLedger.createdAt))
+        .limit(200);
+
+      const ledgerSum = history.reduce((s, h) => s + h.amount, 0);
+      const drift = profile.predictCredits - ledgerSum;
+
+      res.json({
+        profile: {
+          id: profile.id,
+          username: profile.username,
+          fullName: profile.fullName,
+          role: profile.role,
+          rank: profile.rank,
+          xpPoints: profile.xpPoints,
+          predictCredits: profile.predictCredits,
+          totalVotes: profile.totalVotes,
+          totalPredictions: profile.totalPredictions,
+          winRate: profile.winRate,
+          createdAt: profile.createdAt,
+        },
+        ledgerSum,
+        drift,
+        entries: history,
+      });
+    } catch (error: any) {
+      console.error("Error fetching credit history:", error.message);
+      res.status(500).json({ error: "Failed to fetch credit history" });
+    }
+  });
+
   app.post("/api/admin/test-payout-pipeline", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     if (process.env.ENABLE_TEST_ENDPOINTS !== 'true') {
       return res.status(403).json({ error: "Test endpoints disabled. Set ENABLE_TEST_ENDPOINTS=true to enable." });

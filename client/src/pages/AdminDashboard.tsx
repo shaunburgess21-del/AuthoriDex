@@ -56,6 +56,8 @@ import {
 import { AdminUnderratedOverrated } from "@/components/admin/AdminUnderratedOverrated";
 import { AdminCurateProfile } from "@/components/admin/AdminCurateProfile";
 import { AdminInductionQueue } from "@/components/admin/AdminInductionQueue";
+import { AdminSettlementCenter } from "@/components/admin/AdminSettlementCenter";
+import { AdminUserCreditHistory } from "@/components/admin/AdminUserCreditHistory";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1242,6 +1244,7 @@ export default function AdminDashboard() {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [creditAdjustment, setCreditAdjustment] = useState({ amount: 0, reason: "" });
   const [showCreditModal, setShowCreditModal] = useState(false);
+  const [creditHistoryUserId, setCreditHistoryUserId] = useState<string | null>(null);
   const [confirmText, setConfirmText] = useState("");
   
   const [showCelebrityModal, setShowCelebrityModal] = useState(false);
@@ -4376,47 +4379,7 @@ export default function AdminDashboard() {
 
         {/* Settlement Section */}
         {activeSection === "settlement" && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold">Settlement Center</h2>
-              <p className="text-muted-foreground">Resolve closed markets and distribute payouts</p>
-            </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Pending Settlements</CardTitle>
-                <CardDescription>Markets awaiting resolution</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {marketsLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Gavel className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>No markets pending settlement</p>
-                    <p className="text-sm mt-1">
-                      Markets with status "CLOSED_PENDING" will appear here
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Settlement History</CardTitle>
-                <CardDescription>Recently resolved markets</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  <Clock className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p>No settlement history yet</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <AdminSettlementCenter />
         )}
 
         {/* Users Section */}
@@ -4481,6 +4444,15 @@ export default function AdminDashboard() {
                           <Button
                             variant="outline"
                             size="sm"
+                            onClick={() => setCreditHistoryUserId(user.id)}
+                            data-testid={`button-view-user-${user.id}`}
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            Details
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => {
                               setSelectedUser(user);
                               setShowCreditModal(true);
@@ -4511,6 +4483,14 @@ export default function AdminDashboard() {
                 )}
               </CardContent>
             </Card>
+
+            {creditHistoryUserId && (
+              <AdminUserCreditHistory
+                userId={creditHistoryUserId}
+                open={!!creditHistoryUserId}
+                onOpenChange={(open) => { if (!open) setCreditHistoryUserId(null); }}
+              />
+            )}
           </div>
         )}
 
