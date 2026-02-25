@@ -151,6 +151,7 @@ export async function fetchSerperData(name: string, searchQueryOverride?: string
       .where(eq(apiCache.cacheKey, cacheKey))
       .limit(1);
 
+    _serperSearchCallsAttempted++;
     const response = await serperFetch(SERPER_BASE_URL, {
       method: "POST",
       headers: {
@@ -302,6 +303,7 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
       return JSON.parse(cached.responseData);
     }
 
+    _serperFallbackCallsAttempted++;
     const response24h = await serperFetch("https://google.serper.dev/news", {
       method: "POST",
       headers: {

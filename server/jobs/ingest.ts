@@ -1273,14 +1273,18 @@ export async function runDataIngestion(): Promise<IngestResult> {
               prevSearchVolume >= sbp50! * 0.6;
             const floorHold = !hasSearchBaseline && prevSearchVolume >= 200 &&
               rawSearchVolume < prevSearchVolume * 0.2;
+            // zeroGuard: Serper returned 0 (no data / stale) but we have a prior known value.
+            // Prevents 0 from passing through percentile normalization and snapping to the ~40 floor,
+            // which causes mass leaderboard churn on search refresh ticks.
+            const zeroGuard = rawSearchVolume === 0 && prevSearchVolume > 0;
 
-            if (baselineHold || floorHold) {
+            if (baselineHold || floorHold || zeroGuard) {
               searchVolume = prevSearchVolume;
               searchDelta = mostRecent?.searchDelta ?? 0;
               searchEmaHeld = true;
               searchEmaHeldCount++;
               searchHoldDiag = {
-                reason: baselineHold ? "baseline_artifact" : "floor_artifact",
+                reason: zeroGuard ? "zeroGuard" : baselineHold ? "baseline_artifact" : "floor_artifact",
                 prevVolume: prevSearchVolume,
                 currentVolume: rawSearchVolume,
                 baselineP50: sbp50 ?? null,
@@ -1757,7 +1761,9 @@ export async function runDataIngestion(): Promise<IngestResult> {
       reliability: (() => {
         const ss = getSerperRunStats();
         return {
-          serperCallsAttempted: ss.callsAttempted,
+          serperSearchCallsAttempted: ss.searchCallsAttempted,
+          serperFallbackCallsAttempted: ss.fallbackCallsAttempted,
+          serperTotalCallsAttempted: ss.callsAttempted,
           serperRetriesUsed: ss.retriesUsed,
           serperRetryRate: ss.callsAttempted > 0 ? `${((ss.retriesUsed / ss.callsAttempted) * 100).toFixed(1)}%` : "0%",
           serperFinalFailures: ss.finalFailures,
@@ -1770,7 +1776,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
       coverage: {
         newsPct: `${newsCoveragePctActual.toFixed(0)}%`,
         searchPct: `${searchCoveragePctActual.toFixed(0)}%`,
-        newsGovernor: `${(newsGovernorFactor * 100).toFixed(0)}%`,
+        newsFreshnessGovernor: `${(newsGovernorFactor * 100).toFixed(0)}%`,
         searchGovernor: `${(searchGovernorFactor * 100).toFixed(0)}%`,
         newsProviderUsed: newsSource,
         newsFreshCoveragePct: `${newsCoveragePctActual.toFixed(0)}%`,
