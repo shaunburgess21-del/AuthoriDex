@@ -1,0 +1,79 @@
+Yep — this is a really good “ops polish” iteration, and Claude’s take is basically spot-on. A few extra thoughts (including the one place I’d be slightly cautious):
+
+My read on Replit’s four changes
+T003 Ops summary cards: big win
+
+This is the highest ROI thing they shipped here. It turns the admin panel into a daily control center instead of “a place you go when something breaks.”
+
+Two small UX tweaks to consider (optional, but high value):
+
+Add a tiny “Last updated: 2m ago” on the cards (or a refresh icon) so you trust freshness.
+
+Make the Resolver health card show both “last run time” and “markets processed last run” (even just “0 processed”) so you can tell if it’s alive but idle.
+
+T001 Credit history pagination: correctly implemented
+
+Key detail: they compute ledger sum across all entries, not the current page — that’s the important part, otherwise drift/reconciliation becomes meaningless past 50 rows. Good.
+
+One extra thing to request early (before ledger grows):
+
+Add quick filters in credit history:
+
+txnType filter (stake / payout / refund / initial_grant / admin_adjustment)
+
+date range (last 7d / 30d / all)
+This prevents endless paging when you’re trying to debug one incident.
+
+T004 “Already settled” toast: exactly the right polish
+
+This matters more than it seems. Admin tools need to feel calm and deterministic.
+
+One additional micro-safety:
+
+Disable the Resolve/Void button while request is in-flight (if not already), and show “Resolving…” to reduce double-click attempts in the first place.
+
+T002 sanity warning tuning: good direction
+
+“Stuck > 30 min” is a good threshold for early ops.
+
+Raising concentration to >60% reduces false positives early (small pools).
+
+One extra warning that’s high-signal and low-noise:
+
+“Closes in < X hours AND 0 bets” (you already mentioned earlier). That one is very actionable.
+
+The one thing I’d be a bit cautious about
+
+Replit said: “Resolver doesn’t track last run time… I’ll add a lastResolverRun export / timestamp.”
+
+That’s fine, but make sure it’s not misleading:
+
+If the resolver “runs” but finds zero expired markets, it should still update lastRunAt (so you know it’s alive).
+
+If the server restarts, that value resets unless persisted — which is OK, but then show it as “since boot” or compute a DB-derived proxy (e.g., last resolver log entry / last resolved market timestamp) so it’s not confusing.
+
+Best practice: update lastResolverRunAt at the start/end of every resolver tick, not only when something was resolved.
+
+What I’d ask Replit for next (small, high-value)
+
+If you want to keep building “Polymarket-style operator comfort”:
+
+Card click-through filters
+When you click “Needs Resolution”, land you on Settlement Center already filtered to CLOSED_PENDING (not just the tab).
+
+Market action audit snippet on payout preview
+In the preview modal/panel: show last 3 events:
+
+created
+
+closed
+
+resolver attempted
+
+resolved/voided (+ who)
+
+A “Resolve now” confirmation that includes the payout summary
+Your brother will appreciate: “You are about to pay out 1,000 credits to 12 winners (largest payout 210). Confirm.”
+
+Soft alert: closing soon queue
+Even just sorting: markets closing in the next 24h bubble up.

@@ -497,6 +497,7 @@ export async function resolveExpiredMarkets(): Promise<void> {
         lte(predictionMarkets.endAt, now),
       ));
 
+    _lastResolverRunAt = now;
     if (expiredMarkets.length === 0) {
       _resolverStats.lastRunAt = now.toISOString();
       _resolverStats.marketsFound = 0;

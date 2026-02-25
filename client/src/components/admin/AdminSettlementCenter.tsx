@@ -351,9 +351,11 @@ function ResolutionDialog({
                 data-testid="button-confirm-resolve"
               >
                 {settleMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                {selectedPreview
-                  ? `Resolve — ${selectedPreview.totalPayouts} credits to ${selectedPreview.winnersCount} winner${selectedPreview.winnersCount !== 1 ? "s" : ""}`
-                  : "Select an outcome"}
+                {settleMutation.isPending
+                  ? "Resolving..."
+                  : selectedPreview
+                    ? `Resolve — ${selectedPreview.totalPayouts} credits to ${selectedPreview.winnersCount} winner${selectedPreview.winnersCount !== 1 ? "s" : ""}`
+                    : "Select an outcome"}
               </Button>
             </>
           ) : (
@@ -368,7 +370,7 @@ function ResolutionDialog({
                 data-testid="button-confirm-void"
               >
                 {voidMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <XCircle className="h-4 w-4 mr-2" />}
-                Void & Refund All Stakes
+                {voidMutation.isPending ? "Voiding..." : "Void & Refund All Stakes"}
               </Button>
             </>
           )}
