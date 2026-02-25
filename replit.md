@@ -13,6 +13,7 @@ Preferred communication style: Simple, everyday language.
 - **UI/UX**: Radix UI and shadcn/ui (New York style) with custom dark/light themes, HSL color tokens, and a glassy neon aesthetic. Features a mobile-first responsive design.
 - **Key Features**: Global Favorites Filter, Custom Topic Support, "+ Suggest" buttons, Bloomberg-style Compare Momentum Graph, and interactive elements.
 - **Page Structure**: Core pages include Home, Vote, Predict, Me, Public Profiles, Prediction Leaderboard (`/predictions/leaderboard`), and an Admin Panel for site management.
+- **Sentiment Polls Data**: 227 polls seeded across 7 categories (Tech 41, Politics 40, Business 35, Sports 35, Custom Topic/misc 33, Creator 31, Music 12) via CSV import. Re-import available via Admin Dashboard → Voting CMS → Sentiment Polls → "Import CSV" button or `npx tsx scripts/import-sentiment-polls.ts`.
 
 ### Backend
 - **Technology Stack**: Node.js with Express.js, TypeScript, Drizzle ORM.

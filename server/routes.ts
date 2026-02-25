@@ -6803,6 +6803,155 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   });
 
   // ===========================================
+  // ADMIN: IMPORT SENTIMENT POLLS FROM CSV
+  // ===========================================
+
+  app.post("/api/admin/import-sentiment-polls-csv", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { csvContent } = req.body;
+      if (!csvContent || typeof csvContent !== "string") {
+        return res.status(400).json({ error: "csvContent (string) is required" });
+      }
+
+      const VALID_CATS = new Set(["Tech", "Politics", "Business", "Music", "Sports", "Creator", "misc"]);
+      const CAT_MAP: Record<string, string> = {
+        "custom topic": "misc", "custom": "misc", "misc": "misc",
+        "tech": "Tech", "politics": "Politics", "business": "Business",
+        "music": "Music", "sports": "Sports", "creator": "Creator",
+      };
+
+      function normalizeCat(raw: string): string | null {
+        const lower = raw.trim().toLowerCase();
+        if (CAT_MAP[lower]) return CAT_MAP[lower];
+        const cap = raw.trim().charAt(0).toUpperCase() + raw.trim().slice(1).toLowerCase();
+        return VALID_CATS.has(cap) ? cap : (VALID_CATS.has(raw.trim()) ? raw.trim() : null);
+      }
+
+      function parseCSVContent(content: string): string[][] {
+        const rows: string[][] = [];
+        let i = 0;
+        while (i < content.length) {
+          const row: string[] = [];
+          while (i < content.length && content[i] !== '\n') {
+            if (content[i] === '"') {
+              let cell = '';
+              i++;
+              while (i < content.length) {
+                if (content[i] === '"' && content[i + 1] === '"') { cell += '"'; i += 2; }
+                else if (content[i] === '"') { i++; break; }
+                else { cell += content[i]; i++; }
+              }
+              row.push(cell);
+              if (i < content.length && content[i] === ',') i++;
+            } else {
+              let cell = '';
+              while (i < content.length && content[i] !== ',' && content[i] !== '\n') { cell += content[i]; i++; }
+              row.push(cell.trim());
+              if (i < content.length && content[i] === ',') i++;
+            }
+          }
+          if (content[i] === '\n') i++;
+          if (row.length > 0 && row.some(c => c !== '')) rows.push(row);
+        }
+        return rows;
+      }
+
+      const allRows = parseCSVContent(csvContent);
+      if (allRows.length < 2) return res.status(400).json({ error: "CSV has no data rows" });
+
+      const headers = allRows[0].map((h: string) => h.trim().toLowerCase());
+      const idx = {
+        category: headers.findIndex((h: string) => h === 'category'),
+        headline: headers.findIndex((h: string) => h === 'headline'),
+        slug: headers.findIndex((h: string) => h === 'slug'),
+        subjectText: headers.findIndex((h: string) => h.replace(/[\s/]+/g, '').includes('subject') || h.includes('question')),
+        description: headers.findIndex((h: string) => h === 'description'),
+        celebrity: headers.findIndex((h: string) => h.includes('celebrity') || h.includes('linked')),
+        seedSupport: headers.findIndex((h: string) => h.includes('support')),
+        seedNeutral: headers.findIndex((h: string) => h.includes('neutral')),
+        seedOppose: headers.findIndex((h: string) => h.includes('oppose')),
+      };
+
+      const allPeople = await db.select({ id: trackedPeople.id, name: trackedPeople.name }).from(trackedPeople);
+      const peopleByName = new Map<string, string>();
+      for (const p of allPeople) peopleByName.set(p.name.toLowerCase().trim(), p.id);
+
+      let created = 0, updated = 0, skipped = 0;
+      const warnings: string[] = [];
+      const errors: string[] = [];
+
+      for (let i = 1; i < allRows.length; i++) {
+        const row = allRows[i];
+        const rowNum = i + 1;
+        const rawCat = row[idx.category]?.trim() || '';
+        const category = normalizeCat(rawCat);
+        if (!category) { errors.push(`Row ${rowNum}: Unknown category "${rawCat}"`); skipped++; continue; }
+
+        const headline = row[idx.headline]?.trim() || '';
+        const slug = row[idx.slug]?.trim().toLowerCase() || '';
+        if (!headline || !slug) { errors.push(`Row ${rowNum}: Missing headline or slug`); skipped++; continue; }
+
+        const subjectText = row[idx.subjectText]?.trim() || '';
+        const description = row[idx.description]?.trim() || '';
+        const rawCelebrity = row[idx.celebrity]?.trim() || '';
+        let personId: string | null = null;
+        if (rawCelebrity) {
+          const match = peopleByName.get(rawCelebrity.toLowerCase().trim());
+          if (match) { personId = match; }
+          else { warnings.push(`Row ${rowNum}: Celebrity "${rawCelebrity}" not found`); }
+        }
+
+        const parseSeed = (raw: string, field: string): number => {
+          const v = parseInt((raw || '').trim(), 10);
+          if (isNaN(v) || v < 0) { if ((raw || '').trim()) warnings.push(`Row ${rowNum}: Invalid ${field} "${raw}", using 0`); return 0; }
+          return v;
+        };
+
+        const seedSupportCount = parseSeed(row[idx.seedSupport], 'Seed Support');
+        const seedNeutralCount = parseSeed(row[idx.seedNeutral], 'Seed Neutral');
+        const seedOpposeCount = parseSeed(row[idx.seedOppose], 'Seed Oppose');
+
+        try {
+          const result = await db.execute(sql`
+            INSERT INTO trending_polls (
+              id, category, headline, slug, subject_text, description,
+              person_id, seed_support_count, seed_neutral_count, seed_oppose_count,
+              status, visibility, featured, created_at, updated_at
+            ) VALUES (
+              gen_random_uuid(), ${category}, ${headline}, ${slug}, ${subjectText}, ${description},
+              ${personId}, ${seedSupportCount}, ${seedNeutralCount}, ${seedOpposeCount},
+              'live', 'live', false, NOW(), NOW()
+            )
+            ON CONFLICT (slug) DO UPDATE SET
+              category = EXCLUDED.category,
+              headline = EXCLUDED.headline,
+              subject_text = EXCLUDED.subject_text,
+              description = EXCLUDED.description,
+              person_id = EXCLUDED.person_id,
+              seed_support_count = EXCLUDED.seed_support_count,
+              seed_neutral_count = EXCLUDED.seed_neutral_count,
+              seed_oppose_count = EXCLUDED.seed_oppose_count,
+              status = 'live',
+              visibility = 'live',
+              updated_at = NOW()
+            RETURNING (xmax = 0) AS inserted
+          `);
+          const wasInserted = (result.rows[0] as any)?.inserted;
+          if (wasInserted === true || wasInserted === 't') created++; else updated++;
+        } catch (err: any) {
+          errors.push(`Row ${rowNum} (${slug}): ${err.message}`);
+          skipped++;
+        }
+      }
+
+      res.json({ success: true, created, updated, skipped, warnings, errors });
+    } catch (error: any) {
+      console.error("Error importing sentiment polls CSV:", error.message);
+      res.status(500).json({ error: "Import failed", details: error.message });
+    }
+  });
+
+  // ===========================================
   // ADMIN: SEED TRENDING POLLS FROM HARDCODED DATA
   // ===========================================
 

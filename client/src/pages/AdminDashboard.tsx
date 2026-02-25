@@ -51,6 +51,7 @@ import {
   ImagePlus,
   ChevronDown,
   ChevronUp,
+  Upload,
 } from "lucide-react";
 import { AdminUnderratedOverrated } from "@/components/admin/AdminUnderratedOverrated";
 import { AdminCurateProfile } from "@/components/admin/AdminCurateProfile";
@@ -1280,6 +1281,8 @@ export default function AdminDashboard() {
   const [editingPoll, setEditingPoll] = useState<TrendingPoll | null>(null);
   const [pollFilter, setPollFilter] = useState<string>("all");
   const [pollCategoryFilter, setPollCategoryFilter] = useState<string>("all");
+  const [importingPollsCsv, setImportingPollsCsv] = useState(false);
+  const pollCsvInputRef = useRef<HTMLInputElement>(null);
   const [pollForm, setPollForm] = useState({
     status: "draft" as "draft" | "live" | "archived",
     category: "Tech",
@@ -2096,6 +2099,30 @@ export default function AdminDashboard() {
       toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
     },
   });
+
+  const handlePollCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setImportingPollsCsv(true);
+    try {
+      const csvContent = await file.text();
+      const res = await fetchWithAuth("/api/admin/import-sentiment-polls-csv", {
+        method: "POST",
+        body: JSON.stringify({ csvContent }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      const { created, updated, skipped, warnings, errors } = data;
+      const desc = `${created} created, ${updated} updated, ${skipped} skipped${warnings?.length ? `, ${warnings.length} warnings` : ''}${errors?.length ? `, ${errors.length} errors` : ''}`;
+      toast({ title: "CSV Import Complete", description: desc });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
+    } catch (err: any) {
+      toast({ title: "Import Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setImportingPollsCsv(false);
+    }
+  };
 
   const createOpinionPollMutation = useMutation({
     mutationFn: async (data: typeof opinionPollForm) => {
@@ -3757,23 +3784,47 @@ export default function AdminDashboard() {
 
               <TabsContent value="polls" className="mt-4">
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-2">
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
                     <div>
                       <CardTitle>Sentiment Polls</CardTitle>
                       <CardDescription>Manage community polling questions</CardDescription>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setEditingPoll(null);
-                        resetPollForm();
-                        setShowPollModal(true);
-                      }}
-                      data-testid="button-add-poll"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Poll
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={pollCsvInputRef}
+                        type="file"
+                        accept=".csv"
+                        className="hidden"
+                        onChange={handlePollCsvImport}
+                        data-testid="input-import-polls-csv"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => pollCsvInputRef.current?.click()}
+                        disabled={importingPollsCsv}
+                        data-testid="button-import-polls-csv"
+                      >
+                        {importingPollsCsv ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Upload className="h-4 w-4 mr-2" />
+                        )}
+                        Import CSV
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setEditingPoll(null);
+                          resetPollForm();
+                          setShowPollModal(true);
+                        }}
+                        data-testid="button-add-poll"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Poll
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-2 mb-4 flex-wrap">
