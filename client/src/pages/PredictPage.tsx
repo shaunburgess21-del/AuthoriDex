@@ -51,6 +51,8 @@ import {
   Video,
   LayoutGrid,
   Flame,
+  RotateCcw,
+  XCircle,
   type LucideIcon
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -1096,6 +1098,8 @@ function UserBetResult({ betResult, isMarketClosed = false }: { betResult?: { re
         'bg-red-500/10 text-red-400'
       }`} data-testid="text-bet-result">
         {betResult.result === 'won' && <Trophy className="h-3.5 w-3.5" />}
+        {betResult.result === 'lost' && <XCircle className="h-3.5 w-3.5" />}
+        {betResult.result === 'refunded' && <RotateCcw className="h-3.5 w-3.5" />}
         {betResult.result === 'won' ? `Won +${betResult.payout} credits` :
          betResult.result === 'refunded' ? `Refunded ${betResult.stakeAmount} credits` :
          `Lost ${betResult.stakeAmount} credits`}
