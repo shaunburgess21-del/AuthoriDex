@@ -1,0 +1,264 @@
+Replit Prompt (Sentiment Polls CSV Import + Populate Cards)
+
+We are now ready to populate the Sentiment Polls section (previously called Trending Polls) from a CSV upload.
+
+Context
+
+The frontend card design and admin list UI already exist.
+
+We want to bulk import poll records from CSV and make them appear in:
+
+Vote page frontend (Sentiment Polls cards)
+
+Backend Admin Portal → Voting CMS → Sentiment Polls list
+
+CSV file
+
+I will upload a CSV file with sentiment poll records.
+
+Goal
+
+Create a robust CSV import flow (or script/admin action) that:
+
+Reads the CSV
+
+Creates or updates Sentiment Poll records
+
+Maps fields correctly
+
+Applies seed vote counts for Support / Neutral / Oppose
+
+Links celebrity where applicable
+
+Makes the polls visible in admin + frontend based on visibility/status defaults
+
+CSV Columns (expected)
+
+Please map the CSV columns exactly as follows:
+
+Category
+
+Headline
+
+Slug
+
+Subject/Question
+
+Description
+
+Linked celebrity
+
+Seed Support
+
+Seed Neutral
+
+Seed Oppose
+
+If my actual column names differ slightly (e.g. “Subject / Question” with spaces/slashes), normalize safely and log the matched mapping.
+
+Import Requirements
+1) Import target = Sentiment Polls (not Matchups)
+
+This CSV is for Sentiment Polls only (formerly Trending Polls).
+Do not import into Matchups or other voting types.
+
+2) Upsert behavior (important)
+
+Use Slug as the unique key for import.
+
+If a poll with the same slug already exists:
+
+Update its fields from the CSV (headline, question, description, category, linked celebrity, seed votes if allowed)
+
+If no poll exists:
+
+Create a new poll
+
+This prevents duplicates when I re-import.
+
+3) Category mapping
+
+Map CSV category text to the app’s valid Sentiment Poll categories (e.g. Tech, Politics, Business, Music, Sports, Creator, etc).
+
+Trim whitespace
+
+Handle case-insensitive matching
+
+If invalid/unrecognized category is found:
+
+Skip row and log an error (don’t crash the whole import)
+
+4) Headline / Subject / Description mapping
+
+Map fields like this:
+
+Headline → poll heading/title (used in list/admin and card heading link)
+
+Subject/Question → short question shown on the card
+
+Description → detailed summary text for the dedicated poll URL page
+
+Do not overwrite fields with blank CSV values unless explicitly intended.
+
+5) Slug handling
+
+Use CSV Slug as the dedicated URL slug.
+
+Ensure uniqueness / normalization:
+
+lowercase
+
+trim
+
+URL-safe format
+
+If a duplicate slug conflict exists with a different poll and cannot be resolved:
+
+log error + skip row
+
+6) Linked celebrity mapping
+
+CSV column: Linked celebrity
+
+If this field is populated:
+
+Try to link it to an existing leaderboard celebrity/person record by name match
+
+Case-insensitive exact match first
+
+If no match found:
+
+leave linked celebrity null
+
+log “celebrity not found” warning for that row (don’t fail the row)
+
+If the field is blank:
+
+leave unlinked (null)
+
+7) Seed vote import (Support / Neutral / Oppose)
+
+CSV contains pre-generated seed vote counts:
+
+Seed Support
+
+Seed Neutral
+
+Seed Oppose
+
+Please import these as the initial seed counts for the three sentiment options.
+
+Important behavior
+
+Seed votes should populate the poll so the frontend does not look empty at launch.
+
+These are initial counts, not real user votes.
+
+If your schema supports seed fields separately from live votes, store them separately and resolve totals in API response.
+
+If not, apply them to the vote totals in a safe/import-only way.
+
+8) Seed vote validation
+
+For each row:
+
+Parse seed values as integers
+
+Clamp negatives to 0
+
+If a seed value is missing/invalid, default to 0 and log warning
+
+Preserve Support / Neutral / Oppose mapping correctly (do not mix order)
+
+9) Visibility / status defaults
+
+Unless otherwise specified by CSV, imported polls should default to:
+
+Visibility: Live (Active) (or the equivalent internal enum)
+
+If there is an existing row on update, preserve its current visibility unless I choose overwrite mode
+
+10) Featured default
+
+If CSV has no featured column:
+
+default to not featured
+
+preserve existing value on upsert if row already exists
+
+Admin + Frontend Outcomes (must verify)
+
+After import, confirm:
+
+Admin portal (Voting CMS → Sentiment Polls)
+
+Imported polls appear in the list
+
+Can open/edit imported polls
+
+Slugs are saved
+
+Linked celebrity (if matched) shows correctly
+
+Seed votes are reflected in whichever admin fields/stats are expected
+
+Frontend Vote page (Sentiment Polls section)
+
+Imported polls render as cards
+
+Headline + short question display properly
+
+Clicking heading opens dedicated URL using slug
+
+Dedicated page shows description summary text
+
+Support / Neutral / Oppose counts show non-zero seed values (from CSV)
+
+Logging / Import Summary (please implement)
+
+At the end of the import, print a clear summary like:
+
+Total rows processed
+
+Created
+
+Updated
+
+Skipped
+
+Warnings (invalid category / celebrity not found / missing seed)
+
+Errors (with row number + reason)
+
+This is important so I can trust the import.
+
+Safe Import Notes
+
+Do not modify Matchups, Underrated/Overrated, Curate Profile, Induction Queue, or Prediction CMS sections.
+
+Do not refactor frontend design/layout.
+
+Do only the CSV import + mapping + persistence + display verification for Sentiment Polls.
+
+Nice-to-have (if quick)
+
+If easy, add an admin action/button:
+
+“Import Sentiment Polls CSV”
+or a server-side script I can run, e.g.:
+
+npm run import:sentiment-polls -- file.csv
+
+Either is fine — prioritize correctness.
+
+Final deliverable
+
+Please:
+
+Implement the import
+
+Run it against my uploaded CSV
+
+Confirm created/updated counts
+
+Confirm Sentiment Poll cards are visible in admin and frontend
