@@ -1276,7 +1276,7 @@ export async function runDataIngestion(): Promise<IngestResult> {
             // zeroGuard: Serper returned 0 (no data / stale) but we have a prior known value.
             // Prevents 0 from passing through percentile normalization and snapping to the ~40 floor,
             // which causes mass leaderboard churn on search refresh ticks.
-            const zeroGuard = rawSearchVolume === 0 && prevSearchVolume > 0;
+            const zeroGuard = rawSearchVolume === 0 && prevSearchVolume >= 5;
 
             if (baselineHold || floorHold || zeroGuard) {
               searchVolume = prevSearchVolume;
