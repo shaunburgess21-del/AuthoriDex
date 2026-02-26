@@ -6,6 +6,7 @@ import { startSnapshotScheduler } from "./jobs/snapshot-scheduler";
 import { runDataIngestion, hydrateTrendingPeopleFromSnapshots } from "./jobs/ingest";
 import { startLiveTickScheduler, setLastFullRefreshAt, applySnapBackDampening } from "./jobs/live-tick";
 import { startMarketResolverScheduler } from "./jobs/market-resolver";
+import { runSeedBatch } from "./jobs/seed-engine";
 import { pool } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
 
@@ -320,7 +321,6 @@ function startSeedEngineScheduler() {
     log(`[Seed Engine] Next run at ${next.toISOString()} (in ${Math.round(ms / 1000 / 60)} min)`);
     setTimeout(async () => {
       try {
-        const { runSeedBatch } = await import("./jobs/seed-engine");
         const result = await runSeedBatch();
         if (result.processed > 0) {
           log(`[Seed Engine] Batch complete: ${result.processed} markets seeded, ${result.totalCreditsDistributed} credits distributed`);
