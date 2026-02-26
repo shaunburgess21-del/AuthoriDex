@@ -12,38 +12,26 @@ import { setDbGuardrailsVerified } from "./guardrails";
 console.log(`[BOOT] started at ${new Date().toISOString()} (env=${process.env.NODE_ENV || "unknown"})`);
 
 // ===========================================
-// SIGHUP RESILIENCE
-// ===========================================
-const _origExit = process.exit;
-process.exit = function(code?: number) {
-  if (code === 1) {
-    process.stderr.write("[RECOVERY] Suppressed non-fatal exit(1) from Vite/esbuild - staying alive\n");
-    return undefined as never;
-  }
-  return _origExit.call(process, code);
-} as typeof process.exit;
-
-// ===========================================
 // GLOBAL ERROR HANDLERS
 // ===========================================
 process.on("uncaughtException", (err) => {
   process.stderr.write(`[FATAL] Uncaught exception: ${err?.stack || err}\n`);
-  _origExit.call(process, 1);
+  process.exit(1);
 });
 process.on("unhandledRejection", (reason) => {
   process.stderr.write(`[FATAL] Unhandled promise rejection: ${reason}\n`);
-  _origExit.call(process, 1);
+  process.exit(1);
 });
 process.on("exit", (code) => {
   process.stderr.write(`[EXIT] Process exiting with code ${code}\n`);
 });
 process.on("SIGTERM", () => {
   process.stderr.write("[SIGNAL] Received SIGTERM - shutting down\n");
-  _origExit.call(process, 0);
+  process.exit(0);
 });
 process.on("SIGINT", () => {
   process.stderr.write("[SIGNAL] Received SIGINT - interrupted\n");
-  _origExit.call(process, 0);
+  process.exit(0);
 });
 process.on("SIGHUP", () => {
   process.stderr.write("[SIGNAL] Received SIGHUP - ignoring (kept alive)\n");

@@ -39,7 +39,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "fuser -k 5000/tcp 2>/dev/null || true; trap '' HUP; npm run dev"
+args = "fuser -k 5000/tcp 2>/dev/null || true; trap '' HUP; npm run build && npm run start"
 waitForPort = 5000
 
 [agent]
