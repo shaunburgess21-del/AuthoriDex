@@ -3938,7 +3938,7 @@ export default function AdminDashboard() {
                           <SelectItem value="Politics">Politics</SelectItem>
                           <SelectItem value="Business">Business</SelectItem>
                           <SelectItem value="Creator">Creator</SelectItem>
-                          <SelectItem value="Custom Topic">Custom Topic</SelectItem>
+                          <SelectItem value="misc">Custom Topic</SelectItem>
                         </SelectContent>
                       </Select>
                       <Input
@@ -4111,6 +4111,7 @@ export default function AdminDashboard() {
                           <SelectItem value="Politics">Politics</SelectItem>
                           <SelectItem value="Business">Business</SelectItem>
                           <SelectItem value="Creator">Creator</SelectItem>
+                          <SelectItem value="misc">Custom Topic</SelectItem>
                         </SelectContent>
                       </Select>
                       <Input
@@ -5844,7 +5845,7 @@ export default function AdminDashboard() {
                     <SelectItem value="Politics">Politics</SelectItem>
                     <SelectItem value="Business">Business</SelectItem>
                     <SelectItem value="Creator">Creator</SelectItem>
-                    <SelectItem value="Custom Topic">Custom Topic</SelectItem>
+                    <SelectItem value="misc">Custom Topic</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -6392,7 +6393,7 @@ export default function AdminDashboard() {
                     <SelectItem value="Politics">Politics</SelectItem>
                     <SelectItem value="Business">Business</SelectItem>
                     <SelectItem value="Creator">Creator</SelectItem>
-                    <SelectItem value="Custom Topic">Custom Topic</SelectItem>
+                    <SelectItem value="misc">Custom Topic</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

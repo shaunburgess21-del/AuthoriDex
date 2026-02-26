@@ -9,6 +9,8 @@ import { startMarketResolverScheduler } from "./jobs/market-resolver";
 import { pool } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
 
+console.log(`[BOOT] started at ${new Date().toISOString()}`);
+
 // ===========================================
 // GLOBAL ERROR HANDLERS
 // ===========================================
