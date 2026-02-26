@@ -9,12 +9,11 @@ import { startMarketResolverScheduler } from "./jobs/market-resolver";
 import { pool } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
 
-console.log(`[BOOT] started at ${new Date().toISOString()}`);
+console.log(`[BOOT] started at ${new Date().toISOString()} (env=${process.env.NODE_ENV || "unknown"})`);
 
 // ===========================================
 // GLOBAL ERROR HANDLERS
 // ===========================================
-// Catch unhandled exceptions and rejections so crashes are logged instead of silent.
 process.on("uncaughtException", (err) => {
   process.stderr.write(`[FATAL] Uncaught exception: ${err?.stack || err}\n`);
   process.exit(1);
@@ -28,6 +27,10 @@ process.on("exit", (code) => {
 });
 process.on("SIGTERM", () => {
   process.stderr.write("[SIGNAL] Received SIGTERM - shutting down\n");
+  process.exit(0);
+});
+process.on("SIGINT", () => {
+  process.stderr.write("[SIGNAL] Received SIGINT - interrupted\n");
   process.exit(0);
 });
 process.on("SIGHUP", () => {
