@@ -96,6 +96,12 @@ export interface TrendScoreResult {
   
   change24h: number | null;
   change7d: number | null;
+  velocityComponents: {
+    search: number;
+    news: number;
+    wiki: number;
+    weights: { search: number; news: number; wiki: number };
+  };
 }
 
 /**

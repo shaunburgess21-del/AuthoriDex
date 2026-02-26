@@ -153,26 +153,21 @@ export async function getTrendContext(personId: string): Promise<TrendContext> {
     .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id))
     .limit(1);
   
-  const cacheKeys = [
-    { key: `wiki:pageviews:${personData.wikiSlug}`, provider: "wiki" },
-    { key: `gdelt:news:${personData.name.toLowerCase().replace(/ /g, "_")}`, provider: "gdelt" },
-    { key: `serper:search:${personData.name.toLowerCase().replace(/ /g, "_")}`, provider: "serper" },
-  ];
-  
+  const personName = personData.name.toLowerCase().replace(/ /g, "_");
+  const gdeltKey = `gdelt:news:${personName}`;
+  const wikiKey = `wiki:pageviews:${personData.wikiSlug}`;
+  const serperKey = `serper:search:${personName}`;
+
   const cacheResults = await db
     .select()
     .from(apiCache)
     .where(
-      eq(apiCache.provider, "gdelt")
+      sql`${apiCache.cacheKey} IN (${gdeltKey}, ${wikiKey}, ${serperKey})`
     );
   
-  const gdeltCache = cacheResults.find(c => 
-    c.cacheKey === `gdelt:news:${personData.name.toLowerCase().replace(/ /g, "_")}`
-  );
-  
-  const allCache = await db.select().from(apiCache);
-  const wikiCache = allCache.find(c => c.cacheKey === `wiki:pageviews:${personData.wikiSlug}`);
-  const serperCache = allCache.find(c => c.cacheKey === `serper:search:${personData.name.toLowerCase().replace(/ /g, "_")}`);
+  const gdeltCache = cacheResults.find(c => c.cacheKey === gdeltKey);
+  const wikiCache = cacheResults.find(c => c.cacheKey === wikiKey);
+  const serperCache = cacheResults.find(c => c.cacheKey === serperKey);
   
   let headlines: string[] = [];
   if (gdeltCache) {
@@ -243,16 +238,37 @@ export function formatRelativeTime(date: Date | null): string {
 export async function getTrendContextBatch(personIds: string[]): Promise<Map<string, TrendContext>> {
   const results = new Map<string, TrendContext>();
   
-  const people = await db.select().from(trackedPeople);
+  const people = await db.select({
+    id: trackedPeople.id,
+    name: trackedPeople.name,
+    wikiSlug: trackedPeople.wikiSlug,
+  }).from(trackedPeople);
+
+  // Only fetch the 5 columns we need, filtered to last 7 days, to avoid loading the 48MB diagnostics JSONB
   const allSnapshots = await db
-    .select()
+    .select({
+      personId: trendSnapshots.personId,
+      timestamp: trendSnapshots.timestamp,
+      wikiDelta: trendSnapshots.wikiDelta,
+      newsDelta: trendSnapshots.newsDelta,
+      searchDelta: trendSnapshots.searchDelta,
+    })
     .from(trendSnapshots)
     .where(and(
       sql`${trendSnapshots.timestamp} = date_trunc('hour', ${trendSnapshots.timestamp})`,
-      eq(trendSnapshots.snapshotOrigin, 'ingest')
+      eq(trendSnapshots.snapshotOrigin, 'ingest'),
+      sql`${trendSnapshots.timestamp} >= NOW() - INTERVAL '7 days'`
     ))
     .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id));
-  const allCache = await db.select().from(apiCache);
+
+  // api_cache is small (< 1MB) — only fetch provider keys we actually need
+  const allCache = await db.select({
+    cacheKey: apiCache.cacheKey,
+    fetchedAt: apiCache.fetchedAt,
+    responseData: apiCache.responseData,
+  }).from(apiCache).where(
+    sql`${apiCache.provider} IN ('gdelt', 'wiki', 'serper')`
+  );
   
   const snapshotMap = new Map<string, typeof allSnapshots[0]>();
   for (const snap of allSnapshots) {

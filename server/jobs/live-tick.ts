@@ -239,11 +239,9 @@ export function startLiveTickScheduler() {
     const currentMinute = nextTick.getMinutes();
     let nextBoundary = Math.ceil(currentMinute / 10) * 10;
     if (nextBoundary === currentMinute) {
-      if (now.getSeconds() <= 5) {
-        nextBoundary = currentMinute;
-      } else {
-        nextBoundary = currentMinute + 10;
-      }
+      // Already at a 10-minute boundary; always advance to the NEXT one.
+      // (Staying at the same boundary would schedule a tick in the past → 1s loop bug)
+      nextBoundary = currentMinute + 10;
     }
     if (nextBoundary >= 60) {
       nextTick.setHours(nextTick.getHours() + 1);

@@ -241,8 +241,8 @@ function checkBetRateLimit(userId: string): boolean {
 
 setInterval(() => {
   const cutoff = Date.now() - BET_RATE_WINDOW_MS * 2;
-  for (const [uid, ts] of betRateMap) {
-    const filtered = ts.filter(t => t > cutoff);
+  for (const [uid, ts] of Array.from(betRateMap.entries())) {
+    const filtered = (ts as number[]).filter((t: number) => t > cutoff);
     if (filtered.length === 0) betRateMap.delete(uid);
     else betRateMap.set(uid, filtered);
   }
@@ -3990,7 +3990,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       if (!matchup) {
         return res.status(404).json({ error: "Matchup not found" });
       }
-      const [profile] = await db.select().from(profiles).where(eq(profiles.userId, req.userId));
+      const [profile] = await db.select().from(profiles).where(eq(profiles.id, req.userId!));
       const [comment] = await db.insert(matchupComments).values({
         matchupId: matchup.id,
         userId: req.userId,
@@ -4410,7 +4410,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           marketTitle: predictionMarkets.title,
           marketStatus: predictionMarkets.status,
           marketType: predictionMarkets.marketType,
-          winnerEntryId: predictionMarkets.winnerEntryId,
+          entryResolutionStatus: marketEntries.resolutionStatus,
           entryLabel: marketEntries.label,
         })
         .from(marketBets)
@@ -4424,7 +4424,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         let result: 'won' | 'lost' | 'refunded' | 'pending' = 'pending';
         let payout = 0;
         if (b.marketStatus === 'RESOLVED') {
-          if (b.winnerEntryId && b.entryId === b.winnerEntryId) {
+          if (b.entryResolutionStatus === 'winner') {
             result = 'won';
             payout = b.potentialPayout || 0;
           } else {
@@ -4463,10 +4463,14 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const [market] = await db.select({
         id: predictionMarkets.id,
         status: predictionMarkets.status,
-        winnerEntryId: predictionMarkets.winnerEntryId,
       }).from(predictionMarkets).where(eq(predictionMarkets.id, id)).limit(1);
 
       if (!market) return res.status(404).json({ error: "Market not found" });
+
+      const [winningEntry] = await db.select({ id: marketEntries.id })
+        .from(marketEntries)
+        .where(and(eq(marketEntries.marketId, id), eq(marketEntries.resolutionStatus, 'winner')))
+        .limit(1);
 
       const allBets = await db.select({
         stakeAmount: marketBets.stakeAmount,
@@ -4487,8 +4491,8 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const userPayout = myBets.reduce((s, b) => s + (b.payoutAmount ?? 0), 0);
 
       let winnerPoolTotal = 0;
-      if (market.winnerEntryId) {
-        winnerPoolTotal = allBets.filter(b => b.entryId === market.winnerEntryId).reduce((s, b) => s + b.stakeAmount, 0);
+      if (winningEntry) {
+        winnerPoolTotal = allBets.filter(b => b.entryId === winningEntry.id).reduce((s, b) => s + b.stakeAmount, 0);
       }
 
       res.json({
@@ -6958,14 +6962,14 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         "music": "Music", "sports": "Sports", "creator": "Creator",
       };
 
-      function normalizeCat(raw: string): string | null {
+      const normalizeCat = (raw: string): string | null => {
         const lower = raw.trim().toLowerCase();
         if (CAT_MAP[lower]) return CAT_MAP[lower];
         const cap = raw.trim().charAt(0).toUpperCase() + raw.trim().slice(1).toLowerCase();
         return VALID_CATS.has(cap) ? cap : (VALID_CATS.has(raw.trim()) ? raw.trim() : null);
-      }
+      };
 
-      function parseCSVContent(content: string): string[][] {
+      const parseCSVContent = (content: string): string[][] => {
         const rows: string[][] = [];
         let i = 0;
         while (i < content.length) {
@@ -7462,9 +7466,9 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
 
       let username = "Anonymous";
       let avatarUrl = null;
-      const [profile] = await db.select().from(profiles).where(eq(profiles.userId, userId)).limit(1);
+      const [profile] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
       if (profile) {
-        username = profile.displayName || profile.username || "Anonymous";
+        username = profile.fullName || profile.username || "Anonymous";
         avatarUrl = profile.avatarUrl || null;
       }
 
@@ -9550,7 +9554,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
           }
           betStats[mid].uniqueBettors = userTotals.size;
           let maxUser: { userId: string; total: number } | null = null;
-          for (const [uid, total] of userTotals) {
+          for (const [uid, total] of Array.from(userTotals.entries())) {
             if (!maxUser || total > maxUser.total) maxUser = { userId: uid, total };
           }
           betStats[mid].maxStakeUser = maxUser;
@@ -9669,7 +9673,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
       const totalPool = bets.reduce((s, b) => s + b.stakeAmount, 0);
 
       const usernames = new Map<string, string>();
-      const userIds = [...new Set(bets.map(b => b.userId))];
+      const userIds = Array.from(new Set(bets.map(b => b.userId)));
       if (userIds.length > 0) {
         const profs = await db.select({ id: profiles.id, username: profiles.username }).from(profiles)
           .where(sql`${profiles.id} IN (${sql.join(userIds.map(uid => sql`${uid}`), sql`, `)})`);

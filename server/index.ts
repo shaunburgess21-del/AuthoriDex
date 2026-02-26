@@ -10,6 +10,35 @@ import { pool } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
 
 // ===========================================
+// GLOBAL ERROR HANDLERS
+// ===========================================
+// Catch unhandled exceptions and rejections so crashes are logged instead of silent.
+process.on("uncaughtException", (err) => {
+  process.stderr.write(`[FATAL] Uncaught exception: ${err?.stack || err}\n`);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  process.stderr.write(`[FATAL] Unhandled promise rejection: ${reason}\n`);
+  process.exit(1);
+});
+process.on("exit", (code) => {
+  process.stderr.write(`[EXIT] Process exiting with code ${code}\n`);
+});
+process.on("SIGTERM", () => {
+  process.stderr.write("[SIGNAL] Received SIGTERM - shutting down\n");
+  process.exit(0);
+});
+process.on("SIGHUP", () => {
+  process.stderr.write("[SIGNAL] Received SIGHUP\n");
+  process.exit(0);
+});
+
+// Catch pg pool errors to prevent uncaught 'error' event crashes
+pool.on("error", (err) => {
+  process.stderr.write(`[FATAL] pg pool error: ${err?.message || err}\n`);
+});
+
+// ===========================================
 // SERVERLESS MODE DETECTION
 // ===========================================
 // When SERVERLESS_MODE=true (e.g., on Vercel), background schedulers are disabled.
@@ -83,7 +112,7 @@ async function detectAndBackfillGaps(): Promise<void> {
       covered_by_run AS (
         SELECT date_trunc('hour', hour_bucket) AS hour_bucket
         FROM ingestion_runs
-        WHERE status IN ('success', 'completed')
+        WHERE status IN ('completed')
           AND hour_bucket >= $1
       )
       SELECT h.hour_bucket
@@ -104,13 +133,13 @@ async function detectAndBackfillGaps(): Promise<void> {
 
     log(`[Backfill] Found ${gaps.length} gap(s) in last ${BACKFILL_LOOKBACK_HOURS}h — filling sequentially`);
 
-    function minutesUntilNextPrimary(): number {
+    const minutesUntilNextPrimary = (): number => {
       const n = new Date();
       const next = new Date(n);
       next.setMinutes(2, 0, 0);
       if (next <= n) next.setHours(next.getHours() + 1);
       return Math.round((next.getTime() - n.getTime()) / (1000 * 60));
-    }
+    };
 
     let filled = 0;
     for (const targetHour of gaps) {

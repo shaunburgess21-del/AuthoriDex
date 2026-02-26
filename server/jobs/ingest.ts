@@ -447,7 +447,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     let mediastackBatchStats: MediastackBatchStats | null = null;
 
     const mediastackAvailable = isMediastackConfigured();
-    let mediastackCadence: { shouldRefresh: boolean; lastFetchAt: Date | null; ageMs: number | null } | null = null;
+    let mediastackCadence: { shouldRefresh: boolean; lastFetchAt: Date | null; ageMs: number | null; budgetThrottled: boolean } | null = null;
 
     // ── TIER 1: Mediastack (primary) ──────────────────────────────────────────
     if (mediastackAvailable) {
@@ -608,11 +608,16 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     };
 
     let serperStart = Date.now();
-    let serperData = await fetchSerperBatch(
-      people.map(p => ({ id: p.id, name: p.name, searchQueryOverride: p.searchQueryOverride })),
-      2,
-      1000
-    );
+    let serperData: Map<string, any> = new Map();
+    try {
+      serperData = await fetchSerperBatch(
+        people.map(p => ({ id: p.id, name: p.name, searchQueryOverride: p.searchQueryOverride })),
+        2,
+        300
+      );
+    } catch (serperErr) {
+      console.error(`[Ingest] Serper batch failed, continuing without search data:`, serperErr);
+    }
     sourceTimings.serper = Date.now() - serperStart;
 
     const serperCoverage = serperData.size / people.length;
