@@ -1,0 +1,83 @@
+These still apply and should be included in what you send Replit:
+
+1. The engine is mostly fine; orchestration is the issue
+
+The scoring formula is not the first thing to change. Focus on:
+
+ingest stability
+
+idempotency
+
+backfill correctness
+
+partial-hour handling
+
+environment uptime
+
+2. Backfill is high ROI, but only if it is schema-safe and idempotent
+
+Backfill helps coverage, but only if:
+
+it does not violate snapshot_origin constraints
+
+it does not re-run filled hours
+
+it does not trigger same-hour duplicate storms
+
+3. Development environment instability can distort health
+
+If Replit had outages / agent issues / sleeping containers, some missing hours may be environmental, not engine logic.
+
+So Replit should separate:
+
+true engine failure
+
+dev environment sleep/restart
+
+same-hour duplicate trigger noise
+
+4. The SIGHUP/Vite/esbuild issue is separate from engine health
+
+Earlier instability you saw with:
+
+SIGHUP
+
+Vite/esbuild “service is no longer running”
+
+dev server crashes
+
+…is a dev environment/runtime issue, not a trend-score logic issue.
+
+That should not be “fixed” by suppressing legitimate exits broadly. The better long-term answer is:
+
+stabilize runtime process management
+
+avoid dev-server quirks affecting operations
+
+run ingestion in a more reliable background context if possible
+
+5. Snapshot-origin consistency must be fixed
+
+The console error you showed proves there is a real mismatch between:
+
+what code writes
+
+what DB allows
+
+That needs a direct schema/code reconciliation.
+
+What I would tell Replit, in one tight block
+
+You can send this:
+
+Please prioritize ingest orchestration fixes, not scoring tweaks. The main problems are: (1) same-hour retry storm causing “row count mismatch” failures, (2) partial-hour writes like 60/100 and 82/100, and (3) backfill/schema mismatch around snapshot_origin (backfill appears to violate the DB check constraint).
+
+Implement a hard idempotency guard before expensive work: if the hour bucket already has a completed run or already has 100 ingest snapshots for the current score version, skip cleanly (do not fail). Convert same-hour duplicate attempts into skipped / already_ingested, not failed.
+
+Also ensure primary ingest hours are either 0/100 or 100/100; partial hours should be explicitly marked and excluded from canonical baseline/delta selection.
+
+Fix backfill so code and DB agree on snapshot_origin (either allow backfill in the constraint or store snapshot_origin='ingest' with isBackfill=true in diagnostics). Backfill must skip already-full hours and must not create retry storms.
+
+Improve lock logging and distinguish locked_out, skipped_same_hour, and true failures.
+
+Finally, warm GDELT fallback more proactively, and cleanly retire X/Twitter from health semantics if it is intentionally dead.

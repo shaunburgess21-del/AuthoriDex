@@ -1,0 +1,270 @@
+What looks most concerning
+1. Retry storm inside the same hour bucket (highest priority)
+
+This is the big one.
+
+The repeated:
+
+“Row count mismatch: expected 0, DB has 100. Rolling back.”
+
+lots of failed
+
+lots of locked_out
+
+…means the system is repeatedly trying to ingest an hour that has already been successfully written.
+
+That is not a scoring bug. It is an ingest control-flow bug.
+
+2. Coverage gaps are still too high
+
+If you are only getting roughly 60–75% hourly coverage, then:
+
+24h change is less trustworthy
+
+7d change is less trustworthy
+
+“open vs close” comparisons for internal prediction markets become less clean
+
+backfill becomes more important
+
+If this is still running in a dev-style environment that sleeps or gets unstable, that explains a lot. But operationally, it is still a problem.
+
+3. Partial hours (60/100, 82/100)
+
+This is a red flag.
+
+A “successful” hour should really be:
+
+either 0/100 (didn’t run)
+
+or 100/100 (completed)
+
+Anything like 60/100 means the run got interrupted mid-flight, or part of the pipeline failed and still committed partial work. That can distort rankings and deltas.
+
+4. GDELT fallback is not warm
+
+If GDELT is supposed to be Tier 2 fallback but almost all cache is expired, then in a real Mediastack issue, your fallback may not be as ready as you think.
+
+Not catastrophic, but worth tightening.
+
+5. X/Twitter is dead
+
+This is only a problem if the code/UI still implies X matters. If X has been intentionally retired, then the real fix is:
+
+remove stale cache noise
+
+remove any lingering weight assumptions / labels
+
+stop treating it like an expected source
+
+Recommended fixes to give Replit
+A. Fix the retry storm / same-hour duplicate attempts (do this first)
+
+Tell Replit to implement all of these together:
+
+1) Hard hour-bucket idempotency guard before doing expensive work
+
+Before a run starts real ingestion work, check:
+
+does a completed ingestion run already exist for this hourBucket?
+
+do 100 snapshots already exist for this hourBucket with snapshot_origin='ingest' and current score_version?
+
+If yes:
+
+do not run
+
+log: SKIP_ALREADY_INGESTED
+
+mark run as skipped (or don’t create a run record at all)
+
+This check should happen before API fetches.
+
+2) Treat “hour already filled” as a clean skip, not a failure
+
+Right now it looks like it is rolling back and logging a failure.
+
+That should instead become:
+
+status: completed with skippedReason='already_ingested', or
+
+a dedicated status like skipped
+
+It should not count as a failed run.
+
+3) Prevent multiple triggers inside the same hour
+
+If the scheduler runs too often, enforce:
+
+only one primary ingest per hour bucket
+
+any later attempts in that same hour become no-ops
+
+This is more important than fancy retry logic.
+
+B. Fix partial-hour writes (very important)
+
+A 60/100 hour is bad. Replit should verify the write path is atomic enough.
+
+Recommended rule:
+
+For a primary ingest hour, either:
+
+all 100 snapshots commit, or
+
+none do
+
+If that is not practical in one huge transaction, then at minimum:
+
+1) Mark incomplete runs explicitly
+
+If fewer than 100 snapshots are written:
+
+mark run as failed_partial
+
+store peopleProcessed
+
+do not let downstream logic treat that as a healthy baseline hour
+
+2) Exclude partial hours from baseline/delta selection
+
+When computing:
+
+24h comparisons
+
+7d comparisons
+
+leaderboard change labels
+
+market opening/closing reference lookups
+
+Prefer hours that have full cohort completeness.
+
+At minimum, avoid using a 60/100 hour as the canonical “that hour.”
+
+C. Tighten backfill behavior
+
+This connects directly to the earlier error you showed:
+
+trend_snapshots violates check constraint "chk_snapshot_origin_values"
+
+failing row contained backfill
+
+That means the code tried to write snapshot_origin='backfill', but the DB constraint likely only allows something like:
+
+ingest
+
+maybe other legacy values
+
+Replit should fix this explicitly:
+1) Align snapshot_origin enum/constraint with code
+
+Either:
+
+allow 'backfill' in the DB constraint, or
+
+store backfilled rows as snapshot_origin='ingest' and put isBackfill=true in diagnostics/metadata
+
+Right now code and schema are disagreeing.
+
+2) Do not backfill the current hour
+
+Backfill should only fill older missing hour buckets, never the hour actively being ingested.
+
+3) Backfill should skip already-full hours
+
+Same idempotency logic:
+
+if hour already has 100 snapshots, skip
+
+4) Do not let backfill create retry storms
+
+Backfill must not trigger a second primary-style ingest for the same bucket.
+
+5) Use backfilled rows carefully in charts/deltas
+
+Because backfill may reuse cached data, it can create:
+
+flat segments
+
+then sudden step changes
+
+For now, I’d recommend:
+
+allow them for continuity
+
+but mark them in metadata so later you can optionally exclude or visually smooth them
+
+D. Improve lock behavior
+
+The lock is doing something, but it is getting hammered.
+
+Replit should add:
+1) Clear distinction between:
+
+locked_out because another run is legitimately active
+
+skipped_same_hour
+
+failed_real_error
+
+These are not the same operationally.
+
+2) Heartbeat frequency sanity
+
+If runs commonly last 2–3 minutes, a 2-minute heartbeat is a bit thin.
+Safer:
+
+heartbeat every 30–60 seconds
+
+stale lock threshold 4–5 minutes
+
+3) Log lock owner + hour bucket
+
+Every lock event should include:
+
+run id
+
+hour bucket
+
+started at
+
+last heartbeat
+
+That makes debugging much easier.
+
+E. Warm the fallback path (GDELT) better
+
+Because Mediastack is primary now, GDELT won’t naturally stay warm unless it is periodically touched.
+
+Recommended:
+
+run a lightweight GDELT refresh on a small canary subset periodically
+
+or proactively refresh GDELT cache when Mediastack quality drops below threshold
+
+don’t wait until a full Mediastack bad hour to discover GDELT is stale too
+
+This is operational insurance.
+
+F. Clean up source semantics
+1) Retire X cleanly
+
+If X is dead:
+
+remove it from health summaries if it still causes noise
+
+remove stale cache concern from operator dashboards
+
+ensure no UI implies it contributes
+
+ensure no weighting assumes it still exists
+
+2) Confirm Mass weighting when follower data is absent
+
+This was a good catch in the earlier review:
+if follower signals are unavailable and wiki effectively carries full mass, make sure the weighting is intentional and normalized fairly.
+
+I would ask Replit to verify:
+
+whether mass component is renormalized when social signals are absent
