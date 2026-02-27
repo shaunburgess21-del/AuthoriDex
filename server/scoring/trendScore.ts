@@ -158,7 +158,7 @@ export function computeTrendScore(
       youtubeMassContrib
     );
   } else {
-    massScore = wikiMassScore * PLATFORM_WEIGHTS.mass.wiki;
+    massScore = wikiMassScore;
   }
   
   // =========================================================================

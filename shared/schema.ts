@@ -1129,7 +1129,7 @@ export type InsertTier1Override = z.infer<typeof insertTier1OverrideSchema>;
 // INGESTION RUNS - Tracks every data ingestion execution for health monitoring
 // ============================================================================
 
-export const ingestionRunStatusEnum = pgEnum("ingestion_run_status", ["running", "completed", "failed", "locked_out"]);
+export const ingestionRunStatusEnum = pgEnum("ingestion_run_status", ["running", "completed", "failed", "locked_out", "skipped", "failed_partial"]);
 
 export const ingestionRuns = pgTable("ingestion_runs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
