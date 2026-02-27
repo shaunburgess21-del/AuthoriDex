@@ -1,0 +1,133 @@
+AuthoriDex Trend Score Engine — Current Architecture
+
+Core model
+
+The engine computes a Trend Score / Fame Index hourly for each tracked person.
+
+It uses a Mass + Velocity framework:
+
+Mass = baseline enduring attention / popularity
+
+Velocity = current attention surge
+
+Current weighting is approximately:
+
+Mass: 40%
+
+Velocity: 60%
+
+Primary source inputs
+
+Search (Serper) → strongest live intent signal
+
+News (Mediastack primary)
+
+Wikipedia pageviews → curiosity / research proxy
+
+Current news provider chain
+
+Mediastack = primary
+
+GDELT = fallback when Mediastack quality/coverage is weak
+
+Serper News = emergency fallback when both are insufficient
+
+Normalization
+
+Raw source values are normalized so one mega-celebrity doesn’t compress the rest of the board.
+
+The engine uses percentile-style scaling / distribution-aware normalization rather than raw counts.
+
+Scores are versioned (v2) and queries are supposed to filter by score version.
+
+Anti-spam / anti-noise
+
+Velocity is damped by mass so low-baseline names can’t dominate purely from noisy short-term spikes.
+
+There are guardrails like:
+
+anti-spam damping
+
+tapering / cooling behavior
+
+source health governors
+
+EMA smoothing
+
+rate caps
+
+Stabilization
+
+The engine does not let scores move freely each hour.
+
+It applies:
+
+rate limiting cap per run
+
+EMA smoothing
+
+asymmetric decay (down moves can react slightly faster than up moves)
+
+dynamic loosening for corroborated real breakouts
+
+Catch-up mode exists to accelerate convergence after unusual gaps or drift.
+
+Snapshot system
+
+Canonical scores are written as hourly snapshots
+
+Snapshots are the basis for:
+
+24h / 7d changes
+
+charts
+
+market resolution
+
+historical comparisons
+
+The old snapshot scheduler is deprecated; ingest.ts is the main path.
+
+Health / resilience
+
+Source health has a state machine:
+
+HEALTHY
+
+DEGRADED
+
+OUTAGE
+
+RECOVERY
+
+Health is persisted so restarts don’t reset the state.
+
+Canaries monitor high-profile names to detect silent provider failures.
+
+Governors reduce source weight when freshness or quality drops.
+
+Key recent fixes / current direction
+
+Moved to Mediastack primary
+
+Added stronger fallbacks
+
+Added engine health, churn, reconciliation, payout, and resolver observability
+
+Added opening score capture for prediction market resolution
+
+Auto-resolution now works for internal market types
+
+The main concern now is news quality / coverage consistency, not the core scoring framework
+
+Current risk areas to watch
+
+Mediastack returning too many zeros
+
+duplicate hourly runs
+
+cache-hour news being over-penalized
+
+long-term snapshot retention / pruning
+
+ensuring provider quality is measured separately from transport success

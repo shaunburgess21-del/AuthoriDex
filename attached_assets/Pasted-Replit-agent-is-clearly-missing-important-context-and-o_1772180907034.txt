@@ -1,0 +1,321 @@
+Replit agent is clearly missing important context, and on this one it mixed up old architecture with your current architecture.
+
+The biggest correction is:
+
+Mediastack is primary
+
+GDELT is secondary fallback
+
+Serper News is emergency fallback
+
+Serper Search is still your main search signal
+
+So your instinct was right to call that out.
+
+Here’s my take on the actual red flags from the Mediastack review, and what I’d tell Replit to fix/check next.
+
+What is actually a red flag
+1) Persistent high zero-article coverage from Mediastack
+
+This is the real issue.
+
+If, on refresh runs, you’re seeing:
+
+nearZeroPct = 71–82%
+
+lots of people with 0 articles
+
+recurring offenders in the top 25
+
+then Mediastack is operationally up but data-quality weak for your use case.
+
+That means:
+
+the API is “healthy” technically,
+
+but your news signal is underpowered for a meaningful chunk of the leaderboard.
+
+This matters more than the single timeout.
+
+2) Repeat zero coverage for important names
+
+Also real.
+
+If names like:
+
+MrBeast
+
+Lisa / Blackpink
+
+Ed Sheeran
+
+Theo Von
+
+Nayib Bukele
+
+keep getting zeroes, that means Mediastack has blind spots by:
+
+entertainment/music
+
+international figures
+
+certain creator/political profiles
+
+That is exactly the kind of bias that can distort a “who’s trending” product.
+
+3) Duplicate runs in the same hour bucket
+
+This is worth investigating.
+
+If you truly had:
+
+one fresh run
+
+one cache-only run
+
+both completing for the same hour bucket
+
+then one of these is happening:
+
+the lock is not preventing overlap correctly
+
+a retry/backfill path is writing into the same hour bucket
+
+the “fresh vs cache” decision is being recomputed in a second invocation for the same bucket
+
+the ingestion scheduler is firing twice
+
+Even if snapshots are idempotent, this can still:
+
+skew health metrics
+
+confuse provider stats
+
+produce inconsistent “last run” diagnostics
+
+This is a real ops bug to inspect.
+
+What is not necessarily a red flag
+4) newsGovernor = 75% on cache-only runs
+
+I would not call this a bug by itself.
+
+That sounds like your freshness governor doing exactly what it was designed to do:
+
+fresh fetch = full weight
+
+cache reuse = dampened weight
+
+That is a feature, not a failure.
+
+The only question is whether 75% is the right penalty. But “it happens every cache hour” is expected if your cadence is intentionally:
+
+refresh every 2h
+
+cache on the in-between hour
+
+So I would tell Replit:
+
+This is not a red flag unless the penalty is making news too weak in practice.
+
+5) One timeout in 48h
+
+One isolated connection timeout is acceptable if fallback worked and the pipeline stayed healthy.
+
+That’s not what I’d focus on.
+
+My recommended fixes (best next moves)
+Priority 1 — Separate “API success” from “signal usefulness”
+
+Right now the agent is treating “request succeeded” as “news is healthy,” which is misleading.
+
+Tell Replit to add two separate health metrics for Mediastack:
+
+transport success rate = did the API respond?
+
+useful coverage rate = what % of tracked people got non-zero / meaningful article counts?
+
+And specifically show:
+
+overall non-zero %
+
+top 25 non-zero %
+
+top 10 non-zero %
+
+repeated zero-streak names
+
+That gives you the truth:
+
+API can be green
+
+signal quality can still be yellow/red
+
+This is probably the single most useful monitoring improvement.
+
+Priority 2 — Add a “Mediastack weak coverage” escalation rule
+
+Right now it sounds like fallbackOverride=true is hiding a persistent weakness.
+
+That may be too forgiving.
+
+I’d tell Replit to add a rule like:
+
+If Mediastack refresh succeeds but top-25 non-zero coverage is below a threshold (for example 70%) for X consecutive refreshes,
+
+mark provider as WEAK_COVERAGE
+
+increase selective fallback usage
+
+surface this clearly in health
+
+Not “outage,” but a new degraded-quality state.
+
+That way the system stops pretending “all good” when the transport is good but the output is thin.
+
+Priority 3 — Promote selective fallback for recurring zero-streak names
+
+For the recurring offenders, don’t wait for them to fail over organically every time.
+
+Have Replit implement a top-name persistent patch list:
+
+If a tracked person has 0 Mediastack articles for 3+ refreshes in a row
+
+and they are in the top X by rank / mass / watchlist
+
+automatically run Serper News fallback for them on refresh runs
+
+In other words:
+
+keep Mediastack as primary globally
+
+but treat specific people as known bad fits for Mediastack
+
+That’s a practical fix without throwing out the whole provider.
+
+Priority 4 — Investigate and harden the duplicate-hour issue
+
+Tell Replit to inspect these exact things:
+
+ingestionRuns for the duplicate hours
+Check:
+
+run IDs
+
+startedAt / completedAt
+
+hourBucket
+
+isBackfill
+
+provider mode (fresh/cache)
+
+lock acquisition logs
+
+Whether the second run is:
+
+a backfill,
+
+a manual trigger,
+
+a retry after stale lock cleanup,
+
+or a second scheduler tick.
+
+Add a hard guard:
+
+if a completed primary run already exists for hourBucket,
+
+do not allow another primary run for that same bucket.
+
+Even if snapshots are safe, your run accounting should be one canonical primary run per bucket.
+
+Priority 5 — Add a per-provider quality dashboard row
+
+You want Replit to give you a compact table each health check like:
+
+Mediastack: responded yes/no, non-zero %, top-25 non-zero %, zero-streak names
+
+GDELT: invoked yes/no, candidate coverage, fallback contribution
+
+Serper News: fallback count, names patched
+
+Serper Search: search coverage %, zeroGuard count
+
+This will make it immediately obvious whether:
+
+Mediastack is carrying the load,
+
+GDELT is quietly saving weak hours,
+
+or Serper fallback is becoming too important.
+
+Specific instructions I’d give Replit
+
+You can paste this:
+
+Please do these 5 checks/fixes:
+
+Split Mediastack health into transport vs quality
+
+Add metrics for:
+
+API response success
+
+non-zero coverage overall
+
+non-zero coverage top 25
+
+non-zero coverage top 10
+
+Show these separately in engine health.
+
+Add a weak-coverage state
+
+If Mediastack refresh succeeds but top-25 non-zero coverage stays low for consecutive refreshes, mark it as weak coverage (not outage).
+
+Do not let fallbackOverride=true hide this.
+
+Add persistent selective fallback for repeat zero-streak names
+
+If a tracked person gets 0 Mediastack articles for 3+ refreshes in a row, and they’re high-priority, auto-patch them with Serper News on refresh runs.
+
+Audit the duplicate hour-bucket runs
+
+Inspect ingestionRuns for the duplicate hours.
+
+Confirm whether the second run was primary, retry, manual, or backfill.
+
+Enforce one canonical primary completed run per hour bucket.
+
+Give me a 48h provider quality report
+
+Refresh runs only
+
+For each refresh hour:
+
+Mediastack non-zero overall
+
+Mediastack non-zero top 25
+
+GDELT invoked or not
+
+Serper fallback count
+
+recurring zero-streak names
+
+My bottom line
+
+The new agent’s provider summary was wrong, but the Mediastack quality concern is probably real.
+
+So the real priorities are:
+
+don’t panic about the single timeout
+
+don’t treat 75% governor on cache hours as a bug
+
+do investigate persistent zero coverage
+
+do investigate duplicate primary runs
+
+do make health reporting reflect signal quality, not just transport success
