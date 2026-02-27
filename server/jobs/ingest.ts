@@ -296,12 +296,12 @@ async function acquireIngestionLock(): Promise<{ acquired: boolean; runId?: stri
   for (const run of existingRuns) {
     const lastSignOfLife = run.heartbeatAt ?? run.startedAt;
     if (lastSignOfLife < staleThreshold) {
-      console.warn(`[Ingest Lock] Found stale running lock (id=${run.id}, lastHeartbeat=${lastSignOfLife.toISOString()}). Marking as failed.`);
+      console.warn(`[Ingest Lock] Found stale running lock (id=${run.id}, hourBucket=${run.hourBucket?.toISOString() ?? 'unknown'}, lastHeartbeat=${lastSignOfLife.toISOString()}). Marking as failed.`);
       await db.update(ingestionRuns)
         .set({ status: "failed", finishedAt: now, errorSummary: `Stale lock auto-cleaned (no heartbeat for >${HEARTBEAT_STALE_MS / 60000}min)` })
         .where(eq(ingestionRuns.id, run.id));
     } else {
-      console.warn(`[Ingest Lock] Another ingestion is currently running (id=${run.id}, started=${run.startedAt.toISOString()}, lastHeartbeat=${lastSignOfLife.toISOString()})`);
+      console.warn(`[Ingest Lock] Another ingestion is currently running (id=${run.id}, hourBucket=${run.hourBucket?.toISOString() ?? 'unknown'}, started=${run.startedAt.toISOString()}, lastHeartbeat=${lastSignOfLife.toISOString()})`);
       return { acquired: false, existingRunId: run.id };
     }
   }
@@ -358,7 +358,7 @@ async function releaseIngestionLock(
     })
     .where(eq(ingestionRuns.id, runId));
   
-  console.log(`[Ingest Lock] Released lock, run ${runId} => ${status}`);
+  console.log(`[Ingest Lock] Released lock, run ${runId} => ${status} (hourBucket=${details.hourBucket?.toISOString() ?? 'unknown'})`);
 }
 
 export async function runDataIngestion(options?: { targetHour?: Date; isBackfill?: boolean }): Promise<IngestResult> {
@@ -1525,30 +1525,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           runId: runId,
           scoreVersion: SCORE_VERSION,
         };
-        await db.insert(trendSnapshots).values(snapshotValues)
-          .onConflictDoUpdate({
-            target: [trendSnapshots.personId, trendSnapshots.timestamp],
-            set: {
-              trendScore: snapshotValues.trendScore,
-              fameIndex: snapshotValues.fameIndex,
-              newsCount: snapshotValues.newsCount,
-              searchVolume: snapshotValues.searchVolume,
-              wikiPageviews: snapshotValues.wikiPageviews,
-              wikiDelta: snapshotValues.wikiDelta,
-              newsDelta: snapshotValues.newsDelta,
-              searchDelta: snapshotValues.searchDelta,
-              massScore: snapshotValues.massScore,
-              velocityScore: snapshotValues.velocityScore,
-              velocityAdjusted: snapshotValues.velocityAdjusted,
-              confidence: snapshotValues.confidence,
-              diversityMultiplier: snapshotValues.diversityMultiplier,
-              momentum: snapshotValues.momentum,
-              drivers: snapshotValues.drivers,
-              snapshotOrigin: snapshotValues.snapshotOrigin,
-              diagnostics: snapshotValues.diagnostics,
-              runId: snapshotValues.runId,
-            },
-          });
+        pendingSnapshots.push(snapshotValues);
 
         scoreResults.push({ person, score: scoreResult });
         processed++;
@@ -2020,7 +1997,39 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     };
     (healthSummary as any).runId = runId;
 
-    const runStatus = errors > 0 ? "failed" : "completed";
+    if (pendingSnapshots.length > 0) {
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < pendingSnapshots.length; i += BATCH_SIZE) {
+        const batch = pendingSnapshots.slice(i, i + BATCH_SIZE);
+        await db.insert(trendSnapshots).values(batch)
+          .onConflictDoUpdate({
+            target: [trendSnapshots.personId, trendSnapshots.timestamp],
+            set: {
+              trendScore: sql`excluded.trend_score`,
+              fameIndex: sql`excluded.fame_index`,
+              newsCount: sql`excluded.news_count`,
+              searchVolume: sql`excluded.search_volume`,
+              wikiPageviews: sql`excluded.wiki_pageviews`,
+              wikiDelta: sql`excluded.wiki_delta`,
+              newsDelta: sql`excluded.news_delta`,
+              searchDelta: sql`excluded.search_delta`,
+              massScore: sql`excluded.mass_score`,
+              velocityScore: sql`excluded.velocity_score`,
+              velocityAdjusted: sql`excluded.velocity_adjusted`,
+              confidence: sql`excluded.confidence`,
+              diversityMultiplier: sql`excluded.diversity_multiplier`,
+              momentum: sql`excluded.momentum`,
+              drivers: sql`excluded.drivers`,
+              snapshotOrigin: sql`excluded.snapshot_origin`,
+              diagnostics: sql`excluded.diagnostics`,
+              runId: sql`excluded.run_id`,
+            },
+          });
+      }
+      console.log(`[Ingest] Batch-inserted ${pendingSnapshots.length} snapshots`);
+    }
+
+    const runStatus = processed < people.length && processed > 0 ? "failed_partial" : (errors > 0 ? "failed" : "completed");
     await releaseIngestionLock(runId, runStatus, {
       snapshotsWritten: processed,
       peopleProcessed: processed,
