@@ -249,10 +249,12 @@ export interface IngestResult {
   duration: number;
   runId?: string;
   lockedOut?: boolean;
+  skipped?: boolean;
+  skippedReason?: string;
 }
 
-const HEARTBEAT_STALE_MS = 5 * 60 * 1000; // 5 minutes without heartbeat = stale
-const HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000; // update heartbeat every 2 minutes
+const HEARTBEAT_STALE_MS = 4 * 60 * 1000; // 4 minutes without heartbeat = stale
+const HEARTBEAT_INTERVAL_MS = 60 * 1000; // update heartbeat every 60 seconds
 
 const heartbeatTimers = new Map<string, ReturnType<typeof setInterval>>();
 
@@ -327,7 +329,7 @@ async function acquireIngestionLock(): Promise<{ acquired: boolean; runId?: stri
 
 async function releaseIngestionLock(
   runId: string,
-  status: "completed" | "failed",
+  status: "completed" | "failed" | "skipped" | "failed_partial",
   details: {
     snapshotsWritten?: number;
     peopleProcessed?: number;
@@ -409,6 +411,54 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         0, 0, 0
       ));
   console.log(`${logPrefix} Hour timestamp: ${hourTimestamp.toISOString()}${isBackfill ? " (backfill)" : ""}`);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // IDEMPOTENCY GUARD: Skip if this hour bucket is already fully ingested.
+  // Check BEFORE any expensive API calls to prevent retry storms.
+  // ═══════════════════════════════════════════════════════════════════════════
+  try {
+    const [completedRunCheck] = await db.select({ id: ingestionRuns.id })
+      .from(ingestionRuns)
+      .where(and(
+        eq(ingestionRuns.status, "completed"),
+        eq(ingestionRuns.hourBucket, hourTimestamp),
+        eq(ingestionRuns.scoreVersion, SCORE_VERSION),
+      ))
+      .limit(1);
+
+    if (completedRunCheck) {
+      const skipReason = `Hour ${hourTimestamp.toISOString()} already has completed run ${completedRunCheck.id} (score_version=${SCORE_VERSION})`;
+      console.log(`${logPrefix} SKIP_ALREADY_INGESTED: ${skipReason}`);
+      await releaseIngestionLock(runId, "skipped", {
+        errorSummary: skipReason,
+        hourBucket: hourTimestamp,
+      });
+      return { processed: 0, errors: 0, duration: Date.now() - startTime, runId, skipped: true, skippedReason: "already_ingested" };
+    }
+
+    const existingSnapshotCount = await db.execute(
+      sql`SELECT COUNT(*) as count FROM trend_snapshots WHERE timestamp = ${hourTimestamp} AND snapshot_origin = 'ingest' AND score_version = ${SCORE_VERSION}`
+    );
+    const snapshotRows = Array.isArray(existingSnapshotCount) ? existingSnapshotCount : (existingSnapshotCount as any).rows ?? [];
+    const existingCount = parseInt((snapshotRows[0] as any)?.count || '0', 10);
+
+    const trackedCount = await db.execute(sql`SELECT COUNT(*) as count FROM tracked_people`);
+    const trackedRows = Array.isArray(trackedCount) ? trackedCount : (trackedCount as any).rows ?? [];
+    const totalTracked = parseInt((trackedRows[0] as any)?.count || '0', 10);
+
+    if (existingCount >= totalTracked && totalTracked > 0) {
+      const skipReason = `Hour ${hourTimestamp.toISOString()} already has ${existingCount}/${totalTracked} snapshots (score_version=${SCORE_VERSION})`;
+      console.log(`${logPrefix} SKIP_ALREADY_INGESTED: ${skipReason}`);
+      await releaseIngestionLock(runId, "skipped", {
+        snapshotsWritten: existingCount,
+        errorSummary: skipReason,
+        hourBucket: hourTimestamp,
+      });
+      return { processed: 0, errors: 0, duration: Date.now() - startTime, runId, skipped: true, skippedReason: "already_ingested" };
+    }
+  } catch (idempotencyErr) {
+    console.warn(`${logPrefix} Idempotency check failed (proceeding with ingestion): ${idempotencyErr}`);
+  }
 
   console.log(`${logPrefix} Starting data ingestion...`);
 
@@ -651,7 +701,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     }).from(trendSnapshots).where(
       and(
         gte(trendSnapshots.timestamp, time7dAgo),
-        inArray(trendSnapshots.snapshotOrigin, ['ingest', 'backfill'])
+        eq(trendSnapshots.snapshotOrigin, 'ingest')
       )
     );
     
@@ -1470,8 +1520,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           diversityMultiplier: scoreResult.diversityMultiplier,
           momentum: scoreResult.momentum,
           drivers: scoreResult.drivers,
-          snapshotOrigin: isBackfill ? 'backfill' : 'ingest',
-          diagnostics: diagnosticsData,
+          snapshotOrigin: 'ingest',
+          diagnostics: { ...diagnosticsData, isBackfill: isBackfill || undefined },
           runId: runId,
           scoreVersion: SCORE_VERSION,
         };
