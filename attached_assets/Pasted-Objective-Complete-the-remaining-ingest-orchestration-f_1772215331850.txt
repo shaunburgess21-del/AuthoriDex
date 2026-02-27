@@ -1,0 +1,60 @@
+Objective
+Complete the remaining ingest orchestration fixes. T001/T004 code changes are done but the DB enum blocks them from working. Remaining: add enum values, fix partial-hour atomicity, improve lock logging, warm GDELT fallback, clean up X/Twitter, and update the backfill flow.
+
+Tasks
+T001: Add skipped and failed_partial to DB Enum
+Blocked By: []
+Details:
+The ingestion_run_status Postgres enum currently only allows: running, completed, failed, locked_out.
+The idempotency guard (already in code) tries to write skipped status, and partial-hour detection needs failed_partial.
+Run ALTER TYPE ingestion_run_status ADD VALUE 'skipped' and ALTER TYPE ingestion_run_status ADD VALUE 'failed_partial'.
+Update shared/schema.ts line 1132: add "skipped" and "failed_partial" to the pgEnum array.
+Run npm run db:push --force to sync schema.
+Files: shared/schema.ts (line 1132)
+Acceptance: Idempotency guard can write skipped status. No more "invalid input value for enum" errors.
+T002: Fix Partial-Hour Writes (Atomic Snapshot Batch)
+Blocked By: [T001]
+Details:
+Currently snapshots are written one-by-one per person. If the server crashes mid-loop, partial hours (60/100, 82/100) result.
+Collect all snapshot values into an array during the per-person loop, then batch-insert them in a single transaction after the loop completes.
+After insert, verify count matches expected. If fewer than people.length snapshots were produced (due to per-person errors), mark run as failed_partial.
+Update the run status logic at the end of runDataIngestion(): if processed < people.length && processed > 0, use failed_partial instead of completed.
+Files: server/jobs/ingest.ts (snapshot write around line 1528, run status around line 2023)
+Acceptance: Snapshot writes are atomic (all-or-nothing per hour). Partial runs marked failed_partial.
+T003: Improve Lock Log Context
+Blocked By: []
+Details:
+Add hourBucket to lock acquisition/release log messages for easier debugging.
+Update acquireIngestionLock log messages to include the target hour.
+Update releaseIngestionLock log to include hour bucket.
+Update the stale lock auto-clean message to include the run's hour bucket.
+Files: server/jobs/ingest.ts (lock functions around lines 290-365)
+Acceptance: Every lock log message includes the hour bucket context.
+T004: Harden Backfill (Skip Full Hours, Never Target Current Hour)
+Blocked By: []
+Details:
+In detectAndBackfillGaps() in server/index.ts, the gap-detection SQL already excludes hours with completed runs and snapshots. But the backfill still calls runDataIngestion() which could re-process — now safely handled by the idempotency guard from T001.
+Add explicit guard: skip backfill for the current hour bucket (only fill past hours).
+Update scheduledIngestion() to only trigger backfill when result.processed > 0 (not on skipped runs).
+Files: server/index.ts (lines 99-175, 263-276)
+Acceptance: Backfill never targets current hour. Skipped primary runs don't trigger unnecessary backfill attempts.
+T005: Warm GDELT Fallback Proactively
+Blocked By: []
+Details:
+GDELT cache is 100% expired. If Mediastack fails, Tier 2 fallback is cold.
+Add a lightweight GDELT canary refresh after each successful primary ingest: fetch GDELT data for the 10 canary celebrities only.
+Import fetchBatchGdeltNews and getCanaryNames in server/index.ts.
+Add warmGdeltCanaryCache() function that calls fetchBatchGdeltNews for canary names with a short time budget.
+Call it from scheduledIngestion() after a successful run.
+Files: server/index.ts
+Acceptance: After each successful ingest, GDELT cache for 10 canaries is refreshed. Fallback is warm.
+T006: Clean Up Dead X/Twitter
+Blocked By: []
+Details:
+Delete stale X cache entries: run SQL DELETE FROM api_cache WHERE provider = 'x'.
+Verify sourceHealth.ts doesn't track X (it only tracks news, search, wiki — confirmed clean).
+Verify trendScore.ts doesn't use X velocity/mass weights (confirmed — X already removed from weights).
+Verify mass scoring is correct when follower data is absent: trendScore.ts line 160-162 shows massScore = wikiMassScore * PLATFORM_WEIGHTS.mass.wiki when no followers — this only applies 50% weight to wiki, meaning mass is artificially halved. This should be massScore = wikiMassScore (wiki carries full mass when it's the only signal).
+Fix the mass renormalization when followers are absent.
+Files: server/scoring/trendScore.ts (line 160-162)
+Acceptance: Stale X cache entries deleted. Mass score correctly normalized when followers unavailable.
