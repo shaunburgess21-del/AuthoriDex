@@ -382,6 +382,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
   resetSerperRunStats();
   const sourceTimings: Record<string, number> = {};
   const sourceStatuses: Record<string, string> = {};
+  const pendingSnapshots: any[] = [];
 
   if (process.env.REQUIRE_DB_GUARDRAILS === 'true') {
     const { dbGuardrailsVerified } = await import('../guardrails');

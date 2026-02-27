@@ -9,6 +9,8 @@ import { startMarketResolverScheduler } from "./jobs/market-resolver";
 import { runSeedBatch } from "./jobs/seed-engine";
 import { pool } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
+import { fetchBatchGdeltNews } from "./providers/gdelt";
+import { getCanaryNames } from "./scoring/canaryMonitor";
 
 console.log(`[BOOT] started at ${new Date().toISOString()} (env=${process.env.NODE_ENV || "unknown"})`);
 
@@ -96,9 +98,28 @@ async function verifyDbConstraints() {
 const BACKFILL_MAX_SLOTS = 3;
 const BACKFILL_LOOKBACK_HOURS = 12;
 
+async function warmGdeltCanaryCache(): Promise<void> {
+  try {
+    const names = getCanaryNames();
+    const people = names.map(name => ({ id: name, name }));
+    log(`[GDELT Warm] Refreshing GDELT cache for ${people.length} canaries...`);
+    await fetchBatchGdeltNews(people, { timeBudgetMs: 30_000 });
+    log(`[GDELT Warm] Canary cache refreshed`);
+  } catch (err) {
+    log(`[GDELT Warm] Error warming canary cache: ${err}`);
+  }
+}
+
 async function detectAndBackfillGaps(): Promise<void> {
   try {
     const cutoff = new Date(Date.now() - BACKFILL_LOOKBACK_HOURS * 60 * 60 * 1000);
+    const currentHourBucket = new Date(Date.UTC(
+      new Date().getUTCFullYear(),
+      new Date().getUTCMonth(),
+      new Date().getUTCDate(),
+      new Date().getUTCHours(),
+      0, 0, 0
+    ));
 
     // Find hour buckets in the last 12h that have no snapshots AND no completed ingestion run
     const result = await pool.query(`
