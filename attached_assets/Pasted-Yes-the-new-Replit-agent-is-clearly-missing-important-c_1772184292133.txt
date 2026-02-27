@@ -1,0 +1,753 @@
+Yes — the new Replit agent is clearly missing important context, and on this one it mixed up old architecture with your current architecture.
+
+The biggest correction is:
+
+Mediastack is primary
+
+GDELT is secondary fallback
+
+Serper News is emergency fallback
+
+Serper Search is still your main search signal
+
+So your instinct was right to call that out.
+
+Here’s my take on the actual red flags from the Mediastack review, and what I’d tell Replit to fix/check next.
+
+What is actually a red flag
+1) Persistent high zero-article coverage from Mediastack
+
+This is the real issue.
+
+If, on refresh runs, you’re seeing:
+
+nearZeroPct = 71–82%
+
+lots of people with 0 articles
+
+recurring offenders in the top 25
+
+then Mediastack is operationally up but data-quality weak for your use case.
+
+That means:
+
+the API is “healthy” technically,
+
+but your news signal is underpowered for a meaningful chunk of the leaderboard.
+
+This matters more than the single timeout.
+
+2) Repeat zero coverage for important names
+
+Also real.
+
+If names like:
+
+MrBeast
+
+Lisa / Blackpink
+
+Ed Sheeran
+
+Theo Von
+
+Nayib Bukele
+
+keep getting zeroes, that means Mediastack has blind spots by:
+
+entertainment/music
+
+international figures
+
+certain creator/political profiles
+
+That is exactly the kind of bias that can distort a “who’s trending” product.
+
+3) Duplicate runs in the same hour bucket
+
+This is worth investigating.
+
+If you truly had:
+
+one fresh run
+
+one cache-only run
+
+both completing for the same hour bucket
+
+then one of these is happening:
+
+the lock is not preventing overlap correctly
+
+a retry/backfill path is writing into the same hour bucket
+
+the “fresh vs cache” decision is being recomputed in a second invocation for the same bucket
+
+the ingestion scheduler is firing twice
+
+Even if snapshots are idempotent, this can still:
+
+skew health metrics
+
+confuse provider stats
+
+produce inconsistent “last run” diagnostics
+
+This is a real ops bug to inspect.
+
+What is not necessarily a red flag
+4) newsGovernor = 75% on cache-only runs
+
+I would not call this a bug by itself.
+
+That sounds like your freshness governor doing exactly what it was designed to do:
+
+fresh fetch = full weight
+
+cache reuse = dampened weight
+
+That is a feature, not a failure.
+
+The only question is whether 75% is the right penalty. But “it happens every cache hour” is expected if your cadence is intentionally:
+
+refresh every 2h
+
+cache on the in-between hour
+
+So I would tell Replit:
+
+This is not a red flag unless the penalty is making news too weak in practice.
+
+5) One timeout in 48h
+
+One isolated connection timeout is acceptable if fallback worked and the pipeline stayed healthy.
+
+That’s not what I’d focus on.
+
+My recommended fixes (best next moves)
+Priority 1 — Separate “API success” from “signal usefulness”
+
+Right now the agent is treating “request succeeded” as “news is healthy,” which is misleading.
+
+Tell Replit to add two separate health metrics for Mediastack:
+
+transport success rate = did the API respond?
+
+useful coverage rate = what % of tracked people got non-zero / meaningful article counts?
+
+And specifically show:
+
+overall non-zero %
+
+top 25 non-zero %
+
+top 10 non-zero %
+
+repeated zero-streak names
+
+That gives you the truth:
+
+API can be green
+
+signal quality can still be yellow/red
+
+This is probably the single most useful monitoring improvement.
+
+Priority 2 — Add a “Mediastack weak coverage” escalation rule
+
+Right now it sounds like fallbackOverride=true is hiding a persistent weakness.
+
+That may be too forgiving.
+
+I’d tell Replit to add a rule like:
+
+If Mediastack refresh succeeds but top-25 non-zero coverage is below a threshold (for example 70%) for X consecutive refreshes,
+
+mark provider as WEAK_COVERAGE
+
+increase selective fallback usage
+
+surface this clearly in health
+
+Not “outage,” but a new degraded-quality state.
+
+That way the system stops pretending “all good” when the transport is good but the output is thin.
+
+Priority 3 — Promote selective fallback for recurring zero-streak names
+
+For the recurring offenders, don’t wait for them to fail over organically every time.
+
+Have Replit implement a top-name persistent patch list:
+
+If a tracked person has 0 Mediastack articles for 3+ refreshes in a row
+
+and they are in the top X by rank / mass / watchlist
+
+automatically run Serper News fallback for them on refresh runs
+
+In other words:
+
+keep Mediastack as primary globally
+
+but treat specific people as known bad fits for Mediastack
+
+That’s a practical fix without throwing out the whole provider.
+
+Priority 4 — Investigate and harden the duplicate-hour issue
+
+Tell Replit to inspect these exact things:
+
+ingestionRuns for the duplicate hours
+Check:
+
+run IDs
+
+startedAt / completedAt
+
+hourBucket
+
+isBackfill
+
+provider mode (fresh/cache)
+
+lock acquisition logs
+
+Whether the second run is:
+
+a backfill,
+
+a manual trigger,
+
+a retry after stale lock cleanup,
+
+or a second scheduler tick.
+
+Add a hard guard:
+
+if a completed primary run already exists for hourBucket,
+
+do not allow another primary run for that same bucket.
+
+Even if snapshots are safe, your run accounting should be one canonical primary run per bucket.
+
+Priority 5 — Add a per-provider quality dashboard row
+
+You want Replit to give you a compact table each health check like:
+
+Mediastack: responded yes/no, non-zero %, top-25 non-zero %, zero-streak names
+
+GDELT: invoked yes/no, candidate coverage, fallback contribution
+
+Serper News: fallback count, names patched
+
+Serper Search: search coverage %, zeroGuard count
+
+This will make it immediately obvious whether:
+
+Mediastack is carrying the load,
+
+GDELT is quietly saving weak hours,
+
+or Serper fallback is becoming too important.
+
+Specific instructions I’d give Replit
+
+You can paste this:
+
+Please do these 5 checks/fixes:
+
+Split Mediastack health into transport vs quality
+
+Add metrics for:
+
+API response success
+
+non-zero coverage overall
+
+non-zero coverage top 25
+
+non-zero coverage top 10
+
+Show these separately in engine health.
+
+Add a weak-coverage state
+
+If Mediastack refresh succeeds but top-25 non-zero coverage stays low for consecutive refreshes, mark it as weak coverage (not outage).
+
+Do not let fallbackOverride=true hide this.
+
+Add persistent selective fallback for repeat zero-streak names
+
+If a tracked person gets 0 Mediastack articles for 3+ refreshes in a row, and they’re high-priority, auto-patch them with Serper News on refresh runs.
+
+Audit the duplicate hour-bucket runs
+
+Inspect ingestionRuns for the duplicate hours.
+
+Confirm whether the second run was primary, retry, manual, or backfill.
+
+Enforce one canonical primary completed run per hour bucket.
+
+Give me a 48h provider quality report
+
+Refresh runs only
+
+For each refresh hour:
+
+Mediastack non-zero overall
+
+Mediastack non-zero top 25
+
+GDELT invoked or not
+
+Serper fallback count
+
+recurring zero-streak names
+
+My bottom line
+
+The new agent’s provider summary was wrong, but the Mediastack quality concern is probably real.
+
+So the real priorities are:
+
+don’t panic about the single timeout
+
+don’t treat 75% governor on cache hours as a bug
+
+do investigate persistent zero coverage
+
+do investigate duplicate primary runs
+
+do make health reporting reflect signal quality, not just transport success
+
+If you want, send me Replit’s next health report after those checks and I’ll help you interpret whether Mediastack is “good enough,” “needs patching,” or “should be partially replaced.”
+
+Can you also
+a. give me an overview of our trend score engine architecture that I can give to Replit to remind of where we are at
+b. recommend to me if I should move off Mediastack to https://newsapi.org/
+Thought for 2m 19s
+
+Yes — and first, Replit’s “GDELT is primary” read is outdated for your current build.
+Your stack now is:
+
+Mediastack primary → GDELT fallback → Serper News emergency fallback
+
+So if the new agent says otherwise, correct it immediately.
+
+Recommended fixes for the red flags you found
+
+Stop masking “successful but empty” Mediastack runs
+Right now transport success and content quality are being treated too similarly.
+Tell Replit to split:
+
+API transport success = request worked
+
+content quality success = enough non-zero article coverage to trust the signal
+
+If Mediastack returns mostly zeros, that should count as quality degradation, even if the API technically succeeded.
+
+Rework the cache-hour news governor
+If every cache-only hour is auto-penalized to 75%, you are weakening news on half your runs.
+Better:
+
+first cache reuse after a fresh pull: 90–100%
+
+second stale hour: 85–90%
+
+only go to 75% when news is genuinely stale or quality is poor
+
+In other words: freshness penalty and quality penalty should be separate knobs.
+
+Promote known Mediastack weak entities to alternate providers faster
+For names like:
+
+MrBeast
+
+Lisa / Blackpink
+
+Theo Von
+
+Ed Sheeran
+
+Nayib Bukele
+
+…if they hit repeated zero-article runs, don’t keep waiting.
+Add a per-person rule:
+
+after 2–3 consecutive Mediastack zeros, bypass to GDELT
+
+if GDELT also weak, patch with Serper News
+
+Fix duplicate hour-bucket runs
+Two completed runs for the same hour is a real ops smell.
+Ask Replit to add:
+
+a hard uniqueness guarantee on ingestion_runs for (hour_bucket, score_version) for primary runs
+
+explicit is_backfill separation if backfills are allowed
+
+logging for why a second run was allowed through
+
+Add a Mediastack quality panel to engine health
+You want a visible section showing:
+
+fresh vs cache run
+
+non-zero coverage %
+
+top-25 non-zero coverage %
+
+repeat zero offenders
+
+fallback count by provider
+
+That will make this issue obvious at a glance instead of buried in logs.
+
+a) Trend score engine architecture overview (to remind Replit where you’re at)
+
+You can give Replit this directly:
+
+AuthoriDex Trend Score Engine — Current Architecture
+
+Core model
+
+The engine computes a Trend Score / Fame Index hourly for each tracked person.
+
+It uses a Mass + Velocity framework:
+
+Mass = baseline enduring attention / popularity
+
+Velocity = current attention surge
+
+Current weighting is approximately:
+
+Mass: 40%
+
+Velocity: 60%
+
+Primary source inputs
+
+Search (Serper) → strongest live intent signal
+
+News (Mediastack primary)
+
+Wikipedia pageviews → curiosity / research proxy
+
+Current news provider chain
+
+Mediastack = primary
+
+GDELT = fallback when Mediastack quality/coverage is weak
+
+Serper News = emergency fallback when both are insufficient
+
+Normalization
+
+Raw source values are normalized so one mega-celebrity doesn’t compress the rest of the board.
+
+The engine uses percentile-style scaling / distribution-aware normalization rather than raw counts.
+
+Scores are versioned (v2) and queries are supposed to filter by score version.
+
+Anti-spam / anti-noise
+
+Velocity is damped by mass so low-baseline names can’t dominate purely from noisy short-term spikes.
+
+There are guardrails like:
+
+anti-spam damping
+
+tapering / cooling behavior
+
+source health governors
+
+EMA smoothing
+
+rate caps
+
+Stabilization
+
+The engine does not let scores move freely each hour.
+
+It applies:
+
+rate limiting cap per run
+
+EMA smoothing
+
+asymmetric decay (down moves can react slightly faster than up moves)
+
+dynamic loosening for corroborated real breakouts
+
+Catch-up mode exists to accelerate convergence after unusual gaps or drift.
+
+Snapshot system
+
+Canonical scores are written as hourly snapshots
+
+Snapshots are the basis for:
+
+24h / 7d changes
+
+charts
+
+market resolution
+
+historical comparisons
+
+The old snapshot scheduler is deprecated; ingest.ts is the main path.
+
+Health / resilience
+
+Source health has a state machine:
+
+HEALTHY
+
+DEGRADED
+
+OUTAGE
+
+RECOVERY
+
+Health is persisted so restarts don’t reset the state.
+
+Canaries monitor high-profile names to detect silent provider failures.
+
+Governors reduce source weight when freshness or quality drops.
+
+Key recent fixes / current direction
+
+Moved to Mediastack primary
+
+Added stronger fallbacks
+
+Added engine health, churn, reconciliation, payout, and resolver observability
+
+Added opening score capture for prediction market resolution
+
+Auto-resolution now works for internal market types
+
+The main concern now is news quality / coverage consistency, not the core scoring framework
+
+Current risk areas to watch
+
+Mediastack returning too many zeros
+
+duplicate hourly runs
+
+cache-hour news being over-penalized
+
+long-term snapshot retention / pruning
+
+ensuring provider quality is measured separately from transport success
+
+b) Should you move off Mediastack to NewsAPI?
+My recommendation: No full switch yet
+
+I would not move off Mediastack immediately.
+
+I would do this instead:
+
+Best next move
+
+Run NewsAPI in shadow mode for 3–7 days against:
+
+your top 25
+
+your 15 repeat Mediastack zero-offenders
+
+a small long-tail sample
+
+Then compare it directly against Mediastack.
+
+Why I would not hard-switch today
+
+Your issue is not “Mediastack is dead.”
+Your issue is:
+
+it returns too many empty results for certain entity types
+
+your quality logic is too forgiving
+
+your fallback behavior likely needs to be more aggressive for repeat weak names
+
+A full provider switch before measuring can create a new problem you don’t yet understand.
+
+What to ask Replit to test in the bakeoff
+
+For each provider, compare:
+
+Non-zero article coverage
+
+overall
+
+top 25
+
+repeat problem names
+
+Entity accuracy
+
+does the provider actually match the right person?
+
+especially for ambiguous names
+
+International / entertainment coverage
+
+your weak zone appears to be some music / creator / international names
+
+Latency and cost at your hourly cadence
+
+100+ entities, repeated refreshes, fallback bursts
+
+How it behaves on cache hours
+
+if you reuse cached data, which provider gives better usable depth per pull?
+
+Practical recommendation for right now
+
+Tell Replit:
+
+Keep Mediastack as primary for now
+
+Add NewsAPI as a shadow benchmark, not a replacement
+
+If NewsAPI materially beats Mediastack on:
+
+top-25 non-zero coverage
+
+repeat zero-offenders
+
+entity precision
+
+acceptable cost
+then promote it to:
+
+either new primary
+
+or secondary before GDELT
+
+If you want the safest near-term setup
+
+I’d test this order conceptually:
+
+Mediastack primary → NewsAPI secondary → GDELT tertiary → Serper emergency
+
+That gives you:
+
+paid structured source first
+
+a second mainstream article API before falling to noisier backup behavior
+
+Serper only when everything else struggles
+
+Bottom line
+
+Do not rip out Mediastack yet
+
+Do run a controlled A/B comparison immediately
+
+Your biggest gain likely comes from:
+
+stricter quality detection
+
+smarter per-person fallbacks
+
+only then a provider swap if the data proves it
+
+If you want, I can also draft the exact prompt to give Replit for:
+
+the Mediastack quality fixes, and
+
+the NewsAPI shadow-test implementation.
+
+I just happened to browse around replit and I came acrross the console which looks like it's doing work in real time. i saw that every second it was processing a new person with this error. What does that mean.
+
+BTW replit is still down, I tried a new build and the agent just got stuck for 30 min. I've emailed their support again
+Thought for 26s
+
+Yes — that error is very actionable, and it explains a lot.
+
+What it means:
+
+Your ingest job is trying to insert a row into trend_snapshots, but Postgres is rejecting it because of a check constraint on the snapshot_origin column:
+
+Constraint: chk_snapshot_origin_values
+
+Error code: 23514 = check constraint violation
+
+From the row preview in the error, the failing value is:
+
+snapshot_origin = 'backfill'
+
+So the table currently allows only certain origin values, and backfill is not one of them.
+
+That means:
+
+the engine is processing each person normally,
+
+but when it reaches the snapshot insert step for a backfill run,
+
+each insert fails,
+
+so you see it repeatedly “processing a new person” and erroring person-by-person.
+
+Why it is happening every second:
+
+The job is likely running a backfill hour and looping through all tracked people.
+For each person, it computes the score, then tries to write a snapshot tagged as backfill, and the DB blocks it.
+
+So this is not a random crash — it is a schema/code mismatch:
+
+code now writes snapshot_origin = 'backfill'
+
+database constraint still only permits older values (probably something like ingest, maybe live, etc.)
+
+What to tell Replit to fix:
+
+Tell it exactly this:
+
+The trend_snapshots table check constraint chk_snapshot_origin_values does not allow 'backfill', but the ingest/backfill code is now inserting snapshot_origin='backfill'.
+Please either:
+
+update the DB constraint to include 'backfill', or
+
+stop using 'backfill' and write an allowed value (for example keep snapshot_origin='ingest' and store isBackfill=true only in diagnostics/metadata).
+Then verify backfill inserts succeed.
+
+My recommendation:
+
+Best quick fix: keep snapshot_origin='ingest' for backfilled snapshots, and track backfill status in metadata only.
+
+Why:
+
+safer,
+
+avoids breaking any queries that filter snapshot_origin='ingest',
+
+avoids needing every downstream query/chart/stat to learn a new origin type.
+
+If you do want a separate origin, then Replit must also audit all queries that currently do things like:
+
+WHERE snapshot_origin = 'ingest'
+
+Otherwise backfilled snapshots may be written successfully but silently excluded from charts, stats, baselines, and health checks.
+
+Why this matters:
+
+This likely also explains instability around backfill:
+
+the backfill routine is running,
+
+inserts fail for every person,
+
+the run may still consume time/resources,
+
+and it can create noisy logs and partial processing.
+
+So this is a real bug, but a fixable one.
+
+A clean message you can paste to Replit:
+
+“Console shows trend_snapshots insert failures on every person during backfill. Postgres says check constraint chk_snapshot_origin_values is violated, and the failing row clearly has snapshot_origin='backfill'. That means code and schema are out of sync. Please fix this by either allowing 'backfill' in the constraint and auditing all snapshot_origin='ingest' queries, or more safely, keep snapshot_origin='ingest' for backfilled snapshots and store backfill status only in metadata/diagnostics. Then verify backfill inserts succeed without per-person errors.”
+
+And one extra note: this is separate from Replit’s platform outage. Even if their agent is flaky, this specific console error is in your app/database logic, not just a Replit UI problem.

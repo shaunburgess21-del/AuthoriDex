@@ -1,0 +1,67 @@
+Objective
+Based on ChatGPT's analysis of Mediastack run quality over the last 48h, implement 5 improvements to the ingestion health monitoring and reliability system:
+
+Split Mediastack transport vs signal-quality health metrics (add top-10 nonZero, separate quality from transport)
+Add a WEAK_COVERAGE state so fallbackOverride=true can no longer hide persistent Mediastack quality issues
+Harden the duplicate hour-bucket guard (sequential duplicates are not blocked today, only concurrent ones)
+Promote persistent selective fallback for known Mediastack zero-streak names (lower cooldown, proactive on refresh runs)
+Add a 48h provider quality report API endpoint for admin diagnostics
+Tasks
+T001: Add top-10 nonZero metric and separate transport/quality in Mediastack batch stats
+Blocked By: []
+Details:
+In server/providers/mediastack.ts: add top10NonZeroCount, top10Total, top10NonZeroCoveragePct to MediastackBatchStats interface and compute it (top 10 by rank order passed in)
+In server/jobs/ingest.ts: log and include mediastackTop10NonZeroPct in the health summary alongside mediastackTop25NonZeroPct
+Add a clear transport vs quality log line:
+[Mediastack] Transport: 100% | Signal quality: nonZero=58% overall, top25=76%, top10=80%
+Files: server/providers/mediastack.ts, server/jobs/ingest.ts
+Acceptance: Health summary JSON includes mediastackTop10NonZeroPct, new log line printed on every Mediastack run
+T002: Add WEAK_COVERAGE state to Mediastack health tracking
+Blocked By: [T001]
+Details:
+Create a new lightweight Mediastack-specific quality state machine persisted in api_cache under key system:mediastack_quality_state
+Track: consecutiveWeakRefreshes (counter), state: "OK" | "WEAK_COVERAGE" | "RECOVERING"
+Entry condition: top-25 nonZero% < 70% for 2 consecutive refresh runs (not cache-only runs)
+Exit condition: top-25 nonZero% >= 70% for 1 refresh run
+When in WEAK_COVERAGE: log a visible warning, include mediastackQuality: "WEAK_COVERAGE" in health summary
+Do NOT remove fallbackOverride=true (it serves a real purpose for the OUTAGE state machine) — instead add this as a separate parallel quality track
+Files: server/jobs/ingest.ts (add state persistence inline, similar to how NewsProviderPref is handled), server/scoring/sourceHealth.ts (optionally add helpers)
+Acceptance: WEAK_COVERAGE warning fires when top-25 nonZero drops below 70% for 2+ consecutive refreshes. Clears on recovery.
+T003: Harden the duplicate hour-bucket guard
+Blocked By: []
+Details:
+In acquireIngestionLock() in server/jobs/ingest.ts: after clearing stale locks, add a check for an existing completed (status = "completed") primary (isBackfill = false) run for the same hourBucket
+If one exists: log a warning and return { acquired: false } to skip the run — don't allow a second primary completed run for the same bucket
+Note: backfill runs (isBackfill = true) should be allowed regardless — this guard is only for primary runs
+Also add isBackfill boolean column to ingestion_runs schema if not present, so we can distinguish them in queries
+Files: shared/schema.ts, server/jobs/ingest.ts
+Acceptance: A second primary run for an already-completed hour bucket is blocked and logs "[Ingest Lock] Hour bucket YYYY-MM-DDTHH already has a completed primary run — skipping"
+T004: Proactive refresh-run Serper patching for persistent Mediastack zero-streak names
+Blocked By: []
+Details:
+Current behavior: per-person fallback fires after streak≥3, max 15 per run, 90-min cooldown
+Problem: 90-min cooldown means a person that fails every Mediastack refresh (every ~2h) gets patched roughly every other refresh cycle — not every one
+Change: On Mediastack refresh runs specifically (not cache-only runs), reduce cooldown to 30 minutes for people with streak≥3
+Also increase PER_PERSON_FALLBACK_MAX from 15 to 25 for Mediastack refresh runs specifically (since we have full Serper budget available)
+Add a log line identifying how many of the per-person patches are "refresh-proactive" vs "streak first-time"
+Files: server/jobs/ingest.ts
+Acceptance: On a Mediastack refresh run, people with streak≥3 and rank≤25 get Serper patched if their cooldown expired (30min on refresh vs 90min on cache), up to 25 per refresh run
+T005: Add 48h provider quality report API endpoint
+Blocked By: []
+Details:
+Add GET /api/admin/ingestion/quality-report in server/routes.ts
+Queries last 48h of ingestion_runs where status = 'completed' and healthSummary IS NOT NULL, ordered by startedAt DESC
+For each run, extract from healthSummary JSON:
+hour (hourBucket)
+newsProviderUsed
+isRefresh (from mediastackCadence)
+mediastackNonZeroPct
+mediastackTop25NonZeroPct
+mediastackTop10NonZeroPct (once T001 adds it)
+gdeltInvoked (sourceStatuses.gdelt present and not "SKIPPED")
+serperFallbackCount (perPerson.succeeded)
+serperFallbackNames (perPerson.patched)
+newsGovernor
+Return structured JSON, refresh runs flagged separately from cache-only runs
+Files: server/routes.ts
+Acceptance: GET /api/admin/ingestion/quality-report returns a JSON array of run summaries, refresh runs clearly marked, with all the above fields populated
