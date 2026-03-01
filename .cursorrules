@@ -1,0 +1,90 @@
+# AuthoriDex — Cursor Agent Rules
+
+## Project Overview
+AuthoriDex is a live influence index and prediction platform. It ranks 100 public figures by influence score, updated hourly via external APIs. Users vote, predict outcomes, and track momentum in real time.
+
+## Stack
+- Frontend: React 18, Vite, TailwindCSS, shadcn/ui, Wouter (routing), TanStack Query (data fetching)
+- Backend: Node.js, Express, TypeScript
+- Database: PostgreSQL via Supabase (Drizzle ORM)
+- Hosting: Railway (backend), Vercel (frontend)
+- Auth: Passport.js (local strategy)
+
+## Folder Structure
+- `client/` — React frontend
+- `server/` — Express backend
+- `shared/` — Shared types/schemas used by both frontend and backend
+- `server/trending/` — Score engine (DO NOT modify without full understanding)
+- `server/ingestion/` — Data ingestion jobs
+- `server/jobs/` — Background schedulers
+
+## Critical Rules — Read Before Every Change
+
+### Never Do This
+- NEVER push directly to `main` branch
+- NEVER modify `server/db.ts` without understanding Drizzle + Supabase pooler setup
+- NEVER expose `SUPABASE_SERVICE_ROLE_KEY` to the frontend
+- NEVER modify the score engine (`server/trending/`) without being explicitly asked
+- NEVER change scheduler timing without being explicitly asked
+- NEVER delete or rename database tables without a migration plan
+- NEVER commit `.env` files to git
+
+### Always Do This
+- ALWAYS create a feature branch before making changes: `git checkout -b feature/name`
+- ALWAYS check `shared/` folder when changing types — changes affect both frontend and backend
+- ALWAYS use TanStack Query for frontend data fetching (not raw fetch/axios)
+- ALWAYS use Wouter for client-side navigation (not React Router)
+- ALWAYS use existing shadcn/ui components before creating new ones
+- ALWAYS preserve existing API response shapes — frontend depends on them
+- ALWAYS test locally with `npm run dev` before pushing
+
+## Code Style
+- TypeScript everywhere — no `any` types unless absolutely necessary
+- Functional React components only — no class components
+- TailwindCSS for all styling — no inline styles
+- Use existing color variables and design tokens from `tailwind.config.ts`
+- Keep components small and focused — one responsibility per component
+- Use `shared/schema.ts` for all Zod validation schemas
+
+## Database Rules
+- Use Drizzle ORM for all DB queries — no raw SQL unless absolutely necessary
+- The `DATABASE_URL` uses Supabase Session Pooler (port 5432)
+- Never use the direct connection string in production
+- All schema changes go through `drizzle-kit push` — never manual SQL
+
+## API Rules
+- All API routes defined in `server/routes.ts`
+- Always return consistent response shapes: `{ data: ... }` or `{ error: ... }`
+- Never break existing endpoint URLs — frontend depends on them
+- Authentication uses express-session — check auth middleware before adding protected routes
+
+## Environment
+- Local dev: `npm run dev` (loads `.env` automatically via --env-file flag)
+- Never hardcode URLs — use environment variables
+- Local runs on port 5000
+
+## When Asked to Build a Feature
+1. Read relevant existing code first — understand the pattern before writing new code
+2. Follow existing patterns in the codebase
+3. Make the smallest change that achieves the goal
+4. List all files you plan to modify before making changes
+5. Explain what you changed and why after completing
+
+## When Asked to Fix a Bug
+1. Identify the root cause first — don't just patch symptoms
+2. Check if the same bug exists elsewhere in the codebase
+3. Fix the root cause, not just the visible error
+4. Explain what caused the bug and how the fix addresses it
+
+## Commit Message Format
+- `feat:` for new features
+- `fix:` for bug fixes
+- `refactor:` for code restructuring
+- `style:` for UI/visual changes
+- `docs:` for documentation
+- `chore:` for maintenance tasks
+
+## Two-Agent Workflow
+- Primary agent (Codex/GPT): Day-to-day feature building, component work, API routes
+- Backup agent (Claude Opus): Architecture decisions, complex refactors, debugging hard problems
+- When stuck after 2 attempts — switch to backup agent and explain what was tried
