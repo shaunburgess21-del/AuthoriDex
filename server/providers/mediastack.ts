@@ -277,8 +277,9 @@ export async function getMonthlyCallEstimate(): Promise<{ dailyCalls: number[]; 
   }
 
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const dayOfMonth = now.getDate();
-  const avgDailyCalls = total / Math.min(7, dayOfMonth);
+  // Use last-7-day average for projection; do not use dayOfMonth as denominator
+  // (on day 1 it would treat 7-day total as "daily" and over-project e.g. 116k)
+  const avgDailyCalls = total / 7;
   const projectedMonthly = Math.round(avgDailyCalls * daysInMonth);
 
   return {
