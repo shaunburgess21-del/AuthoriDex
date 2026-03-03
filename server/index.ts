@@ -421,11 +421,12 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
+  // ALWAYS serve the app on the port specified in the environment variable PORT.
+  // In development, default to 3000 if PORT is not set; otherwise default to 5000.
+  // This serves both the API and the client.
+  const envPort = process.env.PORT;
+  const defaultPort = process.env.NODE_ENV === "development" ? "3000" : "5000";
+  const port = parseInt(envPort || defaultPort, 10);
   server.listen({
     port,
     host: "0.0.0.0",
