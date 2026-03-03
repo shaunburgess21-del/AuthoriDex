@@ -65,27 +65,27 @@ def main():
                     f"Full ingestion is {full_age:.0f} min overdue — check Railway scheduler"
                 )
 
-        # Check LiveTick frequency (should run ~every 10 min)
+        # Check LiveTick frequency (should run ~every 10 min; liveUpdatedAt only advances when rows are written due to ranking changes)
         live_updated_at = parse_time(data.get("liveUpdatedAt"))
         live_age = age_minutes(live_updated_at)
 
         if live_age is not None:
             result["details"].append(
-                f"Last LiveTick: {live_age:.0f} min ago (expected: <15 min)"
+                f"Last LiveTick write: {live_age:.0f} min ago (expected: <45 min; updates only when rankings change)"
             )
-            if live_age <= 15:
-                result["details"].append("✅ LiveTick frequency: ON SCHEDULE")
-            elif live_age <= 30:
+            if live_age <= 45:
+                result["details"].append("✅ LiveTick: ON SCHEDULE")
+            elif live_age <= 60:
                 result["status"] = "warning" if result["status"] == "ok" else result["status"]
-                result["details"].append("⚠️  LiveTick frequency: SLIGHTLY DELAYED")
+                result["details"].append("⚠️  LiveTick: SLIGHTLY DELAYED")
                 result["action_items"].append(
-                    f"LiveTick ran {live_age:.0f} min ago — expected every 10 min"
+                    f"LiveTick last wrote {live_age:.0f} min ago (writes only on ranking changes) — monitor"
                 )
             else:
                 result["status"] = "error"
-                result["details"].append("❌ LiveTick frequency: OVERDUE")
+                result["details"].append("❌ LiveTick: OVERDUE")
                 result["action_items"].append(
-                    f"LiveTick is {live_age:.0f} min overdue — scheduler may be down"
+                    f"LiveTick has not written for {live_age:.0f} min (writes only on ranking changes) — check scheduler if rankings should be changing"
                 )
 
         # Summary

@@ -16,9 +16,12 @@ BASE_URL = os.environ.get(
 
 SOURCE_LABELS = {
     "serper": "Serper (Google Search)",
+    "serper_news": "Serper News",
     "mediastack": "Mediastack (News)",
     "wiki": "Wikipedia Pageviews",
-    "gdelt": "GDELT (Global Events)"
+    "gdelt": "GDELT (Global Events)",
+    "ai_trending": "AI Trending",
+    "system": "System",
 }
 
 def main():
@@ -35,7 +38,7 @@ def main():
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
 
-        sources = data.get("sources", {})
+        sources = data.get("freshness", {})
 
         if not sources:
             result["status"] = "warning"
@@ -51,29 +54,29 @@ def main():
         for source, info in sources.items():
             label = SOURCE_LABELS.get(source, source)
             if isinstance(info, dict):
-                src_status = str(info.get("status", "unknown")).upper()
-                last_healthy = info.get("lastHealthy", "unknown")
-                fails = info.get("consecutiveFails", 0)
+                src_status = str(info.get("status", "unknown")).lower()
+                last_updated = info.get("lastUpdated", "unknown")
+                count = info.get("count", 0)
 
-                if "OUTAGE" in src_status:
+                if "outage" in src_status:
                     outage.append(source)
                     result["details"].append(
-                        f"❌ {label}: OUTAGE (fails={fails}, last healthy={last_healthy})"
+                        f"❌ {label}: OUTAGE (count={count}, last updated={last_updated})"
                     )
                     result["action_items"].append(
                         f"{label} is in OUTAGE — check API key validity and rate limits"
                     )
-                elif "DEGRADED" in src_status or "CACHED" in src_status:
+                elif src_status in ("cached", "stale", "degraded"):
                     degraded.append(source)
                     result["details"].append(
-                        f"⚠️  {label}: DEGRADED (using cache, last healthy={last_healthy})"
+                        f"⚠️  {label}: {src_status.upper()} (count={count}, last updated={last_updated})"
                     )
                     result["action_items"].append(
-                        f"{label} is degraded — monitor for recovery"
+                        f"{label} is {src_status} — monitor for recovery"
                     )
                 else:
                     healthy.append(source)
-                    result["details"].append(f"✅ {label}: LIVE")
+                    result["details"].append(f"✅ {label}: LIVE (count={count}, {last_updated})")
             else:
                 result["details"].append(f"? {label}: {info}")
 
