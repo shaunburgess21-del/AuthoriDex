@@ -427,9 +427,10 @@ app.use((req, res, next) => {
   const envPort = process.env.PORT;
   const defaultPort = process.env.NODE_ENV === "development" ? "3000" : "5000";
   const port = parseInt(envPort || defaultPort, 10);
+  const host = process.env.NODE_ENV === "development" ? "127.0.0.1" : "0.0.0.0";
   server.listen({
     port,
-    host: "0.0.0.0",
+    host,
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
