@@ -431,7 +431,6 @@ app.use((req, res, next) => {
   server.listen({
     port,
     host,
-    reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
     
