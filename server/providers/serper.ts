@@ -151,12 +151,12 @@ export async function fetchSerperData(name: string, searchQueryOverride?: string
       .where(eq(apiCache.cacheKey, cacheKey))
       .limit(1);
 
-    // Stale cache fallback: if we have data fetched within the last 48 hours,
-    // use it instead of making a live API call. This prevents excessive API usage
-    // and memory pressure when the 12-hour TTL has just expired.
+    // Stale cache fallback: if we have data fetched within the last 24 hours,
+    // use it instead of making a live API call. Beyond 24h we always refresh
+    // so hourly ingestion keeps Serper freshness within 24h.
     if (rawCached) {
       const staleAgeHours = (Date.now() - new Date(rawCached.fetchedAt).getTime()) / (1000 * 60 * 60);
-      if (staleAgeHours <= 48) {
+      if (staleAgeHours <= 24) {
         console.log(`[Serper] Stale cache hit for ${name} (${staleAgeHours.toFixed(1)}h old), skipping live API call`);
         return JSON.parse(rawCached.responseData);
       }

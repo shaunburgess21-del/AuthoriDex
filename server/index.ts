@@ -52,6 +52,9 @@ pool.on("error", (err) => {
 // Instead, use the /api/cron/* endpoints triggered by external schedulers.
 const SERVERLESS_MODE = process.env.SERVERLESS_MODE === "true" || process.env.VERCEL === "1";
 
+// When DISABLE_SCHEDULERS=true (e.g., local dev), do not start any background schedulers.
+const DISABLE_SCHEDULERS = process.env.DISABLE_SCHEDULERS === "true";
+
 // Data ingestion interval: 1 hour (increased frequency for smoother trend curves)
 // Since X API was removed, we have budget for more frequent Wiki/GDELT/Serper calls
 const INGESTION_INTERVAL_MS = 60 * 60 * 1000; // 1 hour in ms
@@ -272,7 +275,7 @@ async function checkStaleness(): Promise<void> {
 }
 
 function startStalenessMonitor() {
-  if (SERVERLESS_MODE) return;
+  if (SERVERLESS_MODE || DISABLE_SCHEDULERS) return;
   log("[Staleness Monitor] Starting (checks every 30 min)");
   setTimeout(() => {
     checkStaleness();
@@ -301,6 +304,7 @@ function startIngestionScheduler() {
     log("[Ingestion Scheduler] Skipped - serverless mode enabled. Use /api/cron/refresh-data instead.");
     return;
   }
+  if (DISABLE_SCHEDULERS) return;
   
   log(`[Ingestion Scheduler] Starting (absolute hourly scheduling at :02 past each hour)`);
   
@@ -330,7 +334,7 @@ function startIngestionScheduler() {
 }
 
 function startSeedEngineScheduler() {
-  if (SERVERLESS_MODE) return;
+  if (SERVERLESS_MODE || DISABLE_SCHEDULERS) return;
   log("[Seed Engine] Starting scheduler (hourly at :30 past each hour, Mon-Tue only)");
 
   function scheduleNextSeedRun() {
@@ -417,15 +421,16 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
+  // ALWAYS serve the app on the port specified in the environment variable PORT.
+  // In development, default to 3000 if PORT is not set; otherwise default to 5000.
+  // This serves both the API and the client.
+  const envPort = process.env.PORT;
+  const defaultPort = process.env.NODE_ENV === "development" ? "3000" : "5000";
+  const port = parseInt(envPort || defaultPort, 10);
+  const host = process.env.NODE_ENV === "development" ? "127.0.0.1" : "0.0.0.0";
   server.listen({
     port,
-    host: "0.0.0.0",
-    reusePort: true,
+    host,
   }, () => {
     log(`serving on port ${port}`);
     
@@ -436,24 +441,26 @@ app.use((req, res, next) => {
     verifyDbConstraints();
     
     // Start hourly snapshot scheduler (captures data points for graphs)
-    startSnapshotScheduler(60 * 60 * 1000);
-    
-    // Start data ingestion scheduler (fetches fresh API data every 8 hours)
-    startIngestionScheduler();
+    if (DISABLE_SCHEDULERS) {
+      log("[BOOT] DISABLE_SCHEDULERS=true — Ingestion, LiveTick, Seed Engine, MarketResolver, Staleness Monitor, Snapshot schedulers not started");
+    } else {
+      startSnapshotScheduler(60 * 60 * 1000);
+      startIngestionScheduler();
 
-    // Start live tick scheduler (re-ranks every 10 min using internal signals)
-    if (!SERVERLESS_MODE) {
-      startLiveTickScheduler();
+      // Start live tick scheduler (re-ranks every 10 min using internal signals)
+      if (!SERVERLESS_MODE) {
+        startLiveTickScheduler();
+      }
+
+      startSeedEngineScheduler();
+
+      // Start market auto-resolver (resolves expired prediction markets every 5 min)
+      if (!SERVERLESS_MODE) {
+        startMarketResolverScheduler();
+      }
+
+      // Start staleness monitor (alerts when snapshots are >2h old)
+      startStalenessMonitor();
     }
-
-    startSeedEngineScheduler();
-
-    // Start market auto-resolver (resolves expired prediction markets every 5 min)
-    if (!SERVERLESS_MODE) {
-      startMarketResolverScheduler();
-    }
-
-    // Start staleness monitor (alerts when snapshots are >2h old)
-    startStalenessMonitor();
   });
 })();
