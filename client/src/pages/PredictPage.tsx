@@ -53,6 +53,8 @@ import {
   Flame,
   RotateCcw,
   XCircle,
+  Clapperboard,
+  Gamepad2,
   type LucideIcon
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -588,8 +590,10 @@ const BASE_CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: "tech", label: "Tech" },
   { id: "politics", label: "Politics" },
   { id: "business", label: "Business" },
-  { id: "music", label: "Music" },
   { id: "sports", label: "Sports" },
+  { id: "music", label: "Music" },
+  { id: "acting", label: "Acting" },
+  { id: "gaming", label: "Gaming" },
   { id: "creator", label: "Creator" },
 ];
 
@@ -600,15 +604,17 @@ const CATEGORY_ICONS: Record<CategoryFilter, LucideIcon> = {
   tech: Cpu,
   politics: Landmark,
   business: Briefcase,
-  music: Music2,
   sports: Trophy,
+  music: Music2,
+  acting: Clapperboard,
+  gaming: Gamepad2,
   creator: Video,
   misc: Sparkles,
 };
 
 const CATEGORY_FILTERS_WITH_CUSTOM: { id: CategoryFilter; label: string }[] = [
   ...BASE_CATEGORY_FILTERS,
-  { id: "misc", label: "Custom Topic" },
+  { id: "misc", label: "Misc" },
 ];
 
 const getPredictCategoryFilters = (includeCustomTopic: boolean) => 

@@ -699,7 +699,9 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
     { value: "sports", label: "Sports" },
     { value: "business", label: "Business" },
     { value: "creator", label: "Creator" },
-    { value: "misc", label: "Custom Topic" },
+    { value: "acting", label: "Acting" },
+    { value: "gaming", label: "Gaming" },
+    { value: "misc", label: "Misc" },
   ];
 
   const titlePlaceholders: Record<string, string> = {
@@ -3937,8 +3939,10 @@ export default function AdminDashboard() {
                           <SelectItem value="Sports">Sports</SelectItem>
                           <SelectItem value="Politics">Politics</SelectItem>
                           <SelectItem value="Business">Business</SelectItem>
+                          <SelectItem value="Acting">Acting</SelectItem>
+                          <SelectItem value="Gaming">Gaming</SelectItem>
                           <SelectItem value="Creator">Creator</SelectItem>
-                          <SelectItem value="misc">Custom Topic</SelectItem>
+                          <SelectItem value="misc">Misc</SelectItem>
                         </SelectContent>
                       </Select>
                       <Input
@@ -4110,8 +4114,10 @@ export default function AdminDashboard() {
                           <SelectItem value="Sports">Sports</SelectItem>
                           <SelectItem value="Politics">Politics</SelectItem>
                           <SelectItem value="Business">Business</SelectItem>
+                          <SelectItem value="Acting">Acting</SelectItem>
+                          <SelectItem value="Gaming">Gaming</SelectItem>
                           <SelectItem value="Creator">Creator</SelectItem>
-                          <SelectItem value="misc">Custom Topic</SelectItem>
+                          <SelectItem value="misc">Misc</SelectItem>
                         </SelectContent>
                       </Select>
                       <Input
@@ -5358,6 +5364,8 @@ export default function AdminDashboard() {
                   <SelectItem value="Sports">Sports</SelectItem>
                   <SelectItem value="Politics">Politics</SelectItem>
                   <SelectItem value="Business">Business</SelectItem>
+                  <SelectItem value="Acting">Acting</SelectItem>
+                  <SelectItem value="Gaming">Gaming</SelectItem>
                   <SelectItem value="Science">Science</SelectItem>
                 </SelectContent>
               </Select>
@@ -5844,8 +5852,10 @@ export default function AdminDashboard() {
                     <SelectItem value="Sports">Sports</SelectItem>
                     <SelectItem value="Politics">Politics</SelectItem>
                     <SelectItem value="Business">Business</SelectItem>
+                  <SelectItem value="Acting">Acting</SelectItem>
+                  <SelectItem value="Gaming">Gaming</SelectItem>
                     <SelectItem value="Creator">Creator</SelectItem>
-                    <SelectItem value="misc">Custom Topic</SelectItem>
+                    <SelectItem value="misc">Misc</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -6166,6 +6176,8 @@ export default function AdminDashboard() {
                     <SelectItem value="Sports">Sports</SelectItem>
                     <SelectItem value="Politics">Politics</SelectItem>
                     <SelectItem value="Business">Business</SelectItem>
+                  <SelectItem value="Acting">Acting</SelectItem>
+                  <SelectItem value="Gaming">Gaming</SelectItem>
                     <SelectItem value="Creator">Creator</SelectItem>
                   </SelectContent>
                 </Select>
@@ -6393,7 +6405,7 @@ export default function AdminDashboard() {
                     <SelectItem value="Politics">Politics</SelectItem>
                     <SelectItem value="Business">Business</SelectItem>
                     <SelectItem value="Creator">Creator</SelectItem>
-                    <SelectItem value="misc">Custom Topic</SelectItem>
+                    <SelectItem value="misc">Misc</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

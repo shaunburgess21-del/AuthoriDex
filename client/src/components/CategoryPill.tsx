@@ -1,5 +1,5 @@
 const CATEGORY_LABEL_MAP: Record<string, string> = {
-  misc: "Custom Topic",
+  misc: "Misc",
 };
 
 const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string }> = {
@@ -28,15 +28,25 @@ const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string
     border: 'border-[#FB923C]/40',
     text: 'text-[#FB923C]',
   },
+  Acting: {
+    bg: 'bg-[#A855F7]/10',
+    border: 'border-[#A855F7]/40',
+    text: 'text-[#A855F7]',
+  },
+  Gaming: {
+    bg: 'bg-[#06B6D4]/10',
+    border: 'border-[#06B6D4]/40',
+    text: 'text-[#06B6D4]',
+  },
   Creator: {
     bg: 'bg-[#FACC15]/10',
     border: 'border-[#FACC15]/40',
     text: 'text-[#FACC15]',
   },
   misc: {
-    bg: 'bg-[#8B5CF6]/10',
-    border: 'border-[#8B5CF6]/40',
-    text: 'text-[#8B5CF6]',
+    bg: 'bg-[#94A3B8]/10',
+    border: 'border-[#94A3B8]/40',
+    text: 'text-[#94A3B8]',
   },
 };
 

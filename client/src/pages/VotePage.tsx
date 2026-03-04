@@ -76,16 +76,18 @@ const VOTE_CATEGORIES = [
   { value: "Favorites", label: "Favorites" },
   { value: "Trending", label: "Trending" },
   { value: "Tech", label: "Tech" },
-  { value: "Politics", label: "Politics" },
   { value: "Business", label: "Business" },
+  { value: "Politics", label: "Politics" },
   { value: "Music", label: "Music" },
   { value: "Sports", label: "Sports" },
+  { value: "Acting", label: "Acting" },
+  { value: "Gaming", label: "Gaming" },
   { value: "Creator", label: "Creator" },
 ];
 
 const VOTE_CATEGORIES_WITH_CUSTOM = [
   ...VOTE_CATEGORIES,
-  { value: "misc", label: "Custom Topic" },
+  { value: "misc", label: "Misc" },
 ];
 
 const mockCelebrityList = [
@@ -102,7 +104,7 @@ interface InductionCandidate {
   name: string;
   initials: string;
   imageSlug: string | null;
-  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics";
+  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics" | "Acting" | "Gaming";
   votes: number;
 }
 
@@ -890,7 +892,7 @@ function DiscourseCard({
     <div className="relative group h-full">
       <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100" />
     <Card 
-      className="relative pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col border-slate-700/50 group-hover:shadow-lg group-hover:shadow-cyan-500/20"
+      className="relative pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[300px] flex flex-col border-slate-700/50 group-hover:shadow-lg group-hover:shadow-cyan-500/20"
       data-testid={`card-discourse-${topic.id}`}
     >
       <div className="absolute top-3 right-3">
@@ -916,11 +918,11 @@ function DiscourseCard({
         )}
         <div className="flex-1 min-w-0">
           {topic.slug ? (
-            <Link href={`/polls/${topic.slug}`} data-testid={`link-poll-detail-${topic.id}`}>
-              <h3 className="font-serif font-bold text-lg leading-tight hover:text-cyan-400 transition-colors cursor-pointer">{topic.headline}</h3>
+            <Link href={`/polls/${topic.slug}`} data-testid={`link-poll-detail-${topic.id}`} className="block w-full min-w-0">
+              <h3 className="font-serif font-bold text-lg leading-tight hover:text-cyan-400 transition-colors cursor-pointer line-clamp-2">{topic.headline}</h3>
             </Link>
           ) : (
-            <h3 className="font-serif font-bold text-lg leading-tight">{topic.headline}</h3>
+            <h3 className="font-serif font-bold text-lg leading-tight line-clamp-2 block min-w-0">{topic.headline}</h3>
           )}
           {topic.personName && (
             <span className="text-xs text-cyan-400">{topic.personName}</span>
@@ -928,10 +930,10 @@ function DiscourseCard({
         </div>
       </div>
       {topic.subjectText && (
-        <p className="text-sm text-muted-foreground mb-5 flex-grow line-clamp-1">{topic.subjectText}</p>
+        <p className="text-sm text-muted-foreground mb-5 flex-grow line-clamp-2">{topic.subjectText}</p>
       )}
       {!topic.subjectText && topic.description && (
-        <p className="text-sm text-muted-foreground mb-5 flex-grow line-clamp-1">{topic.description}</p>
+        <p className="text-sm text-muted-foreground mb-5 flex-grow line-clamp-2">{topic.description}</p>
       )}
       
       {!voted ? (
@@ -1754,7 +1756,7 @@ function FilterChip({
 
   const getDisplayLabel = () => {
     if (isFavorites) return "Favorites";
-    if (isCustomTopic) return "Custom Topic";
+    if (isCustomTopic) return "Misc";
     return category;
   };
 
@@ -3076,7 +3078,7 @@ export default function VotePage() {
                   {pollSubjectType === 'custom' ? (
                     <>
                       <Sparkles className="h-3 w-3" />
-                      Custom Topic
+                      Misc
                     </>
                   ) : (
                     <>
@@ -3242,7 +3244,7 @@ export default function VotePage() {
                   <SelectItem value="Sports">Sports</SelectItem>
                   <SelectItem value="Politics">Politics</SelectItem>
                   <SelectItem value="Business">Business</SelectItem>
-                  <SelectItem value="misc">Custom Topic</SelectItem>
+                  <SelectItem value="misc">Misc</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -1,4 +1,4 @@
-export type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "creator";
+export type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "sports" | "music" | "acting" | "gaming" | "creator";
 
 export interface PredictionMarket {
   id: string;
@@ -264,5 +264,7 @@ export const CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: "business", label: "Business" },
   { id: "music", label: "Music" },
   { id: "sports", label: "Sports" },
+  { id: "acting", label: "Acting" },
+  { id: "gaming", label: "Gaming" },
   { id: "creator", label: "Creator" },
 ];

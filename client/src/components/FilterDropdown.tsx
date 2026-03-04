@@ -15,10 +15,12 @@ const DEFAULT_CATEGORIES = [
   { value: "favorites", label: "Favorites" },
   { value: "trending", label: "Trending" },
   { value: "Tech", label: "Tech" },
-  { value: "Politics", label: "Politics" },
   { value: "Business", label: "Business" },
+  { value: "Politics", label: "Politics" },
   { value: "Music", label: "Music" },
   { value: "Sports", label: "Sports" },
+  { value: "Acting", label: "Acting" },
+  { value: "Gaming", label: "Gaming" },
   { value: "Creator", label: "Creator" },
 ];
 

@@ -6952,11 +6952,13 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         return res.status(400).json({ error: "csvContent (string) is required" });
       }
 
-      const VALID_CATS = new Set(["Tech", "Politics", "Business", "Music", "Sports", "Creator", "misc"]);
+      const VALID_CATS = new Set(["Tech", "Politics", "Business", "Music", "Sports", "Acting", "Gaming", "Creator", "misc"]);
       const CAT_MAP: Record<string, string> = {
         "custom topic": "misc", "custom": "misc", "misc": "misc",
         "tech": "Tech", "politics": "Politics", "business": "Business",
-        "music": "Music", "sports": "Sports", "creator": "Creator",
+        "music": "Music", "sports": "Sports",
+        "acting": "Acting", "gaming": "Gaming",
+        "creator": "Creator",
       };
 
       const normalizeCat = (raw: string): string | null => {

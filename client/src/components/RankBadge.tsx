@@ -22,7 +22,7 @@ export function RankBadge({ rank, colorMode = "fame" }: RankBadgeProps) {
       )}
       data-testid={`badge-rank-${rank}`}
     >
-      #{rank}
+      {rank}
     </Badge>
   );
 }

@@ -19,6 +19,8 @@ export const BASE_FILTER_CATEGORIES = [
   "Business",
   "Music",
   "Sports",
+  "Acting",
+  "Gaming",
   "Creator",
 ] as const;
 
@@ -31,6 +33,8 @@ export const FILTER_CATEGORIES_WITH_CUSTOM = [
   "Business",
   "Music",
   "Sports",
+  "Acting",
+  "Gaming",
   "Creator",
   "misc",
 ] as const;
@@ -48,12 +52,14 @@ export const BASE_CATEGORY_FILTER_OPTIONS: { id: FilterCategory; label: string }
   { id: "Business", label: "Business" },
   { id: "Music", label: "Music" },
   { id: "Sports", label: "Sports" },
+  { id: "Acting", label: "Acting" },
+  { id: "Gaming", label: "Gaming" },
   { id: "Creator", label: "Creator" },
 ];
 
 export const CATEGORY_FILTER_OPTIONS_WITH_CUSTOM: { id: FilterCategory; label: string }[] = [
   ...BASE_CATEGORY_FILTER_OPTIONS,
-  { id: "misc", label: "Custom Topic" },
+  { id: "misc", label: "Misc" },
 ];
 
 export const CATEGORY_FILTER_OPTIONS = BASE_CATEGORY_FILTER_OPTIONS;
@@ -65,6 +71,8 @@ export const LEGACY_FILTER_CATEGORIES = [
   "Business",
   "Music",
   "Sports",
+  "Acting",
+  "Gaming",
   "Creator",
 ] as const;
 

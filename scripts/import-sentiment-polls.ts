@@ -12,7 +12,7 @@ import { db } from "../server/db";
 import { trendingPolls, trackedPeople } from "../shared/schema";
 import { eq, sql } from "drizzle-orm";
 
-const VALID_CATEGORIES = new Set(["Tech", "Politics", "Business", "Music", "Sports", "Creator", "misc"]);
+const VALID_CATEGORIES = new Set(["Tech", "Politics", "Business", "Music", "Sports", "Acting", "Gaming", "Creator", "misc"]);
 
 const CATEGORY_MAP: Record<string, string> = {
   "custom topic": "misc",
@@ -23,6 +23,8 @@ const CATEGORY_MAP: Record<string, string> = {
   "business": "Business",
   "music": "Music",
   "sports": "Sports",
+  "acting": "Acting",
+  "gaming": "Gaming",
   "creator": "Creator",
 };
 
