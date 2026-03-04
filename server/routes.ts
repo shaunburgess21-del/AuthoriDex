@@ -2946,10 +2946,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fetchNetWorthContext(person.name),
       ]);
       
-      // Initialize OpenAI with Replit AI Integrations
+      // Initialize OpenAI (supports Replit AI integrations or direct OpenAI key)
       const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
       });
       
       // Build context from web search
@@ -3111,10 +3110,9 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
               fetchNetWorthContext(person.name),
             ]);
             
-            // Initialize OpenAI
+            // Initialize OpenAI (supports Replit AI integrations or direct OpenAI key)
             const openai = new OpenAI({
-              apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-              baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+              apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
             });
             
             // Build context from web search
