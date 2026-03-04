@@ -981,6 +981,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Lightweight health check for monitors (no auth). Prefer /api/system/freshness for data status.
+  app.get("/api/system/health", async (req, res) => {
+    const serverTime = new Date().toISOString();
+    let dbOk = false;
+    try {
+      await db.execute(sql`SELECT 1 as ok`);
+      dbOk = true;
+    } catch (_e) {
+      // DB down — still return 200 so load balancer sees app up; body indicates DB failure
+    }
+    res.status(200).json({
+      status: dbOk ? "ok" : "degraded",
+      serverTime,
+      database: dbOk ? "connected" : "error",
+    });
+  });
+
   // Get system data freshness status
   app.get("/api/system/freshness", async (req, res) => {
     try {
@@ -1012,6 +1029,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status,
         };
       }
+      
+      // systemStatus uses only scheduled pipeline sources. Demand-driven (ai_trending) excluded.
+      // News: prefer Mediastack (primary); only consider GDELT when Mediastack absent — so GDELT staleness doesn't mark degraded when Mediastack is live.
+      const newsStatus = freshness["mediastack"] != null
+        ? freshness["mediastack"].status
+        : (freshness["gdelt"]?.status ?? null);
+      const statusesForHealth: ("live" | "stale" | "cached")[] = [
+        freshness["wiki"]?.status,
+        freshness["serper"]?.status,
+        newsStatus,
+      ].filter((s): s is "live" | "stale" | "cached" => s != null);
+      const systemStatus = statusesForHealth.length > 0 && statusesForHealth.every(s => s !== "stale")
+        ? "healthy"
+        : "degraded";
       
       let fullRefresh = getLastFullRefreshAt();
 
@@ -1065,7 +1096,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         freshness,
-        systemStatus: Object.values(freshness).every(f => f.status !== "stale") ? "healthy" : "degraded",
+        systemStatus,
         lastScoredAt: lastScoredAt?.toISOString() || null,
         lastScoredAtFormatted: formatRelativeTime(lastScoredAt),
         liveUpdatedAt: liveUpdatedAt?.toISOString() || null,
@@ -7769,7 +7800,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
   });
   
   // Run full data ingestion from external APIs
-  // Call this every 2 hours via external scheduler (Basic tier X API)
+  // Use when SERVERLESS_MODE: call every 1–2h via external scheduler. Do NOT call if the in-process ingestion scheduler is already running (see index.ts startIngestionScheduler) or you will get locked_out/skipped runs.
   app.post("/api/cron/refresh-data", verifyCronSecret, async (req, res) => {
     const startTime = Date.now();
     try {

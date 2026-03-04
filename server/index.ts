@@ -302,6 +302,8 @@ function startIngestionScheduler() {
     return;
   }
   
+  // Single source of ingestion: use EITHER this scheduler OR external cron (POST /api/cron/refresh-data), not both.
+  // If both run, the second trigger will be locked_out or skipped (0s/0 snap) and gdelt/wiki cache may not refresh as often as expected.
   log(`[Ingestion Scheduler] Starting (absolute hourly scheduling at :02 past each hour)`);
   
   // Run initial ingestion after 30 second delay (let server fully initialize)
