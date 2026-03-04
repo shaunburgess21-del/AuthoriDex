@@ -17,7 +17,7 @@ Preferred communication style: Simple, everyday language.
 ### Backend
 - **Technology Stack**: Node.js with Express.js, TypeScript, Drizzle ORM.
 - **API Design**: RESTful endpoints.
-- **Scoring Engine**: Calculates a Fame Score (0-1,000,000) based on Mass (40%) and Velocity (60%), with Velocity sources from Wikipedia (25%), News (35%), and Search (40%). Features per-source normalization, percentile ranking, multi-layered stabilization, circuit breakers, stale cache fallbacks, and adaptive request spacing. It generates AI-powered "Why Trending" summaries using `gpt-4o-mini`, tracks ingestion runs, and provides an Engine Health Dashboard. It also includes a cascading news provider hierarchy (Mediastack → GDELT → Serper News), per-person news fallback, degradation governor, and an EMA Hold Rule to prevent leaderboard whiplash. A "Canary People List" acts as an early-warning system for data source issues. Boot timestamp `[BOOT]` with NODE_ENV is logged on every startup for restart diagnostics.
+**Scoring Engine**: Calculates a Fame Score (0-1,000,000) based on Mass (40%) and Velocity (60%), with Velocity sources from Wikipedia (25%), News (35%), and Search (40%). Features per-source normalization, percentile ranking, multi-layered stabilization, circuit breakers, stale cache fallbacks, and adaptive request spacing. It generates AI-powered "Why Trending" summaries using `gpt-4o`, tracks ingestion runs, and provides an Engine Health Dashboard. It also includes a cascading news provider hierarchy (Mediastack → GDELT → Serper News), per-person news fallback, degradation governor, and an EMA Hold Rule to prevent leaderboard whiplash. A "Canary People List" acts as an early-warning system for data source issues. Boot timestamp `[BOOT]` with NODE_ENV is logged on every startup for restart diagnostics.
 - **Process Resilience**: SIGHUP signals are caught and ignored (kept alive). Vite/esbuild `process.exit(1)` calls are intercepted and suppressed to prevent cascading crashes from esbuild service restarts. Real fatal errors (uncaughtException, unhandledRejection) bypass the guard and exit immediately via `_origExit`. Signal handlers cover SIGTERM, SIGINT, SIGHUP, and exit.
 - **Serverless Architecture**: Stateless design, using Supabase Database for all state management with authenticated API endpoints for scheduled tasks.
 - **Image Storage Architecture**: Utilizes Supabase Storage Buckets for optimized WebP images across various sizes, with a robust `imageResolver` for contextual cascading URL fallbacks.
@@ -32,7 +32,7 @@ Preferred communication style: Simple, everyday language.
 - **Serper.dev API**: Google search results and emergency news fallback.
 - **Google Fonts**: Inter, Space Grotesk, JetBrains Mono.
 - **Supabase**: PostgreSQL database provider.
-- **OpenAI**: `gpt-4o-mini` for AI-generated summaries.
+- **OpenAI**: `gpt-4o` for AI-generated summaries.
 
 ### Key Libraries
 - **UI Components**: Radix UI.

@@ -3564,7 +3564,7 @@ Return a JSON object with:
 Be concise, factual, and strictly neutral. Only return the JSON object.`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-4o",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -3591,7 +3591,7 @@ Be concise, factual, and strictly neutral. Only return the JSON object.`;
         cacheStatus: "REGENERATED" as string,
         staleAgeMinutes: 0,
         provenance: {
-          model: "gpt-4o-mini",
+          model: "gpt-4o",
           promptVersion: WHY_TRENDING_PROMPT_VERSION,
           serperQuery: person.name,
           serperTbs: "qdr:w",
