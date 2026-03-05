@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
+import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   Crown, 
@@ -934,7 +935,48 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         </div>
       </Card>
 
-      <div 
+      {/* Real-World Markets (Open Markets) */}
+      <section>
+        <SectionHeader
+          icon={<Users className="h-4 w-4 text-violet-400" />}
+          title="Real-World Markets"
+          subtitle="Predict the outcome of verifiable global events"
+          count={communityPredictions.length || undefined}
+          showViewAll={communityPredictions.length > 3}
+          onViewAll={() => setShowCommunityOverlay(true)}
+          infoTooltip="Prediction markets about real-world events involving this person"
+        />
+        {communityPredictions.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {communityPredictions.slice(0, 3).map((community) => (
+              <CommunityCard
+                key={community.id}
+                market={community}
+                onClick={() => {}}
+                isMarketClosed={isMarketClosed}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-6 text-muted-foreground">
+            No real-world markets for {personName} yet.
+          </div>
+        )}
+      </section>
+
+      {/* Sticky weekly countdown timer */}
+      <MarketCycleHero marketState={marketCycle} />
+
+      {/* Weekly Jackpot - person specific */}
+      <section>
+        <SectionHeader
+          icon={<Crown className="h-4 w-4 text-amber-400" />}
+          title="Weekly Jackpot"
+          subtitle="Predict this week's exact Trend Score"
+          infoTooltip="Closest prediction to the final score wins the jackpot pot"
+        />
+
+        <div 
         className="relative overflow-hidden rounded-xl border-2 border-amber-500/50"
         style={{
           background: "linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 146, 60, 0.05) 50%, transparent 100%)",
@@ -1084,19 +1126,99 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
           </Button>
         </DialogContent>
       </Dialog>
+      </section>
 
-      {weeklyMarket && (
-        <section>
-          <SectionHeader
-            icon={<TrendingUp className="h-4 w-4 text-violet-400" />}
-            title="Weekly Up/Down"
-            subtitle="Predict if trend score goes up or down by week's end"
-            infoTooltip="Will their trend score be higher than start-of-week by market close?"
-          />
+      {/* Up/Down Predictions */}
+      <section>
+        <SectionHeader
+          icon={<TrendingUp className="h-4 w-4 text-violet-400" />}
+          title="Up/Down Predictions"
+          subtitle="Will their trend score end the week up or down?"
+          infoTooltip="Predict whether their trend score finishes the week above or below the starting value"
+        />
+        {weeklyMarket ? (
           <WeeklyUpDownCard market={weeklyMarket} isMarketClosed={isMarketClosed} />
-        </section>
+        ) : (
+          <div className="text-center py-6 text-muted-foreground">
+            No weekly Up/Down market for {personName} yet.
+          </div>
+        )}
+      </section>
+
+      {/* Head-to-Head Battles */}
+      <section>
+        <SectionHeader
+          icon={<Swords className="h-4 w-4 text-violet-400" />}
+          title="Head-to-Head Battles"
+          subtitle="Predict who will gain more trend points"
+          count={h2hBattles.length || undefined}
+          infoTooltip="Face-off markets matching this person against another rival"
+        />
+        {h2hBattles.length > 0 ? (
+          <div className={`grid gap-4 ${h2hBattles.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+            {h2hBattles.map((battle) => (
+              <HeadToHeadCard key={battle.id} market={battle} isMarketClosed={isMarketClosed} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-6 text-muted-foreground">
+            No head-to-head battles involving {personName} yet.
+          </div>
+        )}
+      </section>
+
+      {/* Top Gainer Predictions */}
+      <section>
+        <SectionHeader
+          icon={<BarChart3 className="h-4 w-4 text-violet-400" />}
+          title="Top Gainer Predictions"
+          subtitle="Who will add the most raw trend points"
+          count={gainerMarkets.length || undefined}
+          infoTooltip="Tracks raw points gained over the week, not percentage changes"
+        />
+        {gainerMarkets.length > 0 ? (
+          <div className={`grid gap-4 ${gainerMarkets.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+            {gainerMarkets.map((gainer) => (
+              <TopGainerCard
+                key={gainer.id}
+                market={gainer}
+                personName={personName}
+                isMarketClosed={isMarketClosed}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-6 text-muted-foreground">
+            No top gainer markets featuring {personName} yet.
+          </div>
+        )}
+      </section>
+
+      {/* Fallback when there are no markets at all */}
+      {!hasAnyMarkets && (
+        <Card className="p-8 text-center border-dashed">
+          <div className="space-y-3">
+            <p className="text-lg font-semibold">No active markets</p>
+            <p className="text-muted-foreground">
+              There are currently no prediction markets for {personName}.
+            </p>
+            <p className="text-sm text-muted-foreground mt-4">
+              Check back later or visit the main Prediction Markets page to explore all available markets.
+            </p>
+          </div>
+        </Card>
       )}
 
+      {/* View-all overlay for Real-World Markets */}
+      <ViewAllCommunityOverlay
+        open={showCommunityOverlay}
+        onClose={() => setShowCommunityOverlay(false)}
+        personName={personName}
+        markets={communityPredictions}
+        isMarketClosed={isMarketClosed}
+      />
+
+      {/*
       {h2hBattles.length > 0 && (
         <section>
           <SectionHeader
@@ -1163,14 +1285,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
           </div>
         </Card>
       )}
-
-      <ViewAllCommunityOverlay
-        open={showCommunityOverlay}
-        onClose={() => setShowCommunityOverlay(false)}
-        personName={personName}
-        markets={communityPredictions}
-        isMarketClosed={isMarketClosed}
-      />
+      */}
     </div>
   );
 }

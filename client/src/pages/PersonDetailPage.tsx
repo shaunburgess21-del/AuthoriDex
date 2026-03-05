@@ -15,22 +15,47 @@ import { CelebrityInfoModal } from "@/components/CelebrityInfoModal";
 import { CategoryPill } from "@/components/CategoryPill";
 import { TrendScoreInfoIcon } from "@/components/TrendScoreInfo";
 import { ApprovalRatingInfoIcon } from "@/components/ApprovalRatingInfo";
-import { ArrowLeft, Share2, Star, TrendingUp, Users, MessageSquare, Trophy, Zap, Camera, Check, X, Search, ThumbsUp, ThumbsDown, Minus, HelpCircle, ChevronDown } from "lucide-react";
+import { CardSection } from "@/components/CardSection";
+import { UnderratedOverratedCard, type ValueVotePerson } from "@/components/UnderratedOverratedCard";
+import { CurateProfileCard, type CuratePerson } from "@/components/curate";
+import {
+  ArrowLeft,
+  Share2,
+  Star,
+  TrendingUp,
+  Users,
+  MessageSquare,
+  Trophy,
+  Zap,
+  Camera,
+  Check,
+  X,
+  Search,
+  ThumbsUp,
+  ThumbsDown,
+  Minus,
+  HelpCircle,
+  ChevronDown,
+  Swords,
+  ListChecks,
+  ChevronRight,
+  BarChart3,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useRoute, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useRoute, useLocation, Link } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatNumber";
-import { OverratedUnderratedWidget } from "@/components/OverratedUnderratedWidget";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { getExceptionalIndicator } from "@/components/LeaderboardRow";
 import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
 import { MomentumSignals } from "@/components/MomentumSignals";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 const APPROVAL_COLORS = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
 const getApprovalColor = (ratingOrPct: number): string => {
@@ -39,55 +64,463 @@ const getApprovalColor = (ratingOrPct: number): string => {
   return APPROVAL_COLORS[clampedRating - 1];
 };
 
-interface CurateProfilePoll {
-  id: string;
-  personId: number | string;
-  personName: string;
-  category: string;
-}
-
-interface CelebrityImage {
-  id: number;
-  personId: number;
-  imageUrl: string;
-  sourceType: string;
-  votesUp: number;
-  votesDown: number;
+interface ValueVoteMetrics {
+  userVote: "underrated" | "overrated" | "fairly_rated" | null;
+  underratedPct: number | null;
+  overratedPct: number | null;
+  fairlyRatedPct: number | null;
+  valueScore: number | null;
+  underratedVotesCount: number;
+  overratedVotesCount: number;
+  fairlyRatedVotesCount: number;
 }
 
 interface FeaturedPoll {
   id: string;
   headline: string;
   description: string;
-  subjectEntity: string;
   approvePercent: number;
   neutralPercent: number;
   disapprovePercent: number;
   totalVotes: number;
-  createdAt: Date;
 }
 
-const FEATURED_POLLS_DATA: FeaturedPoll[] = [
-  { id: "fp1", headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", subjectEntity: "Elon Musk", approvePercent: 35, neutralPercent: 20, disapprovePercent: 45, totalVotes: 89432, createdAt: new Date("2024-12-20") },
-  { id: "fp2", headline: "Tesla's Cybertruck success", description: "Is it living up to the hype?", subjectEntity: "Elon Musk", approvePercent: 42, neutralPercent: 28, disapprovePercent: 30, totalVotes: 67891, createdAt: new Date("2024-12-18") },
-  { id: "fp3", headline: "SpaceX Mars timeline", description: "Will they really reach Mars by 2030?", subjectEntity: "Elon Musk", approvePercent: 38, neutralPercent: 32, disapprovePercent: 30, totalVotes: 54321, createdAt: new Date("2024-12-15") },
-  { id: "fp4", headline: "Neuralink progress", description: "Breakthrough or overpromise?", subjectEntity: "Elon Musk", approvePercent: 28, neutralPercent: 35, disapprovePercent: 37, totalVotes: 43210, createdAt: new Date("2024-12-10") },
-  { id: "fp5", headline: "X Platform rebrand", description: "Better or worse than Twitter?", subjectEntity: "Elon Musk", approvePercent: 25, neutralPercent: 30, disapprovePercent: 45, totalVotes: 98765, createdAt: new Date("2024-12-05") },
-  { id: "fp6", headline: "Trump's 2024 campaign", description: "Will he win the election?", subjectEntity: "Donald Trump", approvePercent: 48, neutralPercent: 12, disapprovePercent: 40, totalVotes: 234567, createdAt: new Date("2024-12-22") },
-  { id: "fp7", headline: "Trump on TikTok ban", description: "Should TikTok be banned?", subjectEntity: "Donald Trump", approvePercent: 52, neutralPercent: 18, disapprovePercent: 30, totalVotes: 156789, createdAt: new Date("2024-12-19") },
-  { id: "fp8", headline: "MAGA economic policies", description: "Good for the economy?", subjectEntity: "Donald Trump", approvePercent: 45, neutralPercent: 20, disapprovePercent: 35, totalVotes: 145678, createdAt: new Date("2024-12-14") },
-  { id: "fp9", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", subjectEntity: "Taylor Swift", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567, createdAt: new Date("2024-12-21") },
-  { id: "fp10", headline: "Taylor & Travis relationship", description: "Power couple or PR stunt?", subjectEntity: "Taylor Swift", approvePercent: 65, neutralPercent: 22, disapprovePercent: 13, totalVotes: 189432, createdAt: new Date("2024-12-17") },
-  { id: "fp11", headline: "Beyoncé's country album", description: "Authentic exploration or cultural appropriation?", subjectEntity: "Beyoncé", approvePercent: 65, neutralPercent: 20, disapprovePercent: 15, totalVotes: 176543, createdAt: new Date("2024-12-20") },
-  { id: "fp12", headline: "MrBeast's philanthropy", description: "Is it genuine or just content?", subjectEntity: "MrBeast", approvePercent: 68, neutralPercent: 20, disapprovePercent: 12, totalVotes: 98765, createdAt: new Date("2024-12-19") },
-];
+interface MatchupData {
+  id: string;
+  category: string;
+  title: string;
+  optionAText: string;
+  optionAImage: string | null;
+  optionBText: string;
+  optionBImage: string | null;
+  promptText?: string | null;
+  isActive?: boolean;
+  visibility?: string;
+  featured?: boolean;
+  slug?: string | null;
+  createdAt?: string;
+  optionAVotes: number;
+  optionBVotes: number;
+  totalVotes: number;
+  optionAPercent: number;
+  optionBPercent: number;
+  personAId?: string | null;
+  personBId?: string | null;
+}
+
+interface TrendingPoll {
+  id: string;
+  headline: string;
+  subjectText?: string | null;
+  description?: string | null;
+  category: string;
+  personId?: string | null;
+  personName?: string | null;
+  personAvatar?: string | null;
+  imageUrl?: string | null;
+  slug?: string | null;
+  totalVotes: number;
+  approvePercent: number;
+  neutralPercent: number;
+  disapprovePercent: number;
+}
+
+interface OpinionPollOption {
+  id: string;
+  name: string;
+  imageUrl?: string | null;
+  personId?: string | null;
+  personName?: string | null;
+  votes: number;
+  percent: number;
+}
+
+interface OpinionPoll {
+  id: string;
+  title: string;
+  description?: string | null;
+  category?: string | null;
+  slug: string;
+  options: OpinionPollOption[];
+  totalVotes: number;
+  userVote?: string | null;
+}
+
+function ProfileMatchupCard({
+  matchup,
+  userVote,
+  onVote,
+  onRemoveVote,
+}: {
+  matchup: MatchupData;
+  userVote: string | null;
+  onVote: (matchupId: string, option: "option_a" | "option_b") => void;
+  onRemoveVote: (matchupId: string) => void;
+}) {
+  const hasVoted = userVote !== null;
+  const votedA = userVote === "option_a";
+  const votedB = userVote === "option_b";
+  const leadingA = matchup.optionAPercent >= matchup.optionBPercent;
+
+  const handleVoteA = () => {
+    if (!hasVoted || votedB) onVote(matchup.id, "option_a");
+  };
+
+  const handleVoteB = () => {
+    if (!hasVoted || votedA) onVote(matchup.id, "option_b");
+  };
+
+  return (
+    <div className="relative group h-full">
+      <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100" />
+      <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50 group-hover:shadow-lg group-hover:shadow-cyan-500/20 transition-all h-full flex flex-col">
+        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg" />
+
+        <div className="relative pt-4 pb-4 flex flex-col flex-1">
+          <div className="absolute top-3 right-3 z-10">
+            <CategoryPill category={matchup.category} data-testid={`badge-matchup-${matchup.id}`} />
+          </div>
+          <div className="flex items-center mb-3 gap-2 px-4">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Users className="h-3.5 w-3.5 text-cyan-400" />
+              <span>{matchup.totalVotes.toLocaleString("en-US")} votes</span>
+            </div>
+          </div>
+
+          <div className={`flex flex-col items-center justify-center gap-1 px-4 mb-2 ${hasVoted ? "invisible" : ""}`}>
+            {matchup.slug ? (
+              <Link
+                href={`/vote/matchups/${matchup.slug}`}
+                className="text-sm font-semibold text-slate-300 hover:text-cyan-400 transition-colors text-center"
+                data-testid={`link-matchup-${matchup.id}`}
+              >
+                {matchup.promptText || "Who do you prefer?"}
+              </Link>
+            ) : (
+              <span className="text-sm font-semibold text-slate-300">
+                {matchup.promptText || "Who do you prefer?"}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-stretch gap-[2px] relative px-[2px]">
+            <button
+              onClick={handleVoteA}
+              className={`flex-1 flex flex-col rounded-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
+                hasVoted
+                  ? votedA
+                    ? "border-cyan-500/50 ring-2 ring-cyan-500/30"
+                    : "border-slate-700/30 opacity-70 hover:opacity-90 hover:border-cyan-500/30"
+                  : "border-slate-700/50 hover:border-cyan-500/50"
+              }`}
+              data-testid={`button-vote-a-${matchup.id}`}
+            >
+              <div className="relative" style={{ minHeight: "222px" }}>
+                {matchup.optionAImage ? (
+                  <div className="absolute inset-0">
+                    <img
+                      src={matchup.optionAImage}
+                      alt={matchup.optionAText}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-br ${
+                      hasVoted && votedA
+                        ? "from-cyan-600/30 via-slate-800 to-slate-900"
+                        : "from-slate-700 via-slate-800 to-slate-900"
+                    }`}
+                  />
+                )}
+              </div>
+              <div className="px-2 py-2 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
+                <span className="font-semibold text-sm truncate block">{matchup.optionAText}</span>
+              </div>
+            </button>
+
+            <div className="absolute left-1/2 top-[calc(50%-16px)] -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
+              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
+                <span className="text-xs font-bold text-slate-200">VS</span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleVoteB}
+              className={`flex-1 flex flex-col rounded-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
+                hasVoted
+                  ? votedB
+                    ? "border-sky-600/50 ring-2 ring-sky-600/30"
+                    : "border-slate-700/30 opacity-70 hover:opacity-90 hover:border-sky-600/30"
+                  : "border-slate-700/50 hover:border-sky-600/50"
+              }`}
+              data-testid={`button-vote-b-${matchup.id}`}
+            >
+              <div className="relative" style={{ minHeight: "222px" }}>
+                {matchup.optionBImage ? (
+                  <div className="absolute inset-0">
+                    <img
+                      src={matchup.optionBImage}
+                      alt={matchup.optionBText}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-br ${
+                      hasVoted && votedB
+                        ? "from-sky-700/30 via-slate-800 to-slate-900"
+                        : "from-slate-700 via-slate-800 to-slate-900"
+                    }`}
+                  />
+                )}
+              </div>
+              <div className="px-2 py-2 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
+                <span className="font-semibold text-sm truncate block">{matchup.optionBText}</span>
+              </div>
+            </button>
+          </div>
+
+          <div className="mt-auto pt-3 px-4">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`text-lg font-bold ${
+                      hasVoted ? (leadingA ? "text-cyan-400" : "text-slate-400") : "text-slate-600"
+                    }`}
+                  >
+                    {hasVoted ? `${matchup.optionAPercent}%` : "%"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`text-lg font-bold ${
+                      hasVoted ? (!leadingA ? "text-[#0386C9]" : "text-slate-400") : "text-slate-600"
+                    }`}
+                  >
+                    {hasVoted ? `${matchup.optionBPercent}%` : "%"}
+                  </span>
+                </div>
+              </div>
+              <div className={`h-2.5 rounded-full overflow-hidden flex ${hasVoted ? "bg-slate-700/50" : "bg-slate-700/30"}`}>
+                {hasVoted ? (
+                  <>
+                    <div
+                      className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400"
+                      style={{ width: `${matchup.optionAPercent}%` }}
+                    />
+                    <div
+                      className="h-full bg-gradient-to-r from-sky-500 to-sky-600"
+                      style={{ width: `${matchup.optionBPercent}%` }}
+                    />
+                  </>
+                ) : (
+                  <div className="h-full w-full bg-slate-700/40" />
+                )}
+              </div>
+              <div className="flex items-center justify-between mt-1.5">
+                <span className={`text-[11px] font-medium ${hasVoted ? "text-slate-500" : "text-slate-600"}`}>
+                  {matchup.optionAText}
+                </span>
+                <span className={`text-[11px] font-medium ${hasVoted ? "text-slate-500" : "text-slate-600"}`}>
+                  {matchup.optionBText}
+                </span>
+              </div>
+            </div>
+            {hasVoted ? (
+              <div className="flex items-center justify-center gap-2 mt-2">
+                <span className="text-[10px] text-slate-500/70">Tap the other image to change your vote</span>
+                <span className="text-[10px] text-slate-500/40">|</span>
+                <button
+                  onClick={() => onRemoveVote(matchup.id)}
+                  className="text-[10px] text-slate-500/70 hover:text-red-400/80 transition-colors"
+                  data-testid={`button-remove-vote-${matchup.id}`}
+                >
+                  Remove vote
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2 text-xs text-slate-500/70 mt-2">
+                <Swords className="h-3.5 w-3.5 text-cyan-400/70" />
+                <span className="font-medium">Tap an image to pick your side</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function OpinionPollCardProfile({
+  poll,
+  onVote,
+}: {
+  poll: OpinionPoll;
+  onVote: (pollSlug: string, optionId: string) => void;
+}) {
+  const [voted, setVoted] = useState<string | null>(poll.userVote || null);
+  const options = poll.options || [];
+  const visibleOptions = options.slice(0, 4);
+  const remainingCount = options.length - 4;
+  const totalVotes = poll.totalVotes || 0;
+
+  const handleVote = (optionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!voted) {
+      setVoted(optionId);
+      onVote(poll.slug, optionId);
+    }
+  };
+
+  const handleChangeVote = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setVoted(null);
+  };
+
+  const hasVoted = !!voted;
+
+  return (
+    <div className="relative group h-full">
+      <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100" />
+      <Card
+        className="relative pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col border-slate-700/50 group-hover:shadow-lg group-hover:shadow-cyan-500/20"
+        data-testid={`opinion-poll-card-${poll.id}`}
+      >
+        <div className="absolute top-3 right-3">
+          <CategoryPill category={poll.category || ""} data-testid={`badge-opinion-category-${poll.id}`} />
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+          <Users className="h-3.5 w-3.5 text-cyan-400" />
+          <span>{totalVotes.toLocaleString("en-US")} votes</span>
+        </div>
+        <div className="flex items-start gap-3 mb-3">
+          {poll.options[0]?.imageUrl ? (
+            <div className="h-12 w-12 rounded-md overflow-hidden shrink-0 border border-cyan-500/30 bg-slate-800">
+              <img src={poll.options[0].imageUrl!} alt={poll.title} className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <div className="h-12 w-12 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0 border border-slate-600/30">
+              <ListChecks className="h-5 w-5 text-slate-400" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <Link href={`/vote/opinion-polls/${poll.slug}`} data-testid={`link-opinion-detail-${poll.id}`}>
+              <h3 className="font-serif font-bold text-lg leading-tight hover:text-cyan-400 transition-colors cursor-pointer">
+                {poll.title}
+              </h3>
+            </Link>
+          </div>
+        </div>
+        {poll.description && (
+          <p className="text-sm text-muted-foreground mb-4 flex-grow line-clamp-1">{poll.description}</p>
+        )}
+        {!poll.description && <div className="flex-grow" />}
+
+        {!hasVoted ? (
+          <div className="space-y-2">
+            {visibleOptions.map((option) => (
+              <button
+                key={option.id}
+                onClick={(e) => handleVote(option.id, e)}
+                className="w-full flex items-center gap-2.5 p-2.5 rounded-md border border-border/50 bg-muted/30 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10"
+                data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
+              >
+                {option.imageUrl ? (
+                  <img src={option.imageUrl} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" />
+                ) : (
+                  <div className="w-6 h-6 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
+                    <ListChecks className="h-3 w-3 text-cyan-400" />
+                  </div>
+                )}
+                <span className="text-sm truncate">{option.name}</span>
+              </button>
+            ))}
+            {remainingCount > 0 && (
+              <Link href={`/vote/opinion-polls/${poll.slug}`}>
+                <p
+                  className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-1"
+                  data-testid={`link-more-options-${poll.id}`}
+                >
+                  +{remainingCount} more options
+                </p>
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {visibleOptions.map((option) => {
+              const isSelected = voted === option.id;
+              const percent = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
+              return (
+                <div
+                  key={option.id}
+                  className={`relative p-2.5 rounded-md border overflow-hidden ${
+                    isSelected ? "border-cyan-500/50 bg-cyan-500/10" : "border-border/30 bg-muted/20"
+                  }`}
+                  data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
+                >
+                  <div
+                    className="absolute inset-0 bg-cyan-500/10 transition-all duration-500"
+                    style={{ width: `${percent}%` }}
+                  />
+                  <div className="relative flex items-center gap-2.5">
+                    {option.imageUrl ? (
+                      <img src={option.imageUrl} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" />
+                    ) : (
+                      <div className="w-6 h-6 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
+                        <ListChecks className="h-3 w-3 text-cyan-400" />
+                      </div>
+                    )}
+                    <span className="text-sm truncate flex-1">{option.name}</span>
+                    <span className="text-xs font-semibold text-muted-foreground shrink-0">{percent}%</span>
+                  </div>
+                </div>
+              );
+            })}
+            {remainingCount > 0 && (
+              <Link href={`/vote/opinion-polls/${poll.slug}`}>
+                <p
+                  className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-1"
+                  data-testid={`link-more-options-${poll.id}`}
+                >
+                  +{remainingCount} more options
+                </p>
+              </Link>
+            )}
+            <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Zap className="h-3.5 w-3.5" />
+                <span>{totalVotes.toLocaleString("en-US")} total votes</span>
+              </div>
+              <div
+                className="px-2 py-0.5 rounded-full text-xs font-medium border bg-cyan-500/10 border-cyan-500/40 text-cyan-400"
+                data-testid={`badge-voted-opinion-${poll.id}`}
+              >
+                You voted
+              </div>
+            </div>
+            <button
+              onClick={handleChangeVote}
+              className="text-xs text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline text-center w-full"
+              data-testid={`button-change-vote-opinion-${poll.id}`}
+            >
+              Change your vote
+            </button>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
 
 function CurateProfileCardProfile({ 
   poll, 
   onVote,
   onComplete 
 }: { 
-  poll: CurateProfilePoll; 
+  poll: any; 
   onVote: () => void;
   onComplete: () => void;
 }) {
@@ -503,6 +936,197 @@ export default function PersonDetailPage() {
     return { isHotMover: indicator?.triggersHotMover === true, exceptionalIndicator: indicator };
   }, [person, leaderboardForThresholds]);
 
+  const isVoteTab = activeTab === "vote";
+
+  const { data: valueMetrics } = useQuery<ValueVoteMetrics>({
+    queryKey: ['/api/celebrity', person?.id, 'value-vote'],
+    enabled: isVoteTab && !!person,
+  });
+
+  // Shared voting data (matchups, sentiment polls, opinion polls) for the Vote tab
+  const { data: matchups = [], isLoading: matchupsLoading } = useQuery<MatchupData[]>({
+    queryKey: ['/api/matchups'],
+    staleTime: 60 * 1000,
+    enabled: isVoteTab,
+  });
+
+  const { data: matchupUserVotesFromServer = {} } = useQuery<Record<string, string>>({
+    queryKey: ['/api/matchups/user-votes'],
+    staleTime: 60 * 1000,
+    enabled: isVoteTab,
+  });
+
+  const [localMatchupVotes, setLocalMatchupVotes] = useState<Record<string, string>>({});
+
+  const mergedMatchupVotes = useMemo(
+    () => ({ ...matchupUserVotesFromServer, ...localMatchupVotes }),
+    [matchupUserVotesFromServer, localMatchupVotes]
+  );
+
+  const matchupUserVotes = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(mergedMatchupVotes).filter(([_, v]) => v !== "__removed__")
+      ),
+    [mergedMatchupVotes]
+  );
+
+  const matchupVoteMutation = useMutation({
+    mutationFn: async ({ matchupId, option }: { matchupId: string; option: 'option_a' | 'option_b'; previousVote?: string | null }) => {
+      const response = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { option });
+      return response.json();
+    },
+    onMutate: ({ matchupId, option }) => {
+      setLocalMatchupVotes((prev) => ({ ...prev, [matchupId]: option }));
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
+      const isChange = !!variables.previousVote;
+      toast({
+        title: isChange ? "Vote changed!" : "Vote recorded!",
+        description: isChange ? "Your matchup vote has been updated." : "Your matchup vote has been counted.",
+      });
+    },
+    onError: (error: any, variables) => {
+      setLocalMatchupVotes((prev) => {
+        const next = { ...prev };
+        if (variables.previousVote) {
+          next[variables.matchupId] = variables.previousVote as string;
+        } else {
+          delete next[variables.matchupId];
+        }
+        return next;
+      });
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit vote",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const matchupRemoveVoteMutation = useMutation({
+    mutationFn: async ({ matchupId }: { matchupId: string; previousVote: string }) => {
+      const response = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { remove: true });
+      return response.json();
+    },
+    onMutate: ({ matchupId }) => {
+      setLocalMatchupVotes((prev) => ({ ...prev, [matchupId]: "__removed__" }));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
+      toast({
+        title: "Vote removed",
+        description: "Your matchup vote has been removed.",
+      });
+    },
+    onError: (error: any, variables) => {
+      setLocalMatchupVotes((prev) => {
+        const next = { ...prev };
+        if (variables.previousVote) {
+          next[variables.matchupId] = variables.previousVote as string;
+        } else {
+          delete next[variables.matchupId];
+        }
+        return next;
+      });
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update vote",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleMatchupVote = (matchupId: string, option: 'option_a' | 'option_b') => {
+    const previousVote = matchupUserVotes[matchupId] || null;
+    matchupVoteMutation.mutate({ matchupId, option, previousVote });
+  };
+
+  const handleMatchupRemoveVote = (matchupId: string) => {
+    const previousVote = matchupUserVotes[matchupId];
+    if (!previousVote) return;
+    matchupRemoveVoteMutation.mutate({ matchupId, previousVote });
+  };
+
+  const { data: trendingPolls = [], isLoading: sentimentPollsLoading } = useQuery<TrendingPoll[]>({
+    queryKey: ['/api/trending-polls'],
+    staleTime: 60 * 1000,
+    enabled: isVoteTab,
+  });
+
+  const { data: opinionPolls = [], isLoading: opinionPollsLoading } = useQuery<OpinionPoll[]>({
+    queryKey: ['/api/opinion-polls'],
+    staleTime: 60 * 1000,
+    enabled: isVoteTab,
+  });
+
+  const valueVotePerson: ValueVotePerson | null = useMemo(() => {
+    if (!person) return null;
+
+    const metrics = valueMetrics;
+
+    return {
+      id: String(person.id),
+      name: person.name,
+      avatar: person.avatar ?? null,
+      category: person.category ?? null,
+      fameIndex: (person as any).fameIndex ?? Math.round(person.trendScore / 100),
+      trendScore: person.trendScore,
+      approvalPct: (person as any).approvalPct ?? null,
+      approvalAvgRating: (person as any).approvalAvgRating ?? null,
+      underratedPct: metrics?.underratedPct ?? null,
+      overratedPct: metrics?.overratedPct ?? null,
+      fairlyRatedPct: metrics?.fairlyRatedPct ?? null,
+      underratedCount: metrics?.underratedVotesCount ?? null,
+      overratedCount: metrics?.overratedVotesCount ?? null,
+      fairlyRatedCount: metrics?.fairlyRatedVotesCount ?? null,
+      userValueVote: metrics?.userVote ?? null,
+    };
+  }, [person, valueMetrics]);
+
+  const personMatchups = useMemo(() => {
+    if (!person) return [] as MatchupData[];
+    const personId = person.id;
+    const nameLower = person.name.toLowerCase();
+    return matchups.filter((m) => {
+      const aName = (m.optionAText || "").toLowerCase();
+      const bName = (m.optionBText || "").toLowerCase();
+      return (
+        m.personAId === personId ||
+        m.personBId === personId ||
+        aName.includes(nameLower) ||
+        bName.includes(nameLower)
+      );
+    });
+  }, [matchups, person]);
+
+  const personTrendingPolls = useMemo(() => {
+    if (!person) return [] as TrendingPoll[];
+    return (trendingPolls || []).filter((p) => p.personId === person.id);
+  }, [trendingPolls, person]);
+
+  const personOpinionPolls = useMemo(() => {
+    if (!person) return [] as OpinionPoll[];
+    return (opinionPolls || []).filter((poll) =>
+      (poll.options || []).some((opt) => opt.personId === person.id)
+    );
+  }, [opinionPolls, person]);
+
+  const featuredPollsForPerson: FeaturedPoll[] = useMemo(() => {
+    return personTrendingPolls.map((p) => ({
+      id: p.id,
+      headline: p.headline,
+      description: p.description || p.subjectText || "",
+      approvePercent: p.approvePercent,
+      neutralPercent: p.neutralPercent,
+      disapprovePercent: p.disapprovePercent,
+      totalVotes: p.totalVotes,
+    }));
+  }, [personTrendingPolls]);
+
   // Check if person is favorited
   useEffect(() => {
     if (!user || !person) return;
@@ -836,22 +1460,207 @@ export default function PersonDetailPage() {
         {/* VOTE TAB */}
         {activeTab === "vote" && (
           <>
-            {/* Sentiment Voting Widget */}
-            <div id="voting-widget" className="mb-8">
-              <AnimatedSentimentVotingWidget 
-                personId={person.id} 
+            {/* Overall Rating / Sentiment Voting */}
+            <section id="voting-widget" className="mb-10">
+              <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                      <ThumbsUp className="h-5 w-5 text-cyan-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-serif font-bold">Overall Rating</h2>
+                      <p className="text-sm text-muted-foreground">How do you feel about {person.name}?</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <AnimatedSentimentVotingWidget
+                personId={person.id}
                 personName={person.name}
                 isProfilePage={true}
               />
-            </div>
+            </section>
 
-            {/* Overrated/Underrated Widget - below Cast Your Vote */}
-            <div className="mb-8">
-              <OverratedUnderratedWidget personId={person.id} personName={person.name} />
-            </div>
+            {/* Matchups Section */}
+            <section className="mb-10">
+              <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                      <Swords className="h-5 w-5 text-cyan-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-serif font-bold">Matchups</h2>
+                      <p className="text-sm text-muted-foreground">Head-to-head battles featuring {person.name}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {matchupsLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {[1, 2, 3].map((i) => (
+                    <Card key={i} className="bg-slate-800/30 animate-pulse" style={{ minHeight: "380px" }} />
+                  ))}
+                </div>
+              ) : personMatchups.length > 0 ? (
+                <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="profile-matchups">
+                  {personMatchups.map((matchup) => (
+                    <ProfileMatchupCard
+                      key={matchup.id}
+                      matchup={matchup}
+                      userVote={matchupUserVotes[matchup.id] || null}
+                      onVote={handleMatchupVote}
+                      onRemoveVote={handleMatchupRemoveVote}
+                    />
+                  ))}
+                </CardSection>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No matchups featuring {person.name} yet. Check back soon.
+                </div>
+              )}
+            </section>
+
+            {/* Sentiment Polls Section */}
+            <section className="mb-10">
+              <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                      <MessageSquare className="h-5 w-5 text-cyan-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-serif font-bold">Sentiment Polls</h2>
+                      <p className="text-sm text-muted-foreground">Community votes on real-world questions</p>
+                    </div>
+                  </div>
+                  {featuredPollsForPerson.length > 3 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowAllPollsOverlay(true)}
+                      className="text-cyan-400 hover:text-cyan-300"
+                      data-testid="button-view-all-polls"
+                    >
+                      View all
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {sentimentPollsLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : featuredPollsForPerson.length > 0 ? (
+                <>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {featuredPollsForPerson.slice(0, 3).map((poll) => (
+                      <FeaturedPollCard
+                        key={poll.id}
+                        poll={poll}
+                        onVote={(choice) => {
+                          toast({
+                            title: "Vote Recorded",
+                            description: `You voted "${choice}" on "${poll.headline}"`,
+                          });
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  <ViewAllPollsOverlay
+                    open={showAllPollsOverlay}
+                    onClose={() => setShowAllPollsOverlay(false)}
+                    title={`All Sentiment Polls about ${person.name}`}
+                    polls={featuredPollsForPerson}
+                    onVote={(_pollId, _choice) => {
+                      toast({
+                        title: "Vote Recorded",
+                        description: "Your vote has been recorded.",
+                      });
+                    }}
+                  />
+                </>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No sentiment polls about {person.name} yet.
+                </div>
+              )}
+            </section>
+
+            {/* Opinion Polls Section */}
+            <section className="mb-10">
+              <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                      <ListChecks className="h-5 w-5 text-cyan-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-serif font-bold">Opinion Polls</h2>
+                      <p className="text-sm text-muted-foreground">Multi-option polls where {person.name} appears</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {opinionPollsLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : personOpinionPolls.length > 0 ? (
+                <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="profile-opinion-polls">
+                  {personOpinionPolls.map((poll) => (
+                    <OpinionPollCardProfile
+                      key={poll.id}
+                      poll={poll}
+                      onVote={async (pollSlug, optionId) => {
+                        try {
+                          await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                          queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
+                        } catch (err: any) {
+                          console.error("Opinion poll vote error:", err);
+                        }
+                      }}
+                    />
+                  ))}
+                </CardSection>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No opinion polls including {person.name} yet.
+                </div>
+              )}
+            </section>
+
+            {/* Underrated / Overrated Section */}
+            <section className="mb-10">
+              <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                      <BarChart3 className="h-5 w-5 text-cyan-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-serif font-bold">Underrated / Overrated</h2>
+                      <p className="text-sm text-muted-foreground">Is {person.name} overhyped or underappreciated?</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {valueVotePerson && (
+                <div className="max-w-xl mx-auto">
+                  <UnderratedOverratedCard person={valueVotePerson} />
+                </div>
+              )}
+            </section>
 
             {/* Curate the Profile Section */}
-            <section className="mb-8">
+            <section className="mb-10">
               <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -878,10 +1687,18 @@ export default function PersonDetailPage() {
 
               {!curateCompleted ? (
                 <div className="max-w-md mx-auto">
-                  <CurateProfileCardProfile
-                    poll={{ id: `curate-${person.id}`, personId: person.id, personName: person.name, category: person.category || "General" }}
+                  <CurateProfileCard
+                    person={{
+                      id: String(person.id),
+                      name: person.name,
+                      category: person.category,
+                      imageUrl: person.avatar ?? null,
+                    } as CuratePerson}
                     onVote={() => {}}
                     onComplete={() => setCurateCompleted(true)}
+                    onSkip={() => setCurateCompleted(true)}
+                    onViewResults={() => {}}
+                    cycleNumber={0}
                   />
                 </div>
               ) : (
@@ -890,9 +1707,11 @@ export default function PersonDetailPage() {
                     <Check className="h-8 w-8 text-green-500" />
                   </div>
                   <p className="text-lg font-semibold mb-2">Thanks for voting!</p>
-                  <p className="text-sm text-muted-foreground mb-4">Your vote helps determine their official profile image.</p>
-                  <Button 
-                    variant="outline" 
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Your vote helps determine their official profile image.
+                  </p>
+                  <Button
+                    variant="outline"
                     onClick={() => setCurateCompleted(false)}
                     className="border-cyan-500/50 text-cyan-400"
                     data-testid="button-curate-vote-again"
@@ -902,75 +1721,6 @@ export default function PersonDetailPage() {
                 </div>
               )}
             </section>
-
-            {/* Featured Polls Section */}
-            {(() => {
-              const personPolls = FEATURED_POLLS_DATA
-                .filter(p => p.subjectEntity === person.name)
-                .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-              
-              if (personPolls.length === 0) return null;
-
-              const displayPolls = personPolls.slice(0, 3);
-              const hasMore = personPolls.length > 3;
-
-              return (
-                <section className="mb-8">
-                  <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-                          <MessageSquare className="h-5 w-5 text-cyan-400" />
-                        </div>
-                        <div>
-                          <h2 className="text-lg font-serif font-bold">Featured Polls</h2>
-                          <p className="text-sm text-muted-foreground">{personPolls.length} poll{personPolls.length !== 1 ? 's' : ''} about {person.name}</p>
-                        </div>
-                      </div>
-                      {hasMore && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => setShowAllPollsOverlay(true)}
-                          className="text-cyan-400 hover:text-cyan-300"
-                          data-testid="button-view-all-polls"
-                        >
-                          View all
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {displayPolls.map((poll) => (
-                      <FeaturedPollCard 
-                        key={poll.id} 
-                        poll={poll} 
-                        onVote={(choice) => {
-                          toast({
-                            title: "Vote Recorded",
-                            description: `You voted "${choice}" on "${poll.headline}"`,
-                          });
-                        }}
-                      />
-                    ))}
-                  </div>
-
-                  <ViewAllPollsOverlay
-                    open={showAllPollsOverlay}
-                    onClose={() => setShowAllPollsOverlay(false)}
-                    title={`All Polls about ${person.name}`}
-                    polls={personPolls}
-                    onVote={(pollId, choice) => {
-                      toast({
-                        title: "Vote Recorded",
-                        description: `Your vote has been recorded.`,
-                      });
-                    }}
-                  />
-                </section>
-              );
-            })()}
 
             {/* Community Insights */}
             <div className="mb-8">

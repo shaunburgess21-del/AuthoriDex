@@ -91,3 +91,4 @@ AuthoriDex is a live influence index and prediction platform. It ranks 100 publi
 - Primary agent (Codex/GPT): Day-to-day feature building, component work, API routes
 - Backup agent (Claude Opus): Architecture decisions, complex refactors, debugging hard problems
 - When stuck after 2 attempts — switch to backup agent and explain what was tried
+Never modify or remove cross-env, --env-file=.env, or NODE_ENV from the dev or start scripts in package.json. These are required for Windows compatibility.
