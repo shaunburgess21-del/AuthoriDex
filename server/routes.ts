@@ -3564,35 +3564,38 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       const headlinesText = newsContext.sources.map(s => s.title).join('\n');
       const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-      const systemPrompt = `You are a neutral news summarizer. Today's date is ${todayStr}. Use the headlines provided to determine what is currently happening. Treat all information in the headlines as current events happening right now.
+      const systemPrompt = `You are a neutral wire-service news reporter (like AP or Reuters). Today's date is ${todayStr}. Use the headlines provided to determine what is currently happening. Treat all information in the headlines as current events happening right now.
 
 CRITICAL RULES:
 - Do NOT add titles like "former", "ex-", or "President" to anyone's name unless that exact title appears in the headlines.
 - If the headlines simply say a person's name without a title, use just their name — do NOT infer or add titles from your training data.
 - Never call someone "former President" or "former CEO" unless the headline explicitly uses that phrase.
-- When in doubt, just use the person's name without any title prefix.`;
+- When in doubt, just use the person's name without any title prefix.
+- You must NEVER express or imply public opinion, approval, or disapproval of any figure.
+- Never use phrases like "facing backlash", "widely criticized", "growing dissatisfaction", "public outcry", or "mounting pressure" unless those exact phrases appear in a headline.
+- Never characterize how the public feels about a person. Only describe what the person DID or what HAPPENED.
+- For politically polarizing figures, describe actions and events only. Do not editorialize.`;
 
-      const userPrompt = `Based on these recent news headlines about ${person.name}, write a brief 1-2 sentence summary explaining why they are currently trending or in the news.
+      const userPrompt = `Based on these recent news headlines about ${person.name}, write a brief 1-2 sentence summary explaining why they are currently in the news.
 
-IMPORTANT GUIDELINES:
-- Be strictly neutral and objective — do not express opinions or take sides
-- Focus only on factual events and actions, not interpretations or judgments
-- Avoid loaded, biased, or emotionally charged language
-- Do not use words like "controversial", "criticized", "scandal", "backlash" unless directly quoting a headline
-- Present information as a neutral news reporter would
-- For political figures, be especially careful to remain impartial and balanced
-- Use titles and roles as implied by the headlines, not from your training data
+STRICT NEUTRALITY RULES:
+- Describe ONLY actions taken and events that occurred — never describe reactions, opinions, or public sentiment
+- Do NOT use any of these words or phrases: controversial, criticized, backlash, scandal, slammed, blasted, under fire, embattled, divisive, polarizing, widely, overwhelmingly, growing concern, mounting, outcry, fury, outrage
+- Do NOT characterize public opinion (e.g. never say "Americans are frustrated" or "facing widespread criticism")
+- Write as a wire-service reporter: facts only, zero commentary
+- If headlines are mostly negative about a person, still summarize neutrally by focusing on what happened, not how people reacted
+- Treat every public figure with the same neutral tone regardless of political affiliation
 
 Headlines:
 ${headlinesText}
 
 Return a JSON object with:
 {
-  "summary": "1-2 sentence neutral, factual summary of why they're trending",
+  "summary": "1-2 sentence strictly factual summary describing what happened or what actions were taken",
   "category": "One of: Politics, Business, Music, Sports, Technology, Legal, Personal Life, Controversy, or General News"
 }
 
-Be concise, factual, and strictly neutral. Only return the JSON object.`;
+Only return the JSON object.`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
