@@ -63,6 +63,9 @@ AuthoriDex is a live influence index and prediction platform. It ranks 100 publi
 - Never hardcode URLs — use environment variables
 - Local runs on port 5000
 
+### Windows Compatibility
+- Never remove `cross-env` or `--env-file=.env` from the `package.json` `dev` or `start` scripts. These are required for Windows development compatibility.
+
 ## When Asked to Build a Feature
 1. Read relevant existing code first — understand the pattern before writing new code
 2. Follow existing patterns in the codebase
