@@ -71,7 +71,7 @@ function DeltaBadge({ pct }: { pct: number }) {
       className={`text-xs font-mono ${isUp ? "text-emerald-500 border-emerald-500/30" : "text-red-500 border-red-500/30"}`}
       data-testid="badge-delta"
     >
-      {isUp ? "+" : ""}{pct}% <span className="text-muted-foreground font-normal text-[10px]">24h</span>
+      {isUp ? "+" : ""}{pct}%<span className="ml-1 text-muted-foreground font-normal text-[10px]">24h</span>
     </Badge>
   );
 }
