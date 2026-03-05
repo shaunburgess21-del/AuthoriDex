@@ -1218,7 +1218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           sql`${trendSnapshots.timestamp} = date_trunc('hour', ${trendSnapshots.timestamp})`
         ))
         .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id))
-        .limit(2);
+        .limit(1);
 
       if (latestSnapshots.length === 0) {
         return res.json({
@@ -1232,10 +1232,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const latest = latestSnapshots[0];
-      const prev = latestSnapshots.length > 1 ? latestSnapshots[1] : null;
       const diag = latest.diagnostics as Record<string, any> | null;
       const evidence = diag?.evidence ?? {};
       const fresh = diag?.fresh ?? {};
+
+      // Single snapshot from ~24h ago for pill deltas and drivers (20–28h window)
+      const [snap24hAgo] = await db
+        .select({
+          diagnostics: trendSnapshots.diagnostics,
+          searchVolume: trendSnapshots.searchVolume,
+          newsCount: trendSnapshots.newsCount,
+          wikiPageviews: trendSnapshots.wikiPageviews,
+        })
+        .from(trendSnapshots)
+        .where(and(
+          eq(trendSnapshots.personId, id),
+          eq(trendSnapshots.snapshotOrigin, 'ingest'),
+          sql`${trendSnapshots.timestamp} = date_trunc('hour', ${trendSnapshots.timestamp})`,
+          sql`${trendSnapshots.timestamp} BETWEEN NOW() - INTERVAL '28 hours' AND NOW() - INTERVAL '20 hours'`,
+        ))
+        .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id))
+        .limit(1);
 
       const ageMs = Date.now() - latest.timestamp.getTime();
       const ageMinutes = Math.round(ageMs / 60000);
@@ -1251,17 +1268,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (fresh.newsEmaHeld) staleFlags.newsHeld = true;
       if (fresh.searchEmaHeld) staleFlags.searchHeld = true;
 
-      const searchDeltaPct = prev && prev.searchVolume > 0
-        ? Math.round(((latest.searchVolume - prev.searchVolume) / prev.searchVolume) * 100)
+      // 24h change for pills; small dead zone to avoid noisy ±1% flicker
+      const DELTA_DEAD_ZONE_PCT = 2;
+      const rawSearchDeltaPct = snap24hAgo && snap24hAgo.searchVolume > 0
+        ? Math.round(((latest.searchVolume - snap24hAgo.searchVolume) / snap24hAgo.searchVolume) * 100)
         : 0;
+      const searchDeltaPct = Math.abs(rawSearchDeltaPct) <= DELTA_DEAD_ZONE_PCT ? 0 : rawSearchDeltaPct;
 
-      const newsDeltaPct = prev && prev.newsCount > 0
-        ? Math.round(((latest.newsCount - prev.newsCount) / prev.newsCount) * 100)
+      const rawNewsDeltaPct = snap24hAgo && snap24hAgo.newsCount > 0
+        ? Math.round(((latest.newsCount - snap24hAgo.newsCount) / snap24hAgo.newsCount) * 100)
         : 0;
+      const newsDeltaPct = Math.abs(rawNewsDeltaPct) <= DELTA_DEAD_ZONE_PCT ? 0 : rawNewsDeltaPct;
 
-      const wikiDeltaPct = prev && prev.wikiPageviews && prev.wikiPageviews > 0
-        ? Math.round(((latest.wikiPageviews! - prev.wikiPageviews) / prev.wikiPageviews) * 100)
+      const rawWikiDeltaPct = snap24hAgo && snap24hAgo.wikiPageviews != null && snap24hAgo.wikiPageviews > 0
+        ? Math.round(((latest.wikiPageviews! - snap24hAgo.wikiPageviews!) / snap24hAgo.wikiPageviews!) * 100)
         : 0;
+      const wikiDeltaPct = Math.abs(rawWikiDeltaPct) <= DELTA_DEAD_ZONE_PCT ? 0 : rawWikiDeltaPct;
 
       const change24hAbs = Math.abs(trending?.change24h ?? 0);
       const hasSignificantMovement = change24hAbs >= 2.0;
@@ -1276,22 +1298,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       {
         const currentVC = diag?.velocityComponents;
-
-        const [snap24hAgo] = await db
-          .select({
-            diagnostics: trendSnapshots.diagnostics,
-            searchVolume: trendSnapshots.searchVolume,
-            newsCount: trendSnapshots.newsCount,
-            wikiPageviews: trendSnapshots.wikiPageviews,
-          })
-          .from(trendSnapshots)
-          .where(and(
-            eq(trendSnapshots.personId, id),
-            eq(trendSnapshots.snapshotOrigin, 'ingest'),
-            sql`${trendSnapshots.timestamp} BETWEEN NOW() - INTERVAL '28 hours' AND NOW() - INTERVAL '20 hours'`,
-          ))
-          .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id))
-          .limit(1);
 
         if (snap24hAgo) {
           const prevDiag = snap24hAgo.diagnostics as Record<string, any> | null;
