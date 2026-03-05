@@ -892,6 +892,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: snapshot.timestamp.toLocaleDateString(),
         time: snapshot.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         trendScore: snapshot.trendScore,
+        fameIndex: snapshot.fameIndex,
         newsCount: snapshot.newsCount,
         youtubeViews: snapshot.youtubeViews,
         spotifyFollowers: snapshot.spotifyFollowers,

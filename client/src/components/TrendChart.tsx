@@ -25,6 +25,7 @@ interface HistoryDataPoint {
   date: string;
   time: string;
   trendScore: number;
+  fameIndex: number;
   newsCount: number;
   youtubeViews: number;
   spotifyFollowers: number;
@@ -111,7 +112,7 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
 
   const startScore = useMemo(() => {
     if (!historyData || historyData.length === 0) return 0;
-    return historyData[0].trendScore;
+    return historyData[0].fameIndex;
   }, [historyData]);
 
   const formatYAxis = (value: number) => {
@@ -146,7 +147,7 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
 
   const yDomain = useMemo(() => {
     if (!historyData || historyData.length === 0) return ['auto', 'auto'];
-    const scores = historyData.map(d => d.trendScore);
+    const scores = historyData.map(d => d.fameIndex);
     const min = Math.min(...scores);
     const max = Math.max(...scores);
     const padding = (max - min) * 0.1;
@@ -234,7 +235,7 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
                 )}
                 <Area 
                   type="linear"
-                  dataKey="trendScore" 
+                  dataKey="fameIndex" 
                   stroke="hsl(var(--primary))" 
                   strokeWidth={2}
                   fill="url(#trendGradient)"
