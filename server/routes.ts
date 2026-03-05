@@ -1340,9 +1340,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const wikiDelta = Math.abs(wikiWeighted - (prevVC.wiki * prevVC.weights.wiki));
             const totalDelta = searchDelta + newsDelta + wikiDelta;
 
-            if (searchDelta / Math.max(searchWeighted, 1) < 0.05) quietSources.push("Search");
-            if (newsDelta / Math.max(newsWeighted, 1) < 0.05) quietSources.push("News");
-            if (wikiDelta / Math.max(wikiWeighted, 1) < 0.05) quietSources.push("Wikipedia");
+            if (searchDelta / Math.max(searchWeighted, 1) < 0.03) quietSources.push("Search");
+            if (newsDelta / Math.max(newsWeighted, 1) < 0.03) quietSources.push("News");
+            if (wikiDelta / Math.max(wikiWeighted, 1) < 0.03) quietSources.push("Wikipedia");
             driverSourceCount = 3 - quietSources.length;
 
             if (totalDelta > 0 && hasSignificantMovement) {
@@ -1368,9 +1368,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const searchBase = Math.max(snap24hAgo.searchVolume, 1);
             const newsBase = Math.max(snap24hAgo.newsCount, 1);
             const wikiBase = Math.max(snap24hAgo.wikiPageviews ?? 1, 1);
-            if (searchChange / searchBase < 0.05) quietSources.push("Search");
-            if (newsChange / newsBase < 0.05) quietSources.push("News");
-            if (wikiChange / wikiBase < 0.05) quietSources.push("Wikipedia");
+            if (searchChange / searchBase < 0.03) quietSources.push("Search");
+            if (newsChange / newsBase < 0.03) quietSources.push("News");
+            if (wikiChange / wikiBase < 0.03) quietSources.push("Wikipedia");
             driverSourceCount = 3 - quietSources.length;
 
             if (totalContrib > 0 && hasSignificantMovement) {
