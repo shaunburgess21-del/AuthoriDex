@@ -128,7 +128,7 @@ export interface InductionCandidate {
   name: string;
   initials: string;
   avatar: string;
-  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics" | "Acting" | "Gaming";
+  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics" | "Film & TV" | "Gaming" | "Food & Drink" | "Lifestyle";
   votes: number;
 }
 
@@ -186,5 +186,5 @@ export const CURATE_PROFILE_POLLS: CurateProfilePoll[] = [
   },
 ];
 
-export const FILTER_CATEGORIES = ["All", "Favorites", "Trending", "Tech", "Business", "Politics", "Sports", "Music", "Acting", "Gaming", "Creator"] as const;
+export const FILTER_CATEGORIES = ["All", "Favorites", "Trending", "Tech", "Business", "Politics", "Sports", "Music", "Film & TV", "Gaming", "Creator", "Food & Drink", "Lifestyle"] as const;
 export type FilterCategory = typeof FILTER_CATEGORIES[number];

@@ -19,9 +19,11 @@ export const BASE_FILTER_CATEGORIES = [
   "Business",
   "Music",
   "Sports",
-  "Acting",
+  "Film & TV",
   "Gaming",
   "Creator",
+  "Food & Drink",
+  "Lifestyle",
 ] as const;
 
 export const FILTER_CATEGORIES_WITH_CUSTOM = [
@@ -33,10 +35,12 @@ export const FILTER_CATEGORIES_WITH_CUSTOM = [
   "Business",
   "Music",
   "Sports",
-  "Acting",
+  "Film & TV",
   "Gaming",
   "Creator",
   "misc",
+  "Food & Drink",
+  "Lifestyle",
 ] as const;
 
 export const FILTER_CATEGORIES = BASE_FILTER_CATEGORIES;
@@ -52,14 +56,28 @@ export const BASE_CATEGORY_FILTER_OPTIONS: { id: FilterCategory; label: string }
   { id: "Business", label: "Business" },
   { id: "Music", label: "Music" },
   { id: "Sports", label: "Sports" },
-  { id: "Acting", label: "Acting" },
+  { id: "Film & TV", label: "Film & TV" },
   { id: "Gaming", label: "Gaming" },
   { id: "Creator", label: "Creator" },
+  { id: "Food & Drink", label: "Food & Drink" },
+  { id: "Lifestyle", label: "Lifestyle" },
 ];
 
 export const CATEGORY_FILTER_OPTIONS_WITH_CUSTOM: { id: FilterCategory; label: string }[] = [
-  ...BASE_CATEGORY_FILTER_OPTIONS,
+  { id: "All", label: "All" },
+  { id: "Favorites", label: "Favorites" },
+  { id: "Trending", label: "Trending" },
+  { id: "Tech", label: "Tech" },
+  { id: "Politics", label: "Politics" },
+  { id: "Business", label: "Business" },
+  { id: "Music", label: "Music" },
+  { id: "Sports", label: "Sports" },
+  { id: "Film & TV", label: "Film & TV" },
+  { id: "Gaming", label: "Gaming" },
+  { id: "Creator", label: "Creator" },
   { id: "misc", label: "Misc" },
+  { id: "Food & Drink", label: "Food & Drink" },
+  { id: "Lifestyle", label: "Lifestyle" },
 ];
 
 export const CATEGORY_FILTER_OPTIONS = BASE_CATEGORY_FILTER_OPTIONS;
@@ -71,7 +89,7 @@ export const LEGACY_FILTER_CATEGORIES = [
   "Business",
   "Music",
   "Sports",
-  "Acting",
+  "Film & TV",
   "Gaming",
   "Creator",
 ] as const;

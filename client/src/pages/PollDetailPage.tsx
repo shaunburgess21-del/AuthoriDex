@@ -312,7 +312,13 @@ export default function PollDetailPage() {
               <AvatarFallback className="bg-cyan-500/20 text-cyan-400 text-xs">{(poll.personName || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
             </Avatar>
             <div>
-              <p className="text-sm font-semibold">{poll.personName}</p>
+              {poll.personId ? (
+                <Link href={`/person/${poll.personId}`} className="text-sm font-semibold text-cyan-400 hover:text-cyan-300 hover:underline">
+                  {poll.personName}
+                </Link>
+              ) : (
+                <p className="text-sm font-semibold">{poll.personName}</p>
+              )}
               <p className="text-xs text-muted-foreground">Linked Celebrity</p>
             </div>
           </div>

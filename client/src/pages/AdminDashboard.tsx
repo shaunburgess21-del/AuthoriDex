@@ -699,9 +699,11 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
     { value: "sports", label: "Sports" },
     { value: "business", label: "Business" },
     { value: "creator", label: "Creator" },
-    { value: "acting", label: "Acting" },
+    { value: "Film & TV", label: "Film & TV" },
     { value: "gaming", label: "Gaming" },
     { value: "misc", label: "Misc" },
+    { value: "Food & Drink", label: "Food & Drink" },
+    { value: "Lifestyle", label: "Lifestyle" },
   ];
 
   const titlePlaceholders: Record<string, string> = {
@@ -3939,10 +3941,12 @@ export default function AdminDashboard() {
                           <SelectItem value="Sports">Sports</SelectItem>
                           <SelectItem value="Politics">Politics</SelectItem>
                           <SelectItem value="Business">Business</SelectItem>
-                          <SelectItem value="Acting">Acting</SelectItem>
+                          <SelectItem value="Film & TV">Film & TV</SelectItem>
                           <SelectItem value="Gaming">Gaming</SelectItem>
                           <SelectItem value="Creator">Creator</SelectItem>
                           <SelectItem value="misc">Misc</SelectItem>
+                          <SelectItem value="Food & Drink">Food & Drink</SelectItem>
+                          <SelectItem value="Lifestyle">Lifestyle</SelectItem>
                         </SelectContent>
                       </Select>
                       <Input
@@ -4114,10 +4118,12 @@ export default function AdminDashboard() {
                           <SelectItem value="Sports">Sports</SelectItem>
                           <SelectItem value="Politics">Politics</SelectItem>
                           <SelectItem value="Business">Business</SelectItem>
-                          <SelectItem value="Acting">Acting</SelectItem>
+                          <SelectItem value="Film & TV">Film & TV</SelectItem>
                           <SelectItem value="Gaming">Gaming</SelectItem>
                           <SelectItem value="Creator">Creator</SelectItem>
                           <SelectItem value="misc">Misc</SelectItem>
+                          <SelectItem value="Food & Drink">Food & Drink</SelectItem>
+                          <SelectItem value="Lifestyle">Lifestyle</SelectItem>
                         </SelectContent>
                       </Select>
                       <Input
@@ -5364,9 +5370,12 @@ export default function AdminDashboard() {
                   <SelectItem value="Sports">Sports</SelectItem>
                   <SelectItem value="Politics">Politics</SelectItem>
                   <SelectItem value="Business">Business</SelectItem>
-                  <SelectItem value="Acting">Acting</SelectItem>
+                  <SelectItem value="Film & TV">Film & TV</SelectItem>
                   <SelectItem value="Gaming">Gaming</SelectItem>
                   <SelectItem value="Science">Science</SelectItem>
+                  <SelectItem value="Creator">Creator</SelectItem>
+                  <SelectItem value="Food & Drink">Food & Drink</SelectItem>
+                  <SelectItem value="Lifestyle">Lifestyle</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -5852,10 +5861,12 @@ export default function AdminDashboard() {
                     <SelectItem value="Sports">Sports</SelectItem>
                     <SelectItem value="Politics">Politics</SelectItem>
                     <SelectItem value="Business">Business</SelectItem>
-                  <SelectItem value="Acting">Acting</SelectItem>
+                  <SelectItem value="Film & TV">Film & TV</SelectItem>
                   <SelectItem value="Gaming">Gaming</SelectItem>
                     <SelectItem value="Creator">Creator</SelectItem>
                     <SelectItem value="misc">Misc</SelectItem>
+                    <SelectItem value="Food & Drink">Food & Drink</SelectItem>
+                    <SelectItem value="Lifestyle">Lifestyle</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -6176,9 +6187,12 @@ export default function AdminDashboard() {
                     <SelectItem value="Sports">Sports</SelectItem>
                     <SelectItem value="Politics">Politics</SelectItem>
                     <SelectItem value="Business">Business</SelectItem>
-                  <SelectItem value="Acting">Acting</SelectItem>
+                  <SelectItem value="Film & TV">Film & TV</SelectItem>
                   <SelectItem value="Gaming">Gaming</SelectItem>
                     <SelectItem value="Creator">Creator</SelectItem>
+                    <SelectItem value="misc">Misc</SelectItem>
+                    <SelectItem value="Food & Drink">Food & Drink</SelectItem>
+                    <SelectItem value="Lifestyle">Lifestyle</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -6404,8 +6418,12 @@ export default function AdminDashboard() {
                     <SelectItem value="Sports">Sports</SelectItem>
                     <SelectItem value="Politics">Politics</SelectItem>
                     <SelectItem value="Business">Business</SelectItem>
+                    <SelectItem value="Film & TV">Film & TV</SelectItem>
+                    <SelectItem value="Gaming">Gaming</SelectItem>
                     <SelectItem value="Creator">Creator</SelectItem>
                     <SelectItem value="misc">Misc</SelectItem>
+                    <SelectItem value="Food & Drink">Food & Drink</SelectItem>
+                    <SelectItem value="Lifestyle">Lifestyle</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -6531,6 +6531,11 @@ Only return the JSON object.`;
 
       const result = polls.map(p => {
         const total = (p.seedSupportCount || 0) + (p.seedNeutralCount || 0) + (p.seedOpposeCount || 0);
+        // Use stored imageUrl, or derive from slug when missing (sentiment-polls/[slug]/1.webp)
+        let imageUrl = p.imageUrl || null;
+        if (!imageUrl && !p.personAvatar && p.slug && process.env.SUPABASE_URL) {
+          imageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/sentiment-polls/${p.slug}/1.webp`;
+        }
         return {
           id: p.id,
           headline: p.headline,
@@ -6540,7 +6545,7 @@ Only return the JSON object.`;
           personId: p.personId,
           personName: p.personName || null,
           personAvatar: p.personAvatar || null,
-          imageUrl: p.imageUrl,
+          imageUrl,
           slug: p.slug || null,
           totalVotes: total,
           approvePercent: total > 0 ? Math.round(((p.seedSupportCount || 0) / total) * 100) : 0,
@@ -6630,8 +6635,16 @@ Only return the JSON object.`;
         if (uv) userVote = uv.choice;
       }
 
+      // Derive imageUrl from slug when missing (sentiment-polls/[slug]/1.webp)
+      let imageUrl = poll.imageUrl || null;
+      if (!imageUrl && !poll.personAvatar && poll.slug && process.env.SUPABASE_URL) {
+        imageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/sentiment-polls/${poll.slug}/1.webp`;
+      }
+
       res.json({
         ...poll,
+        imageUrl,
+        personAvatar: poll.personAvatar || null,
         supportCount,
         neutralCount,
         opposeCount,
@@ -6993,13 +7006,16 @@ Only return the JSON object.`;
         return res.status(400).json({ error: "csvContent (string) is required" });
       }
 
-      const VALID_CATS = new Set(["Tech", "Politics", "Business", "Music", "Sports", "Acting", "Gaming", "Creator", "misc"]);
+      const VALID_CATS = new Set(["Tech", "Politics", "Business", "Music", "Sports", "Film & TV", "Gaming", "Creator", "misc", "Food & Drink", "Lifestyle"]);
       const CAT_MAP: Record<string, string> = {
         "custom topic": "misc", "custom": "misc", "misc": "misc",
         "tech": "Tech", "politics": "Politics", "business": "Business",
         "music": "Music", "sports": "Sports",
-        "acting": "Acting", "gaming": "Gaming",
+        "acting": "Film & TV", "film-tv": "Film & TV", "film & tv": "Film & TV",
+        "gaming": "Gaming",
         "creator": "Creator",
+        "food-drink": "Food & Drink", "food & drink": "Food & Drink",
+        "lifestyle": "Lifestyle",
       };
 
       const normalizeCat = (raw: string): string | null => {

@@ -49,6 +49,10 @@ import {
   Video,
   LayoutGrid,
   Flame,
+  Clapperboard,
+  Gamepad2,
+  UtensilsCrossed,
+  Heart,
   type LucideIcon
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -80,9 +84,11 @@ const VOTE_CATEGORIES = [
   { value: "Politics", label: "Politics" },
   { value: "Music", label: "Music" },
   { value: "Sports", label: "Sports" },
-  { value: "Acting", label: "Acting" },
+  { value: "Film & TV", label: "Film & TV" },
   { value: "Gaming", label: "Gaming" },
   { value: "Creator", label: "Creator" },
+  { value: "Food & Drink", label: "Food & Drink" },
+  { value: "Lifestyle", label: "Lifestyle" },
 ];
 
 const VOTE_CATEGORIES_WITH_CUSTOM = [
@@ -104,7 +110,7 @@ interface InductionCandidate {
   name: string;
   initials: string;
   imageSlug: string | null;
-  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics" | "Acting" | "Gaming";
+  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics" | "Film & TV" | "Gaming" | "Food & Drink" | "Lifestyle";
   votes: number;
 }
 
@@ -876,6 +882,11 @@ function DiscourseCard({
   onVote: (choice: 'support' | 'neutral' | 'oppose') => void;
 }) {
   const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(null);
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [topic.id, topic.imageUrl, topic.personAvatar]);
 
   const handleVote = (choice: 'support' | 'neutral' | 'oppose') => {
     if (!voted) {
@@ -903,16 +914,17 @@ function DiscourseCard({
         <span>{topic.totalVotes.toLocaleString('en-US')} votes</span>
       </div>
       <div className="flex items-start gap-3 mb-3">
-        {(topic.personAvatar || topic.imageUrl) ? (
-          <div className="h-12 w-12 rounded-md overflow-hidden shrink-0 border border-cyan-500/30 bg-slate-800">
+        {(topic.personAvatar || topic.imageUrl) && !imageError ? (
+          <div className="h-16 w-16 rounded-md overflow-hidden shrink-0 border border-cyan-500/30 bg-slate-800">
             <img 
-              src={topic.personAvatar || topic.imageUrl} 
+              src={topic.personAvatar || topic.imageUrl!} 
               alt={topic.personName || topic.headline}
               className="w-full h-full object-cover"
+              onError={() => setImageError(true)}
             />
           </div>
         ) : (
-          <div className="h-12 w-12 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0 border border-slate-600/30">
+          <div className="h-16 w-16 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0 border border-slate-600/30">
             <MessageSquare className="h-5 w-5 text-slate-400" />
           </div>
         )}
@@ -925,7 +937,13 @@ function DiscourseCard({
             <h3 className="font-serif font-bold text-lg leading-tight line-clamp-2 block min-w-0">{topic.headline}</h3>
           )}
           {topic.personName && (
-            <span className="text-xs text-cyan-400">{topic.personName}</span>
+            topic.personId ? (
+              <Link href={`/person/${topic.personId}`} className="text-xs text-cyan-400 hover:text-cyan-300 hover:underline cursor-pointer">
+                {topic.personName}
+              </Link>
+            ) : (
+              <span className="text-xs text-cyan-400">{topic.personName}</span>
+            )
           )}
         </div>
       </div>
@@ -1107,14 +1125,14 @@ function OpinionPollCard({
               <button
                 key={option.id}
                 onClick={(e) => handleVote(option.id, e)}
-                className="w-full flex items-center gap-2.5 p-2.5 rounded-md border border-border/50 bg-muted/30 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10"
+                className="w-full flex items-center gap-2.5 p-[6px] rounded-md border border-border/50 bg-muted/30 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10"
                 data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
               >
                 {option.imageUrl ? (
-                  <img src={option.imageUrl} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" />
+                  <img src={option.imageUrl} alt="" className="w-10 h-10 rounded-md object-cover shrink-0" />
                 ) : (
-                  <div className="w-6 h-6 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
-                    <ListChecks className="h-3 w-3 text-cyan-400" />
+                  <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
+                    <ListChecks className="h-4 w-4 text-cyan-400" />
                   </div>
                 )}
                 <span className="text-sm truncate">{option.name}</span>
@@ -1136,7 +1154,7 @@ function OpinionPollCard({
               return (
                 <div
                   key={option.id}
-                  className={`relative p-2.5 rounded-md border overflow-hidden ${
+                  className={`relative p-[6px] rounded-md border overflow-hidden ${
                     isSelected ? 'border-cyan-500/50 bg-cyan-500/10' : 'border-border/30 bg-muted/20'
                   }`}
                   data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
@@ -1147,10 +1165,10 @@ function OpinionPollCard({
                   />
                   <div className="relative flex items-center gap-2.5">
                     {option.imageUrl ? (
-                      <img src={option.imageUrl} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" />
+                      <img src={option.imageUrl} alt="" className="w-10 h-10 rounded-md object-cover shrink-0" />
                     ) : (
-                      <div className="w-6 h-6 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
-                        <ListChecks className="h-3 w-3 text-cyan-400" />
+                      <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
+                        <ListChecks className="h-4 w-4 text-cyan-400" />
                       </div>
                     )}
                     <span className="text-sm truncate flex-1">{option.name}</span>
@@ -1722,7 +1740,11 @@ const VOTE_CATEGORY_ICONS: Record<string, LucideIcon> = {
   Business: Briefcase,
   Music: Music2,
   Sports: Trophy,
+  "Film & TV": Clapperboard,
+  Gaming: Gamepad2,
   Creator: Video,
+  "Food & Drink": UtensilsCrossed,
+  Lifestyle: Heart,
   misc: Sparkles,
 };
 

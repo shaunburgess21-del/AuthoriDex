@@ -55,6 +55,8 @@ import {
   XCircle,
   Clapperboard,
   Gamepad2,
+  UtensilsCrossed,
+  Heart,
   type LucideIcon
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -81,7 +83,7 @@ function MarketAvatar({ market }: { market: any }) {
 
 // Prediction Type definitions
 type PredictionType = "all" | "jackpot" | "updown" | "h2h" | "gainer" | "community";
-type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "creator" | "misc";
+type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
 
 interface PredictionMarket {
   id: string;
@@ -592,9 +594,11 @@ const BASE_CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: "business", label: "Business" },
   { id: "sports", label: "Sports" },
   { id: "music", label: "Music" },
-  { id: "acting", label: "Acting" },
+  { id: "film-tv", label: "Film & TV" },
   { id: "gaming", label: "Gaming" },
   { id: "creator", label: "Creator" },
+  { id: "food-drink", label: "Food & Drink" },
+  { id: "lifestyle", label: "Lifestyle" },
 ];
 
 const CATEGORY_ICONS: Record<CategoryFilter, LucideIcon> = {
@@ -606,15 +610,29 @@ const CATEGORY_ICONS: Record<CategoryFilter, LucideIcon> = {
   business: Briefcase,
   sports: Trophy,
   music: Music2,
-  acting: Clapperboard,
+  "film-tv": Clapperboard,
   gaming: Gamepad2,
   creator: Video,
+  "food-drink": UtensilsCrossed,
+  lifestyle: Heart,
   misc: Sparkles,
 };
 
 const CATEGORY_FILTERS_WITH_CUSTOM: { id: CategoryFilter; label: string }[] = [
-  ...BASE_CATEGORY_FILTERS,
+  { id: "all", label: "All" },
+  { id: "favorites", label: "Favorites" },
+  { id: "trending", label: "Trending" },
+  { id: "tech", label: "Tech" },
+  { id: "politics", label: "Politics" },
+  { id: "business", label: "Business" },
+  { id: "sports", label: "Sports" },
+  { id: "music", label: "Music" },
+  { id: "film-tv", label: "Film & TV" },
+  { id: "gaming", label: "Gaming" },
+  { id: "creator", label: "Creator" },
   { id: "misc", label: "Misc" },
+  { id: "food-drink", label: "Food & Drink" },
+  { id: "lifestyle", label: "Lifestyle" },
 ];
 
 const getPredictCategoryFilters = (includeCustomTopic: boolean) => 

@@ -1,5 +1,11 @@
 const CATEGORY_LABEL_MAP: Record<string, string> = {
   misc: "Misc",
+  Acting: "Film & TV",
+  "film-tv": "Film & TV",
+  "Food & Drink": "Food & Drink",
+  "food-drink": "Food & Drink",
+  Lifestyle: "Lifestyle",
+  lifestyle: "Lifestyle",
 };
 
 const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string }> = {
@@ -28,20 +34,35 @@ const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string
     border: 'border-[#FB923C]/40',
     text: 'text-[#FB923C]',
   },
+  "Film & TV": {
+    bg: 'bg-[#A855F7]/10',
+    border: 'border-[#A855F7]/40',
+    text: 'text-[#A855F7]',
+  },
   Acting: {
     bg: 'bg-[#A855F7]/10',
     border: 'border-[#A855F7]/40',
     text: 'text-[#A855F7]',
   },
   Gaming: {
-    bg: 'bg-[#06B6D4]/10',
-    border: 'border-[#06B6D4]/40',
-    text: 'text-[#06B6D4]',
+    bg: 'bg-[#7C3AED]/10',
+    border: 'border-[#7C3AED]/40',
+    text: 'text-[#7C3AED]',
   },
   Creator: {
     bg: 'bg-[#FACC15]/10',
     border: 'border-[#FACC15]/40',
     text: 'text-[#FACC15]',
+  },
+  "Food & Drink": {
+    bg: 'bg-[#D97706]/10',
+    border: 'border-[#D97706]/40',
+    text: 'text-[#D97706]',
+  },
+  Lifestyle: {
+    bg: 'bg-[#DB2777]/10',
+    border: 'border-[#DB2777]/40',
+    text: 'text-[#DB2777]',
   },
   misc: {
     bg: 'bg-[#94A3B8]/10',
@@ -57,7 +78,8 @@ const DEFAULT_CATEGORY_STYLE = {
 };
 
 export function getCategoryStyle(category: string) {
-  if (CATEGORY_STYLES[category]) return CATEGORY_STYLES[category];
+  const display = CATEGORY_LABEL_MAP[category] || category;
+  if (CATEGORY_STYLES[display]) return CATEGORY_STYLES[display];
   const normalized = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
   return CATEGORY_STYLES[normalized] || DEFAULT_CATEGORY_STYLE;
 }

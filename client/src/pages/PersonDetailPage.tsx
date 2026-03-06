@@ -424,14 +424,14 @@ function OpinionPollCardProfile({
               <button
                 key={option.id}
                 onClick={(e) => handleVote(option.id, e)}
-                className="w-full flex items-center gap-2.5 p-2.5 rounded-md border border-border/50 bg-muted/30 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10"
+                className="w-full flex items-center gap-2.5 p-[6px] rounded-md border border-border/50 bg-muted/30 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10"
                 data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
               >
                 {option.imageUrl ? (
-                  <img src={option.imageUrl} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" />
+                  <img src={option.imageUrl} alt="" className="w-10 h-10 rounded-md object-cover shrink-0" />
                 ) : (
-                  <div className="w-6 h-6 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
-                    <ListChecks className="h-3 w-3 text-cyan-400" />
+                  <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
+                    <ListChecks className="h-4 w-4 text-cyan-400" />
                   </div>
                 )}
                 <span className="text-sm truncate">{option.name}</span>
@@ -456,7 +456,7 @@ function OpinionPollCardProfile({
               return (
                 <div
                   key={option.id}
-                  className={`relative p-2.5 rounded-md border overflow-hidden ${
+                  className={`relative p-[6px] rounded-md border overflow-hidden ${
                     isSelected ? "border-cyan-500/50 bg-cyan-500/10" : "border-border/30 bg-muted/20"
                   }`}
                   data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
@@ -467,10 +467,10 @@ function OpinionPollCardProfile({
                   />
                   <div className="relative flex items-center gap-2.5">
                     {option.imageUrl ? (
-                      <img src={option.imageUrl} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" />
+                      <img src={option.imageUrl} alt="" className="w-10 h-10 rounded-md object-cover shrink-0" />
                     ) : (
-                      <div className="w-6 h-6 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
-                        <ListChecks className="h-3 w-3 text-cyan-400" />
+                      <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
+                        <ListChecks className="h-4 w-4 text-cyan-400" />
                       </div>
                     )}
                     <span className="text-sm truncate flex-1">{option.name}</span>

@@ -3,7 +3,13 @@
  *
  * Usage: npx tsx scripts/import-sentiment-polls.ts [path-to-csv]
  *
- * Defaults to: attached_assets/sentiment_polls_upload_v2_1772042536028.csv
+ * CSV columns: headline, slug, category, question, linked_celebrity, support_seed, neutral_seed, oppose_seed
+ * - If a poll with the same slug exists: UPDATE seed counts, person_id, image_url only (do not change headline, slug, visibility, status).
+ * - If slug does not exist: INSERT new poll with visibility/status "live"; featured = true if headline contains "Elon" or row is in top 10.
+ * - imageUrl set to [SUPABASE_URL]/storage/v1/object/public/sentiment-polls/[slug]/1.webp only when
+ *   there is no linked_celebrity (otherwise left blank for app to use celebrity image).
+ *
+ * Default path: attached_assets/sentiment_polls_upload_v2_1772042536028.csv
  */
 
 import { readFileSync } from "fs";
@@ -12,7 +18,7 @@ import { db } from "../server/db";
 import { trendingPolls, trackedPeople } from "../shared/schema";
 import { eq, sql } from "drizzle-orm";
 
-const VALID_CATEGORIES = new Set(["Tech", "Politics", "Business", "Music", "Sports", "Acting", "Gaming", "Creator", "misc"]);
+const VALID_CATEGORIES = new Set(["Tech", "Politics", "Business", "Music", "Sports", "Film & TV", "Gaming", "Creator", "misc", "Food & Drink", "Lifestyle"]);
 
 const CATEGORY_MAP: Record<string, string> = {
   "custom topic": "misc",
@@ -23,9 +29,15 @@ const CATEGORY_MAP: Record<string, string> = {
   "business": "Business",
   "music": "Music",
   "sports": "Sports",
-  "acting": "Acting",
+  "sport": "Sports",
+  "acting": "Film & TV",
+  "film-tv": "Film & TV",
+  "film & tv": "Film & TV",
   "gaming": "Gaming",
   "creator": "Creator",
+  "food-drink": "Food & Drink",
+  "food & drink": "Food & Drink",
+  "lifestyle": "Lifestyle",
 };
 
 function normalizeCategory(raw: string): string | null {
@@ -148,6 +160,11 @@ async function main() {
   const warnings: string[] = [];
   const errors: string[] = [];
 
+  const SUPABASE_URL = process.env.SUPABASE_URL || "";
+  if (!SUPABASE_URL && dataRows.length > 0) {
+    warnings.push("SUPABASE_URL not set: poll images will be left blank (set env for sentiment-polls bucket URLs).");
+  }
+
   for (let i = 0; i < dataRows.length; i++) {
     const rowNum = i + 2;
     const row = dataRows[i];
@@ -162,7 +179,7 @@ async function main() {
 
     const headline = row[idx.headline]?.trim() || '';
     const slug = row[idx.slug]?.trim().toLowerCase() || '';
-    const subjectText = row[idx.subjectText]?.trim() || '';
+    const subjectText = row[idx.subjectText]?.trim() || headline;
     const description = row[idx.description]?.trim() || '';
     const rawCelebrity = row[idx.celebrity]?.trim() || '';
 
@@ -171,6 +188,8 @@ async function main() {
       skipped++;
       continue;
     }
+
+    const [existingBySlug] = await db.select({ id: trendingPolls.id }).from(trendingPolls).where(eq(trendingPolls.slug, slug));
 
     let personId: string | null = null;
     if (rawCelebrity) {
@@ -186,38 +205,50 @@ async function main() {
     const seedNeutralCount = parseSeedInt(row[idx.seedNeutral], rowNum, 'Seed Neutral', warnings);
     const seedOpposeCount = parseSeedInt(row[idx.seedOppose], rowNum, 'Seed Oppose', warnings);
 
-    try {
-      const result = await db.execute(sql`
-        INSERT INTO trending_polls (
-          id, category, headline, slug, subject_text, description,
-          person_id, seed_support_count, seed_neutral_count, seed_oppose_count,
-          status, visibility, featured, created_at, updated_at
-        ) VALUES (
-          gen_random_uuid(), ${category}, ${headline}, ${slug}, ${subjectText}, ${description},
-          ${personId}, ${seedSupportCount}, ${seedNeutralCount}, ${seedOpposeCount},
-          'live', 'live', false, NOW(), NOW()
-        )
-        ON CONFLICT (slug) DO UPDATE SET
-          category = EXCLUDED.category,
-          headline = EXCLUDED.headline,
-          subject_text = EXCLUDED.subject_text,
-          description = EXCLUDED.description,
-          person_id = EXCLUDED.person_id,
-          seed_support_count = EXCLUDED.seed_support_count,
-          seed_neutral_count = EXCLUDED.seed_neutral_count,
-          seed_oppose_count = EXCLUDED.seed_oppose_count,
-          status = 'live',
-          visibility = 'live',
-          updated_at = NOW()
-        RETURNING (xmax = 0) AS inserted
-      `);
+    const imageUrl = !personId && SUPABASE_URL
+      ? `${SUPABASE_URL}/storage/v1/object/public/sentiment-polls/${slug}/1.webp`
+      : null;
 
-      const wasInserted = (result.rows[0] as any)?.inserted;
-      if (wasInserted === true || wasInserted === 't') {
-        created++;
-      } else {
+    if (existingBySlug) {
+      try {
+        await db
+          .update(trendingPolls)
+          .set({
+            seedSupportCount,
+            seedNeutralCount,
+            seedOpposeCount,
+            personId,
+            imageUrl,
+            updatedAt: new Date(),
+          })
+          .where(eq(trendingPolls.id, existingBySlug.id));
         updated++;
+      } catch (err: any) {
+        errors.push(`Row ${rowNum} (slug: ${slug}): Update error — ${err.message}`);
+        skipped++;
       }
+      continue;
+    }
+
+    const featured = headline.toLowerCase().includes("elon") || i < 10;
+
+    try {
+      await db.insert(trendingPolls).values({
+        category,
+        headline,
+        slug,
+        subjectText: subjectText || headline,
+        description: description || null,
+        personId,
+        imageUrl,
+        seedSupportCount,
+        seedNeutralCount,
+        seedOpposeCount,
+        status: "live",
+        visibility: "live",
+        featured,
+      });
+      created++;
     } catch (err: any) {
       errors.push(`Row ${rowNum} (slug: ${slug}): DB error — ${err.message}`);
       skipped++;
@@ -228,7 +259,7 @@ async function main() {
   console.log(`Total rows processed: ${dataRows.length}`);
   console.log(`  Created: ${created}`);
   console.log(`  Updated: ${updated}`);
-  console.log(`  Skipped: ${skipped}`);
+  console.log(`  Skipped (error): ${skipped}`);
   console.log(`  Warnings: ${warnings.length}`);
   console.log(`  Errors: ${errors.length}`);
 
@@ -244,8 +275,10 @@ async function main() {
 
   const dbCount = await db.execute(sql`SELECT status, COUNT(*)::int as count FROM trending_polls GROUP BY status`);
   console.log(`\nDB state after import:`);
-  for (const row of dbCount.rows) {
-    console.log(`  status="${(row as any).status}": ${(row as any).count} polls`);
+  const countRows = Array.isArray(dbCount) ? dbCount : (dbCount as { rows?: unknown[] }).rows ?? [];
+  for (const row of countRows) {
+    const r = row as { status: string; count: number };
+    console.log(`  status="${r.status}": ${r.count} polls`);
   }
 
   console.log(`\nDone.\n`);

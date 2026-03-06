@@ -19,9 +19,11 @@ const DEFAULT_CATEGORIES = [
   { value: "Politics", label: "Politics" },
   { value: "Music", label: "Music" },
   { value: "Sports", label: "Sports" },
-  { value: "Acting", label: "Acting" },
+  { value: "Film & TV", label: "Film & TV" },
   { value: "Gaming", label: "Gaming" },
   { value: "Creator", label: "Creator" },
+  { value: "Food & Drink", label: "Food & Drink" },
+  { value: "Lifestyle", label: "Lifestyle" },
 ];
 
 interface FilterDropdownProps {

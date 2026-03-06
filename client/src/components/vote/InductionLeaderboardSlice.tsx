@@ -14,7 +14,7 @@ export interface InductionCandidate {
   name: string;
   initials: string;
   imageSlug?: string | null;
-  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics" | "Acting" | "Gaming";
+  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics" | "Film & TV" | "Gaming" | "Food & Drink" | "Lifestyle";
   votes: number;
 }
 

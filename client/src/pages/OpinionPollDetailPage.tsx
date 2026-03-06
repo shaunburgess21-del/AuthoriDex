@@ -266,13 +266,13 @@ export default function OpinionPollDetailPage() {
                     setShowVoteChange(false);
                   }}
                   disabled={voteMutation.isPending}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md bg-cyan-500/10 border border-cyan-500/50 text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/20 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                  className={`w-full flex items-center gap-2.5 p-[6px] rounded-md bg-cyan-500/10 border border-cyan-500/50 text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/20 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
                   data-testid={`button-vote-option-${option.id}`}
                 >
                   {option.imageUrl ? (
-                    <img src={option.imageUrl} alt="" className="w-8 h-8 rounded-md object-cover shrink-0" />
+                    <img src={option.imageUrl} alt="" className="w-10 h-10 rounded-md object-cover shrink-0" />
                   ) : (
-                    <div className="w-8 h-8 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
                       <span className="text-sm font-medium text-cyan-400">{option.orderIndex + 1}</span>
                     </div>
                   )}
@@ -289,11 +289,11 @@ export default function OpinionPollDetailPage() {
                 const isSelected = poll.userVote === option.id;
                 const percent = option.percent || 0;
                 return (
-                  <div key={option.id} className="flex items-center gap-3">
+                  <div key={option.id} className="flex items-center gap-2.5">
                     {option.imageUrl ? (
-                      <img src={option.imageUrl} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" />
+                      <img src={option.imageUrl} alt="" className="w-10 h-10 rounded-md object-cover shrink-0" />
                     ) : (
-                      <div className="w-6 h-6 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
+                      <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
                         <span className="text-xs font-medium text-cyan-400">{option.orderIndex + 1}</span>
                       </div>
                     )}

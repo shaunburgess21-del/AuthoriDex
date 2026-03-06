@@ -1,13 +1,16 @@
 import { useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-const CELEBRITY_SMALL_PREFIX = "_compressed_small_100kb_webp";
-const CELEBRITY_LARGE_PREFIX = "_compressed_large_200kb_webp";
-const LEADERS_SMALL_PREFIX = "_compressed_70kb";
-const LEADERS_LARGE_PREFIX = "_compressed_150kb_expanded";
+const CELEBRITY_BUCKET = "celebrity-large";
+const LEADERS_BUCKET = "leaders-large";
 
 export type ImageContext = "tile" | "expanded" | "induction";
 
+/**
+ * Returns candidate image URLs for a given slug and context.
+ * All images now use a single bucket per source (celebrity-large for leaderboard/profile,
+ * leaders-large for induction queue). No subfolders — files sit at [bucket]/[slug]/[filename].webp
+ */
 export function getImageCandidates(
   supabaseUrl: string,
   slug: string,
@@ -18,24 +21,14 @@ export function getImageCandidates(
   const candidates: string[] = [];
 
   if (context === "induction") {
-    candidates.push(`${base}/leaders-small/${LEADERS_SMALL_PREFIX}/${slug}/1.webp`);
-    candidates.push(`${base}/leaders-small/${LEADERS_SMALL_PREFIX}/${slug}/2.webp`);
-  } else if (context === "tile") {
-    candidates.push(`${base}/celebrity-small/${CELEBRITY_SMALL_PREFIX}/${slug}/${index}.webp`);
-    candidates.push(`${base}/leaders-small/${LEADERS_SMALL_PREFIX}/${slug}/${index}.webp`);
-    if (index > 1) {
-      candidates.push(`${base}/celebrity-small/${CELEBRITY_SMALL_PREFIX}/${slug}/1.webp`);
-      candidates.push(`${base}/leaders-small/${LEADERS_SMALL_PREFIX}/${slug}/1.webp`);
-    }
+    candidates.push(`${base}/${LEADERS_BUCKET}/${slug}/1.webp`);
+    candidates.push(`${base}/${LEADERS_BUCKET}/${slug}/2.webp`);
     candidates.push(`${base}/celebrity_images/${slug}/1.png`);
   } else {
-    candidates.push(`${base}/celebrity-large/${CELEBRITY_LARGE_PREFIX}/${slug}/${index}.webp`);
-    candidates.push(`${base}/leaders-large/${LEADERS_LARGE_PREFIX}/${slug}/${index}.webp`);
-    candidates.push(`${base}/celebrity-small/${CELEBRITY_SMALL_PREFIX}/${slug}/${index}.webp`);
+    // tile and expanded: same bucket and path
+    candidates.push(`${base}/${CELEBRITY_BUCKET}/${slug}/${index}.webp`);
     if (index > 1) {
-      candidates.push(`${base}/celebrity-large/${CELEBRITY_LARGE_PREFIX}/${slug}/1.webp`);
-      candidates.push(`${base}/leaders-large/${LEADERS_LARGE_PREFIX}/${slug}/1.webp`);
-      candidates.push(`${base}/celebrity-small/${CELEBRITY_SMALL_PREFIX}/${slug}/1.webp`);
+      candidates.push(`${base}/${CELEBRITY_BUCKET}/${slug}/1.webp`);
     }
     candidates.push(`${base}/celebrity_images/${slug}/1.png`);
   }

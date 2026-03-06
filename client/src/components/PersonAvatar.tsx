@@ -28,11 +28,15 @@ export function PersonAvatar({ name, avatar, imageSlug, imageContext = "tile", i
 
   const { src: resolvedSrc, onError: onResolvedError } = useResolvedImage(imageSlug, imageContext, imageIndex);
 
-  const displaySrc = resolvedSrc || avatar || null;
+  // Prefer server-provided avatar (winning curate image URL) when present, so leaderboard
+  // and profile show the same image. Otherwise use slug-based resolution then fallback.
+  const hasServerAvatar = avatar && typeof avatar === "string" && /^https?:\/\//i.test(avatar.trim());
+  const displaySrc = hasServerAvatar ? avatar! : (resolvedSrc || avatar || null);
+  const onError = hasServerAvatar ? undefined : onResolvedError;
 
   return (
     <Avatar className={`${sizeClass} rounded-md`} data-testid={`avatar-${name.toLowerCase().replace(/\s/g, '-')}`}>
-      {displaySrc && <AvatarImage key={displaySrc} src={displaySrc} alt={name} className="object-cover" onError={resolvedSrc ? onResolvedError : undefined} />}
+      {displaySrc && <AvatarImage key={displaySrc} src={displaySrc} alt={name} className="object-cover" onError={onError} />}
       <AvatarFallback className="bg-primary/10 text-primary font-semibold rounded-md">
         {initials}
       </AvatarFallback>

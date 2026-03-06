@@ -35,7 +35,9 @@ import {
   Video,
   LayoutGrid,
   Clapperboard,
-  Gamepad2
+  Gamepad2,
+  UtensilsCrossed,
+  Heart
 } from "lucide-react";
 import {
   DISCOURSE_TOPICS,
@@ -653,9 +655,11 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
             {cat === "Business" && <Briefcase className="h-3.5 w-3.5" />}
             {cat === "Music" && <Music2 className="h-3.5 w-3.5" />}
             {cat === "Sports" && <Trophy className="h-3.5 w-3.5" />}
-            {cat === "Acting" && <Clapperboard className="h-3.5 w-3.5" />}
+            {cat === "Film & TV" && <Clapperboard className="h-3.5 w-3.5" />}
             {cat === "Gaming" && <Gamepad2 className="h-3.5 w-3.5" />}
             {cat === "Creator" && <Video className="h-3.5 w-3.5" />}
+            {cat === "Food & Drink" && <UtensilsCrossed className="h-3.5 w-3.5" />}
+            {cat === "Lifestyle" && <Heart className="h-3.5 w-3.5" />}
             {cat === "Favorites" ? <span className="hidden md:inline">{cat}</span> : cat}
           </button>
         ))}
