@@ -251,7 +251,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               {person.category}
             </p>
           )}
-          <p className="md:hidden text-xs text-muted-foreground leading-tight truncate">
+          <p className="md:hidden text-[11px] text-muted-foreground leading-tight truncate">
             {activeTab === "fame" && (
               <span className="font-mono">
                 {compactNumber(fameScore)}

@@ -495,17 +495,6 @@ export default function HomePage() {
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
   const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
-  const [showVoteTip, setShowVoteTip] = useState(() => {
-    try {
-      return localStorage.getItem("authoridex-vote-tip-dismissed") !== "1" && localStorage.getItem("authoridex-has-ever-voted") !== "1";
-    } catch { return false; }
-  });
-
-  useEffect(() => {
-    const handleEverVoted = () => setShowVoteTip(false);
-    window.addEventListener("authoridex-ever-voted", handleEverVoted);
-    return () => window.removeEventListener("authoridex-ever-voted", handleEverVoted);
-  }, []);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [moversCollapsed, setMoversCollapsed] = useState(true);
   const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(() => {
@@ -1008,36 +997,14 @@ export default function HomePage() {
                       </TouchTooltip>
                     </div>
                   )}
-                  {showVoteTip && (
-                    <div className="mx-4 sm:mx-6 my-2 px-3 py-2.5 rounded-md bg-primary/5 border border-primary/15 flex items-center justify-between gap-3" data-testid="vote-tip-banner">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Star className="h-3.5 w-3.5 text-primary shrink-0" />
-                        <span>Tap <span className="font-medium text-foreground">Rate</span> next to any name to cast your vote</span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0 text-muted-foreground/60"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowVoteTip(false);
-                          try { localStorage.setItem("authoridex-vote-tip-dismissed", "1"); } catch {}
-                        }}
-                        aria-label="Dismiss tip"
-                        data-testid="button-dismiss-vote-tip"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  )}
                   {displayPeople.length > 0 && (
-                    <div className="hidden lg:flex items-center gap-6 px-4 py-2 border-b text-[11px] font-medium uppercase tracking-wider text-muted-foreground" data-testid="leaderboard-column-header">
+                    <div className="hidden lg:flex items-center gap-6 lg:gap-7 px-4 py-2 border-b text-[11px] font-medium uppercase tracking-wider text-muted-foreground" data-testid="leaderboard-column-header">
                       <div className="flex-1" />
                       {leaderboardTab === "fame" ? (
                         <>
-                          <div className="text-right w-[120px] shrink-0 flex items-center justify-end gap-1">Trend Score <TrendScoreInfoIcon testId="icon-trend-score-header" className="h-3 w-3 text-muted-foreground/40 cursor-help" /></div>
-                          <div className="text-right w-[72px] shrink-0">24h</div>
-                          <div className="text-right w-[72px] shrink-0 flex items-center justify-end gap-1">Approval <ApprovalRatingInfoIcon testId="icon-approval-header-fame" className="h-3 w-3 text-muted-foreground/40 cursor-help" /></div>
+                          <div className="text-right w-[120px] lg:w-[140px] shrink-0 flex items-center justify-end gap-1">Trend Score <TrendScoreInfoIcon testId="icon-trend-score-header" className="h-3 w-3 text-muted-foreground/40 cursor-help" /></div>
+                          <div className="text-right w-[72px] lg:w-[80px] shrink-0">24h</div>
+                          <div className="text-right w-[72px] lg:w-[84px] shrink-0 flex items-center justify-end gap-1">Approval <ApprovalRatingInfoIcon testId="icon-approval-header-fame" className="h-3 w-3 text-muted-foreground/40 cursor-help" /></div>
                         </>
                       ) : (
                         <>
@@ -1045,7 +1012,7 @@ export default function HomePage() {
                           <div className="text-right w-[120px] shrink-0 flex items-center justify-end gap-1">Trend Score <TrendScoreInfoIcon testId="icon-trend-score-header-approval" className="h-3 w-3 text-muted-foreground/40 cursor-help" /></div>
                         </>
                       )}
-                      <div className="w-[68px] shrink-0" />
+                      <div className="w-[72px] shrink-0" />
                     </div>
                   )}
                   <div>
