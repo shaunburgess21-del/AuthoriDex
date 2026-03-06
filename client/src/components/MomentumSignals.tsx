@@ -7,6 +7,7 @@ import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
+import { cn } from "@/lib/utils";
 
 interface MomentumData {
   asOf: string | null;
@@ -54,6 +55,13 @@ function formatNum(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
   return n.toLocaleString('en-US');
+}
+
+function getNewsActivityLevel(count: number): { label: string; dotClass: string } {
+  if (count >= 19) return { label: "High", dotClass: "bg-green-500" };
+  if (count >= 7) return { label: "Medium", dotClass: "bg-amber-500" };
+  if (count >= 1) return { label: "Low", dotClass: "bg-red-500" };
+  return { label: "None", dotClass: "bg-muted-foreground" };
 }
 
 function DeltaBadge({ pct }: { pct: number }) {
@@ -315,16 +323,17 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
             </div>
           </CardHeader>
           <CardContent className="pt-4 space-y-3">
-            <div className="text-2xl font-bold" data-testid="text-news-count">
-              {signals.news.count === 0 && signals.news.recentPeak ? (
-                <>
-                  {formatNum(signals.news.recentPeak)}<span className="text-sm font-normal text-muted-foreground ml-1">articles tracked recently</span>
-                </>
-              ) : (
-                <>
-                  {formatNum(signals.news.count)}<span className="text-sm font-normal text-muted-foreground ml-1">articles (24h)</span>
-                </>
-              )}
+            <div className="flex items-center gap-2 text-base font-semibold" data-testid="text-news-count">
+              {(() => {
+                const { label, dotClass } = getNewsActivityLevel(signals.news.count);
+                return (
+                  <>
+                    <div className={cn("h-2 w-2 rounded-full shrink-0", dotClass)} />
+                    <span>{label}</span>
+                    <span className="text-sm font-normal text-muted-foreground ml-1">(24h)</span>
+                  </>
+                );
+              })()}
             </div>
             {signals.news.count === 0 && signals.news.recentPeak && signals.news.recentPeakAge && (
               <p className="text-[10px] text-muted-foreground/60" data-testid="text-news-recent-peak">
