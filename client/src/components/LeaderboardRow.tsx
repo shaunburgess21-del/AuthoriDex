@@ -220,6 +220,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             avatar={person.avatar}
             imageSlug={(person as any).imageSlug}
             size="md"
+            className="h-12 w-12 lg:h-[58px] lg:w-[58px]"
           />
         </div>
         <div className="flex-1 min-w-0">
