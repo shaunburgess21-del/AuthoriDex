@@ -52,18 +52,18 @@ const parseEnvFloat = (key: string, fallback: number): number => {
   return isNaN(parsed) ? fallback : parsed;
 };
 
-export const EMA_ALPHA_DEFAULT = parseEnvFloat('EMA_BASE_ALPHA', 0.15);
-export const EMA_ALPHA_2_SOURCES = parseEnvFloat('EMA_2_SOURCE_ALPHA', 0.15);
-export const EMA_ALPHA_3_SOURCES = parseEnvFloat('EMA_3_SOURCE_ALPHA', 0.22);
+export const EMA_ALPHA_DEFAULT = parseEnvFloat('EMA_BASE_ALPHA', 0.22);
+export const EMA_ALPHA_2_SOURCES = parseEnvFloat('EMA_2_SOURCE_ALPHA', 0.22);
+export const EMA_ALPHA_3_SOURCES = parseEnvFloat('EMA_3_SOURCE_ALPHA', 0.28);
 export const EMA_HIGH_BASELINE_MIN_ALPHA = parseEnvFloat('EMA_HIGH_BASELINE_MIN_ALPHA', 0.20);
 export const EMA_HIGH_BASELINE_VELOCITY_THRESHOLD = parseEnvFloat('EMA_HIGH_BASELINE_VELOCITY_THRESHOLD', 65);
 export const EMA_HIGH_BASELINE_MIN_STRONG_SOURCES = parseEnvFloat('EMA_HIGH_BASELINE_MIN_STRONG_SOURCES', 2);
-export const EMA_DOWNWARD_MULTIPLIER = parseEnvFloat('EMA_DOWNWARD_MULTIPLIER', 1.2);
+export const EMA_DOWNWARD_MULTIPLIER = parseEnvFloat('EMA_DOWNWARD_MULTIPLIER', 1.1);
 
 // Rate limiting - maximum change per hour
-// Default 8% cap (raised from 5%), increases with multi-source breakouts
+// Default 12% cap (relaxed from 8%), increases with multi-source breakouts
 // Target: <25% of population rate-limited in steady state
-export const MAX_HOURLY_CHANGE_PERCENT = 0.08;
+export const MAX_HOURLY_CHANGE_PERCENT = 0.12;
 
 // Legacy constant for backwards compatibility
 export const EMA_ALPHA = EMA_ALPHA_DEFAULT;
@@ -685,13 +685,13 @@ export function getDynamicRateLimit(spikingCount: number): number {
       baseCap = 0.35; // 35% - all three sources agree
       break;
     case 2:
-      baseCap = 0.20; // 20% - two sources corroborate (raised from 18%)
+      baseCap = 0.25; // 25% - two sources corroborate (relaxed from 20%)
       break;
     case 1:
-      baseCap = 0.12; // 12% - one source spiking (raised from 8%)
+      baseCap = 0.16; // 16% - one source spiking (relaxed from 12%)
       break;
     default:
-      baseCap = MAX_HOURLY_CHANGE_PERCENT; // 8% - default steady-state
+      baseCap = MAX_HOURLY_CHANGE_PERCENT; // 12% - default steady-state (relaxed from 8%)
   }
   const recalBoosted = getRecalibrationRateBoost(baseCap);
   return recalBoosted * getCatchUpCapMultiplier();

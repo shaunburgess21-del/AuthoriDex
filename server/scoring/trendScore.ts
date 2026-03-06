@@ -342,7 +342,7 @@ export function computeTrendScore(
       effectiveCap = recoveryRateBoost;
     }
     
-    const DOWN_CAP_MULTIPLIER = 1.5;
+    const DOWN_CAP_MULTIPLIER = 1.2;
     const maxChangeUp = previousFameIndex * effectiveCap;
     const maxChangeDown = previousFameIndex * effectiveCap * DOWN_CAP_MULTIPLIER;
     const actualChange = fameIndex - previousFameIndex;
