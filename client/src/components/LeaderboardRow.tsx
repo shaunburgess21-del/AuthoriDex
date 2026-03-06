@@ -1,6 +1,5 @@
 import { TrendingPerson } from "@shared/schema";
 import { PersonAvatar } from "./PersonAvatar";
-import { RankBadge } from "./RankBadge";
 import { Button } from "@/components/ui/button";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { Popover, PopoverTrigger, PopoverContent, PopoverClose } from "@/components/ui/popover";
@@ -192,6 +191,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
   const hasVoted = sentimentScore !== null;
   const showVotePulse = !hasVoted && !hasEverVoted;
   const [justVoted, setJustVoted] = useState(false);
+  const rank = person.leaderboardRank ?? (person as any).liveRank ?? person.rank;
 
   const prevScoreRef = useRef(fameScore);
   const [scoreFlash, setScoreFlash] = useState(false);
@@ -207,15 +207,24 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
   return (
     <div className="border-b">
       <div
-        className="flex items-center gap-3 sm:gap-4 lg:gap-6 p-3 py-4 sm:p-4 sm:py-5 hover-elevate active-elevate-2 cursor-pointer"
+        className="flex items-center gap-3 sm:gap-4 lg:gap-7 p-3 py-4 sm:p-4 sm:py-5 hover-elevate active-elevate-2 cursor-pointer"
         onClick={onVisitProfile}
         data-testid={`row-person-${person.id}`}
       >
-        <RankBadge rank={person.leaderboardRank ?? (person as any).liveRank ?? person.rank} rankChange={person.rankChange} colorMode={activeTab} />
-        <PersonAvatar name={person.name} avatar={person.avatar} imageSlug={(person as any).imageSlug} size="md" />
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          <span className="font-mono font-bold text-slate-500 w-4 text-center text-[13px] sm:text-[14px]">
+            {rank}
+          </span>
+          <PersonAvatar
+            name={person.name}
+            avatar={person.avatar}
+            imageSlug={(person as any).imageSlug}
+            size="sm"
+          />
+        </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <h3 className="font-semibold text-base truncate" data-testid={`text-name-${person.id}`}>
+            <h3 className="font-semibold text-sm sm:text-base truncate" data-testid={`text-name-${person.id}`}>
               {person.name}
             </h3>
             {exceptional && ExceptionalIcon && (
@@ -280,7 +289,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
 
         {activeTab === "fame" && (
           <>
-            <div className="text-right hidden sm:block w-[120px] shrink-0">
+            <div className="text-right hidden sm:block w-[120px] lg:w-[140px] shrink-0">
               <p className={`font-mono font-bold text-2xl tabular-nums ${scoreFlash ? 'number-flash' : ''}`} data-testid={`text-score-${person.id}`}>
                 {fameScore.toLocaleString('en-US')}
               </p>
@@ -288,7 +297,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 Trend Score
               </p>
             </div>
-            <div className="hidden lg:block text-right w-[72px] shrink-0" data-testid={`text-delta-desktop-${person.id}`}>
+            <div className="hidden lg:block text-right w-[72px] lg:w-[80px] shrink-0" data-testid={`text-delta-desktop-${person.id}`}>
               <p className={`font-mono font-semibold text-sm tabular-nums ${
                 person.change24h == null || Math.abs(person.change24h) < 0.05
                   ? "text-muted-foreground"
@@ -300,7 +309,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               </p>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">24h</p>
             </div>
-            <div className="hidden md:block text-right w-[72px] shrink-0">
+            <div className="hidden md:block text-right w-[72px] lg:w-[84px] shrink-0">
               <TouchTooltip
                 content={person.approvalAvgRating != null ? `${person.name} has a ${person.approvalAvgRating.toFixed(1)}/5 community rating` : "No votes yet"}
                 side="top"
