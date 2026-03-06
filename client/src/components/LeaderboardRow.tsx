@@ -207,19 +207,19 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
   return (
     <div className="border-b">
       <div
-        className="flex items-center gap-3 sm:gap-4 lg:gap-7 p-3 py-4 sm:p-4 sm:py-5 hover-elevate active-elevate-2 cursor-pointer"
+        className="flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-3 py-4 sm:pl-3 sm:pr-4 sm:py-5 hover-elevate active-elevate-2 cursor-pointer"
         onClick={onVisitProfile}
         data-testid={`row-person-${person.id}`}
       >
-        <div className="flex items-center gap-2 sm:gap-2.5">
-          <span className="font-mono font-bold text-slate-500 w-4 text-center text-[13px] sm:text-[14px]">
+        <div className="flex items-center gap-2.5">
+          <span className="font-mono font-semibold text-slate-500 w-5 text-center text-[16px] sm:text-[18px]">
             {rank}
           </span>
           <PersonAvatar
             name={person.name}
             avatar={person.avatar}
             imageSlug={(person as any).imageSlug}
-            size="sm"
+            size="md"
           />
         </div>
         <div className="flex-1 min-w-0">
