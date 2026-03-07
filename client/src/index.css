@@ -650,6 +650,38 @@
     animation: count-flash 0.3s ease-out;
   }
 
+  /* ===== SWIPER CAROUSEL - AuthoriDex pagination overrides ===== */
+  /* Inactive dots: muted grey (slate-600) */
+  .authoridex-swiper .swiper-pagination-bullet {
+    background: rgb(71 85 105);
+    opacity: 1;
+    width: 8px;
+    height: 8px;
+    transition: background 0.2s, width 0.2s;
+  }
+  /* Active dot: cyan/teal by default */
+  .authoridex-swiper .swiper-pagination-bullet-active {
+    background: rgb(34 211 238);
+    width: 24px;
+    border-radius: 4px;
+  }
+  .authoridex-swiper[data-dot-active="violet"] .swiper-pagination-bullet-active {
+    background: rgb(139 92 246);
+  }
+  .authoridex-swiper .swiper-pagination-bullets {
+    position: relative;
+    margin-top: 1rem;
+  }
+  /* Multi-slide carousels: show pagination only on mobile (1 slide) */
+  .authoridex-swiper-multi .swiper-pagination {
+    display: flex;
+  }
+  @media (min-width: 768px) {
+    .authoridex-swiper-multi .swiper-pagination {
+      display: none;
+    }
+  }
+
   /* ===== PULL TO REFRESH ===== */
   @keyframes ptr-spin {
     to { transform: rotate(360deg); }

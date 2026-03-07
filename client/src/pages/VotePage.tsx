@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, Children } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -63,9 +63,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import Slider from "react-slick";
-import "slick-carousel/slick/slick.css";
-import "slick-carousel/slick/slick-theme.css";
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Pagination, A11y } from "swiper/modules";
+import "swiper/css";
+import "swiper/css/pagination";
 import { motion, AnimatePresence } from "framer-motion";
 import { getFilterCategories, type FilterCategory } from "@shared/constants";
 import type { TrendingPerson } from "@shared/schema";
@@ -1207,41 +1208,18 @@ function OpinionPollCard({
   );
 }
 
-function CarouselSection({ 
-  title, 
-  subtitle, 
+function CarouselSection({
+  title,
+  subtitle,
   children,
   icon: Icon
-}: { 
-  title: string; 
-  subtitle: string; 
+}: {
+  title: string;
+  subtitle: string;
   children: React.ReactNode;
   icon: typeof Vote;
 }) {
-  const sliderSettings = {
-    dots: false,
-    infinite: false,
-    speed: 300,
-    slidesToShow: 3,
-    slidesToScroll: 1,
-    arrows: true,
-    responsive: [
-      {
-        breakpoint: 1024,
-        settings: {
-          slidesToShow: 2,
-        }
-      },
-      {
-        breakpoint: 640,
-        settings: {
-          slidesToShow: 1,
-          centerMode: true,
-          centerPadding: '20px',
-        }
-      }
-    ]
-  };
+  const slides = Children.toArray(children);
 
   return (
     <section className="mb-10">
@@ -1254,11 +1232,30 @@ function CarouselSection({
           <p className="text-sm text-muted-foreground">{subtitle}</p>
         </div>
       </div>
-      
-      <div className="predict-carousel -mx-2">
-        <Slider {...sliderSettings}>
-          {children}
-        </Slider>
+
+      <div className="predict-carousel -mx-2 authoridex-swiper authoridex-swiper-multi" data-dot-active="cyan">
+        <Swiper
+          modules={[Pagination, A11y]}
+          spaceBetween={12}
+          slidesPerView={3}
+          threshold={10}
+          touchAngle={45}
+          resistanceRatio={0.85}
+          speed={300}
+          cssMode={false}
+          breakpoints={{
+            640: { slidesPerView: 1 },
+            1024: { slidesPerView: 2 },
+          }}
+          pagination={{ clickable: true }}
+          a11y={{ enabled: true, prevSlideMessage: "Previous slide", nextSlideMessage: "Next slide" }}
+        >
+          {slides.map((child, i) => (
+            <SwiperSlide key={i}>
+              {child}
+            </SwiperSlide>
+          ))}
+        </Swiper>
       </div>
     </section>
   );
