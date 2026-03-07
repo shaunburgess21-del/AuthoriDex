@@ -398,11 +398,11 @@ function OpinionPollCardProfile({
         </div>
         <div className="flex items-start gap-3 mb-3">
           {poll.options[0]?.imageUrl ? (
-            <div className="h-12 w-12 rounded-md overflow-hidden shrink-0 border border-cyan-500/30 bg-slate-800">
+            <div className="h-12 w-12 rounded-md overflow-hidden shrink-0 bg-slate-800">
               <img src={poll.options[0].imageUrl!} alt={poll.title} className="w-full h-full object-cover" />
             </div>
           ) : (
-            <div className="h-12 w-12 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0 border border-slate-600/30">
+            <div className="h-12 w-12 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
               <ListChecks className="h-5 w-5 text-slate-400" />
             </div>
           )}

@@ -184,7 +184,7 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart 
                   data={historyData} 
-                  margin={{ top: 5, right: 0, left: 0, bottom: 5 }}
+                  margin={{ top: 5, right: 0, left: 4, bottom: 5 }}
                   onMouseMove={handleMouseMove}
                   onMouseLeave={handleMouseLeave}
                 >
