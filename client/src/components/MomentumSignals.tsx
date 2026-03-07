@@ -183,7 +183,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
     return null;
   }
 
-  const { signals, categoryRank, staleFlags, ageMinutes, activeSources, officialProfiles } = data;
+  const { signals, staleFlags, ageMinutes, activeSources, officialProfiles } = data;
 
   const freshnessText = ageMinutes < 2
     ? "Just now"
@@ -197,20 +197,9 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
 
   return (
     <div id="momentum-signals" className="mt-8 space-y-6" data-testid="section-momentum-signals">
-      <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-xl font-bold">Momentum Signals</h2>
-          {categoryRank && (
-            <div className="flex items-center gap-2" data-testid="badge-category-rank">
-              <Badge variant="secondary" className="text-xs">
-                <Trophy className="h-3 w-3 mr-1" />
-                #{categoryRank.categoryRank} in {categoryRank.category}
-              </Badge>
-              <Badge variant="outline" className="text-xs">
-                #{categoryRank.overall} Overall
-              </Badge>
-            </div>
-          )}
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" />
