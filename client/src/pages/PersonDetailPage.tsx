@@ -55,7 +55,6 @@ import { formatNumber } from "@/lib/formatNumber";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { getExceptionalIndicator } from "@/components/LeaderboardRow";
 import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
-import { MomentumSignals } from "@/components/MomentumSignals";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 const APPROVAL_COLORS = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
