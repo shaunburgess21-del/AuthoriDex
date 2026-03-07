@@ -736,7 +736,7 @@ function PredictCard({
             : `opacity-0 group-hover:opacity-100 ${selected ? 'opacity-100 border-violet-500' : ''}`
         }`}
       />
-      <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all h-full flex flex-col rounded-none md:rounded-xl min-h-[380px] md:min-h-0 border-0 md:border md:border-transparent shadow-none md:shadow-sm ${
+      <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all h-full flex flex-col rounded-none md:rounded-xl min-h-[390px] md:min-h-0 border-0 md:border md:border-transparent shadow-none md:shadow-sm ${
         inactive 
           ? 'opacity-50 grayscale-[40%]' 
           : `md:group-hover:shadow-lg md:group-hover:shadow-violet-500/20 ${selected ? 'shadow-lg shadow-violet-500/30' : ''}`
@@ -782,7 +782,7 @@ function WeeklyUpDownCard({
   onSelect?: (choice: "up" | "down") => void;
 }) {
   return (
-    <PredictCard testId={`card-weekly-${market.id}`} className={`min-h-[300px] ${isMarketClosed ? 'opacity-75' : ''}`}>
+    <PredictCard testId={`card-weekly-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''}`}>
       <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
         <Badge 
           variant="outline" 
@@ -873,7 +873,7 @@ function HeadToHeadCard({
   onSelect?: (person: 1 | 2) => void;
 }) {
   return (
-    <PredictCard testId={`card-h2h-${market.id}`} className={`relative overflow-hidden min-h-[320px] ${isMarketClosed ? 'opacity-75' : ''}`}>
+    <PredictCard testId={`card-h2h-${market.id}`} className={`relative overflow-hidden ${isMarketClosed ? 'opacity-75' : ''}`}>
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute left-0 top-0 w-1/2 h-full bg-gradient-to-r from-blue-600/20 to-transparent" />
         <div className="absolute right-0 top-0 w-1/2 h-full bg-gradient-to-l from-purple-600/20 to-transparent" />
@@ -1174,7 +1174,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
   const noPercent = 100 - yesPercent;
   
   return (
-    <PredictCard testId={`card-market-${market.slug}`} className={`min-h-[300px] ${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
+    <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
@@ -1239,7 +1239,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
   const totalEntryStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0) + (e.seedCount || 0), 0) || 1;
   
   return (
-    <PredictCard testId={`card-market-${market.slug}`} className={`min-h-[300px] ${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
+    <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
@@ -1309,7 +1309,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
   const belowPercent = 100 - abovePercent;
   
   return (
-    <PredictCard testId={`card-market-${market.slug}`} className={`min-h-[300px] ${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
+    <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 mr-1" />
