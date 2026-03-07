@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useState, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -130,9 +130,9 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
     const dataLength = historyData.length;
     
     if (typeof window !== 'undefined' && window.innerWidth < 640) {
-      return Math.max(1, Math.floor(dataLength / 4));
+      return Math.max(1, Math.floor(dataLength / 5));
     }
-    return Math.max(1, Math.floor(dataLength / 6));
+    return Math.max(1, Math.floor(dataLength / 7));
   }, [historyData]);
 
   const handleMouseMove = useCallback((state: any) => {
@@ -155,20 +155,20 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
   }, [historyData]);
 
   return (
-    <Card>
-      <CardHeader className="pb-4">
+    <Card className="border-0 md:border rounded-none md:rounded-xl shadow-none md:shadow-sm overflow-hidden">
+      <CardHeader className="pb-3 px-4 md:px-6">
         <CardTitle className="text-lg font-serif">Trend History</CardTitle>
       </CardHeader>
-      <CardContent>
+      <div className="px-0">
         {isLoading ? (
-          <div className="h-80 flex items-center justify-center">
+          <div className="h-[400px] flex items-center justify-center">
             <div className="text-center">
               <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
               <p className="mt-4 text-sm text-muted-foreground">Loading trend data...</p>
             </div>
           </div>
         ) : !historyData || historyData.length === 0 ? (
-          <div className="h-80 flex items-center justify-center border rounded-lg bg-muted/20">
+          <div className="h-[400px] flex items-center justify-center mx-4 border rounded-lg bg-muted/20">
             <div className="text-center">
               <p className="text-muted-foreground">
                 No historical data available yet
@@ -179,11 +179,11 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
             </div>
           </div>
         ) : (
-          <div className="h-80">
+          <div className="h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart 
                 data={historyData} 
-                margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+                margin={{ top: 5, right: 4, left: 4, bottom: 5 }}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
               >
@@ -197,7 +197,7 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
                   strokeDasharray="3 3" 
                   vertical={false}
                   stroke="hsl(var(--muted-foreground))"
-                  strokeOpacity={0.15}
+                  strokeOpacity={0.1}
                 />
                 <XAxis 
                   dataKey="timestamp" 
@@ -205,8 +205,10 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
                   tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
                   tickFormatter={formatXAxisTick}
                   interval={getTickInterval()}
-                  axisLine={{ stroke: 'hsl(var(--border))' }}
+                  axisLine={false}
                   tickLine={false}
+                  tickMargin={10}
+                  padding={{ left: 8, right: 8 }}
                 />
                 <YAxis 
                   tickFormatter={formatYAxis}
@@ -215,7 +217,10 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
                   domain={yDomain as [number, number]}
                   axisLine={false}
                   tickLine={false}
-                  width={55}
+                  width={48}
+                  orientation="left"
+                  mirror={false}
+                  tickMargin={2}
                 />
                 <Tooltip 
                   content={<CustomTooltip startScore={startScore} timeRange={timeRange} />}
@@ -254,8 +259,7 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
           </div>
         )}
         
-        {/* Time range buttons - positioned below chart like Polymarket */}
-        <div className="flex gap-1 mt-4">
+        <div className="flex gap-1.5 mt-4 mb-2 px-4 md:px-6">
           {(["1D", "7D", "30D", "6M", "1Y", "ALL"] as TimeRange[]).map((range) => (
             <Button
               key={range}
@@ -269,7 +273,7 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
             </Button>
           ))}
         </div>
-      </CardContent>
+      </div>
     </Card>
   );
 }
