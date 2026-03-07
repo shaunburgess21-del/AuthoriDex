@@ -38,10 +38,10 @@ export function CardSection({
         {desktopItems}
       </div>
 
-      <div className="md:hidden authoridex-swiper" data-dot-active={dotActive}>
+      <div className="md:hidden authoridex-swiper w-screen relative left-1/2 -ml-[50vw]" data-dot-active={dotActive}>
         <Swiper
           modules={[Pagination, A11y, Virtual]}
-          spaceBetween={12}
+          spaceBetween={0}
           slidesPerView={1}
           threshold={10}
           touchAngle={45}
@@ -64,7 +64,7 @@ export function CardSection({
         >
           {items.map((item, i) => (
             <SwiperSlide key={i} virtualIndex={i}>
-              <div className="w-full px-1">
+              <div className="w-full px-0">
                 {item}
               </div>
             </SwiperSlide>

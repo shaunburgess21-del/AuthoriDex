@@ -670,7 +670,12 @@
   }
   .authoridex-swiper .swiper-pagination-bullets {
     position: relative;
-    margin-top: 1rem;
+    margin-top: 0.5rem;
+  }
+  @media (min-width: 768px) {
+    .authoridex-swiper .swiper-pagination-bullets {
+      margin-top: 1rem;
+    }
   }
   /* Multi-slide carousels: show pagination only on mobile (1 slide) */
   .authoridex-swiper-multi .swiper-pagination {
