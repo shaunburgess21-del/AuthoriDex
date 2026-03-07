@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { sharePage } from "@/lib/share";
 import { UserMenu } from "@/components/UserMenu";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ import {
   Lock,
   Info,
   Gavel,
+  Share2,
 } from "lucide-react";
 
 interface MarketEntry {
@@ -613,6 +615,16 @@ export default function MarketDetailPage() {
                 <span>Source</span>
               </a>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => sharePage(`${market.title} on AuthoriDex`)}
+              className="ml-auto"
+              data-testid="button-share"
+            >
+              <Share2 className="h-4 w-4 mr-1" />
+              Share
+            </Button>
           </div>
 
           {market.tags && market.tags.length > 0 && (

@@ -49,8 +49,9 @@ import { useRoute, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useAuth } from "@/contexts/AuthContext";
-import { getSupabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
+import { sharePage } from "@/lib/share";
+import { useFavorites } from "@/hooks/useFavorites";
 import { formatNumber } from "@/lib/formatNumber";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { getExceptionalIndicator } from "@/components/LeaderboardRow";
@@ -879,12 +880,12 @@ function ViewAllPollsOverlay({
 }
 
 export default function PersonDetailPage() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const { toast } = useToast();
   const [, params] = useRoute("/person/:id");
   const [location, setLocation] = useLocation();
-  const [isFavorited, setIsFavorited] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const { isFavorite } = useFavorites();
   const validTabs = ["overview", "vote", "predict"];
   const initialTab = (() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -1138,30 +1139,7 @@ export default function PersonDetailPage() {
     }));
   }, [personTrendingPolls]);
 
-  // Check if person is favorited
-  useEffect(() => {
-    if (!user || !person) return;
-
-    async function checkFavorite() {
-      try {
-        const supabase = await getSupabase();
-        const { data, error } = await supabase
-          .from('user_favourites')
-          .select('id')
-          .eq('userId', user!.id)
-          .eq('personId', person!.id)
-          .single();
-
-        if (!error && data) {
-          setIsFavorited(true);
-        }
-      } catch (error) {
-        console.error('Error checking favorite:', error);
-      }
-    }
-
-    checkFavorite();
-  }, [user, person]);
+  const isFavorited = person ? isFavorite(person.id) : false;
 
   // Scroll to voting widget when navigated from modal with hash
   useEffect(() => {
@@ -1182,7 +1160,7 @@ export default function PersonDetailPage() {
   }, [person, isLoading]);
 
   const handleToggleFavorite = async () => {
-    if (!user) {
+    if (!user || !session?.access_token) {
       toast({
         title: "Sign in required",
         description: "Please sign in to add favorites",
@@ -1196,41 +1174,32 @@ export default function PersonDetailPage() {
 
     setFavoriteLoading(true);
     try {
-      const supabase = await getSupabase();
-
-      if (isFavorited) {
-        const { error } = await supabase
-          .from('user_favourites')
-          .delete()
-          .eq('userId', user.id)
-          .eq('personId', person.id);
-
-        if (error) throw error;
-
-        setIsFavorited(false);
-        toast({
-          title: "Removed from favorites",
-          description: `${person.name} has been removed from your favorites`,
-        });
-      } else {
-        const { error } = await supabase
-          .from('user_favourites')
-          .insert({
-            userId: user.id,
-            personId: person.id,
+      const method = isFavorited ? "DELETE" : "POST";
+      const res = await fetch(`/api/me/favorites/${person.id}`, {
+        method,
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        ...(method === "POST" ? {
+          body: JSON.stringify({
             personName: person.name,
             personAvatar: person.avatar,
             personCategory: person.category,
-          });
+          }),
+        } : {}),
+      });
 
-        if (error) throw error;
+      if (!res.ok) throw new Error(`Failed: ${res.status}`);
 
-        setIsFavorited(true);
-        toast({
-          title: "Added to favorites",
-          description: `${person.name} has been added to your favorites`,
-        });
-      }
+      await queryClient.invalidateQueries({ queryKey: ["/api/me/favorites"] });
+
+      toast({
+        title: isFavorited ? "Removed from favorites" : "Added to favorites",
+        description: isFavorited
+          ? `${person.name} has been removed from your favorites`
+          : `${person.name} has been added to your favorites`,
+      });
     } catch (error) {
       console.error('Error toggling favorite:', error);
       toast({
@@ -1357,7 +1326,7 @@ export default function PersonDetailPage() {
                   )}
                 </div>
                 <div className="flex flex-row gap-2">
-                  <Button variant="outline" size="icon" className="sm:hidden" data-testid="button-share-mobile">
+                  <Button variant="outline" size="icon" className="sm:hidden" onClick={() => sharePage(`${person.name} on AuthoriDex`)} data-testid="button-share-mobile">
                     <Share2 className="h-4 w-4" />
                   </Button>
                   <Button
@@ -1370,7 +1339,7 @@ export default function PersonDetailPage() {
                   >
                     <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
                   </Button>
-                  <Button variant="outline" className="hidden sm:inline-flex gap-2" data-testid="button-share">
+                  <Button variant="outline" className="hidden sm:inline-flex gap-2" onClick={() => sharePage(`${person.name} on AuthoriDex`)} data-testid="button-share">
                     <Share2 className="h-4 w-4" />
                     Share
                   </Button>

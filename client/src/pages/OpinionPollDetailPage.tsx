@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { sharePage } from "@/lib/share";
 import { UserMenu } from "@/components/UserMenu";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
@@ -62,7 +63,6 @@ export default function OpinionPollDetailPage() {
   const [commentText, setCommentText] = useState("");
   const [commentSort, setCommentSort] = useState<"top" | "newest">("top");
   const [showVoteChange, setShowVoteChange] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
 
   const { data: poll, isLoading } = useQuery<any>({
     queryKey: ["/api/opinion-polls", slug],
@@ -142,16 +142,8 @@ export default function OpinionPollDetailPage() {
     return sorted;
   }, [comments, commentSort]);
 
-  const handleShare = async () => {
-    const url = window.location.href;
-    try {
-      await navigator.clipboard.writeText(url);
-      setLinkCopied(true);
-      toast({ title: "Link Copied", description: "Poll link copied to clipboard." });
-      setTimeout(() => setLinkCopied(false), 2000);
-    } catch {
-      toast({ title: "Share", description: url });
-    }
+  const handleShare = () => {
+    sharePage(poll ? `${poll.title} on AuthoriDex` : "AuthoriDex");
   };
 
   if (isLoading) {
@@ -240,8 +232,8 @@ export default function OpinionPollDetailPage() {
               className="ml-auto"
               data-testid="button-share"
             >
-              {linkCopied ? <CheckCircle2 className="h-4 w-4 mr-1 text-green-400" /> : <Share2 className="h-4 w-4 mr-1" />}
-              {linkCopied ? "Copied" : "Share"}
+              <Share2 className="h-4 w-4 mr-1" />
+              Share
             </Button>
           </div>
         </div>

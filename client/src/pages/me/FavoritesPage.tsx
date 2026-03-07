@@ -3,20 +3,39 @@ import { Card } from "@/components/ui/card";
 import { ArrowLeft, Star, Heart, TrendingUp, Search } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 export default function FavoritesPage() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
 
   const { data: favorites, isLoading } = useQuery({
     queryKey: ["/api/me/favorites"],
     enabled: !!user,
   });
+
+  const handleUnfavorite = async (e: React.MouseEvent, celebrityId: string, name: string) => {
+    e.stopPropagation();
+    if (!session?.access_token) return;
+    try {
+      const res = await fetch(`/api/me/favorites/${celebrityId}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) throw new Error(`Failed: ${res.status}`);
+      await queryClient.invalidateQueries({ queryKey: ["/api/me/favorites"] });
+      toast({ title: "Removed from favorites", description: `${name} removed` });
+    } catch {
+      toast({ title: "Error", description: "Failed to remove favorite", variant: "destructive" });
+    }
+  };
 
   if (!user) {
     return (
@@ -110,9 +129,7 @@ export default function FavoritesPage() {
                       variant="ghost" 
                       size="sm" 
                       className="mt-1"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
+                      onClick={(e) => handleUnfavorite(e, fav.celebrityId, fav.name)}
                       data-testid={`button-unfavorite-${fav.id}`}
                     >
                       <Heart className="h-4 w-4 text-red-400 fill-red-400" />

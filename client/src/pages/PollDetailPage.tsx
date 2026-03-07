@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { sharePage } from "@/lib/share";
 import { UserMenu } from "@/components/UserMenu";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,6 @@ import {
   BarChart3,
   Info,
   Share2,
-  CheckCircle2,
   MessageSquare,
   ArrowUpDown,
   Copy,
@@ -108,7 +108,6 @@ export default function PollDetailPage() {
 
   const [commentBody, setCommentBody] = useState("");
   const [commentSort, setCommentSort] = useState<"top" | "newest">("top");
-  const [linkCopied, setLinkCopied] = useState(false);
   const [showVoteChange, setShowVoteChange] = useState(false);
 
   const { data: poll, isLoading: pollLoading, error: pollError } = useQuery<PollData>({
@@ -200,16 +199,8 @@ export default function PollDetailPage() {
     commentMutation.mutate(commentBody.trim());
   };
 
-  const handleShare = async () => {
-    const url = window.location.href;
-    try {
-      await navigator.clipboard.writeText(url);
-      setLinkCopied(true);
-      toast({ title: "Link Copied", description: "Poll link copied to clipboard." });
-      setTimeout(() => setLinkCopied(false), 2000);
-    } catch {
-      toast({ title: "Share", description: url });
-    }
+  const handleShare = () => {
+    sharePage(poll ? `${poll.headline} on AuthoriDex` : "AuthoriDex");
   };
 
   if (pollLoading) {
@@ -299,8 +290,8 @@ export default function PollDetailPage() {
               className="ml-auto"
               data-testid="button-share"
             >
-              {linkCopied ? <CheckCircle2 className="h-4 w-4 mr-1 text-green-400" /> : <Share2 className="h-4 w-4 mr-1" />}
-              {linkCopied ? "Copied" : "Share"}
+              <Share2 className="h-4 w-4 mr-1" />
+              Share
             </Button>
           </div>
         </div>

@@ -4577,6 +4577,56 @@ Only return the JSON object.`;
       res.status(500).json({ error: "Failed to fetch favorites" });
     }
   });
+
+  app.post("/api/me/favorites/:personId", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { personId } = req.params;
+      const { personName, personAvatar, personCategory } = req.body || {};
+
+      let name = personName;
+      let avatar = personAvatar;
+      let category = personCategory;
+
+      if (!name) {
+        const person = await db.select().from(trackedPeople).where(eq(trackedPeople.id, personId)).limit(1);
+        if (person[0]) {
+          name = person[0].name;
+          avatar = avatar ?? person[0].avatar;
+          category = category ?? person[0].category;
+        }
+      }
+
+      await db.insert(userFavourites).values({
+        userId,
+        personId,
+        personName: name || "Unknown",
+        personAvatar: avatar || null,
+        personCategory: category || null,
+      }).onConflictDoNothing();
+
+      res.json({ ok: true });
+    } catch (error: any) {
+      console.error("Error adding favorite:", error.message);
+      res.status(500).json({ error: "Failed to add favorite" });
+    }
+  });
+
+  app.delete("/api/me/favorites/:personId", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.userId!;
+      const { personId } = req.params;
+
+      await db.delete(userFavourites).where(
+        and(eq(userFavourites.userId, userId), eq(userFavourites.personId, personId))
+      );
+
+      res.json({ ok: true });
+    } catch (error: any) {
+      console.error("Error removing favorite:", error.message);
+      res.status(500).json({ error: "Failed to remove favorite" });
+    }
+  });
   
   // ==================
   // Admin Endpoints

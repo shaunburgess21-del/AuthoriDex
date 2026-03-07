@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { sharePage } from "@/lib/share";
 import { UserMenu } from "@/components/UserMenu";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,6 @@ import {
   BarChart3,
   Info,
   Share2,
-  CheckCircle2,
   MessageSquare,
   ArrowUpDown,
   Copy,
@@ -103,7 +103,6 @@ export default function MatchupDetailPage() {
   const queryClient = useQueryClient();
   const { user, isLoggedIn } = useAuth();
 
-  const [copied, setCopied] = useState(false);
   const [commentBody, setCommentBody] = useState("");
   const [commentSort, setCommentSort] = useState<"top" | "newest">("top");
 
@@ -204,15 +203,8 @@ export default function MatchupDetailPage() {
     removeVoteMutation.mutate(matchupId);
   };
 
-  const handleShare = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      setCopied(true);
-      toast({ title: "Link Copied", description: "Matchup link copied to clipboard." });
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast({ title: "Share", description: window.location.href });
-    }
+  const handleShare = () => {
+    sharePage(matchup ? `${matchup.title} on AuthoriDex` : "AuthoriDex");
   };
 
   const handlePostComment = () => {
@@ -319,8 +311,8 @@ export default function MatchupDetailPage() {
               className="ml-auto"
               data-testid="button-share"
             >
-              {copied ? <CheckCircle2 className="h-4 w-4 mr-1 text-green-400" /> : <Share2 className="h-4 w-4 mr-1" />}
-              {copied ? "Copied" : "Share"}
+              <Share2 className="h-4 w-4 mr-1" />
+              Share
             </Button>
           </div>
         </div>
