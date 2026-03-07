@@ -78,7 +78,7 @@ export function InlineCelebrityBio({ personId, personName }: InlineCelebrityBioP
       <div>
         <h4 className="text-xs uppercase tracking-wide text-muted-foreground mb-1">About</h4>
         <p
-          className={`text-sm leading-relaxed text-muted-foreground ${!expanded ? "line-clamp-2" : ""}`}
+          className={`text-base leading-relaxed text-muted-foreground ${!expanded ? "line-clamp-2" : ""}`}
           data-testid="text-celebrity-bio"
         >
           {aboutText}
