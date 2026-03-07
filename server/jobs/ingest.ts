@@ -699,6 +699,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       searchVolume: trendSnapshots.searchVolume,
       newsDelta: trendSnapshots.newsDelta,
       searchDelta: trendSnapshots.searchDelta,
+      diagnostics: trendSnapshots.diagnostics,
     }).from(trendSnapshots).where(
       and(
         gte(trendSnapshots.timestamp, time7dAgo),
@@ -722,6 +723,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       searchVolume: number | null;
       newsDelta: number | null;
       searchDelta: number | null;
+      prevNewsHeadlines: string[];
+      prevNewsProvider: string | null;
+      prevTopStories: Array<{ title: string; link: string }>;
     }>();
     const lastNonZeroNewsMap = new Map<string, { newsCount: number; newsDelta: number; timestamp: Date }>();
     const lastNonZeroSearchMap = new Map<string, { searchVolume: number; searchDelta: number; timestamp: Date }>();
@@ -736,6 +740,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       // Track most recent snapshot per person (for EMA smoothing continuity + fallback data)
       const existingRecent = mostRecentMap.get(snap.personId);
       if (!existingRecent || new Date(snap.timestamp) > existingRecent.timestamp) {
+        const diag = snap.diagnostics as Record<string, any> | null;
+        const ev = diag?.evidence ?? {};
         mostRecentMap.set(snap.personId, { 
           trendScore: snap.trendScore, 
           fameIndex: snap.fameIndex,
@@ -744,6 +750,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           searchVolume: snap.searchVolume,
           newsDelta: snap.newsDelta,
           searchDelta: snap.searchDelta,
+          prevNewsHeadlines: Array.isArray(ev.newsHeadlines) ? ev.newsHeadlines : [],
+          prevNewsProvider: ev.newsProvider ?? null,
+          prevTopStories: Array.isArray(ev.topStories) ? ev.topStories : [],
         });
       }
 
@@ -1477,13 +1486,22 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             has24hBaseline: !!prev24h,
             has7dBaseline: !!prev7d,
           },
-          evidence: {
-            newsHeadlines: (news?.topHeadlines ?? []).slice(0, 3),
-            newsProvider: hasPerPersonFallback ? "serper_news" : newsSource,
-            relatedSearches: (serper?.relatedSearches ?? []).slice(0, 5),
-            peopleAlsoAsk: (serper?.peopleAlsoAsk ?? []).slice(0, 5),
-            topStories: (serper?.topStories ?? []).slice(0, 3),
-          },
+          evidence: (() => {
+            const currentHeadlines = (news?.topHeadlines ?? []).slice(0, 3);
+            const currentTopStories = (serper?.topStories ?? []).slice(0, 3);
+            const currentProvider = hasPerPersonFallback ? "serper_news" : newsSource;
+            const shouldCarryForward = (newsEmaHeld || newsUsedFallback) &&
+              currentHeadlines.length === 0 && currentTopStories.length === 0 &&
+              mostRecent;
+            return {
+              newsHeadlines: shouldCarryForward ? (mostRecent!.prevNewsHeadlines.length > 0 ? mostRecent!.prevNewsHeadlines : currentHeadlines) : currentHeadlines,
+              newsProvider: shouldCarryForward && mostRecent!.prevNewsProvider ? mostRecent!.prevNewsProvider : currentProvider,
+              relatedSearches: (serper?.relatedSearches ?? []).slice(0, 5),
+              peopleAlsoAsk: (serper?.peopleAlsoAsk ?? []).slice(0, 5),
+              topStories: shouldCarryForward ? (mostRecent!.prevTopStories.length > 0 ? mostRecent!.prevTopStories : currentTopStories) : currentTopStories,
+              ...(shouldCarryForward ? { headlinesCarriedForward: true } : {}),
+            };
+          })(),
           velocityComponents: scoreResult.velocityComponents,
           driversModel: "velocity_components_v1",
           driversMethod: scoreResult.velocityComponents ? "exact_velocity_components" : "estimate_signal_change",
