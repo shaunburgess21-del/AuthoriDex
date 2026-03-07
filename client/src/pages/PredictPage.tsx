@@ -730,16 +730,16 @@ function PredictCard({
       data-testid={testId}
     >
       <div 
-        className={`absolute -inset-[1px] rounded-xl border border-violet-500/60 transition-opacity pointer-events-none ${
+        className={`absolute -inset-[1px] rounded-xl border border-violet-500/60 transition-opacity pointer-events-none hidden md:block ${
           inactive 
             ? 'opacity-0' 
             : `opacity-0 group-hover:opacity-100 ${selected ? 'opacity-100 border-violet-500' : ''}`
         }`}
       />
-      <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all h-full flex flex-col ${
+      <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all h-full flex flex-col rounded-none md:rounded-xl ${
         inactive 
           ? 'opacity-50 grayscale-[40%]' 
-          : `group-hover:shadow-lg group-hover:shadow-violet-500/20 ${selected ? 'shadow-lg shadow-violet-500/30' : ''}`
+          : `md:group-hover:shadow-lg md:group-hover:shadow-violet-500/20 ${selected ? 'shadow-lg shadow-violet-500/30' : ''}`
       } ${className}`}>
         {inactive && (
           <div className="absolute top-3 right-3 z-10">
