@@ -670,7 +670,7 @@
   }
   .authoridex-swiper .swiper-pagination-bullets {
     position: relative;
-    margin-top: 0.5rem;
+    margin-top: 1rem;
   }
   @media (min-width: 768px) {
     .authoridex-swiper .swiper-pagination-bullets {

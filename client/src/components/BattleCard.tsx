@@ -24,7 +24,7 @@ export function BattleCard({ battle, compact = false }: BattleCardProps) {
   return (
     <div className={compact ? "" : "px-0 md:px-2"}>
       <Card 
-        className="p-4 hover:translate-y-[-2px] hover:shadow-lg hover:border-purple-500/40 hover:shadow-purple-500/20 transition-all duration-200 relative z-0 hover:z-10 rounded-none md:rounded-xl"
+        className="p-4 hover:translate-y-[-2px] hover:shadow-lg hover:border-purple-500/40 hover:shadow-purple-500/20 transition-all duration-200 relative z-0 hover:z-10 rounded-none md:rounded-xl min-h-[380px] md:min-h-0"
         data-testid={`card-battle-${battle.id}`}
       >
         <div className="flex items-center justify-between mb-3">

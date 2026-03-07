@@ -107,7 +107,7 @@ export function UnderratedOverratedCard({
     <div className="relative group h-full">
       <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
     <Card 
-      className="relative pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full flex flex-col border-slate-700/50 group-hover:shadow-lg md:group-hover:shadow-cyan-500/20 rounded-none md:rounded-xl"
+      className="relative pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[380px] md:min-h-0 flex flex-col border-slate-700/50 group-hover:shadow-lg md:group-hover:shadow-cyan-500/20 rounded-none md:rounded-xl"
       data-testid={`card-value-vote-${person.id}`}
     >
       {person.category && (
