@@ -1,5 +1,8 @@
-import { useState, useRef, useCallback, useEffect, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo, type ReactNode } from "react";
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Pagination, A11y } from "swiper/modules";
+import "swiper/css";
+import "swiper/css/pagination";
 
 interface CardSectionProps {
   children: ReactNode[];
@@ -18,46 +21,9 @@ export function CardSection({
   testIdPrefix = "card-section",
   dotActiveColor = "bg-cyan-400",
 }: CardSectionProps) {
-  const items = children.filter(Boolean);
+  const items = useMemo(() => children.filter(Boolean), [children]);
   const desktopItems = items.slice(0, desktopLimit);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const touchStartX = useRef(0);
-  const touchDeltaX = useRef(0);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isSwiping, setIsSwiping] = useState(false);
-
-  const maxIndex = items.length - 1;
-
-  const goTo = useCallback((index: number) => {
-    setCurrentIndex(Math.max(0, Math.min(index, maxIndex)));
-  }, [maxIndex]);
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchDeltaX.current = 0;
-    setIsSwiping(true);
-  }, []);
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    touchDeltaX.current = e.touches[0].clientX - touchStartX.current;
-  }, []);
-
-  const handleTouchEnd = useCallback(() => {
-    setIsSwiping(false);
-    const threshold = 50;
-    if (touchDeltaX.current < -threshold) {
-      goTo(currentIndex + 1);
-    } else if (touchDeltaX.current > threshold) {
-      goTo(currentIndex - 1);
-    }
-    touchDeltaX.current = 0;
-  }, [currentIndex, goTo]);
-
-  useEffect(() => {
-    if (currentIndex > maxIndex) {
-      setCurrentIndex(Math.max(0, maxIndex));
-    }
-  }, [maxIndex, currentIndex]);
+  const dotActive = dotActiveColor.includes("violet") ? "violet" : "cyan";
 
   if (items.length === 0) return null;
 
@@ -71,103 +37,35 @@ export function CardSection({
         {desktopItems}
       </div>
 
-      <div className="md:hidden">
-        <div
-          ref={containerRef}
-          className="relative overflow-hidden py-2"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
+      <div className="md:hidden authoridex-swiper" data-dot-active={dotActive}>
+        <Swiper
+          modules={[Pagination, A11y]}
+          spaceBetween={12}
+          slidesPerView={1}
+          threshold={10}
+          touchAngle={45}
+          resistanceRatio={0.85}
+          speed={300}
+          cssMode={false}
+          pagination={{
+            clickable: true,
+          }}
+          a11y={{
+            enabled: true,
+            prevSlideMessage: "Previous slide",
+            nextSlideMessage: "Next slide",
+          }}
+          className="py-2"
           data-testid={`${testIdPrefix}-carousel`}
         >
-          <div
-            className="flex transition-transform duration-300 ease-out"
-            style={{
-              transform: `translateX(-${currentIndex * 100}%)`,
-              ...(isSwiping ? { transition: 'none' } : {}),
-            }}
-          >
-            {items.map((item, i) => (
-              <div
-                key={i}
-                className="w-full shrink-0 px-1"
-                style={{ minWidth: '100%' }}
-              >
+          {items.map((item, i) => (
+            <SwiperSlide key={i}>
+              <div className="w-full px-1">
                 {item}
               </div>
-            ))}
-          </div>
-        </div>
-
-        {items.length > 1 && (
-          <div className="flex items-center justify-center gap-3 mt-4">
-            <button
-              onClick={() => goTo(currentIndex - 1)}
-              disabled={currentIndex === 0}
-              className="h-7 w-7 rounded-full flex items-center justify-center border border-slate-700/50 text-slate-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              data-testid={`${testIdPrefix}-prev`}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-
-            <div className="flex items-center gap-1.5" data-testid={`${testIdPrefix}-dots`}>
-              {(() => {
-                const total = items.length;
-                const MAX_DOTS = 5;
-                if (total <= MAX_DOTS) {
-                  return items.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => goTo(i)}
-                      className={`rounded-full transition-all duration-200 ${
-                        i === currentIndex
-                          ? `w-6 h-2 ${dotActiveColor}`
-                          : 'w-2 h-2 bg-slate-600 hover:bg-slate-500'
-                      }`}
-                      data-testid={`${testIdPrefix}-dot-${i}`}
-                    />
-                  ));
-                }
-                const half = Math.floor(MAX_DOTS / 2);
-                let start = currentIndex - half;
-                let end = currentIndex + half;
-                if (start < 0) { end -= start; start = 0; }
-                if (end >= total) { start -= (end - total + 1); end = total - 1; }
-                start = Math.max(0, start);
-                const visible: number[] = [];
-                for (let i = start; i <= end; i++) visible.push(i);
-                return visible.map((i) => {
-                  const isActive = i === currentIndex;
-                  const isEdge = i === visible[0] || i === visible[visible.length - 1];
-                  const isOuter = !isActive && isEdge && total > MAX_DOTS;
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => goTo(i)}
-                      className={`rounded-full transition-all duration-200 ${
-                        isActive
-                          ? `w-6 h-2 ${dotActiveColor}`
-                          : isOuter
-                            ? 'w-1.5 h-1.5 bg-slate-700 hover:bg-slate-500'
-                            : 'w-2 h-2 bg-slate-600 hover:bg-slate-500'
-                      }`}
-                      data-testid={`${testIdPrefix}-dot-${i}`}
-                    />
-                  );
-                });
-              })()}
-            </div>
-
-            <button
-              onClick={() => goTo(currentIndex + 1)}
-              disabled={currentIndex === maxIndex}
-              className="h-7 w-7 rounded-full flex items-center justify-center border border-slate-700/50 text-slate-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              data-testid={`${testIdPrefix}-next`}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        )}
+            </SwiperSlide>
+          ))}
+        </Swiper>
       </div>
     </div>
   );
