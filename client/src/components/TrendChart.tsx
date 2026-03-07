@@ -155,125 +155,127 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
   }, [historyData]);
 
   return (
-    <Card className="border-0 md:border rounded-none md:rounded-xl shadow-none md:shadow-sm overflow-hidden">
-      <CardHeader className="pb-3 px-4 md:px-6">
-        <CardTitle className="text-lg font-serif">Trend History</CardTitle>
-      </CardHeader>
-      <div className="px-0">
-        {isLoading ? (
-          <div className="h-[400px] flex items-center justify-center">
-            <div className="text-center">
-              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
-              <p className="mt-4 text-sm text-muted-foreground">Loading trend data...</p>
+    <div className="w-screen relative left-1/2 -ml-[50vw] md:w-auto md:relative md:left-0 md:ml-0">
+      <Card className="border-0 md:border rounded-none md:rounded-xl shadow-none md:shadow-sm overflow-hidden">
+        <CardHeader className="pb-3 px-4 md:px-6">
+          <CardTitle className="text-lg font-serif">Trend History</CardTitle>
+        </CardHeader>
+        <div>
+          {isLoading ? (
+            <div className="h-[400px] flex items-center justify-center">
+              <div className="text-center">
+                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
+                <p className="mt-4 text-sm text-muted-foreground">Loading trend data...</p>
+              </div>
             </div>
-          </div>
-        ) : !historyData || historyData.length === 0 ? (
-          <div className="h-[400px] flex items-center justify-center mx-4 border rounded-lg bg-muted/20">
-            <div className="text-center">
-              <p className="text-muted-foreground">
-                No historical data available yet
-              </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Data will appear as trend snapshots are collected
-              </p>
+          ) : !historyData || historyData.length === 0 ? (
+            <div className="h-[400px] flex items-center justify-center mx-4 border rounded-lg bg-muted/20">
+              <div className="text-center">
+                <p className="text-muted-foreground">
+                  No historical data available yet
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Data will appear as trend snapshots are collected
+                </p>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart 
-                data={historyData} 
-                margin={{ top: 5, right: 4, left: 4, bottom: 5 }}
-                onMouseMove={handleMouseMove}
-                onMouseLeave={handleMouseLeave}
-              >
-                <defs>
-                  <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid 
-                  strokeDasharray="3 3" 
-                  vertical={false}
-                  stroke="hsl(var(--muted-foreground))"
-                  strokeOpacity={0.1}
-                />
-                <XAxis 
-                  dataKey="timestamp" 
-                  className="text-xs"
-                  tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                  tickFormatter={formatXAxisTick}
-                  interval={getTickInterval()}
-                  axisLine={false}
-                  tickLine={false}
-                  tickMargin={10}
-                  padding={{ left: 8, right: 8 }}
-                />
-                <YAxis 
-                  tickFormatter={formatYAxis}
-                  className="text-xs"
-                  tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                  domain={yDomain as [number, number]}
-                  axisLine={false}
-                  tickLine={false}
-                  width={48}
-                  orientation="left"
-                  mirror={false}
-                  tickMargin={2}
-                />
-                <Tooltip 
-                  content={<CustomTooltip startScore={startScore} timeRange={timeRange} />}
-                  cursor={{
-                    stroke: 'hsl(var(--primary))',
-                    strokeWidth: 1,
-                    strokeDasharray: '4 4',
-                  }}
-                />
-                {activeIndex !== null && historyData[activeIndex] && (
-                  <ReferenceLine
-                    x={historyData[activeIndex].timestamp}
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={1}
-                    strokeDasharray="4 4"
+          ) : (
+            <div className="h-[400px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart 
+                  data={historyData} 
+                  margin={{ top: 5, right: 0, left: 0, bottom: 5 }}
+                  onMouseMove={handleMouseMove}
+                  onMouseLeave={handleMouseLeave}
+                >
+                  <defs>
+                    <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
+                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid 
+                    strokeDasharray="3 3" 
+                    vertical={false}
+                    stroke="hsl(var(--muted-foreground))"
+                    strokeOpacity={0.1}
                   />
-                )}
-                <Area 
-                  type="linear"
-                  dataKey="fameIndex" 
-                  stroke="hsl(var(--primary))" 
-                  strokeWidth={2}
-                  fill="url(#trendGradient)"
-                  name="Trend Score"
-                  dot={false}
-                  activeDot={{ 
-                    r: 6, 
-                    fill: 'hsl(var(--primary))',
-                    stroke: 'hsl(var(--background))',
-                    strokeWidth: 2
-                  }}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+                  <XAxis 
+                    dataKey="timestamp" 
+                    className="text-xs"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                    tickFormatter={formatXAxisTick}
+                    interval={getTickInterval()}
+                    axisLine={false}
+                    tickLine={false}
+                    tickMargin={10}
+                    padding={{ left: 0, right: 0 }}
+                  />
+                  <YAxis 
+                    tickFormatter={formatYAxis}
+                    className="text-xs"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                    domain={yDomain as [number, number]}
+                    axisLine={false}
+                    tickLine={false}
+                    width={44}
+                    orientation="left"
+                    mirror={false}
+                    tickMargin={0}
+                  />
+                  <Tooltip 
+                    content={<CustomTooltip startScore={startScore} timeRange={timeRange} />}
+                    cursor={{
+                      stroke: 'hsl(var(--primary))',
+                      strokeWidth: 1,
+                      strokeDasharray: '4 4',
+                    }}
+                  />
+                  {activeIndex !== null && historyData[activeIndex] && (
+                    <ReferenceLine
+                      x={historyData[activeIndex].timestamp}
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={1}
+                      strokeDasharray="4 4"
+                    />
+                  )}
+                  <Area 
+                    type="linear"
+                    dataKey="fameIndex" 
+                    stroke="hsl(var(--primary))" 
+                    strokeWidth={2}
+                    fill="url(#trendGradient)"
+                    name="Trend Score"
+                    dot={false}
+                    activeDot={{ 
+                      r: 6, 
+                      fill: 'hsl(var(--primary))',
+                      stroke: 'hsl(var(--background))',
+                      strokeWidth: 2
+                    }}
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          
+          <div className="flex gap-1.5 mt-4 mb-2 px-4 md:px-6">
+            {(["1D", "7D", "30D", "6M", "1Y", "ALL"] as TimeRange[]).map((range) => (
+              <Button
+                key={range}
+                variant={timeRange === range ? "default" : "outline"}
+                size="sm"
+                onClick={() => setTimeRange(range)}
+                className="text-xs px-3"
+                data-testid={`button-timerange-${range}`}
+              >
+                {range}
+              </Button>
+            ))}
           </div>
-        )}
-        
-        <div className="flex gap-1.5 mt-4 mb-2 px-4 md:px-6">
-          {(["1D", "7D", "30D", "6M", "1Y", "ALL"] as TimeRange[]).map((range) => (
-            <Button
-              key={range}
-              variant={timeRange === range ? "default" : "outline"}
-              size="sm"
-              onClick={() => setTimeRange(range)}
-              className="text-xs px-3"
-              data-testid={`button-timerange-${range}`}
-            >
-              {range}
-            </Button>
-          ))}
         </div>
-      </div>
-    </Card>
+      </Card>
+    </div>
   );
 }

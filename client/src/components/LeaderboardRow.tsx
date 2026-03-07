@@ -268,11 +268,8 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               <span>
                 {person.approvalAvgRating != null ? (
                   <>
-                    <span
-                      className="font-mono"
-                      style={{ color: getApprovalColor(person.approvalAvgRating) }}
-                    >
-                      {person.approvalAvgRating.toFixed(1)}/5
+                    <span className="font-mono">
+                      <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}</span><span className="text-white">/5</span>
                     </span>
                     {person.approvalVotesCount != null && (
                       <span className="text-muted-foreground">
@@ -317,8 +314,8 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               >
                 <p className="font-mono font-semibold text-lg tabular-nums cursor-help" data-testid={`sentiment-score-${person.id}`}>
                   {person.approvalAvgRating != null ? (
-                    <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>
-                      {person.approvalAvgRating.toFixed(1)}/5
+                    <span>
+                      <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}</span><span className="text-white">/5</span>
                     </span>
                   ) : (
                     '—'
@@ -374,7 +371,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {person.approvalAvgRating != null ? (
-                        <>Community: <span className="font-semibold" style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}/5</span></>
+                        <>Community: <span className="font-semibold"><span style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}</span><span className="text-white">/5</span></span></>
                       ) : (
                         'No community votes yet'
                       )}
@@ -422,8 +419,8 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               >
                 <p className="font-mono font-bold text-2xl tabular-nums cursor-help">
                   {person.approvalAvgRating != null ? (
-                    <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>
-                      {person.approvalAvgRating.toFixed(1)}/5
+                    <span>
+                      <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}</span><span className="text-white">/5</span>
                     </span>
                   ) : (
                     '—'
@@ -487,7 +484,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {person.approvalAvgRating != null ? (
-                        <>Community: <span className="font-semibold" style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}/5</span></>
+                        <>Community: <span className="font-semibold"><span style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}</span><span className="text-white">/5</span></span></>
                       ) : (
                         'No community votes yet'
                       )}

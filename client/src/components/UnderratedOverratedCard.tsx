@@ -140,7 +140,7 @@ export function UnderratedOverratedCard({
           {(person.approvalAvgRating ?? person.approvalPct) != null && (
             <p className="text-xs text-muted-foreground mt-0.5">
               {person.approvalAvgRating != null
-                ? `${person.approvalAvgRating.toFixed(1)}/5 community rating`
+                ? <>{person.approvalAvgRating.toFixed(1)}<span className="text-white">/5</span> community rating</>
                 : `${Math.round(person.approvalPct!)}% approval`}
             </p>
           )}
