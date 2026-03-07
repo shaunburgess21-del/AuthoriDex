@@ -1450,6 +1450,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               recentPeakAge,
               deltaPct: newsDeltaPct,
               headlines: (evidence.newsHeadlines ?? []).slice(0, 3),
+              topStories: (evidence.topStories ?? []).slice(0, 3),
               provider: evidence.newsProvider ?? fresh.newsSource ?? "unknown",
             };
           })(),

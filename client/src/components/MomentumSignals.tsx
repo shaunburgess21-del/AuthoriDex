@@ -27,6 +27,7 @@ interface MomentumData {
       recentPeakAge?: string | null;
       deltaPct: number;
       headlines: string[];
+      topStories?: Array<{ title: string; link: string }>;
       provider: string;
     };
     wiki: {
@@ -340,7 +341,25 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                 {signals.news.recentPeak} articles detected {signals.news.recentPeakAge} &middot; current tick shows 0
               </p>
             )}
-            {signals.news.headlines.length > 0 ? (
+            {signals.news.topStories && signals.news.topStories.length > 0 ? (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">Top Headlines</p>
+                <ul className="space-y-1.5">
+                  {signals.news.topStories.map((s, i) => (
+                    <li key={i} className="text-xs leading-relaxed line-clamp-2" data-testid={`text-headline-${i}`}>
+                      <a
+                        href={s.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        {s.title}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : signals.news.headlines.length > 0 ? (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1.5">Top Headlines</p>
                 <ul className="space-y-1.5">
@@ -356,7 +375,9 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                 {signals.news.count > 0 ? "No major headlines in the last 24h" : (signals.news.recentPeak ? "Headlines from recent coverage no longer cached" : "No headlines tracked yet")}
               </p>
             )}
-            <p className="text-[10px] text-muted-foreground/60 capitalize">via {signals.news.provider}</p>
+            <p className="text-[10px] text-muted-foreground/60 capitalize">
+              via {signals.news.topStories && signals.news.topStories.length > 0 ? "Google" : signals.news.provider}
+            </p>
           </CardContent>
         </Card>
 

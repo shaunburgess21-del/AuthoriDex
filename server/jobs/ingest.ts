@@ -1482,6 +1482,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             newsProvider: hasPerPersonFallback ? "serper_news" : newsSource,
             relatedSearches: (serper?.relatedSearches ?? []).slice(0, 5),
             peopleAlsoAsk: (serper?.peopleAlsoAsk ?? []).slice(0, 5),
+            topStories: (serper?.topStories ?? []).slice(0, 3),
           },
           velocityComponents: scoreResult.velocityComponents,
           driversModel: "velocity_components_v1",

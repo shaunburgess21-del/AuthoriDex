@@ -11,7 +11,8 @@ import { AnimatedSentimentVotingWidget } from "@/components/AnimatedSentimentVot
 import { CommunityInsights } from "@/components/CommunityInsights";
 import { ProfileTabs } from "@/components/ProfileTabs";
 import { PredictTab } from "@/components/PredictTab";
-import { CelebrityInfoModal } from "@/components/CelebrityInfoModal";
+import { MomentumSignals } from "@/components/MomentumSignals";
+import { InlineCelebrityBio } from "@/components/InlineCelebrityBio";
 import { CategoryPill } from "@/components/CategoryPill";
 import { TrendScoreInfoIcon } from "@/components/TrendScoreInfo";
 import { ApprovalRatingInfoIcon } from "@/components/ApprovalRatingInfo";
@@ -1324,13 +1325,7 @@ export default function PersonDetailPage() {
                 </h1>
                 <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
                   <p className="text-lg text-muted-foreground">{person.category}</p>
-                  <CelebrityInfoModal personId={person.id} personName={person.name} />
                 </div>
-                {person.bio && (
-                  <p className="text-sm text-muted-foreground leading-relaxed mb-4" data-testid="text-person-bio">
-                    {person.bio}
-                  </p>
-                )}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <div
@@ -1372,6 +1367,8 @@ export default function PersonDetailPage() {
             </div>
           </div>
         </div>
+
+        <InlineCelebrityBio personId={person.id} personName={person.name} />
 
         {/* 2. Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

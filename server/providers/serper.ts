@@ -117,6 +117,7 @@ interface SerperResult {
   delta: number;
   relatedSearches?: string[];
   peopleAlsoAsk?: string[];
+  topStories?: Array<{ title: string; link: string }>;
 }
 
 interface SerperSearchResponse {
@@ -224,6 +225,7 @@ export async function fetchSerperData(name: string, searchQueryOverride?: string
     const rawRelated = (data.relatedSearches || []).map(r => r.query.trim());
     const rawPAA = (data.peopleAlsoAsk || []).map(r => r.question.trim());
     const deduped = (arr: string[]) => Array.from(new Set(arr)).slice(0, 5);
+    const topStories = (data.topStories || []).slice(0, 3).map(s => ({ title: s.title, link: s.link }));
 
     const result: SerperResult = {
       searchVolume,
@@ -231,6 +233,7 @@ export async function fetchSerperData(name: string, searchQueryOverride?: string
       delta,
       relatedSearches: deduped(rawRelated),
       peopleAlsoAsk: deduped(rawPAA),
+      topStories,
     };
 
     // CACHE VALIDITY GATE
