@@ -736,7 +736,7 @@ function PredictCard({
             : `opacity-0 group-hover:opacity-100 ${selected ? 'opacity-100 border-violet-500' : ''}`
         }`}
       />
-      <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all h-full flex flex-col rounded-none md:rounded-xl min-h-[380px] md:min-h-0 ${
+      <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all h-full flex flex-col rounded-none md:rounded-xl min-h-[380px] md:min-h-0 border-0 md:border shadow-none md:shadow-sm ${
         inactive 
           ? 'opacity-50 grayscale-[40%]' 
           : `md:group-hover:shadow-lg md:group-hover:shadow-violet-500/20 ${selected ? 'shadow-lg shadow-violet-500/30' : ''}`
