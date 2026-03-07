@@ -736,7 +736,7 @@ function PredictCard({
             : `opacity-0 group-hover:opacity-100 ${selected ? 'opacity-100 border-violet-500' : ''}`
         }`}
       />
-      <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all h-full flex flex-col rounded-none md:rounded-xl min-h-[380px] md:min-h-0 border-0 md:border shadow-none md:shadow-sm ${
+      <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all h-full flex flex-col rounded-none md:rounded-xl min-h-[380px] md:min-h-0 border-0 md:border md:border-transparent shadow-none md:shadow-sm ${
         inactive 
           ? 'opacity-50 grayscale-[40%]' 
           : `md:group-hover:shadow-lg md:group-hover:shadow-violet-500/20 ${selected ? 'shadow-lg shadow-violet-500/30' : ''}`
@@ -2083,13 +2083,13 @@ export default function PredictPage() {
   });
   const openMarkets = openMarketsData || [];
 
-  const { data: nativeUpdownData } = useQuery<any[]>({
+  const { data: nativeUpdownData, isLoading: updownLoading } = useQuery<any[]>({
     queryKey: ['/api/native-markets/updown'],
   });
-  const { data: nativeH2hData } = useQuery<any[]>({
+  const { data: nativeH2hData, isLoading: h2hLoading } = useQuery<any[]>({
     queryKey: ['/api/native-markets/h2h'],
   });
-  const { data: nativeGainerData } = useQuery<any[]>({
+  const { data: nativeGainerData, isLoading: gainerLoading } = useQuery<any[]>({
     queryKey: ['/api/native-markets/gainer'],
   });
   const { data: userBetsData } = useQuery<any[]>({
@@ -2674,7 +2674,11 @@ export default function PredictPage() {
               user={user}
               onAuthRequired={() => setLocation("/login")}
             />
-            {filteredUpDown.length > 0 ? (
+            {updownLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="h-8 w-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : filteredUpDown.length > 0 ? (
               <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-violet-500">
                 {filteredUpDown.map((market) => (
                   <WeeklyUpDownCard 
@@ -2723,7 +2727,11 @@ export default function PredictPage() {
               user={user}
               onAuthRequired={() => setLocation("/login")}
             />
-            {filteredH2H.length > 0 ? (
+            {h2hLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="h-8 w-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : filteredH2H.length > 0 ? (
               <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-violet-500">
                 {filteredH2H.map((market) => (
                   <HeadToHeadCard 
@@ -2772,7 +2780,11 @@ export default function PredictPage() {
               user={user}
               onAuthRequired={() => setLocation("/login")}
             />
-            {filteredGainers.length > 0 ? (
+            {gainerLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="h-8 w-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : filteredGainers.length > 0 ? (
               <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-violet-500">
                 {filteredGainers.map((market) => (
                   <TopGainerCard 
