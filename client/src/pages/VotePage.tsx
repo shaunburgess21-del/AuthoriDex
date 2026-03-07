@@ -283,10 +283,10 @@ function VersusCard({
             <span>{matchup.totalVotes.toLocaleString('en-US')} votes</span>
           </div>
         </div>
-        
-        <div className={`flex flex-col items-center justify-center gap-1 px-4 mb-2 ${hasVoted ? 'invisible' : ''}`}>
+
+        <div className="rounded-t-lg border border-slate-700/30 border-b-0 bg-slate-900/80 backdrop-blur-sm px-4 py-2 text-center mb-0 mt-[5px]">
           {matchup.slug ? (
-            <Link href={`/vote/matchups/${matchup.slug}`} className="text-sm font-semibold text-slate-300 hover:text-cyan-400 transition-colors text-center" data-testid={`link-matchup-${matchup.id}`}>
+            <Link href={`/vote/matchups/${matchup.slug}`} className="text-sm font-semibold text-slate-300 hover:text-cyan-400 transition-colors" data-testid={`link-matchup-${matchup.id}`}>
               {matchup.promptText || "Who do you prefer?"}
             </Link>
           ) : (
@@ -295,13 +295,13 @@ function VersusCard({
             </span>
           )}
         </div>
-        
-        <div className="flex items-stretch gap-[2px] relative px-[2px]">
+
+        <div className="flex items-stretch gap-0 relative">
           <button
             onClick={(e) => {
               if (!hasVoted || votedB) onVote(matchup.id, 'option_a', e);
             }}
-            className={`flex-1 flex flex-col rounded-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
+            className={`flex-1 flex flex-col rounded-t-none rounded-b-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
               hasVoted
                 ? votedA
                   ? 'border-cyan-500/50 ring-2 ring-cyan-500/30'
@@ -356,7 +356,7 @@ function VersusCard({
             onClick={(e) => {
               if (!hasVoted || votedA) onVote(matchup.id, 'option_b', e);
             }}
-            className={`flex-1 flex flex-col rounded-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
+            className={`flex-1 flex flex-col rounded-t-none rounded-b-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
               hasVoted
                 ? votedB
                   ? 'border-sky-600/50 ring-2 ring-sky-600/30'
