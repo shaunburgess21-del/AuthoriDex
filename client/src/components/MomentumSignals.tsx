@@ -364,8 +364,10 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                 {signals.news.count > 0 ? "No major headlines in the last 24h" : (signals.news.recentPeak ? "Headlines from recent coverage no longer cached" : "No headlines tracked yet")}
               </p>
             )}
-            <p className="text-[10px] text-muted-foreground/60 capitalize">
-              via {signals.news.topStories && signals.news.topStories.length > 0 ? "Google" : signals.news.provider}
+            <p className="text-[10px] text-muted-foreground/60">
+              Via {signals.news.topStories && signals.news.topStories.length > 0
+                ? "Google"
+                : ({ serper_news: "Google News", gdelt: "GDELT", mediastack: "Mediastack", unknown: "News" } as Record<string, string>)[signals.news.provider] ?? signals.news.provider}
             </p>
           </CardContent>
         </Card>
