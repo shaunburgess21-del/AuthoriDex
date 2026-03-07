@@ -74,9 +74,9 @@ function MarketAvatar({ market }: { market: any }) {
   const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
   if (!imgUrl) return null;
   return (
-    <Avatar className="h-10 w-10 shrink-0 rounded-md">
+    <Avatar className="h-[52px] w-[52px] shrink-0 rounded-md">
       <AvatarImage src={imgUrl} alt={market.title} className="object-cover" />
-      <AvatarFallback className="text-xs rounded-md">{(market.title || "?")[0]}</AvatarFallback>
+      <AvatarFallback className="text-sm rounded-md">{(market.title || "?")[0]}</AvatarFallback>
     </Avatar>
   );
 }
@@ -783,7 +783,7 @@ function WeeklyUpDownCard({
 }) {
   return (
     <PredictCard testId={`card-weekly-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''}`}>
-      <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <Badge 
           variant="outline" 
           className={market.change7d >= 0 ? "text-green-500 border-green-500/30" : "text-red-500 border-red-500/30"}
@@ -793,21 +793,21 @@ function WeeklyUpDownCard({
         <CategoryPill category={market.category} />
       </div>
       
-      <div className="flex items-center gap-3 mb-2">
+      <div className="flex items-center gap-3 mb-3">
         <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-[73px] w-[73px]" />
         <div>
-          <p className="font-semibold text-sm">{market.personName}</p>
-          <p className="text-xs text-muted-foreground font-mono">
+          <p className="font-semibold text-[16px] leading-[1.4]">{market.personName}</p>
+          <p className="text-sm text-muted-foreground font-mono">
             {market.currentScore.toLocaleString('en-US')} pts
           </p>
         </div>
       </div>
       
-      <p className="text-xs text-muted-foreground mb-2">
+      <p className="text-sm text-muted-foreground mb-3 leading-[1.4]">
         Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span>'s Trend Score be higher or lower than start-of-week by close?
       </p>
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
         <Users className="h-3.5 w-3.5" />
         <span>{market.totalPool > 0 ? Math.ceil(market.totalPool / 100) : 0} participants</span>
       </div>
@@ -989,11 +989,11 @@ function TopGainerCard({
   return (
     <PredictCard testId={`card-gainer-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''} ${isShimmering ? 'shimmer-once' : ''}`}>
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs text-muted-foreground">7-day gain</span>
+        <span className="text-sm text-muted-foreground">7-day gain</span>
         <CategoryPill category={market.category} />
       </div>
       
-      <h3 className="font-semibold mb-3">Top Gainer: {market.category.charAt(0).toUpperCase() + market.category.slice(1)}</h3>
+      <h3 className="text-[16px] font-semibold mb-3 leading-[1.4]">Top Gainer: {market.category.charAt(0).toUpperCase() + market.category.slice(1)}</h3>
       
       <div className="space-y-2 mb-3">
         {market.leaders.map((leader, i) => (
@@ -1184,20 +1184,20 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
       </div>
       
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <div className="flex items-center gap-3 mb-2">
+        <div className="flex items-center gap-3 mb-3">
           <MarketAvatar market={market} />
-          <p className={`text-sm font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
+          <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
-      {market.teaser && <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{market.teaser}</p>}
+      {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
       
       <div className="mt-auto pt-1">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
           <Users className="h-3.5 w-3.5" />
           <span>{participants} participants</span>
         </div>
         
-        <div className="mb-2">
+        <div className="mb-3">
           <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
             <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
           </div>
@@ -1249,14 +1249,14 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
       </div>
       
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <div className="flex items-center gap-3 mb-2">
+        <div className="flex items-center gap-3 mb-3">
           <MarketAvatar market={market} />
-          <p className={`text-sm font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
+          <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
-      {market.teaser && <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{market.teaser}</p>}
+      {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
         <Users className="h-3.5 w-3.5" />
         <span>{participants} participants</span>
         <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
@@ -1319,9 +1319,9 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
       </div>
       
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <div className="flex items-center gap-3 mb-2">
+        <div className="flex items-center gap-3 mb-3">
           <MarketAvatar market={market} />
-          <p className={`text-sm font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
+          <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
       

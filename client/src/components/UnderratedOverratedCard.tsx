@@ -149,7 +149,7 @@ export function UnderratedOverratedCard({
       
       {!localVote ? (
         <div className="flex flex-col gap-3 mt-auto">
-          <p className="text-sm text-muted-foreground text-center mb-1">
+          <p className="text-[16px] leading-[1.4] text-muted-foreground text-center mb-2">
             Is {person.name.split(" ")[0]} underrated or overrated?
           </p>
           <button

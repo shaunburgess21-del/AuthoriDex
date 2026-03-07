@@ -552,7 +552,7 @@ function InductionCandidateCard({
         </div>
       </div>
 
-      <div className="flex flex-col items-center text-center mb-4 flex-grow">
+      <div className="flex flex-col items-center text-center mb-4">
         <div className="relative">
           <PersonAvatar name={candidate.name} imageSlug={candidate.imageSlug} imageContext="induction" className="h-32 w-32" />
           {isVoted && (
@@ -561,10 +561,10 @@ function InductionCandidateCard({
             </div>
           )}
         </div>
-        <h3 className="font-semibold mt-3">{candidate.name}</h3>
+        <h3 className="font-semibold text-[16px] leading-[1.4] mt-3">{candidate.name}</h3>
       </div>
       
-      <div className="mb-4">
+      <div className="mt-auto mb-4">
         <div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden">
           <div 
             className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 rounded-full transition-all duration-500"
@@ -949,14 +949,14 @@ function DiscourseCard({
         </div>
       </div>
       {topic.subjectText && (
-        <p className="text-sm text-muted-foreground mb-5 flex-grow line-clamp-2">{topic.subjectText}</p>
+        <p className="text-[16px] leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{topic.subjectText}</p>
       )}
       {!topic.subjectText && topic.description && (
-        <p className="text-sm text-muted-foreground mb-5 flex-grow line-clamp-2">{topic.description}</p>
+        <p className="text-[16px] leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{topic.description}</p>
       )}
       
       {!voted ? (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 mt-auto">
           <button
             onClick={() => handleVote('support')}
             className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
@@ -983,7 +983,7 @@ function DiscourseCard({
           </button>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 mt-auto">
           <div className="flex items-center gap-3">
             <ThumbsUp className="h-4 w-4 text-[#00C853] shrink-0" />
             <span className="text-sm text-[#00C853] w-16 shrink-0">Support</span>
@@ -1116,12 +1116,11 @@ function OpinionPollCard({
           </div>
         </div>
         {poll.description && (
-          <p className="text-sm text-muted-foreground mb-4 flex-grow line-clamp-1">{poll.description}</p>
+          <p className="text-[16px] leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{poll.description}</p>
         )}
-        {!poll.description && <div className="flex-grow" />}
 
         {!hasVoted ? (
-          <div className="space-y-2">
+          <div className="space-y-2 mt-auto">
             {visibleOptions.map((option: any) => (
               <button
                 key={option.id}
@@ -1148,7 +1147,7 @@ function OpinionPollCard({
             )}
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2 mt-auto">
             {visibleOptions.map((option: any) => {
               const isSelected = voted === option.id;
               const percent = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
