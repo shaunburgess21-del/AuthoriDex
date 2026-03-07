@@ -1313,7 +1313,7 @@ export default function PersonDetailPage() {
                     data-testid="text-header-rank"
                   >
                     <Trophy className="h-3.5 w-3.5" />
-                    <span>#{person.rank} Overall</span>
+                    <span>Overall #{person.rank}</span>
                   </div>
                   {momentumData?.categoryRank && (
                     <div
@@ -1321,7 +1321,7 @@ export default function PersonDetailPage() {
                       data-testid="text-header-category-rank"
                     >
                       <Trophy className="h-3.5 w-3.5" />
-                      <span>#{momentumData.categoryRank.categoryRank} in {momentumData.categoryRank.category}</span>
+                      <span>{momentumData.categoryRank.category} #{momentumData.categoryRank.categoryRank}</span>
                     </div>
                   )}
                 </div>
