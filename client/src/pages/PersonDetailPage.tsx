@@ -1344,8 +1344,7 @@ export default function PersonDetailPage() {
                     data-testid="text-header-rank"
                   >
                     <Trophy className="h-3.5 w-3.5" />
-                    <span>Rank</span>
-                    <span>#{person.rank}</span>
+                    <span>#{person.rank} Overall</span>
                   </div>
                   {momentumData?.categoryRank && (
                     <div
@@ -1357,7 +1356,7 @@ export default function PersonDetailPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex flex-row gap-2">
                   <Button variant="outline" size="icon" className="sm:hidden" data-testid="button-share-mobile">
                     <Share2 className="h-4 w-4" />
                   </Button>
