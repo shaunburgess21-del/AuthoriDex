@@ -3,12 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CategoryPill } from "@/components/CategoryPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
+import { FilterDropdown } from "@/components/FilterDropdown";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { X, Search, Crown, ImageIcon, Users } from "lucide-react";
-import { getFilterCategories, type FilterCategory } from "@shared/constants";
-import { useAuth } from "@/contexts/AuthContext";
-import { useLocation } from "wouter";
+import { type FilterCategory } from "@shared/constants";
 import type { CuratePerson } from "./CurateProfileCard";
 
 interface TrendingPerson {
@@ -33,32 +32,21 @@ interface CurateViewAllOverlayProps {
   onSelectPerson: (person: CuratePerson) => void;
 }
 
-function FilterChip({ 
-  category, 
-  isActive, 
-  onClick,
-  showIcon = false
-}: { 
-  category: string; 
-  isActive: boolean; 
-  onClick: () => void;
-  showIcon?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
-        isActive
-          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/40'
-          : 'bg-muted/30 border border-border/50 text-muted-foreground hover:bg-muted/50'
-      }`}
-      data-testid={`filter-chip-${category.toLowerCase()}`}
-    >
-      {showIcon && category === "Favorites" && <span>★</span>}
-      {category}
-    </button>
-  );
-}
+const CURATE_CATEGORIES = [
+  { value: "All", label: "All Categories" },
+  { value: "Favorites", label: "Favorites" },
+  { value: "Trending", label: "Trending" },
+  { value: "Tech", label: "Tech" },
+  { value: "Business", label: "Business" },
+  { value: "Politics", label: "Politics" },
+  { value: "Music", label: "Music" },
+  { value: "Sports", label: "Sports" },
+  { value: "Film & TV", label: "Film & TV" },
+  { value: "Gaming", label: "Gaming" },
+  { value: "Creator", label: "Creator" },
+  { value: "Food & Drink", label: "Food & Drink" },
+  { value: "Lifestyle", label: "Lifestyle" },
+];
 
 function CelebCard({ 
   person, 
@@ -91,7 +79,7 @@ function CelebCard({
       data-testid={`view-all-card-${person.id}`}
     >
       <div className="p-3 relative">
-        <div className="absolute top-3 right-3 z-10">
+        <div className="absolute top-3 right-3 z-10 hidden md:block">
           <CategoryPill category={person.category} />
         </div>
         <div className="flex items-center gap-2 mb-2">
@@ -144,8 +132,6 @@ export function CurateViewAllOverlay({
   onClose, 
   onSelectPerson 
 }: CurateViewAllOverlayProps) {
-  const { user } = useAuth();
-  const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("All");
 
@@ -172,14 +158,6 @@ export function CurateViewAllOverlay({
     }).sort((a: any, b: any) => categoryFilter === "Trending" ? ((b.fameScore ?? b.score ?? 0) - (a.fameScore ?? a.score ?? 0)) : 0);
   }, [celebrities, categoryFilter, searchQuery]);
 
-  const handleCategoryClick = (cat: string) => {
-    if (cat === "Favorites" && !user) {
-      setLocation("/login");
-      return;
-    }
-    setCategoryFilter(cat as FilterCategory);
-  };
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -202,28 +180,24 @@ export function CurateViewAllOverlay({
         </Button>
       </div>
       
-      <div className="sticky top-0 z-10 p-4 border-b bg-background/95 backdrop-blur-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          {getFilterCategories(false).map((cat) => (
-            <FilterChip
-              key={cat}
-              category={cat}
-              isActive={categoryFilter === cat}
-              onClick={() => handleCategoryClick(cat)}
-              showIcon={cat === "Favorites"}
+      <div className="sticky top-0 z-10 px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <FilterDropdown
+            value={categoryFilter}
+            onChange={(v) => setCategoryFilter(v as FilterCategory)}
+            categories={CURATE_CATEGORIES}
+            allValue="All"
+            testId="button-filter-curate-overlay"
+          />
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
+              data-testid="input-view-all-search"
             />
-          ))}
-          <div className="ml-auto">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search celebrities..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 h-8 w-48 bg-slate-800/30 border-slate-700/40"
-                data-testid="input-view-all-search"
-              />
-            </div>
           </div>
         </div>
       </div>

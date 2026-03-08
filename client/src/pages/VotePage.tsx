@@ -287,8 +287,8 @@ function VersusCard({
 
         <div className="rounded-t-lg border border-slate-700/30 border-b-0 bg-slate-900/80 backdrop-blur-sm px-4 py-2 text-center mb-0 mt-[5px]">
           {matchup.slug ? (
-            <Link href={`/vote/matchups/${matchup.slug}`} className="text-sm font-semibold text-slate-300 hover:text-cyan-400 transition-colors" data-testid={`link-matchup-${matchup.id}`}>
-              {matchup.promptText || "Who do you prefer?"}
+            <Link href={`/vote/matchups/${matchup.slug}`} className={`text-sm font-semibold transition-colors ${hasVoted ? 'text-cyan-400 hover:text-cyan-300' : 'text-slate-300 hover:text-cyan-400'}`} data-testid={`link-matchup-${matchup.id}`}>
+              {hasVoted ? "View discussion & details →" : (matchup.promptText || "Who do you prefer?")}
             </Link>
           ) : (
             <span className="text-sm font-semibold text-slate-300">

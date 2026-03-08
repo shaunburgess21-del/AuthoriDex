@@ -192,10 +192,10 @@ function ProfileMatchupCard({
             {matchup.slug ? (
               <Link
                 href={`/vote/matchups/${matchup.slug}`}
-                className="text-sm font-semibold text-slate-300 hover:text-cyan-400 transition-colors"
+                className={`text-sm font-semibold transition-colors ${hasVoted ? 'text-cyan-400 hover:text-cyan-300' : 'text-slate-300 hover:text-cyan-400'}`}
                 data-testid={`link-matchup-${matchup.id}`}
               >
-                {matchup.promptText || "Who do you prefer?"}
+                {hasVoted ? "View discussion & details →" : (matchup.promptText || "Who do you prefer?")}
               </Link>
             ) : (
               <span className="text-sm font-semibold text-slate-300">
