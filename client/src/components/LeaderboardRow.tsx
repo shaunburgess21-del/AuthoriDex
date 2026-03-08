@@ -186,7 +186,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
   const fameScore = (person as any).fameIndexLive ?? person.fameIndex ?? Math.round(person.trendScore / 100);
   const delta24h = formatDelta(person.change24h);
   const showDelta = person.change24h != null && Math.abs(person.change24h) >= 2;
-  const exceptional = showExceptional ? getExceptionalIndicator(person, thresholds) : null;
+  const exceptional = showExceptional && activeTab === "fame" ? getExceptionalIndicator(person, thresholds) : null;
   const ExceptionalIcon = exceptional?.icon;
   const hasVoted = sentimentScore !== null;
   const showVotePulse = !hasVoted && !hasEverVoted;
