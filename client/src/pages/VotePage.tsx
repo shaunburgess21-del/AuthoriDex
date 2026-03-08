@@ -552,16 +552,16 @@ function InductionCandidateCard({
         </div>
       </div>
 
-      <div className="flex flex-col items-center text-center mb-4">
+      <div className="flex flex-col items-center text-center mb-2 md:mb-4">
         <div className="relative">
-          <PersonAvatar name={candidate.name} imageSlug={candidate.imageSlug} imageContext="induction" className="h-32 w-32" />
+          <PersonAvatar name={candidate.name} imageSlug={candidate.imageSlug} imageContext="induction" className="h-40 w-40 md:h-32 md:w-32" />
           {isVoted && (
             <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center">
               <Check className="h-3 w-3 text-white" />
             </div>
           )}
         </div>
-        <h3 className="font-semibold text-[16px] leading-[1.4] mt-3">{candidate.name}</h3>
+        <h3 className="font-semibold text-[16px] leading-[1.4] mt-2 md:mt-3">{candidate.name}</h3>
       </div>
       
       <div className="mt-auto mb-4">
@@ -1854,8 +1854,6 @@ export default function VotePage() {
   useScrollHint(dragScrollRef7);
   useScrollHint(dragScrollRef8);
 
-  const [currentCurateIndex, setCurrentCurateIndex] = useState(0);
-  
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
 
   interface InductionAPIResponse {
@@ -2188,15 +2186,6 @@ export default function VotePage() {
     addXP(10, event);
   };
 
-  const handleCurateVote = (event?: React.MouseEvent) => {
-    addXP(10, event as React.MouseEvent);
-  };
-
-  const handleCurateComplete = () => {
-    if (currentCurateIndex < curateProfilePolls.length - 1) {
-      setCurrentCurateIndex(prev => prev + 1);
-    }
-  };
 
   const handleDiscourseVote = (topicId: string, choice: 'support' | 'neutral' | 'oppose', event?: React.MouseEvent) => {
     addXP(20, event as React.MouseEvent);
@@ -2244,8 +2233,6 @@ export default function VotePage() {
       reader.readAsDataURL(file);
     }
   };
-
-  const currentCuratePoll = curateProfilePolls[currentCurateIndex];
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
@@ -2491,7 +2478,7 @@ export default function VotePage() {
             </div>
           )}
 
-          <div className="text-center mt-6">
+          <div className="text-center mt-2 md:mt-6">
             <Button
               variant="ghost"
               onClick={() => setMatchupsOverlayOpen(true)}
@@ -2602,7 +2589,7 @@ export default function VotePage() {
             </div>
           )}
 
-          <div className="text-center mt-6">
+          <div className="text-center mt-2 md:mt-6">
             <Button
               variant="ghost"
               onClick={() => setTopicsOverlayOpen(true)}
@@ -2721,7 +2708,7 @@ export default function VotePage() {
             </div>
           )}
 
-          <div className="text-center mt-6">
+          <div className="text-center mt-2 md:mt-6">
             <Button
               variant="ghost"
               onClick={() => setOpinionPollsOverlayOpen(true)}
@@ -2816,7 +2803,7 @@ export default function VotePage() {
             </div>
           )}
 
-          <div className="text-center mt-6">
+          <div className="text-center mt-2 md:mt-6">
             <Button
               variant="ghost"
               onClick={() => setValuePerceptionOverlayOpen(true)}
@@ -3058,9 +3045,7 @@ export default function VotePage() {
             </div>
           </div>
 
-          <div className="max-w-md mx-auto">
-            <CurateSection categoryFilter={curateCategoryFilter} />
-          </div>
+          <CurateSection categoryFilter={curateCategoryFilter} />
         </section>
         )}
       </div>

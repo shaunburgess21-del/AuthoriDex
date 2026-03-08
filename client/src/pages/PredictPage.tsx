@@ -301,9 +301,10 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
 interface TopGainerMarket {
   id: string;
   category: CategoryFilter;
-  leaders: { name: string; avatar: string; currentGain: number; percentGain: number }[];
+  leaders: { name: string; avatar: string; currentGain: number; percentGain: number; rank?: number }[];
   totalPool: number;
   endTime: string;
+  totalEntries?: number;
 }
 
 const topGainerMarkets: TopGainerMarket[] = [
@@ -807,6 +808,7 @@ function WeeklyUpDownCard({
         Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span>'s Trend Score be higher or lower than start-of-week by close?
       </p>
       
+      <div className="mt-auto">
       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
         <Users className="h-3.5 w-3.5" />
         <span>{market.totalPool > 0 ? Math.ceil(market.totalPool / 100) : 0} participants</span>
@@ -829,7 +831,7 @@ function WeeklyUpDownCard({
         <span className="text-sm font-semibold text-violet-500">Pool: {market.totalPool.toLocaleString('en-US')}</span>
       </div>
       
-      <div className="mt-auto">
+      <div>
         {isMarketClosed ? (
           <Button 
             className="w-full bg-muted text-muted-foreground cursor-not-allowed"
@@ -858,6 +860,7 @@ function WeeklyUpDownCard({
             </Button>
           </div>
         )}
+      </div>
       </div>
     </PredictCard>
   );
@@ -1011,11 +1014,11 @@ function TopGainerCard({
                     </div>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p className="text-xs">Rank is determined by market share at close time</p>
+                    <p className="text-xs">Current category leaderboard rank</p>
                   </TooltipContent>
                 </Tooltip>
               ) : (
-                <span className="text-xs font-bold text-violet-500 w-5 text-center">#{i + 1}</span>
+                <span className="text-xs font-bold text-violet-500 w-5 text-center">#{leader.rank || (i + 1)}</span>
               )}
             </div>
             <PersonAvatar name={leader.name} avatar={leader.avatar} size="sm" />
@@ -1026,6 +1029,9 @@ function TopGainerCard({
             </div>
           </div>
         ))}
+        {(market.totalEntries ?? 0) > 3 && (
+          <p className="text-xs text-violet-400 text-center mt-1">+{(market.totalEntries ?? 0) - 3} more candidates</p>
+        )}
       </div>
       
       <div className="flex items-center justify-between mb-3">
@@ -1054,8 +1060,7 @@ function TopGainerCard({
           </Button>
         ) : (
           <Button 
-            size="sm" 
-            className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+            className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3 md:py-2 h-auto"
             data-testid={`button-place-prediction-${market.id}`}
             onClick={handlePlacePrediction}
           >
@@ -2201,11 +2206,13 @@ export default function PredictPage() {
               avatar: p.avatar || "",
               currentGain: Math.abs(Number(p.change7d || 0) * Number(p.trendScore || 0) / 100),
               percentGain: Math.abs(Number(p.change7d || 0)),
+              rank: Number(p.rank || 0),
             };
           }),
           totalPool: Number(m.seedVolume || 0),
           endTime: "Sun 23:59 UTC",
           totalBets: Number(m.seedConfig?.participants || 0),
+          totalEntries: entries.length,
         } as TopGainerMarket;
       });
     }

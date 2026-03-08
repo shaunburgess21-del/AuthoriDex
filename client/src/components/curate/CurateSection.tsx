@@ -2,7 +2,12 @@ import { useState, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "framer-motion";
-import { ImageIcon, RotateCcw, ChevronRight } from "lucide-react";
+import { ImageIcon, ChevronRight } from "lucide-react";
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Pagination, A11y, Virtual } from "swiper/modules";
+import "swiper/css";
+import "swiper/css/pagination";
+import "swiper/css/virtual";
 import { CurateProfileCard, type CuratePerson } from "./CurateProfileCard";
 import { CurateViewResultsOverlay } from "./CurateViewResultsOverlay";
 import { CurateViewAllOverlay } from "./CurateViewAllOverlay";
@@ -26,9 +31,6 @@ export function CurateSection({
   categoryFilter,
   compact = false
 }: CurateSectionProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [cycleNumber, setCycleNumber] = useState(0);
-  const [votedPersonIds, setVotedPersonIds] = useState<Set<string>>(new Set());
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [viewResultsPerson, setViewResultsPerson] = useState<CuratePerson | null>(null);
 
@@ -54,62 +56,27 @@ export function CurateSection({
     );
   }, [allCelebrities, categoryFilter]);
 
-  const currentPerson: CuratePerson | null = useMemo(() => {
-    if (filteredCelebrities.length === 0) return null;
-    const safeIndex = currentIndex % filteredCelebrities.length;
-    const person = filteredCelebrities[safeIndex];
-    if (!person || !person.id) return null;
-    return {
+  const curatePersons: CuratePerson[] = useMemo(() => {
+    return filteredCelebrities.map(person => ({
       id: person.id,
       name: person.name || 'Unknown',
       category: person.category || 'Music',
       imageUrl: person.imageUrl,
-    };
-  }, [filteredCelebrities, currentIndex]);
+    }));
+  }, [filteredCelebrities]);
 
-  const handleVote = useCallback(() => {
-    if (currentPerson) {
-      setVotedPersonIds(prev => new Set(Array.from(prev).concat(currentPerson.id)));
-    }
-  }, [currentPerson]);
+  const handleVote = useCallback(() => {}, []);
 
-  const handleComplete = useCallback(() => {
-    const nextIndex = currentIndex + 1;
-    if (nextIndex >= filteredCelebrities.length) {
-      setCycleNumber(prev => prev + 1);
-      setCurrentIndex(0);
-    } else {
-      setCurrentIndex(nextIndex);
-    }
-  }, [currentIndex, filteredCelebrities.length]);
-
-  const handleSkip = useCallback(() => {
-    handleComplete();
-  }, [handleComplete]);
+  const handleComplete = useCallback(() => {}, []);
 
   const handleViewResults = useCallback((person: CuratePerson) => {
     setViewResultsPerson(person);
   }, []);
 
   const handleSelectFromViewAll = useCallback((person: CuratePerson) => {
-    const idx = filteredCelebrities.findIndex(p => p.id === person.id);
-    if (idx >= 0) {
-      setCurrentIndex(idx);
-    }
     setViewAllOpen(false);
     setViewResultsPerson(person);
-  }, [filteredCelebrities]);
-
-  const handleStartOver = useCallback(() => {
-    setCycleNumber(prev => prev + 1);
-    setCurrentIndex(0);
   }, []);
-
-  const progress = filteredCelebrities.length > 0 
-    ? Math.min(currentIndex + 1, filteredCelebrities.length)
-    : 0;
-  const total = filteredCelebrities.length;
-  const isComplete = currentIndex >= filteredCelebrities.length && filteredCelebrities.length > 0;
 
   return (
     <>
@@ -123,46 +90,67 @@ export function CurateSection({
             <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
             <p className="text-sm">No celebrities match this filter</p>
           </div>
-        ) : isComplete ? (
-          <div className="text-center py-8 bg-muted/20 rounded-lg border border-border">
-            <div className="h-12 w-12 rounded-full bg-cyan-500/20 flex items-center justify-center mx-auto mb-3">
-              <RotateCcw className="h-6 w-6 text-cyan-400" />
-            </div>
-            <p className="font-medium text-cyan-400 mb-1">All caught up!</p>
-            <p className="text-sm text-muted-foreground mb-4">
-              You've seen all {total} celebrities in this category
-            </p>
-            <Button
-              size="sm"
-              onClick={handleStartOver}
-              className="bg-cyan-500 hover:bg-cyan-600"
-              data-testid="button-start-over"
-            >
-              <RotateCcw className="h-3.5 w-3.5 mr-1" />
-              Start Over (New Photos)
-            </Button>
-          </div>
-        ) : currentPerson ? (
+        ) : (
           <>
-            <CurateProfileCard
-              key={`${currentPerson.id}-${cycleNumber}`}
-              person={currentPerson}
-              onVote={handleVote}
-              onComplete={handleComplete}
-              onSkip={handleSkip}
-              onViewResults={handleViewResults}
-              cycleNumber={cycleNumber}
-            />
-            
-            <p className="text-center text-xs font-mono text-muted-foreground mt-2" data-testid="text-curate-carousel-counter">
-              {currentIndex + 1} &ndash; {total}
-            </p>
+            {/* Desktop: grid layout */}
+            <div className="hidden md:grid grid-cols-2 lg:grid-cols-3 gap-5">
+              {curatePersons.slice(0, 9).map((person) => (
+                <CurateProfileCard
+                  key={person.id}
+                  person={person}
+                  onVote={handleVote}
+                  onComplete={handleComplete}
+                  onViewResults={handleViewResults}
+                  cycleNumber={0}
+                />
+              ))}
+            </div>
+
+            {/* Mobile: Swiper carousel */}
+            <div className="md:hidden authoridex-swiper w-screen relative left-1/2 -ml-[50vw]" data-dot-active="cyan">
+              <Swiper
+                modules={[Pagination, A11y, Virtual]}
+                spaceBetween={0}
+                slidesPerView={1}
+                threshold={10}
+                touchAngle={45}
+                resistanceRatio={0.85}
+                speed={300}
+                cssMode={false}
+                virtual
+                pagination={{
+                  clickable: true,
+                  dynamicBullets: true,
+                  dynamicMainBullets: 3,
+                }}
+                a11y={{
+                  enabled: true,
+                  prevSlideMessage: "Previous slide",
+                  nextSlideMessage: "Next slide",
+                }}
+                className="py-2"
+                data-testid="section-curate-carousel"
+              >
+                {curatePersons.map((person, i) => (
+                  <SwiperSlide key={person.id} virtualIndex={i}>
+                    <div className="w-full px-0">
+                      <CurateProfileCard
+                        person={person}
+                        onVote={handleVote}
+                        onComplete={handleComplete}
+                        onViewResults={handleViewResults}
+                        cycleNumber={0}
+                      />
+                    </div>
+                  </SwiperSlide>
+                ))}
+              </Swiper>
+            </div>
           </>
-        ) : null}
+        )}
         
-        {/* View full curation list button at bottom */}
         {!isLoading && filteredCelebrities.length > 0 && (
-          <div className="text-center mt-4">
+          <div className="text-center mt-2 md:mt-6">
             <Button
               variant="ghost"
               onClick={() => setViewAllOpen(true)}

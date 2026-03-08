@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Check, ChevronRight, SkipForward, Camera, Eye, Maximize2 } from "lucide-react";
+import { Check, ChevronRight, Camera, Eye } from "lucide-react";
 
 interface CelebrityImage {
   id: string;
@@ -31,7 +31,6 @@ interface CurateProfileCardProps {
   person: CuratePerson;
   onVote: () => void;
   onComplete: () => void;
-  onSkip: () => void;
   onViewResults: (person: CuratePerson) => void;
   cycleNumber?: number;
 }
@@ -40,16 +39,13 @@ export function CurateProfileCard({
   person,
   onVote,
   onComplete,
-  onSkip,
   onViewResults,
   cycleNumber = 0,
 }: CurateProfileCardProps) {
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
-  const [isExiting, setIsExiting] = useState(false);
   const [showShimmer, setShowShimmer] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const timeoutRef1 = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const timeoutRef2 = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
 
   const { data: images = [], isLoading } = useQuery<CelebrityImage[]>({
@@ -87,7 +83,6 @@ export function CurateProfileCard({
   useEffect(() => {
     return () => {
       if (timeoutRef1.current) clearTimeout(timeoutRef1.current);
-      if (timeoutRef2.current) clearTimeout(timeoutRef2.current);
     };
   }, []);
 
@@ -109,16 +104,6 @@ export function CurateProfileCard({
     }, 600);
   };
 
-  const handleContinue = () => {
-    setIsExiting(true);
-    timeoutRef2.current = setTimeout(onComplete, 300);
-  };
-
-  const handleSkip = () => {
-    setIsExiting(true);
-    timeoutRef2.current = setTimeout(onSkip, 300);
-  };
-
   const totalVotes = useMemo(() => {
     return images.reduce((sum, img) => sum + img.votesUp + img.votesDown, 0);
   }, [images]);
@@ -126,15 +111,9 @@ export function CurateProfileCard({
   const hasVoted = selectedPhoto !== null;
 
   return (
-    <motion.div 
-      className="w-full"
-      initial={{ opacity: 1, x: 0 }}
-      animate={{ opacity: isExiting ? 0 : 1, x: isExiting ? -100 : 0 }}
-      transition={{ duration: 0.3 }}
-    >
+    <div className="w-full h-full">
       <Card 
-        className="relative overflow-hidden bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-slate-700/50"
-        style={{ minHeight: '340px' }}
+        className="relative overflow-hidden bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border-0 md:border md:border-slate-700/50 shadow-none md:shadow-sm rounded-none md:rounded-xl h-full flex flex-col min-h-[390px] md:min-h-0"
         data-testid={`card-curate-${person.id}`}
       >
         <AnimatePresence>
@@ -159,7 +138,7 @@ export function CurateProfileCard({
           <CategoryPill category={person.category} />
         </div>
 
-        <div className="relative p-4">
+        <div className="relative p-4 md:p-4 flex flex-col flex-1">
           <div className="flex items-center gap-3 mb-3">
             <PersonAvatar name={person.name} avatar={person.imageUrl || ""} size="md" />
             <div className="flex-1 min-w-0 flex flex-col justify-center">
@@ -178,15 +157,6 @@ export function CurateProfileCard({
             <div className="text-center py-12 text-muted-foreground">
               <Camera className="h-10 w-10 mx-auto mb-2 opacity-50" />
               <p className="text-sm">No images available</p>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="mt-2"
-                onClick={handleSkip}
-                data-testid={`button-skip-${person.id}`}
-              >
-                Skip <SkipForward className="h-3 w-3 ml-1" />
-              </Button>
             </div>
           ) : showResults ? (
             <div className="text-center py-6">
@@ -212,15 +182,6 @@ export function CurateProfileCard({
                 >
                   <Eye className="h-3.5 w-3.5 mr-1" />
                   View Results
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleContinue}
-                  className="bg-cyan-500 hover:bg-cyan-600 text-white"
-                  data-testid={`button-next-${person.id}`}
-                >
-                  Next
-                  <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               </div>
             </div>
@@ -281,24 +242,10 @@ export function CurateProfileCard({
                   );
                 })}
               </div>
-              
-              {!hasVoted && (
-                <div className="flex justify-center mt-3">
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={handleSkip}
-                    className="text-muted-foreground hover:text-foreground"
-                    data-testid={`button-skip-${person.id}`}
-                  >
-                    Skip <SkipForward className="h-3 w-3 ml-1" />
-                  </Button>
-                </div>
-              )}
             </>
           )}
         </div>
       </Card>
-    </motion.div>
+    </div>
   );
 }
