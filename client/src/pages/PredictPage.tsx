@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +8,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
+import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -1497,186 +1497,6 @@ function FullScreenOverlay({
   );
 }
 
-const MISSION_HEADERS: Record<string, string> = {
-  jackpot: "Predict the exact Trend Score at week's end to win the pot.",
-  updown: "Will their Trend Score be higher or lower by close?",
-  h2h: "Back your champion to win this weekly matchup.",
-  race: "Predict the #1 top performer to win.",
-  gainer: "Predict the #1 top performer to win.",
-  community: "Cast your vote on this real-world prediction.",
-};
-
-function StakeModal({
-  open,
-  onClose,
-  selection,
-  onConfirm,
-  walletBalance,
-  onConfirmWithAnimation
-}: {
-  open: boolean;
-  onClose: () => void;
-  selection: { type: string; choice: string; marketName: string; marketId?: string; startScore?: number; currentScore?: number; crowdSentiment?: number; estimatedPayout?: number } | null;
-  onConfirm: (amount: number) => void;
-  walletBalance: number;
-  onConfirmWithAnimation?: (amount: number, marketId?: string) => void;
-}) {
-  const [stakeAmount, setStakeAmount] = useState("");
-  const parsedAmount = parseInt(stakeAmount) || 0;
-  const balanceAfter = walletBalance - parsedAmount;
-  const confirmButtonRef = useRef<HTMLButtonElement>(null);
-  
-  if (!selection) return null;
-  
-  const missionText = MISSION_HEADERS[selection.type] || "Place your prediction on this market.";
-  const showJackpotWarning = selection.type === "jackpot";
-  
-  const triggerConfetti = () => {
-    if (confirmButtonRef.current) {
-      const rect = confirmButtonRef.current.getBoundingClientRect();
-      const x = (rect.left + rect.width / 2) / window.innerWidth;
-      const y = (rect.top + rect.height / 2) / window.innerHeight;
-      
-      confetti({
-        particleCount: 60,
-        spread: 55,
-        origin: { x, y },
-        colors: ['#06b6d4', '#a855f7', '#8b5cf6', '#22d3ee'],
-        startVelocity: 25,
-        gravity: 1.2,
-        scalar: 0.8,
-        ticks: 100,
-      });
-    }
-  };
-  
-  const handleConfirm = () => {
-    if (parsedAmount > 0 && balanceAfter >= 0) {
-      try {
-        triggerConfetti();
-      } catch (e) {
-        console.error("Confetti error:", e);
-      }
-      onConfirm(parsedAmount);
-      setStakeAmount("");
-    }
-  };
-  
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-sm premium-scrollbar">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5 text-violet-500" />
-            Confirm Prediction
-          </DialogTitle>
-          <DialogDescription>
-            {missionText}
-          </DialogDescription>
-        </DialogHeader>
-        
-        <div className="py-4 space-y-4">
-          <Card className="p-3 bg-violet-500/5 border-violet-500/20">
-            <p className="text-xs text-muted-foreground mb-1">Market</p>
-            <p className="text-sm font-semibold text-foreground">{selection.marketName}</p>
-            <p className="text-lg font-bold mt-1 text-[#00c853]">{selection.choice}</p>
-          </Card>
-          
-          {showJackpotWarning && (
-            <p className="text-xs text-amber-500 text-center flex items-center justify-center gap-1">
-              <Clock className="h-3 w-3" />
-              Predictions lock Thursday 5 PM UTC
-            </p>
-          )}
-          
-          {(selection.startScore || selection.currentScore) && (
-            <div className="grid grid-cols-2 gap-3">
-              {selection.startScore && (
-                <Card className="p-2.5 bg-muted/30">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Start Score</p>
-                  <p className="font-mono font-bold text-sm">{selection.startScore.toLocaleString('en-US')}</p>
-                </Card>
-              )}
-              {selection.currentScore && (
-                <Card className="p-2.5 bg-muted/30">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Score</p>
-                  <p className="font-mono font-bold text-sm">{selection.currentScore.toLocaleString('en-US')}</p>
-                </Card>
-              )}
-            </div>
-          )}
-          
-          {selection.estimatedPayout && !isNaN(selection.estimatedPayout) && (
-            <p className="text-xs text-muted-foreground text-center">
-              Estimated Payout: <span className="font-mono font-medium text-green-500">{selection.estimatedPayout.toFixed(1)}x</span>
-            </p>
-          )}
-          
-          {selection.crowdSentiment && (
-            <p className="text-xs text-muted-foreground text-center">
-              Crowd Sentiment: <span className="font-mono font-medium text-foreground">{selection.crowdSentiment}% predict this outcome</span>
-            </p>
-          )}
-          
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Stake Amount</label>
-            <Input
-              type="number"
-              placeholder="Enter credits to stake"
-              value={stakeAmount}
-              onChange={(e) => setStakeAmount(e.target.value)}
-              className="font-mono"
-              data-testid="input-stake"
-            />
-          </div>
-          
-          <div className="flex gap-2">
-            {[100, 500, 1000].map((amount) => (
-              <Button
-                key={amount}
-                variant="outline"
-                size="sm"
-                onClick={() => setStakeAmount(amount.toString())}
-                className="flex-1"
-                data-testid={`button-preset-${amount}`}
-              >
-                {amount}
-              </Button>
-            ))}
-          </div>
-          
-          <div className="flex items-center justify-between text-xs pt-2 border-t">
-            <div>
-              <span className="text-muted-foreground">Current Balance: </span>
-              <span className="font-mono font-medium">{walletBalance.toLocaleString('en-US')}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">After Stake: </span>
-              <span className={`font-mono font-medium ${balanceAfter < 0 ? 'text-red-500' : 'text-green-500'}`}>
-                {balanceAfter >= 0 ? balanceAfter.toLocaleString('en-US') : 'Insufficient'}
-              </span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onClose} className="flex-1">
-            Cancel
-          </Button>
-          <Button 
-            ref={confirmButtonRef}
-            onClick={handleConfirm}
-            className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-            disabled={!stakeAmount || parsedAmount <= 0 || balanceAfter < 0}
-            data-testid="button-confirm-stake"
-          >
-            Confirm
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function CreatePredictionModal({
   open,
@@ -2022,16 +1842,7 @@ export default function PredictPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   
-  const [pendingSelection, setPendingSelection] = useState<{
-    type: string;
-    choice: string;
-    marketName: string;
-    marketId?: string;
-    startScore?: number;
-    currentScore?: number;
-    crowdSentiment?: number;
-    estimatedPayout?: number;
-  } | null>(null);
+  const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [predictedMarkets, setPredictedMarkets] = useState<Set<string>>(new Set());
   const [shimmeringMarket, setShimmeringMarket] = useState<string | null>(null);
@@ -2954,6 +2765,13 @@ export default function PredictPage() {
         selection={pendingSelection}
         onConfirm={handleConfirmStake}
         walletBalance={walletCredits}
+        onDirectionChange={(dir) => {
+          if (!pendingSelection || pendingSelection.type !== "updown") return;
+          const marketId = pendingSelection.marketId;
+          const market = hydratedMarkets.find(m => m.id === marketId);
+          if (!market) return;
+          handleUpDownSelect(market, dir);
+        }}
       />
       <CreatePredictionModal
         open={createModalOpen}

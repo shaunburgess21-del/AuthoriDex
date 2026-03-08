@@ -3,6 +3,8 @@ import { SearchBar } from "@/components/SearchBar";
 import { LeaderboardRow, getExceptionalIndicator } from "@/components/LeaderboardRow";
 import type { PercentileThresholds } from "@/components/LeaderboardRow";
 import { VotingModal } from "@/components/VotingModal";
+import { StakeModal, type StakeSelection } from "@/components/StakeModal";
+import { useToast } from "@/hooks/use-toast";
 import { UserMenu } from "@/components/UserMenu";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -497,6 +499,66 @@ export default function HomePage() {
   const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [moversCollapsed, setMoversCollapsed] = useState(true);
+
+  const { toast } = useToast();
+  const [stakeModalOpen, setStakeModalOpen] = useState(false);
+  const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
+  const [walletCredits, setWalletCredits] = useState(10000);
+
+  const { data: nativeUpdownData } = useQuery<any[]>({
+    queryKey: ['/api/native-markets/updown'],
+  });
+  const updownMarkets = useMemo(() => {
+    const dbMarkets = (nativeUpdownData || []).filter((m: any) => m.visibility === "live");
+    return dbMarkets.map((m: any) => {
+      const person = m.person || {};
+      const entries = m.entries || [];
+      const upEntry = entries.find((e: any) => e.label?.toLowerCase() === "up");
+      const downEntry = entries.find((e: any) => e.label?.toLowerCase() === "down");
+      const upStake = Number(upEntry?.totalStake || 0);
+      const downStake = Number(downEntry?.totalStake || 0);
+      const total = upStake + downStake || 1;
+      const upPercent = Math.round((upStake / total) * 100);
+      return {
+        id: m.id,
+        personId: m.personId || "",
+        personName: person.name || m.title?.replace(/: Up or Down\?$/, "") || "Unknown",
+        currentScore: Number(person.trendScore || 0),
+        startScore: Number(person.trendScore || 0) - Math.floor(Number(person.trendScore || 0) * (Number(person.change7d || 0) / 100)),
+        upMultiplier: upStake > 0 ? +(total / upStake).toFixed(1) : 2.0,
+        downMultiplier: downStake > 0 ? +(total / downStake).toFixed(1) : 2.0,
+        upPoolPercent: upPercent || 50,
+      };
+    });
+  }, [nativeUpdownData]);
+
+  const handleLeaderboardPredict = useCallback((personId: string, direction: "up" | "down") => {
+    const market = updownMarkets.find(m => m.personId === personId);
+    if (!market) {
+      toast({ title: "No active market", description: "No active prediction market for this person this week." });
+      return;
+    }
+    const crowdSentiment = direction === "up" ? market.upPoolPercent : (100 - market.upPoolPercent);
+    const estimatedPayout = direction === "up" ? market.upMultiplier : market.downMultiplier;
+    setPendingSelection({
+      type: "updown",
+      choice: direction === "up" ? "Trend Score UP" : "Trend Score DOWN",
+      marketName: market.personName,
+      marketId: market.id,
+      startScore: market.startScore,
+      currentScore: market.currentScore,
+      crowdSentiment,
+      estimatedPayout,
+    });
+    setStakeModalOpen(true);
+  }, [updownMarkets, toast]);
+
+  const handleConfirmStake = useCallback((amount: number) => {
+    setWalletCredits(prev => prev - amount);
+    setStakeModalOpen(false);
+    setPendingSelection(null);
+    toast({ title: "Prediction placed!", description: `You staked ${amount} credits.` });
+  }, [toast]);
   const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(() => {
     try {
       const saved = localStorage.getItem('trending_now_collapsed');
@@ -1012,7 +1074,9 @@ export default function HomePage() {
                           <div className="text-right w-[120px] shrink-0 flex items-center justify-end gap-1">Trend Score <TrendScoreInfoIcon testId="icon-trend-score-header-approval" className="h-3 w-3 text-muted-foreground/40 cursor-help" /></div>
                         </>
                       )}
-                      <div className="w-[72px] shrink-0" />
+                      <div className={`${leaderboardTab === "fame" ? "w-[88px]" : "w-[72px]"} shrink-0 text-right`}>
+                        {leaderboardTab === "fame" ? "Predict" : ""}
+                      </div>
                     </div>
                   )}
                   <div>
@@ -1038,6 +1102,8 @@ export default function HomePage() {
                         activeTab={leaderboardTab}
                         onVisitProfile={() => handleVisitProfile(person.id)}
                         onVoteClick={() => handleVoteClick(person.id)}
+                        onPredictUp={() => handleLeaderboardPredict(person.id, "up")}
+                        onPredictDown={() => handleLeaderboardPredict(person.id, "down")}
                         showExceptional={exceptionalIds.has(person.id)}
                         thresholds={percentileThresholds}
                       />
@@ -1122,11 +1188,38 @@ export default function HomePage() {
           />
         )}
       </AnimatePresence>
-      <VotingModal 
-        open={votingModalOpen} 
+      <VotingModal
+        open={votingModalOpen}
         onOpenChange={setVotingModalOpen}
         initialPersonId={votingPersonId}
         peopleList={allPeople}
+      />
+      <StakeModal
+        open={stakeModalOpen}
+        onClose={() => {
+          setStakeModalOpen(false);
+          setPendingSelection(null);
+        }}
+        selection={pendingSelection}
+        onConfirm={handleConfirmStake}
+        walletBalance={walletCredits}
+        onDirectionChange={(dir) => {
+          if (!pendingSelection || pendingSelection.type !== "updown") return;
+          const market = updownMarkets.find(m => m.id === pendingSelection.marketId);
+          if (!market) return;
+          const crowdSentiment = dir === "up" ? market.upPoolPercent : (100 - market.upPoolPercent);
+          const estimatedPayout = dir === "up" ? market.upMultiplier : market.downMultiplier;
+          setPendingSelection({
+            type: "updown",
+            choice: dir === "up" ? "Trend Score UP" : "Trend Score DOWN",
+            marketName: market.personName,
+            marketId: market.id,
+            startScore: market.startScore,
+            currentScore: market.currentScore,
+            crowdSentiment,
+            estimatedPayout,
+          });
+        }}
       />
     </div>
   );
