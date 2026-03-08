@@ -122,23 +122,23 @@ export function UnderratedOverratedCard({
       </div>
       
       <div 
-        className="flex items-start gap-3 mb-4 cursor-pointer group"
+        className="flex items-start gap-3 md:gap-3 mb-4 cursor-pointer group"
         onClick={onVisitProfile}
       >
         <PersonAvatar 
           name={person.name} 
           avatar={person.avatar} 
-          size="lg" 
+          className="h-20 w-20 md:h-16 md:w-16"
         />
         <div className="flex-1 min-w-0">
-          <h3 className="font-serif font-bold text-lg leading-tight group-hover:text-cyan-400 transition-colors">
+          <h3 className="font-serif font-bold text-xl md:text-lg leading-tight group-hover:text-cyan-400 transition-colors">
             {person.name}
           </h3>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <p className="text-[15px] md:text-sm text-muted-foreground mt-1 md:mt-0.5">
             Trend Score: <span className="font-mono text-foreground">{(person.fameIndex ?? 0).toLocaleString('en-US')}</span>
           </p>
           {(person.approvalAvgRating ?? person.approvalPct) != null && (
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-sm md:text-xs text-muted-foreground mt-0.5">
               {person.approvalAvgRating != null
                 ? <>{person.approvalAvgRating.toFixed(1)}<span className="text-white">/5</span> community rating</>
                 : `${Math.round(person.approvalPct!)}% approval`}
@@ -155,7 +155,7 @@ export function UnderratedOverratedCard({
           <button
             onClick={() => handleVote('underrated')}
             disabled={isPending}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20 disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20 disabled:opacity-50"
             data-testid={`button-underrated-${person.id}`}
           >
             {isPending ? (
@@ -170,7 +170,7 @@ export function UnderratedOverratedCard({
           <button
             onClick={() => handleVote('fairly_rated')}
             disabled={isPending}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15 disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15 disabled:opacity-50"
             data-testid={`button-fairly-rated-${person.id}`}
           >
             {isPending ? (
@@ -185,7 +185,7 @@ export function UnderratedOverratedCard({
           <button
             onClick={() => handleVote('overrated')}
             disabled={isPending}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 disabled:opacity-50"
             data-testid={`button-overrated-${person.id}`}
           >
             {isPending ? (

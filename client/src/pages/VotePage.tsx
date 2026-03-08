@@ -949,17 +949,17 @@ function DiscourseCard({
         </div>
       </div>
       {topic.subjectText && (
-        <p className="text-[16px] leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{topic.subjectText}</p>
+        <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{topic.subjectText}</p>
       )}
       {!topic.subjectText && topic.description && (
-        <p className="text-[16px] leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{topic.description}</p>
+        <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{topic.description}</p>
       )}
       
       {!voted ? (
         <div className="flex flex-col gap-3 mt-auto">
           <button
             onClick={() => handleVote('support')}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
             data-testid={`button-support-${topic.id}`}
           >
             <ThumbsUp className="h-4 w-4 shrink-0" />
@@ -967,7 +967,7 @@ function DiscourseCard({
           </button>
           <button
             onClick={() => handleVote('neutral')}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15"
             data-testid={`button-neutral-${topic.id}`}
           >
             <Minus className="h-4 w-4 shrink-0" />
@@ -975,7 +975,7 @@ function DiscourseCard({
           </button>
           <button
             onClick={() => handleVote('oppose')}
-            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
             data-testid={`button-oppose-${topic.id}`}
           >
             <ThumbsDown className="h-4 w-4 shrink-0" />
@@ -1097,7 +1097,7 @@ function OpinionPollCard({
         </div>
         <div className="flex items-start gap-3 mb-3">
           {poll.imageUrl ? (
-            <div className="h-12 w-12 rounded-md overflow-hidden shrink-0 bg-slate-800">
+            <div className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-slate-800">
               <img
                 src={poll.imageUrl}
                 alt={poll.title}
@@ -1105,7 +1105,7 @@ function OpinionPollCard({
               />
             </div>
           ) : (
-            <div className="h-12 w-12 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
+            <div className="h-16 w-16 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
               <ListChecks className="h-5 w-5 text-slate-400" />
             </div>
           )}
@@ -1116,11 +1116,11 @@ function OpinionPollCard({
           </div>
         </div>
         {poll.description && (
-          <p className="text-[16px] leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{poll.description}</p>
+          <p className="text-[16px] leading-[1.4] text-muted-foreground mb-2 line-clamp-2">{poll.description}</p>
         )}
 
         {!hasVoted ? (
-          <div className="space-y-2 mt-auto">
+          <div className="space-y-1.5 mt-auto">
             {visibleOptions.map((option: any) => (
               <button
                 key={option.id}
@@ -1140,14 +1140,14 @@ function OpinionPollCard({
             ))}
             {remainingCount > 0 && (
               <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-1" data-testid={`link-more-options-${poll.id}`}>
+                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-3" data-testid={`link-more-options-${poll.id}`}>
                   +{remainingCount} more options
                 </p>
               </Link>
             )}
           </div>
         ) : (
-          <div className="space-y-2 mt-auto">
+          <div className="space-y-1.5 mt-auto">
             {visibleOptions.map((option: any) => {
               const isSelected = voted === option.id;
               const percent = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
@@ -1179,7 +1179,7 @@ function OpinionPollCard({
             })}
             {remainingCount > 0 && (
               <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-1" data-testid={`link-more-options-${poll.id}`}>
+                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-3" data-testid={`link-more-options-${poll.id}`}>
                   +{remainingCount} more options
                 </p>
               </Link>
