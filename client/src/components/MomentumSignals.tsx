@@ -33,6 +33,8 @@ interface MomentumData {
     wiki: {
       views: number;
       deltaPct: number;
+      wiki_falling?: boolean;
+      wiki_rising?: boolean;
     };
     drivers: {
       status: "active" | "stable";
@@ -390,7 +392,21 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                   </a>
                 )}
               </div>
-              <DeltaBadge pct={signals.wiki.deltaPct} />
+              <div className="flex items-center gap-1.5">
+                <DeltaBadge pct={signals.wiki.deltaPct} />
+                {signals.wiki.wiki_falling === true && (
+                  <span className="flex items-center gap-1 text-xs text-red-500" data-testid="badge-wiki-falling">
+                    <TrendingDown className="h-3 w-3 shrink-0" />
+                    Falling
+                  </span>
+                )}
+                {signals.wiki.wiki_rising === true && (
+                  <span className="flex items-center gap-1 text-xs text-emerald-500" data-testid="badge-wiki-rising">
+                    <TrendingUp className="h-3 w-3 shrink-0" />
+                    Rising
+                  </span>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="pt-4">

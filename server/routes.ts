@@ -1285,6 +1285,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : 0;
       const wikiDeltaPct = Math.abs(rawWikiDeltaPct) <= DELTA_DEAD_ZONE_PCT ? 0 : rawWikiDeltaPct;
 
+      // Wiki 3-day Falling/Rising: need 4 daily values for 3 day-over-day % changes
+      let wikiFalling: boolean | undefined;
+      let wikiRising: boolean | undefined;
+      try {
+        const wikiDailyResult = await db.execute(sql`
+          SELECT wiki_pageviews as views
+          FROM (
+            SELECT DISTINCT ON (date_trunc('day', timestamp)::date)
+              date_trunc('day', timestamp)::date as day,
+              wiki_pageviews
+            FROM trend_snapshots
+            WHERE person_id = ${id}
+              AND snapshot_origin = 'ingest'
+              AND timestamp >= NOW() - INTERVAL '4 days'
+            ORDER BY date_trunc('day', timestamp)::date DESC, timestamp DESC
+            LIMIT 4
+          ) sub
+          ORDER BY day DESC
+        `);
+        const wikiDailyRows = Array.isArray(wikiDailyResult) ? wikiDailyResult : (wikiDailyResult as any).rows ?? [];
+        if (wikiDailyRows.length === 4) {
+          const v0 = Number((wikiDailyRows[0] as any)?.views ?? null);
+          const v1 = Number((wikiDailyRows[1] as any)?.views ?? null);
+          const v2 = Number((wikiDailyRows[2] as any)?.views ?? null);
+          const v3 = Number((wikiDailyRows[3] as any)?.views ?? null);
+          if (v1 > 0 && v2 > 0 && v3 > 0 &&
+              Number.isFinite(v0) && Number.isFinite(v1) && Number.isFinite(v2) && Number.isFinite(v3)) {
+            const pct1 = ((v0 - v1) / v1) * 100;
+            const pct2 = ((v1 - v2) / v2) * 100;
+            const pct3 = ((v2 - v3) / v3) * 100;
+            if (pct1 !== 0 && pct2 !== 0 && pct3 !== 0) {
+              if (pct1 < 0 && pct2 < 0 && pct3 < 0) wikiFalling = true;
+              else if (pct1 > 0 && pct2 > 0 && pct3 > 0) wikiRising = true;
+            }
+          }
+        }
+      } catch {
+        // skip flags on any error
+      }
+
       const change24hAbs = Math.abs(trending?.change24h ?? 0);
       const hasSignificantMovement = change24hAbs >= 2.0;
 
@@ -1457,6 +1497,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           wiki: {
             views: latest.wikiPageviews ?? 0,
             deltaPct: wikiDeltaPct,
+            ...(wikiFalling === true && { wiki_falling: true }),
+            ...(wikiRising === true && { wiki_rising: true }),
           },
           drivers: {
             status: driversStatus,
