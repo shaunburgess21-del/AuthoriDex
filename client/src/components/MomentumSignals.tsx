@@ -2,10 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Newspaper, BookOpen, BarChart3, Trophy, AlertTriangle, Clock, ChevronDown, ChevronUp, ExternalLink, Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Search, Newspaper, BookOpen, BarChart3, Trophy, AlertTriangle, Clock, ExternalLink, Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { cn } from "@/lib/utils";
 
@@ -153,8 +151,6 @@ function SignalSkeleton() {
 }
 
 export function MomentumSignals({ personId, wikiSlug }: { personId: string; wikiSlug?: string | null }) {
-  const [driversExpanded, setDriversExpanded] = useState(false);
-
   const { data, isLoading, error } = useQuery<MomentumData>({
     queryKey: ['/api/people', personId, 'momentum'],
     queryFn: async () => {
@@ -470,7 +466,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                 <div className="flex items-center gap-2">
                   <BarChart3 className="h-4 w-4 text-primary" />
                   <span className="font-semibold text-sm">Score Drivers (24h change)</span>
-                  <TouchTooltip content={<p className="text-xs max-w-[220px]">Based on what changed, not raw totals. Shows which signals drove the most movement.</p>}>
+                  <TouchTooltip content={<p className="text-xs max-w-[220px]">Based on what changed, not raw totals. Shows which signals drove the most movement up or down</p>}>
                     <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                   </TouchTooltip>
                 </div>
@@ -494,30 +490,12 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                       </p>
                     )}
                     <p className="text-[10px] text-muted-foreground/60" data-testid="text-drivers-clarifier">
-                      Drivers explain today's change, not total attention · Compared to ~24h ago
+                      Drivers explain today's trend score change (up or down) not total attention · Compared to ~24h ago
                     </p>
                     <Badge variant="outline" className="text-[9px] px-1.5 py-0" data-testid="badge-drivers-method">
                       {(signals.drivers.method === "exact_velocity_components" || signals.drivers.isExact) ? "Exact (from score components)" : "Estimate (from signal changes)"}
                     </Badge>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-xs text-muted-foreground"
-                    onClick={() => setDriversExpanded(!driversExpanded)}
-                    data-testid="button-expand-drivers"
-                  >
-                    {driversExpanded ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
-                    {driversExpanded ? "Hide details" : "View full calculation"}
-                  </Button>
-                  {driversExpanded && (
-                    <div className="text-xs text-muted-foreground space-y-1 border-t pt-2">
-                      <p>Search activity score: {signals.search.volume}/100</p>
-                      <p>News articles (24h): {formatNum(signals.news.count)}</p>
-                      <p>Wiki page views (24h): {formatNum(signals.wiki.views)}</p>
-                      <p className="text-[10px] mt-1">Attribution based on actual 24h signal changes.</p>
-                    </div>
-                  )}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">Insufficient data for attribution</p>
