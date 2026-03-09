@@ -388,26 +388,28 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                   </a>
                 )}
               </div>
-              <div className="flex items-center gap-1.5">
-                <DeltaBadge pct={signals.wiki.deltaPct} />
-                {signals.wiki.wiki_falling === true && (
-                  <span className="flex items-center gap-1 text-xs text-red-500" data-testid="badge-wiki-falling">
-                    <TrendingDown className="h-3 w-3 shrink-0" />
-                    Falling
-                  </span>
-                )}
-                {signals.wiki.wiki_rising === true && (
-                  <span className="flex items-center gap-1 text-xs text-emerald-500" data-testid="badge-wiki-rising">
-                    <TrendingUp className="h-3 w-3 shrink-0" />
-                    Rising
-                  </span>
-                )}
-              </div>
+              <DeltaBadge pct={signals.wiki.deltaPct} />
             </div>
           </CardHeader>
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold" data-testid="text-wiki-views">
-              {formatNum(signals.wiki.views)}<span className="text-sm font-normal text-muted-foreground ml-1">page views (24h)</span>
+            <div className="flex items-baseline justify-between gap-2 flex-wrap" data-testid="text-wiki-views">
+              <div className="text-2xl font-bold">
+                {formatNum(signals.wiki.views)}<span className="text-sm font-normal text-muted-foreground ml-1">page views (24h)</span>
+              </div>
+              <div className="flex items-center gap-1 text-xs">
+                {signals.wiki.wiki_rising === true && (
+                  <>
+                    <TrendingUp className="h-3 w-3 text-emerald-500" />
+                    <span className="text-emerald-500">Rising</span>
+                  </>
+                )}
+                {signals.wiki.wiki_falling === true && (
+                  <>
+                    <TrendingDown className="h-3 w-3 text-red-500" />
+                    <span className="text-red-500">Falling</span>
+                  </>
+                )}
+              </div>
             </div>
             {signals.wiki.views < 100 && signals.wiki.deltaPct === 0 ? (
               <p className="text-[10px] text-muted-foreground/60 mt-2" data-testid="text-wiki-quiet">Low curiosity signal today</p>
