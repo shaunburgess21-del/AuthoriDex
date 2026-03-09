@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
+import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -1422,9 +1423,6 @@ function FullScreenOverlay({
   user?: any;
   onAuthRequired?: () => void;
 }) {
-  const dragScrollRef = useDragScroll<HTMLDivElement>();
-  useScrollHint(dragScrollRef);
-
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden';
@@ -1435,6 +1433,8 @@ function FullScreenOverlay({
   }, [open]);
   
   if (!open) return null;
+  
+  const predictCategories = CATEGORY_FILTERS.map((c) => ({ value: c.id, label: c.label }));
   
   return (
     <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto premium-scrollbar" data-testid="overlay-view-all">
@@ -1447,44 +1447,19 @@ function FullScreenOverlay({
             </Button>
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-                className="pl-9"
-                data-testid="input-overlay-search"
-              />
-            </div>
-            
-            <div ref={dragScrollRef} className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
-              {CATEGORY_FILTERS.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => {
-                    if (cat.id === "favorites" && !user) {
-                      onAuthRequired?.();
-                      return;
-                    }
-                    onCategoryChange(cat.id);
-                  }}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all backdrop-blur-sm flex items-center gap-1.5 ${
-                    categoryFilter === cat.id
-                      ? 'bg-violet-500/20 text-violet-300 border border-violet-400/40 shadow-sm shadow-violet-500/20'
-                      : 'bg-background/50 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-violet-400/20'
-                  }`}
-                  data-testid={`chip-overlay-${cat.id}`}
-                  aria-label={cat.id === "favorites" ? "Favorites" : undefined}
-                >
-                  {cat.id === "favorites" && <Star className="h-3.5 w-3.5" />}
-                  {cat.id === "favorites" ? <span className="hidden md:inline">{cat.label}</span> : cat.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <OverlayFilterBar
+            value={categoryFilter}
+            onChange={(v) => onCategoryChange(v as CategoryFilter)}
+            searchValue={searchQuery}
+            onSearchChange={onSearchChange}
+            categories={predictCategories}
+            allValue="all"
+            placeholder="Search..."
+            testIdPrefix="overlay-predict"
+            variant="predict"
+            user={user}
+            onAuthRequired={onAuthRequired}
+          />
         </div>
       </div>
       

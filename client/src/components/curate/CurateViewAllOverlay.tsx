@@ -1,12 +1,13 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { CategoryPill } from "@/components/CategoryPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { FilterDropdown } from "@/components/FilterDropdown";
+import { OverlayFilterBar } from "@/components/OverlayFilterBar";
+import { useAuth } from "@/contexts/AuthContext";
+import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { X, Search, Crown, ImageIcon, Users } from "lucide-react";
+import { X, Crown, ImageIcon, Users } from "lucide-react";
 import { type FilterCategory } from "@shared/constants";
 import type { CuratePerson } from "./CurateProfileCard";
 
@@ -132,6 +133,8 @@ export function CurateViewAllOverlay({
   onClose, 
   onSelectPerson 
 }: CurateViewAllOverlayProps) {
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("All");
 
@@ -180,27 +183,19 @@ export function CurateViewAllOverlay({
         </Button>
       </div>
       
-      <div className="sticky top-0 z-10 px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          <FilterDropdown
-            value={categoryFilter}
-            onChange={(v) => setCategoryFilter(v as FilterCategory)}
-            categories={CURATE_CATEGORIES}
-            allValue="All"
-            testId="button-filter-curate-overlay"
-          />
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
-              data-testid="input-view-all-search"
-            />
-          </div>
-        </div>
-      </div>
+      <OverlayFilterBar
+        value={categoryFilter}
+        onChange={(v) => setCategoryFilter(v as FilterCategory)}
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        categories={CURATE_CATEGORIES}
+        allValue="All"
+        placeholder="Search..."
+        testIdPrefix="curate-overlay"
+        variant="vote"
+        user={user}
+        onAuthRequired={() => setLocation("/login")}
+      />
       
       <div className="flex-1 overflow-y-auto p-4">
         {isLoading ? (

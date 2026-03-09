@@ -75,6 +75,7 @@ import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
 import { CardSection } from "@/components/CardSection";
 import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
 import { FilterDropdown } from "@/components/FilterDropdown";
+import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 
 const VOTE_CATEGORIES = [
   { value: "All", label: "All Categories" },
@@ -1806,6 +1807,79 @@ function FilterChip({
   );
 }
 
+const VOTE_WELCOME_SEEN_KEY = "authoridex_vote_welcome_seen";
+
+function VoteWelcomeModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-xl">
+            <Sparkles className="h-6 w-6 text-cyan-400" />
+            The Voice of the People
+          </DialogTitle>
+          <DialogDescription>
+            Your votes capture what the world thinks
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          <div className="flex items-start gap-3">
+            <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+              <Swords className="h-4 w-4 text-cyan-400" />
+            </div>
+            <div>
+              <h4 className="font-semibold text-sm">Pick Your Side</h4>
+              <p className="text-xs text-muted-foreground">
+                Vote in head-to-head matchups, back hot topics, and rate who's overrated or underrated.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+              <BarChart3 className="h-4 w-4 text-cyan-400" />
+            </div>
+            <div>
+              <h4 className="font-semibold text-sm">Shape the Index</h4>
+              <p className="text-xs text-muted-foreground">
+                Every vote feeds real data. Your opinion directly influences the rankings.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+              <Trophy className="h-4 w-4 text-cyan-400" />
+            </div>
+            <div>
+              <h4 className="font-semibold text-sm">Earn as You Vote</h4>
+              <p className="text-xs text-muted-foreground">
+                Rack up XP for every vote you cast, unlock ranks, and build your reputation.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/20 flex items-center gap-3">
+            <Sparkles className="h-4 w-4 text-cyan-400 shrink-0" />
+            <p className="text-xs text-muted-foreground">
+              <span className="font-semibold text-cyan-400">Vox Populi, Vox Dei</span> — the voice of the people is the voice of the world.
+            </p>
+          </div>
+        </div>
+
+        <Button
+          onClick={onClose}
+          className="w-full bg-gradient-to-r from-cyan-600 to-teal-500 hover:from-cyan-500 hover:to-teal-400 text-white font-medium"
+          data-testid="button-cast-first-vote"
+        >
+          Cast Your First Vote
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function VotePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -1920,7 +1994,8 @@ export default function VotePage() {
   
   const [activeSection, setActiveSection] = useState<SectionToggle>("All");
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
-  const [infoModalOpen, setInfoModalOpen] = useState<"voxpopuli" | "governance" | null>(null);
+  const [infoModalOpen, setInfoModalOpen] = useState<"governance" | null>(null);
+  const [showVoteWelcomeModal, setShowVoteWelcomeModal] = useState(false);
   const [curateCategoryFilter, setCurateCategoryFilter] = useState<FilterCategory>("All");
   const [globalVoteSearchQuery, setGlobalVoteSearchQuery] = useState("");
   const [globalCategoryFilter, setGlobalCategoryFilter] = useState<FilterCategory>("All");
@@ -2164,6 +2239,18 @@ export default function VotePage() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const hasSeen = localStorage.getItem(VOTE_WELCOME_SEEN_KEY);
+    if (!hasSeen) {
+      setShowVoteWelcomeModal(true);
+    }
+  }, []);
+
+  const handleCloseVoteWelcomeModal = () => {
+    localStorage.setItem(VOTE_WELCOME_SEEN_KEY, "true");
+    setShowVoteWelcomeModal(false);
+  };
+
   // Sync global category filter to all section filters
   useEffect(() => {
     setMatchupsCategoryFilter(globalCategoryFilter);
@@ -2322,62 +2409,10 @@ export default function VotePage() {
           </div>
         </div>
       </div>
-      <div className="container mx-auto px-4 py-4 max-w-7xl">
-        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative w-full sm:w-[184px] sm:flex-none">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search votes..."
-              value={globalVoteSearchQuery}
-              onChange={(e) => setGlobalVoteSearchQuery(e.target.value)}
-              className="pl-9"
-              data-testid="input-global-vote-search"
-            />
-          </div>
-          
-          <div ref={dragScrollRef2} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
-            {getFilterCategories(false).map((cat) => (
-              <FilterChip
-                key={cat}
-                category={cat}
-                isActive={globalCategoryFilter === cat}
-                onClick={() => setGlobalCategoryFilter(cat as FilterCategory)}
-                testIdPrefix="chip-category"
-                user={user}
-                onAuthRequired={handleAuthRequired}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
       <div className="container mx-auto px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
-        {/* VOX POPULI HEADER - Above Matchups + Trending Polls */}
-        {(activeSection === "All" || isPublicOpinionSection(activeSection)) && (
-        <div className="relative overflow-hidden mb-6">
-          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent" />
-          <div className="relative py-4">
-            <div className="text-center">
-              <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-voxpopuli-title">
-                The Voice of the People
-              </h2>
-              <p className="text-muted-foreground max-w-2xl mx-auto mb-3">Your votes capture what the world thinks</p>
-              <button
-                onClick={() => setInfoModalOpen("voxpopuli")}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/30 transition-all cursor-pointer"
-                data-testid="button-voxpopuli-info"
-              >
-                <Sparkles className="h-4 w-4 text-cyan-400" />
-                <span className="text-sm text-cyan-400 font-medium">Vox Populi</span>
-              </button>
-            </div>
-          </div>
-        </div>
-        )}
-
         {/* ZONE 1: Public Opinion - Matchups Section (First) */}
         {(activeSection === "All" || activeSection === "Matchups") && (
-        <section className="mb-10">
+        <section className="mb-10 mt-[5px]">
           <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -3800,48 +3835,10 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
-      {/* Vox Populi Info Modal */}
-      <Dialog open={infoModalOpen === "voxpopuli"} onOpenChange={() => setInfoModalOpen(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-cyan-400" />
-              The World's Sentiment Engine
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4 text-sm">
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="h-6 w-6 rounded-full bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-cyan-400 text-xs font-bold">1</span>
-                </div>
-                <div>
-                  <span className="font-medium text-cyan-400">Cut Through the Noise:</span>
-                  <span className="text-muted-foreground"> Headlines only tell half the story. Use Sentiment Polls to capture what the world actually thinks about today's news.</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="h-6 w-6 rounded-full bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-cyan-400 text-xs font-bold">2</span>
-                </div>
-                <div>
-                  <span className="font-medium text-cyan-400">Pick Your Side:</span>
-                  <span className="text-muted-foreground"> From massive beefs to serious debates, align yourself with the winners or defend the underdogs.</span>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="h-6 w-6 rounded-full bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-cyan-400 text-xs font-bold">3</span>
-                </div>
-                <div>
-                  <span className="font-medium text-cyan-400">Drive the Data:</span>
-                  <span className="text-muted-foreground"> Watch the percentages shift live as thousands of users around the world weigh in on the exact same moment.</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <VoteWelcomeModal
+        open={showVoteWelcomeModal}
+        onClose={handleCloseVoteWelcomeModal}
+      />
       {/* Community Governance Info Modal */}
       <Dialog open={infoModalOpen === "governance"} onOpenChange={() => setInfoModalOpen(null)}>
         <DialogContent className="max-w-lg">
@@ -3904,27 +3901,19 @@ export default function VotePage() {
               </Button>
             </div>
             
-            <div className="sticky top-0 z-10 px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
-              <div className="flex items-center gap-2">
-                <FilterDropdown
-                  value={inductionCategoryFilter}
-                  onChange={(v) => setInductionCategoryFilter(v as FilterCategory)}
-                  categories={VOTE_CATEGORIES}
-                  allValue="All"
-                  testId="button-filter-overlay-induction"
-                />
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search..."
-                    value={inductionSearchQuery}
-                    onChange={(e) => setInductionSearchQuery(e.target.value)}
-                    className="pl-10"
-                    data-testid="input-overlay-induction-search"
-                  />
-                </div>
-              </div>
-            </div>
+            <OverlayFilterBar
+              value={inductionCategoryFilter}
+              onChange={(v) => setInductionCategoryFilter(v as FilterCategory)}
+              searchValue={inductionSearchQuery}
+              onSearchChange={setInductionSearchQuery}
+              categories={VOTE_CATEGORIES}
+              allValue="All"
+              placeholder="Search..."
+              testIdPrefix="overlay-induction"
+              variant="vote"
+              user={user}
+              onAuthRequired={handleAuthRequired}
+            />
             
             <div className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-7xl mx-auto">
@@ -3969,27 +3958,19 @@ export default function VotePage() {
               </Button>
             </div>
             
-            <div className="sticky top-0 z-10 px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
-              <div className="flex items-center gap-2">
-                <FilterDropdown
-                  value={topicsCategoryFilter}
-                  onChange={(v) => setTopicsCategoryFilter(v as FilterCategory)}
-                  categories={VOTE_CATEGORIES_WITH_CUSTOM}
-                  allValue="All"
-                  testId="button-filter-overlay-topics"
-                />
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search..."
-                    value={topicsSearchQuery}
-                    onChange={(e) => setTopicsSearchQuery(e.target.value)}
-                    className="pl-10"
-                    data-testid="input-overlay-topics-search"
-                  />
-                </div>
-              </div>
-            </div>
+            <OverlayFilterBar
+              value={topicsCategoryFilter}
+              onChange={(v) => setTopicsCategoryFilter(v as FilterCategory)}
+              searchValue={topicsSearchQuery}
+              onSearchChange={setTopicsSearchQuery}
+              categories={VOTE_CATEGORIES_WITH_CUSTOM}
+              allValue="All"
+              placeholder="Search..."
+              testIdPrefix="overlay-topics"
+              variant="vote"
+              user={user}
+              onAuthRequired={handleAuthRequired}
+            />
             
             <div className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
@@ -4035,27 +4016,19 @@ export default function VotePage() {
               </Button>
             </div>
             
-            <div className="sticky top-0 z-10 px-4 py-3 border-b border-cyan-500/10 bg-background/95 backdrop-blur-sm">
-              <div className="flex items-center gap-2">
-                <FilterDropdown
-                  value={matchupsCategoryFilter}
-                  onChange={(v) => setMatchupsCategoryFilter(v as FilterCategory)}
-                  categories={VOTE_CATEGORIES_WITH_CUSTOM}
-                  allValue="All"
-                  testId="button-filter-overlay-matchups"
-                />
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search..."
-                    value={matchupsSearchQuery}
-                    onChange={(e) => setMatchupsSearchQuery(e.target.value)}
-                    className="pl-10"
-                    data-testid="input-overlay-matchups-search"
-                  />
-                </div>
-              </div>
-            </div>
+            <OverlayFilterBar
+              value={matchupsCategoryFilter}
+              onChange={(v) => setMatchupsCategoryFilter(v as FilterCategory)}
+              searchValue={matchupsSearchQuery}
+              onSearchChange={setMatchupsSearchQuery}
+              categories={VOTE_CATEGORIES_WITH_CUSTOM}
+              allValue="All"
+              placeholder="Search..."
+              testIdPrefix="overlay-matchups"
+              variant="vote"
+              user={user}
+              onAuthRequired={handleAuthRequired}
+            />
             
             <div className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
@@ -4103,27 +4076,19 @@ export default function VotePage() {
               </Button>
             </div>
             
-            <div className="sticky top-0 z-10 px-4 py-3 border-b border-cyan-500/10 bg-background/95 backdrop-blur-sm">
-              <div className="flex items-center gap-2">
-                <FilterDropdown
-                  value={opinionPollsCategoryFilter}
-                  onChange={(v) => setOpinionPollsCategoryFilter(v as FilterCategory)}
-                  categories={VOTE_CATEGORIES_WITH_CUSTOM}
-                  allValue="All"
-                  testId="button-filter-overlay-opinion"
-                />
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search..."
-                    value={opinionPollsSearchQuery}
-                    onChange={(e) => setOpinionPollsSearchQuery(e.target.value)}
-                    className="pl-10"
-                    data-testid="input-overlay-opinion-search"
-                  />
-                </div>
-              </div>
-            </div>
+            <OverlayFilterBar
+              value={opinionPollsCategoryFilter}
+              onChange={(v) => setOpinionPollsCategoryFilter(v as FilterCategory)}
+              searchValue={opinionPollsSearchQuery}
+              onSearchChange={setOpinionPollsSearchQuery}
+              categories={VOTE_CATEGORIES_WITH_CUSTOM}
+              allValue="All"
+              placeholder="Search..."
+              testIdPrefix="overlay-opinion"
+              variant="vote"
+              user={user}
+              onAuthRequired={handleAuthRequired}
+            />
             
             <div className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
@@ -4176,27 +4141,19 @@ export default function VotePage() {
               </Button>
             </div>
             
-            <div className="sticky top-0 z-10 px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
-              <div className="flex items-center gap-2">
-                <FilterDropdown
-                  value={valuePerceptionCategoryFilter}
-                  onChange={(v) => setValuePerceptionCategoryFilter(v as FilterCategory)}
-                  categories={VOTE_CATEGORIES_WITH_CUSTOM}
-                  allValue="All"
-                  testId="button-filter-overlay-value"
-                />
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search..."
-                    value={valuePerceptionSearchQuery}
-                    onChange={(e) => setValuePerceptionSearchQuery(e.target.value)}
-                    className="pl-10"
-                    data-testid="input-overlay-value-search"
-                  />
-                </div>
-              </div>
-            </div>
+            <OverlayFilterBar
+              value={valuePerceptionCategoryFilter}
+              onChange={(v) => setValuePerceptionCategoryFilter(v as FilterCategory)}
+              searchValue={valuePerceptionSearchQuery}
+              onSearchChange={setValuePerceptionSearchQuery}
+              categories={VOTE_CATEGORIES_WITH_CUSTOM}
+              allValue="All"
+              placeholder="Search..."
+              testIdPrefix="overlay-value"
+              variant="vote"
+              user={user}
+              onAuthRequired={handleAuthRequired}
+            />
             
             <div className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
