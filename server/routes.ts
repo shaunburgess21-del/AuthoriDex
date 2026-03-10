@@ -635,13 +635,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const [currentSnaps, prevSnaps] = await Promise.all([
             db.select({
               personId: trendSnapshots.personId,
-              searchDelta: trendSnapshots.searchDelta,
-              newsDelta: trendSnapshots.newsDelta,
-              wikiDelta: trendSnapshots.wikiDelta,
               searchVolume: trendSnapshots.searchVolume,
               newsCount: trendSnapshots.newsCount,
               wikiPageviews: trendSnapshots.wikiPageviews,
               timestamp: trendSnapshots.timestamp,
+              diagnostics: trendSnapshots.diagnostics,
             })
               .from(trendSnapshots)
               .where(and(
@@ -652,13 +650,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             db.select({
               personId: trendSnapshots.personId,
-              searchDelta: trendSnapshots.searchDelta,
-              newsDelta: trendSnapshots.newsDelta,
-              wikiDelta: trendSnapshots.wikiDelta,
               searchVolume: trendSnapshots.searchVolume,
               newsCount: trendSnapshots.newsCount,
               wikiPageviews: trendSnapshots.wikiPageviews,
               timestamp: trendSnapshots.timestamp,
+              diagnostics: trendSnapshots.diagnostics,
             })
               .from(trendSnapshots)
               .where(and(
@@ -686,28 +682,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const prev = prevByPerson.get(id);
             if (!curr) continue;
 
-            const rawSources = [
-              { key: "search", currVal: curr.searchDelta ?? 0, prevVal: prev?.searchDelta ?? 0, weight: 0.40 },
-              { key: "news", currVal: curr.newsDelta ?? 0, prevVal: prev?.newsDelta ?? 0, weight: 0.35 },
-              { key: "wiki", currVal: curr.wikiDelta ?? 0, prevVal: prev?.wikiDelta ?? 0, weight: 0.25 },
-            ];
-
-            const activeSources = rawSources.filter(s => s.currVal !== 0 || s.prevVal !== 0);
+            const currDiag = curr.diagnostics as Record<string, any> | null;
+            const prevDiag = prev?.diagnostics as Record<string, any> | null;
+            const currentVC = currDiag?.velocityComponents;
+            const prevVC = prevDiag?.velocityComponents;
 
             let sources: Array<{ key: string; pct: number; status: string }> = [];
             let dominantDriver: string | null = null;
 
-            if (activeSources.length > 0) {
-              const contributions = activeSources.map(s => ({
-                key: s.key,
-                absContrib: Math.abs(s.currVal - s.prevVal) * s.weight,
-              }));
-              const total = contributions.reduce((sum, c) => sum + c.absContrib, 0);
+            if (currentVC && prevVC && currentVC.weights && prevVC.weights) {
+              const searchWeighted = currentVC.search * currentVC.weights.search;
+              const newsWeighted = currentVC.news * currentVC.weights.news;
+              const wikiWeighted = currentVC.wiki * currentVC.weights.wiki;
 
-              if (total >= 0.001) {
-                sources = contributions
-                  .map(c => ({ key: c.key, pct: Math.round((c.absContrib / total) * 100), status: "active" as string }))
-                  .sort((a, b) => b.pct - a.pct);
+              const searchDelta = Math.abs(searchWeighted - (prevVC.search * prevVC.weights.search));
+              const newsDelta = Math.abs(newsWeighted - (prevVC.news * prevVC.weights.news));
+              const wikiDelta = Math.abs(wikiWeighted - (prevVC.wiki * prevVC.weights.wiki));
+              const totalDelta = searchDelta + newsDelta + wikiDelta;
+
+              if (totalDelta > 0) {
+                sources = [
+                  { key: "search", pct: Math.round((searchDelta / totalDelta) * 100), status: "active" as string },
+                  { key: "news", pct: Math.round((newsDelta / totalDelta) * 100), status: "active" as string },
+                  { key: "wiki", pct: Math.round((wikiDelta / totalDelta) * 100), status: "active" as string },
+                ].filter(s => s.pct > 0).sort((a, b) => b.pct - a.pct);
               }
             }
 
@@ -721,21 +719,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const totalContrib = searchContrib + newsContrib + wikiContrib;
 
               if (totalContrib > 0) {
-                const rawContribs = [
+                sources = [
                   { key: "search", absContrib: searchContrib },
                   { key: "news", absContrib: newsContrib },
                   { key: "wiki", absContrib: wikiContrib },
-                ].filter(c => c.absContrib > 0);
-                sources = rawContribs
-                  .map(c => ({ key: c.key, pct: Math.round((c.absContrib / totalContrib) * 100), status: "active" }))
+                ].filter((c: any) => c.absContrib > 0)
+                  .map((c: any) => ({ key: c.key, pct: Math.round((c.absContrib / totalContrib) * 100), status: "active" }))
                   .sort((a, b) => b.pct - a.pct);
               }
             }
 
             const allKeys = ["search", "news", "wiki"];
             const presentKeys = new Set(sources.map(s => s.key));
-            const hasAnyData = curr.searchDelta != null || curr.newsDelta != null || curr.wikiDelta != null
-              || (curr.searchVolume ?? 0) > 0 || (curr.newsCount ?? 0) > 0 || (curr.wikiPageviews ?? 0) > 0;
+            const hasAnyData = (curr.searchVolume ?? 0) > 0 || (curr.newsCount ?? 0) > 0 || (curr.wikiPageviews ?? 0) > 0;
             for (const k of allKeys) {
               if (!presentKeys.has(k)) {
                 sources.push({ key: k, pct: 0, status: hasAnyData ? "quiet" : "no-data" });
