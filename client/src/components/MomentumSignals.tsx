@@ -325,7 +325,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
             </div>
             {signals.news.count === 0 && signals.news.recentPeak && signals.news.recentPeakAge && (
               <p className="text-[10px] text-muted-foreground/60" data-testid="text-news-recent-peak">
-                {signals.news.recentPeak} articles detected {signals.news.recentPeakAge} &middot; current tick shows 0
+                {signals.news.recentPeak} articles found {signals.news.recentPeakAge}
               </p>
             )}
             {signals.news.topStories && signals.news.topStories.length > 0 ? (
@@ -359,14 +359,16 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
               </div>
             ) : (
               <p className="text-[10px] text-muted-foreground/60" data-testid="text-news-empty">
-                {signals.news.count > 0 ? "No major headlines in the last 24h" : (signals.news.recentPeak ? "Headlines from recent coverage no longer cached" : "No headlines tracked yet")}
+                {signals.news.count > 0 ? "No major headlines in the last 24h" : "No recent headlines available"}
               </p>
             )}
-            <p className="text-[10px] text-muted-foreground/60">
-              Via {signals.news.topStories && signals.news.topStories.length > 0
-                ? "Google"
-                : ({ serper_news: "Google News", gdelt: "GDELT", mediastack: "Mediastack", unknown: "News" } as Record<string, string>)[signals.news.provider] ?? signals.news.provider}
-            </p>
+            {((signals.news.topStories && signals.news.topStories.length > 0) || signals.news.headlines.length > 0 || signals.news.count > 0) && (
+              <p className="text-[10px] text-muted-foreground/60">
+                Via {signals.news.topStories && signals.news.topStories.length > 0
+                  ? "Google"
+                  : ({ serper_news: "Google News", gdelt: "GDELT", mediastack: "Mediastack", unknown: "News" } as Record<string, string>)[signals.news.provider] ?? signals.news.provider}
+              </p>
+            )}
           </CardContent>
         </Card>
 

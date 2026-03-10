@@ -1490,7 +1490,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             const currentHeadlines = (news?.topHeadlines ?? []).slice(0, 3);
             const currentTopStories = (serper?.topStories ?? []).slice(0, 3);
             const currentProvider = hasPerPersonFallback ? "serper_news" : newsSource;
-            const shouldCarryForward = (newsEmaHeld || newsUsedFallback) &&
+            const shouldCarryForward =
               currentHeadlines.length === 0 && currentTopStories.length === 0 &&
               mostRecent;
             return {
