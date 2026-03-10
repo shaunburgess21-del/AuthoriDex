@@ -504,7 +504,7 @@ export async function fetchTrendingNewsContext(name: string): Promise<TrendingNe
   }
 
   const cacheKey = `serper:trending:${name.replace(/\s+/g, "_").toLowerCase()}`;
-  const CACHE_TTL_HOURS = 6; // Cache trending context for 6 hours
+  const CACHE_TTL_HOURS = 3; // Cache trending context for 3 hours
 
   try {
     const cached = await getCachedResponse(cacheKey);
@@ -524,7 +524,7 @@ export async function fetchTrendingNewsContext(name: string): Promise<TrendingNe
         num: 10,
         gl: "us",
         hl: "en",
-        tbs: "qdr:w", // Last week
+        tbs: "qdr:3d", // Last 3 days
       }),
     });
 

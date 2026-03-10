@@ -1399,7 +1399,7 @@ export default function PersonDetailPage() {
             </div>
             {(person as any).approvalAvgRating != null ? (
               <p className="text-3xl font-mono font-bold" data-testid="text-approval-pct">
-                <span style={{ color: getApprovalColor((person as any).approvalAvgRating) }}>{((person as any).approvalAvgRating as number).toFixed(1)}</span><span className="text-white">/5</span>
+                <span style={{ color: getApprovalColor((person as any).approvalAvgRating) }}>{((person as any).approvalAvgRating as number).toFixed(1)}</span><span className="text-muted-foreground">/5</span>
               </p>
             ) : (
               <p className="text-xl font-mono text-muted-foreground mt-1" data-testid="text-approval-pct">

@@ -3356,7 +3356,7 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
   //   D) Rate limit: max 1 OpenAI generation per person per 30 minutes
 
   const WHY_TRENDING_PROMPT_VERSION = 4;
-  const WHY_TRENDING_CACHE_TTL_HOURS = 6;
+  const WHY_TRENDING_CACHE_TTL_HOURS = 4;
   const WHY_TRENDING_RATE_LIMIT_MINUTES = 30;
 
   function extractDomain(url: string): string {
@@ -3611,7 +3611,10 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
       });
       
-      const headlinesText = newsContext.sources.map(s => s.title).join('\n');
+      const headlinesText = newsContext.sources.map(s => {
+        const dateLabel = s.date ? ` (${s.date})` : '';
+        return `${s.title}${dateLabel}`;
+      }).join('\n');
       const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
       const systemPrompt = `You are a neutral wire-service news reporter (like AP or Reuters). Today's date is ${todayStr}. Use the headlines provided to determine what is currently happening. Treat all information in the headlines as current events happening right now.
@@ -3627,6 +3630,11 @@ CRITICAL RULES:
 - For politically polarizing figures, describe actions and events only. Do not editorialize.`;
 
       const userPrompt = `Based on these recent news headlines about ${person.name}, write a brief 1-2 sentence summary explaining why they are currently in the news.
+
+RECENCY RULES:
+- Each headline may have a date in parentheses. Prioritize the most recent headlines.
+- If older headlines (3+ days before today) appear alongside newer ones, focus your summary on what happened most recently.
+- The summary should reflect what is happening NOW, not days ago.
 
 STRICT NEUTRALITY RULES:
 - Describe ONLY actions taken and events that occurred — never describe reactions, opinions, or public sentiment
