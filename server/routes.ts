@@ -3355,7 +3355,7 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
   //   C) Provenance: store model, promptVersion, headlinesUsed in cached payload
   //   D) Rate limit: max 1 OpenAI generation per person per 30 minutes
 
-  const WHY_TRENDING_PROMPT_VERSION = 4;
+  const WHY_TRENDING_PROMPT_VERSION = 5;
   const WHY_TRENDING_CACHE_TTL_HOURS = 4;
   const WHY_TRENDING_RATE_LIMIT_MINUTES = 30;
 
@@ -3513,7 +3513,7 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         set: { fetchedAt: lockNow, expiresAt: lockExpires, responseData: JSON.stringify({ personId, lockedAt: lockNow.toISOString() }) },
       });
       
-      // Fetch fresh news via Serper (Serper has its own 6h cache)
+      // Fetch fresh news via Serper (Serper has its own 3h cache)
       const newsContext = await fetchTrendingNewsContext(person.name);
       
       // Helper: release single-flight lock (expire immediately)
