@@ -59,7 +59,7 @@ function formatNum(n: number): string {
 }
 
 function getNewsActivityLevel(count: number): { label: string; dotClass: string } {
-  if (count >= 19) return { label: "High", dotClass: "bg-green-500" };
+  if (count >= 16) return { label: "High", dotClass: "bg-green-500" };
   if (count >= 7) return { label: "Medium", dotClass: "bg-amber-500" };
   if (count >= 1) return { label: "Low", dotClass: "bg-red-500" };
   return { label: "None", dotClass: "bg-muted-foreground" };
