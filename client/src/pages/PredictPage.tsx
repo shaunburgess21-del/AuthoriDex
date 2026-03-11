@@ -648,60 +648,61 @@ function FirstTimeModal({ open, onClose }: { open: boolean; onClose: () => void 
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <Zap className="h-6 w-6 text-violet-500" />
-            Welcome to Prediction Markets
+            <Sparkles className="h-6 w-6 text-violet-500" />
+            Open Markets
           </DialogTitle>
           <DialogDescription>
-            Use virtual credits to predict who's trending next
+            Predict the outcome of any topic
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="space-y-4 py-4">
+          <div className="flex items-start gap-3">
+            <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+              <Globe className="h-4 w-4 text-violet-500" />
+            </div>
+            <div>
+              <h4 className="font-semibold text-sm">Real-World Events</h4>
+              <p className="text-xs text-muted-foreground">
+                Predict elections, acquisitions, viral moments, and more.
+              </p>
+            </div>
+          </div>
+
           <div className="flex items-start gap-3">
             <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
               <Target className="h-4 w-4 text-violet-500" />
             </div>
             <div>
-              <h4 className="font-semibold text-sm">1. Pick a Market</h4>
+              <h4 className="font-semibold text-sm">Stake Your Conviction</h4>
               <p className="text-xs text-muted-foreground">
-                Choose from Weekly Up/Down, Head-to-Head battles, or Category Races
+                Back your prediction with virtual credits. The bigger the pool, the bigger the return.
               </p>
             </div>
           </div>
-          
-          <div className="flex items-start gap-3">
-            <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-              <Users className="h-4 w-4 text-violet-500" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-sm">2. Back Your Prediction</h4>
-              <p className="text-xs text-muted-foreground">
-                Stake virtual credits on your pick. Your potential return depends on the pool.
-              </p>
-            </div>
-          </div>
-          
+
           <div className="flex items-start gap-3">
             <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
               <Trophy className="h-4 w-4 text-violet-500" />
             </div>
             <div>
-              <h4 className="font-semibold text-sm">3. Win from the Pool</h4>
+              <h4 className="font-semibold text-sm">Claim Your Winnings</h4>
               <p className="text-xs text-muted-foreground">
-                If you're right, you share the pool with other winners based on your stake.
+                When events resolve, winners split the pool. Be right, get paid.
               </p>
             </div>
           </div>
-          
-          <Card className="p-3 bg-violet-500/5 border-violet-500/20">
+
+          <div className="p-3 rounded-lg bg-violet-500/5 border border-violet-500/20 flex items-center gap-3">
+            <Sparkles className="h-4 w-4 text-violet-500 shrink-0" />
             <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-violet-500">Parimutuel System:</span> You're betting against other users, not the house. The bigger the pool, the bigger the potential returns!
+              <span className="font-semibold text-violet-500">Parimutuel System</span> — you're betting against other users, not the house. The bigger the pool, the bigger the potential returns!
             </p>
-          </Card>
+          </div>
         </div>
-        
+
         <Button onClick={onClose} className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white" data-testid="button-get-started">
-          Get Started
+          Make Your First Prediction
         </Button>
       </DialogContent>
     </Dialog>
@@ -2216,8 +2217,8 @@ export default function PredictPage() {
         </div>
       </header>
       <div className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b">
-        <div className="container mx-auto px-4 py-3 max-w-7xl">
-          <HorizontalScroll className="pb-1">
+        <div className="container mx-auto px-4 py-3 max-w-7xl flex items-center gap-3">
+          <HorizontalScroll className="pb-1 flex-1 min-w-0">
             {PREDICTION_TYPES.map((type) => (
               <button
                 key={type.id}
@@ -2235,92 +2236,24 @@ export default function PredictPage() {
               </button>
             ))}
           </HorizontalScroll>
-        </div>
-      </div>
-      <div className="container mx-auto px-4 py-4 max-w-7xl">
-        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative w-full sm:w-[163px] sm:flex-none">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search markets..."
-              value={globalSearchQuery}
-              onChange={(e) => setGlobalSearchQuery(e.target.value)}
-              className="pl-9"
-              data-testid="input-global-search"
-            />
-          </div>
           {user && userBetsByMarket.size > 0 && (
             <Button
               variant={showMyPositions ? "default" : "outline"}
               size="sm"
               onClick={() => setShowMyPositions(!showMyPositions)}
-              className={`whitespace-nowrap ${showMyPositions ? 'bg-violet-500 hover:bg-violet-600 text-white' : ''}`}
+              className={`whitespace-nowrap shrink-0 ${showMyPositions ? 'bg-violet-500 hover:bg-violet-600 text-white' : ''}`}
               data-testid="toggle-my-positions"
             >
               <Wallet className="h-3.5 w-3.5 mr-1.5" />
               My Positions ({userBetsByMarket.size})
             </Button>
           )}
-          
-          <HorizontalScroll className="sm:pb-0">
-            {CATEGORY_FILTERS.map((cat) => {
-              const IconComponent = CATEGORY_ICONS[cat.id];
-              const isIconOnly = cat.id === "favorites";
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => {
-                    if (cat.id === "favorites" && !user) {
-                      setLocation("/login");
-                      return;
-                    }
-                    setCategoryFilter(cat.id);
-                  }}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all backdrop-blur-sm flex items-center gap-1.5 ${
-                    categoryFilter === cat.id
-                      ? 'bg-violet-500/20 text-violet-300 border border-violet-400/40 shadow-sm shadow-violet-500/20'
-                      : 'bg-background/50 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-violet-400/20'
-                  }`}
-                  data-testid={`chip-category-${cat.id}`}
-                  aria-label={isIconOnly ? cat.label : undefined}
-                >
-                  <IconComponent className="h-3.5 w-3.5" />
-                  {isIconOnly ? <span className="hidden md:inline">{cat.label}</span> : cat.label}
-                </button>
-              );
-            })}
-          </HorizontalScroll>
         </div>
-
       </div>
       <div className="container mx-auto px-4 max-w-7xl">
-        {/* SECTION HEADER: Open Markets (Real-World Predictions) */}
-        {showSection("community") && (
-          <div className="relative overflow-hidden mb-6">
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 via-transparent to-transparent" />
-            <div className="relative py-4">
-              <div className="text-center">
-                <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-open-markets-title">
-                  Open Markets
-                </h2>
-                <p className="text-muted-foreground max-w-2xl mx-auto mb-3">Predict the outcome of any topic.</p>
-                <button
-                  onClick={() => setRulesModalOpen("community")}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all cursor-pointer"
-                  data-testid="button-prediction-rules"
-                >
-                  <Sparkles className="h-4 w-4 text-violet-400" />
-                  <span className="text-sm text-violet-400 font-medium">How It Works</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Real-World Markets Section - Now First */}
         {showSection("community") && (
-          <section className="mb-12">
+          <section className="mb-12 mt-[5px]">
             <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mt-[15px] mb-[15px]">
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg sm:text-xl font-serif font-bold truncate">Real-World Markets</h2>
@@ -2411,27 +2344,6 @@ export default function PredictPage() {
               </Button>
             </div>
           </section>
-        )}
-
-        {/* SECTION HEADER: Predict the Trend Score (Official Markets) */}
-        {(showSection("jackpot") || showSection("updown") || showSection("h2h") || showSection("gainer")) && (
-          <div className="relative overflow-hidden mb-6">
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 via-transparent to-transparent" />
-            <div className="relative py-4">
-              <div className="text-center">
-                <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-fame-score-title">Predict the Trend Score</h2>
-                <p className="text-muted-foreground max-w-2xl mx-auto mb-3">Forecast celebrity trend score movements.</p>
-                <button
-                  onClick={() => setShowFirstTimeModal(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-500/30 transition-all cursor-pointer"
-                  data-testid="button-how-scoring-works"
-                >
-                  <Sparkles className="h-4 w-4 text-violet-400" />
-                  <span className="text-sm text-violet-400 font-medium">How It Works</span>
-                </button>
-              </div>
-            </div>
-          </div>
         )}
 
         <div>
