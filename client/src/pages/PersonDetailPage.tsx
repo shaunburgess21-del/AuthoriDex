@@ -195,7 +195,7 @@ function ProfileMatchupCard({
                 className={`text-sm font-semibold transition-colors ${hasVoted ? 'text-cyan-400 hover:text-cyan-300' : 'text-slate-300 hover:text-cyan-400'}`}
                 data-testid={`link-matchup-${matchup.id}`}
               >
-                {hasVoted ? "View discussion & details →" : (matchup.promptText || "Who do you prefer?")}
+                {hasVoted ? "View details →" : (matchup.promptText || "Who do you prefer?")}
               </Link>
             ) : (
               <span className="text-sm font-semibold text-slate-300">
