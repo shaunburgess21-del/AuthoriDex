@@ -2413,7 +2413,7 @@ export default function VotePage() {
         {/* ZONE 1: Public Opinion - Matchups Section (First) */}
         {(activeSection === "All" || activeSection === "Matchups") && (
         <section className="mb-10 mt-[5px]">
-          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+          <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
@@ -2530,7 +2530,7 @@ export default function VotePage() {
         {/* ZONE 1: Public Opinion - Sentiment Polls Section (Second) */}
         {(activeSection === "All" || activeSection === "Sentiment Polls") && (
         <section className="mb-10">
-          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+          <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
@@ -2641,7 +2641,7 @@ export default function VotePage() {
         {/* ZONE 1.5: Opinion Polls - Multi-option community polls */}
         {(activeSection === "All" || activeSection === "Opinion Polls") && (
         <section className="mb-10">
-          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+          <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
@@ -2760,7 +2760,7 @@ export default function VotePage() {
         {/* ZONE 2: Value Perception - Underrated/Overrated Section */}
         {(activeSection === "All" || activeSection === "Underrated/Overrated") && (
         <section className="mb-10">
-          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+          <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
@@ -2880,7 +2880,7 @@ export default function VotePage() {
         {/* ZONE 3: Governance - Induction Queue Section */}
         {(activeSection === "All" || activeSection === "Induction Queue") && (
         <section className="mb-10">
-          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+          <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
@@ -3006,7 +3006,7 @@ export default function VotePage() {
         {/* ZONE 3: Governance - Curate Profile Section */}
         {(activeSection === "All" || activeSection === "Curate Profile") && (
         <section className="mb-10">
-          <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
+          <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
