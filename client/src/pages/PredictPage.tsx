@@ -1813,8 +1813,6 @@ export default function PredictPage() {
   const [gainerSearch, setGainerSearch] = useState("");
   const [communityCategory, setCommunityCategory] = useState<CategoryFilter>("all");
   const [communitySearch, setCommunitySearch] = useState("");
-  const [walletCredits, setWalletCredits] = useState(10000);
-  const [activePredictions, setActivePredictions] = useState(0);
   const [viewAllCategory, setViewAllCategory] = useState<string | null>(() => window.history.state?.overlay || null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
