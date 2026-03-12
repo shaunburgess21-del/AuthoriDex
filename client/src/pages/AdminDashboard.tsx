@@ -849,6 +849,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
                     variant="ghost"
                     size="icon"
                     onClick={clearMarketCeleb}
+                    aria-label="Clear celebrity"
                     data-testid="button-clear-market-celebrity"
                   >
                     <X className="h-4 w-4" />
@@ -875,7 +876,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
                       onMouseDown={(e) => { e.preventDefault(); selectMarketCeleb(celeb); }}
                       data-testid={`market-celeb-option-${celeb.id}`}
                     >
-                      {celeb.avatar && <img src={celeb.avatar} alt="" className="h-6 w-6 rounded object-cover" />}
+                      {celeb.avatar && <img src={celeb.avatar} alt={celeb.name} className="h-6 w-6 rounded object-cover" />}
                       <span>{celeb.name}</span>
                       <span className="text-xs text-muted-foreground ml-auto">{celeb.category}</span>
                     </button>
@@ -965,6 +966,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
                     variant="ghost" 
                     size="icon"
                     onClick={() => setResolutionCriteria(resolutionCriteria.filter((_, i) => i !== idx))}
+                    aria-label="Remove criterion"
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -1093,7 +1095,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
                     <p className="text-[10px] text-muted-foreground text-center">seed</p>
                   </div>
                   {openMarketType === "multi" && entries.length > 3 && (
-                    <Button variant="ghost" size="icon" onClick={() => removeEntry(idx)} data-testid={`button-remove-entry-${idx}`}>
+                    <Button variant="ghost" size="icon" onClick={() => removeEntry(idx)} aria-label="Remove entry" data-testid={`button-remove-entry-${idx}`}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   )}
@@ -1115,6 +1117,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
                           size="icon"
                           className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
                           onClick={() => clearEntryCeleb(idx)}
+                          aria-label="Clear celebrity"
                           data-testid={`button-clear-entry-celeb-${idx}`}
                         >
                           <X className="h-3 w-3" />
@@ -3174,6 +3177,7 @@ export default function AdminDashboard() {
                               setShowScoreBreakdown(true);
                             }}
                             title="Score Breakdown"
+                            aria-label="Score breakdown"
                             data-testid={`button-score-breakdown-${celebrity.id}`}
                           >
                             <Activity className="h-4 w-4" />
@@ -3182,6 +3186,7 @@ export default function AdminDashboard() {
                             variant="ghost"
                             size="icon"
                             onClick={() => openEditCelebrity(celebrity)}
+                            aria-label="Edit"
                             data-testid={`button-edit-celebrity-${celebrity.id}`}
                           >
                             <Edit className="h-4 w-4" />
@@ -3194,6 +3199,7 @@ export default function AdminDashboard() {
                               setDeleteTarget({ type: "celebrity", id: celebrity.id, name: celebrity.name });
                               setShowDeleteConfirm(true);
                             }}
+                            aria-label="Delete"
                             data-testid={`button-delete-celebrity-${celebrity.id}`}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -3345,6 +3351,7 @@ export default function AdminDashboard() {
                                   variant="ghost" 
                                   size="icon"
                                   onClick={() => setEditMarketId(market.id)}
+                                  aria-label="Edit"
                                   data-testid={`button-edit-market-${market.id}`}
                                 >
                                   <Pencil className="h-4 w-4" />
@@ -3357,6 +3364,7 @@ export default function AdminDashboard() {
                                       onClick={() => {
                                         setSettleMarketId(market.id);
                                       }}
+                                      aria-label="Settle"
                                       data-testid={`button-settle-${market.id}`}
                                     >
                                       <Gavel className="h-4 w-4" />
@@ -3365,6 +3373,7 @@ export default function AdminDashboard() {
                                       variant="ghost" 
                                       size="icon"
                                       onClick={() => setVoidMarketId(market.id)}
+                                      aria-label="Void"
                                       data-testid={`button-void-${market.id}`}
                                     >
                                       <XCircle className="h-4 w-4 text-destructive" />
@@ -3447,8 +3456,8 @@ export default function AdminDashboard() {
                                     <SelectItem value="archived">Archived</SelectItem>
                                   </SelectContent>
                                 </Select>
-                                <Button variant="ghost" size="icon" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
-                                {market.status === "OPEN" && <Button variant="ghost" size="icon" onClick={() => settleNativeMarketMutation.mutate({ id: market.id })}><Gavel className="h-4 w-4" /></Button>}
+                                <Button variant="ghost" size="icon" aria-label="Toggle featured" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
+                                {market.status === "OPEN" && <Button variant="ghost" size="icon" aria-label="Settle" onClick={() => settleNativeMarketMutation.mutate({ id: market.id })}><Gavel className="h-4 w-4" /></Button>}
                               </div>
                             </div>
                           ))}
@@ -3552,8 +3561,8 @@ export default function AdminDashboard() {
                                     <SelectItem value="archived">Archived</SelectItem>
                                   </SelectContent>
                                 </Select>
-                                <Button variant="ghost" size="icon" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
-                                <Button variant="ghost" size="icon" onClick={() => deleteNativeMarketMutation.mutate(market.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                                <Button variant="ghost" size="icon" aria-label="Toggle featured" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
+                                <Button variant="ghost" size="icon" aria-label="Delete" onClick={() => deleteNativeMarketMutation.mutate(market.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                               </div>
                             </div>
                           ))}
@@ -3620,9 +3629,9 @@ export default function AdminDashboard() {
                                     <SelectItem value="archived">Archived</SelectItem>
                                   </SelectContent>
                                 </Select>
-                                <Button variant="ghost" size="icon" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
-                                {market.status === "OPEN" && <Button variant="ghost" size="icon" onClick={() => settleNativeMarketMutation.mutate({ id: market.id })}><Gavel className="h-4 w-4" /></Button>}
-                                <Button variant="ghost" size="icon" onClick={() => deleteNativeMarketMutation.mutate(market.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                                <Button variant="ghost" size="icon" aria-label="Toggle featured" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
+                                {market.status === "OPEN" && <Button variant="ghost" size="icon" aria-label="Settle" onClick={() => settleNativeMarketMutation.mutate({ id: market.id })}><Gavel className="h-4 w-4" /></Button>}
+                                <Button variant="ghost" size="icon" aria-label="Delete" onClick={() => deleteNativeMarketMutation.mutate(market.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                               </div>
                             </div>
                           ))}
@@ -3689,9 +3698,9 @@ export default function AdminDashboard() {
                                     <SelectItem value="archived">Archived</SelectItem>
                                   </SelectContent>
                                 </Select>
-                                <Button variant="ghost" size="icon" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
-                                {market.status === "OPEN" && <Button variant="ghost" size="icon" onClick={() => settleNativeMarketMutation.mutate({ id: market.id })}><Gavel className="h-4 w-4" /></Button>}
-                                <Button variant="ghost" size="icon" onClick={() => deleteNativeMarketMutation.mutate(market.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                                <Button variant="ghost" size="icon" aria-label="Toggle featured" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
+                                {market.status === "OPEN" && <Button variant="ghost" size="icon" aria-label="Settle" onClick={() => settleNativeMarketMutation.mutate({ id: market.id })}><Gavel className="h-4 w-4" /></Button>}
+                                <Button variant="ghost" size="icon" aria-label="Delete" onClick={() => deleteNativeMarketMutation.mutate(market.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                               </div>
                             </div>
                           ))}
@@ -4023,6 +4032,7 @@ export default function AdminDashboard() {
                                     });
                                   }}
                                   title="Archive"
+                                  aria-label="Archive"
                                   data-testid={`button-archive-poll-${poll.id}`}
                                 >
                                   <Ban className="h-4 w-4" />
@@ -4032,6 +4042,7 @@ export default function AdminDashboard() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => openEditPoll(poll)}
+                                aria-label="Edit"
                                 data-testid={`button-edit-poll-${poll.id}`}
                               >
                                 <Edit className="h-4 w-4" />
@@ -4044,6 +4055,7 @@ export default function AdminDashboard() {
                                   setDeleteTarget({ type: "poll", id: poll.id, name: poll.headline });
                                   setShowDeleteConfirm(true);
                                 }}
+                                aria-label="Delete"
                                 data-testid={`button-delete-poll-${poll.id}`}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -4166,6 +4178,7 @@ export default function AdminDashboard() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => openEditOpinionPoll(poll)}
+                                aria-label="Edit"
                                 data-testid={`button-edit-opinion-poll-${poll.id}`}
                               >
                                 <Edit className="h-4 w-4" />
@@ -4178,6 +4191,7 @@ export default function AdminDashboard() {
                                   setDeleteTarget({ type: "opinion-poll", id: poll.id, name: poll.title });
                                   setShowDeleteConfirm(true);
                                 }}
+                                aria-label="Delete"
                                 data-testid={`button-delete-opinion-poll-${poll.id}`}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -4285,6 +4299,7 @@ export default function AdminDashboard() {
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => openEditMatchup(matchup)}
+                                aria-label="Edit"
                                 data-testid={`button-edit-matchup-${matchup.id}`}
                               >
                                 <Edit className="h-4 w-4" />
@@ -4297,6 +4312,7 @@ export default function AdminDashboard() {
                                   setDeleteTarget({ type: "matchup", id: matchup.id, name: matchup.title || `${matchup.optionAText} vs ${matchup.optionBText}` });
                                   setShowDeleteConfirm(true);
                                 }}
+                                aria-label="Delete"
                                 data-testid={`button-delete-matchup-${matchup.id}`}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -4401,6 +4417,7 @@ export default function AdminDashboard() {
                                 setDeleteTarget({ type: "insight", id: insight.id, name: "this insight" });
                                 setShowDeleteConfirm(true);
                               }}
+                              aria-label="Delete"
                               data-testid={`button-delete-insight-${insight.id}`}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -4453,6 +4470,7 @@ export default function AdminDashboard() {
                                 setDeleteTarget({ type: "comment", id: comment.id, name: "this comment" });
                                 setShowDeleteConfirm(true);
                               }}
+                              aria-label="Delete"
                               data-testid={`button-delete-comment-${comment.id}`}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -5902,6 +5920,7 @@ export default function AdminDashboard() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setMatchupForm({ ...matchupForm, personAId: "" })}
+                      aria-label="Clear selection"
                       data-testid="button-clear-option-a"
                     >
                       <X className="h-4 w-4" />
@@ -5978,6 +5997,7 @@ export default function AdminDashboard() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setMatchupForm({ ...matchupForm, personBId: "" })}
+                      aria-label="Clear selection"
                       data-testid="button-clear-option-b"
                     >
                       <X className="h-4 w-4" />
@@ -6320,6 +6340,7 @@ export default function AdminDashboard() {
                             newInputs[idx] = "";
                             setOpOptionSearchInputs(newInputs);
                           }}
+                          aria-label="Clear celebrity"
                           data-testid={`button-clear-opinion-option-celebrity-${idx}`}
                         >
                           <X className="h-3 w-3" />
@@ -6334,7 +6355,7 @@ export default function AdminDashboard() {
                               onClick={() => selectCelebrityForOption(idx, celeb)}
                               data-testid={`option-celebrity-result-${idx}-${celeb.id}`}
                             >
-                              {celeb.avatar && <img src={celeb.avatar} alt="" className="w-5 h-5 rounded-full" />}
+                              {celeb.avatar && <img src={celeb.avatar} alt={celeb.name} className="w-5 h-5 rounded-full" />}
                               <span>{celeb.name}</span>
                             </button>
                           ))}
@@ -6348,6 +6369,7 @@ export default function AdminDashboard() {
                       variant="ghost"
                       size="icon"
                       onClick={() => removeOpinionOption(idx)}
+                      aria-label="Remove option"
                       data-testid={`button-remove-opinion-option-${idx}`}
                     >
                       <X className="h-4 w-4" />
@@ -6521,6 +6543,7 @@ export default function AdminDashboard() {
                       variant="ghost"
                       size="icon"
                       onClick={clearCelebrity}
+                      aria-label="Clear celebrity"
                       data-testid="button-clear-celebrity"
                     >
                       <X className="h-4 w-4" />
@@ -6548,7 +6571,7 @@ export default function AdminDashboard() {
                         onMouseDown={(e) => { e.preventDefault(); selectCelebrity(celeb); }}
                         data-testid={`celebrity-option-${celeb.id}`}
                       >
-                        {celeb.avatar && <img src={celeb.avatar} alt="" className="h-6 w-6 rounded object-cover" />}
+                        {celeb.avatar && <img src={celeb.avatar} alt={celeb.name} className="h-6 w-6 rounded object-cover" />}
                         <span>{celeb.name}</span>
                         <span className="text-xs text-muted-foreground ml-auto">{celeb.category}</span>
                       </button>

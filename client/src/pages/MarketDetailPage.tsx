@@ -520,7 +520,7 @@ export default function MarketDetailPage() {
         <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
           <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={() => window.history.back()} data-testid="button-back">
+              <Button variant="ghost" size="icon" onClick={() => window.history.back()} aria-label="Go back" data-testid="button-back">
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <Link href="/">
@@ -554,7 +554,7 @@ export default function MarketDetailPage() {
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => window.history.back()} data-testid="button-back">
+            <Button variant="ghost" size="icon" onClick={() => window.history.back()} aria-label="Go back" data-testid="button-back">
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <Link href="/">

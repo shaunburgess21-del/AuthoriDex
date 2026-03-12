@@ -53,6 +53,7 @@ export default function MePage() {
                 }
               }}
               className="md:hidden"
+              aria-label="Go back"
               data-testid="button-back"
             >
               <ArrowLeft className="h-5 w-5" />

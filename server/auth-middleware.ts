@@ -35,7 +35,6 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
     req.userEmail = user.email || undefined;
     req.userRole = user.user_metadata?.role || 'user';
 
-    console.log(`User ${user.email} authenticated. Role: ${req.userRole}`); // Debug log
 
     next();
   } catch (error) {
@@ -55,7 +54,6 @@ export async function requireAdmin(req: AuthRequest, res: Response, next: NextFu
   }
 
   if (req.userRole !== 'admin') {
-    console.log(`Blocked access to admin route for user ${req.userId} (Role: ${req.userRole})`);
     return res.status(403).json({ error: "Forbidden - Admins only" });
   }
 

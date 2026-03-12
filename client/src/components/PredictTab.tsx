@@ -803,7 +803,7 @@ function ViewAllCommunityOverlay({
               <h2 className="text-lg font-serif font-bold">Real-World Predictions</h2>
               <p className="text-sm text-muted-foreground">{filteredMarkets.length} predictions about {personName}</p>
             </div>
-            <Button variant="ghost" size="icon" onClick={onClose} className="relative z-20" data-testid="button-close-community-overlay">
+            <Button variant="ghost" size="icon" onClick={onClose} className="relative z-20" aria-label="Close" data-testid="button-close-community-overlay">
               <X className="h-5 w-5" />
             </Button>
           </div>
@@ -869,7 +869,7 @@ function SectionHeader({
             {infoTooltip && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-6 w-6">
+                  <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Help">
                     <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
                   </Button>
                 </TooltipTrigger>

@@ -79,12 +79,6 @@ export function PlatformBlock({ platform, insights, followerCount, followerLabel
   const Icon = config.icon;
 
   const handleInsightClick = (insight: PlatformInsight) => {
-    // Log telemetry event
-    console.log('[Telemetry] ui.insight_modal_open', { 
-      personId,
-      platform, 
-      insightKey: insight.insightType 
-    });
     setSelectedInsight(insight);
   };
 

@@ -53,14 +53,7 @@ export function InsightModal({
   platform,
   personId
 }: InsightModalProps) {
-  const handleViewOriginalClick = (rank: number) => {
-    // Log telemetry event
-    console.log('[Telemetry] ui.insight_post_open', { 
-      personId,
-      platform, 
-      insightKey: insightType,
-      rank 
-    });
+  const handleViewOriginalClick = (_rank: number) => {
   };
 
   return (

@@ -115,9 +115,6 @@ export function SentimentVotingWidget({
         detail: { personId, value } 
       }));
       
-      // Log telemetry event
-      console.log('[Telemetry] ui.vote_submitted', { personId, value });
-      
       // Show feedback message
       setShowFeedback(true);
       setTimeout(() => setShowFeedback(false), 3000);
@@ -145,7 +142,6 @@ export function SentimentVotingWidget({
     const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100));
     const value = Math.max(1, Math.min(10, positionToValue(percentage)));
     
-    console.log('[SentimentSlider] Click detected, value:', value);
     handleVote(value);
   };
 

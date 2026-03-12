@@ -297,7 +297,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Manual seeding endpoint for testing
-  app.post("/api/admin/seed-supabase", async (req, res) => {
+  app.post("/api/admin/seed-supabase", requireAuth, requireAdmin, async (req, res) => {
     try {
       const result = await seedSupabasePersons();
       
@@ -319,7 +319,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Run data ingestion - fetches real data from Wikipedia and GDELT
-  app.post("/api/admin/ingest", async (req, res) => {
+  app.post("/api/admin/ingest", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { runDataIngestion } = await import("./jobs/ingest");
       const result = await runDataIngestion();
@@ -335,7 +335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Seed historical trend data for graphs
-  app.post("/api/admin/seed-history", async (req, res) => {
+  app.post("/api/admin/seed-history", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { seedHistoricalSnapshots } = await import("./jobs/seed-history");
       const { days = 7 } = req.body;
@@ -7342,7 +7342,8 @@ Only return the JSON object.`;
           if (!authHeader?.startsWith('Bearer ')) return null;
           const token = authHeader.split(' ')[1];
           const jwt = require('jsonwebtoken');
-          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'authoridex-secret-key');
+          if (!process.env.JWT_SECRET) return null;
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
           return (decoded as any).userId || null;
         } catch { return null; }
       })();
@@ -7882,8 +7883,8 @@ Only return the JSON object.`;
     if (cronCallLog.length > CRON_CALL_LOG_MAX) cronCallLog.shift();
 
     if (!cronSecret) {
-      console.warn('[Cron] Warning: CRON_SECRET not set. Cron endpoints are unprotected.');
-      return next();
+      console.warn('[Cron] CRON_SECRET not set. Rejecting request.');
+      return res.status(503).json({ error: 'Service unavailable: CRON_SECRET not configured' });
     }
     
     if (!authHeader || authHeader !== `Bearer ${cronSecret}`) {
@@ -7979,12 +7980,10 @@ Only return the JSON object.`;
     }
   });
   
-  app.get("/api/cron/health", (req, res) => {
+  app.get("/api/cron/health", verifyCronSecret, (req, res) => {
     res.json({
       status: "ok",
       serverTime: new Date().toISOString(),
-      cronSecretConfigured: !!process.env.CRON_SECRET,
-      recentCalls: cronCallLog.slice(-10),
     });
   });
 

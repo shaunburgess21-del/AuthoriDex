@@ -217,6 +217,7 @@ export function AdminInductionQueue() {
                                 className="text-emerald-400"
                                 onClick={() => approveMutation.mutate(candidate.id)}
                                 disabled={approveMutation.isPending}
+                                aria-label="Approve"
                                 data-testid={`button-approve-${candidate.id}`}
                               >
                                 <Check className="h-4 w-4" />
@@ -227,6 +228,7 @@ export function AdminInductionQueue() {
                                 className="text-red-400"
                                 onClick={() => rejectMutation.mutate(candidate.id)}
                                 disabled={rejectMutation.isPending}
+                                aria-label="Reject"
                                 data-testid={`button-reject-${candidate.id}`}
                               >
                                 <X className="h-4 w-4" />
@@ -237,6 +239,7 @@ export function AdminInductionQueue() {
                             size="icon"
                             variant="ghost"
                             onClick={() => openEdit(candidate)}
+                            aria-label="Edit"
                             data-testid={`button-edit-${candidate.id}`}
                           >
                             <Edit2 className="h-4 w-4" />
@@ -247,6 +250,7 @@ export function AdminInductionQueue() {
                             className="text-red-400"
                             onClick={() => deleteMutation.mutate(candidate.id)}
                             disabled={deleteMutation.isPending}
+                            aria-label="Delete"
                             data-testid={`button-delete-${candidate.id}`}
                           >
                             <Trash2 className="h-4 w-4" />

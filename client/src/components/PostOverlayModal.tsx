@@ -269,6 +269,7 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
                       ? "text-green-500 bg-green-500/10" 
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   } ${!user ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                  aria-label="Upvote comment"
                   data-testid={`button-overlay-comment-upvote-${comment.id}`}
                 >
                   <ThumbsUp className={`h-4 w-4 ${commentVote === "up" ? "fill-current" : ""}`} />
@@ -288,6 +289,7 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
                       ? "text-red-500 bg-red-500/10" 
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   } ${!user ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                  aria-label="Downvote comment"
                   data-testid={`button-overlay-comment-downvote-${comment.id}`}
                 >
                   <ThumbsDown className={`h-4 w-4 ${commentVote === "down" ? "fill-current" : ""}`} />
@@ -297,6 +299,7 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
                   <button
                     onClick={() => startReply(comment)}
                     className="flex items-center gap-1 ml-2 p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                    aria-label="Reply"
                     data-testid={`button-overlay-comment-reply-${comment.id}`}
                   >
                     <MessageCircle className="h-4 w-4" />
@@ -342,6 +345,7 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
                         size="icon"
                         onClick={() => handleSubmitReply(comment.id)}
                         disabled={createCommentMutation.isPending || !replyContent.trim()}
+                        aria-label="Submit reply"
                       >
                         {createCommentMutation.isPending ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -356,6 +360,7 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
                           setReplyingTo(null);
                           setReplyContent("");
                         }}
+                        aria-label="Cancel reply"
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -393,6 +398,7 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
             size="icon"
             onClick={onClose}
             className="h-8 w-8"
+            aria-label="Close"
             data-testid="button-close-overlay"
           >
             <X className="h-5 w-5" />
@@ -438,6 +444,7 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
                       ? "text-green-500 bg-green-500/10" 
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   } ${!user ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                  aria-label="Upvote"
                   data-testid="button-overlay-upvote"
                 >
                   <ThumbsUp className={`h-5 w-5 ${userVote === "up" ? "fill-current" : ""}`} />
@@ -457,6 +464,7 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
                       ? "text-red-500 bg-red-500/10" 
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   } ${!user ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                  aria-label="Downvote"
                   data-testid="button-overlay-downvote"
                 >
                   <ThumbsDown className={`h-5 w-5 ${userVote === "down" ? "fill-current" : ""}`} />
@@ -497,6 +505,7 @@ export function PostOverlayModal({ insight, isOpen, onClose, userVote, onVote }:
                     size="icon"
                     onClick={handleSubmitComment}
                     disabled={createCommentMutation.isPending || !newComment.trim()}
+                    aria-label="Submit comment"
                     data-testid="button-overlay-submit-comment"
                   >
                     {createCommentMutation.isPending ? (

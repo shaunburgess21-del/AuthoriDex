@@ -4,7 +4,7 @@ import { eq, and, gt, sql } from "drizzle-orm";
 import pLimit from "p-limit";
 
 const MEDIASTACK_API_KEY = process.env.MEDIASTACK_API_KEY;
-const MEDIASTACK_BASE_URL = "http://api.mediastack.com/v1/news";
+const MEDIASTACK_BASE_URL = "https://api.mediastack.com/v1/news";
 
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 3000;

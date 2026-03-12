@@ -1,5 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startSnapshotScheduler } from "./jobs/snapshot-scheduler";
@@ -360,6 +362,21 @@ function startSeedEngineScheduler() {
 
 const app = express();
 app.set('trust proxy', 1);
+
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later." },
+});
+app.use("/api/", apiLimiter);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 

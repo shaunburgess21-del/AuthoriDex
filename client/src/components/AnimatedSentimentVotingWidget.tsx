@@ -270,20 +270,12 @@ export function AnimatedSentimentVotingWidget({
 
         if (error) {
           console.error('Error saving vote to Supabase:', error);
-        } else {
-          console.log('Vote saved to Supabase');
         }
       } catch (error) {
         console.error('Error connecting to Supabase:', error);
       }
     }
     
-    console.log('[Telemetry] ui.vote_submitted', { 
-      personId, 
-      value: currentValue,
-      zone: getZoneLabel(currentValue),
-      savedToSupabase: !!user
-    });
     
   };
 

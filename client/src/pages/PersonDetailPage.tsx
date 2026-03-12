@@ -429,7 +429,7 @@ function OpinionPollCardProfile({
                 data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
               >
                 {option.imageUrl ? (
-                  <img src={option.imageUrl} alt="" className="w-10 h-10 rounded-md object-cover shrink-0" />
+                  <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0" />
                 ) : (
                   <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
                     <ListChecks className="h-4 w-4 text-cyan-400" />
@@ -468,7 +468,7 @@ function OpinionPollCardProfile({
                   />
                   <div className="relative flex items-center gap-2.5">
                     {option.imageUrl ? (
-                      <img src={option.imageUrl} alt="" className="w-10 h-10 rounded-md object-cover shrink-0" />
+                      <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0" />
                     ) : (
                       <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
                         <ListChecks className="h-4 w-4 text-cyan-400" />
@@ -840,7 +840,7 @@ function ViewAllPollsOverlay({
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-serif font-bold text-xl">{title}</h2>
-            <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-polls-overlay">
+            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close" data-testid="button-close-polls-overlay">
               <X className="h-5 w-5" />
             </Button>
           </div>
@@ -1263,6 +1263,7 @@ export default function PersonDetailPage() {
                   setLocation("/");
                 }
               }}
+              aria-label="Go back"
               data-testid="button-back"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -1326,7 +1327,7 @@ export default function PersonDetailPage() {
                   )}
                 </div>
                 <div className="flex flex-row gap-2">
-                  <Button variant="outline" size="icon" className="sm:hidden" onClick={() => sharePage(`${person.name} on AuthoriDex`)} data-testid="button-share-mobile">
+                  <Button variant="outline" size="icon" className="sm:hidden" onClick={() => sharePage(`${person.name} on AuthoriDex`)} aria-label="Share" data-testid="button-share-mobile">
                     <Share2 className="h-4 w-4" />
                   </Button>
                   <Button
@@ -1335,6 +1336,7 @@ export default function PersonDetailPage() {
                     className="sm:hidden"
                     onClick={handleToggleFavorite}
                     disabled={favoriteLoading}
+                    aria-label={isFavorited ? "Remove from favorites" : "Add to favorites"}
                     data-testid="button-favorite-mobile"
                   >
                     <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
@@ -1662,7 +1664,7 @@ export default function PersonDetailPage() {
                   </div>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" data-testid="button-curate-info">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Help" data-testid="button-curate-info">
                         <HelpCircle className="h-4 w-4 text-muted-foreground" />
                       </Button>
                     </TooltipTrigger>

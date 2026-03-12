@@ -130,6 +130,7 @@ export function UploadImageInput({
           size="icon"
           disabled={disabled || uploading}
           onClick={() => fileInputRef.current?.click()}
+          aria-label="Upload image"
           data-testid="button-upload-image"
         >
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -141,6 +142,7 @@ export function UploadImageInput({
             size="icon"
             onClick={handleClear}
             disabled={disabled || uploading}
+            aria-label="Clear image"
             data-testid="button-clear-image"
           >
             <X className="h-4 w-4" />

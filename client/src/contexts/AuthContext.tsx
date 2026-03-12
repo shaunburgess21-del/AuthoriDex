@@ -59,8 +59,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (syncResponse.ok) {
           const profileData = await syncResponse.json();
-          console.log("[AuthContext] Profile Synced from /api/profile/sync:", profileData);
-          console.log("[AuthContext] Role received:", profileData?.role, "| isAdmin will be:", profileData?.role === "admin");
           setProfile(profileData);
           return;
         }
@@ -73,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
       
-      console.warn("[AuthContext] Profile sync failed after retries:", lastError);
+      console.error("[AuthContext] Profile sync failed after retries:", lastError);
     } catch (error) {
       console.error("Error syncing profile:", error);
     } finally {
@@ -94,12 +92,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (response.ok) {
         const profileData = await response.json();
-        console.log("[AuthContext] Profile Fetched from /api/profile/me:", profileData);
-        console.log("[AuthContext] Role received:", profileData?.role, "| isAdmin will be:", profileData?.role === "admin");
         setProfile(profileData);
       } else if (response.status === 404) {
-        // Profile doesn't exist, sync it
-        console.log("[AuthContext] Profile not found (404), triggering sync...");
         await syncProfile(accessToken);
       }
     } catch (error) {

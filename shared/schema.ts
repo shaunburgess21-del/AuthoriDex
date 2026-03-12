@@ -7,9 +7,12 @@ import { relations } from "drizzle-orm";
 export const contentStatusEnum = pgEnum("content_status", ["draft", "live", "archived"]);
 export const marketOutcomeEnum = pgEnum("market_outcome", ["yes", "no"]);
 
+// NOTE: Auth is handled by Supabase. The password field is legacy and unused — do not read or write it.
+// This table is still used for gamification (XP, credits, streaks). Plan a migration to drop the password column.
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
+  /** @deprecated Legacy field — auth is handled by Supabase. Never read or write this. */
   password: text("password").notNull(),
   email: text("email").unique(),
   walletAddress: text("wallet_address"),
@@ -23,7 +26,6 @@ export const users = pgTable("users", {
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
-  password: true,
   email: true,
 });
 

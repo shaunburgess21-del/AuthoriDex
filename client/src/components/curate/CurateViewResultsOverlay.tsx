@@ -82,6 +82,7 @@ export function CurateViewResultsOverlay({
                 variant="ghost"
                 size="icon"
                 onClick={onBack}
+                aria-label="Go back"
                 data-testid="button-back-from-results"
               >
                 <ChevronLeft className="h-5 w-5" />
@@ -102,6 +103,7 @@ export function CurateViewResultsOverlay({
             variant="ghost"
             size="icon"
             onClick={onClose}
+            aria-label="Close"
             data-testid="button-close-view-results"
           >
             <X className="h-5 w-5" />
@@ -150,6 +152,7 @@ export function CurateViewResultsOverlay({
                     <button
                       onClick={() => setExpandedImage(image)}
                       className="relative h-16 w-16 rounded-lg overflow-hidden shrink-0 group cursor-pointer border border-slate-700/50 hover:border-cyan-500/50 transition-colors"
+                      aria-label={`Expand ${person.name} photo ${idx + 1}`}
                       data-testid={`button-expand-image-${image.id}`}
                     >
                       <img 
@@ -225,6 +228,7 @@ export function CurateViewResultsOverlay({
               size="icon"
               className="absolute top-4 right-4 text-white hover:bg-white/10"
               onClick={() => setExpandedImage(null)}
+              aria-label="Close lightbox"
               data-testid="button-close-lightbox"
             >
               <X className="h-6 w-6" />

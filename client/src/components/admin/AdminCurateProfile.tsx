@@ -100,7 +100,10 @@ export function AdminCurateProfile() {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('source', 'admin_upload');
-      const token = localStorage.getItem("auth_token");
+      const { getSupabase } = await import("@/lib/supabase");
+      const supabase = await getSupabase();
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
       const res = await fetch(`/api/admin/vote/curate-profile/${editingCard.id}/images`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},

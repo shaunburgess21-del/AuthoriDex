@@ -114,8 +114,10 @@ export default function PollDetailPage() {
     queryKey: ["/api/polls", slug],
     queryFn: async () => {
       const headers: Record<string, string> = {};
-      const token = localStorage.getItem("auth_token");
-      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const { getSupabase } = await import("@/lib/supabase");
+      const supabase = await getSupabase();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
       const res = await fetch(`/api/polls/${slug}`, { headers });
       if (!res.ok) throw new Error("Poll not found");
       return res.json();

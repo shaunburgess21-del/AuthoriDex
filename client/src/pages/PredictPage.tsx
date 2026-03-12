@@ -441,6 +441,7 @@ function SectionHeader({
                 size="icon" 
                 className="h-7 w-7"
                 onClick={onRulesClick}
+                aria-label="How it works"
                 data-testid={`button-rules-${title.toLowerCase().replace(/\s+/g, '-')}`}
               >
                 <HelpCircle className="h-4 w-4 text-violet-500" />
@@ -1443,7 +1444,7 @@ function FullScreenOverlay({
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-serif font-bold text-xl">{title}</h2>
-            <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-overlay">
+            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close" data-testid="button-close-overlay">
               <X className="h-5 w-5" />
             </Button>
           </div>
@@ -2173,6 +2174,7 @@ export default function PredictPage() {
                 }
               }}
               className="md:hidden"
+              aria-label="Go back"
               data-testid="button-back"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -2267,6 +2269,7 @@ export default function PredictPage() {
                       size="icon" 
                       className="h-7 w-7"
                       onClick={() => setRulesModalOpen("community")}
+                      aria-label="How it works"
                       data-testid="button-rules-real-world-markets"
                     >
                       <HelpCircle className="h-4 w-4 text-violet-500" />

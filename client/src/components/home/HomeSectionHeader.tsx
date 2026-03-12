@@ -58,6 +58,7 @@ export function HomeSectionHeader({
               variant="ghost"
               size="icon"
               onClick={() => setHelpOpen(true)}
+              aria-label="Help"
               data-testid={`button-help-${testId}`}
             >
               <HelpCircle className="h-3.5 w-3.5" />
