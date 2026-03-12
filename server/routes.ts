@@ -7,7 +7,7 @@ import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insight
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
-import { requireAuth, requireAdmin as requireAdminAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
+import { requireAuth, requireAdmin, optionalAuth, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
 import { createHash, randomUUID } from "crypto";
 import multer from "multer";
@@ -297,7 +297,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Manual seeding endpoint for testing
-  app.post("/api/admin/seed-supabase", requireAuth, requireAdminAuth, async (req, res) => {
+  app.post("/api/admin/seed-supabase", requireAuth, requireAdmin, async (req, res) => {
     try {
       const result = await seedSupabasePersons();
       
@@ -319,7 +319,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Run data ingestion - fetches real data from Wikipedia and GDELT
-  app.post("/api/admin/ingest", requireAuth, requireAdminAuth, async (req, res) => {
+  app.post("/api/admin/ingest", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { runDataIngestion } = await import("./jobs/ingest");
       const result = await runDataIngestion();
@@ -335,7 +335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Seed historical trend data for graphs
-  app.post("/api/admin/seed-history", requireAuth, requireAdminAuth, async (req, res) => {
+  app.post("/api/admin/seed-history", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { seedHistoricalSnapshots } = await import("./jobs/seed-history");
       const { days = 7 } = req.body;
@@ -4220,11 +4220,7 @@ Only return the JSON object.`;
 
   // ==================== PROFILE ENDPOINTS ====================
   
-  // Admin emails that get special privileges
-  const ADMIN_EMAILS = ["shaun.burgess21@gmail.com", "andrewdburgess001@gmail.com"];
-  
   // Sync profile after Supabase auth - creates profile if doesn't exist
-  // Implements admin backdoor for specific emails
   app.post("/api/profile/sync", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
@@ -4264,27 +4260,14 @@ Only return the JSON object.`;
         if (fullName && !existing[0].fullName) updateData.fullName = fullName;
         if (avatarUrl && !existing[0].avatarUrl) updateData.avatarUrl = avatarUrl;
         
-        // Check if this is an admin email but profile doesn't have admin role yet
-        // This handles the case where admin was manually set in DB or backdoor wasn't applied
-        const shouldBeAdmin = email && ADMIN_EMAILS.includes(email.toLowerCase());
-        if (shouldBeAdmin && existing[0].role !== "admin") {
-          updateData.role = "admin";
-          updateData.rank = "Hall of Famer";
-          updateData.xpPoints = Math.max(existing[0].xpPoints, 100000);
-          console.log(`[Profile] Upgrading ${email} to admin role via sync backdoor`);
-        }
-        
         await db.update(profiles).set(updateData).where(eq(profiles.id, userId));
         const updated = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-        
-        // Debug logging for sync
-        console.log(`[Profile] /api/profile/sync - User: ${userId}, Email: ${email}, Role: ${updated[0].role}`);
-        
+        await gamificationService.ensureLegacyUserShadow(userId);
+
         return res.json(updated[0]);
       }
       
       // Create new profile
-      const isAdmin = email && ADMIN_EMAILS.includes(email.toLowerCase());
       const username = email ? email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "") + Math.floor(Math.random() * 1000) : `user${Date.now()}`;
       
       const newProfile = {
@@ -4293,9 +4276,9 @@ Only return the JSON object.`;
         fullName,
         avatarUrl,
         isPublic: true,
-        role: isAdmin ? "admin" : "user",
-        rank: isAdmin ? "Hall of Famer" : "Citizen",
-        xpPoints: isAdmin ? 100000 : 0, // Admin starts with high XP
+        role: "user",
+        rank: "Citizen",
+        xpPoints: 0,
         predictCredits: 1000,
         currentStreak: 0,
         totalVotes: 0,
@@ -4316,9 +4299,8 @@ Only return the JSON object.`;
         idempotencyKey: `initial_grant_${userId}`,
         metadata: { reason: 'New account signup bonus' },
       }).onConflictDoNothing();
-      
-      console.log(`Created profile for ${email} - Role: ${newProfile.role}, Rank: ${newProfile.rank}`);
-      
+      await gamificationService.ensureLegacyUserShadow(userId);
+
       res.json(newProfile);
     } catch (error: any) {
       console.error("Error syncing profile:", error.message);
@@ -4335,9 +4317,6 @@ Only return the JSON object.`;
       if (profile.length === 0) {
         return res.status(404).json({ error: "Profile not found. Please sync your profile first." });
       }
-      
-      // Debug logging for admin access issues
-      console.log(`[Profile] /api/profile/me - User: ${userId}, Role: ${profile[0].role}, Username: ${profile[0].username}`);
       
       res.json(profile[0]);
     } catch (error: any) {
@@ -4374,6 +4353,7 @@ Only return the JSON object.`;
       
       await db.update(profiles).set(updateData).where(eq(profiles.id, userId));
       const updated = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+      await gamificationService.ensureLegacyUserShadow(userId);
       
       res.json(updated[0]);
     } catch (error: any) {
@@ -4677,67 +4657,6 @@ Only return the JSON object.`;
   // ==================
   // Admin Endpoints
   // ==================
-  
-  // Helper middleware to check admin status with VERBOSE debugging
-  const requireAdmin = async (req: AuthRequest, res: any, next: any) => {
-    try {
-      const userId = req.userId;
-      console.log(`\n========== ADMIN ACCESS CHECK ==========`);
-      console.log(`[requireAdmin] Step 1 - UserId from request: ${userId}`);
-      
-      if (!userId) {
-        console.log(`[requireAdmin] FAIL - No userId in request`);
-        return res.status(401).json({ error: "Authentication required" });
-      }
-
-      // Check 1: Look at the Profiles table (Database)
-      const profile = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-      const dbRole = profile.length > 0 ? profile[0].role : "NO_PROFILE_FOUND";
-      const isDbAdmin = profile.length > 0 && profile[0].role === "admin";
-      console.log(`[requireAdmin] Step 2 - Database profile found: ${profile.length > 0}`);
-      console.log(`[requireAdmin] Step 3 - DB Role value: "${dbRole}" (type: ${typeof dbRole})`);
-      console.log(`[requireAdmin] Step 4 - isDbAdmin check (role === "admin"): ${isDbAdmin}`);
-
-      // Check 2: Look at Supabase Auth Metadata (with fallback to JWT email)
-      let authEmail = (req as AuthRequest).userEmail || "NO_EMAIL";
-      let isAuthAdmin = false;
-      
-      try {
-        const { data: { user }, error: authError } = await supabaseServer.auth.admin.getUserById(userId);
-        if (!authError && user) {
-          authEmail = user.email || authEmail;
-          isAuthAdmin = user.user_metadata?.role === 'admin';
-        } else {
-          console.log(`[requireAdmin] Admin API failed, using JWT email: ${authEmail}`);
-        }
-      } catch (adminErr: any) {
-        console.log(`[requireAdmin] Admin API error, using JWT email: ${authEmail}`, adminErr?.message);
-      }
-      
-      const authEmailLower = authEmail.toLowerCase();
-      
-      // Check against ADMIN_EMAILS list (case-insensitive)
-      const adminEmailsLower = ADMIN_EMAILS.map(e => e.toLowerCase());
-      const isInAdminList = adminEmailsLower.includes(authEmailLower);
-      
-      console.log(`[requireAdmin] SUMMARY: isDbAdmin=${isDbAdmin}, isAuthAdmin=${isAuthAdmin}, isInAdminList=${isInAdminList}, email=${authEmailLower}`);
-
-      // If ANY check passes, let them in
-      if (isDbAdmin || isAuthAdmin || isInAdminList) {
-        console.log(`[requireAdmin] ACCESS GRANTED - Reason: ${isDbAdmin ? "DB_ROLE" : isInAdminList ? "EMAIL_LIST" : "AUTH_METADATA"}`);
-        console.log(`==========================================\n`);
-        return next();
-      }
-
-      console.log(`[requireAdmin] ACCESS DENIED - No admin role or email match`);
-      console.log(`==========================================\n`);
-      return res.status(403).json({ error: "Admin access required" });
-    } catch (error: any) {
-      console.error("[requireAdmin] ERROR:", error.message);
-      console.log(`==========================================\n`);
-      res.status(500).json({ error: "Failed to verify admin status" });
-    }
-  };
   
   // Engine Health Diagnostics - comprehensive snapshot/ingestion health check
   app.get("/api/admin/engine-health", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
@@ -8759,13 +8678,22 @@ Only return the JSON object.`;
       const entryShare = entryPool / totalPool;
       const potentialPayout = Math.round(stakeAmount / Math.max(entryShare, 0.01));
 
-      const newBalance = profile.predictCredits - stakeAmount;
-
       const [bet] = await db.transaction(async (tx) => {
-        await tx
+        const [updatedProfile] = await tx
           .update(profiles)
-          .set({ predictCredits: newBalance })
-          .where(eq(profiles.id, authReq.userId!));
+          .set({
+            predictCredits: sql`${profiles.predictCredits} - ${stakeAmount}`,
+            totalPredictions: sql`${profiles.totalPredictions} + 1`,
+          })
+          .where(and(
+            eq(profiles.id, authReq.userId!),
+            sql`${profiles.predictCredits} >= ${stakeAmount}`
+          ))
+          .returning({ predictCredits: profiles.predictCredits });
+
+        if (!updatedProfile) {
+          throw new Error("Insufficient credits");
+        }
 
         const [insertedBet] = await tx
           .insert(marketBets)
@@ -8784,7 +8712,7 @@ Only return the JSON object.`;
           txnType: 'prediction_stake',
           amount: -stakeAmount,
           walletType: 'VIRTUAL',
-          balanceAfter: newBalance,
+          balanceAfter: updatedProfile.predictCredits,
           source: 'user_action',
           idempotencyKey: `stake_${market.id}_${insertedBet.id}`,
           metadata: { marketId: market.id, entryId, betId: insertedBet.id },
@@ -8792,18 +8720,21 @@ Only return the JSON object.`;
 
         await tx
           .update(marketEntries)
-          .set({ totalStake: entry.totalStake + stakeAmount })
+          .set({ totalStake: sql`${marketEntries.totalStake} + ${stakeAmount}` })
           .where(eq(marketEntries.id, entryId));
 
-        return [insertedBet];
+        return [{ ...insertedBet, remainingCredits: updatedProfile.predictCredits }];
       });
 
       res.json({
         ...bet,
         potentialPayout,
-        remainingCredits: newBalance,
+        remainingCredits: bet.remainingCredits,
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.message === "Insufficient credits") {
+        return res.status(400).json({ error: "Insufficient credits" });
+      }
       console.error("[Open Markets] Bet error:", error);
       res.status(500).json({ error: "Failed to place bet" });
     }

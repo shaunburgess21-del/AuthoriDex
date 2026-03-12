@@ -1795,7 +1795,7 @@ function WeeklyJackpotHero({
 export default function PredictPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [showFirstTimeModal, setShowFirstTimeModal] = useState(false);
   const [selectedType, setSelectedType] = useState<PredictionType>("all");
   const [showMyPositions, setShowMyPositions] = useState(false);
@@ -1813,16 +1813,12 @@ export default function PredictPage() {
   const [gainerSearch, setGainerSearch] = useState("");
   const [communityCategory, setCommunityCategory] = useState<CategoryFilter>("all");
   const [communitySearch, setCommunitySearch] = useState("");
-  const [walletCredits, setWalletCredits] = useState(10000);
-  const [activePredictions, setActivePredictions] = useState(0);
   const [viewAllCategory, setViewAllCategory] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
-  const [predictedMarkets, setPredictedMarkets] = useState<Set<string>>(new Set());
-  const [shimmeringMarket, setShimmeringMarket] = useState<string | null>(null);
   
   const RULES_CONTENT: Record<string, { title: string; description: string; steps: { icon: React.ReactNode; title: string; description: string }[] }> = {
     updown: {
@@ -1913,6 +1909,29 @@ export default function PredictPage() {
     });
     return map;
   }, [userBetsData]);
+  const walletCredits = profile?.predictCredits ?? 0;
+  const activePredictions = useMemo(
+    () => Array.from(userBetsByMarket.values()).filter((bet) => bet.result === "pending").length,
+    [userBetsByMarket]
+  );
+  const predictedMarkets = useMemo(() => new Set(Array.from(userBetsByMarket.keys())), [userBetsByMarket]);
+  const showNativeMarketUnavailable = useCallback(() => {
+    if (!user) {
+      toast({
+        title: "Sign in required",
+        description: "Sign in to place predictions on live community markets.",
+      });
+      setLocation("/login");
+      return;
+    }
+
+    toast({
+      title: "Native markets are read-only",
+      description: "Only Real-World Markets persist bets right now. Native market staking is temporarily disabled.",
+      variant: "destructive",
+    });
+  }, [setLocation, toast, user]);
+
 
   const hydratedMarkets = useMemo((): PredictionMarket[] => {
     const dbMarkets = (nativeUpdownData || []).filter((m: any) => m.visibility === "live");
@@ -2039,85 +2058,35 @@ export default function PredictPage() {
 
   const handleEnterJackpot = () => {
     if (!selectedJackpotPerson) return;
-    setPendingSelection({
-      type: "jackpot",
-      choice: `Predict exact score for ${selectedJackpotPerson.name}`,
-      marketName: "Weekly Jackpot",
-      marketId: "jackpot",
-      startScore: selectedJackpotPerson.trendScore - Math.floor(selectedJackpotPerson.trendScore * 0.02),
-      currentScore: selectedJackpotPerson.trendScore,
-      crowdSentiment: 12,
-      estimatedPayout: 8.5
-    });
-    setStakeModalOpen(true);
+    showNativeMarketUnavailable();
   };
 
   const handleUpDownSelect = (market: PredictionMarket, choice: "up" | "down") => {
-    const crowdSentiment = choice === "up" ? market.upPoolPercent : (100 - market.upPoolPercent);
-    const estimatedPayout = choice === "up" ? market.upMultiplier : market.downMultiplier;
-    setPendingSelection({
-      type: "updown",
-      choice: choice === "up" ? "Trend Score UP" : "Trend Score DOWN",
-      marketName: market.personName,
-      marketId: market.id,
-      startScore: market.startScore,
-      currentScore: market.currentScore,
-      crowdSentiment,
-      estimatedPayout
-    });
-    setStakeModalOpen(true);
+    void market;
+    void choice;
+    showNativeMarketUnavailable();
   };
 
   const handleH2HSelect = (market: HeadToHeadMarket, person: 1 | 2) => {
-    const chosenPerson = person === 1 ? market.person1 : market.person2;
-    const crowdSentiment = person === 1 ? market.person1Percent : (100 - market.person1Percent);
-    const estimatedPayout = person === 1 ? (100 / market.person1Percent) : (100 / (100 - market.person1Percent));
-    setPendingSelection({
-      type: "h2h",
-      choice: chosenPerson.name,
-      marketName: market.title,
-      marketId: market.id,
-      currentScore: chosenPerson.currentScore,
-      crowdSentiment,
-      estimatedPayout: Math.round(estimatedPayout * 10) / 10
-    });
-    setStakeModalOpen(true);
+    void market;
+    void person;
+    showNativeMarketUnavailable();
   };
 
   const handleGainerSelect = (market: TopGainerMarket, name: string) => {
-    const leader = market.leaders.find(l => l.name === name);
-    const leaderIndex = market.leaders.findIndex(l => l.name === name);
-    const crowdSentiment = leaderIndex === 0 ? 45 : leaderIndex === 1 ? 32 : 23;
-    const estimatedPayout = Math.round((100 / crowdSentiment) * 10) / 10;
-    setPendingSelection({
-      type: "gainer",
-      choice: name,
-      marketName: `Top Gainer: ${market.category}`,
-      marketId: market.id,
-      currentScore: leader?.currentGain,
-      crowdSentiment,
-      estimatedPayout
-    });
-    setStakeModalOpen(true);
+    void market;
+    void name;
+    showNativeMarketUnavailable();
   };
 
   const handleConfirmStake = (amount: number) => {
-    const marketId = pendingSelection?.marketId;
-    
-    setWalletCredits(prev => prev - amount);
-    setActivePredictions(prev => prev + 1);
-    
-    if (marketId) {
-      setPredictedMarkets(prev => new Set(prev).add(marketId));
-      setShimmeringMarket(marketId);
-      setTimeout(() => setShimmeringMarket(null), 800);
-    }
-    
+    void amount;
     setStakeModalOpen(false);
     setPendingSelection(null);
     toast({
-      title: "Prediction placed!",
-      description: `You staked ${amount} credits.`,
+      title: "Native markets are read-only",
+      description: "Only Real-World Markets persist bets right now.",
+      variant: "destructive",
     });
   };
 
@@ -2501,7 +2470,7 @@ export default function PredictPage() {
                     isMarketClosed={isMarketClosed}
                     onSelect={(name) => handleGainerSelect(market, name)}
                     isPredicted={predictedMarkets.has(market.id)}
-                    isShimmering={shimmeringMarket === market.id}
+                    isShimmering={false}
                   />
                 ))}
               </CardSection>
@@ -2615,7 +2584,7 @@ export default function PredictPage() {
               isMarketClosed={isMarketClosed}
               onSelect={(name) => handleGainerSelect(market, name)}
               isPredicted={predictedMarkets.has(market.id)}
-              isShimmering={shimmeringMarket === market.id}
+              isShimmering={false}
             />
           ))}
       </FullScreenOverlay>

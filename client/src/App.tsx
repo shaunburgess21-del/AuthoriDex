@@ -32,6 +32,7 @@ function Router() {
     <Switch>
       <Route path="/" component={HomePage} />
       <Route path="/person/:id" component={PersonDetailPage} />
+      <Route path="/celebrity/:id" component={PersonDetailPage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/profile" component={UserProfilePage} />
       <Route path="/predict" component={PredictPage} />

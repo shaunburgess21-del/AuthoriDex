@@ -1,23 +1,17 @@
 import { db } from "../db";
 import { 
   users, 
+  profiles,
   xpLedger, 
   creditLedger, 
   xpActions, 
   ranks,
+  type Profile,
   type XpAction,
   type Rank
 } from "@shared/schema";
 import { eq, and, sql, gte, desc } from "drizzle-orm";
-
-export type Capability = 
-  | 'can_vote_sentiment'
-  | 'can_vote_matchup'
-  | 'can_vote_induction'
-  | 'can_vote_curation'
-  | 'can_post_insight'
-  | 'can_comment'
-  | 'can_predict';
+import { canAccessCapability, computeCreditBalance, type Capability } from "./gamification-utils";
 
 interface AwardXpResult {
   success: boolean;
@@ -46,11 +40,55 @@ interface UserStats {
   capabilities: Record<Capability, boolean>;
 }
 
+const LEGACY_PASSWORD_PREFIX = "supabase_managed:";
+
 class GamificationService {
   private xpActionsCache: Map<string, XpAction> = new Map();
   private ranksCache: Rank[] = [];
   private cacheExpiry: number = 0;
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  private async getProfile(userId: string): Promise<Profile | null> {
+    const [profile] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+    return profile ?? null;
+  }
+
+  private async syncLegacyUserShadow(profile: Profile): Promise<void> {
+    const username = profile.username || `user_${profile.id.slice(0, 8)}`;
+    const legacyValues = {
+      id: profile.id,
+      username,
+      password: `${LEGACY_PASSWORD_PREFIX}${profile.id}`,
+      email: null,
+      walletAddress: null,
+      xpPoints: profile.xpPoints,
+      reputationRank: profile.rank,
+      predictCredits: profile.predictCredits,
+      currentStreak: profile.currentStreak,
+      lastActiveAt: profile.lastActiveAt,
+      createdAt: profile.createdAt,
+    };
+
+    await db.insert(users).values(legacyValues).onConflictDoUpdate({
+      target: users.id,
+      set: {
+        username: legacyValues.username,
+        email: legacyValues.email,
+        xpPoints: legacyValues.xpPoints,
+        reputationRank: legacyValues.reputationRank,
+        predictCredits: legacyValues.predictCredits,
+        currentStreak: legacyValues.currentStreak,
+        lastActiveAt: legacyValues.lastActiveAt,
+      },
+    });
+  }
+
+  async ensureLegacyUserShadow(userId: string): Promise<Profile | null> {
+    const profile = await this.getProfile(userId);
+    if (!profile) return null;
+    await this.syncLegacyUserShadow(profile);
+    return profile;
+  }
 
   private async ensureCache(): Promise<void> {
     if (Date.now() < this.cacheExpiry) return;
@@ -107,14 +145,12 @@ class GamificationService {
     });
 
     if (existingEntry) {
-      const user = await db.query.users.findFirst({
-        where: eq(users.id, userId)
-      });
+      const profile = await this.getProfile(userId);
       return {
         success: false,
         xpAwarded: 0,
-        newTotalXp: user?.xpPoints || 0,
-        newRank: user?.reputationRank || null,
+        newTotalXp: profile?.xpPoints || 0,
+        newRank: profile?.rank || null,
         dailyCount: 0,
         dailyCap: action.dailyCap,
         message: 'Duplicate action - XP already awarded'
@@ -137,17 +173,28 @@ class GamificationService {
     const dailyCount = Number(dailyCountResult[0]?.count || 0);
 
     if (action.dailyCap !== null && dailyCount >= action.dailyCap) {
-      const user = await db.query.users.findFirst({
-        where: eq(users.id, userId)
-      });
+      const profile = await this.getProfile(userId);
       return {
         success: false,
         xpAwarded: 0,
-        newTotalXp: user?.xpPoints || 0,
-        newRank: user?.reputationRank || null,
+        newTotalXp: profile?.xpPoints || 0,
+        newRank: profile?.rank || null,
         dailyCount,
         dailyCap: action.dailyCap,
         message: `Daily cap reached for ${actionType} (${dailyCount}/${action.dailyCap})`
+      };
+    }
+
+    const profile = await this.ensureLegacyUserShadow(userId);
+    if (!profile) {
+      return {
+        success: false,
+        xpAwarded: 0,
+        newTotalXp: 0,
+        newRank: null,
+        dailyCount,
+        dailyCap: action.dailyCap,
+        message: "User profile not found",
       };
     }
 
@@ -160,14 +207,14 @@ class GamificationService {
       metadata: metadata || null
     });
 
-    const updatedUser = await db.update(users)
+    const updatedProfile = await db.update(profiles)
       .set({
-        xpPoints: sql`${users.xpPoints} + ${action.xpValue}`
+        xpPoints: sql`${profiles.xpPoints} + ${action.xpValue}`
       })
-      .where(eq(users.id, userId))
+      .where(eq(profiles.id, userId))
       .returning();
 
-    const newTotalXp = updatedUser[0]?.xpPoints || 0;
+    const newTotalXp = updatedProfile[0]?.xpPoints || 0;
 
     const newRank = await this.recalculateUserRank(userId, newTotalXp);
 
@@ -205,11 +252,9 @@ class GamificationService {
       };
     }
 
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, userId)
-    });
+    const profile = await this.getProfile(userId);
 
-    if (!user) {
+    if (!profile) {
       return {
         success: false,
         amount: 0,
@@ -218,13 +263,13 @@ class GamificationService {
       };
     }
 
-    const newBalance = user.predictCredits + amount;
+    const newBalance = computeCreditBalance(profile.predictCredits, amount);
 
-    if (newBalance < 0) {
+    if (newBalance === null) {
       return {
         success: false,
         amount: 0,
-        newBalance: user.predictCredits,
+        newBalance: profile.predictCredits,
         message: 'Insufficient credits'
       };
     }
@@ -240,9 +285,14 @@ class GamificationService {
       metadata: metadata || null
     });
 
-    await db.update(users)
+    const [updatedProfile] = await db.update(profiles)
       .set({ predictCredits: newBalance })
-      .where(eq(users.id, userId));
+      .where(eq(profiles.id, userId))
+      .returning();
+
+    if (updatedProfile) {
+      await this.syncLegacyUserShadow(updatedProfile);
+    }
 
     return {
       success: true,
@@ -259,10 +309,8 @@ class GamificationService {
 
     let xp = currentXp;
     if (xp === undefined) {
-      const user = await db.query.users.findFirst({
-        where: eq(users.id, userId)
-      });
-      xp = user?.xpPoints || 0;
+      const profile = await this.getProfile(userId);
+      xp = profile?.xpPoints || 0;
     }
 
     let newRank: Rank | null = null;
@@ -274,9 +322,13 @@ class GamificationService {
     }
 
     if (newRank) {
-      await db.update(users)
-        .set({ reputationRank: newRank.name })
-        .where(eq(users.id, userId));
+      const [updatedProfile] = await db.update(profiles)
+        .set({ rank: newRank.name })
+        .where(eq(profiles.id, userId))
+        .returning();
+      if (updatedProfile) {
+        await this.syncLegacyUserShadow(updatedProfile);
+      }
       return newRank.name;
     }
 
@@ -286,44 +338,24 @@ class GamificationService {
   async checkPermission(userId: string, capability: Capability): Promise<boolean> {
     await this.ensureCache();
 
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, userId)
-    });
+    const profile = await this.getProfile(userId);
 
-    if (!user) return false;
+    if (!profile) return false;
 
-    const userRank = this.ranksCache.find(r => r.name === user.reputationRank);
+    const userRank = this.ranksCache.find(r => r.name === profile.rank);
     const tier = userRank?.tier || 1;
 
-    switch (capability) {
-      case 'can_vote_sentiment':
-      case 'can_vote_matchup':
-      case 'can_predict':
-        return true;
-
-      case 'can_vote_induction':
-      case 'can_vote_curation':
-        return tier >= 2; // Aspirant+
-
-      case 'can_post_insight':
-      case 'can_comment':
-        return tier >= 2; // Aspirant+ (buffer rank for spam prevention)
-
-      default:
-        return false;
-    }
+    return canAccessCapability(tier, capability);
   }
 
   async getUserStats(userId: string): Promise<UserStats | null> {
     await this.ensureCache();
 
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, userId)
-    });
+    const profile = await this.getProfile(userId);
 
-    if (!user) return null;
+    if (!profile) return null;
 
-    const userRank = this.ranksCache.find(r => r.name === user.reputationRank);
+    const userRank = this.ranksCache.find(r => r.name === profile.rank);
 
     const capabilities: Record<Capability, boolean> = {
       can_vote_sentiment: await this.checkPermission(userId, 'can_vote_sentiment'),
@@ -336,12 +368,12 @@ class GamificationService {
     };
 
     return {
-      userId: user.id,
-      username: user.username,
-      xpPoints: user.xpPoints,
-      predictCredits: user.predictCredits,
+      userId: profile.id,
+      username: profile.username || "Unknown",
+      xpPoints: profile.xpPoints,
+      predictCredits: profile.predictCredits,
       rank: userRank || null,
-      currentStreak: user.currentStreak,
+      currentStreak: profile.currentStreak,
       capabilities
     };
   }
@@ -353,13 +385,11 @@ class GamificationService {
 
     await this.ensureCache();
 
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, userId)
-    });
+    const profile = await this.getProfile(userId);
 
-    if (!user) return 1.0;
+    if (!profile) return 1.0;
 
-    const userRank = this.ranksCache.find(r => r.name === user.reputationRank);
+    const userRank = this.ranksCache.find(r => r.name === profile.rank);
     return userRank?.voteMultiplier || 1.0;
   }
 

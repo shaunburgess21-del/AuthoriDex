@@ -2818,7 +2818,7 @@ export default function VotePage() {
                 <UnderratedOverratedCard 
                   key={person.id} 
                   person={person}
-                  onVisitProfile={() => setLocation(`/celebrity/${person.id}`)}
+                  onVisitProfile={() => setLocation(`/person/${person.id}`)}
                 />
               ))}
             </CardSection>
@@ -4153,7 +4153,7 @@ export default function VotePage() {
                     person={person}
                     onVisitProfile={() => {
                       setValuePerceptionOverlayOpen(false);
-                      setLocation(`/celebrity/${person.id}`);
+                      setLocation(`/person/${person.id}`);
                     }}
                   />
                 ))}

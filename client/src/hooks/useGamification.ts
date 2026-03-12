@@ -94,6 +94,10 @@ export function useCheckPermission(capability: Capability, enabled: boolean = tr
 export function useXpHistory(limit: number = 20, enabled: boolean = true) {
   return useQuery({
     queryKey: ['/api/gamification/xp-history', { limit }],
+    queryFn: async () => {
+      const res = await apiRequest('GET', `/api/gamification/xp-history?limit=${limit}`);
+      return res.json();
+    },
     enabled,
     staleTime: 30 * 1000,
   });
@@ -102,6 +106,10 @@ export function useXpHistory(limit: number = 20, enabled: boolean = true) {
 export function useCreditHistory(limit: number = 20, enabled: boolean = true) {
   return useQuery({
     queryKey: ['/api/gamification/credit-history', { limit }],
+    queryFn: async () => {
+      const res = await apiRequest('GET', `/api/gamification/credit-history?limit=${limit}`);
+      return res.json();
+    },
     enabled,
     staleTime: 30 * 1000,
   });

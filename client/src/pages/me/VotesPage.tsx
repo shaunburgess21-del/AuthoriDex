@@ -11,7 +11,7 @@ export default function VotesPage() {
   const { user, profile } = useAuth();
   const [, setLocation] = useLocation();
 
-  const { data: votes, isLoading } = useQuery({
+  const { data: votes, isLoading, error } = useQuery({
     queryKey: ["/api/me/votes"],
     enabled: !!user,
   });
@@ -72,6 +72,17 @@ export default function VotesPage() {
               <Skeleton key={i} className="h-20 w-full" />
             ))}
           </div>
+        ) : error ? (
+          <Card className="p-8 text-center">
+            <Vote className="h-12 w-12 mx-auto mb-4 text-destructive" />
+            <h2 className="text-lg font-semibold mb-2">Couldn&apos;t load votes</h2>
+            <p className="text-muted-foreground mb-4">
+              Please try again in a moment.
+            </p>
+            <Button onClick={() => window.location.reload()} data-testid="button-retry-votes">
+              Retry
+            </Button>
+          </Card>
         ) : votes && Array.isArray(votes) && votes.length > 0 ? (
           <div className="space-y-3">
             {votes.map((vote: any) => (

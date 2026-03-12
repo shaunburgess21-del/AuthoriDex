@@ -16,7 +16,7 @@ export default function FavoritesPage() {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
 
-  const { data: favorites, isLoading } = useQuery({
+  const { data: favorites, isLoading, error } = useQuery({
     queryKey: ["/api/me/favorites"],
     enabled: !!user,
   });
@@ -92,13 +92,24 @@ export default function FavoritesPage() {
               <Skeleton key={i} className="h-20 w-full" />
             ))}
           </div>
+        ) : error ? (
+          <Card className="p-8 text-center">
+            <Star className="h-12 w-12 mx-auto mb-4 text-destructive" />
+            <h2 className="text-lg font-semibold mb-2">Couldn&apos;t load favorites</h2>
+            <p className="text-muted-foreground mb-4">
+              Please try again in a moment.
+            </p>
+            <Button onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/me/favorites"] })}>
+              Retry
+            </Button>
+          </Card>
         ) : favorites && Array.isArray(favorites) && favorites.length > 0 ? (
           <div className="space-y-3">
             {favorites.map((fav: any) => (
               <Card 
                 key={fav.id} 
                 className="p-4 hover-elevate cursor-pointer" 
-                onClick={() => setLocation(`/celebrity/${fav.celebrityId}`)}
+                onClick={() => setLocation(`/person/${fav.celebrityId}`)}
                 data-testid={`favorite-item-${fav.id}`}
               >
                 <div className="flex items-center justify-between">

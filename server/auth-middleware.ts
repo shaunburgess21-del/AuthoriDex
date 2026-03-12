@@ -1,5 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import { createClient } from '@supabase/supabase-js';
+import { eq } from "drizzle-orm";
+import { db } from "./db";
+import { profiles } from "@shared/schema";
+import { isAdminRole, resolveProfileRole } from "./utils/authz";
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!;
@@ -10,11 +14,11 @@ export interface AuthRequest extends Request {
   userId?: string;
   userEmail?: string;
   sessionId?: string;
-  userRole?: string; // Added to track role
+  userRole?: string;
 }
 
 /**
- * Middleware to verify Supabase JWT and extract user ID AND Role
+ * Middleware to verify Supabase JWT and attach the server-controlled profile role.
  */
 export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   try {
@@ -31,9 +35,15 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
       return res.status(401).json({ error: "Unauthorized - Invalid token" });
     }
 
+    const [profile] = await db
+      .select({ role: profiles.role })
+      .from(profiles)
+      .where(eq(profiles.id, user.id))
+      .limit(1);
+
     req.userId = user.id;
     req.userEmail = user.email || undefined;
-    req.userRole = user.user_metadata?.role || 'user';
+    req.userRole = resolveProfileRole(profile?.role);
 
 
     next();
@@ -48,12 +58,11 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
  * Must be used AFTER requireAuth
  */
 export async function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
-  // If requireAuth hasn't run yet, we can't check the role
   if (!req.userId) {
     return res.status(401).json({ error: "Unauthorized - Log in first" });
   }
 
-  if (req.userRole !== 'admin') {
+  if (!isAdminRole(req.userRole)) {
     return res.status(403).json({ error: "Forbidden - Admins only" });
   }
 
@@ -68,8 +77,15 @@ export async function optionalAuth(req: AuthRequest, res: Response, next: NextFu
       const token = authHeader.substring(7);
       const { data: { user }, error } = await supabase.auth.getUser(token);
       if (!error && user) {
+        const [profile] = await db
+          .select({ role: profiles.role })
+          .from(profiles)
+          .where(eq(profiles.id, user.id))
+          .limit(1);
+
         req.userId = user.id;
-        req.userRole = user.user_metadata?.role || 'user';
+        req.userEmail = user.email || undefined;
+        req.userRole = resolveProfileRole(profile?.role);
       }
     }
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
