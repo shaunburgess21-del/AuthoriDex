@@ -37,7 +37,7 @@ export default function LoginPage() {
           title: "Welcome back!",
           description: "You've successfully signed in.",
         });
-        setLocation("/profile");
+        setLocation("/me");
       } else {
         const { error } = await supabase.auth.signUp({
           email,
@@ -68,7 +68,7 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/profile`,
+          redirectTo: `${window.location.origin}/me`,
         },
       });
 

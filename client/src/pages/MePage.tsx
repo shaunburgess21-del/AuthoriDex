@@ -93,6 +93,11 @@ export default function MePage() {
         </h1>
 
         {user ? (
+          profileLoading && !profile ? (
+            <Card className="p-8 text-center">
+              <p className="text-muted-foreground">Loading your account...</p>
+            </Card>
+          ) : (
           <div className="space-y-6">
             <Card className="p-6">
               <div className="flex items-start gap-4 mb-6">
@@ -242,6 +247,7 @@ export default function MePage() {
               Sign Out
             </Button>
           </div>
+          )
         ) : (
           <Card className="p-8 text-center">
             <User className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />

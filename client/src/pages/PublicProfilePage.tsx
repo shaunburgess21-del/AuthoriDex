@@ -9,15 +9,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 interface PublicProfile {
   username: string;
-  fullName: string | null;
-  avatarUrl: string | null;
-  rank: string;
-  xpPoints: number;
-  totalVotes: number;
-  totalPredictions: number;
-  winRate: number;
+  fullName?: string | null;
+  avatarUrl?: string | null;
+  rank?: string;
+  xpPoints?: number;
+  totalVotes?: number;
+  totalPredictions?: number;
+  winRate?: number;
   isPublic: boolean;
-  createdAt: string;
+  createdAt?: string;
+  message?: string;
 }
 
 function RankBadge({ rank }: { rank: string }) {
@@ -95,11 +96,6 @@ export default function PublicProfilePage() {
   }
 
   if (error || !profile) {
-    const errorMessage = (error as any)?.message?.includes("private") 
-      ? "This profile is private"
-      : "User not found";
-    const isPrivate = errorMessage.includes("private");
-
     return (
       <div className="min-h-screen pb-20 md:pb-0">
         <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
@@ -123,23 +119,54 @@ export default function PublicProfilePage() {
         </header>
         <div className="container mx-auto px-4 py-16 max-w-md">
           <Card className="p-8 text-center">
-            {isPrivate ? (
-              <>
-                <Lock className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                <h2 className="text-xl font-semibold mb-2">Private Profile</h2>
-                <p className="text-muted-foreground">
-                  This user has chosen to keep their profile private.
-                </p>
-              </>
-            ) : (
-              <>
-                <User className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                <h2 className="text-xl font-semibold mb-2">User Not Found</h2>
-                <p className="text-muted-foreground">
-                  The user @{username} does not exist.
-                </p>
-              </>
-            )}
+            <User className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+            <h2 className="text-xl font-semibold mb-2">User Not Found</h2>
+            <p className="text-muted-foreground">
+              The user @{username} does not exist.
+            </p>
+            <Button 
+              variant="outline" 
+              className="mt-6"
+              onClick={() => setLocation("/")}
+              data-testid="button-go-home"
+            >
+              Go to Homepage
+            </Button>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile.isPublic) {
+    return (
+      <div className="min-h-screen pb-20 md:pb-0">
+        <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
+          <div className="container mx-auto px-4 h-14 flex items-center gap-4">
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => {
+                if (window.history.length > 1) {
+                  window.history.back();
+                } else {
+                  setLocation("/");
+                }
+              }}
+              data-testid="button-back"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <span className="font-semibold">Profile</span>
+          </div>
+        </header>
+        <div className="container mx-auto px-4 py-16 max-w-md">
+          <Card className="p-8 text-center">
+            <Lock className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+            <h2 className="text-xl font-semibold mb-2">Private Profile</h2>
+            <p className="text-muted-foreground">
+              This user has chosen to keep their profile private.
+            </p>
             <Button 
               variant="outline" 
               className="mt-6"

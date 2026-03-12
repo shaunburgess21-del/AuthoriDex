@@ -688,7 +688,7 @@ export type InsertXpAction = z.infer<typeof insertXpActionSchema>;
 // XP Ledger - Immutable transaction log for XP awards (Source of Truth)
 export const xpLedger = pgTable("xp_ledger", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
   actionType: text("action_type").notNull(), // References xpActions.actionKey
   xpDelta: integer("xp_delta").notNull(), // Can be negative for deductions
   idempotencyKey: text("idempotency_key").notNull(), // Prevents duplicate awards
@@ -761,26 +761,26 @@ export type InsertProfile = z.infer<typeof insertProfileSchema>;
 
 // Relations for gamification tables
 export const xpLedgerRelations = relations(xpLedger, ({ one }) => ({
-  user: one(users, {
+  user: one(profiles, {
     fields: [xpLedger.userId],
-    references: [users.id],
+    references: [profiles.id],
   }),
 }));
 
 export const creditLedgerRelations = relations(creditLedger, ({ one }) => ({
-  user: one(users, {
+  user: one(profiles, {
     fields: [creditLedger.userId],
-    references: [users.id],
+    references: [profiles.id],
   }),
 }));
 
-export const usersRelations = relations(users, ({ many }) => ({
-  xpLedgerEntries: many(xpLedger),
-  creditLedgerEntries: many(creditLedger),
+export const usersRelations = relations(users, () => ({
 }));
 
 export const profilesRelations = relations(profiles, ({ many }) => ({
   votes: many(votes),
+  xpLedgerEntries: many(xpLedger),
+  creditLedgerEntries: many(creditLedger),
 }));
 
 // ============================================================================

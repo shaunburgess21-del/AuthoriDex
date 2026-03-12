@@ -388,7 +388,7 @@ function UpDownOutcomes({
 export default function MarketDetailPage() {
   const params = useParams<{ slug: string }>();
   const [, setLocation] = useLocation();
-  const { user, isLoggedIn } = useAuth();
+  const { user, isLoggedIn, refreshProfile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -414,9 +414,15 @@ export default function MarketDetailPage() {
       const res = await apiRequest("POST", `/api/open-markets/${params.slug}/bet`, { entryId, stakeAmount: amount });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({ title: "Prediction placed!", description: "Your prediction has been recorded." });
-      queryClient.invalidateQueries({ queryKey: ["/api/open-markets", params.slug] });
+      await Promise.all([
+        refreshProfile(),
+        queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/open-markets", params.slug] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
       setSelectedEntry(null);
       setStakeAmount("");
     },

@@ -1,17 +1,31 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, TrendingUp, TrendingDown, Clock, CheckCircle, XCircle, Filter } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Clock, CheckCircle, XCircle, Filter, Target } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { inferPredictionDirection } from "./predictions-utils";
+
+interface UserPrediction {
+  betId: string;
+  marketId: string;
+  marketSlug: string;
+  marketTitle: string;
+  marketStatus: string;
+  marketType: string;
+  entryLabel: string;
+  stakeAmount: number;
+  result: "won" | "lost" | "refunded" | "pending";
+  payout: number;
+}
 
 export default function PredictionsPage() {
   const { user, profile } = useAuth();
   const [, setLocation] = useLocation();
 
-  const { data: predictions, isLoading, error } = useQuery({
+  const { data: predictions, isLoading, error } = useQuery<UserPrediction[]>({
     queryKey: ["/api/me/predictions"],
     enabled: !!user,
   });
@@ -30,14 +44,16 @@ export default function PredictionsPage() {
     );
   }
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: UserPrediction["result"]) => {
     switch (status) {
-      case "active":
+      case "pending":
         return <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30"><Clock className="h-3 w-3 mr-1" />Active</Badge>;
       case "won":
         return <Badge className="bg-green-500/20 text-green-300 border-green-500/30"><CheckCircle className="h-3 w-3 mr-1" />Won</Badge>;
       case "lost":
         return <Badge className="bg-red-500/20 text-red-300 border-red-500/30"><XCircle className="h-3 w-3 mr-1" />Lost</Badge>;
+      case "refunded":
+        return <Badge variant="secondary">Refunded</Badge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
@@ -115,32 +131,39 @@ export default function PredictionsPage() {
           </Card>
         ) : predictions && Array.isArray(predictions) && predictions.length > 0 ? (
           <div className="space-y-3">
-            {predictions.map((prediction: any) => (
-              <Card key={prediction.id} className="p-4" data-testid={`prediction-item-${prediction.id}`}>
+            {predictions.map((prediction) => {
+              const direction = inferPredictionDirection(prediction.entryLabel);
+
+              return (
+              <Card key={prediction.betId} className="p-4" data-testid={`prediction-item-${prediction.betId}`}>
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-3">
-                    {prediction.direction === "up" ? (
-                      <TrendingUp className="h-5 w-5 text-green-400" />
-                    ) : (
+                    {direction === "down" ? (
                       <TrendingDown className="h-5 w-5 text-red-400" />
+                    ) : direction === "neutral" ? (
+                      <Target className="h-5 w-5 text-violet-400" />
+                    ) : (
+                      <TrendingUp className="h-5 w-5 text-green-400" />
                     )}
                     <div>
                       <p className="font-medium">{prediction.marketTitle || "Prediction"}</p>
-                      <p className="text-xs text-muted-foreground">{prediction.celebrity || ""}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Picked: {prediction.entryLabel || "Unknown outcome"}
+                      </p>
                     </div>
                   </div>
-                  {getStatusBadge(prediction.status)}
+                  {getStatusBadge(prediction.result)}
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Stake: {prediction.stake} credits</span>
-                  {prediction.payout && (
-                    <span className={prediction.payout > 0 ? "text-green-400" : "text-red-400"}>
-                      {prediction.payout > 0 ? "+" : ""}{prediction.payout} credits
+                  <span className="text-muted-foreground">Stake: {prediction.stakeAmount} credits</span>
+                  {prediction.payout > 0 && (
+                    <span className={prediction.result === "lost" ? "text-red-400" : "text-green-400"}>
+                      {prediction.result === "lost" ? "" : "+"}{prediction.payout} credits
                     </span>
                   )}
                 </div>
               </Card>
-            ))}
+            )})}
           </div>
         ) : (
           <Card className="p-8 text-center">

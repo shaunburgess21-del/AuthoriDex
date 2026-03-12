@@ -14,6 +14,7 @@ import multer from "multer";
 import path from "path";
 import { gamificationService } from "./services/gamification";
 import { isAdminRole } from "./utils/authz";
+import { applyAdminCreditAdjustment } from "./utils/admin-credits";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext } from "./providers/serper";
 import { getSourceStats } from "./scoring/sourceStats";
@@ -3158,15 +3159,8 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
   });
 
   // Admin endpoint to refresh all celebrity profiles with new model and web grounding
-  app.post("/api/admin/refresh-all-profiles", requireAuth, async (req, res) => {
+  app.post("/api/admin/refresh-all-profiles", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const authReq = req as AuthRequest;
-      
-      // Check admin role (set in auth middleware)
-      if (authReq.userRole !== 'admin') {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-      
       // Get all tracked people
       const people = await db.select().from(trackedPeople);
       console.log(`[Admin] Starting profile refresh for ${people.length} celebrities...`);
@@ -3325,7 +3319,7 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
       
       // Log admin action
       await db.insert(adminAuditLog).values({
-        adminId: authReq.userId || 'unknown',
+        adminId: req.userId || 'unknown',
         actionType: 'refresh_all_profiles',
         targetTable: 'celebrity_profiles',
         targetId: 'all',
@@ -4226,6 +4220,16 @@ Only return the JSON object.`;
     try {
       const userId = req.userId!;
       const jwtEmail = req.userEmail || null;
+      const initialGrantEntry = {
+        userId,
+        txnType: 'initial_grant' as const,
+        amount: 1000,
+        walletType: 'VIRTUAL' as const,
+        balanceAfter: 1000,
+        source: 'signup',
+        idempotencyKey: `initial_grant_${userId}`,
+        metadata: { reason: 'New account signup bonus' },
+      };
       
       // Try to get user details from Supabase Admin API, but don't block on failure
       let email = jwtEmail;
@@ -4261,7 +4265,10 @@ Only return the JSON object.`;
         if (fullName && !existing[0].fullName) updateData.fullName = fullName;
         if (avatarUrl && !existing[0].avatarUrl) updateData.avatarUrl = avatarUrl;
         
-        await db.update(profiles).set(updateData).where(eq(profiles.id, userId));
+        await db.transaction(async (tx) => {
+          await tx.update(profiles).set(updateData).where(eq(profiles.id, userId));
+          await tx.insert(creditLedger).values(initialGrantEntry).onConflictDoNothing();
+        });
         const updated = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
 
         return res.json(updated[0]);
@@ -4287,18 +4294,10 @@ Only return the JSON object.`;
         lastActiveAt: new Date(),
       };
       
-      await db.insert(profiles).values(newProfile);
-
-      await db.insert(creditLedger).values({
-        userId,
-        txnType: 'initial_grant',
-        amount: 1000,
-        walletType: 'VIRTUAL',
-        balanceAfter: 1000,
-        source: 'signup',
-        idempotencyKey: `initial_grant_${userId}`,
-        metadata: { reason: 'New account signup bonus' },
-      }).onConflictDoNothing();
+      await db.transaction(async (tx) => {
+        await tx.insert(profiles).values(newProfile);
+        await tx.insert(creditLedger).values(initialGrantEntry).onConflictDoNothing();
+      });
 
       res.json(newProfile);
     } catch (error: any) {
@@ -5603,8 +5602,9 @@ Only return the JSON object.`;
     try {
       const adminId = req.userId!;
       const { userId, amount, reason } = req.body;
+      const numericAmount = Number(amount);
       
-      if (!userId || amount === undefined || !reason) {
+      if (!userId || amount === undefined || !reason || !Number.isFinite(numericAmount)) {
         return res.status(400).json({ error: "userId, amount, and reason are required" });
       }
       
@@ -5614,7 +5614,7 @@ Only return the JSON object.`;
         return res.status(404).json({ error: "User not found" });
       }
       
-      const newBalance = Math.max(0, user.predictCredits + amount);
+      const { appliedAmount, newBalance, wasClamped } = applyAdminCreditAdjustment(user.predictCredits, numericAmount);
       const idempotencyKey = `admin_adjust_${adminId}_${userId}_${Date.now()}`;
       
       // Use transaction to ensure ledger and profile stay in sync
@@ -5623,12 +5623,12 @@ Only return the JSON object.`;
         await tx.insert(creditLedger).values({
           userId,
           txnType: 'admin_adjustment',
-          amount,
+          amount: appliedAmount,
           walletType: 'VIRTUAL',
           balanceAfter: newBalance,
           source: 'admin',
           idempotencyKey,
-          metadata: { reason, adjustedBy: adminId },
+          metadata: { reason, adjustedBy: adminId, requestedAmount: numericAmount, wasClamped },
         });
         
         // Update user balance
@@ -5642,11 +5642,11 @@ Only return the JSON object.`;
           targetId: userId,
           previousData: { predictCredits: user.predictCredits },
           newData: { predictCredits: newBalance },
-          metadata: { amount, reason },
+          metadata: { requestedAmount: numericAmount, appliedAmount, reason, wasClamped },
         });
       });
       
-      res.json({ success: true, newBalance });
+      res.json({ success: true, newBalance, appliedAmount, wasClamped });
     } catch (error: any) {
       console.error("Error adjusting credits:", error.message);
       res.status(500).json({ error: "Failed to adjust credits" });

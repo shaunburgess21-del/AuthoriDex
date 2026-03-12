@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
 
 export default function SettingsPage() {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, profileLoading, refreshProfile, signOut } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -22,17 +22,31 @@ export default function SettingsPage() {
   const [username, setUsername] = useState(profile?.username || "");
   const [fullName, setFullName] = useState(profile?.fullName || "");
   const [isPublic, setIsPublic] = useState(profile?.isPublic ?? true);
+  const [hasLocalChanges, setHasLocalChanges] = useState(false);
+
+  useEffect(() => {
+    if (!profile || hasLocalChanges) {
+      return;
+    }
+
+    setUsername(profile.username || "");
+    setFullName(profile.fullName || "");
+    setIsPublic(profile.isPublic);
+  }, [profile, hasLocalChanges]);
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: { username?: string; fullName?: string; isPublic?: boolean }) => {
-      return await apiRequest("PATCH", "/api/profile/me", data);
+      const response = await apiRequest("PATCH", "/api/profile/me", data);
+      return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      await refreshProfile();
+      setHasLocalChanges(false);
       toast({
         title: "Profile updated",
         description: "Your changes have been saved.",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] });
     },
     onError: () => {
       toast({
@@ -72,6 +86,18 @@ export default function SettingsPage() {
           <Button onClick={() => setLocation("/login")} className="mt-4" data-testid="button-sign-in">
             Sign In
           </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  if (profileLoading && !profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="p-8 text-center max-w-md">
+          <Loader2 className="h-12 w-12 mx-auto mb-4 animate-spin text-muted-foreground" />
+          <h2 className="text-xl font-semibold mb-2">Loading your settings</h2>
+          <p className="text-muted-foreground">Please wait a moment.</p>
         </Card>
       </div>
     );
@@ -138,7 +164,10 @@ export default function SettingsPage() {
               <Input 
                 id="username" 
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => {
+                  setHasLocalChanges(true);
+                  setUsername(e.target.value);
+                }}
                 placeholder="Choose a username"
                 data-testid="input-username"
               />
@@ -152,7 +181,10 @@ export default function SettingsPage() {
               <Input 
                 id="fullName" 
                 value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                onChange={(e) => {
+                  setHasLocalChanges(true);
+                  setFullName(e.target.value);
+                }}
                 placeholder="Your display name"
                 data-testid="input-fullname"
               />
@@ -160,7 +192,7 @@ export default function SettingsPage() {
 
             <Button 
               onClick={handleSaveProfile}
-              disabled={updateProfileMutation.isPending}
+              disabled={updateProfileMutation.isPending || profileLoading || !profile}
               data-testid="button-save-profile"
             >
               {updateProfileMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -189,7 +221,10 @@ export default function SettingsPage() {
                 </Badge>
                 <Switch 
                   checked={isPublic}
-                  onCheckedChange={setIsPublic}
+                  onCheckedChange={(checked) => {
+                    setHasLocalChanges(true);
+                    setIsPublic(checked);
+                  }}
                   data-testid="switch-public-profile"
                 />
               </div>

@@ -31,8 +31,6 @@ def main():
 
         full_refresh_at = data.get("fullRefreshAt")
         full_refresh_formatted = data.get("fullRefreshAtFormatted", "unknown")
-        next_refresh = data.get("nextFullRefreshAt")
-
         result["details"].append(f"Last ingestion: {full_refresh_formatted}")
 
         if full_refresh_at:
@@ -55,38 +53,33 @@ def main():
                     f"Ingestion has not run for {age_hours:.1f}h — check Railway for crashes"
                 )
 
-        # Check caps usage if available
-        caps = data.get("capsUsed", {})
-        if caps:
-            spike3 = caps.get("spike3", "0%")
-            result["details"].append(f"API cap usage (spike3): {spike3}")
-            try:
-                pct = float(str(spike3).replace("%", ""))
-                if pct > 80:
-                    result["status"] = "warning"
-                    result["action_items"].append(
-                        f"API cap usage at {spike3} — approaching limit"
-                    )
-            except ValueError:
-                pass
-
         # Check source health
-        sources = data.get("sources", {})
-        outage_sources = []
-        for source, info in sources.items():
+        freshness = data.get("freshness", {})
+        stale_sources = []
+        cached_sources = []
+        for source, info in freshness.items():
             if isinstance(info, dict):
-                src_status = info.get("status", "")
-                if "OUTAGE" in str(src_status).upper():
-                    outage_sources.append(source)
-                    result["details"].append(f"⚠️  {source}: OUTAGE")
+                src_status = str(info.get("status", "unknown")).lower()
+                if src_status == "stale":
+                    stale_sources.append(source)
+                    result["details"].append(f"⚠️  {source}: STALE")
+                elif src_status == "cached":
+                    cached_sources.append(source)
+                    result["details"].append(f"⚠️  {source}: CACHED")
                 else:
                     result["details"].append(f"✓  {source}: {src_status}")
 
-        if outage_sources:
+        if stale_sources:
+            if result["status"] == "ok":
+                result["status"] = "error"
+            result["action_items"].append(
+                f"Sources stale: {', '.join(stale_sources)} — investigate ingestion freshness"
+            )
+        elif cached_sources:
             if result["status"] == "ok":
                 result["status"] = "warning"
             result["action_items"].append(
-                f"Sources in OUTAGE: {', '.join(outage_sources)} — ingestion using cached data"
+                f"Sources cached: {', '.join(cached_sources)} — monitor for live recovery"
             )
 
     except urllib.error.URLError as e:

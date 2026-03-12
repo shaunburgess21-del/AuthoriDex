@@ -7,7 +7,6 @@ Run: python ops/check_snapshots.py
 
 import json
 import os
-import sys
 import urllib.request
 from datetime import datetime, timezone
 
@@ -44,31 +43,33 @@ def main():
             now = datetime.now(timezone.utc)
             age_hours = (now - last).total_seconds() / 3600
 
-            if age_hours > 2:
-                result["status"] = "warning"
-                result["action_items"].append(
-                    f"Last snapshot is {age_hours:.1f}h old — ingestion may be delayed"
-                )
-            elif age_hours > 4:
+            if age_hours > 4:
                 result["status"] = "error"
                 result["action_items"].append(
                     f"Last snapshot is {age_hours:.1f}h old — ingestion appears broken"
+                )
+            elif age_hours > 2:
+                result["status"] = "warning"
+                result["action_items"].append(
+                    f"Last snapshot is {age_hours:.1f}h old — ingestion may be delayed"
                 )
 
         if system_status == "healthy":
             result["summary"] = f"Snapshots healthy — last refresh {full_refresh}"
         else:
-            result["status"] = "warning"
+            if result["status"] == "ok":
+                result["status"] = "warning"
             result["summary"] = f"System status: {system_status} — last refresh {full_refresh}"
             result["action_items"].append(f"System reporting status: {system_status}")
 
-        # Check sources
-        sources = data.get("sources", {})
-        for source, info in sources.items():
+        # Check source freshness
+        freshness = data.get("freshness", {})
+        for source, info in freshness.items():
             if isinstance(info, dict):
-                src_status = info.get("status", "unknown")
+                src_status = str(info.get("status", "unknown")).lower()
                 if src_status not in ("live", "healthy", "cached"):
-                    result["status"] = "warning"
+                    if result["status"] == "ok":
+                        result["status"] = "warning"
                     result["details"].append(f"Source {source}: {src_status}")
                     result["action_items"].append(f"Source {source} is {src_status}")
                 else:
