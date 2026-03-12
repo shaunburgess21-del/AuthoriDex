@@ -227,7 +227,7 @@ export default function MatchupDetailPage() {
           <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
             <div className="flex items-center gap-3 min-w-0">
               <Link href="/" data-testid="link-logo-home">
-                <AuthoriDexLogo size="sm" />
+                <AuthoriDexLogo size={28} />
               </Link>
               <Button variant="ghost" size="sm" onClick={() => { window.history.length > 1 ? window.history.back() : setLocation("/vote"); }} data-testid="button-back">
                 <ArrowLeft className="h-4 w-4 mr-1" />
@@ -259,7 +259,7 @@ export default function MatchupDetailPage() {
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
             <Link href="/" data-testid="link-logo-home">
-              <AuthoriDexLogo size="sm" />
+              <AuthoriDexLogo size={28} />
             </Link>
             <Button variant="ghost" size="sm" onClick={() => { window.history.length > 1 ? window.history.back() : setLocation("/vote"); }} data-testid="button-back">
               <ArrowLeft className="h-4 w-4 mr-1" />

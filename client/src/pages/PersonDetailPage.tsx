@@ -86,6 +86,17 @@ interface FeaturedPoll {
   totalVotes: number;
 }
 
+interface CelebrityImage {
+  id: string;
+  personId: string;
+  imageUrl: string;
+  source: string | null;
+  isPrimary: boolean;
+  votesUp: number;
+  votesDown: number;
+  addedAt: string;
+}
+
 interface MatchupData {
   id: string;
   category: string;
@@ -1686,7 +1697,6 @@ export default function PersonDetailPage() {
                     } as CuratePerson}
                     onVote={() => {}}
                     onComplete={() => setCurateCompleted(true)}
-                    onSkip={() => setCurateCompleted(true)}
                     onViewResults={() => {}}
                     cycleNumber={0}
                   />

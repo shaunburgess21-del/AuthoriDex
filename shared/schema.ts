@@ -7,8 +7,8 @@ import { relations } from "drizzle-orm";
 export const contentStatusEnum = pgEnum("content_status", ["draft", "live", "archived"]);
 export const marketOutcomeEnum = pgEnum("market_outcome", ["yes", "no"]);
 
-// NOTE: Auth is handled by Supabase. The password field is legacy and unused — do not read or write it.
-// This table is still used for gamification (XP, credits, streaks). Plan a migration to drop the password column.
+// NOTE: Auth and live account state are handled via Supabase + profiles.
+// The legacy users table is kept only for migration-era compatibility and should not be used for runtime reads/writes.
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
@@ -463,11 +463,12 @@ export const matchups = pgTable("face_offs", {
   seedVotesB: integer("seed_votes_b").notNull().default(0),
   visibility: text("visibility").default("live"),
   featured: boolean("featured").default(false),
-  slug: text("slug").unique(),
+  slug: text("slug"),
   scheduledAt: timestamp("scheduled_at"),
   createdBy: varchar("created_by"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
+  slugUniqueIdx: uniqueIndex("face_offs_slug_unique").on(table.slug),
   slugIdx: index("face_offs_slug_idx").on(table.slug),
   visibilityIdx: index("face_offs_visibility_idx").on(table.visibility),
 }));
@@ -516,13 +517,14 @@ export const trendingPolls = pgTable("trending_polls", {
   seedSupportCount: integer("seed_support_count").notNull().default(0),
   seedNeutralCount: integer("seed_neutral_count").notNull().default(0),
   seedOpposeCount: integer("seed_oppose_count").notNull().default(0),
-  slug: text("slug").unique(),
+  slug: text("slug"),
   featured: boolean("featured").default(false),
   visibility: text("visibility").default("draft"),
   createdBy: varchar("created_by"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
+  slugUniqueIdx: uniqueIndex("trending_polls_slug_unique").on(table.slug),
   statusIdx: index("trending_polls_status_idx").on(table.status),
   slugIdx: index("trending_polls_slug_idx").on(table.slug),
   categoryIdx: index("trending_polls_category_idx").on(table.category),
@@ -1172,7 +1174,7 @@ export type InsertIngestionRun = z.infer<typeof insertIngestionRunSchema>;
 export const opinionPolls = pgTable("opinion_polls", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
-  slug: text("slug").unique().notNull(),
+  slug: text("slug").notNull(),
   category: text("category").notNull(),
   description: text("description"),
   summary: text("summary"),
@@ -1183,6 +1185,7 @@ export const opinionPolls = pgTable("opinion_polls", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
+  slugUniqueIdx: uniqueIndex("opinion_polls_slug_unique").on(table.slug),
   slugIdx: index("opinion_polls_slug_idx").on(table.slug),
   categoryIdx: index("opinion_polls_category_idx").on(table.category),
   visibilityIdx: index("opinion_polls_visibility_idx").on(table.visibility),

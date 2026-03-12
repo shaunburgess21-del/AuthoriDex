@@ -30,8 +30,8 @@ External APIs (Serper, Mediastack, Wiki, GDELT)
 | Backend | Node.js, Express, TypeScript (tsx) | Railway |
 | Database | PostgreSQL via Supabase | Supabase |
 | ORM | Drizzle ORM | — |
-| Session | express-session + connect-pg-simple | — |
-| Auth | Passport.js (local strategy) | — |
+| Session | Supabase session tokens on the client, cookies for selected backend flows | — |
+| Auth | Supabase Auth + backend JWT validation + `profiles` role lookup | — |
 
 ---
 
@@ -49,7 +49,7 @@ AuthoriDex-main/
 │   ├── index.ts          # Entry point, scheduler bootstrap
 │   ├── db.ts             # Database connection (Drizzle + Supabase)
 │   ├── routes.ts         # API route definitions
-│   ├── auth.ts           # Authentication logic
+│   ├── auth-middleware.ts# JWT auth + role resolution from profiles
 │   ├── trending/         # Trend scoring engine
 │   ├── ingestion/        # Data ingestion jobs
 │   ├── jobs/             # Background schedulers
@@ -80,7 +80,8 @@ AuthoriDex-main/
 ### 4. Predictions (Real-World Outcomes)
 - Users predict binary outcomes (Yes/No)
 - Example: Will ETH hit $12k? Will OpenAI IPO?
-- Accuracy tracked and feeds into user credibility score
+- Credits settle through the immutable `credit_ledger`
+- Accuracy can award XP through the immutable `xp_ledger`
 
 ### 5. Gamification
 - Users earn XP and rank tiers (Citizen → Aspirant → etc.)
@@ -126,14 +127,18 @@ Key tables:
 
 | Table | Purpose |
 |---|---|
-| `trending_people` | Master list of 100 tracked people |
+| `tracked_people` | Canonical list of tracked public figures |
+| `trending_people` | Current ranked view and live-score fields |
 | `trend_snapshots` | Hourly score snapshots per person |
-| `matchups` | Head-to-head matchup definitions |
-| `votes` | User votes on matchups |
-| `predictions` | User predictions on outcomes |
+| `profiles` | Source of truth for app user identity, roles, XP, and credits |
+| `face_offs` | Head-to-head matchup definitions |
+| `votes` | Sentiment votes |
+| `market_bets` | User predictions on outcomes |
+| `xp_ledger` | Immutable XP awards log keyed to `profiles.id` |
+| `credit_ledger` | Immutable credit balance log keyed to `profiles.id` |
 | `opinion_polls` | Poll definitions |
-| `poll_votes` | User responses to polls |
-| `users` | User accounts |
+| `opinion_poll_votes` | User responses to opinion polls |
+| `users` | Legacy compatibility table only; not the runtime source of truth |
 
 ---
 
@@ -168,6 +173,9 @@ npm install
 # Start dev server (loads .env automatically)
 npm run dev
 
+# Apply schema changes safely
+npm run db:push
+
 # App runs at http://localhost:5000
 ```
 
@@ -187,3 +195,4 @@ Requirements:
 - **Score engine logic lives in `server/trending/`** — changes here affect all rankings
 - The app uses **Wouter** for client-side routing (not React Router)
 - The app uses **TanStack Query** for all data fetching on the frontend
+- Runtime user state should come from `profiles`; treat `users` as legacy-only unless you are explicitly doing migration cleanup

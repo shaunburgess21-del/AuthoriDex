@@ -9,9 +9,14 @@ export default function LeaderboardRowExample() {
     rank: 1,
     trendScore: 985000,
     fameIndex: 9850,
+    fameIndexLive: null,
+    liveRank: null,
+    liveUpdatedAt: null,
+    liveDampen: null,
     change24h: 12.5,
     change7d: 23.8,
     category: "Music",
+    profileViews10m: null,
   };
 
   return (

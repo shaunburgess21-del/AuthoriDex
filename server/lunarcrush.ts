@@ -34,11 +34,18 @@ function generateMockTrendingPeople(): TrendingPerson[] {
     id: "person-1",
     name: "Elon Musk",
     avatar: null,
+    bio: null,
     rank: 1,
     trendScore: 10000,
+    fameIndex: 100,
+    fameIndexLive: null,
+    liveRank: null,
+    liveUpdatedAt: null,
+    liveDampen: null,
     change24h: (Math.random() - 0.5) * 30,
     change7d: (Math.random() - 0.5) * 60,
     category: "Tech",
+    profileViews10m: null,
   });
 
   // Rank 2: Donald Trump
@@ -46,11 +53,18 @@ function generateMockTrendingPeople(): TrendingPerson[] {
     id: "person-2",
     name: "Donald Trump",
     avatar: "/assets/donald-trump.png",
+    bio: null,
     rank: 2,
     trendScore: 9950,
+    fameIndex: 100,
+    fameIndexLive: null,
+    liveRank: null,
+    liveUpdatedAt: null,
+    liveDampen: null,
     change24h: (Math.random() - 0.5) * 30,
     change7d: (Math.random() - 0.5) * 60,
     category: "Politics",
+    profileViews10m: null,
   });
   
   for (let i = 2; i < 100; i++) {
@@ -62,11 +76,18 @@ function generateMockTrendingPeople(): TrendingPerson[] {
       id: `person-${i + 1}`,
       name,
       avatar: null,
+      bio: null,
       rank: i + 1,
       trendScore: 9900 - ((i - 2) * 50) + Math.random() * 100,
+      fameIndex: Math.round((9900 - ((i - 2) * 50) + Math.random() * 100) / 100),
+      fameIndexLive: null,
+      liveRank: null,
+      liveUpdatedAt: null,
+      liveDampen: null,
       change24h: (Math.random() - 0.5) * 30,
       change7d: (Math.random() - 0.5) * 60,
       category: categories[i % categories.length],
+      profileViews10m: null,
     });
   }
 

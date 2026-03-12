@@ -29,7 +29,7 @@ Format: `postgresql://postgres.[ref]:[password]@aws-1-eu-north-1.pooler.supabase
 |---|---|---|
 | `SUPABASE_URL` | ✅ Yes | Your Supabase project URL (https://xxx.supabase.co) |
 | `SUPABASE_ANON_KEY` | ✅ Yes | Public anon key (safe for frontend) |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅ Yes | Private service role key (backend only — never expose to frontend) |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ Yes in production | Private service role key for backend admin/storage operations (backend only — never expose to frontend) |
 
 ---
 
@@ -52,6 +52,15 @@ Format: `postgresql://postgres.[ref]:[password]@aws-1-eu-north-1.pooler.supabase
 |---|---|---|
 | `SESSION_SECRET` | ✅ Yes | Random string used to sign session cookies |
 | `NODE_ENV` | Auto-set | Set by `cross-env` in npm scripts (development/production) |
+
+---
+
+## Runtime Notes
+
+- The backend now fails fast if `SUPABASE_URL` is missing.
+- Production also fails fast if `SUPABASE_SERVICE_ROLE_KEY` is missing.
+- Outside production, the backend can fall back to `SUPABASE_ANON_KEY`, but some admin/storage flows may not work.
+- Runtime auth uses Supabase sessions/JWTs, while profile state, roles, XP, and credits live in the `profiles` table.
 
 ---
 
@@ -115,3 +124,18 @@ DISABLE_SCHEDULERS=true
 | `SERPER_API_KEY` | serper.dev → Dashboard → API Key |
 | `MEDIASTACK_API_KEY` | mediastack.com → Dashboard → API Key |
 | `SESSION_SECRET` | Generate any random string (50+ chars recommended) |
+
+---
+
+## Schema Workflow
+
+Use the repository script rather than calling Drizzle directly:
+
+```bash
+npm run db:push
+```
+
+Notes:
+- `npm run db:push` now wraps `drizzle-kit push` with the project `.env` and auto-selects the non-destructive default if Drizzle prompts about truncation.
+- `npm run db:push:raw` is available only for manual debugging when you explicitly want raw Drizzle behavior.
+- The app expects `xp_ledger.user_id` and `credit_ledger.user_id` to align with `profiles.id`, not the legacy `users.id`.

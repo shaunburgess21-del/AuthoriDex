@@ -413,9 +413,14 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
       rank: index + 1,
       trendScore: celeb.trendScore,
       fameIndex: currentFameIndex,
+      fameIndexLive: null,
+      liveRank: null,
+      liveUpdatedAt: null,
+      liveDampen: null,
       change24h: change24h !== null ? Math.round(change24h * 10) / 10 : null,
       change7d: change7d !== null ? Math.round(change7d * 10) / 10 : null,
       category: celeb.category,
+      profileViews10m: null,
     });
   }
   

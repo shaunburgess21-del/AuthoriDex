@@ -2,7 +2,7 @@
 
 ## Overview
 
-AuthoriDex runs 4 background schedulers on Railway. These are bootstrapped in `server/index.ts` at startup. They do NOT run during frontend-only builds.
+AuthoriDex runs multiple background jobs on the backend service. They are bootstrapped in `server/index.ts`, do not run during frontend-only builds, and can all be skipped with `DISABLE_SCHEDULERS=true`.
 
 ---
 
@@ -10,6 +10,7 @@ AuthoriDex runs 4 background schedulers on Railway. These are bootstrapped in `s
 
 | Job | Frequency | Purpose |
 |---|---|---|
+| Snapshot Scheduler | Every 60 minutes | Captures historical score snapshots for charts and backfills |
 | Ingestion Scheduler | Every hour at :02 | Full data fetch + score calculation |
 | LiveTick | Every 10 minutes | Fast rank recalculation (no external API calls) |
 | Seed Engine | Hourly at :30 (Mon-Tue only) | Discovers and seeds new people candidates |
@@ -18,7 +19,19 @@ AuthoriDex runs 4 background schedulers on Railway. These are bootstrapped in `s
 
 ---
 
-## 1. Ingestion Scheduler
+## 1. Snapshot Scheduler
+
+**Runs:** Every 60 minutes
+**Location:** `server/jobs/snapshot-scheduler.ts`
+
+### What it does:
+1. Captures point-in-time score data for charts and history views
+2. Preserves the historical series used by trend comparisons and diagnostics
+3. Gives the app a stable baseline for backfills and freshness monitoring
+
+---
+
+## 2. Ingestion Scheduler
 
 **Runs:** Every hour at :02 past the hour (e.g. 14:02, 15:02)
 **Location:** `server/jobs/` + `server/ingestion/`
@@ -53,10 +66,10 @@ AuthoriDex runs 4 background schedulers on Railway. These are bootstrapped in `s
 
 ---
 
-## 2. LiveTick
+## 3. LiveTick
 
 **Runs:** Every 10 minutes
-**Location:** `server/jobs/liveTick.ts` (or similar)
+**Location:** `server/jobs/live-tick.ts`
 
 ### What it does:
 1. Reads latest snapshot scores from Supabase
@@ -75,10 +88,10 @@ Keeps the leaderboard feeling "live" between full hourly ingestions. Captures vo
 
 ---
 
-## 3. Seed Engine
+## 4. Seed Engine
 
 **Runs:** Hourly at :30 past the hour, Monday and Tuesday only
-**Location:** `server/jobs/seedEngine.ts` (or similar)
+**Location:** Bootstrapped in `server/index.ts`
 
 ### What it does:
 - Discovers new candidate public figures to potentially add to the index
@@ -90,20 +103,20 @@ Limits API usage — seeding is expensive and only needs to run a couple of time
 
 ---
 
-## 4. Market Resolver
+## 5. Market Resolver
 
 **Runs:** Every 5 minutes (with 2-minute startup delay)
-**Location:** `server/jobs/marketResolver.ts` (or similar)
+**Location:** `server/jobs/market-resolver.ts`
 
 ### What it does:
 - Checks all open prediction markets
 - Resolves markets where the outcome deadline has passed
+- Applies payout/refund ledger entries transactionally
 - Awards XP to users who predicted correctly
-- Updates user credibility scores
 
 ---
 
-## 5. Staleness Monitor
+## 6. Staleness Monitor
 
 **Runs:** Every 30 minutes
 **Location:** Bootstrapped in `server/index.ts`
@@ -136,7 +149,7 @@ Add to `.env`:
 ```
 DISABLE_SCHEDULERS=true
 ```
-Note: This flag needs to be wired into `server/index.ts` bootstrap logic to take effect.
+This flag is already wired into `server/index.ts` and skips Snapshot, Ingestion, LiveTick, Seed Engine, Market Resolver, and Staleness Monitor.
 
 ---
 

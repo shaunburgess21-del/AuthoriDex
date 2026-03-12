@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { xpActions, xpLedger, users, ranks } from "@shared/schema";
+import { xpActions, xpLedger, profiles, ranks } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 
 async function seedXpActions() {
@@ -88,12 +88,12 @@ async function seedRanks() {
 async function migrateLegacyXp() {
   console.log("[Gamification] Migrating legacy XP balances to ledger...");
   
-  const existingUsers = await db.select().from(users);
+  const existingProfiles = await db.select().from(profiles);
   let migrated = 0;
 
-  for (const user of existingUsers) {
-    if (user.xpPoints > 0) {
-      const idempotencyKey = `legacy_migration_${user.id}`;
+  for (const profile of existingProfiles) {
+    if (profile.xpPoints > 0) {
+      const idempotencyKey = `legacy_migration_${profile.id}`;
       
       const existing = await db.select()
         .from(xpLedger)
@@ -102,12 +102,12 @@ async function migrateLegacyXp() {
 
       if (existing.length === 0) {
         await db.insert(xpLedger).values({
-          userId: user.id,
+          userId: profile.id,
           actionType: 'legacy_migration',
-          xpDelta: user.xpPoints,
+          xpDelta: profile.xpPoints,
           idempotencyKey,
           source: 'legacy_migration',
-          metadata: { migratedAt: new Date().toISOString(), originalXp: user.xpPoints }
+          metadata: { migratedAt: new Date().toISOString(), originalXp: profile.xpPoints }
         });
         migrated++;
       }

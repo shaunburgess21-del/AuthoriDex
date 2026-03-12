@@ -362,17 +362,24 @@ function startSeedEngineScheduler() {
   scheduleNextSeedRun();
 }
 
-function runStartupTask(name: string, task: () => Promise<void>) {
-  task().catch((error) => {
-    process.stderr.write(`[STARTUP TASK ERROR] ${name}: ${error?.stack || error}\n`);
+function formatError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.stack || error.message;
+  }
+  return String(error);
+}
+
+function runStartupTask(name: string, task: () => Promise<unknown>) {
+  task().catch((error: unknown) => {
+    process.stderr.write(`[STARTUP TASK ERROR] ${name}: ${formatError(error)}\n`);
   });
 }
 
 function startScheduler(name: string, start: () => void) {
   try {
     start();
-  } catch (error) {
-    process.stderr.write(`[SCHEDULER START ERROR] ${name}: ${error?.stack || error}\n`);
+  } catch (error: unknown) {
+    process.stderr.write(`[SCHEDULER START ERROR] ${name}: ${formatError(error)}\n`);
   }
 }
 

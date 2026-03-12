@@ -18,9 +18,10 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
+  const supabase = await getSupabase();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) return { "Content-Type": "application/json" };
   return { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` };
