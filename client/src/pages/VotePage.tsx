@@ -356,9 +356,9 @@ function VersusCard({
             className={`flex-1 flex flex-col rounded-t-none rounded-b-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
               hasVoted
                 ? votedB
-                  ? 'border-sky-600/50 ring-2 ring-sky-600/30'
-                  : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-sky-600/30'
-                : 'border-slate-700/50 hover:border-sky-600/50'
+                  ? 'border-amber-500/50 ring-2 ring-amber-500/30'
+                  : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-amber-500/30'
+                : 'border-slate-700/50 hover:border-amber-500/50'
             }`}
             data-testid={`button-vote-b-${matchup.id}`}
           >
@@ -385,7 +385,7 @@ function VersusCard({
                   />
                 </div>
               ) : (
-                <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? 'from-sky-700/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
+                <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? 'from-amber-700/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
               )}
             </div>
             <div className="px-2 py-2 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
@@ -409,11 +409,11 @@ function VersusCard({
               </div>
               <div className="flex items-center gap-1.5">
                 {hasVoted && votedB && (
-                  <Badge variant="outline" className="text-[10px] border-sky-600/40 text-sky-500 px-1.5 py-0">
+                  <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-400 px-1.5 py-0">
                     Your pick
                   </Badge>
                 )}
-                <span className={`text-lg font-bold ${hasVoted ? (!leadingA ? 'text-[#0386C9]' : 'text-slate-400') : 'text-slate-600'}`}>
+                <span className={`text-lg font-bold ${hasVoted ? (!leadingA ? 'text-amber-400' : 'text-slate-400') : 'text-slate-600'}`}>
                   {hasVoted ? `${matchup.optionBPercent}%` : '%'}
                 </span>
               </div>
@@ -426,7 +426,7 @@ function VersusCard({
                     style={{ width: `${matchup.optionAPercent}%` }}
                   />
                   <div 
-                    className="h-full bg-gradient-to-r from-sky-500 to-sky-600"
+                    className="h-full bg-gradient-to-r from-amber-500 to-amber-600"
                     style={{ width: `${matchup.optionBPercent}%` }}
                   />
                 </>
@@ -1799,6 +1799,21 @@ function FilterChip({
 
 const VOTE_WELCOME_SEEN_KEY = "authoridex_vote_welcome_seen";
 
+const OVERLAY_SCROLL_PREFIX = "overlay_scroll_";
+function saveOverlayScroll(name: string, scrollTop: number) {
+  sessionStorage.setItem(OVERLAY_SCROLL_PREFIX + name, String(Math.round(scrollTop)));
+}
+function restoreOverlayScroll(name: string, el: HTMLElement | null) {
+  const saved = sessionStorage.getItem(OVERLAY_SCROLL_PREFIX + name);
+  if (saved && el) {
+    const pos = parseInt(saved, 10);
+    requestAnimationFrame(() => { el.scrollTop = pos; });
+  }
+}
+function clearOverlayScroll(name: string) {
+  sessionStorage.removeItem(OVERLAY_SCROLL_PREFIX + name);
+}
+
 function VoteWelcomeModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -1860,7 +1875,7 @@ function VoteWelcomeModal({ open, onClose }: { open: boolean; onClose: () => voi
 
         <Button
           onClick={onClose}
-          className="w-full bg-gradient-to-r from-cyan-600 to-teal-500 hover:from-cyan-500 hover:to-teal-400 text-white font-medium"
+          className="w-full bg-gradient-to-r from-cyan-500 to-cyan-300 hover:from-cyan-400 hover:to-cyan-200 text-white font-medium"
           data-testid="button-cast-first-vote"
         >
           Cast Your First Vote
@@ -2006,6 +2021,12 @@ export default function VotePage() {
   const [opinionSuggestDuration, setOpinionSuggestDuration] = useState<string>("none");
   const [opinionSuggestCustomDate, setOpinionSuggestCustomDate] = useState("");
   const [opinionSuggestOptions, setOpinionSuggestOptions] = useState<string[]>(["", "", ""]);
+
+  const inductionScrollRef = useRef<HTMLDivElement>(null);
+  const topicsScrollRef = useRef<HTMLDivElement>(null);
+  const matchupsScrollRef = useRef<HTMLDivElement>(null);
+  const opinionPollsScrollRef = useRef<HTMLDivElement>(null);
+  const valuePerceptionScrollRef = useRef<HTMLDivElement>(null);
 
   const enrichedCandidates = dbInductionCandidates;
   
@@ -2204,6 +2225,7 @@ export default function VotePage() {
   }, [applyOverlayState]);
 
   const closeOverlay = useCallback(() => {
+    ["induction", "topics", "matchups", "opinion-polls", "value-perception"].forEach(clearOverlayScroll);
     applyOverlayState(undefined);
     window.history.back();
   }, [applyOverlayState]);
@@ -2215,6 +2237,22 @@ export default function VotePage() {
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [applyOverlayState]);
+
+  useEffect(() => {
+    if (inductionOverlayOpen) restoreOverlayScroll("induction", inductionScrollRef.current);
+  }, [inductionOverlayOpen]);
+  useEffect(() => {
+    if (topicsOverlayOpen) restoreOverlayScroll("topics", topicsScrollRef.current);
+  }, [topicsOverlayOpen]);
+  useEffect(() => {
+    if (matchupsOverlayOpen) restoreOverlayScroll("matchups", matchupsScrollRef.current);
+  }, [matchupsOverlayOpen]);
+  useEffect(() => {
+    if (opinionPollsOverlayOpen) restoreOverlayScroll("opinion-polls", opinionPollsScrollRef.current);
+  }, [opinionPollsOverlayOpen]);
+  useEffect(() => {
+    if (valuePerceptionOverlayOpen) restoreOverlayScroll("value-perception", valuePerceptionScrollRef.current);
+  }, [valuePerceptionOverlayOpen]);
 
   const addXP = (amount: number, event?: React.MouseEvent) => {
     setXp(prev => prev + amount);
@@ -3932,7 +3970,7 @@ export default function VotePage() {
               onAuthRequired={handleAuthRequired}
             />
             
-            <div className="flex-1 overflow-y-auto p-4">
+            <div ref={inductionScrollRef} onScroll={(e) => saveOverlayScroll("induction", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-7xl mx-auto">
                 {filteredCandidates.map((candidate, index) => (
                   <InductionCandidateCard
@@ -3989,7 +4027,7 @@ export default function VotePage() {
               onAuthRequired={handleAuthRequired}
             />
             
-            <div className="flex-1 overflow-y-auto p-4">
+            <div ref={topicsScrollRef} onScroll={(e) => saveOverlayScroll("topics", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
                 {filteredTopics.map((topic) => (
                   <DiscourseCard 
@@ -4047,7 +4085,7 @@ export default function VotePage() {
               onAuthRequired={handleAuthRequired}
             />
             
-            <div className="flex-1 overflow-y-auto p-4">
+            <div ref={matchupsScrollRef} onScroll={(e) => saveOverlayScroll("matchups", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
                 {filteredMatchups.map((matchup) => (
                   <VersusCard 
@@ -4107,7 +4145,7 @@ export default function VotePage() {
               onAuthRequired={handleAuthRequired}
             />
             
-            <div className="flex-1 overflow-y-auto p-4">
+            <div ref={opinionPollsScrollRef} onScroll={(e) => saveOverlayScroll("opinion-polls", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
                 {filteredOpinionPolls.map((poll: any) => (
                   <OpinionPollCard
@@ -4172,7 +4210,7 @@ export default function VotePage() {
               onAuthRequired={handleAuthRequired}
             />
             
-            <div className="flex-1 overflow-y-auto p-4">
+            <div ref={valuePerceptionScrollRef} onScroll={(e) => saveOverlayScroll("value-perception", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
                 {filteredValueCelebrities.map((person) => (
                   <UnderratedOverratedCard 

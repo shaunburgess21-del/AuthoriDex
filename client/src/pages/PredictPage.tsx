@@ -1402,6 +1402,21 @@ function SuggestMarketCard({ onClick }: { onClick: () => void }) {
   );
 }
 
+const OVERLAY_SCROLL_PREFIX = "overlay_scroll_";
+function saveOverlayScroll(name: string, scrollTop: number) {
+  sessionStorage.setItem(OVERLAY_SCROLL_PREFIX + name, String(Math.round(scrollTop)));
+}
+function restoreOverlayScroll(name: string, el: HTMLElement | null) {
+  const saved = sessionStorage.getItem(OVERLAY_SCROLL_PREFIX + name);
+  if (saved && el) {
+    const pos = parseInt(saved, 10);
+    requestAnimationFrame(() => { el.scrollTop = pos; });
+  }
+}
+function clearOverlayScroll(name: string) {
+  sessionStorage.removeItem(OVERLAY_SCROLL_PREFIX + name);
+}
+
 function FullScreenOverlay({
   open,
   onClose,
@@ -1412,7 +1427,8 @@ function FullScreenOverlay({
   searchQuery,
   onSearchChange,
   user,
-  onAuthRequired
+  onAuthRequired,
+  overlayName
 }: {
   open: boolean;
   onClose: () => void;
@@ -1424,7 +1440,10 @@ function FullScreenOverlay({
   onSearchChange: (q: string) => void;
   user?: any;
   onAuthRequired?: () => void;
+  overlayName: string;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden';
@@ -1433,13 +1452,17 @@ function FullScreenOverlay({
     }
     return () => { document.body.style.overflow = ''; };
   }, [open]);
+
+  useEffect(() => {
+    if (open) restoreOverlayScroll(overlayName, scrollRef.current);
+  }, [open, overlayName]);
   
   if (!open) return null;
   
   const predictCategories = CATEGORY_FILTERS.map((c) => ({ value: c.id, label: c.label }));
   
   return (
-    <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto premium-scrollbar" data-testid="overlay-view-all">
+    <div ref={scrollRef} onScroll={(e) => saveOverlayScroll(overlayName, e.currentTarget.scrollTop)} className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto premium-scrollbar" data-testid="overlay-view-all">
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
@@ -2062,6 +2085,7 @@ export default function PredictPage() {
   }, []);
 
   const closePredictOverlay = useCallback(() => {
+    ["community", "weekly", "h2h", "gainers"].forEach(clearOverlayScroll);
     setViewAllCategory(null);
     window.history.back();
   }, []);
@@ -2531,6 +2555,7 @@ export default function PredictPage() {
         open={viewAllCategory === "weekly"}
         onClose={closePredictOverlay}
         title="All Weekly Up/Down Markets"
+        overlayName="weekly"
         categoryFilter={overlayCategoryFilter}
         onCategoryChange={setOverlayCategoryFilter}
         searchQuery={overlaySearchQuery}
@@ -2557,6 +2582,7 @@ export default function PredictPage() {
         open={viewAllCategory === "h2h"}
         onClose={closePredictOverlay}
         title="All Head-to-Head Battles"
+        overlayName="h2h"
         categoryFilter={overlayCategoryFilter}
         onCategoryChange={setOverlayCategoryFilter}
         searchQuery={overlaySearchQuery}
@@ -2583,6 +2609,7 @@ export default function PredictPage() {
         open={viewAllCategory === "gainers"}
         onClose={closePredictOverlay}
         title="All Top Gainer Predictions"
+        overlayName="gainers"
         categoryFilter={overlayCategoryFilter}
         onCategoryChange={setOverlayCategoryFilter}
         searchQuery={overlaySearchQuery}
@@ -2610,6 +2637,7 @@ export default function PredictPage() {
         open={viewAllCategory === "community"}
         onClose={closePredictOverlay}
         title="All Real-World Markets"
+        overlayName="community"
         categoryFilter={overlayCategoryFilter}
         onCategoryChange={setOverlayCategoryFilter}
         searchQuery={overlaySearchQuery}
