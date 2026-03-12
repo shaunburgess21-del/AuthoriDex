@@ -7,7 +7,7 @@ import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insight
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
-import { requireAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
+import { requireAuth, requireAdmin as requireAdminAuth, optionalAuth, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
 import { createHash, randomUUID } from "crypto";
 import multer from "multer";
@@ -297,7 +297,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Manual seeding endpoint for testing
-  app.post("/api/admin/seed-supabase", requireAuth, requireAdmin, async (req, res) => {
+  app.post("/api/admin/seed-supabase", requireAuth, requireAdminAuth, async (req, res) => {
     try {
       const result = await seedSupabasePersons();
       
@@ -319,7 +319,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Run data ingestion - fetches real data from Wikipedia and GDELT
-  app.post("/api/admin/ingest", requireAuth, requireAdmin, async (req, res) => {
+  app.post("/api/admin/ingest", requireAuth, requireAdminAuth, async (req, res) => {
     try {
       const { runDataIngestion } = await import("./jobs/ingest");
       const result = await runDataIngestion();
@@ -335,7 +335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Seed historical trend data for graphs
-  app.post("/api/admin/seed-history", requireAuth, requireAdmin, async (req, res) => {
+  app.post("/api/admin/seed-history", requireAuth, requireAdminAuth, async (req, res) => {
     try {
       const { seedHistoricalSnapshots } = await import("./jobs/seed-history");
       const { days = 7 } = req.body;
