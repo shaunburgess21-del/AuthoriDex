@@ -3,6 +3,7 @@ import path from "path";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
+
 import { setupVite, serveStatic, log } from "./vite";
 import { startSnapshotScheduler } from "./jobs/snapshot-scheduler";
 import { runDataIngestion, hydrateTrendingPeopleFromSnapshots } from "./jobs/ingest";
