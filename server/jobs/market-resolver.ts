@@ -1,7 +1,7 @@
 import { db } from "../db";
 import { predictionMarkets, marketEntries, marketBets, trendSnapshots, profiles, creditLedger } from "@shared/schema";
 import { eq, and, sql, inArray, lte, gte, desc, asc } from "drizzle-orm";
-import { log } from "../vite";
+import { log } from "../log";
 import { calculateSettlementPayouts } from "./settlement-utils";
 
 const RESOLVER_INTERVAL_MS = 5 * 60 * 1000;

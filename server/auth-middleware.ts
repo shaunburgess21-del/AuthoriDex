@@ -17,35 +17,57 @@ export interface AuthRequest extends Request {
   userRole?: string;
 }
 
+export interface ResolvedAuthContext {
+  userId: string;
+  userEmail?: string;
+  userRole: string;
+}
+
+function getBearerToken(authHeader?: string | string[]): string | null {
+  if (typeof authHeader !== "string" || !authHeader.startsWith("Bearer ")) {
+    return null;
+  }
+
+  return authHeader.substring(7);
+}
+
+export async function resolveAuthContextFromHeader(authHeader?: string | string[]): Promise<ResolvedAuthContext | null> {
+  const token = getBearerToken(authHeader);
+  if (!token) {
+    return null;
+  }
+
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user) {
+    return null;
+  }
+
+  const [profile] = await db
+    .select({ role: profiles.role })
+    .from(profiles)
+    .where(eq(profiles.id, user.id))
+    .limit(1);
+
+  return {
+    userId: user.id,
+    userEmail: user.email || undefined,
+    userRole: resolveProfileRole(profile?.role),
+  };
+}
+
 /**
  * Middleware to verify Supabase JWT and attach the server-controlled profile role.
  */
 export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: "Unauthorized - Missing header" });
+    const authContext = await resolveAuthContextFromHeader(req.headers.authorization);
+    if (!authContext) {
+      return res.status(401).json({ error: "Unauthorized - Invalid or missing token" });
     }
 
-    const token = authHeader.substring(7);
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      return res.status(401).json({ error: "Unauthorized - Invalid token" });
-    }
-
-    const [profile] = await db
-      .select({ role: profiles.role })
-      .from(profiles)
-      .where(eq(profiles.id, user.id))
-      .limit(1);
-
-    req.userId = user.id;
-    req.userEmail = user.email || undefined;
-    req.userRole = resolveProfileRole(profile?.role);
-
-
+    req.userId = authContext.userId;
+    req.userEmail = authContext.userEmail;
+    req.userRole = authContext.userRole;
     next();
   } catch (error) {
     console.error("Auth middleware error:", error);
@@ -72,21 +94,11 @@ export async function requireAdmin(req: AuthRequest, res: Response, next: NextFu
 // Keep the optionalAuth function exactly as it was
 export async function optionalAuth(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      const { data: { user }, error } = await supabase.auth.getUser(token);
-      if (!error && user) {
-        const [profile] = await db
-          .select({ role: profiles.role })
-          .from(profiles)
-          .where(eq(profiles.id, user.id))
-          .limit(1);
-
-        req.userId = user.id;
-        req.userEmail = user.email || undefined;
-        req.userRole = resolveProfileRole(profile?.role);
-      }
+    const authContext = await resolveAuthContextFromHeader(req.headers.authorization);
+    if (authContext) {
+      req.userId = authContext.userId;
+      req.userEmail = authContext.userEmail;
+      req.userRole = authContext.userRole;
     }
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
     const userAgent = req.headers['user-agent'] || 'unknown';

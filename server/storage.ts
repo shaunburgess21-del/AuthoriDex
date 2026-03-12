@@ -1,12 +1,8 @@
-import { type User, type InsertUser, type TrendingPerson, type CelebrityProfile, type InsertCelebrityProfile, celebrityProfiles, trendingPeople } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { type TrendingPerson, type CelebrityProfile, type InsertCelebrityProfile, celebrityProfiles, trendingPeople } from "@shared/schema";
 import { db } from "./db";
 import { eq, asc } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
   getTrendingPeople(): Promise<TrendingPerson[]>;
   getTrendingPerson(id: string): Promise<TrendingPerson | undefined>;
   updateTrendingPeople(people: TrendingPerson[]): Promise<void>;
@@ -16,40 +12,10 @@ export interface IStorage {
 }
 
 export class MemStorage implements IStorage {
-  private users: Map<string, User>;
   private trendingPeople: Map<string, TrendingPerson>;
 
   constructor() {
-    this.users = new Map();
     this.trendingPeople = new Map();
-  }
-
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = {
-      walletAddress: null,
-      email: null,
-      xpPoints: 0,
-      reputationRank: "Citizen",
-      predictCredits: 1000,
-      currentStreak: 0,
-      lastActiveAt: null,
-      createdAt: new Date(),
-      ...insertUser,
-      id,
-    };
-    this.users.set(id, user);
-    return user;
   }
 
   async getTrendingPeople(): Promise<TrendingPerson[]> {

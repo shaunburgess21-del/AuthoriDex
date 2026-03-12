@@ -7,12 +7,13 @@ import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insight
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
-import { requireAuth, requireAdmin, optionalAuth, type AuthRequest } from "./auth-middleware";
+import { requireAuth, requireAdmin, optionalAuth, resolveAuthContextFromHeader, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
 import { createHash, randomUUID } from "crypto";
 import multer from "multer";
 import path from "path";
 import { gamificationService } from "./services/gamification";
+import { isAdminRole } from "./utils/authz";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext } from "./providers/serper";
 import { getSourceStats } from "./scoring/sourceStats";
@@ -4262,7 +4263,6 @@ Only return the JSON object.`;
         
         await db.update(profiles).set(updateData).where(eq(profiles.id, userId));
         const updated = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-        await gamificationService.ensureLegacyUserShadow(userId);
 
         return res.json(updated[0]);
       }
@@ -4299,7 +4299,6 @@ Only return the JSON object.`;
         idempotencyKey: `initial_grant_${userId}`,
         metadata: { reason: 'New account signup bonus' },
       }).onConflictDoNothing();
-      await gamificationService.ensureLegacyUserShadow(userId);
 
       res.json(newProfile);
     } catch (error: any) {
@@ -4353,7 +4352,6 @@ Only return the JSON object.`;
       
       await db.update(profiles).set(updateData).where(eq(profiles.id, userId));
       const updated = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-      await gamificationService.ensureLegacyUserShadow(userId);
       
       res.json(updated[0]);
     } catch (error: any) {
@@ -4405,12 +4403,9 @@ Only return the JSON object.`;
   // Check if current user is admin
   app.get("/api/profile/is-admin", requireAuth, async (req: AuthRequest, res) => {
     try {
-      const userId = req.userId!;
-      const profile = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-      
       res.json({ 
-        isAdmin: profile.length > 0 && profile[0].role === "admin",
-        role: profile.length > 0 ? profile[0].role : null
+        isAdmin: isAdminRole(req.userRole),
+        role: req.userRole || null,
       });
     } catch (error: any) {
       console.error("Error checking admin status:", error.message);
@@ -5675,7 +5670,7 @@ Only return the JSON object.`;
       }
       
       // Can't ban admins
-      if (user.role === 'admin') {
+      if (isAdminRole(user.role)) {
         return res.status(403).json({ error: "Cannot ban admin users" });
       }
       
@@ -7255,17 +7250,8 @@ Only return the JSON object.`;
 
   app.get("/api/opinion-polls", async (req, res) => {
     try {
-      const userId = (() => {
-        try {
-          const authHeader = req.headers.authorization;
-          if (!authHeader?.startsWith('Bearer ')) return null;
-          const token = authHeader.split(' ')[1];
-          const jwt = require('jsonwebtoken');
-          if (!process.env.JWT_SECRET) return null;
-          const decoded = jwt.verify(token, process.env.JWT_SECRET);
-          return (decoded as any).userId || null;
-        } catch { return null; }
-      })();
+      const authContext = await resolveAuthContextFromHeader(req.headers.authorization);
+      const userId = authContext?.userId ?? null;
 
       const polls = await db
         .select()

@@ -4,7 +4,8 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 
-import { setupVite, serveStatic, log } from "./vite";
+import { log } from "./log";
+import { serveStatic } from "./serve-static";
 import { startSnapshotScheduler } from "./jobs/snapshot-scheduler";
 import { runDataIngestion, hydrateTrendingPeopleFromSnapshots } from "./jobs/ingest";
 import { startLiveTickScheduler, setLastFullRefreshAt, applySnapBackDampening } from "./jobs/live-tick";
@@ -361,6 +362,20 @@ function startSeedEngineScheduler() {
   scheduleNextSeedRun();
 }
 
+function runStartupTask(name: string, task: () => Promise<void>) {
+  task().catch((error) => {
+    process.stderr.write(`[STARTUP TASK ERROR] ${name}: ${error?.stack || error}\n`);
+  });
+}
+
+function startScheduler(name: string, start: () => void) {
+  try {
+    start();
+  } catch (error) {
+    process.stderr.write(`[SCHEDULER START ERROR] ${name}: ${error?.stack || error}\n`);
+  }
+}
+
 const app = express();
 app.set('trust proxy', 1);
 
@@ -417,7 +432,7 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
+async function startServer() {
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -436,6 +451,7 @@ app.use((req, res, next) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
+    const { setupVite } = await import("./vite");
     await setupVite(app, server);
   } else {
     serveStatic(app);
@@ -455,12 +471,9 @@ app.use((req, res, next) => {
     host,
   }, () => {
     log(`serving on port ${port}`);
-    
-    hydrateTrendingPeopleFromSnapshots().catch(e => 
-      console.error("[Boot] Hydration error:", e)
-    );
-    
-    verifyDbConstraints();
+
+    runStartupTask("hydrate trending people", hydrateTrendingPeopleFromSnapshots);
+    runStartupTask("verify database constraints", verifyDbConstraints);
 
     const schedulersDisabled = process.env.DISABLE_SCHEDULERS === "true";
     if (schedulersDisabled) {
@@ -469,24 +482,29 @@ app.use((req, res, next) => {
     }
     
     // Start hourly snapshot scheduler (captures data points for graphs)
-    startSnapshotScheduler(60 * 60 * 1000);
+    startScheduler("Snapshot", () => startSnapshotScheduler(60 * 60 * 1000));
     
     // Start data ingestion scheduler (fetches fresh API data every 8 hours)
-    startIngestionScheduler();
+    startScheduler("Ingestion", startIngestionScheduler);
 
     // Start live tick scheduler (re-ranks every 10 min using internal signals)
     if (!SERVERLESS_MODE) {
-      startLiveTickScheduler();
+      startScheduler("LiveTick", startLiveTickScheduler);
     }
 
-    startSeedEngineScheduler();
+    startScheduler("Seed Engine", startSeedEngineScheduler);
 
     // Start market auto-resolver (resolves expired prediction markets every 5 min)
     if (!SERVERLESS_MODE) {
-      startMarketResolverScheduler();
+      startScheduler("MarketResolver", startMarketResolverScheduler);
     }
 
     // Start staleness monitor (alerts when snapshots are >2h old)
-    startStalenessMonitor();
+    startScheduler("Staleness Monitor", startStalenessMonitor);
   });
-})();
+}
+
+startServer().catch((error) => {
+  process.stderr.write(`[BOOT] Failed to start server: ${error?.stack || error}\n`);
+  process.exit(1);
+});

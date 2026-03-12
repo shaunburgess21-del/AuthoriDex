@@ -1,6 +1,5 @@
 import { db } from "../db";
 import { 
-  users, 
   profiles,
   xpLedger, 
   creditLedger, 
@@ -12,6 +11,7 @@ import {
 } from "@shared/schema";
 import { eq, and, sql, gte, desc } from "drizzle-orm";
 import { canAccessCapability, computeCreditBalance, type Capability } from "./gamification-utils";
+import { resolveRankForXp } from "./gamification-ranks";
 
 interface AwardXpResult {
   success: boolean;
@@ -40,8 +40,6 @@ interface UserStats {
   capabilities: Record<Capability, boolean>;
 }
 
-const LEGACY_PASSWORD_PREFIX = "supabase_managed:";
-
 class GamificationService {
   private xpActionsCache: Map<string, XpAction> = new Map();
   private ranksCache: Rank[] = [];
@@ -51,43 +49,6 @@ class GamificationService {
   private async getProfile(userId: string): Promise<Profile | null> {
     const [profile] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
     return profile ?? null;
-  }
-
-  private async syncLegacyUserShadow(profile: Profile): Promise<void> {
-    const username = profile.username || `user_${profile.id.slice(0, 8)}`;
-    const legacyValues = {
-      id: profile.id,
-      username,
-      password: `${LEGACY_PASSWORD_PREFIX}${profile.id}`,
-      email: null,
-      walletAddress: null,
-      xpPoints: profile.xpPoints,
-      reputationRank: profile.rank,
-      predictCredits: profile.predictCredits,
-      currentStreak: profile.currentStreak,
-      lastActiveAt: profile.lastActiveAt,
-      createdAt: profile.createdAt,
-    };
-
-    await db.insert(users).values(legacyValues).onConflictDoUpdate({
-      target: users.id,
-      set: {
-        username: legacyValues.username,
-        email: legacyValues.email,
-        xpPoints: legacyValues.xpPoints,
-        reputationRank: legacyValues.reputationRank,
-        predictCredits: legacyValues.predictCredits,
-        currentStreak: legacyValues.currentStreak,
-        lastActiveAt: legacyValues.lastActiveAt,
-      },
-    });
-  }
-
-  async ensureLegacyUserShadow(userId: string): Promise<Profile | null> {
-    const profile = await this.getProfile(userId);
-    if (!profile) return null;
-    await this.syncLegacyUserShadow(profile);
-    return profile;
   }
 
   private async ensureCache(): Promise<void> {
@@ -137,96 +98,120 @@ class GamificationService {
       };
     }
 
-    const existingEntry = await db.query.xpLedger.findFirst({
-      where: and(
-        eq(xpLedger.userId, userId),
-        eq(xpLedger.idempotencyKey, idempotencyKey)
-      )
-    });
-
-    if (existingEntry) {
-      const profile = await this.getProfile(userId);
-      return {
-        success: false,
-        xpAwarded: 0,
-        newTotalXp: profile?.xpPoints || 0,
-        newRank: profile?.rank || null,
-        dailyCount: 0,
-        dailyCap: action.dailyCap,
-        message: 'Duplicate action - XP already awarded'
-      };
-    }
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const dailyCountResult = await db.select({
-      count: sql<number>`count(*)`
-    })
-    .from(xpLedger)
-    .where(and(
-      eq(xpLedger.userId, userId),
-      eq(xpLedger.actionType, actionType),
-      gte(xpLedger.createdAt, today)
-    ));
-
-    const dailyCount = Number(dailyCountResult[0]?.count || 0);
-
-    if (action.dailyCap !== null && dailyCount >= action.dailyCap) {
-      const profile = await this.getProfile(userId);
-      return {
-        success: false,
-        xpAwarded: 0,
-        newTotalXp: profile?.xpPoints || 0,
-        newRank: profile?.rank || null,
-        dailyCount,
-        dailyCap: action.dailyCap,
-        message: `Daily cap reached for ${actionType} (${dailyCount}/${action.dailyCap})`
-      };
-    }
-
-    const profile = await this.ensureLegacyUserShadow(userId);
-    if (!profile) {
-      return {
-        success: false,
-        xpAwarded: 0,
-        newTotalXp: 0,
-        newRank: null,
-        dailyCount,
-        dailyCap: action.dailyCap,
-        message: "User profile not found",
-      };
-    }
-
-    await db.insert(xpLedger).values({
-      userId,
-      actionType,
-      xpDelta: action.xpValue,
-      idempotencyKey,
-      source: 'user_action',
-      metadata: metadata || null
-    });
-
-    const updatedProfile = await db.update(profiles)
-      .set({
-        xpPoints: sql`${profiles.xpPoints} + ${action.xpValue}`
+    return db.transaction(async (tx) => {
+      const [existingEntry] = await tx.select({
+        id: xpLedger.id,
       })
-      .where(eq(profiles.id, userId))
-      .returning();
+      .from(xpLedger)
+      .where(and(
+        eq(xpLedger.userId, userId),
+        eq(xpLedger.idempotencyKey, idempotencyKey)
+      ))
+      .limit(1);
 
-    const newTotalXp = updatedProfile[0]?.xpPoints || 0;
+      if (existingEntry) {
+        const [profile] = await tx.select({
+          xpPoints: profiles.xpPoints,
+          rank: profiles.rank,
+        })
+        .from(profiles)
+        .where(eq(profiles.id, userId))
+        .limit(1);
 
-    const newRank = await this.recalculateUserRank(userId, newTotalXp);
+        return {
+          success: false,
+          xpAwarded: 0,
+          newTotalXp: profile?.xpPoints || 0,
+          newRank: profile?.rank || null,
+          dailyCount: 0,
+          dailyCap: action.dailyCap,
+          message: 'Duplicate action - XP already awarded'
+        };
+      }
 
-    return {
-      success: true,
-      xpAwarded: action.xpValue,
-      newTotalXp,
-      newRank,
-      dailyCount: dailyCount + 1,
-      dailyCap: action.dailyCap,
-      message: `Awarded ${action.xpValue} XP for ${action.displayName}`
-    };
+      const dailyCountResult = await tx.select({
+        count: sql<number>`count(*)`
+      })
+      .from(xpLedger)
+      .where(and(
+        eq(xpLedger.userId, userId),
+        eq(xpLedger.actionType, actionType),
+        gte(xpLedger.createdAt, today)
+      ));
+
+      const dailyCount = Number(dailyCountResult[0]?.count || 0);
+      const [profile] = await tx.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+
+      if (!profile) {
+        return {
+          success: false,
+          xpAwarded: 0,
+          newTotalXp: 0,
+          newRank: null,
+          dailyCount,
+          dailyCap: action.dailyCap,
+          message: "User profile not found",
+        };
+      }
+
+      if (action.dailyCap !== null && dailyCount >= action.dailyCap) {
+        return {
+          success: false,
+          xpAwarded: 0,
+          newTotalXp: profile.xpPoints,
+          newRank: profile.rank || null,
+          dailyCount,
+          dailyCap: action.dailyCap,
+          message: `Daily cap reached for ${actionType} (${dailyCount}/${action.dailyCap})`
+        };
+      }
+
+      const insertedLedger = await tx.insert(xpLedger).values({
+        userId,
+        actionType,
+        xpDelta: action.xpValue,
+        idempotencyKey,
+        source: 'user_action',
+        metadata: metadata || null
+      }).onConflictDoNothing().returning({
+        id: xpLedger.id,
+      });
+
+      if (insertedLedger.length === 0) {
+        return {
+          success: false,
+          xpAwarded: 0,
+          newTotalXp: profile.xpPoints,
+          newRank: profile.rank || null,
+          dailyCount,
+          dailyCap: action.dailyCap,
+          message: 'Duplicate action - XP already awarded'
+        };
+      }
+
+      const newTotalXp = profile.xpPoints + action.xpValue;
+      const nextRank = resolveRankForXp(this.ranksCache, newTotalXp);
+
+      await tx.update(profiles)
+        .set({
+          xpPoints: newTotalXp,
+          rank: nextRank?.name ?? profile.rank,
+        })
+        .where(eq(profiles.id, userId));
+
+      return {
+        success: true,
+        xpAwarded: action.xpValue,
+        newTotalXp,
+        newRank: nextRank?.name ?? profile.rank ?? null,
+        dailyCount: dailyCount + 1,
+        dailyCap: action.dailyCap,
+        message: `Awarded ${action.xpValue} XP for ${action.displayName}`
+      };
+    });
   }
 
   async adjustCredits(
@@ -236,72 +221,88 @@ class GamificationService {
     idempotencyKey: string,
     metadata?: Record<string, unknown>
   ): Promise<AdjustCreditsResult> {
-    const existingEntry = await db.query.creditLedger.findFirst({
-      where: and(
+    return db.transaction(async (tx) => {
+      const [existingEntry] = await tx.select({
+        balanceAfter: creditLedger.balanceAfter,
+      })
+      .from(creditLedger)
+      .where(and(
         eq(creditLedger.userId, userId),
         eq(creditLedger.idempotencyKey, idempotencyKey)
-      )
-    });
+      ))
+      .limit(1);
 
-    if (existingEntry) {
-      return {
-        success: false,
-        amount: 0,
-        newBalance: existingEntry.balanceAfter,
-        message: 'Duplicate transaction'
-      };
-    }
+      if (existingEntry) {
+        return {
+          success: false,
+          amount: 0,
+          newBalance: existingEntry.balanceAfter,
+          message: 'Duplicate transaction'
+        };
+      }
 
-    const profile = await this.getProfile(userId);
-
-    if (!profile) {
-      return {
-        success: false,
-        amount: 0,
-        newBalance: 0,
-        message: 'User not found'
-      };
-    }
-
-    const newBalance = computeCreditBalance(profile.predictCredits, amount);
-
-    if (newBalance === null) {
-      return {
-        success: false,
-        amount: 0,
-        newBalance: profile.predictCredits,
-        message: 'Insufficient credits'
-      };
-    }
-
-    await db.insert(creditLedger).values({
-      userId,
-      txnType,
-      amount,
-      walletType: 'VIRTUAL',
-      balanceAfter: newBalance,
-      source: 'user_action',
-      idempotencyKey,
-      metadata: metadata || null
-    });
-
-    const [updatedProfile] = await db.update(profiles)
-      .set({ predictCredits: newBalance })
+      const [profile] = await tx.select({
+        predictCredits: profiles.predictCredits,
+      })
+      .from(profiles)
       .where(eq(profiles.id, userId))
-      .returning();
+      .limit(1);
 
-    if (updatedProfile) {
-      await this.syncLegacyUserShadow(updatedProfile);
-    }
+      if (!profile) {
+        return {
+          success: false,
+          amount: 0,
+          newBalance: 0,
+          message: 'User not found'
+        };
+      }
 
-    return {
-      success: true,
-      amount,
-      newBalance,
-      message: amount > 0 
-        ? `Added ${amount} credits` 
-        : `Deducted ${Math.abs(amount)} credits`
-    };
+      const newBalance = computeCreditBalance(profile.predictCredits, amount);
+
+      if (newBalance === null) {
+        return {
+          success: false,
+          amount: 0,
+          newBalance: profile.predictCredits,
+          message: 'Insufficient credits'
+        };
+      }
+
+      const insertedLedger = await tx.insert(creditLedger).values({
+        userId,
+        txnType,
+        amount,
+        walletType: 'VIRTUAL',
+        balanceAfter: newBalance,
+        source: 'user_action',
+        idempotencyKey,
+        metadata: metadata || null
+      }).onConflictDoNothing().returning({
+        id: creditLedger.id,
+      });
+
+      if (insertedLedger.length === 0) {
+        return {
+          success: false,
+          amount: 0,
+          newBalance: profile.predictCredits,
+          message: 'Duplicate transaction'
+        };
+      }
+
+      await tx.update(profiles)
+        .set({ predictCredits: newBalance })
+        .where(eq(profiles.id, userId));
+
+      return {
+        success: true,
+        amount,
+        newBalance,
+        message: amount > 0
+          ? `Added ${amount} credits`
+          : `Deducted ${Math.abs(amount)} credits`
+      };
+    });
   }
 
   async recalculateUserRank(userId: string, currentXp?: number): Promise<string | null> {
@@ -313,22 +314,13 @@ class GamificationService {
       xp = profile?.xpPoints || 0;
     }
 
-    let newRank: Rank | null = null;
-    for (const rank of this.ranksCache) {
-      if (xp >= rank.minXp && (rank.maxXp === null || xp <= rank.maxXp)) {
-        newRank = rank;
-        break;
-      }
-    }
+    const newRank = resolveRankForXp(this.ranksCache, xp);
 
     if (newRank) {
-      const [updatedProfile] = await db.update(profiles)
+      await db.update(profiles)
         .set({ rank: newRank.name })
         .where(eq(profiles.id, userId))
         .returning();
-      if (updatedProfile) {
-        await this.syncLegacyUserShadow(updatedProfile);
-      }
       return newRank.name;
     }
 
