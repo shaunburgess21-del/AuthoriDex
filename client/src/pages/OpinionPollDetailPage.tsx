@@ -185,7 +185,7 @@ export default function OpinionPollDetailPage() {
             <Link href="/" data-testid="link-logo-home">
               <AuthoriDexLogo size="sm" />
             </Link>
-            <Button variant="ghost" size="sm" onClick={() => setLocation("/vote")} data-testid="button-back">
+            <Button variant="ghost" size="sm" onClick={() => { window.history.length > 1 ? window.history.back() : setLocation("/vote"); }} data-testid="button-back">
               <ArrowLeft className="h-4 w-4 mr-1" />
               Vote
             </Button>

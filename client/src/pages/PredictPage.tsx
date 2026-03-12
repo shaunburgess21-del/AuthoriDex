@@ -1813,7 +1813,9 @@ export default function PredictPage() {
   const [gainerSearch, setGainerSearch] = useState("");
   const [communityCategory, setCommunityCategory] = useState<CategoryFilter>("all");
   const [communitySearch, setCommunitySearch] = useState("");
-  const [viewAllCategory, setViewAllCategory] = useState<string | null>(null);
+  const [walletCredits, setWalletCredits] = useState(10000);
+  const [activePredictions, setActivePredictions] = useState(0);
+  const [viewAllCategory, setViewAllCategory] = useState<string | null>(() => window.history.state?.overlay || null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   
@@ -2055,6 +2057,24 @@ export default function PredictPage() {
     localStorage.setItem(FIRST_VISIT_KEY, "true");
     setShowFirstTimeModal(false);
   };
+
+  const openPredictOverlay = useCallback((category: string) => {
+    window.history.pushState({ overlay: category }, "");
+    setViewAllCategory(category);
+  }, []);
+
+  const closePredictOverlay = useCallback(() => {
+    setViewAllCategory(null);
+    window.history.back();
+  }, []);
+
+  useEffect(() => {
+    const onPopState = (e: PopStateEvent) => {
+      setViewAllCategory(e.state?.overlay || null);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   const handleEnterJackpot = () => {
     if (!selectedJackpotPerson) return;
@@ -2308,7 +2328,7 @@ export default function PredictPage() {
                 variant="ghost" 
                 size="sm" 
                 className="text-violet-500 hover:text-violet-400 text-[14px]"
-                onClick={() => setViewAllCategory("community")}
+                onClick={() => openPredictOverlay("community")}
                 data-testid="button-view-all-real-world"
               >
                 View All Markets
@@ -2376,7 +2396,7 @@ export default function PredictPage() {
                 variant="ghost" 
                 size="sm" 
                 className="text-violet-500 hover:text-violet-400 text-[14px]"
-                onClick={() => setViewAllCategory("weekly")}
+                onClick={() => openPredictOverlay("weekly")}
                 data-testid="button-view-all-updown"
               >
                 View All Markets
@@ -2429,7 +2449,7 @@ export default function PredictPage() {
                 variant="ghost" 
                 size="sm" 
                 className="text-violet-500 hover:text-violet-400 text-[14px]"
-                onClick={() => setViewAllCategory("h2h")}
+                onClick={() => openPredictOverlay("h2h")}
                 data-testid="button-view-all-h2h"
               >
                 View All Markets
@@ -2484,7 +2504,7 @@ export default function PredictPage() {
                 variant="ghost" 
                 size="sm" 
                 className="text-violet-500 hover:text-violet-400 text-[14px]"
-                onClick={() => setViewAllCategory("gainers")}
+                onClick={() => openPredictOverlay("gainers")}
                 data-testid="button-view-all-gainer"
               >
                 View All Markets
@@ -2511,7 +2531,7 @@ export default function PredictPage() {
       />
       <FullScreenOverlay
         open={viewAllCategory === "weekly"}
-        onClose={() => setViewAllCategory(null)}
+        onClose={closePredictOverlay}
         title="All Weekly Up/Down Markets"
         categoryFilter={overlayCategoryFilter}
         onCategoryChange={setOverlayCategoryFilter}
@@ -2537,7 +2557,7 @@ export default function PredictPage() {
       </FullScreenOverlay>
       <FullScreenOverlay
         open={viewAllCategory === "h2h"}
-        onClose={() => setViewAllCategory(null)}
+        onClose={closePredictOverlay}
         title="All Head-to-Head Battles"
         categoryFilter={overlayCategoryFilter}
         onCategoryChange={setOverlayCategoryFilter}
@@ -2563,7 +2583,7 @@ export default function PredictPage() {
       </FullScreenOverlay>
       <FullScreenOverlay
         open={viewAllCategory === "gainers"}
-        onClose={() => setViewAllCategory(null)}
+        onClose={closePredictOverlay}
         title="All Top Gainer Predictions"
         categoryFilter={overlayCategoryFilter}
         onCategoryChange={setOverlayCategoryFilter}
@@ -2590,7 +2610,7 @@ export default function PredictPage() {
       </FullScreenOverlay>
       <FullScreenOverlay
         open={viewAllCategory === "community"}
-        onClose={() => setViewAllCategory(null)}
+        onClose={closePredictOverlay}
         title="All Real-World Markets"
         categoryFilter={overlayCategoryFilter}
         onCategoryChange={setOverlayCategoryFilter}

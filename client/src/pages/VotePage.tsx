@@ -1957,18 +1957,19 @@ export default function VotePage() {
   const [inductionSearchQuery, setInductionSearchQuery] = useState("");
   const [inductionOverlayOpen, setInductionOverlayOpen] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get("section") === "induction";
+    if (params.get("section") === "induction") return true;
+    return window.history.state?.overlay === "induction";
   });
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   const [topicsCategoryFilter, setTopicsCategoryFilter] = useState<FilterCategory>("All");
   const [topicsSearchQuery, setTopicsSearchQuery] = useState("");
-  const [topicsOverlayOpen, setTopicsOverlayOpen] = useState(false);
+  const [topicsOverlayOpen, setTopicsOverlayOpen] = useState(() => window.history.state?.overlay === "topics");
   const [startPollModalOpen, setStartPollModalOpen] = useState(false);
   
   const [matchupsCategoryFilter, setMatchupsCategoryFilter] = useState<FilterCategory>("All");
   const [matchupsSearchQuery, setMatchupsSearchQuery] = useState("");
-  const [matchupsOverlayOpen, setMatchupsOverlayOpen] = useState(false);
+  const [matchupsOverlayOpen, setMatchupsOverlayOpen] = useState(() => window.history.state?.overlay === "matchups");
   const [pollHeadline, setPollHeadline] = useState("");
   const [pollCategory, setPollCategory] = useState("");
   const [pollDescription, setPollDescription] = useState("");
@@ -1990,14 +1991,14 @@ export default function VotePage() {
   const [globalVoteSearchQuery, setGlobalVoteSearchQuery] = useState("");
   const [globalCategoryFilter, setGlobalCategoryFilter] = useState<FilterCategory>("All");
   
-  const [valuePerceptionOverlayOpen, setValuePerceptionOverlayOpen] = useState(false);
+  const [valuePerceptionOverlayOpen, setValuePerceptionOverlayOpen] = useState(() => window.history.state?.overlay === "value-perception");
   const [valuePerceptionCategoryFilter, setValuePerceptionCategoryFilter] = useState<FilterCategory>("All");
   const [valuePerceptionSearchQuery, setValuePerceptionSearchQuery] = useState("");
   const [curateSearchQuery, setCurateSearchQuery] = useState("");
 
   const [opinionPollsCategoryFilter, setOpinionPollsCategoryFilter] = useState<FilterCategory>("All");
   const [opinionPollsSearchQuery, setOpinionPollsSearchQuery] = useState("");
-  const [opinionPollsOverlayOpen, setOpinionPollsOverlayOpen] = useState(false);
+  const [opinionPollsOverlayOpen, setOpinionPollsOverlayOpen] = useState(() => window.history.state?.overlay === "opinion-polls");
   const [opinionSuggestOpen, setOpinionSuggestOpen] = useState(false);
   const [opinionSuggestTitle, setOpinionSuggestTitle] = useState("");
   const [opinionSuggestDescription, setOpinionSuggestDescription] = useState("");
@@ -2188,6 +2189,32 @@ export default function VotePage() {
     }
     return () => { document.body.style.overflow = ''; };
   }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen, matchupsOverlayOpen, inductionSuggestOpen, matchupSuggestOpen, valuePerceptionOverlayOpen, opinionPollsOverlayOpen]);
+
+  const applyOverlayState = useCallback((name: string | undefined) => {
+    setInductionOverlayOpen(name === "induction");
+    setTopicsOverlayOpen(name === "topics");
+    setMatchupsOverlayOpen(name === "matchups");
+    setOpinionPollsOverlayOpen(name === "opinion-polls");
+    setValuePerceptionOverlayOpen(name === "value-perception");
+  }, []);
+
+  const openOverlay = useCallback((name: string) => {
+    window.history.pushState({ overlay: name }, "");
+    applyOverlayState(name);
+  }, [applyOverlayState]);
+
+  const closeOverlay = useCallback(() => {
+    applyOverlayState(undefined);
+    window.history.back();
+  }, [applyOverlayState]);
+
+  useEffect(() => {
+    const onPopState = (e: PopStateEvent) => {
+      applyOverlayState(e.state?.overlay);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [applyOverlayState]);
 
   const addXP = (amount: number, event?: React.MouseEvent) => {
     setXp(prev => prev + amount);
@@ -2506,7 +2533,7 @@ export default function VotePage() {
           <div className="text-center mt-2 md:mt-6">
             <Button
               variant="ghost"
-              onClick={() => setMatchupsOverlayOpen(true)}
+              onClick={() => openOverlay("matchups")}
               className="text-cyan-400 hover:text-cyan-300"
               data-testid="button-view-all-matchups"
             >
@@ -2617,7 +2644,7 @@ export default function VotePage() {
           <div className="text-center mt-2 md:mt-6">
             <Button
               variant="ghost"
-              onClick={() => setTopicsOverlayOpen(true)}
+              onClick={() => openOverlay("topics")}
               className="text-cyan-400 hover:text-cyan-300"
               data-testid="button-view-all-topics"
             >
@@ -2736,7 +2763,7 @@ export default function VotePage() {
           <div className="text-center mt-2 md:mt-6">
             <Button
               variant="ghost"
-              onClick={() => setOpinionPollsOverlayOpen(true)}
+              onClick={() => openOverlay("opinion-polls")}
               className="text-cyan-400 hover:text-cyan-300"
               data-testid="button-view-all-opinion-polls"
             >
@@ -2831,7 +2858,7 @@ export default function VotePage() {
           <div className="text-center mt-2 md:mt-6">
             <Button
               variant="ghost"
-              onClick={() => setValuePerceptionOverlayOpen(true)}
+              onClick={() => openOverlay("value-perception")}
               className="text-cyan-400"
               data-testid="button-view-all-value"
             >
@@ -2982,7 +3009,7 @@ export default function VotePage() {
           <div className="text-center mb-6">
             <Button
               variant="ghost"
-              onClick={() => setInductionOverlayOpen(true)}
+              onClick={() => openOverlay("induction")}
               className="text-cyan-400 hover:text-cyan-300"
               data-testid="button-view-full-candidate-list"
             >
@@ -3884,7 +3911,7 @@ export default function VotePage() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setInductionOverlayOpen(false)}
+                onClick={closeOverlay}
                 data-testid="button-close-candidates-overlay"
               >
                 <X className="h-5 w-5" />
@@ -3941,7 +3968,7 @@ export default function VotePage() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setTopicsOverlayOpen(false)}
+                onClick={closeOverlay}
                 data-testid="button-close-topics-overlay"
               >
                 <X className="h-5 w-5" />
@@ -3999,7 +4026,7 @@ export default function VotePage() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setMatchupsOverlayOpen(false)}
+                onClick={closeOverlay}
                 data-testid="button-close-matchups-overlay"
               >
                 <X className="h-5 w-5" />
@@ -4059,7 +4086,7 @@ export default function VotePage() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setOpinionPollsOverlayOpen(false)}
+                onClick={closeOverlay}
                 data-testid="button-close-opinion-polls-overlay"
               >
                 <X className="h-5 w-5" />
@@ -4124,7 +4151,7 @@ export default function VotePage() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setValuePerceptionOverlayOpen(false)}
+                onClick={closeOverlay}
                 data-testid="button-close-value-overlay"
               >
                 <X className="h-5 w-5" />
@@ -4152,7 +4179,8 @@ export default function VotePage() {
                     key={person.id} 
                     person={person}
                     onVisitProfile={() => {
-                      setValuePerceptionOverlayOpen(false);
+                      applyOverlayState(undefined);
+                      window.history.replaceState({}, "");
                       setLocation(`/person/${person.id}`);
                     }}
                   />
