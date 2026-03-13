@@ -6491,7 +6491,7 @@ Only return the JSON object.`;
 
   app.post("/api/admin/matchups", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, visibility, featured, slug, personAId, personBId, promptText, seedVotesA, seedVotesB } = req.body;
+      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, visibility, featured, slug, personAId, personBId, promptText, description, seedVotesA, seedVotesB } = req.body;
       const adminId = req.userId!;
       
       if (!title || !optionAText || !optionBText) {
@@ -6518,6 +6518,7 @@ Only return the JSON object.`;
         personAId: personAId || null,
         personBId: personBId || null,
         promptText: promptText || null,
+        description: description || null,
         seedVotesA: parseInt(seedVotesA) || 0,
         seedVotesB: parseInt(seedVotesB) || 0,
       }).returning();
@@ -6556,7 +6557,7 @@ Only return the JSON object.`;
   app.patch("/api/admin/matchups/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, displayOrder, visibility, featured, slug, personAId, personBId, promptText, seedVotesA, seedVotesB } = req.body;
+      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, displayOrder, visibility, featured, slug, personAId, personBId, promptText, description, seedVotesA, seedVotesB } = req.body;
       const adminId = req.userId!;
       
       const [existing] = await db.select().from(matchups).where(eq(matchups.id, id));
@@ -6579,6 +6580,7 @@ Only return the JSON object.`;
       if (personAId !== undefined) updates.personAId = personAId;
       if (personBId !== undefined) updates.personBId = personBId;
       if (promptText !== undefined) updates.promptText = promptText;
+      if (description !== undefined) updates.description = description || null;
       if (seedVotesA !== undefined) updates.seedVotesA = parseInt(seedVotesA) || 0;
       if (seedVotesB !== undefined) updates.seedVotesB = parseInt(seedVotesB) || 0;
       
