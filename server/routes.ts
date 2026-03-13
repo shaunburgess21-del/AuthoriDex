@@ -9726,7 +9726,7 @@ Only return the JSON object.`;
 
   app.get("/api/admin/credit-reconciliation", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const allProfiles = await db.select({ id: profiles.id, predictCredits: profiles.predictCredits }).from(profiles);
+      const allProfiles = await db.select({ id: profiles.id, predictCredits: profiles.predictCredits }).from(profiles).where(eq(profiles.isAgent, false));
 
       const ledgerSums = await db
         .select({
@@ -9843,7 +9843,7 @@ Only return the JSON object.`;
         ? Math.floor((Date.now() - resolverLastRunAt.getTime()) / (1000 * 60))
         : null;
 
-      const allProfiles = await db.select({ id: profiles.id, predictCredits: profiles.predictCredits }).from(profiles);
+      const allProfiles = await db.select({ id: profiles.id, predictCredits: profiles.predictCredits }).from(profiles).where(eq(profiles.isAgent, false));
       const ledgerSums = await db
         .select({
           userId: creditLedger.userId,
