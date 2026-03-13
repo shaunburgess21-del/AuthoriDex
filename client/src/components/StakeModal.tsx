@@ -226,8 +226,8 @@ export function StakeModal({
           )}
 
           {selection.startScore != null && selection.currentScore != null && (() => {
-            const baseline = selection.startScore!;
-            const delta = selection.currentScore! - baseline;
+            const baseline = selection.startScore as number;
+            const delta = (selection.currentScore as number) - baseline;
             const pct = baseline !== 0 ? (delta / baseline) * 100 : 0;
             const isPositive = delta >= 0;
             const color = isPositive ? "text-green-500" : "text-red-500";
@@ -281,7 +281,7 @@ export function StakeModal({
 
           {isUpDown && selection.marketId && (
             <OutcomePathChart
-              marketId={selection.marketId!}
+              marketId={selection.marketId}
               baselineScore={selection.startScore || selection.baselineScore || 0}
               currentScore={selection.currentScore || 0}
               personName={selection.marketName}

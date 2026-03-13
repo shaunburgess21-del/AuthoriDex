@@ -1761,7 +1761,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(insightVotes)
         .where(and(
           eq(insightVotes.userId, userId),
-          sql`${insightVotes.insightId} IN ${insightIds}`
+          inArray(insightVotes.insightId, insightIds)
         ));
 
       // Convert to map: insightId -> voteType
@@ -2841,7 +2841,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
           .from(commentVotes)
           .where(and(
-            sql`${commentVotes.commentId} IN ${commentIds}`,
+            inArray(commentVotes.commentId, commentIds),
             eq(commentVotes.voteType, 'up')
           ))
           .groupBy(commentVotes.commentId);
@@ -2853,7 +2853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
           .from(commentVotes)
           .where(and(
-            sql`${commentVotes.commentId} IN ${commentIds}`,
+            inArray(commentVotes.commentId, commentIds),
             eq(commentVotes.voteType, 'down')
           ))
           .groupBy(commentVotes.commentId);
@@ -2999,7 +2999,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(commentVotes)
         .where(and(
           eq(commentVotes.userId, userId),
-          sql`${commentVotes.commentId} IN ${commentIds}`
+          inArray(commentVotes.commentId, commentIds)
         ));
 
       // Convert to map: commentId -> voteType
@@ -9226,6 +9226,7 @@ Only return the JSON object.`;
         .where(
           and(
             eq(predictionMarkets.marketType, type),
+            eq(predictionMarkets.status, "OPEN"),
             inArray(predictionMarkets.visibility, ["live", "inactive"])
           )
         )

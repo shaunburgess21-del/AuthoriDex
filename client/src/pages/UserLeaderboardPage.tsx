@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, useCallback } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -327,13 +327,14 @@ export default function UserLeaderboardPage() {
     staleTime: 30_000,
   });
 
-  const handleSearchChange = (val: string) => {
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSearchChange = useCallback((val: string) => {
     setSearch(val);
-    clearTimeout((window as any)._leaderboardSearchTimer);
-    (window as any)._leaderboardSearchTimer = setTimeout(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
       setDebouncedSearch(val);
     }, 350);
-  };
+  }, []);
 
   const handleRowClick = (user: LeaderboardUser) => {
     if (user.username && user.isPublic) {

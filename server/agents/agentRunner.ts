@@ -216,7 +216,7 @@ async function runAgentBatchOnce(): Promise<{
           and(
             eq(scheduledAgentActions.agentId, agent.id),
             eq(scheduledAgentActions.marketId, market.id),
-            sql`${scheduledAgentActions.status} IN ('pending', 'executed')`
+            sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`
           )
         )
         .limit(1);

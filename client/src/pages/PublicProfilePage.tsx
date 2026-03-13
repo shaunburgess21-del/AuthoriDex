@@ -256,9 +256,9 @@ export default function PublicProfilePage() {
               {profile.agentProfile.bio && (
                 <p className="text-sm text-muted-foreground mb-3">{profile.agentProfile.bio}</p>
               )}
-              {profile.agentProfile.specialties.length > 0 && (
+              {(profile.agentProfile.specialties ?? []).length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {profile.agentProfile.specialties.map((specialty) => (
+                  {(profile.agentProfile.specialties ?? []).map((specialty: string) => (
                     <Badge key={specialty} variant="secondary" className="capitalize">
                       {specialty}
                     </Badge>

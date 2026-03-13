@@ -207,7 +207,7 @@ export function OutcomePathChart({
               dataKey="fameIndex"
               stroke="hsl(var(--primary))"
               strokeWidth={2}
-              fill="url(#aboveBaseline-" 
+              fill={`url(#aboveBaseline-${marketId})`}
               dot={false}
               activeDot={{
                 r: compact ? 3 : 5,

@@ -5,7 +5,7 @@
 
 import { db } from "../db";
 import { marketBets, agentConfigs, agentPerformance, predictionMarkets } from "@shared/schema";
-import { eq, and, isNotNull } from "drizzle-orm";
+import { eq, and, isNotNull, sql } from "drizzle-orm";
 import { addMemory } from "./memoryManager";
 import { log } from "../log";
 
@@ -88,55 +88,17 @@ async function upsertAgentPerformance(
   brierScore: number,
   category: string
 ): Promise<void> {
-  const [existing] = await db
-    .select()
-    .from(agentPerformance)
-    .where(
-      and(
-        eq(agentPerformance.agentId, agentId),
-        eq(agentPerformance.periodStart, periodStart),
-        eq(agentPerformance.periodEnd, periodEnd)
-      )
-    )
-    .limit(1);
+  const initCategoryScores = {
+    [category]: {
+      correct: isCorrect ? 1 : 0,
+      total: 1,
+      avg_brier: brierScore,
+    },
+  };
 
-  if (existing) {
-    const newResolved = existing.totalResolved + 1;
-    const newCorrect = existing.correct + (isCorrect ? 1 : 0);
-    const oldBrier = existing.avgBrierScore
-      ? parseFloat(String(existing.avgBrierScore))
-      : 0;
-    const newBrier =
-      existing.totalResolved > 0
-        ? (oldBrier * existing.totalResolved + brierScore) / newResolved
-        : brierScore;
-
-    const categoryScores = (existing.categoryScores as Record<string, any>) ?? {};
-    const cat = categoryScores[category] ?? {
-      correct: 0,
-      total: 0,
-      avg_brier: 0,
-    };
-    cat.total++;
-    if (isCorrect) cat.correct++;
-    cat.avg_brier =
-      ((cat.avg_brier * (cat.total - 1)) + brierScore) / cat.total;
-    categoryScores[category] = cat;
-
-    await db
-      .update(agentPerformance)
-      .set({
-        totalEntered: existing.totalEntered + 1,
-        totalResolved: newResolved,
-        correct: newCorrect,
-        avgBrierScore: newBrier.toFixed(4),
-        accuracy: (newCorrect / newResolved).toFixed(4),
-        categoryScores,
-        updatedAt: new Date(),
-      })
-      .where(eq(agentPerformance.id, existing.id));
-  } else {
-    await db.insert(agentPerformance).values({
+  await db
+    .insert(agentPerformance)
+    .values({
       agentId,
       periodStart,
       periodEnd,
@@ -145,15 +107,26 @@ async function upsertAgentPerformance(
       correct: isCorrect ? 1 : 0,
       avgBrierScore: brierScore.toFixed(4),
       accuracy: isCorrect ? "1.0000" : "0.0000",
-      categoryScores: {
-        [category]: {
-          correct: isCorrect ? 1 : 0,
-          total: 1,
-          avg_brier: brierScore,
-        },
+      categoryScores: initCategoryScores,
+    })
+    .onConflictDoUpdate({
+      target: [agentPerformance.agentId, agentPerformance.periodStart, agentPerformance.periodEnd],
+      set: {
+        totalEntered: sql`${agentPerformance.totalEntered} + 1`,
+        totalResolved: sql`${agentPerformance.totalResolved} + 1`,
+        correct: sql`${agentPerformance.correct} + ${isCorrect ? 1 : 0}`,
+        avgBrierScore: sql`CASE WHEN ${agentPerformance.totalResolved} > 0
+          THEN ((${agentPerformance.avgBrierScore}::numeric * ${agentPerformance.totalResolved} + ${brierScore}) / (${agentPerformance.totalResolved} + 1))::text
+          ELSE ${brierScore.toFixed(4)}
+        END`,
+        accuracy: sql`CASE WHEN (${agentPerformance.totalResolved} + 1) > 0
+          THEN ((${agentPerformance.correct} + ${isCorrect ? 1 : 0})::numeric / (${agentPerformance.totalResolved} + 1))::text
+          ELSE '0.0000'
+        END`,
+        categoryScores: sql`${agentPerformance.categoryScores} || ${JSON.stringify(initCategoryScores)}::jsonb`,
+        updatedAt: new Date(),
       },
     });
-  }
 }
 
 function getPeriodStart(): Date {
