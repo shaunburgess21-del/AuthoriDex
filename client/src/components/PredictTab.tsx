@@ -43,6 +43,7 @@ interface PredictionMarket {
   personName: string;
   personAvatar: string;
   currentScore: number;
+  baselineScore: number;
   startScore: number;
   change7d: number;
   upMultiplier: number;
@@ -91,6 +92,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Elon Musk",
     personAvatar: "",
     currentScore: 515809,
+    baselineScore: 492100,
     startScore: 492100,
     change7d: 4.78,
     upMultiplier: 1.7,
@@ -106,6 +108,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Taylor Swift",
     personAvatar: "",
     currentScore: 489234,
+    baselineScore: 505500,
     startScore: 505500,
     change7d: -3.2,
     upMultiplier: 2.1,
@@ -121,6 +124,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "MrBeast",
     personAvatar: "",
     currentScore: 504734,
+    baselineScore: 531000,
     startScore: 531000,
     change7d: -4.95,
     upMultiplier: 1.5,
@@ -136,6 +140,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Donald Trump",
     personAvatar: "",
     currentScore: 484531,
+    baselineScore: 501300,
     startScore: 501300,
     change7d: -3.35,
     upMultiplier: 1.4,
@@ -151,6 +156,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Kim Kardashian",
     personAvatar: "",
     currentScore: 398456,
+    baselineScore: 405800,
     startScore: 405800,
     change7d: -1.8,
     upMultiplier: 2.2,
@@ -166,6 +172,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Cristiano Ronaldo",
     personAvatar: "",
     currentScore: 445678,
+    baselineScore: 436500,
     startScore: 436500,
     change7d: 2.1,
     upMultiplier: 1.9,
@@ -181,6 +188,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Jensen Huang",
     personAvatar: "",
     currentScore: 412300,
+    baselineScore: 381000,
     startScore: 381000,
     change7d: 8.2,
     upMultiplier: 1.3,
@@ -196,6 +204,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Beyoncé",
     personAvatar: "",
     currentScore: 478200,
+    baselineScore: 471100,
     startScore: 471100,
     change7d: 1.5,
     upMultiplier: 1.8,
@@ -448,6 +457,9 @@ function WeeklyUpDownCard({
   isMarketClosed?: boolean;
   onSelect?: (choice: "up" | "down") => void;
 }) {
+  const delta = market.currentScore - market.baselineScore;
+  const pctDelta = market.baselineScore > 0 ? ((delta / market.baselineScore) * 100).toFixed(1) : "0";
+
   return (
     <PredictCard testId={`card-weekly-${market.id}`} className={isMarketClosed ? 'opacity-75' : ''}>
       <div className="flex items-center justify-between mb-3">
@@ -468,9 +480,16 @@ function WeeklyUpDownCard({
         </Badge>
       </div>
       
-      <p className="text-xs text-muted-foreground mb-3">
-        Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span>'s Trend Score be higher than start-of-week by close?
+      <p className="text-xs text-muted-foreground mb-2 leading-[1.4]">
+        Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
       </p>
+
+      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mb-2 px-0.5">
+        <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
+        <span>Now: <span className="font-mono text-foreground">{market.currentScore.toLocaleString('en-US')}</span></span>
+        <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
+        <span>Pool: <span className="font-mono text-violet-400">{market.totalPool.toLocaleString('en-US')}</span></span>
+      </div>
       
       <div className="h-2 rounded-full bg-muted mb-3 overflow-hidden">
         <div 
@@ -481,7 +500,7 @@ function WeeklyUpDownCard({
       
       <div className="flex items-center justify-between text-xs mb-3">
         <span className="text-green-500">Up {market.upMultiplier}x</span>
-        <span className="text-muted-foreground">Pool: {market.totalPool.toLocaleString('en-US')}</span>
+        <span className="text-muted-foreground">({pctDelta}%)</span>
         <span className="text-red-500">Down {market.downMultiplier}x</span>
       </div>
       

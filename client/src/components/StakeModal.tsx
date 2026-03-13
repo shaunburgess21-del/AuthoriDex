@@ -4,10 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Target, Clock, TrendingUp, TrendingDown, LogIn } from "lucide-react";
+import { Target, Clock, TrendingUp, TrendingDown, LogIn, Star, MessageSquarePlus } from "lucide-react";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
+import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
+import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
+import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 
 const MISSION_HEADERS: Record<string, string> = {
   jackpot: "Predict the exact Trend Score at week's end to win the pot.",
@@ -27,6 +30,13 @@ export interface StakeSelection {
   currentScore?: number;
   crowdSentiment?: number;
   estimatedPayout?: number;
+  baselineScore?: number;
+  baselineTimestamp?: string;
+  tieRule?: string;
+  resolveMethod?: string;
+  endAt?: string;
+  confidence?: number;
+  thesis?: string;
 }
 
 interface StakeModalProps {
@@ -34,6 +44,7 @@ interface StakeModalProps {
   onClose: () => void;
   selection: StakeSelection | null;
   onConfirm: (amount: number) => void;
+  onConfirmWithMeta?: (amount: number, meta: { confidence?: number; thesis?: string }) => void;
   walletBalance: number;
   onDirectionChange?: (direction: "up" | "down") => void;
 }
@@ -52,6 +63,7 @@ export function StakeModal({
   onClose,
   selection,
   onConfirm,
+  onConfirmWithMeta,
   walletBalance,
   onDirectionChange,
 }: StakeModalProps) {
@@ -62,6 +74,9 @@ export function StakeModal({
   const marketCycle = useMarketCycle();
   const { isLoggedIn } = useAuth();
   const [, setLocation] = useLocation();
+  const [confidence, setConfidence] = useState(0);
+  const [thesis, setThesis] = useState("");
+  const [showThesisSection, setShowThesisSection] = useState(false);
 
   if (!selection) return null;
 
@@ -97,8 +112,25 @@ export function StakeModal({
       } catch (e) {
         console.error("Confetti error:", e);
       }
-      onConfirm(parsedAmount);
+
+      if (selection) {
+        selection.confidence = confidence || undefined;
+        selection.thesis = thesis.trim() || undefined;
+      }
+
+      if (onConfirmWithMeta) {
+        onConfirmWithMeta(parsedAmount, {
+          confidence: confidence || undefined,
+          thesis: thesis.trim() || undefined,
+        });
+      } else {
+        onConfirm(parsedAmount);
+      }
+
       setStakeAmount("");
+      setConfidence(0);
+      setThesis("");
+      setShowThesisSection(false);
     }
   };
 
@@ -180,7 +212,7 @@ export function StakeModal({
             <div className="grid grid-cols-2 gap-3">
               {selection.startScore && (
                 <Card className="p-2.5 bg-muted/30">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Start Score</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Baseline Score</p>
                   <p className="font-mono font-bold text-sm">{selection.startScore.toLocaleString('en-US')}</p>
                 </Card>
               )}
@@ -193,6 +225,22 @@ export function StakeModal({
             </div>
           )}
 
+          {selection.startScore != null && selection.currentScore != null && (() => {
+            const baseline = selection.startScore!;
+            const delta = selection.currentScore! - baseline;
+            const pct = baseline !== 0 ? (delta / baseline) * 100 : 0;
+            const isPositive = delta >= 0;
+            const color = isPositive ? "text-green-500" : "text-red-500";
+            return (
+              <div className="flex items-center justify-center gap-2 text-xs">
+                <span className="text-muted-foreground">Delta vs Baseline:</span>
+                <span className={`font-mono font-medium ${color}`}>
+                  {isPositive ? "+" : ""}{delta.toLocaleString("en-US")} pts ({isPositive ? "+" : ""}{pct.toFixed(1)}%)
+                </span>
+              </div>
+            );
+          })()}
+
           {selection.estimatedPayout && !isNaN(selection.estimatedPayout) && (
             <p className="text-xs text-muted-foreground text-center">
               Estimated Payout: <span className="font-mono font-medium text-green-500">{selection.estimatedPayout.toFixed(1)}x</span>
@@ -201,8 +249,45 @@ export function StakeModal({
 
           {selection.crowdSentiment && (
             <p className="text-xs text-muted-foreground text-center">
-              Crowd Sentiment: <span className="font-mono font-medium text-foreground">{selection.crowdSentiment}% predict this outcome</span>
+              Crowd Sentiment: <span className="font-mono font-medium text-foreground">{selection.crowdSentiment}% of the pool is backing this outcome</span>
             </p>
+          )}
+
+          {isUpDown && (
+            <div className="text-xs text-center space-y-1">
+              {isUp && (
+                <p className="text-muted-foreground">
+                  <span className="text-[#00C853] font-medium">UP</span> wins if <span className="font-medium text-foreground">{selection.marketName}</span> closes above <span className="font-mono font-medium text-foreground">{(selection.startScore ?? 0).toLocaleString("en-US")}</span> at weekly close.
+                </p>
+              )}
+              {isDown && (
+                <p className="text-muted-foreground">
+                  <span className="text-[#FF0000] font-medium">DOWN</span> wins if <span className="font-medium text-foreground">{selection.marketName}</span> closes below <span className="font-mono font-medium text-foreground">{(selection.startScore ?? 0).toLocaleString("en-US")}</span> at weekly close.
+                </p>
+              )}
+              <p className="text-muted-foreground/70 italic">Exact tie: all positions refunded.</p>
+            </div>
+          )}
+
+          {isUpDown && (
+            <WhatNeedsToHappen
+              pick={isUp ? "up" : "down"}
+              baselineScore={selection.startScore || selection.baselineScore || 0}
+              currentScore={selection.currentScore || 0}
+              personName={selection.marketName}
+              compact
+            />
+          )}
+
+          {isUpDown && selection.marketId && (
+            <OutcomePathChart
+              marketId={selection.marketId!}
+              baselineScore={selection.startScore || selection.baselineScore || 0}
+              currentScore={selection.currentScore || 0}
+              personName={selection.marketName}
+              compact
+              userPick={isUp ? "up" : isDown ? "down" : null}
+            />
           )}
 
           <div className="space-y-2">
@@ -244,6 +329,71 @@ export function StakeModal({
               </span>
             </div>
           </div>
+        </div>
+
+        {isUpDown && (
+          <MarketResolutionInfo
+            baselineScore={selection.startScore || selection.baselineScore || 0}
+            baselineTimestamp={selection.baselineTimestamp}
+            tieRule={selection.tieRule || "refund"}
+            personName={selection.marketName}
+            compact
+          />
+        )}
+
+        {/* Optional thesis / confidence section */}
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => setShowThesisSection(!showThesisSection)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto"
+          >
+            <MessageSquarePlus className="h-3 w-3" />
+            {showThesisSection ? "Hide your thesis" : "Add your thesis"}
+          </button>
+
+          {showThesisSection && (
+            <div className="space-y-3 border border-border/40 rounded-lg p-3 bg-muted/10">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Confidence (optional)
+                </label>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => setConfidence(confidence === level ? 0 : level)}
+                      className="p-0.5 transition-transform hover:scale-110"
+                    >
+                      <Star
+                        className={`h-5 w-5 ${
+                          level <= confidence
+                            ? "text-yellow-500 fill-yellow-500"
+                            : "text-muted-foreground/40"
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground/60">How confident are you in this pick?</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Your thesis (optional)
+                </label>
+                <textarea
+                  value={thesis}
+                  onChange={(e) => setThesis(e.target.value.slice(0, 100))}
+                  placeholder="Why are you making this pick? (optional)"
+                  rows={2}
+                  className="w-full rounded-md border border-border/40 bg-background px-3 py-2 text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-violet-500/50 resize-none"
+                />
+                <p className="text-[10px] text-muted-foreground/60 text-right">{thesis.length}/100</p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2">

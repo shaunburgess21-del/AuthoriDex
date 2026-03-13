@@ -33,6 +33,7 @@ import {
   Zap,
   Wallet,
   LayoutDashboard,
+  Flame,
 } from "lucide-react";
 
 function useTheme() {
@@ -245,16 +246,23 @@ function UserMenuContent({
         <XPProgressBar xp={profile?.xpPoints || 0} level={xpLevel} />
       </div>
 
-      <div className="px-4 pb-3">
+      <div className="px-4 pb-3 space-y-2">
         <div className="flex items-center justify-between p-2.5 rounded-lg bg-violet-500/10 border border-violet-500/30">
           <div className="flex items-center gap-2">
             <Wallet className="h-4 w-4 text-violet-400" />
-            <span className="text-sm text-muted-foreground">Predict Credits</span>
+            <span className="text-sm text-muted-foreground">Credits</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="font-mono font-bold text-sm">{(profile?.predictCredits || 0).toLocaleString('en-US')}</span>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/30 text-violet-400">VIRTUAL</Badge>
           </div>
+        </div>
+        <div className="flex items-center justify-between p-2.5 rounded-lg bg-orange-500/10 border border-orange-500/30">
+          <div className="flex items-center gap-2">
+            <Flame className="h-4 w-4 text-orange-400" />
+            <span className="text-sm text-muted-foreground">Win Streak</span>
+          </div>
+          <span className="font-mono font-bold text-sm text-orange-400">{profile?.currentStreak || 0}</span>
         </div>
       </div>
 

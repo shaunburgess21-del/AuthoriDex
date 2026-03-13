@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { UserMenu } from "@/components/UserMenu";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Sparkles, Eye, Lock } from "lucide-react";
+import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Sparkles, Eye, Lock, Flame } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
@@ -132,7 +132,7 @@ export default function MePage() {
                 </div>
               </div>
               
-              <div className="grid grid-cols-3 gap-4 mb-6 text-center">
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mb-6 text-center">
                 <div className="p-3 rounded-lg bg-muted/50">
                   <p className="text-2xl font-bold text-cyan-400">{profile?.totalVotes || 0}</p>
                   <p className="text-xs text-muted-foreground">Votes Cast</p>
@@ -144,6 +144,20 @@ export default function MePage() {
                 <div className="p-3 rounded-lg bg-muted/50">
                   <p className="text-2xl font-bold text-green-400">{profile?.winRate || 0}%</p>
                   <p className="text-xs text-muted-foreground">Win Rate</p>
+                </div>
+                <div className="p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
+                  <div className="flex items-center justify-center gap-1">
+                    <Wallet className="h-4 w-4 text-violet-400" />
+                    <p className="text-2xl font-bold text-violet-400 font-mono">{(profile?.predictCredits || 0).toLocaleString('en-US')}</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Credits</p>
+                </div>
+                <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                  <div className="flex items-center justify-center gap-1">
+                    <Flame className="h-4 w-4 text-orange-400" />
+                    <p className="text-2xl font-bold text-orange-400">{profile?.currentStreak || 0}</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Streak</p>
                 </div>
               </div>
               
@@ -203,17 +217,28 @@ export default function MePage() {
 
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold">Predict Credits</h3>
+                <h3 className="font-semibold">Predictor Stats</h3>
                 <Badge variant="outline" className="border-violet-500/30 text-violet-400">VIRTUAL</Badge>
               </div>
-              <div className="flex items-center justify-between p-4 rounded-lg bg-violet-500/10 border border-violet-500/30">
-                <div className="flex items-center gap-3">
-                  <Wallet className="h-5 w-5 text-violet-400" />
-                  <span className="text-muted-foreground">Balance</span>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-violet-500/10 border border-violet-500/30">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-violet-400" />
+                    <span className="text-sm text-muted-foreground">Balance</span>
+                  </div>
+                  <span className="font-mono font-bold text-lg text-violet-400">
+                    {(profile?.predictCredits || 0).toLocaleString('en-US')}
+                  </span>
                 </div>
-                <span className="font-mono font-bold text-2xl text-violet-400">
-                  {(profile?.predictCredits || 0).toLocaleString('en-US')}
-                </span>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                  <div className="flex items-center gap-2">
+                    <Flame className="h-4 w-4 text-orange-400" />
+                    <span className="text-sm text-muted-foreground">Streak</span>
+                  </div>
+                  <span className="font-mono font-bold text-lg text-orange-400">
+                    {profile?.currentStreak || 0}
+                  </span>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground mt-3">
                 Virtual credits for testing prediction features. No real money is involved.

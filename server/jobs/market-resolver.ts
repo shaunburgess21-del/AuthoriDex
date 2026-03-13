@@ -136,6 +136,37 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string):
       .set({ resolutionStatus: "loser" })
       .where(and(eq(marketEntries.marketId, marketId), sql`${marketEntries.id} != ${winnerEntryId}`));
 
+    const uniqueUserIds = Array.from(new Set(allBets.map(b => b.userId)));
+    for (const userId of uniqueUserIds) {
+      const resolvedBets = await tx
+        .select({ status: marketBets.status, settledAt: marketBets.settledAt })
+        .from(marketBets)
+        .where(and(
+          eq(marketBets.userId, userId),
+          sql`${marketBets.status} IN ('won', 'lost')`,
+        ));
+
+      const wonCount = resolvedBets.filter(b => b.status === 'won').length;
+      const totalResolved = resolvedBets.length;
+      const winRate = totalResolved > 0
+        ? Math.round((wonCount / totalResolved) * 1000) / 10
+        : 0;
+
+      const sortedDesc = resolvedBets
+        .filter(b => b.settledAt != null)
+        .sort((a, b) => new Date(b.settledAt!).getTime() - new Date(a.settledAt!).getTime());
+
+      let currentStreak = 0;
+      for (const bet of sortedDesc) {
+        if (bet.status === 'won') currentStreak++;
+        else break;
+      }
+
+      await tx.update(profiles)
+        .set({ winRate, currentStreak })
+        .where(eq(profiles.id, userId));
+    }
+
     return {
       totalPool: preview.totalPool,
       winnersCount: preview.winnerBets.length,

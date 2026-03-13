@@ -1,5 +1,6 @@
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Target } from "lucide-react";
 import { useState, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { 
@@ -15,9 +16,17 @@ import {
 
 type TimeRange = "1D" | "7D" | "30D" | "6M" | "1Y" | "ALL";
 
+export interface ActiveMarketOverlay {
+  baselineScore: number;
+  endAt: string;
+  marketId: string;
+  label: string;
+}
+
 interface TrendChartProps {
   personId: string;
   personName: string;
+  activeMarkets?: ActiveMarketOverlay[];
 }
 
 interface HistoryDataPoint {
@@ -100,9 +109,12 @@ function CustomTooltip({ active, payload, startScore, timeRange }: CustomTooltip
   );
 }
 
-export function TrendChart({ personId, personName }: TrendChartProps) {
+export function TrendChart({ personId, personName, activeMarkets }: TrendChartProps) {
   const [timeRange, setTimeRange] = useState<TimeRange>("7D");
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [showMarketOverlay, setShowMarketOverlay] = useState(false);
+
+  const hasMarkets = activeMarkets && activeMarkets.length > 0;
 
   const days = timeRange === "1D" ? 1 : timeRange === "7D" ? 7 : timeRange === "30D" ? 30 : timeRange === "6M" ? 180 : timeRange === "1Y" ? 365 : 365;
 
@@ -157,8 +169,19 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
   return (
     <div className="w-screen relative left-1/2 -ml-[50vw] md:w-auto md:relative md:left-0 md:ml-0">
       <Card className="border-0 md:border rounded-none md:rounded-xl shadow-none md:shadow-sm overflow-hidden">
-        <CardHeader className="pb-3 px-4 md:px-6">
+        <CardHeader className="pb-3 px-4 md:px-6 flex flex-row items-center justify-between">
           <CardTitle className="text-lg font-serif">Trend History</CardTitle>
+          {hasMarkets && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowMarketOverlay(prev => !prev)}
+              className={`text-xs gap-1.5 ${showMarketOverlay ? 'bg-primary/10 border-primary/40' : ''}`}
+            >
+              <Target className="h-3.5 w-3.5" />
+              {showMarketOverlay ? 'Hide Markets' : 'Show Markets'}
+            </Button>
+          )}
         </CardHeader>
         <div>
           {isLoading ? (
@@ -239,6 +262,21 @@ export function TrendChart({ personId, personName }: TrendChartProps) {
                       strokeDasharray="4 4"
                     />
                   )}
+                  {showMarketOverlay && activeMarkets?.map((market) => (
+                    <ReferenceLine
+                      key={market.marketId}
+                      y={market.baselineScore}
+                      stroke="hsl(var(--chart-4))"
+                      strokeWidth={1.5}
+                      strokeDasharray="6 3"
+                      label={{
+                        value: `Baseline: ${market.label}`,
+                        position: 'insideTopRight',
+                        fill: 'hsl(var(--muted-foreground))',
+                        fontSize: 11,
+                      }}
+                    />
+                  ))}
                   <Area 
                     type="linear"
                     dataKey="fameIndex" 

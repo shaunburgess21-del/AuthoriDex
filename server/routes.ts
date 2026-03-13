@@ -4452,34 +4452,50 @@ Only return the JSON object.`;
     }
   });
   
-  // Get user's predictions (placeholder for now)
+  // Get user's predictions with stats
   app.get("/api/me/predictions", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
-      const bets = await db
-        .select({
-          betId: marketBets.id,
-          marketId: marketBets.marketId,
-          entryId: marketBets.entryId,
-          stakeAmount: marketBets.stakeAmount,
-          potentialPayout: marketBets.potentialPayout,
-          betStatus: marketBets.status,
-          createdAt: marketBets.createdAt,
-          marketSlug: predictionMarkets.slug,
-          marketTitle: predictionMarkets.title,
-          marketStatus: predictionMarkets.status,
-          marketType: predictionMarkets.marketType,
-          entryResolutionStatus: marketEntries.resolutionStatus,
-          entryLabel: marketEntries.label,
-        })
-        .from(marketBets)
-        .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
-        .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
-        .where(eq(marketBets.userId, userId))
-        .orderBy(desc(marketBets.createdAt))
-        .limit(100);
 
-      const results = bets.map(b => {
+      const [[userProfile], bets] = await Promise.all([
+        db.select({ currentStreak: profiles.currentStreak })
+          .from(profiles)
+          .where(eq(profiles.id, userId))
+          .limit(1),
+        db.select({
+            betId: marketBets.id,
+            marketId: marketBets.marketId,
+            entryId: marketBets.entryId,
+            stakeAmount: marketBets.stakeAmount,
+            potentialPayout: marketBets.potentialPayout,
+            betStatus: marketBets.status,
+            betCreatedAt: marketBets.createdAt,
+            marketSlug: predictionMarkets.slug,
+            marketTitle: predictionMarkets.title,
+            marketStatus: predictionMarkets.status,
+            marketType: predictionMarkets.marketType,
+            marketCadence: predictionMarkets.cadence,
+            marketCategory: predictionMarkets.category,
+            baselineScore: predictionMarkets.baselineScore,
+            startAt: predictionMarkets.startAt,
+            endAt: predictionMarkets.endAt,
+            personId: predictionMarkets.personId,
+            entryResolutionStatus: marketEntries.resolutionStatus,
+            entryLabel: marketEntries.label,
+            personName: trendingPeople.name,
+            personAvatar: trendingPeople.avatar,
+            currentScore: trendingPeople.trendScore,
+          })
+          .from(marketBets)
+          .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
+          .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
+          .leftJoin(trendingPeople, eq(predictionMarkets.personId, trendingPeople.id))
+          .where(eq(marketBets.userId, userId))
+          .orderBy(desc(marketBets.createdAt))
+          .limit(100),
+      ]);
+
+      const predictions = bets.map(b => {
         let result: 'won' | 'lost' | 'refunded' | 'pending' = 'pending';
         let payout = 0;
         if (b.marketStatus === 'RESOLVED') {
@@ -4493,6 +4509,9 @@ Only return the JSON object.`;
           result = 'refunded';
           payout = b.stakeAmount;
         }
+
+        const isNative = b.marketType !== 'community';
+
         return {
           betId: b.betId,
           marketId: b.marketId,
@@ -4500,14 +4519,62 @@ Only return the JSON object.`;
           marketTitle: b.marketTitle,
           marketStatus: b.marketStatus,
           marketType: b.marketType,
+          marketCadence: isNative ? (b.marketCadence ?? 'weekly') : b.marketCadence,
+          marketCategory: b.marketCategory,
           entryLabel: b.entryLabel,
           stakeAmount: b.stakeAmount,
+          potentialPayout: b.potentialPayout,
           result,
           payout,
+          baselineScore: b.baselineScore,
+          currentScore: isNative ? b.currentScore : null,
+          betCreatedAt: b.betCreatedAt,
+          personName: isNative ? b.personName : null,
+          personAvatar: isNative ? b.personAvatar : null,
+          startAt: b.startAt,
+          endAt: b.endAt,
         };
       });
 
-      res.json(results);
+      const won = predictions.filter(p => p.result === 'won').length;
+      const lost = predictions.filter(p => p.result === 'lost').length;
+      const refunded = predictions.filter(p => p.result === 'refunded').length;
+      const pending = predictions.filter(p => p.result === 'pending').length;
+
+      const netCredits = predictions.reduce((sum, p) => {
+        if (p.result === 'won') return sum + (p.payout - p.stakeAmount);
+        if (p.result === 'lost') return sum - p.stakeAmount;
+        return sum;
+      }, 0);
+
+      const winRate = (won + lost) > 0
+        ? Math.round((won / (won + lost)) * 1000) / 10
+        : 0;
+
+      const categoryWins: Record<string, number> = {};
+      for (const p of predictions) {
+        if (p.result === 'won' && p.marketCategory) {
+          categoryWins[p.marketCategory] = (categoryWins[p.marketCategory] || 0) + 1;
+        }
+      }
+      const bestCategory = Object.keys(categoryWins).length > 0
+        ? Object.entries(categoryWins).sort((a, b) => b[1] - a[1])[0][0]
+        : null;
+
+      res.json({
+        predictions,
+        stats: {
+          total: predictions.length,
+          won,
+          lost,
+          refunded,
+          pending,
+          netCredits,
+          winRate,
+          bestCategory,
+          currentStreak: userProfile?.currentStreak ?? 0,
+        },
+      });
     } catch (error: any) {
       console.error("Error fetching user predictions:", error.message);
       res.status(500).json({ error: "Failed to fetch predictions" });
@@ -8808,6 +8875,128 @@ Only return the JSON object.`;
       }
       console.error("[Native Markets] Updown bet error:", error);
       res.status(500).json({ error: "Failed to place bet" });
+    }
+  });
+
+  app.get("/api/native-markets/:marketId/history", optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const { marketId } = req.params;
+
+      const [market] = await db
+        .select({
+          id: predictionMarkets.id,
+          personId: predictionMarkets.personId,
+          startAt: predictionMarkets.startAt,
+          endAt: predictionMarkets.endAt,
+          metadata: predictionMarkets.metadata,
+          status: predictionMarkets.status,
+        })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, marketId))
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+
+      if (!market.personId) {
+        return res.status(400).json({ error: "Market has no linked person" });
+      }
+
+      const history = await db
+        .select({
+          timestamp: trendSnapshots.timestamp,
+          fameIndex: trendSnapshots.fameIndex,
+        })
+        .from(trendSnapshots)
+        .where(
+          and(
+            eq(trendSnapshots.personId, market.personId),
+            gte(trendSnapshots.timestamp, market.startAt),
+            lte(trendSnapshots.timestamp, sql`now()`)
+          )
+        )
+        .orderBy(asc(trendSnapshots.timestamp));
+
+      const meta = market.metadata as Record<string, any> | null;
+      const baselineScore = meta?.openingScore?.score ?? null;
+
+      const [person] = await db
+        .select({ trendScore: trendingPeople.trendScore })
+        .from(trendingPeople)
+        .where(eq(trendingPeople.id, market.personId))
+        .limit(1);
+
+      const currentScore = person?.trendScore ?? null;
+
+      let userEntry: {
+        enteredAt: Date;
+        enteredScore: number | null;
+        pick: string;
+        stake: number;
+      } | null = null;
+
+      if (req.userId) {
+        const [bet] = await db
+          .select({
+            createdAt: marketBets.createdAt,
+            stakeAmount: marketBets.stakeAmount,
+            entryId: marketBets.entryId,
+          })
+          .from(marketBets)
+          .where(
+            and(
+              eq(marketBets.marketId, marketId),
+              eq(marketBets.userId, req.userId)
+            )
+          )
+          .orderBy(desc(marketBets.createdAt))
+          .limit(1);
+
+        if (bet) {
+          const [entry] = await db
+            .select({ label: marketEntries.label })
+            .from(marketEntries)
+            .where(eq(marketEntries.id, bet.entryId))
+            .limit(1);
+
+          let enteredScore: number | null = null;
+          if (history.length > 0) {
+            let closest = history[0];
+            let minDiff = Math.abs(new Date(history[0].timestamp).getTime() - new Date(bet.createdAt).getTime());
+            for (const snap of history) {
+              const diff = Math.abs(new Date(snap.timestamp).getTime() - new Date(bet.createdAt).getTime());
+              if (diff < minDiff) {
+                minDiff = diff;
+                closest = snap;
+              }
+            }
+            enteredScore = closest.fameIndex;
+          }
+
+          userEntry = {
+            enteredAt: bet.createdAt,
+            enteredScore,
+            pick: entry?.label ?? bet.entryId,
+            stake: bet.stakeAmount,
+          };
+        }
+      }
+
+      return res.json({
+        marketId: market.id,
+        personId: market.personId,
+        baselineScore,
+        currentScore,
+        startAt: market.startAt,
+        endAt: market.endAt,
+        status: market.status,
+        history,
+        userEntry,
+      });
+    } catch (error) {
+      console.error("[Native Markets] History error:", error);
+      res.status(500).json({ error: "Failed to fetch market history" });
     }
   });
 

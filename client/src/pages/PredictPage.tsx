@@ -93,6 +93,7 @@ interface PredictionMarket {
   personName: string;
   personAvatar: string;
   currentScore: number;
+  baselineScore: number;
   startScore: number;
   change7d: number;
   upMultiplier: number;
@@ -103,6 +104,12 @@ interface PredictionMarket {
   category: CategoryFilter;
   upEntryId?: string;
   downEntryId?: string;
+  cadence?: string;
+  tieRule?: string;
+  startAt?: string;
+  endAt?: string;
+  totalBets?: number;
+  featured?: boolean;
 }
 
 const mockMarkets: PredictionMarket[] = [
@@ -112,6 +119,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Elon Musk",
     personAvatar: "",
     currentScore: 515809,
+    baselineScore: 492100,
     startScore: 492100,
     change7d: 4.78,
     upMultiplier: 1.7,
@@ -127,6 +135,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Taylor Swift",
     personAvatar: "",
     currentScore: 489234,
+    baselineScore: 505500,
     startScore: 505500,
     change7d: -3.2,
     upMultiplier: 2.1,
@@ -142,6 +151,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "MrBeast",
     personAvatar: "",
     currentScore: 504734,
+    baselineScore: 531000,
     startScore: 531000,
     change7d: -4.95,
     upMultiplier: 1.5,
@@ -157,6 +167,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Donald Trump",
     personAvatar: "",
     currentScore: 484531,
+    baselineScore: 501300,
     startScore: 501300,
     change7d: -3.35,
     upMultiplier: 1.4,
@@ -172,6 +183,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Kim Kardashian",
     personAvatar: "",
     currentScore: 398456,
+    baselineScore: 405800,
     startScore: 405800,
     change7d: -1.8,
     upMultiplier: 2.2,
@@ -187,6 +199,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Cristiano Ronaldo",
     personAvatar: "",
     currentScore: 445678,
+    baselineScore: 436500,
     startScore: 436500,
     change7d: 2.1,
     upMultiplier: 1.9,
@@ -202,6 +215,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Jensen Huang",
     personAvatar: "",
     currentScore: 412300,
+    baselineScore: 381000,
     startScore: 381000,
     change7d: 8.2,
     upMultiplier: 1.3,
@@ -217,6 +231,7 @@ const mockMarkets: PredictionMarket[] = [
     personName: "Beyoncé",
     personAvatar: "",
     currentScore: 478200,
+    baselineScore: 471100,
     startScore: 471100,
     change7d: 1.5,
     upMultiplier: 1.8,
@@ -788,53 +803,80 @@ function WeeklyUpDownCard({
   isMarketClosed?: boolean;
   onSelect?: (choice: "up" | "down") => void;
 }) {
+  const delta = market.currentScore - market.baselineScore;
+  const pctDelta = market.baselineScore > 0 ? ((delta / market.baselineScore) * 100).toFixed(1) : "0";
+  const cadenceLabel = (market.cadence || "weekly").charAt(0).toUpperCase() + (market.cadence || "weekly").slice(1);
+
   return (
     <PredictCard testId={`card-weekly-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''}`}>
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
-        <Badge 
-          variant="outline" 
-          className={market.change7d >= 0 ? "text-green-500 border-green-500/30" : "text-red-500 border-red-500/30"}
-        >
-          {market.change7d >= 0 ? "+" : ""}{market.change7d.toFixed(1)}%
-        </Badge>
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+        <div className="flex items-center gap-1.5">
+          <Badge 
+            variant="outline" 
+            className={delta >= 0 ? "text-green-500 border-green-500/30" : "text-red-500 border-red-500/30"}
+          >
+            {delta >= 0 ? "+" : ""}{pctDelta}%
+          </Badge>
+          <Badge variant="outline" className="text-violet-400 border-violet-500/30 text-[10px]">
+            {cadenceLabel}
+          </Badge>
+          {market.featured && (
+            <Badge variant="outline" className="text-yellow-400 border-yellow-500/30 text-[10px]">
+              <Star className="h-3 w-3 mr-0.5" />Featured
+            </Badge>
+          )}
+          {(market.totalPool > 500 || (market.totalBets ?? 0) > 10) && (
+            <Badge variant="outline" className="text-orange-400 border-orange-500/30 text-[10px]">
+              <Flame className="h-3 w-3 mr-0.5" />Hot
+            </Badge>
+          )}
+          {market.totalPool < 100 && (
+            <Badge variant="outline" className="text-amber-400 border-amber-500/30 text-[10px]">
+              Thin Pool
+            </Badge>
+          )}
+        </div>
         <CategoryPill category={market.category} />
       </div>
       
-      <div className="flex items-center gap-3 mb-3">
-        <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-[73px] w-[73px]" />
+      <div className="flex items-center gap-3 mb-2">
+        <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-[64px] w-[64px]" />
         <div>
-          <p className="font-semibold text-[16px] leading-[1.4]">{market.personName}</p>
-          <p className="text-sm text-muted-foreground font-mono">
-            {market.currentScore.toLocaleString('en-US')} pts
+          <p className="font-semibold text-[15px] leading-[1.3]">{market.personName}</p>
+          <p className="text-xs text-muted-foreground font-mono">
+            Now: {market.currentScore.toLocaleString('en-US')}
           </p>
         </div>
       </div>
       
-      <p className="text-sm text-muted-foreground mb-3 leading-[1.4]">
-        Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span>'s Trend Score be higher or lower than start-of-week by close?
+      <p className="text-xs text-muted-foreground mb-2 leading-[1.4]">
+        Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
       </p>
+
+      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mb-2 px-0.5">
+        <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
+        <span>Now: <span className="font-mono text-foreground">{market.currentScore.toLocaleString('en-US')}</span></span>
+        <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
+        <span>Pool: <span className="font-mono text-violet-400">{market.totalPool.toLocaleString('en-US')}</span></span>
+      </div>
       
       <div className="mt-auto">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
-        <Users className="h-3.5 w-3.5" />
+      <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-2">
+        <Users className="h-3 w-3" />
         <span>{market.totalPool > 0 ? Math.ceil(market.totalPool / 100) : 0} participants</span>
       </div>
       
       <div className="mb-2">
-        <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
+        <div className="h-2.5 rounded-full bg-red-500/20 overflow-hidden">
           <div 
             className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
             style={{ width: `${market.upPoolPercent}%` }}
           />
         </div>
-        <div className="flex items-center justify-between text-xs mt-1.5">
+        <div className="flex items-center justify-between text-[11px] mt-1">
           <span className="text-green-500 font-semibold">Up {market.upMultiplier}x</span>
           <span className="text-red-500 font-semibold">Down {market.downMultiplier}x</span>
         </div>
-      </div>
-      
-      <div className="flex items-center justify-center mb-1.5">
-        <span className="text-sm font-semibold text-violet-500">Pool: {market.totalPool.toLocaleString('en-US')}</span>
       </div>
       
       <div>
@@ -1850,11 +1892,11 @@ export default function PredictPage() {
   const RULES_CONTENT: Record<string, { title: string; description: string; steps: { icon: React.ReactNode; title: string; description: string }[] }> = {
     updown: {
       title: "How Up/Down Works",
-      description: "Predict if someone's trend score will go up or down this week",
+      description: "Each week, a fixed baseline score is captured at market open (Monday 00:00 UTC). Everyone bets on whether the final score at close (Sunday 23:59 UTC) finishes above or below that same baseline.",
       steps: [
-        { icon: <TrendingUp className="h-4 w-4 text-violet-500" />, title: "Pick a Direction", description: "Choose UP if you think their trend score will increase, or DOWN if you think it will decrease." },
-        { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Stake Your Credits", description: "The more you stake, the more you can win. Your potential return depends on the pool split." },
-        { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Wait for Results", description: "When the market closes Sunday 23:59 UTC, winners split the pool proportionally." },
+        { icon: <TrendingUp className="h-4 w-4 text-violet-500" />, title: "Fixed Baseline", description: "A baseline score is locked at the start of each market period. All participants bet against this same reference point — not their personal entry time." },
+        { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Pick UP or DOWN", description: "UP wins if the closing score finishes above the baseline. DOWN wins if it finishes below. Exact tie = full refund for all positions." },
+        { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Stake & Win", description: "Stake your credits. Winners split the total pool proportionally. Higher multipliers mean bigger potential payouts. Auto-resolved from AuthoriDex trend data." },
       ]
     },
     h2h: {
@@ -1974,13 +2016,18 @@ export default function PredictPage() {
         const upPercent = Math.round((upStake / total) * 100);
         const upMultiplier = upStake > 0 ? +(total / upStake).toFixed(1) : 2.0;
         const downMultiplier = downStake > 0 ? +(total / downStake).toFixed(1) : 2.0;
+        const currentScore = Number(person.trendScore || person.fameIndex || 0);
+        const storedBaseline = m.metadata?.openingScore?.score;
+        const fallbackBaseline = currentScore - Math.floor(currentScore * (Number(person.change7d || 0) / 100));
+        const baselineScore = storedBaseline ? Number(storedBaseline) : fallbackBaseline;
         return {
           id: m.id,
           personId: m.personId || "",
           personName: person.name || m.title?.replace(/: Up or Down\?$/, "") || "Unknown",
           personAvatar: person.avatar || "",
-          currentScore: Number(person.trendScore || 0),
-          startScore: Number(person.trendScore || 0) - Math.floor(Number(person.trendScore || 0) * (Number(person.change7d || 0) / 100)),
+          currentScore,
+          baselineScore,
+          startScore: baselineScore,
           change7d: Number(person.change7d || 0),
           upMultiplier,
           downMultiplier,
@@ -1990,7 +2037,12 @@ export default function PredictPage() {
           category: (m.category || person.category || "misc") as CategoryFilter,
           upEntryId: upEntry?.id,
           downEntryId: downEntry?.id,
+          cadence: m.cadence || "weekly",
+          tieRule: m.tieRule || "refund",
+          startAt: m.startAt,
+          endAt: m.endAt,
           totalBets: Number(m.seedConfig?.participants || 0),
+          featured: m.featured || false,
         } as PredictionMarket;
       });
     }
@@ -2162,10 +2214,14 @@ export default function PredictPage() {
       choice: choice === "up" ? "Trend Score UP" : "Trend Score DOWN",
       marketName: market.personName,
       marketId: market.id,
-      startScore: market.startScore,
+      startScore: market.baselineScore,
       currentScore: market.currentScore,
       crowdSentiment: choice === "up" ? market.upPoolPercent : 100 - market.upPoolPercent,
       estimatedPayout: choice === "up" ? market.upMultiplier : market.downMultiplier,
+      baselineScore: market.baselineScore,
+      baselineTimestamp: market.startAt,
+      tieRule: market.tieRule || "refund",
+      endAt: market.endAt,
     });
     setStakeModalOpen(true);
   };
