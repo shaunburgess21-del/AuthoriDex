@@ -116,9 +116,9 @@ function ParticipantAvatarStack({
         {participants.slice(0, 3).map((participant) => (
           <Avatar
             key={`${participant.userId}-${participant.username || participant.displayName}`}
-            className={`h-6 w-6 border-2 ${participant.isAgent ? "border-violet-500/60" : "border-background"}`}
+            className="h-6 w-6 border-2 border-background"
           >
-            {participant.avatarUrl ? (
+            {participant.avatarUrl && !participant.isAgent ? (
               <AvatarImage src={participant.avatarUrl} alt={participant.displayName} />
             ) : (
               <AvatarFallback
@@ -2566,7 +2566,7 @@ export default function PredictPage() {
                       data-testid={`recent-activity-${item.id}`}
                     >
                       <Avatar className="h-9 w-9 shrink-0">
-                        {item.avatarUrl ? (
+                        {item.avatarUrl && !item.isAgent ? (
                           <AvatarImage src={item.avatarUrl} alt={item.displayName} />
                         ) : (
                           <AvatarFallback

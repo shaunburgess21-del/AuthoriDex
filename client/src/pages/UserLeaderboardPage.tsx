@@ -217,7 +217,7 @@ function UserRow({
       </div>
 
       <Avatar className="h-8 w-8 shrink-0">
-        {user.avatarUrl ? (
+        {user.avatarUrl && !user.isAgent ? (
           <AvatarImage src={user.avatarUrl} alt={user.displayName} />
         ) : (
           <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs font-semibold">

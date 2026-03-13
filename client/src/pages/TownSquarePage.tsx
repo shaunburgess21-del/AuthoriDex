@@ -150,7 +150,7 @@ export default function TownSquarePage() {
                   onClick={() => setLocation(`/markets/${item.marketSlug}`)}
                 >
                   <Avatar className="h-9 w-9 shrink-0">
-                    {item.avatarUrl ? (
+                    {item.avatarUrl && !item.isAgent ? (
                       <AvatarImage src={item.avatarUrl} alt={item.displayName} />
                     ) : (
                       <AvatarFallback

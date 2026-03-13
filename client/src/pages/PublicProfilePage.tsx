@@ -225,7 +225,7 @@ export default function PublicProfilePage() {
         <Card className="p-6 mb-6">
           <div className="flex items-start gap-4 mb-6">
             <Avatar className="h-20 w-20">
-              {profile.avatarUrl ? (
+              {profile.avatarUrl && !profile.isAgent ? (
                 <AvatarImage src={profile.avatarUrl} alt={displayName} />
               ) : (
                 <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold text-2xl">
