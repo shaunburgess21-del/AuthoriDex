@@ -9300,6 +9300,9 @@ Only return the JSON object.`;
 
   app.get("/api/predict/recent-activity", async (_req, res) => {
     try {
+      const requestedLimit = typeof _req.query.limit === "string" ? parseInt(_req.query.limit, 10) : 20;
+      const queryLimit = Math.max(1, Math.min(requestedLimit || 20, 100));
+
       const recentBets = await db
         .select({
           id: marketBets.id,
@@ -9314,7 +9317,7 @@ Only return the JSON object.`;
         .from(marketBets)
         .where(eq(marketBets.status, "active"))
         .orderBy(desc(marketBets.createdAt))
-        .limit(20);
+        .limit(queryLimit);
 
       if (recentBets.length === 0) {
         return res.json([]);
@@ -11383,6 +11386,11 @@ Only return the JSON object.`;
     try {
       const { seedAgents } = await import("./agents/agentSeeder");
       const result = await seedAgents();
+
+      await db.update(profiles)
+        .set({ avatarUrl: null })
+        .where(eq(profiles.isAgent, true));
+
       res.json({ ok: true, ...result });
     } catch (err: any) {
       console.error("[AgentAdmin] Seed failed:", err);

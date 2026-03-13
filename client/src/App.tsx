@@ -28,6 +28,7 @@ const PollDetailPage = lazy(() => import("@/pages/PollDetailPage"));
 const OpinionPollDetailPage = lazy(() => import("@/pages/OpinionPollDetailPage"));
 const MatchupDetailPage = lazy(() => import("@/pages/MatchupDetailPage"));
 const UserLeaderboardPage = lazy(() => import("@/pages/UserLeaderboardPage"));
+const TownSquarePage = lazy(() => import("@/pages/TownSquarePage"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
 function PageFallback() {
@@ -62,6 +63,7 @@ function Router() {
         <Route path="/vote/opinion-polls/:slug" component={OpinionPollDetailPage} />
         <Route path="/vote/matchups/:slug" component={MatchupDetailPage} />
         <Route path="/predictions/leaderboard" component={UserLeaderboardPage} />
+        <Route path="/predict/activity" component={TownSquarePage} />
         <Route path="/admin" component={AdminDashboard} />
         <Route component={NotFound} />
       </Switch>

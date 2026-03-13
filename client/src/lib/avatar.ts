@@ -2,7 +2,7 @@ export const HUMAN_AVATAR_FALLBACK_CLASS =
   "bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold";
 
 export const AGENT_AVATAR_FALLBACK_CLASS =
-  "bg-violet-500/20 text-violet-200";
+  "bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold";
 
 export function getAvatarInitials(name: string | null | undefined): string {
   const value = (name ?? "").trim();

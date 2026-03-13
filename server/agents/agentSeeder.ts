@@ -172,7 +172,7 @@ export async function seedAgents(): Promise<{
             id: userId,
             username: seed.username,
             fullName: seed.displayName,
-            avatarUrl: `https://api.dicebear.com/7.x/personas/svg?seed=${seed.username}`,
+            avatarUrl: null,
             isPublic: true,
             role: "user",
             isAgent: true,

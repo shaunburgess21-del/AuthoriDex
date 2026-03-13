@@ -2600,6 +2600,17 @@ export default function PredictPage() {
                     </button>
                   ))}
                 </div>
+                <div className="border-t border-border/50 px-4 py-2.5 text-center">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLocation("/predict/activity");
+                    }}
+                    className="text-sm font-medium text-violet-400 hover:text-violet-300 transition-colors"
+                  >
+                    Show more activity →
+                  </button>
+                </div>
               </Card>
             )}
           </section>
