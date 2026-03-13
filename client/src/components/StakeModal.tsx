@@ -143,7 +143,7 @@ export function StakeModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-sm premium-scrollbar">
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto premium-scrollbar">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Target className="h-5 w-5 text-violet-500" />
