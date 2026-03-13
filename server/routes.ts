@@ -2724,12 +2724,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return a.userId.localeCompare(b.userId);
       });
 
-      // Fetch profile info for all user IDs (excluding AI agents)
+      // Fetch profile info for all user IDs, including public AI agents
       const userIds = statsRows.map(r => r.userId);
       const profileRows = await db
-        .select({ id: profiles.id, username: profiles.username, fullName: profiles.fullName, avatarUrl: profiles.avatarUrl, isPublic: profiles.isPublic, rank: profiles.rank, createdAt: profiles.createdAt })
+        .select({ id: profiles.id, username: profiles.username, fullName: profiles.fullName, avatarUrl: profiles.avatarUrl, isPublic: profiles.isPublic, rank: profiles.rank, createdAt: profiles.createdAt, isAgent: profiles.isAgent })
         .from(profiles)
-        .where(and(inArray(profiles.id, userIds), eq(profiles.isAgent, false)));
+        .where(inArray(profiles.id, userIds));
       const profileMap = new Map(profileRows.map(p => [p.id, p]));
 
       // Build ranked list, apply search filter
@@ -2744,6 +2744,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             displayName: profile?.fullName || profile?.username || 'Anonymous',
             avatarUrl: profile?.avatarUrl || null,
             isPublic: profile?.isPublic ?? true,
+            isAgent: profile?.isAgent ?? false,
             userRank: profile?.rank || 'Citizen',
             profitLoss: Number(r.profitLoss) || 0,
             volume: Number(r.volume) || 0,
@@ -4364,35 +4365,86 @@ Only return the JSON object.`;
   app.get("/api/profile/u/:username", async (req, res) => {
     try {
       const { username } = req.params;
-      const profile = await db.select().from(profiles).where(and(eq(profiles.username, username), eq(profiles.isAgent, false))).limit(1);
+      const profile = await db.select().from(profiles).where(eq(profiles.username, username)).limit(1);
       
       if (profile.length === 0) {
         return res.status(404).json({ error: "Profile not found" });
       }
+
+      const baseProfile = profile[0];
+      let agentProfile: {
+        archetype: string;
+        bio: string | null;
+        specialties: string[];
+        displayName: string;
+        totalEntered?: number;
+        accuracy?: number | null;
+      } | null = null;
+
+      if (baseProfile.isAgent) {
+        const { agentConfigs, agentPerformance } = await import("@shared/schema");
+
+        const [agentConfig] = await db
+          .select({
+            id: agentConfigs.id,
+            displayName: agentConfigs.displayName,
+            bio: agentConfigs.bio,
+            archetype: agentConfigs.archetype,
+            specialties: agentConfigs.specialties,
+          })
+          .from(agentConfigs)
+          .where(eq(agentConfigs.userId, baseProfile.id))
+          .limit(1);
+
+        if (agentConfig) {
+          const [latestPerformance] = await db
+            .select({
+              totalEntered: agentPerformance.totalEntered,
+              accuracy: agentPerformance.accuracy,
+            })
+            .from(agentPerformance)
+            .where(eq(agentPerformance.agentId, agentConfig.id))
+            .orderBy(desc(agentPerformance.periodEnd))
+            .limit(1);
+
+          agentProfile = {
+            displayName: agentConfig.displayName,
+            bio: agentConfig.bio ?? null,
+            archetype: agentConfig.archetype,
+            specialties: agentConfig.specialties ?? [],
+            totalEntered: latestPerformance?.totalEntered ?? 0,
+            accuracy: latestPerformance?.accuracy ? Number(latestPerformance.accuracy) : null,
+          };
+        }
+      }
       
       // If profile is private, return limited info
-      if (!profile[0].isPublic) {
+      if (!baseProfile.isPublic) {
         return res.json({
-          username: profile[0].username,
-          avatarUrl: profile[0].avatarUrl,
-          rank: profile[0].rank,
+          username: baseProfile.username,
+          avatarUrl: baseProfile.avatarUrl,
+          rank: baseProfile.rank,
+          isAgent: baseProfile.isAgent,
           isPublic: false,
+          agentProfile,
           message: "This profile is private"
         });
       }
       
       // Return full public profile
       res.json({
-        username: profile[0].username,
-        fullName: profile[0].fullName,
-        avatarUrl: profile[0].avatarUrl,
-        rank: profile[0].rank,
-        xpPoints: profile[0].xpPoints,
-        totalVotes: profile[0].totalVotes,
-        totalPredictions: profile[0].totalPredictions,
-        winRate: profile[0].winRate,
+        username: baseProfile.username,
+        fullName: baseProfile.fullName,
+        avatarUrl: baseProfile.avatarUrl,
+        rank: baseProfile.rank,
+        xpPoints: baseProfile.xpPoints,
+        totalVotes: baseProfile.totalVotes,
+        totalPredictions: baseProfile.totalPredictions,
+        winRate: baseProfile.winRate,
+        isAgent: baseProfile.isAgent,
         isPublic: true,
-        createdAt: profile[0].createdAt,
+        createdAt: baseProfile.createdAt,
+        agentProfile,
       });
     } catch (error: any) {
       console.error("Error fetching public profile:", error.message);
@@ -8081,6 +8133,126 @@ Only return the JSON object.`;
 
   // ============ REAL-WORLD MARKETS (Open Markets) API ============
 
+  async function getMarketEngagementPreview(marketIds: string[]) {
+    const recentParticipantsByMarket = new Map<string, Array<{
+      userId: string;
+      username: string | null;
+      displayName: string;
+      avatarUrl: string | null;
+      isAgent: boolean;
+    }>>();
+    const activeParticipantCountByMarket = new Map<string, number>();
+    const latestRationaleByMarket = new Map<string, {
+      text: string;
+      authorUsername: string | null;
+      authorDisplayName: string;
+      authorAvatarUrl: string | null;
+      isAgent: boolean;
+    }>();
+
+    if (marketIds.length === 0) {
+      return {
+        recentParticipantsByMarket,
+        activeParticipantCountByMarket,
+        latestRationaleByMarket,
+      };
+    }
+
+    const bets = await db
+      .select({
+        marketId: marketBets.marketId,
+        userId: marketBets.userId,
+        createdAt: marketBets.createdAt,
+        betMetadata: marketBets.betMetadata,
+      })
+      .from(marketBets)
+      .where(and(
+        inArray(marketBets.marketId, marketIds),
+        eq(marketBets.status, "active"),
+      ))
+      .orderBy(desc(marketBets.createdAt));
+
+    if (bets.length === 0) {
+      return {
+        recentParticipantsByMarket,
+        activeParticipantCountByMarket,
+        latestRationaleByMarket,
+      };
+    }
+
+    const userIds = Array.from(new Set(bets.map((bet) => bet.userId)));
+    const profileRows = userIds.length > 0
+      ? await db
+          .select({
+            id: profiles.id,
+            username: profiles.username,
+            fullName: profiles.fullName,
+            avatarUrl: profiles.avatarUrl,
+            isAgent: profiles.isAgent,
+          })
+          .from(profiles)
+          .where(inArray(profiles.id, userIds))
+      : [];
+
+    const profileMap = new Map(profileRows.map((profile) => [profile.id, profile]));
+    const participantSets = new Map<string, Set<string>>();
+    const countedParticipants = new Map<string, Set<string>>();
+
+    for (const bet of bets) {
+      const profile = profileMap.get(bet.userId);
+      const displayName = profile?.fullName || profile?.username || "Anonymous";
+      const username = profile?.username || null;
+      const avatarUrl = profile?.avatarUrl || null;
+      const isAgent = profile?.isAgent ?? false;
+
+      const counted = countedParticipants.get(bet.marketId) || new Set<string>();
+      counted.add(bet.userId);
+      countedParticipants.set(bet.marketId, counted);
+      activeParticipantCountByMarket.set(bet.marketId, counted.size);
+
+      const seen = participantSets.get(bet.marketId) || new Set<string>();
+      if (!seen.has(bet.userId)) {
+        seen.add(bet.userId);
+        participantSets.set(bet.marketId, seen);
+
+        const participants = recentParticipantsByMarket.get(bet.marketId) || [];
+        if (participants.length < 3) {
+          participants.push({
+            userId: bet.userId,
+            username,
+            displayName,
+            avatarUrl,
+            isAgent,
+          });
+          recentParticipantsByMarket.set(bet.marketId, participants);
+        }
+      }
+
+      const rationaleText =
+        bet.betMetadata &&
+        typeof bet.betMetadata === "object" &&
+        "rationale" in (bet.betMetadata as Record<string, unknown>)
+          ? String((bet.betMetadata as Record<string, unknown>).rationale || "").trim()
+          : "";
+
+      if (isAgent && rationaleText && !latestRationaleByMarket.has(bet.marketId)) {
+        latestRationaleByMarket.set(bet.marketId, {
+          text: rationaleText,
+          authorUsername: username,
+          authorDisplayName: displayName,
+          authorAvatarUrl: avatarUrl,
+          isAgent,
+        });
+      }
+    }
+
+    return {
+      recentParticipantsByMarket,
+      activeParticipantCountByMarket,
+      latestRationaleByMarket,
+    };
+  }
+
   app.get("/api/open-markets", async (req, res) => {
     try {
       const { category, featured, limit } = req.query;
@@ -8135,10 +8307,15 @@ Only return the JSON object.`;
         }
       }
 
+      const engagement = await getMarketEngagementPreview(marketIds);
+
       const result = markets.map((m) => ({
         ...m,
         entries: entriesByMarket.get(m.id) || [],
         linkedPersonAvatar: m.personId ? personAvatars.get(m.personId) || null : null,
+        recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
+        activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
+        latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
       }));
 
       res.json(result);
@@ -8545,25 +8722,23 @@ Only return the JSON object.`;
         return res.status(404).json({ error: "Market not found" });
       }
 
+      const { voidMarketBets } = await import("./jobs/market-resolver");
+      await voidMarketBets(id);
+
       const [updatedMarket] = await db
         .update(predictionMarkets)
         .set({
-          status: "VOID",
           voidReason,
+          settledBy: (req as AuthRequest).userId ?? null,
+          resolutionNotes: JSON.stringify({
+            type: "community",
+            pendingReason: "admin_voided",
+            adminReason: voidReason,
+          }),
           updatedAt: new Date(),
         })
         .where(eq(predictionMarkets.id, id))
         .returning();
-
-      await db
-        .update(marketEntries)
-        .set({ resolutionStatus: "void" })
-        .where(eq(marketEntries.marketId, id));
-
-      await db
-        .update(marketBets)
-        .set({ status: "void", settledAt: new Date() })
-        .where(eq(marketBets.marketId, id));
 
       res.json(updatedMarket);
     } catch (error) {
@@ -9030,6 +9205,8 @@ Only return the JSON object.`;
           .orderBy(marketEntries.displayOrder);
       }
 
+      const engagement = await getMarketEngagementPreview(marketIds);
+
       if (type === 'updown' || type === 'jackpot') {
         const personIds = markets.map(m => m.personId).filter(Boolean) as string[];
         let persons: any[] = [];
@@ -9042,6 +9219,9 @@ Only return the JSON object.`;
           ...m,
           person: m.personId ? personMap[m.personId] || null : null,
           entries: entries.filter(e => e.marketId === m.id),
+          recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
+          activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
+          latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
         }));
         return res.json(enriched);
       }
@@ -9060,6 +9240,9 @@ Only return the JSON object.`;
             ...e,
             person: e.personId ? personMap[e.personId] || null : null,
           })),
+          recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
+          activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
+          latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
         }));
         return res.json(enriched);
       }
@@ -9067,10 +9250,113 @@ Only return the JSON object.`;
       res.json(markets.map(m => ({
         ...m,
         entries: entries.filter(e => e.marketId === m.id),
+        recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
+        activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
+        latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
       })));
     } catch (error: any) {
       console.error("Error fetching native markets:", error.message);
       res.status(500).json({ error: "Failed to fetch native markets" });
+    }
+  });
+
+  app.get("/api/predict/recent-activity", async (_req, res) => {
+    try {
+      const recentBets = await db
+        .select({
+          id: marketBets.id,
+          marketId: marketBets.marketId,
+          entryId: marketBets.entryId,
+          userId: marketBets.userId,
+          stakeAmount: marketBets.stakeAmount,
+          confidence: marketBets.confidence,
+          createdAt: marketBets.createdAt,
+          betMetadata: marketBets.betMetadata,
+        })
+        .from(marketBets)
+        .where(eq(marketBets.status, "active"))
+        .orderBy(desc(marketBets.createdAt))
+        .limit(20);
+
+      if (recentBets.length === 0) {
+        return res.json([]);
+      }
+
+      const userIds = Array.from(new Set(recentBets.map((bet) => bet.userId)));
+      const marketIds = Array.from(new Set(recentBets.map((bet) => bet.marketId)));
+      const entryIds = Array.from(new Set(recentBets.map((bet) => bet.entryId)));
+
+      const [profileRows, marketRows, entryRows] = await Promise.all([
+        db
+          .select({
+            id: profiles.id,
+            username: profiles.username,
+            fullName: profiles.fullName,
+            avatarUrl: profiles.avatarUrl,
+            isAgent: profiles.isAgent,
+          })
+          .from(profiles)
+          .where(inArray(profiles.id, userIds)),
+        db
+          .select({
+            id: predictionMarkets.id,
+            title: predictionMarkets.title,
+            slug: predictionMarkets.slug,
+            marketType: predictionMarkets.marketType,
+          })
+          .from(predictionMarkets)
+          .where(inArray(predictionMarkets.id, marketIds)),
+        db
+          .select({
+            id: marketEntries.id,
+            label: marketEntries.label,
+          })
+          .from(marketEntries)
+          .where(inArray(marketEntries.id, entryIds)),
+      ]);
+
+      const profileMap = new Map(profileRows.map((profile) => [profile.id, profile]));
+      const marketMap = new Map(marketRows.map((market) => [market.id, market]));
+      const entryMap = new Map(entryRows.map((entry) => [entry.id, entry]));
+
+      const activity = recentBets
+        .map((bet) => {
+          const profile = profileMap.get(bet.userId);
+          const market = marketMap.get(bet.marketId);
+          const entry = entryMap.get(bet.entryId);
+
+          if (!market || !entry) return null;
+
+          const rationale =
+            bet.betMetadata &&
+            typeof bet.betMetadata === "object" &&
+            "rationale" in (bet.betMetadata as Record<string, unknown>)
+              ? String((bet.betMetadata as Record<string, unknown>).rationale || "").trim()
+              : null;
+
+          return {
+            id: bet.id,
+            createdAt: bet.createdAt,
+            stakeAmount: bet.stakeAmount,
+            confidence: bet.confidence ? Number(bet.confidence) : null,
+            choiceLabel: entry.label,
+            marketId: market.id,
+            marketTitle: market.title,
+            marketSlug: market.slug,
+            marketType: market.marketType,
+            username: profile?.username || null,
+            displayName: profile?.fullName || profile?.username || "Anonymous",
+            avatarUrl: profile?.avatarUrl || null,
+            isAgent: profile?.isAgent ?? false,
+            rationale: rationale || null,
+          };
+        })
+        .filter(Boolean);
+
+      res.json(activity);
+    } catch (error: any) {
+      console.error("Error fetching recent prediction activity:", error.message);
+      res.status(500).json({ error: "Failed to fetch recent prediction activity" });
     }
   });
 
@@ -9926,6 +10212,23 @@ Only return the JSON object.`;
         const pendingMinutes = Math.floor(pendingMs / (1000 * 60));
         const pendingHours = Math.floor(pendingMs / (1000 * 60 * 60));
         const concentration = stats.pool > 0 && stats.maxStakeUser ? stats.maxStakeUser.total / stats.pool : 0;
+        const parsedNotes =
+          typeof m.resolutionNotes === "string" && m.resolutionNotes.trim().startsWith("{")
+            ? (() => {
+                try {
+                  return JSON.parse(m.resolutionNotes);
+                } catch {
+                  return null;
+                }
+              })()
+            : null;
+        const pendingReason =
+          parsedNotes?.pendingReason ||
+          (m.marketType === "community"
+            ? "community_requires_manual_resolution"
+            : m.marketType === "jackpot"
+              ? "jackpot_requires_manual_cleanup"
+              : "pending_review");
         
         const warnings: string[] = [];
         if (stats.betCount === 0) warnings.push("no_bets");
@@ -9938,6 +10241,7 @@ Only return the JSON object.`;
           betCount: stats.betCount,
           uniqueBettors: stats.uniqueBettors,
           pendingHours,
+          pendingReason,
           warnings,
           entries: entriesByMarket.get(m.id) || [],
         };
@@ -9947,6 +10251,125 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error fetching pending markets:", error.message);
       res.status(500).json({ error: "Failed to fetch pending markets" });
+    }
+  });
+
+  app.post("/api/admin/markets/pending/cleanup", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const olderThanHoursRaw = Number(req.body?.olderThanHours ?? 24);
+      const olderThanHours = Number.isFinite(olderThanHoursRaw)
+        ? Math.max(1, Math.min(olderThanHoursRaw, 24 * 90))
+        : 24;
+      const cutoff = new Date(Date.now() - olderThanHours * 60 * 60 * 1000);
+
+      const staleMarkets = await db
+        .select()
+        .from(predictionMarkets)
+        .where(and(
+          eq(predictionMarkets.status, "CLOSED_PENDING"),
+          lte(predictionMarkets.endAt, cutoff),
+        ))
+        .orderBy(asc(predictionMarkets.endAt));
+
+      const marketIds = staleMarkets.map((market) => market.id);
+      const activeBetCounts = new Map<string, number>();
+
+      if (marketIds.length > 0) {
+        const betCounts = await db
+          .select({
+            marketId: marketBets.marketId,
+            count: count(),
+          })
+          .from(marketBets)
+          .where(and(
+            inArray(marketBets.marketId, marketIds),
+            eq(marketBets.status, "active"),
+          ))
+          .groupBy(marketBets.marketId);
+
+        for (const row of betCounts) {
+          activeBetCounts.set(row.marketId, Number(row.count));
+        }
+      }
+
+      const { voidMarketBets } = await import("./jobs/market-resolver");
+      const cleaned: Array<{ id: string; title: string; marketType: string; action: string }> = [];
+      const skipped: Array<{ id: string; title: string; marketType: string; reason: string }> = [];
+
+      for (const market of staleMarkets) {
+        const activeBetCount = activeBetCounts.get(market.id) || 0;
+
+        if (market.marketType === "jackpot") {
+          await voidMarketBets(market.id);
+          await db
+            .update(predictionMarkets)
+            .set({
+              voidReason: `Admin stale pending cleanup (${olderThanHours}h threshold)`,
+              settledBy: req.userId!,
+              resolutionNotes: JSON.stringify({
+                type: "jackpot",
+                pendingReason: "jackpot_cleaned_up",
+                cleanupThresholdHours: olderThanHours,
+              }),
+              updatedAt: new Date(),
+            })
+            .where(eq(predictionMarkets.id, market.id));
+          cleaned.push({ id: market.id, title: market.title, marketType: market.marketType, action: "voided" });
+          continue;
+        }
+
+        if (market.marketType === "community" && activeBetCount === 0) {
+          await voidMarketBets(market.id);
+          await db
+            .update(predictionMarkets)
+            .set({
+              voidReason: `Admin stale pending cleanup (${olderThanHours}h threshold, zero active bets)`,
+              settledBy: req.userId!,
+              resolutionNotes: JSON.stringify({
+                type: "community",
+                pendingReason: "community_auto_voided_zero_bets",
+                cleanupThresholdHours: olderThanHours,
+              }),
+              updatedAt: new Date(),
+            })
+            .where(eq(predictionMarkets.id, market.id));
+          cleaned.push({ id: market.id, title: market.title, marketType: market.marketType, action: "voided_zero_bets" });
+          continue;
+        }
+
+        skipped.push({
+          id: market.id,
+          title: market.title,
+          marketType: market.marketType,
+          reason:
+            market.marketType === "community"
+              ? "manual_resolution_required"
+              : "unsupported_cleanup_type",
+        });
+      }
+
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId!,
+        adminEmail: null,
+        actionType: "cleanup",
+        targetTable: "prediction_markets",
+        targetId: "closed_pending",
+        metadata: {
+          olderThanHours,
+          cleanedCount: cleaned.length,
+          skippedCount: skipped.length,
+        },
+      });
+
+      res.json({
+        olderThanHours,
+        found: staleMarkets.length,
+        cleaned,
+        skipped,
+      });
+    } catch (error: any) {
+      console.error("Error cleaning stale pending markets:", error.message);
+      res.status(500).json({ error: "Failed to clean stale pending markets" });
     }
   });
 
@@ -10421,14 +10844,18 @@ Only return the JSON object.`;
           )
         );
 
+      const { voidMarketBets } = await import("./jobs/market-resolver");
       let settled = 0;
       for (const market of openMarkets) {
         if (market.weekNumber && market.weekNumber < currentWeek) {
+          await voidMarketBets(market.id);
           await db.update(predictionMarkets).set({
-            status: "RESOLVED",
-            resolvedAt: new Date(),
+            voidReason: "Auto-voided by weekly reset safety path",
             settledBy: req.userId!,
-            resolutionNotes: "Auto-settled by weekly reset",
+            resolutionNotes: JSON.stringify({
+              type: market.marketType,
+              pendingReason: "weekly_reset_auto_void",
+            }),
             updatedAt: new Date(),
           }).where(eq(predictionMarkets.id, market.id));
           settled++;

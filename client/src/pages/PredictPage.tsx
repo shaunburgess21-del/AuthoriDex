@@ -83,6 +83,69 @@ function MarketAvatar({ market }: { market: any }) {
   );
 }
 
+function formatActivityAge(timestamp: string) {
+  const diffMs = Date.now() - new Date(timestamp).getTime();
+  const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
+  if (diffMinutes < 1) return "just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
+
+function ParticipantAvatarStack({
+  participants = [],
+  totalCount = 0,
+}: {
+  participants?: ParticipantPreview[];
+  totalCount?: number;
+}) {
+  if (participants.length === 0 && totalCount <= 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex -space-x-2">
+        {participants.slice(0, 3).map((participant) => (
+          <Avatar
+            key={`${participant.userId}-${participant.username || participant.displayName}`}
+            className={`h-6 w-6 border-2 ${participant.isAgent ? "border-violet-500/60" : "border-background"}`}
+          >
+            {participant.avatarUrl ? (
+              <AvatarImage src={participant.avatarUrl} alt={participant.displayName} />
+            ) : (
+              <AvatarFallback className={`text-[10px] ${participant.isAgent ? "bg-violet-500/20 text-violet-200" : "bg-muted text-foreground"}`}>
+                {participant.displayName.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            )}
+          </Avatar>
+        ))}
+      </div>
+      <span>{totalCount} participant{totalCount === 1 ? "" : "s"}</span>
+    </div>
+  );
+}
+
+function MarketRationaleCallout({ rationale }: { rationale?: MarketRationalePreview | null }) {
+  if (!rationale?.text) return null;
+
+  return (
+    <div className="mb-3 rounded-md border border-violet-500/20 bg-violet-500/5 p-2.5">
+      <div className="mb-1 flex items-center gap-2">
+        <Badge variant="outline" className="border-violet-500/30 text-[10px] text-violet-300">
+          AI Take
+        </Badge>
+        <span className="text-[11px] font-medium text-violet-200">
+          {rationale.authorDisplayName}
+        </span>
+      </div>
+      <p className="line-clamp-2 text-xs leading-[1.45] text-muted-foreground">{rationale.text}</p>
+    </div>
+  );
+}
+
 // Prediction Type definitions
 type PredictionType = "all" | "jackpot" | "updown" | "h2h" | "gainer" | "community";
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
@@ -110,6 +173,25 @@ interface PredictionMarket {
   endAt?: string;
   totalBets?: number;
   featured?: boolean;
+  activeParticipantCount?: number;
+  recentParticipants?: ParticipantPreview[];
+  latestRationale?: MarketRationalePreview | null;
+}
+
+interface ParticipantPreview {
+  userId: string;
+  username: string | null;
+  displayName: string;
+  avatarUrl: string | null;
+  isAgent: boolean;
+}
+
+interface MarketRationalePreview {
+  text: string;
+  authorUsername: string | null;
+  authorDisplayName: string;
+  authorAvatarUrl: string | null;
+  isAgent: boolean;
 }
 
 const mockMarkets: PredictionMarket[] = [
@@ -252,6 +334,10 @@ interface HeadToHeadMarket {
   endTime: string;
   totalPool: number;
   person1Percent: number;
+  totalBets?: number;
+  activeParticipantCount?: number;
+  recentParticipants?: ParticipantPreview[];
+  latestRationale?: MarketRationalePreview | null;
 }
 
 const headToHeadMarkets: HeadToHeadMarket[] = [
@@ -324,6 +410,27 @@ interface TopGainerMarket {
   totalPool: number;
   endTime: string;
   totalEntries?: number;
+  totalBets?: number;
+  activeParticipantCount?: number;
+  recentParticipants?: ParticipantPreview[];
+  latestRationale?: MarketRationalePreview | null;
+}
+
+interface RecentPredictionActivity {
+  id: string;
+  createdAt: string;
+  stakeAmount: number;
+  confidence: number | null;
+  choiceLabel: string;
+  marketId: string;
+  marketTitle: string;
+  marketSlug: string;
+  marketType: string;
+  username: string | null;
+  displayName: string;
+  avatarUrl: string | null;
+  isAgent: boolean;
+  rationale: string | null;
 }
 
 const topGainerMarkets: TopGainerMarket[] = [
@@ -853,6 +960,8 @@ function WeeklyUpDownCard({
         Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
       </p>
 
+      <MarketRationaleCallout rationale={market.latestRationale} />
+
       <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mb-2 px-0.5">
         <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
         <span>Now: <span className="font-mono text-foreground">{market.currentScore.toLocaleString('en-US')}</span></span>
@@ -861,9 +970,11 @@ function WeeklyUpDownCard({
       </div>
       
       <div className="mt-auto">
-      <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-2">
-        <Users className="h-3 w-3" />
-        <span>{market.totalPool > 0 ? Math.ceil(market.totalPool / 100) : 0} participants</span>
+      <div className="mb-2">
+        <ParticipantAvatarStack
+          participants={market.recentParticipants}
+          totalCount={market.totalBets ?? market.activeParticipantCount ?? 0}
+        />
       </div>
       
       <div className="mb-2">
@@ -1200,7 +1311,7 @@ function OpenMarketCard({ market, onNavigate, isMarketClosed = false, userBetRes
   const totalStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0), 0);
   const totalPool = totalStake + Number(market.seedVolume || 0);
   const entrySeedTotal = entries.reduce((sum: number, e: any) => sum + (e.seedCount || 0), 0);
-  const participants = (market.betCount || 0) + entrySeedTotal;
+  const participants = (market.activeParticipantCount || market.betCount || 0) + entrySeedTotal;
   const isInactive = market.visibility === "inactive";
   
   const endDate = market.endAt ? new Date(market.endAt) : null;
@@ -1243,11 +1354,11 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
       </a>
       {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
+      <MarketRationaleCallout rationale={market.latestRationale} />
       
       <div className="mt-auto pt-1">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
-          <Users className="h-3.5 w-3.5" />
-          <span>{participants} participants</span>
+        <div className="mb-3">
+          <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
         </div>
         
         <div className="mb-3">
@@ -1308,10 +1419,10 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
         </div>
       </a>
       {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
+      <MarketRationaleCallout rationale={market.latestRationale} />
       
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
-        <Users className="h-3.5 w-3.5" />
-        <span>{participants} participants</span>
+      <div className="mb-3 flex items-center gap-2">
+        <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
         <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
       </div>
       
@@ -1387,11 +1498,11 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
           </div>
         </div>
       )}
+      <MarketRationaleCallout rationale={market.latestRationale} />
       
       <div className="mt-auto pt-1">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-          <Users className="h-3.5 w-3.5" />
-          <span>{participants} participants</span>
+        <div className="mb-2">
+          <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
         </div>
         
         <div className="mb-2">
@@ -1954,6 +2065,11 @@ export default function PredictPage() {
     queryKey: ['/api/me/predictions'],
     enabled: !!user,
   });
+  const { data: recentActivity = [] } = useQuery<RecentPredictionActivity[]>({
+    queryKey: ['/api/predict/recent-activity'],
+    staleTime: 60_000,
+    refetchInterval: 90_000,
+  });
   const userBetsByMarket = useMemo(() => {
     const map = new Map<string, { result: string; payout: number; entryLabel: string; stakeAmount: number; marketId: string }>();
     const grouped = new Map<string, any[]>();
@@ -2042,8 +2158,11 @@ export default function PredictPage() {
           tieRule: m.tieRule || "refund",
           startAt: m.startAt,
           endAt: m.endAt,
-          totalBets: Number(m.seedConfig?.participants || 0),
+          totalBets: (Number(m.activeParticipantCount || 0) || 0) + Number(m.seedConfig?.participants || 0),
           featured: m.featured || false,
+          activeParticipantCount: Number(m.activeParticipantCount || 0),
+          recentParticipants: m.recentParticipants || [],
+          latestRationale: m.latestRationale || null,
         } as PredictionMarket;
       });
     }
@@ -2072,7 +2191,10 @@ export default function PredictPage() {
           endTime: "Sun 23:59 UTC",
           totalPool: Number(m.seedVolume || 0),
           person1Percent: Math.round((s1 / total) * 100) || 50,
-          totalBets: Number(m.seedConfig?.participants || 0),
+          totalBets: (Number(m.activeParticipantCount || 0) || 0) + Number(m.seedConfig?.participants || 0),
+          activeParticipantCount: Number(m.activeParticipantCount || 0),
+          recentParticipants: m.recentParticipants || [],
+          latestRationale: m.latestRationale || null,
         } as HeadToHeadMarket;
       });
     }
@@ -2100,8 +2222,11 @@ export default function PredictPage() {
           }),
           totalPool: Number(m.seedVolume || 0),
           endTime: "Sun 23:59 UTC",
-          totalBets: Number(m.seedConfig?.participants || 0),
+          totalBets: (Number(m.activeParticipantCount || 0) || 0) + Number(m.seedConfig?.participants || 0),
           totalEntries: entries.length,
+          activeParticipantCount: Number(m.activeParticipantCount || 0),
+          recentParticipants: m.recentParticipants || [],
+          latestRationale: m.latestRationale || null,
         } as TopGainerMarket;
       });
     }
@@ -2404,6 +2529,61 @@ export default function PredictPage() {
         </div>
       </div>
       <div className="container mx-auto px-4 max-w-7xl">
+        {recentActivity.length > 0 && (
+          <section className="mt-4 mb-8">
+            <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mb-4">
+              <div>
+                <h2 className="text-lg font-serif font-bold">Town Square</h2>
+                <p className="text-xs sm:text-sm text-muted-foreground">Recent prediction activity across live markets</p>
+              </div>
+            </div>
+            <Card className="border-violet-500/10 bg-card/95">
+              <div className="divide-y divide-border/50">
+                {recentActivity.slice(0, 8).map((item) => (
+                  <button
+                    key={item.id}
+                    className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
+                    onClick={() => setLocation(`/markets/${item.marketSlug}`)}
+                    data-testid={`recent-activity-${item.id}`}
+                  >
+                    <Avatar className="h-9 w-9 shrink-0">
+                      {item.avatarUrl ? (
+                        <AvatarImage src={item.avatarUrl} alt={item.displayName} />
+                      ) : (
+                        <AvatarFallback className={item.isAgent ? "bg-violet-500/20 text-violet-200" : "bg-muted text-foreground"}>
+                          {item.displayName.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">{item.displayName}</span>
+                        {item.isAgent && (
+                          <Badge variant="outline" className="border-violet-500/40 text-[10px] text-violet-300">
+                            AI Agent
+                          </Badge>
+                        )}
+                        <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
+                      </div>
+                      <p className="text-sm text-foreground line-clamp-1">
+                        backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {item.stakeAmount.toLocaleString("en-US")} credits{item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
+                      </p>
+                      {item.rationale && (
+                        <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                          "{item.rationale}"
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </Card>
+          </section>
+        )}
+
         {/* Real-World Markets Section - Now First */}
         {showSection("community") && (
           <section className="mb-12 mt-[5px]">

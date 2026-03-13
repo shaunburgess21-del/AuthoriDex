@@ -13,7 +13,7 @@ import { startMarketResolverScheduler } from "./jobs/market-resolver";
 import { runSeedBatch } from "./jobs/seed-engine";
 import { startAgentRunnerScheduler } from "./agents/agentRunner";
 import { startActionWorkerScheduler } from "./agents/actionWorker";
-import { pool } from "./db";
+import { pool, startDbPoolMonitor } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
 import { fetchBatchGdeltNews } from "./providers/gdelt";
 import { getCanaryNames } from "./scoring/canaryMonitor";
@@ -480,6 +480,7 @@ async function startServer() {
     host,
   }, () => {
     log(`serving on port ${port}`);
+    startDbPoolMonitor();
 
     runStartupTask("hydrate trending people", hydrateTrendingPeopleFromSnapshots);
     runStartupTask("verify database constraints", verifyDbConstraints);

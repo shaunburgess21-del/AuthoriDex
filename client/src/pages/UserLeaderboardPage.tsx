@@ -34,6 +34,7 @@ interface LeaderboardUser {
   displayName: string;
   avatarUrl: string | null;
   isPublic: boolean;
+  isAgent?: boolean;
   userRank: string;
   profitLoss: number;
   volume: number;
@@ -184,6 +185,11 @@ function UserRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-sm truncate">{user.displayName}</span>
+          {user.isAgent && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/40 text-violet-300 shrink-0">
+              AI Agent
+            </Badge>
+          )}
           {isCurrentUser && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-cyan-500/40 text-cyan-400 shrink-0">
               You

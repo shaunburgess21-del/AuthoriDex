@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db, withDbAdvisoryLock } from "../db";
 import { predictionMarkets, marketEntries, marketBets, trendSnapshots, profiles, creditLedger } from "@shared/schema";
 import { eq, and, sql, inArray, lte, gte, desc, asc } from "drizzle-orm";
 import { log } from "../log";
@@ -8,6 +8,7 @@ import { scoreResolvedMarket } from "../agents/performanceUpdater";
 const RESOLVER_INTERVAL_MS = 5 * 60 * 1000;
 const RESOLVER_STARTUP_DELAY_MS = 2 * 60 * 1000;
 const SNAPSHOT_TOLERANCE_HOURS = 3;
+const MARKET_RESOLVER_LOCK_KEY = 5_202;
 
 let _lastResolverRunAt: Date | null = null;
 export function getLastResolverRunAt(): Date | null { return _lastResolverRunAt; }
@@ -548,6 +549,7 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
 
   const evidence: any = {
     type: "jackpot",
+    pendingReason: "jackpot_requires_manual_cleanup",
     personId,
     closeScore: closeSnap?.score ?? null,
     closeSnapshotAt: closeSnap?.capturedAt?.toISOString() ?? null,
@@ -563,7 +565,7 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
   return "resolved";
 }
 
-export async function resolveExpiredMarkets(): Promise<void> {
+async function resolveExpiredMarketsOnce(): Promise<void> {
   try {
     const now = new Date();
     const expiredMarkets = await db
@@ -610,6 +612,10 @@ export async function resolveExpiredMarkets(): Promise<void> {
           case "community":
             await db.update(predictionMarkets).set({
               status: "CLOSED_PENDING",
+              resolutionNotes: JSON.stringify({
+                type: "community",
+                pendingReason: "community_requires_manual_resolution",
+              }),
               updatedAt: new Date(),
             }).where(eq(predictionMarkets.id, market.id));
             pending++;
@@ -643,6 +649,18 @@ export async function resolveExpiredMarkets(): Promise<void> {
     log(`[MarketResolver] Done: ${resolved} resolved, ${voided} voided, ${pending} pending admin, ${blocked} blocked, ${skipped} skipped, ${errors} errors`);
   } catch (err) {
     log(`[MarketResolver] Scheduler error: ${err}`);
+  }
+}
+
+export async function resolveExpiredMarkets(): Promise<void> {
+  const locked = await withDbAdvisoryLock(
+    MARKET_RESOLVER_LOCK_KEY,
+    "MarketResolver",
+    resolveExpiredMarketsOnce,
+  );
+
+  if (!locked.acquired) {
+    log("[MarketResolver] Skipping run; another resolver instance holds the lock");
   }
 }
 

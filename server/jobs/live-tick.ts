@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { db, withDbAdvisoryLock } from "../db";
 import { trendingPeople, votes, celebrityValueVotes } from "@shared/schema";
 import { sql, eq, gte, and } from "drizzle-orm";
 
@@ -8,6 +8,7 @@ const VOTE_BOOST_POINTS = 150;
 const VIEW_BOOST_POINTS = 30;
 const TICK_INTERVAL_MS = 10 * 60 * 1000;
 const DAMPEN_DECAY_STEP = 0.1;
+const LIVE_TICK_LOCK_KEY = 5_203;
 
 let _lastFullRefreshAt: Date | null = null;
 
@@ -64,7 +65,7 @@ async function getRecentVoteCounts(sinceMinutes: number): Promise<Map<string, nu
   return counts;
 }
 
-export async function runLiveTick(): Promise<{ processed: number; moved: number }> {
+async function runLiveTickOnce(): Promise<{ processed: number; moved: number }> {
   const now = new Date();
 
   const people = await db
@@ -184,6 +185,21 @@ export async function runLiveTick(): Promise<{ processed: number; moved: number 
 
   console.log(`[LiveTick] Processed ${liveScores.length} people, ${written} rows written, ${moved} rank changes, ${voteCounts.size} with recent votes`);
   return { processed: liveScores.length, moved };
+}
+
+export async function runLiveTick(): Promise<{ processed: number; moved: number }> {
+  const locked = await withDbAdvisoryLock(
+    LIVE_TICK_LOCK_KEY,
+    "LiveTick",
+    runLiveTickOnce,
+  );
+
+  if (!locked.acquired) {
+    console.log("[LiveTick] Skipping tick; another instance holds the lock");
+    return { processed: 0, moved: 0 };
+  }
+
+  return locked.result ?? { processed: 0, moved: 0 };
 }
 
 export async function applySnapBackDampening(): Promise<number> {

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { ArrowLeft, User, Trophy, Vote, TrendingUp, Calendar, Lock, Sparkles, Shield } from "lucide-react";
+import { ArrowLeft, User, Trophy, Vote, TrendingUp, Calendar, Lock, Sparkles, Shield, Cpu, BrainCircuit } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface PublicProfile {
@@ -16,9 +16,18 @@ interface PublicProfile {
   totalVotes?: number;
   totalPredictions?: number;
   winRate?: number;
+  isAgent?: boolean;
   isPublic: boolean;
   createdAt?: string;
   message?: string;
+  agentProfile?: {
+    displayName: string;
+    bio?: string | null;
+    archetype: string;
+    specialties: string[];
+    totalEntered?: number;
+    accuracy?: number | null;
+  } | null;
 }
 
 function RankBadge({ rank }: { rank: string }) {
@@ -181,11 +190,14 @@ export default function PublicProfilePage() {
     );
   }
 
-  const displayName = profile.fullName || profile.username || "User";
+  const displayName = profile.agentProfile?.displayName || profile.fullName || profile.username || "User";
   const memberSince = profile.createdAt ? new Date(profile.createdAt).toLocaleDateString("en-US", { 
     year: "numeric", 
     month: "long" 
   }) : "2024";
+  const accuracyPct = profile.agentProfile?.accuracy != null
+    ? Math.round(profile.agentProfile.accuracy * 100)
+    : null;
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
@@ -226,12 +238,41 @@ export default function PublicProfilePage() {
               <p className="text-muted-foreground">@{profile.username}</p>
               <div className="flex items-center gap-2 mt-3 flex-wrap">
                 <RankBadge rank={profile.rank || "Citizen"} />
+                {profile.isAgent && (
+                  <Badge variant="outline" className="border-violet-500/40 text-violet-300">
+                    <Cpu className="h-3 w-3 mr-1" />
+                    AI Agent
+                  </Badge>
+                )}
                 <Badge variant="secondary" className="font-mono">
                   Level {xpLevel}
                 </Badge>
               </div>
             </div>
           </div>
+
+          {profile.isAgent && profile.agentProfile && (
+            <div className="mb-6 rounded-lg border border-violet-500/20 bg-violet-500/5 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <BrainCircuit className="h-4 w-4 text-violet-300" />
+                <p className="text-sm font-medium capitalize">
+                  {profile.agentProfile.archetype.replace(/_/g, " ")}
+                </p>
+              </div>
+              {profile.agentProfile.bio && (
+                <p className="text-sm text-muted-foreground mb-3">{profile.agentProfile.bio}</p>
+              )}
+              {profile.agentProfile.specialties.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {profile.agentProfile.specialties.map((specialty) => (
+                    <Badge key={specialty} variant="secondary" className="capitalize">
+                      {specialty}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
             <Calendar className="h-4 w-4" />
@@ -246,13 +287,13 @@ export default function PublicProfilePage() {
             </div>
             <div className="p-4 rounded-lg bg-muted/50">
               <TrendingUp className="h-5 w-5 mx-auto mb-2 text-violet-400" />
-              <p className="text-2xl font-bold">{profile.totalPredictions || 0}</p>
-              <p className="text-xs text-muted-foreground">Predictions</p>
+              <p className="text-2xl font-bold">{profile.agentProfile?.totalEntered ?? profile.totalPredictions ?? 0}</p>
+              <p className="text-xs text-muted-foreground">{profile.isAgent ? "Markets Entered" : "Predictions"}</p>
             </div>
             <div className="p-4 rounded-lg bg-muted/50">
               <Trophy className="h-5 w-5 mx-auto mb-2 text-amber-400" />
-              <p className="text-2xl font-bold">{profile.winRate || 0}%</p>
-              <p className="text-xs text-muted-foreground">Win Rate</p>
+              <p className="text-2xl font-bold">{accuracyPct ?? profile.winRate ?? 0}%</p>
+              <p className="text-xs text-muted-foreground">{profile.isAgent ? "Accuracy" : "Win Rate"}</p>
             </div>
           </div>
         </Card>

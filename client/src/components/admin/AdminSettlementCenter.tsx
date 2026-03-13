@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +50,7 @@ interface PendingMarket {
   betCount: number;
   uniqueBettors: number;
   pendingHours: number;
+  pendingReason?: string;
   warnings: string[];
   entries: Array<{ id: string; label: string; marketId: string }>;
 }
@@ -458,6 +459,20 @@ export function AdminSettlementCenter() {
   const [resolveMarket, setResolveMarket] = useState<PendingMarket | null>(null);
   const [payoutDetailId, setPayoutDetailId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const queryClient = useQueryClient();
+  const [isVisible, setIsVisible] = useState(
+    typeof document === "undefined" ? true : document.visibilityState !== "hidden",
+  );
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsVisible(document.visibilityState !== "hidden");
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   const { data: pendingMarkets, isLoading: pendingLoading, error: pendingError } = useQuery<PendingMarket[]>({
     queryKey: ["/api/admin/markets/pending"],
@@ -466,7 +481,8 @@ export function AdminSettlementCenter() {
       if (!res.ok) throw new Error("Failed to load pending markets");
       return res.json();
     },
-    refetchInterval: 30000,
+    refetchInterval: isVisible ? 60000 : false,
+    refetchOnWindowFocus: false,
   });
 
   const { data: resolvedMarkets, isLoading: resolvedLoading, error: resolvedError } = useQuery<ResolvedMarket[]>({
@@ -475,6 +491,32 @@ export function AdminSettlementCenter() {
       const res = await fetchWithAuth("/api/admin/markets/resolved");
       if (!res.ok) throw new Error("Failed to load resolved markets");
       return res.json();
+    },
+  });
+
+  const cleanupMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetchWithAuth("/api/admin/markets/pending/cleanup", {
+        method: "POST",
+        body: JSON.stringify({ olderThanHours: 24 }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Cleanup failed" }));
+        throw new Error(err.error || "Cleanup failed");
+      }
+      return res.json();
+    },
+    onSuccess: (result: { cleaned?: Array<unknown>; skipped?: Array<unknown> }) => {
+      toast({
+        title: "Cleanup complete",
+        description: `${result.cleaned?.length || 0} stale markets cleaned, ${result.skipped?.length || 0} skipped.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets/pending"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets/resolved"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/ops-summary"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Cleanup failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -530,9 +572,21 @@ export function AdminSettlementCenter() {
             <CardTitle className="text-lg">Pending Settlements</CardTitle>
             <CardDescription>Markets awaiting resolution — oldest first</CardDescription>
           </div>
-          {pendingCount > 0 && (
-            <Badge variant="secondary">{pendingCount} pending</Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {pendingCount > 0 && (
+              <Badge variant="secondary">{pendingCount} pending</Badge>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => cleanupMutation.mutate()}
+              disabled={cleanupMutation.isPending}
+              data-testid="button-clean-stale-pending"
+            >
+              {cleanupMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <XCircle className="h-4 w-4 mr-2" />}
+              Clean Stale
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {pendingLoading ? (
@@ -558,6 +612,11 @@ export function AdminSettlementCenter() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium text-sm truncate">{market.title}</p>
                       <MarketTypeBadge type={market.marketType} />
+                      {market.pendingReason && (
+                        <Badge variant="outline" className="text-xs capitalize">
+                          {market.pendingReason.replace(/_/g, " ")}
+                        </Badge>
+                      )}
                       {market.warnings.map(w => <WarningBadge key={w} warning={w} />)}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">

@@ -1438,8 +1438,9 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
-    enabled: isAdmin,
-    refetchInterval: 60000,
+    enabled: isAdmin && activeSection === "overview",
+    refetchInterval: 120000,
+    refetchOnWindowFocus: false,
   });
 
   // Fetch audit logs - only when admin and on overview section
@@ -1551,7 +1552,8 @@ export default function AdminDashboard() {
       return res.json();
     },
     enabled: isAdmin && activeSection === "tools",
-    refetchInterval: 60000,
+    refetchInterval: 120000,
+    refetchOnWindowFocus: false,
   });
 
   const settleMarket = settleMarketId ? markets?.find(m => m.id === settleMarketId) : null;

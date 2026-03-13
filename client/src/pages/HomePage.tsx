@@ -713,7 +713,7 @@ export default function HomePage() {
     fullRefreshAtFormatted: string | null;
   }>({
     queryKey: ['/api/system/freshness'],
-    refetchInterval: 30 * 1000,
+    refetchInterval: 90 * 1000,
   });
 
   const handleVisitProfile = (personId: string) => {

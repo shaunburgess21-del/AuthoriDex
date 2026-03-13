@@ -3,7 +3,7 @@
  * writes scheduled actions to the DB. Does NOT place bets directly.
  */
 
-import { db } from "../db";
+import { db, withDbAdvisoryLock } from "../db";
 import {
   agentConfigs,
   predictionMarkets,
@@ -35,7 +35,9 @@ import {
   AGENT_CREDIT_TOPUP_TARGET,
 } from "./constants";
 
-export async function runAgentBatch(): Promise<{
+const AGENT_RUNNER_LOCK_KEY = 5_201;
+
+async function runAgentBatchOnce(): Promise<{
   scheduled: number;
   abstained: number;
   skipped: number;
@@ -283,6 +285,36 @@ export async function runAgentBatch(): Promise<{
   const exitStats = { scheduled, abstained, skipped, skippedCommunity, skippedNoEntries, skippedNoEntryId };
   log(`[AgentRunner] Batch complete: ${JSON.stringify(exitStats)}`);
   return { ...exitStats, diagnostics: diag };
+}
+
+export async function runAgentBatch(): Promise<{
+  scheduled: number;
+  abstained: number;
+  skipped: number;
+  diagnostics?: Record<string, unknown>;
+}> {
+  const locked = await withDbAdvisoryLock(
+    AGENT_RUNNER_LOCK_KEY,
+    "AgentRunner",
+    runAgentBatchOnce,
+  );
+
+  if (!locked.acquired) {
+    log("[AgentRunner] Skipping batch; another runner instance holds the lock");
+    return {
+      scheduled: 0,
+      abstained: 0,
+      skipped: 0,
+      diagnostics: { reason: "locked_out" },
+    };
+  }
+
+  return locked.result ?? {
+    scheduled: 0,
+    abstained: 0,
+    skipped: 0,
+    diagnostics: { reason: "no_result" },
+  };
 }
 
 function toAgentData(row: typeof agentConfigs.$inferSelect): AgentConfigData {
