@@ -14,7 +14,7 @@ import {
   profiles,
   creditLedger,
 } from "@shared/schema";
-import { eq, and, sql, gte, desc } from "drizzle-orm";
+import { eq, and, sql, gte, desc, ne } from "drizzle-orm";
 import { log } from "../log";
 import { computePrediction } from "./decisionEngine";
 import type {
@@ -61,7 +61,11 @@ async function runAgentBatchOnce(): Promise<{
         .where(eq(profiles.id, agent.userId))
         .limit(1);
 
-      if (!profile || profile.predictCredits >= AGENT_CREDIT_LOW_THRESHOLD) {
+      if (!profile) {
+        log(`[AgentRunner] No profile found for agent ${agent.id} (${agent.displayName}) — skipping top-up`);
+        return;
+      }
+      if (profile.predictCredits >= AGENT_CREDIT_LOW_THRESHOLD) {
         return;
       }
 
@@ -88,7 +92,8 @@ async function runAgentBatchOnce(): Promise<{
         walletType: "VIRTUAL",
         balanceAfter: updatedProfile.predictCredits,
         source: "agent_runner",
-        idempotencyKey: `agent_topup_${agent.id}_${Date.now()}`,
+        // Stable per-hour so duplicate runs within the same hour don't double top-up
+        idempotencyKey: `agent_topup_${agent.id}_${Math.floor(Date.now() / 3_600_000)}`,
       });
 
       log(
@@ -175,7 +180,8 @@ async function runAgentBatchOnce(): Promise<{
       and(
         eq(predictionMarkets.status, "OPEN"),
         eq(predictionMarkets.visibility, "live"),
-        gte(predictionMarkets.endAt, now)
+        gte(predictionMarkets.endAt, now),
+        ne(predictionMarkets.marketType, "community")
       )
     );
 
@@ -418,7 +424,8 @@ function computeExecuteAfter(archetype: string): Date {
   const executeAt = new Date(Date.now() + delaySec * 1000);
 
   // SAST quiet window: push to 07:00 SAST if in quiet hours
-  const sastHour = (executeAt.getUTCHours() + 2) % 24;
+  // Use fractional hours so the 22:00–22:29 SAST window is also caught
+  const sastHour = (executeAt.getUTCHours() + executeAt.getUTCMinutes() / 60 + 2) % 24;
   if (sastHour >= QUIET_HOUR_START_SAST || sastHour < QUIET_HOUR_END_SAST) {
     const nextMorning = new Date(executeAt);
     nextMorning.setUTCHours(5, 0, 0, 0); // 07:00 SAST = 05:00 UTC

@@ -56,7 +56,12 @@ export function UploadImageInput({
       const supabase = await getSupabase();
       setProgress(20);
 
-      const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+      const mimeToExt: Record<string, string> = {
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+      };
+      const ext = mimeToExt[file.type] ?? "png";
       const timestamp = Date.now();
       const filePath = `${moduleName}/${slugOrId}/${timestamp}.${ext}`;
 
@@ -81,10 +86,10 @@ export function UploadImageInput({
 
       setProgress(100);
       onChange(urlData.publicUrl);
-    } catch (err: any) {
-      const msg = err.message || "Upload failed";
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
       if (msg.includes("Bucket not found") || msg.includes("not found")) {
-        setError("Storage bucket not configured. Please create a 'public-images' bucket in your Supabase dashboard.");
+        setError("Unable to upload image. Please try again later.");
       } else {
         setError(msg);
       }

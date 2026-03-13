@@ -442,6 +442,7 @@ interface RecentPredictionActivity {
   displayName: string;
   avatarUrl: string | null;
   isAgent: boolean;
+  isPublic: boolean;
   rationale: string | null;
 }
 
@@ -2566,9 +2567,10 @@ export default function PredictPage() {
                       data-testid={`recent-activity-${item.id}`}
                     >
                       <button
-                        className="shrink-0 rounded-full"
-                        onClick={() => item.username && setLocation(`/u/${item.username}`)}
-                        aria-label={`View ${item.displayName}'s profile`}
+                        className={`shrink-0 rounded-full ${item.username && item.isPublic ? "cursor-pointer" : "cursor-default"}`}
+                        onClick={() => item.username && item.isPublic && setLocation(`/u/${item.username}`)}
+                        aria-label={item.username && item.isPublic ? `View ${item.displayName}'s profile` : item.displayName}
+                        aria-disabled={!(item.username && item.isPublic)}
                       >
                         <Avatar className="h-9 w-9">
                           {item.avatarUrl && !item.isAgent ? (
@@ -2589,8 +2591,9 @@ export default function PredictPage() {
                       <div className="min-w-0 flex-1">
                         <div className="mb-1 flex items-center gap-2 flex-wrap">
                           <button
-                            className="text-sm font-medium hover:underline"
-                            onClick={() => item.username && setLocation(`/u/${item.username}`)}
+                            className={`text-sm font-medium ${item.username && item.isPublic ? "hover:underline cursor-pointer" : "cursor-default"}`}
+                            onClick={() => item.username && item.isPublic && setLocation(`/u/${item.username}`)}
+                            aria-disabled={!(item.username && item.isPublic)}
                           >
                             {item.displayName}
                           </button>

@@ -274,7 +274,7 @@ function UserRow({
       <div className="shrink-0 min-w-[56px] text-right hidden md:block">
         <div className="flex items-center justify-end gap-1">
           <Zap className="h-3 w-3 text-amber-400" />
-          <span className="font-mono text-sm tabular-nums">{user.winRate}%</span>
+          <span className="font-mono text-sm tabular-nums">{Math.round(user.winRate)}%</span>
         </div>
         <p className="text-[10px] text-muted-foreground mt-0.5">win rate</p>
       </div>

@@ -192,10 +192,10 @@ export default function PublicProfilePage() {
   }
 
   const displayName = profile.agentProfile?.displayName || profile.fullName || profile.username || "User";
-  const memberSince = profile.createdAt ? new Date(profile.createdAt).toLocaleDateString("en-US", { 
-    year: "numeric", 
-    month: "long" 
-  }) : "2024";
+  const memberSince = profile.createdAt ? new Date(profile.createdAt).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long"
+  }) : "Unknown";
   const accuracyPct = profile.agentProfile?.accuracy != null
     ? Math.round(profile.agentProfile.accuracy * 100)
     : null;

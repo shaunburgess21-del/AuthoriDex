@@ -287,7 +287,7 @@ function UserMenuContent({
         >
           <TrendingUp className="h-4 w-4 text-violet-400" />
           <span className="flex-1 text-sm">My Predictions</span>
-          <span className="text-xs text-muted-foreground">{profile?.totalPredictions}</span>
+          <span className="text-xs text-muted-foreground">{profile?.totalPredictions ?? 0}</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
         <button
@@ -297,7 +297,7 @@ function UserMenuContent({
         >
           <Vote className="h-4 w-4 text-cyan-400" />
           <span className="flex-1 text-sm">My Votes</span>
-          <span className="text-xs text-muted-foreground">{profile?.totalVotes}</span>
+          <span className="text-xs text-muted-foreground">{profile?.totalVotes ?? 0}</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
         <button
@@ -309,7 +309,7 @@ function UserMenuContent({
           <span className="flex-1 text-sm">Top Predictors</span>
           <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
             <Zap className="h-2.5 w-2.5 mr-0.5" />
-            {profile?.winRate}%
+            {profile?.winRate != null ? `${Math.round(profile.winRate)}%` : "--"}
           </Badge>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>

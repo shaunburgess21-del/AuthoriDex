@@ -9,7 +9,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
 import { UploadImageInput } from "@/components/ui/upload-image-input";
@@ -19,7 +19,6 @@ export default function SettingsPage() {
   const { user, profile, profileLoading, refreshProfile, signOut } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   
   const [username, setUsername] = useState(profile?.username || "");
   const [fullName, setFullName] = useState(profile?.fullName || "");
@@ -44,13 +43,13 @@ export default function SettingsPage() {
       return response.json();
     },
     onSuccess: async () => {
+      // refreshProfile fetches /api/profile/me directly; no need to also invalidate
       await refreshProfile();
       setHasLocalChanges(false);
       toast({
         title: "Profile updated",
         description: "Your changes have been saved.",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] });
     },
     onError: () => {
       toast({
@@ -311,10 +310,11 @@ export default function SettingsPage() {
               </div>
               <Button 
                 variant="destructive" 
-                onClick={handleDeleteAccount}
+                disabled
                 data-testid="button-delete-account"
+                title="Account deletion coming soon"
               >
-                Delete
+                Coming Soon
               </Button>
             </div>
           </div>

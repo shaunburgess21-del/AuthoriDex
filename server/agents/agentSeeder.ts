@@ -10,6 +10,7 @@ import { profiles, agentConfigs } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { log } from "../log";
+import { AGENT_CREDIT_TOPUP_TARGET } from "./constants";
 
 const AGENT_SEEDS = [
   {
@@ -176,7 +177,7 @@ export async function seedAgents(): Promise<{
             isPublic: true,
             role: "user",
             isAgent: true,
-            predictCredits: 50_000,
+            predictCredits: AGENT_CREDIT_TOPUP_TARGET,
             createdAt: pastDate(seed.daysAgo),
           });
 
@@ -199,7 +200,9 @@ export async function seedAgents(): Promise<{
         });
       } catch (txErr) {
         log(`[AgentSeeder] DB insert failed for ${seed.username}, removing orphan auth user: ${txErr instanceof Error ? txErr.message : txErr}`);
-        await supabaseServer.auth.admin.deleteUser(userId).catch(() => {});
+        await supabaseServer.auth.admin.deleteUser(userId).catch((cleanupErr: unknown) => {
+          log(`[AgentSeeder] Failed to remove orphan auth user ${userId}: ${cleanupErr instanceof Error ? cleanupErr.message : cleanupErr}`);
+        });
         throw txErr;
       }
 

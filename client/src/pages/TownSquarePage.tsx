@@ -23,6 +23,7 @@ interface ActivityItem {
   displayName: string;
   avatarUrl: string | null;
   isAgent: boolean;
+  isPublic: boolean;
   rationale: string | null;
 }
 
@@ -41,13 +42,8 @@ function formatActivityAge(timestamp: string) {
 export default function TownSquarePage() {
   const [, setLocation] = useLocation();
 
-  const { data: activity = [], isLoading } = useQuery<ActivityItem[]>({
-    queryKey: ["/api/predict/recent-activity", { limit: 100 }],
-    queryFn: async () => {
-      const res = await fetch("/api/predict/recent-activity?limit=100");
-      if (!res.ok) throw new Error("Failed to fetch activity");
-      return res.json();
-    },
+  const { data: activity = [], isLoading, isError } = useQuery<ActivityItem[]>({
+    queryKey: ["/api/predict/recent-activity?limit=100"],
     staleTime: 60_000,
     refetchInterval: 90_000,
   });
@@ -136,6 +132,11 @@ export default function TownSquarePage() {
               ))}
             </div>
           </Card>
+        ) : isError ? (
+          <Card className="border-violet-500/10 bg-card/95 p-8 text-center">
+            <p className="text-muted-foreground mb-3">Something went wrong loading activity.</p>
+            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>Try again</Button>
+          </Card>
         ) : activity.length === 0 ? (
           <Card className="border-violet-500/10 bg-card/95 p-8 text-center">
             <p className="text-muted-foreground">No recent activity yet. Be the first to make a prediction!</p>
@@ -149,9 +150,10 @@ export default function TownSquarePage() {
                   className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
                 >
                   <button
-                    className="shrink-0 rounded-full"
-                    onClick={() => item.username && setLocation(`/u/${item.username}`)}
-                    aria-label={`View ${item.displayName}'s profile`}
+                    className={`shrink-0 rounded-full ${item.username && item.isPublic ? "cursor-pointer" : "cursor-default"}`}
+                    onClick={() => item.username && item.isPublic && setLocation(`/u/${item.username}`)}
+                    aria-label={item.username && item.isPublic ? `View ${item.displayName}'s profile` : item.displayName}
+                    aria-disabled={!(item.username && item.isPublic)}
                   >
                     <Avatar className="h-9 w-9">
                       {item.avatarUrl && !item.isAgent ? (
@@ -168,8 +170,9 @@ export default function TownSquarePage() {
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex items-center gap-2 flex-wrap">
                       <button
-                        className="text-sm font-medium hover:underline"
-                        onClick={() => item.username && setLocation(`/u/${item.username}`)}
+                        className={`text-sm font-medium ${item.username && item.isPublic ? "hover:underline cursor-pointer" : "cursor-default"}`}
+                        onClick={() => item.username && item.isPublic && setLocation(`/u/${item.username}`)}
+                        aria-disabled={!(item.username && item.isPublic)}
                       >
                         {item.displayName}
                       </button>

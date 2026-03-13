@@ -9335,6 +9335,7 @@ Only return the JSON object.`;
             fullName: profiles.fullName,
             avatarUrl: profiles.avatarUrl,
             isAgent: profiles.isAgent,
+            isPublic: profiles.isPublic,
           })
           .from(profiles)
           .where(inArray(profiles.id, userIds)),
@@ -9389,6 +9390,7 @@ Only return the JSON object.`;
             displayName: profile?.fullName || profile?.username || "Anonymous",
             avatarUrl: profile?.avatarUrl || null,
             isAgent: profile?.isAgent ?? false,
+            isPublic: profile?.isPublic ?? false,
             rationale: rationale || null,
           };
         })
