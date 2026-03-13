@@ -13,7 +13,7 @@ import {
   profiles,
   creditLedger,
 } from "@shared/schema";
-import { eq, and, sql, lte } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { log } from "../log";
 import { generateRationale } from "./rationaleGenerator";
 import {
@@ -24,25 +24,37 @@ import {
 import type { AgentConfigData, MarketWithEntries, PredictionDecision } from "./types";
 
 async function processDueActions(): Promise<void> {
-  const now = new Date();
-
-  const dueActions = await db
-    .select({
-      id: scheduledAgentActions.id,
-      agentId: scheduledAgentActions.agentId,
-      marketId: scheduledAgentActions.marketId,
-      entryId: scheduledAgentActions.entryId,
-      decisionPayload: scheduledAgentActions.decisionPayload,
-      stakeAmount: scheduledAgentActions.stakeAmount,
-    })
-    .from(scheduledAgentActions)
-    .where(
-      and(
-        eq(scheduledAgentActions.status, "pending"),
-        lte(scheduledAgentActions.executeAfter, now)
-      )
+  const claimedActions = await db.execute(sql`
+    WITH claimable AS (
+      SELECT id
+      FROM scheduled_agent_actions
+      WHERE status = 'pending'
+        AND execute_after <= NOW()
+      ORDER BY execute_after ASC
+      LIMIT ${ACTION_WORKER_BATCH_SIZE}
+      FOR UPDATE SKIP LOCKED
     )
-    .limit(ACTION_WORKER_BATCH_SIZE);
+    UPDATE scheduled_agent_actions AS saa
+    SET status = 'in_progress'
+    FROM claimable
+    WHERE saa.id = claimable.id
+    RETURNING
+      saa.id,
+      saa.agent_id AS "agentId",
+      saa.market_id AS "marketId",
+      saa.entry_id AS "entryId",
+      saa.decision_payload AS "decisionPayload",
+      saa.stake_amount AS "stakeAmount"
+  `);
+
+  const dueActions = claimedActions.rows as Array<{
+    id: string;
+    agentId: string;
+    marketId: string;
+    entryId: string;
+    decisionPayload: unknown;
+    stakeAmount: number;
+  }>;
 
   if (!dueActions.length) return;
 
@@ -85,6 +97,18 @@ async function executeAction(action: {
         .set({
           status: "skipped",
           errorMessage: "Market no longer open",
+          executedAt: new Date(),
+        })
+        .where(eq(scheduledAgentActions.id, action.id));
+      return;
+    }
+
+    if (market.endAt && market.endAt <= new Date()) {
+      await db
+        .update(scheduledAgentActions)
+        .set({
+          status: "skipped",
+          errorMessage: "Market past end time",
           executedAt: new Date(),
         })
         .where(eq(scheduledAgentActions.id, action.id));

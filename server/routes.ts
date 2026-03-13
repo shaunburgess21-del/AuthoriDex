@@ -9350,7 +9350,7 @@ Only return the JSON object.`;
       const h2hSnapRows = await db.execute(sql`
         SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
         FROM trend_snapshots
-        WHERE person_id IN (${personAId}::uuid, ${personBId}::uuid)
+        WHERE person_id IN (${personAId}, ${personBId})
         ORDER BY person_id, timestamp DESC
       `);
       const h2hOpeningScores: any[] = [];

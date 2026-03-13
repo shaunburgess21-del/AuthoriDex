@@ -52,30 +52,47 @@ export async function runAgentBatch(): Promise<{
   }
 
   for (const agent of agents) {
-    const [profile] = await db
-      .select({ predictCredits: profiles.predictCredits })
-      .from(profiles)
-      .where(eq(profiles.id, agent.userId))
-      .limit(1);
+    await db.transaction(async (tx) => {
+      const [profile] = await tx
+        .select({ predictCredits: profiles.predictCredits })
+        .from(profiles)
+        .where(eq(profiles.id, agent.userId))
+        .limit(1);
 
-    if (profile && profile.predictCredits < AGENT_CREDIT_LOW_THRESHOLD) {
+      if (!profile || profile.predictCredits >= AGENT_CREDIT_LOW_THRESHOLD) {
+        return;
+      }
+
       const topupAmount = AGENT_CREDIT_TOPUP_TARGET - profile.predictCredits;
-      await db.update(profiles)
+      const [updatedProfile] = await tx
+        .update(profiles)
         .set({ predictCredits: AGENT_CREDIT_TOPUP_TARGET })
-        .where(eq(profiles.id, agent.userId));
+        .where(
+          and(
+            eq(profiles.id, agent.userId),
+            eq(profiles.predictCredits, profile.predictCredits)
+          )
+        )
+        .returning({ predictCredits: profiles.predictCredits });
 
-      await db.insert(creditLedger).values({
+      if (!updatedProfile) {
+        return;
+      }
+
+      await tx.insert(creditLedger).values({
         userId: agent.userId,
         txnType: "agent_topup",
         amount: topupAmount,
         walletType: "VIRTUAL",
-        balanceAfter: AGENT_CREDIT_TOPUP_TARGET,
+        balanceAfter: updatedProfile.predictCredits,
         source: "agent_runner",
         idempotencyKey: `agent_topup_${agent.id}_${Date.now()}`,
       });
 
-      log(`[AgentRunner] Topped up ${agent.displayName}: ${profile.predictCredits} -> ${AGENT_CREDIT_TOPUP_TARGET}`);
-    }
+      log(
+        `[AgentRunner] Topped up ${agent.displayName}: ${profile.predictCredits} -> ${updatedProfile.predictCredits}`
+      );
+    });
   }
 
   const now = new Date();

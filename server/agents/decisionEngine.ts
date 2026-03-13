@@ -34,9 +34,11 @@ export function computePrediction(
 
   // Step 1: Domain filter
   const marketCategory = market.category?.toLowerCase() ?? "";
-  const domainMatch = agent.specialties.some(
-    (s) => marketCategory.includes(s) || s.includes(marketCategory)
-  );
+  const domainMatch =
+    marketCategory !== "" &&
+    agent.specialties.some(
+      (s) => marketCategory.includes(s) || s.includes(marketCategory)
+    );
   const skipProbability = domainMatch ? 0.15 : 0.55;
   if (rng.nextFloat() < skipProbability) return abstain("domain");
 

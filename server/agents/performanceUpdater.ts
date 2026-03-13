@@ -126,6 +126,7 @@ async function upsertAgentPerformance(
     await db
       .update(agentPerformance)
       .set({
+        totalEntered: existing.totalEntered + 1,
         totalResolved: newResolved,
         correct: newCorrect,
         avgBrierScore: newBrier.toFixed(4),
