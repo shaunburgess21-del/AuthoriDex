@@ -1507,6 +1507,19 @@ export default function AdminDashboard() {
     enabled: isAdmin && activeSection === "voting",
   });
 
+  const { data: underratedData } = useQuery<{ data: any[]; totalCount: number }>({
+    queryKey: ['/api/admin/vote/underrated'],
+    enabled: isAdmin && activeSection === "voting",
+  });
+  const { data: inductionData } = useQuery<{ data: any[]; totalCount: number }>({
+    queryKey: ['/api/admin/induction'],
+    enabled: isAdmin && activeSection === "voting",
+  });
+  const { data: curateData } = useQuery<{ data: any[]; totalCount: number }>({
+    queryKey: ['/api/admin/vote/curate-profile'],
+    enabled: isAdmin && activeSection === "voting",
+  });
+
   // Fetch insights for moderation
   const { data: moderationInsights, isLoading: insightsLoading } = useQuery<CommunityInsight[]>({
     queryKey: ["/api/admin/moderation/insights"],
@@ -3248,19 +3261,19 @@ export default function AdminDashboard() {
             <Tabs defaultValue="real-world" className="w-full">
               <TabsList className="flex-wrap">
                 <TabsTrigger value="real-world" data-testid="tab-real-world-markets">
-                  Real-World Markets
+                  Real-World Markets {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "community").length})</span> : null}
                 </TabsTrigger>
                 <TabsTrigger value="weekly-jackpot" data-testid="tab-weekly-jackpot">
-                  Weekly Jackpot
+                  Weekly Jackpot {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "jackpot").length})</span> : null}
                 </TabsTrigger>
                 <TabsTrigger value="weekly-updown" data-testid="tab-weekly-updown">
-                  Weekly Up/Down
+                  Weekly Up/Down {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "updown").length})</span> : null}
                 </TabsTrigger>
                 <TabsTrigger value="head-to-head" data-testid="tab-head-to-head">
-                  Head-to-Head Battles
+                  Head-to-Head Battles {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "h2h").length})</span> : null}
                 </TabsTrigger>
                 <TabsTrigger value="top-gainer" data-testid="tab-top-gainer">
-                  Top Gainer Predictions
+                  Top Gainer Predictions {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "gainer").length})</span> : null}
                 </TabsTrigger>
               </TabsList>
 
@@ -3862,22 +3875,22 @@ export default function AdminDashboard() {
             <Tabs defaultValue="polls" className="w-full">
               <TabsList className="flex-wrap">
                 <TabsTrigger value="polls" data-testid="tab-polls">
-                  Sentiment Polls
+                  Sentiment Polls {trendingPollsList ? <span className="ml-1 text-xs opacity-60">({trendingPollsList.length})</span> : null}
                 </TabsTrigger>
                 <TabsTrigger value="opinion-polls" data-testid="tab-opinion-polls">
-                  Opinion Polls
+                  Opinion Polls {opinionPollsList ? <span className="ml-1 text-xs opacity-60">({opinionPollsList.length})</span> : null}
                 </TabsTrigger>
                 <TabsTrigger value="matchups" data-testid="tab-matchups">
-                  Matchups
+                  Matchups {matchups ? <span className="ml-1 text-xs opacity-60">({matchups.length})</span> : null}
                 </TabsTrigger>
                 <TabsTrigger value="underrated-overrated" data-testid="tab-underrated-overrated">
-                  Underrated / Overrated
+                  Underrated / Overrated {underratedData?.data ? <span className="ml-1 text-xs opacity-60">({underratedData.data.length})</span> : null}
                 </TabsTrigger>
                 <TabsTrigger value="induction" data-testid="tab-induction">
-                  Induction Queue
+                  Induction Queue {inductionData?.data ? <span className="ml-1 text-xs opacity-60">({inductionData.data.length})</span> : null}
                 </TabsTrigger>
                 <TabsTrigger value="curate-profile" data-testid="tab-curate-profile">
-                  Curate Profile
+                  Curate Profile {curateData?.data ? <span className="ml-1 text-xs opacity-60">({curateData.data.length})</span> : null}
                 </TabsTrigger>
               </TabsList>
 
@@ -6167,7 +6180,7 @@ export default function AdminDashboard() {
 
       {/* Opinion Poll Create/Edit Dialog */}
       <Dialog open={showOpinionPollModal} onOpenChange={setShowOpinionPollModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto overflow-x-auto">
           <DialogHeader>
             <DialogTitle>{editingOpinionPoll ? "Edit Opinion Poll" : "Create Opinion Poll"}</DialogTitle>
             <DialogDescription>
@@ -6290,15 +6303,15 @@ export default function AdminDashboard() {
                 </Button>
               </div>
               {opinionPollForm.options.map((opt, idx) => (
-                <div key={idx} className="flex items-start gap-2 p-3 rounded-lg border">
-                  <div className="flex-1 space-y-2">
+                <div key={idx} className="flex items-start gap-2 p-3 rounded-lg border overflow-hidden">
+                  <div className="flex-1 min-w-0 space-y-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-muted-foreground w-4">{idx + 1}</span>
+                      <span className="text-xs font-medium text-muted-foreground w-4 shrink-0">{idx + 1}</span>
                       <Input
                         value={opt.name}
                         onChange={(e) => updateOpinionOption(idx, "name", e.target.value)}
                         placeholder="Option name"
-                        className="flex-1"
+                        className="flex-1 min-w-0"
                         data-testid={`input-opinion-option-name-${idx}`}
                       />
                       <Input
@@ -6307,11 +6320,11 @@ export default function AdminDashboard() {
                         value={opt.seedCount}
                         onChange={(e) => updateOpinionOption(idx, "seedCount", parseInt(e.target.value) || 0)}
                         placeholder="Seed"
-                        className="w-20 text-xs"
+                        className="w-20 shrink-0 text-xs"
                         data-testid={`input-opinion-option-seed-${idx}`}
                       />
                     </div>
-                    <div className="ml-6">
+                    <div className="ml-6 min-w-0">
                       <UploadImageInput
                         value={opt.imageUrl}
                         onChange={(url) => updateOpinionOption(idx, "imageUrl", url)}
@@ -6320,7 +6333,7 @@ export default function AdminDashboard() {
                         placeholder="Upload or paste option image"
                       />
                     </div>
-                    <div className="relative ml-6">
+                    <div className="relative ml-6 min-w-0">
                       <Input
                         value={opOptionSearchInputs[idx] || ""}
                         onChange={(e) => searchCelebrityForOption(idx, e.target.value)}
