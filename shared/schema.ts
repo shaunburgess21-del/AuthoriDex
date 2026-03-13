@@ -833,6 +833,9 @@ export const predictionMarkets = pgTable("prediction_markets", {
   inactiveMessage: text("inactive_message"), // Custom message shown on inactive cards (e.g. "Coming Soon")
   seedConfig: jsonb("seed_config"),
   weekNumber: integer("week_number"),
+  tieRule: text("tie_rule").default("refund"), // 'refund' | 'down_wins' | 'up_wins'
+  cadence: text("cadence").default("weekly"), // 'daily' | 'weekly' | 'custom'
+  baselineScore: integer("baseline_score"), // Denormalized from metadata.openingScore for easy API access
 });
 
 export const insertPredictionMarketSchema = createInsertSchema(predictionMarkets).omit({
@@ -882,6 +885,7 @@ export const marketBets = pgTable("market_bets", {
   settledAt: timestamp("settled_at"),
   payoutAmount: integer("payout_amount"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  betMetadata: jsonb("bet_metadata"), // { confidence?: 1-5, thesis?: string, scoreAtEntry?: number }
 });
 
 export const insertMarketBetSchema = createInsertSchema(marketBets).omit({
@@ -889,6 +893,7 @@ export const insertMarketBetSchema = createInsertSchema(marketBets).omit({
   createdAt: true,
   settledAt: true,
   payoutAmount: true,
+  betMetadata: true,
 });
 
 export type MarketBet = typeof marketBets.$inferSelect;
