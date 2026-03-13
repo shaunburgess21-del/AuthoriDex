@@ -9100,12 +9100,15 @@ Only return the JSON object.`;
         ));
       const existingPersonIds = new Set(existing.map(e => e.personId));
 
-      const openingSnapRows = await db.execute(sql`
-        SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
-        FROM trend_snapshots
-        WHERE person_id = ANY(${people.map(p => p.id)}::uuid[])
-        ORDER BY person_id, timestamp DESC
-      `);
+      const personIdList = people.map(p => p.id);
+      const openingSnapRows = personIdList.length > 0
+        ? await db.execute(sql`
+            SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
+            FROM trend_snapshots
+            WHERE person_id IN (${sql.join(personIdList.map(id => sql`${id}::uuid`), sql`, `)})
+            ORDER BY person_id, timestamp DESC
+          `)
+        : { rows: [] };
       const openingScoreMap = new Map<string, { score: number; snapshotAt: string }>();
       for (const row of (openingSnapRows.rows || [])) {
         if (row.fame_index != null) {
@@ -9491,12 +9494,14 @@ Only return the JSON object.`;
       const title = `Top Gainer: ${category.charAt(0).toUpperCase() + category.slice(1)}`;
       let slug = `gainer-${category}-week-${weekNumber}`;
 
-      const gainerSnapRows = await db.execute(sql`
-        SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
-        FROM trend_snapshots
-        WHERE person_id = ANY(${personIds}::uuid[])
-        ORDER BY person_id, timestamp DESC
-      `);
+      const gainerSnapRows = personIds.length > 0
+        ? await db.execute(sql`
+            SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
+            FROM trend_snapshots
+            WHERE person_id IN (${sql.join(personIds.map(id => sql`${id}::uuid`), sql`, `)})
+            ORDER BY person_id, timestamp DESC
+          `)
+        : { rows: [] };
       const gainerOpeningScores: any[] = [];
       for (const row of (gainerSnapRows.rows || [])) {
         if (row.fame_index != null) {
