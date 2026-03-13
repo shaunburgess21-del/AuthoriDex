@@ -17,6 +17,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { getAvatarInitials, HUMAN_AVATAR_FALLBACK_CLASS } from "@/lib/avatar";
 import { 
   User,
   Menu,
@@ -216,8 +217,8 @@ function UserMenuContent({
             {profile?.avatarUrl ? (
               <AvatarImage src={profile.avatarUrl} alt={displayName} />
             ) : (
-              <AvatarFallback className="rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
-                {displayName.slice(0, 2).toUpperCase()}
+              <AvatarFallback className={`rounded-full ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
+                {getAvatarInitials(displayName)}
               </AvatarFallback>
             )}
           </Avatar>
@@ -392,8 +393,8 @@ export function UserMenu() {
             className="h-full w-full object-cover"
           />
         ) : (
-          <div className="h-full w-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
-            {avatarDisplayName.slice(0, 2).toUpperCase()}
+          <div className={`h-full w-full flex items-center justify-center text-sm ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
+            {getAvatarInitials(avatarDisplayName)}
           </div>
         )
       ) : (
@@ -418,8 +419,8 @@ export function UserMenu() {
                 className="h-full w-full object-cover"
               />
             ) : (
-              <div className="h-full w-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
-                {avatarDisplayName.slice(0, 2).toUpperCase()}
+              <div className={`h-full w-full flex items-center justify-center text-sm ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
+                {getAvatarInitials(avatarDisplayName)}
               </div>
             )
           ) : (

@@ -11,6 +11,9 @@ interface UploadImageInputProps {
   slugOrId?: string;
   disabled?: boolean;
   placeholder?: string;
+  hidePreview?: boolean;
+  buttonAriaLabel?: string;
+  buttonTestId?: string;
 }
 
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -24,6 +27,9 @@ export function UploadImageInput({
   slugOrId = "unnamed",
   disabled = false,
   placeholder = "Paste image URL or upload a file",
+  hidePreview = false,
+  buttonAriaLabel = "Upload image",
+  buttonTestId = "button-upload-image",
 }: UploadImageInputProps) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -130,8 +136,8 @@ export function UploadImageInput({
           size="icon"
           disabled={disabled || uploading}
           onClick={() => fileInputRef.current?.click()}
-          aria-label="Upload image"
-          data-testid="button-upload-image"
+          aria-label={buttonAriaLabel}
+          data-testid={buttonTestId}
         >
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
         </Button>
@@ -175,7 +181,7 @@ export function UploadImageInput({
         </div>
       )}
 
-      {value && !uploading && (
+      {value && !uploading && !hidePreview && (
         <div className="flex items-center gap-3 p-2 rounded-md bg-white/5 border border-white/10" data-testid="image-preview">
           <div className="h-12 w-12 rounded overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
             <img

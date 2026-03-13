@@ -15,6 +15,11 @@ import { TrendingPerson } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
+import {
+  AGENT_AVATAR_FALLBACK_CLASS,
+  getAvatarInitials,
+  HUMAN_AVATAR_FALLBACK_CLASS,
+} from "@/lib/avatar";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useScrollHint } from "@/hooks/use-scroll-hint";
@@ -116,8 +121,14 @@ function ParticipantAvatarStack({
             {participant.avatarUrl ? (
               <AvatarImage src={participant.avatarUrl} alt={participant.displayName} />
             ) : (
-              <AvatarFallback className={`text-[10px] ${participant.isAgent ? "bg-violet-500/20 text-violet-200" : "bg-muted text-foreground"}`}>
-                {participant.displayName.slice(0, 2).toUpperCase()}
+              <AvatarFallback
+                className={`text-[10px] ${
+                  participant.isAgent
+                    ? AGENT_AVATAR_FALLBACK_CLASS
+                    : HUMAN_AVATAR_FALLBACK_CLASS
+                }`}
+              >
+                {getAvatarInitials(participant.displayName)}
               </AvatarFallback>
             )}
           </Avatar>
@@ -2558,8 +2569,14 @@ export default function PredictPage() {
                         {item.avatarUrl ? (
                           <AvatarImage src={item.avatarUrl} alt={item.displayName} />
                         ) : (
-                          <AvatarFallback className={item.isAgent ? "bg-violet-500/20 text-violet-200" : "bg-muted text-foreground"}>
-                            {item.displayName.slice(0, 2).toUpperCase()}
+                          <AvatarFallback
+                            className={
+                              item.isAgent
+                                ? AGENT_AVATAR_FALLBACK_CLASS
+                                : HUMAN_AVATAR_FALLBACK_CLASS
+                            }
+                          >
+                            {getAvatarInitials(item.displayName)}
                           </AvatarFallback>
                         )}
                       </Avatar>

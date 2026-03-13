@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Settings, User, Bell, Shield, Eye, Camera, Loader2 } from "lucide-react";
+import { ArrowLeft, Settings, User, Bell, Shield, Eye, Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
+import { UploadImageInput } from "@/components/ui/upload-image-input";
+import { getAvatarInitials, HUMAN_AVATAR_FALLBACK_CLASS } from "@/lib/avatar";
 
 export default function SettingsPage() {
   const { user, profile, profileLoading, refreshProfile, signOut } = useAuth();
@@ -21,6 +23,7 @@ export default function SettingsPage() {
   
   const [username, setUsername] = useState(profile?.username || "");
   const [fullName, setFullName] = useState(profile?.fullName || "");
+  const [avatarUrl, setAvatarUrl] = useState(profile?.avatarUrl || "");
   const [isPublic, setIsPublic] = useState(profile?.isPublic ?? true);
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
 
@@ -31,11 +34,12 @@ export default function SettingsPage() {
 
     setUsername(profile.username || "");
     setFullName(profile.fullName || "");
+    setAvatarUrl(profile.avatarUrl || "");
     setIsPublic(profile.isPublic);
   }, [profile, hasLocalChanges]);
 
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: { username?: string; fullName?: string; isPublic?: boolean }) => {
+    mutationFn: async (data: { username?: string; fullName?: string; avatarUrl?: string | null; isPublic?: boolean }) => {
       const response = await apiRequest("PATCH", "/api/profile/me", data);
       return response.json();
     },
@@ -61,6 +65,7 @@ export default function SettingsPage() {
     updateProfileMutation.mutate({
       username,
       fullName,
+      avatarUrl: avatarUrl.trim() || null,
       isPublic,
     });
   };
@@ -135,27 +140,40 @@ export default function SettingsPage() {
           <div className="flex items-center gap-4 mb-6">
             <div className="relative">
               <Avatar className="h-20 w-20">
-                {profile?.avatarUrl ? (
-                  <AvatarImage src={profile.avatarUrl} alt={displayName} />
+                {avatarUrl ? (
+                  <AvatarImage src={avatarUrl} alt={displayName} />
                 ) : (
-                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold text-2xl">
-                    {displayName.slice(0, 2).toUpperCase()}
+                  <AvatarFallback className={`${HUMAN_AVATAR_FALLBACK_CLASS} text-2xl`}>
+                    {getAvatarInitials(displayName)}
                   </AvatarFallback>
                 )}
               </Avatar>
-              <Button 
-                variant="secondary" 
-                size="icon" 
-                className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full"
-                data-testid="button-change-avatar"
-              >
-                <Camera className="h-4 w-4" />
-              </Button>
             </div>
             <div>
               <p className="font-medium">{displayName}</p>
               <p className="text-sm text-muted-foreground">{user.email}</p>
             </div>
+          </div>
+
+          <div className="mb-6 space-y-2">
+            <Label>Profile Photo</Label>
+            <UploadImageInput
+              value={avatarUrl}
+              onChange={(url) => {
+                setHasLocalChanges(true);
+                setAvatarUrl(url);
+              }}
+              moduleName="avatars"
+              slugOrId={profile?.id || user.id}
+              disabled={updateProfileMutation.isPending}
+              placeholder="Paste an image URL or upload a photo"
+              hidePreview
+              buttonAriaLabel="Change profile photo"
+              buttonTestId="button-change-avatar"
+            />
+            <p className="text-xs text-muted-foreground">
+              Upload PNG, JPG, or WEBP up to 2MB. Save changes to apply it to your profile.
+            </p>
           </div>
 
           <div className="space-y-4">
