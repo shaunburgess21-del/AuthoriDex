@@ -387,15 +387,17 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                     <button
                       type="button"
                       className="no-default-hover-elevate no-default-active-elevate font-mono font-bold text-lg sm:text-xl tabular-nums cursor-pointer"
-                      style={{ color: getRatingColor(sentimentScore) }}
                       aria-label={`Rated ${person.name} ${sentimentScore}/5`}
                       onClick={(e) => e.stopPropagation()}
                       data-testid={`button-vote-icon-${person.id}`}
                     >
-                      {justVoted ? (
-                        <span className="text-[#22D3EE]">{sentimentScore}/5</span>
+                      {person.approvalAvgRating != null ? (
+                        <span>
+                          <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}</span>
+                          <span className="text-muted-foreground">/5</span>
+                        </span>
                       ) : (
-                        <span>{sentimentScore}/5</span>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </button>
                   </PopoverTrigger>
