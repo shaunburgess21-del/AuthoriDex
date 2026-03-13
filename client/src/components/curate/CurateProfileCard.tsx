@@ -7,7 +7,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Check, ChevronRight, Camera, Eye } from "lucide-react";
+import { useLocation } from "wouter";
+import { Check, ChevronRight, Camera, Eye, RefreshCw, User } from "lucide-react";
 
 interface CelebrityImage {
   id: string;
@@ -47,6 +48,7 @@ export function CurateProfileCard({
   const [showResults, setShowResults] = useState(false);
   const timeoutRef1 = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   const { data: images = [], isLoading } = useQuery<CelebrityImage[]>({
     queryKey: ['/api/people', person.id, 'images'],
@@ -108,6 +110,12 @@ export function CurateProfileCard({
     return images.reduce((sum, img) => sum + img.votesUp + img.votesDown, 0);
   }, [images]);
 
+  const winningAvatar = useMemo(() => {
+    const sorted = [...images].sort((a, b) => b.votesUp - a.votesUp);
+    if (sorted.length > 0 && sorted[0].votesUp > 0) return sorted[0].imageUrl;
+    return person.imageUrl || "";
+  }, [images, person.imageUrl]);
+
   const hasVoted = selectedPhoto !== null;
 
   return (
@@ -140,7 +148,7 @@ export function CurateProfileCard({
 
         <div className="relative p-4 md:p-4 flex flex-col flex-1">
           <div className="flex items-center gap-3 mb-3">
-            <PersonAvatar name={person.name} avatar={person.imageUrl || ""} size="md" />
+            <PersonAvatar name={person.name} avatar={winningAvatar} size="md" />
             <div className="flex-1 min-w-0 flex flex-col justify-center">
               <h3 className="font-semibold text-base truncate">{person.name}</h3>
               <span className="text-xs text-muted-foreground">
@@ -172,16 +180,41 @@ export function CurateProfileCard({
               <p className="text-xs text-muted-foreground mb-4">
                 {totalVotes.toLocaleString('en-US')} total votes
               </p>
-              <div className="flex gap-2 justify-center">
+              <div className="flex flex-col gap-2 items-center">
+                <div className="flex gap-2 justify-center">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onViewResults(person)}
+                    className="border-cyan-500/50 text-cyan-400"
+                    data-testid={`button-view-results-${person.id}`}
+                  >
+                    <Eye className="h-3.5 w-3.5 mr-1" />
+                    View Results
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedPhoto(null);
+                      setShowResults(false);
+                    }}
+                    className="border-slate-600/50 text-slate-300 hover:text-white hover:border-slate-500"
+                    data-testid={`button-change-vote-${person.id}`}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                    Change Vote
+                  </Button>
+                </div>
                 <Button
                   size="sm"
-                  variant="outline"
-                  onClick={() => onViewResults(person)}
-                  className="border-cyan-500/50 text-cyan-400"
-                  data-testid={`button-view-results-${person.id}`}
+                  variant="ghost"
+                  onClick={() => setLocation(`/person/${person.id}`)}
+                  className="text-muted-foreground hover:text-cyan-400 text-xs"
+                  data-testid={`button-visit-profile-${person.id}`}
                 >
-                  <Eye className="h-3.5 w-3.5 mr-1" />
-                  View Results
+                  <User className="h-3 w-3 mr-1" />
+                  Visit Profile
                 </Button>
               </div>
             </div>

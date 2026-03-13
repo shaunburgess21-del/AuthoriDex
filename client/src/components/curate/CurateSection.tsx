@@ -17,6 +17,7 @@ interface TrendingPerson {
   id: string;
   name: string;
   category: string;
+  avatar: string | null;
   imageUrl: string | null;
   trendScore: number;
   rank: number;
@@ -61,7 +62,7 @@ export function CurateSection({
       id: person.id,
       name: person.name || 'Unknown',
       category: person.category || 'Music',
-      imageUrl: person.imageUrl,
+      imageUrl: person.avatar || person.imageUrl || null,
     }));
   }, [filteredCelebrities]);
 

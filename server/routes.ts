@@ -3763,6 +3763,19 @@ Only return the JSON object.`;
   });
 
   // ==================== Matchups API ====================
+
+  const MATCHUP_BUCKET_BASE = process.env.SUPABASE_URL
+    ? `${process.env.SUPABASE_URL}/storage/v1/object/public/matchups`
+    : null;
+
+  function slugifyMatchupName(s: string): string {
+    return s.toLowerCase().replace(/[''`]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  }
+
+  function matchupBucketUrl(slug: string | null | undefined, optionText: string): string | null {
+    if (!MATCHUP_BUCKET_BASE || !slug) return null;
+    return `${MATCHUP_BUCKET_BASE}/${slug}/${slugifyMatchupName(optionText)}.webp`;
+  }
   
   // Get all matchups with vote counts (with dynamic avatar lookup from tracked_people)
   app.get("/api/matchups", async (req, res) => {
@@ -3813,8 +3826,8 @@ Only return the JSON object.`;
         const displayBVotes = realBVotes + (matchup.seedVotesB || 0);
         const totalVotes = displayAVotes + displayBVotes;
         
-        const optionAImageResolved = (matchup.personAId && avatarById[matchup.personAId]) || matchup.optionAImage || avatarByName[matchup.optionAText.toLowerCase()] || null;
-        const optionBImageResolved = (matchup.personBId && avatarById[matchup.personBId]) || matchup.optionBImage || avatarByName[matchup.optionBText.toLowerCase()] || null;
+        const optionAImageResolved = (matchup.personAId && avatarById[matchup.personAId]) || matchup.optionAImage || avatarByName[matchup.optionAText.toLowerCase()] || matchupBucketUrl(matchup.slug, matchup.optionAText) || null;
+        const optionBImageResolved = (matchup.personBId && avatarById[matchup.personBId]) || matchup.optionBImage || avatarByName[matchup.optionBText.toLowerCase()] || matchupBucketUrl(matchup.slug, matchup.optionBText) || null;
         
         return {
           ...matchup,
@@ -3878,8 +3891,8 @@ Only return the JSON object.`;
       const displayBVotes = realBVotes + (matchup.seedVotesB || 0);
       const totalVotes = displayAVotes + displayBVotes;
       
-      const optionAImageResolved = (matchup.personAId && avatarById[matchup.personAId]) || matchup.optionAImage || avatarByName[matchup.optionAText.toLowerCase()] || null;
-      const optionBImageResolved = (matchup.personBId && avatarById[matchup.personBId]) || matchup.optionBImage || avatarByName[matchup.optionBText.toLowerCase()] || null;
+      const optionAImageResolved = (matchup.personAId && avatarById[matchup.personAId]) || matchup.optionAImage || avatarByName[matchup.optionAText.toLowerCase()] || matchupBucketUrl(matchup.slug, matchup.optionAText) || null;
+      const optionBImageResolved = (matchup.personBId && avatarById[matchup.personBId]) || matchup.optionBImage || avatarByName[matchup.optionBText.toLowerCase()] || matchupBucketUrl(matchup.slug, matchup.optionBText) || null;
       
       res.json({
         ...matchup,

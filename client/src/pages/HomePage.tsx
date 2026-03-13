@@ -1057,6 +1057,7 @@ export default function HomePage() {
                           Cooling
                         </span>
                       </TouchTooltip>
+                      <span className="ml-auto lg:hidden text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Predict</span>
                     </div>
                   )}
                   {displayPeople.length > 0 && (

@@ -15,6 +15,7 @@ interface TrendingPerson {
   id: string;
   name: string;
   category: string;
+  avatar: string | null;
   imageUrl: string | null;
   trendScore: number;
   rank: number;
@@ -68,6 +69,11 @@ function CelebCard({
       .slice(0, 2);
   }, [images]);
 
+  const winningAvatar = useMemo(() => {
+    if (topImages.length > 0 && topImages[0].votesUp > 0) return topImages[0].imageUrl;
+    return person.avatar || person.imageUrl || "";
+  }, [topImages, person.avatar, person.imageUrl]);
+
   const totalVotes = images.reduce((sum, img) => sum + img.votesUp, 0);
 
   return (
@@ -84,7 +90,7 @@ function CelebCard({
           <CategoryPill category={person.category} />
         </div>
         <div className="flex items-center gap-2 mb-2">
-          <PersonAvatar name={person.name} avatar={person.imageUrl || ""} size="sm" />
+          <PersonAvatar name={person.name} avatar={winningAvatar} size="sm" />
           <div className="min-w-0 flex flex-col justify-center">
             <p className="font-medium text-sm truncate">{person.name}</p>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -217,7 +223,7 @@ export function CurateViewAllOverlay({
                   id: person.id,
                   name: person.name,
                   category: person.category,
-                  imageUrl: person.imageUrl,
+                  imageUrl: person.avatar || person.imageUrl || null,
                 })}
               />
             ))}

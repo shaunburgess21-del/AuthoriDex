@@ -1245,7 +1245,23 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user, isAdmin, profileLoading, profile } = useAuth();
-  const [activeSection, setActiveSection] = useState<AdminSection>("overview");
+  const [activeSection, setActiveSectionRaw] = useState<AdminSection>(() => {
+    const saved = sessionStorage.getItem("admin_active_section");
+    return (saved as AdminSection) || "overview";
+  });
+  const setActiveSection = (section: AdminSection) => {
+    sessionStorage.setItem("admin_active_section", section);
+    setActiveSectionRaw(section);
+  };
+
+  const [votingSubTab, setVotingSubTabRaw] = useState(() => sessionStorage.getItem("admin_voting_tab") || "polls");
+  const setVotingSubTab = (tab: string) => { sessionStorage.setItem("admin_voting_tab", tab); setVotingSubTabRaw(tab); };
+
+  const [predictionSubTab, setPredictionSubTabRaw] = useState(() => sessionStorage.getItem("admin_prediction_tab") || "real-world");
+  const setPredictionSubTab = (tab: string) => { sessionStorage.setItem("admin_prediction_tab", tab); setPredictionSubTabRaw(tab); };
+
+  const [moderationSubTab, setModerationSubTabRaw] = useState(() => sessionStorage.getItem("admin_moderation_tab") || "insights");
+  const setModerationSubTab = (tab: string) => { sessionStorage.setItem("admin_moderation_tab", tab); setModerationSubTabRaw(tab); };
   const [searchQuery, setSearchQuery] = useState("");
   const [celebritySearch, setCelebritySearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
@@ -1277,6 +1293,7 @@ export default function AdminDashboard() {
     personAId: "",
     personBId: "",
     promptText: "",
+    description: "",
     isActive: true,
     visibility: "live",
     featured: false,
@@ -1879,7 +1896,7 @@ export default function AdminDashboard() {
       toast({ title: "Matchup Created", description: "New matchup added successfully" });
       setShowMatchupModal(false);
       setEditingMatchup(null);
-      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
+      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
       setMatchupSearchA(""); setMatchupSearchB("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
@@ -1901,7 +1918,7 @@ export default function AdminDashboard() {
       toast({ title: "Matchup Updated", description: "Matchup updated successfully" });
       setShowMatchupModal(false);
       setEditingMatchup(null);
-      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
+      setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
       setMatchupSearchA(""); setMatchupSearchB("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
@@ -2429,6 +2446,7 @@ export default function AdminDashboard() {
       personAId: matchup.personAId || "",
       personBId: matchup.personBId || "",
       promptText: matchup.promptText || "",
+      description: (matchup as any).description || "",
       isActive: matchup.isActive,
       visibility: matchup.visibility || "live",
       featured: matchup.featured || false,
@@ -3260,7 +3278,7 @@ export default function AdminDashboard() {
               </Button>
             </div>
 
-            <Tabs defaultValue="real-world" className="w-full">
+            <Tabs value={predictionSubTab} onValueChange={setPredictionSubTab} className="w-full">
               <TabsList className="flex-wrap">
                 <TabsTrigger value="real-world" data-testid="tab-real-world-markets">
                   Real-World Markets {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "community").length})</span> : null}
@@ -3874,7 +3892,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <Tabs defaultValue="polls" className="w-full">
+            <Tabs value={votingSubTab} onValueChange={setVotingSubTab} className="w-full">
               <TabsList className="flex-wrap">
                 <TabsTrigger value="polls" data-testid="tab-polls">
                   Sentiment Polls {trendingPollsList ? <span className="ml-1 text-xs opacity-60">({trendingPollsList.length})</span> : null}
@@ -4248,7 +4266,7 @@ export default function AdminDashboard() {
                       size="sm"
                       onClick={() => {
                         setEditingMatchup(null);
-                        setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
+                        setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
                         setMatchupSearchA(""); setMatchupSearchB("");
                         setShowMatchupModal(true);
                       }}
@@ -4345,7 +4363,7 @@ export default function AdminDashboard() {
                             className="mt-4" 
                             onClick={() => {
                               setEditingMatchup(null);
-                              setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
+                              setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
                               setMatchupSearchA(""); setMatchupSearchB("");
                               setShowMatchupModal(true);
                             }}
@@ -4384,7 +4402,7 @@ export default function AdminDashboard() {
               <p className="text-muted-foreground">Review and moderate user-generated content</p>
             </div>
 
-            <Tabs defaultValue="insights" className="w-full">
+            <Tabs value={moderationSubTab} onValueChange={setModerationSubTab} className="w-full">
               <TabsList>
                 <TabsTrigger value="insights" data-testid="tab-insights">
                   Insights
@@ -6111,6 +6129,18 @@ export default function AdminDashboard() {
                 onChange={(e) => setMatchupForm({ ...matchupForm, promptText: e.target.value })}
                 placeholder='e.g. "Who do you prefer?" (leave blank for default)'
                 data-testid="input-matchup-prompt"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="matchup-description">Description (optional)</Label>
+              <Textarea
+                id="matchup-description"
+                value={matchupForm.description}
+                onChange={(e) => setMatchupForm({ ...matchupForm, description: e.target.value })}
+                placeholder="Additional context or details about this matchup"
+                className="resize-none"
+                rows={3}
+                data-testid="input-matchup-description"
               />
             </div>
             <div className="space-y-2">

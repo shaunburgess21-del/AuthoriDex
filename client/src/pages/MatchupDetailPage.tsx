@@ -31,6 +31,7 @@ import {
   Star,
   Check,
   Swords,
+  TrendingUp,
 } from "lucide-react";
 
 interface MatchupDetail {
@@ -42,6 +43,7 @@ interface MatchupDetail {
   optionBText: string;
   optionBImage: string | null;
   promptText: string | null;
+  description: string | null;
   isActive: boolean;
   visibility: string;
   featured: boolean;
@@ -324,47 +326,58 @@ export default function MatchupDetailPage() {
             Cast Your Vote
           </h2>
 
-          <div className="flex items-stretch gap-3 mb-4">
+          <div className="flex items-stretch gap-0 relative mb-4">
             <button
               onClick={() => {
                 if (!hasVoted || votedB) handleVote(matchup.id, 'option_a');
               }}
-              className={`flex-1 flex flex-col rounded-md border transition-all duration-300 overflow-hidden cursor-pointer ${
+              className={`flex-1 flex flex-col rounded-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
                 hasVoted
                   ? votedA
-                    ? 'border-cyan-500/60 ring-2 ring-cyan-500/30'
-                    : 'border-border/30 opacity-70 hover:opacity-90 hover:border-cyan-500/30'
-                  : 'border-border/50 hover:border-cyan-500/50'
+                    ? 'border-blue-500/60 ring-2 ring-blue-500/30'
+                    : 'border-border/30 opacity-70 hover:opacity-90 hover:border-blue-500/30'
+                  : 'border-border/50 hover:border-blue-500/50'
               }`}
               data-testid="button-vote-option-a"
             >
-              <div className="relative" style={{ minHeight: '200px' }}>
+              <div className="relative" style={{ minHeight: '320px' }}>
                 {matchup.optionAImage ? (
                   <div className="absolute inset-0">
                     <img
                       src={matchup.optionAImage}
                       alt={matchup.optionAText}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        const exts = ['.webp', '.png', '.jpg', '.jpeg'];
+                        const src = img.src;
+                        const currentExt = exts.find(ext => src.toLowerCase().endsWith(ext));
+                        const nextIdx = currentExt ? exts.indexOf(currentExt) + 1 : exts.length;
+                        if (nextIdx < exts.length) {
+                          img.src = src.substring(0, src.length - (currentExt?.length ?? 0)) + exts[nextIdx];
+                        } else {
+                          img.style.display = 'none';
+                        }
+                      }}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
                   </div>
                 ) : (
-                  <div className={`absolute inset-0 bg-gradient-to-br ${votedA ? 'from-cyan-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
+                  <div className={`absolute inset-0 bg-gradient-to-br ${votedA ? 'from-blue-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
                 )}
                 {votedA && (
                   <div className="absolute top-2 right-2">
-                    <Badge variant="outline" className="text-[10px] border-cyan-500/50 text-cyan-400 bg-black/50 backdrop-blur-sm py-0">
+                    <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-400 bg-black/50 backdrop-blur-sm py-0">
                       Your pick
                     </Badge>
                   </div>
                 )}
               </div>
-              <div className="px-3 py-3 bg-card/80 backdrop-blur-sm border-t border-border/30 text-center">
+              <div className="px-3 py-3 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
                 <span className="font-semibold truncate block">{matchup.optionAText}</span>
               </div>
             </button>
 
-            <div className="flex items-center justify-center">
+            <div className="absolute left-1/2 top-[calc(50%-16px)] -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
               <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
                 <span className="text-xs font-bold text-slate-200">VS</span>
               </div>
@@ -374,37 +387,48 @@ export default function MatchupDetailPage() {
               onClick={() => {
                 if (!hasVoted || votedA) handleVote(matchup.id, 'option_b');
               }}
-              className={`flex-1 flex flex-col rounded-md border transition-all duration-300 overflow-hidden cursor-pointer ${
+              className={`flex-1 flex flex-col rounded-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
                 hasVoted
                   ? votedB
-                    ? 'border-sky-600/60 ring-2 ring-sky-600/30'
-                    : 'border-border/30 opacity-70 hover:opacity-90 hover:border-sky-600/30'
-                  : 'border-border/50 hover:border-sky-600/50'
+                    ? 'border-amber-500/60 ring-2 ring-amber-500/30'
+                    : 'border-border/30 opacity-70 hover:opacity-90 hover:border-amber-500/30'
+                  : 'border-border/50 hover:border-amber-500/50'
               }`}
               data-testid="button-vote-option-b"
             >
-              <div className="relative" style={{ minHeight: '200px' }}>
+              <div className="relative" style={{ minHeight: '320px' }}>
                 {matchup.optionBImage ? (
                   <div className="absolute inset-0">
                     <img
                       src={matchup.optionBImage}
                       alt={matchup.optionBText}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        const exts = ['.webp', '.png', '.jpg', '.jpeg'];
+                        const src = img.src;
+                        const currentExt = exts.find(ext => src.toLowerCase().endsWith(ext));
+                        const nextIdx = currentExt ? exts.indexOf(currentExt) + 1 : exts.length;
+                        if (nextIdx < exts.length) {
+                          img.src = src.substring(0, src.length - (currentExt?.length ?? 0)) + exts[nextIdx];
+                        } else {
+                          img.style.display = 'none';
+                        }
+                      }}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
                   </div>
                 ) : (
-                  <div className={`absolute inset-0 bg-gradient-to-br ${votedB ? 'from-sky-700/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
+                  <div className={`absolute inset-0 bg-gradient-to-br ${votedB ? 'from-amber-700/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
                 )}
                 {votedB && (
                   <div className="absolute top-2 right-2">
-                    <Badge variant="outline" className="text-[10px] border-sky-600/50 text-sky-400 bg-black/50 backdrop-blur-sm py-0">
+                    <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-400 bg-black/50 backdrop-blur-sm py-0">
                       Your pick
                     </Badge>
                   </div>
                 )}
               </div>
-              <div className="px-3 py-3 bg-card/80 backdrop-blur-sm border-t border-border/30 text-center">
+              <div className="px-3 py-3 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
                 <span className="font-semibold truncate block">{matchup.optionBText}</span>
               </div>
             </button>
@@ -445,13 +469,13 @@ export default function MatchupDetailPage() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-sm font-medium">{matchup.optionAText}</span>
-                <span className={`text-sm font-bold font-mono ${leadingA ? 'text-cyan-400' : 'text-muted-foreground'}`}>
+                <span className={`text-sm font-bold font-mono ${leadingA ? 'text-blue-400' : 'text-muted-foreground'}`}>
                   {matchup.optionAPercent}%
                 </span>
               </div>
-              <div className="h-8 rounded-md bg-cyan-500/10 border border-cyan-500/30 overflow-hidden relative">
+              <div className="h-8 rounded-md bg-blue-500/10 border border-blue-500/30 overflow-hidden relative">
                 <div
-                  className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-500 rounded-md flex items-center justify-center"
+                  className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-500 rounded-md flex items-center justify-center"
                   style={{ width: `${Math.max(matchup.optionAPercent, 5)}%` }}
                 >
                   {matchup.optionAPercent >= 20 && (
@@ -464,13 +488,13 @@ export default function MatchupDetailPage() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-sm font-medium">{matchup.optionBText}</span>
-                <span className={`text-sm font-bold font-mono ${!leadingA ? 'text-[#0386C9]' : 'text-muted-foreground'}`}>
+                <span className={`text-sm font-bold font-mono ${!leadingA ? 'text-amber-400' : 'text-muted-foreground'}`}>
                   {matchup.optionBPercent}%
                 </span>
               </div>
-              <div className="h-8 rounded-md bg-sky-500/10 border border-sky-500/30 overflow-hidden relative">
+              <div className="h-8 rounded-md bg-amber-500/10 border border-amber-500/30 overflow-hidden relative">
                 <div
-                  className="h-full bg-gradient-to-r from-sky-500 to-sky-600 transition-all duration-500 rounded-md flex items-center justify-center"
+                  className="h-full bg-gradient-to-r from-amber-500 to-amber-600 transition-all duration-500 rounded-md flex items-center justify-center"
                   style={{ width: `${Math.max(matchup.optionBPercent, 5)}%` }}
                 >
                   {matchup.optionBPercent >= 20 && (
@@ -484,18 +508,18 @@ export default function MatchupDetailPage() {
           <div className="grid grid-cols-2 gap-3 text-center mb-3">
             <div>
               <div className="flex items-center justify-center gap-1.5 mb-1">
-                <div className="h-2.5 w-2.5 rounded-full bg-cyan-400" />
+                <div className="h-2.5 w-2.5 rounded-full bg-blue-400" />
                 <span className="text-xs font-medium">{matchup.optionAText}</span>
               </div>
-              <p className="text-lg font-bold font-mono text-cyan-400" data-testid="text-option-a-percent">{matchup.optionAPercent}%</p>
+              <p className="text-lg font-bold font-mono text-blue-400" data-testid="text-option-a-percent">{matchup.optionAPercent}%</p>
               <p className="text-xs text-muted-foreground">{matchup.optionAVotes.toLocaleString('en-US')} votes</p>
             </div>
             <div>
               <div className="flex items-center justify-center gap-1.5 mb-1">
-                <div className="h-2.5 w-2.5 rounded-full bg-sky-500" />
+                <div className="h-2.5 w-2.5 rounded-full bg-amber-500" />
                 <span className="text-xs font-medium">{matchup.optionBText}</span>
               </div>
-              <p className="text-lg font-bold font-mono text-[#0386C9]" data-testid="text-option-b-percent">{matchup.optionBPercent}%</p>
+              <p className="text-lg font-bold font-mono text-amber-400" data-testid="text-option-b-percent">{matchup.optionBPercent}%</p>
               <p className="text-xs text-muted-foreground">{matchup.optionBVotes.toLocaleString('en-US')} votes</p>
             </div>
           </div>
@@ -520,21 +544,23 @@ export default function MatchupDetailPage() {
             <p className="text-xs text-muted-foreground">Comments</p>
           </Card>
           <Card className="p-3 text-center">
-            <Clock className="h-4 w-4 text-cyan-500 mx-auto mb-1" />
-            <p className="text-sm font-semibold" data-testid="text-created-date">{formatDate(matchup.createdAt)}</p>
-            <p className="text-xs text-muted-foreground">Created</p>
+            <TrendingUp className={`h-4 w-4 mx-auto mb-1 ${matchup.optionAPercent === matchup.optionBPercent ? 'text-muted-foreground' : leadingA ? 'text-blue-400' : 'text-amber-400'}`} />
+            <p className={`text-lg font-bold font-mono ${matchup.optionAPercent === matchup.optionBPercent ? 'text-muted-foreground' : leadingA ? 'text-blue-400' : 'text-amber-400'}`} data-testid="text-margin">
+              {matchup.optionAPercent === matchup.optionBPercent ? 'Tied' : `${Math.abs(matchup.optionAPercent - matchup.optionBPercent)}pts`}
+            </p>
+            <p className="text-xs text-muted-foreground">Margin</p>
           </Card>
         </div>
 
-        {/* Context */}
-        {matchup.promptText && (
-          <Card className="p-5 mb-6" data-testid="section-context">
+        {/* About This Matchup */}
+        {matchup.description && (
+          <Card className="p-5 mb-6" data-testid="section-about">
             <h2 className="text-lg font-serif font-bold mb-2 flex items-center gap-2">
               <Info className="h-5 w-5 text-cyan-500" />
-              Context
+              About This Matchup
             </h2>
             <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-              {matchup.promptText}
+              {matchup.description}
             </p>
           </Card>
         )}

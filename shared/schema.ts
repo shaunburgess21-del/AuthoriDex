@@ -459,6 +459,7 @@ export const matchups = pgTable("face_offs", {
   personAId: varchar("person_a_id").references(() => trackedPeople.id),
   personBId: varchar("person_b_id").references(() => trackedPeople.id),
   promptText: text("prompt_text"),
+  description: text("description"),
   seedVotesA: integer("seed_votes_a").notNull().default(0),
   seedVotesB: integer("seed_votes_b").notNull().default(0),
   visibility: text("visibility").default("live"),

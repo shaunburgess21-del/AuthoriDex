@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { CategoryPill } from "@/components/CategoryPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -40,6 +40,11 @@ export function CurateViewResultsOverlay({
 
   const sortedImages = [...images].sort((a, b) => b.votesUp - a.votesUp);
   const totalVotes = images.reduce((sum, img) => sum + img.votesUp, 0);
+
+  const winningAvatar = useMemo(() => {
+    if (sortedImages.length > 0 && sortedImages[0].votesUp > 0) return sortedImages[0].imageUrl;
+    return person.imageUrl || "";
+  }, [sortedImages, person.imageUrl]);
 
   const voteMutation = useMutation({
     mutationFn: async ({ imageId }: { imageId: string }) => {
@@ -88,7 +93,7 @@ export function CurateViewResultsOverlay({
                 <ChevronLeft className="h-5 w-5" />
               </Button>
             )}
-            <PersonAvatar name={person.name} avatar={person.imageUrl || ""} size="md" />
+            <PersonAvatar name={person.name} avatar={winningAvatar} size="md" />
             <div className="flex flex-col justify-center">
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-serif font-bold">{person.name}</h2>

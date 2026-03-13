@@ -306,9 +306,9 @@ function VersusCard({
             className={`flex-1 flex flex-col rounded-t-none rounded-b-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
               hasVoted
                 ? votedA
-                  ? 'border-cyan-500/50 ring-2 ring-cyan-500/30'
-                  : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-cyan-500/30'
-                : 'border-slate-700/50 hover:border-cyan-500/50'
+                  ? 'border-blue-500/50 ring-2 ring-blue-500/30'
+                  : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-blue-500/30'
+                : 'border-slate-700/50 hover:border-blue-500/50'
             }`}
             data-testid={`button-vote-a-${matchup.id}`}
           >
@@ -335,7 +335,7 @@ function VersusCard({
                   />
                 </div>
               ) : (
-                <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedA ? 'from-cyan-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
+                <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedA ? 'from-blue-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
               )}
             </div>
             <div className="px-2 py-2 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
@@ -398,11 +398,11 @@ function VersusCard({
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
-                <span className={`text-lg font-bold ${hasVoted ? (leadingA ? 'text-cyan-400' : 'text-slate-400') : 'text-slate-600'}`}>
+                <span className={`text-lg font-bold ${hasVoted ? (votedA ? 'text-blue-400' : 'text-slate-400') : 'text-slate-600'}`}>
                   {hasVoted ? `${matchup.optionAPercent}%` : '%'}
                 </span>
                 {hasVoted && votedA && (
-                  <Badge variant="outline" className="text-[10px] border-cyan-500/40 text-cyan-400 px-1.5 py-0">
+                  <Badge variant="outline" className="text-[10px] border-blue-500/40 text-blue-400 px-1.5 py-0">
                     Your pick
                   </Badge>
                 )}
@@ -413,7 +413,7 @@ function VersusCard({
                     Your pick
                   </Badge>
                 )}
-                <span className={`text-lg font-bold ${hasVoted ? (!leadingA ? 'text-amber-400' : 'text-slate-400') : 'text-slate-600'}`}>
+                <span className={`text-lg font-bold ${hasVoted ? (votedB ? 'text-amber-400' : 'text-slate-400') : 'text-slate-600'}`}>
                   {hasVoted ? `${matchup.optionBPercent}%` : '%'}
                 </span>
               </div>
@@ -422,7 +422,7 @@ function VersusCard({
               {hasVoted ? (
                 <>
                   <div 
-                    className="h-full bg-gradient-to-r from-cyan-500 to-cyan-400"
+                    className="h-full bg-gradient-to-r from-blue-600 to-blue-400"
                     style={{ width: `${matchup.optionAPercent}%` }}
                   />
                   <div 
