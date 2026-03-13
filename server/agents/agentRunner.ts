@@ -11,6 +11,8 @@ import {
   trendingPeople,
   trendSnapshots,
   scheduledAgentActions,
+  profiles,
+  creditLedger,
 } from "@shared/schema";
 import { eq, and, sql, gte, desc } from "drizzle-orm";
 import { log } from "../log";
@@ -29,6 +31,8 @@ import {
   MAX_AGENT_STAKE,
   AGENT_RUNNER_INTERVAL_MS,
   AGENT_RUNNER_STARTUP_DELAY_MS,
+  AGENT_CREDIT_LOW_THRESHOLD,
+  AGENT_CREDIT_TOPUP_TARGET,
 } from "./constants";
 
 export async function runAgentBatch(): Promise<{
@@ -45,6 +49,33 @@ export async function runAgentBatch(): Promise<{
   if (!agents.length) {
     log("[AgentRunner] No active agents found");
     return { scheduled: 0, abstained: 0, skipped: 0, diagnostics: { reason: "no_agents" } };
+  }
+
+  for (const agent of agents) {
+    const [profile] = await db
+      .select({ predictCredits: profiles.predictCredits })
+      .from(profiles)
+      .where(eq(profiles.id, agent.userId))
+      .limit(1);
+
+    if (profile && profile.predictCredits < AGENT_CREDIT_LOW_THRESHOLD) {
+      const topupAmount = AGENT_CREDIT_TOPUP_TARGET - profile.predictCredits;
+      await db.update(profiles)
+        .set({ predictCredits: AGENT_CREDIT_TOPUP_TARGET })
+        .where(eq(profiles.id, agent.userId));
+
+      await db.insert(creditLedger).values({
+        userId: agent.userId,
+        txnType: "agent_topup",
+        amount: topupAmount,
+        walletType: "VIRTUAL",
+        balanceAfter: AGENT_CREDIT_TOPUP_TARGET,
+        source: "agent_runner",
+        idempotencyKey: `agent_topup_${agent.id}_${Date.now()}`,
+      });
+
+      log(`[AgentRunner] Topped up ${agent.displayName}: ${profile.predictCredits} -> ${AGENT_CREDIT_TOPUP_TARGET}`);
+    }
   }
 
   const now = new Date();

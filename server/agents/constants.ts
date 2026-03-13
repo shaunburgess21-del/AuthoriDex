@@ -25,6 +25,10 @@ export const ARCHETYPE_DELAY_RANGES: Record<string, [number, number]> = {
 export const BASE_STAKE_AMOUNT = 100;
 export const MAX_AGENT_STAKE = 300;
 
+// Credit refresh: top up agents that fall below threshold
+export const AGENT_CREDIT_LOW_THRESHOLD = 10_000;
+export const AGENT_CREDIT_TOPUP_TARGET = 50_000;
+
 // Agent runner sweep interval (checks for new markets every 30 min)
 export const AGENT_RUNNER_INTERVAL_MS = 30 * 60 * 1000;
 export const AGENT_RUNNER_STARTUP_DELAY_MS = 3 * 60 * 1000;
