@@ -134,20 +134,30 @@ export async function runAgentBatch(): Promise<{
     return { scheduled: 0, abstained: 0, skipped: 0, diagnostics: diag };
   }
 
-  log(
-    `[AgentRunner] Running batch: ${agents.length} agents × ${markets.length} markets`
-  );
+  const marketSummary = markets.map(m => ({
+    id: m.id.slice(0, 8),
+    type: m.marketType,
+    title: m.title?.slice(0, 40),
+    personId: m.personId?.slice(0, 8) ?? null,
+    endAt: m.endAt?.toISOString?.() ?? null,
+  }));
+  log(`[AgentRunner] Found ${markets.length} open markets: ${JSON.stringify(marketSummary)}`);
 
   let scheduled = 0;
   let abstained = 0;
   let skipped = 0;
+  let skippedCommunity = 0;
+  let skippedNoEntries = 0;
+  let skippedNoEntryId = 0;
 
   for (const agent of agents) {
     const agentData = toAgentData(agent);
 
     for (const market of markets) {
-      // Skip community markets for agents (only bet on native markets)
-      if (market.marketType === "community") continue;
+      if (market.marketType === "community") {
+        skippedCommunity++;
+        continue;
+      }
 
       const alreadyExists = await db
         .select({ id: scheduledAgentActions.id })
@@ -175,7 +185,11 @@ export async function runAgentBatch(): Promise<{
         .from(marketEntries)
         .where(eq(marketEntries.marketId, market.id));
 
-      if (!entries.length) continue;
+      if (!entries.length) {
+        skippedNoEntries++;
+        log(`[AgentRunner] Market ${market.id.slice(0, 8)} (${market.marketType}) has 0 entries — skipping`);
+        continue;
+      }
 
       const marketData: MarketWithEntries = {
         ...market,
@@ -189,10 +203,15 @@ export async function runAgentBatch(): Promise<{
 
       if (decision.abstain) {
         abstained++;
+        log(`[AgentRunner] ${agent.displayName} abstained on ${market.id.slice(0, 8)}: ${decision.abstainReason}`);
         continue;
       }
 
-      if (!decision.entryId) continue;
+      if (!decision.entryId) {
+        skippedNoEntryId++;
+        log(`[AgentRunner] ${agent.displayName} decision had no entryId for ${market.id.slice(0, 8)}: ${JSON.stringify(decision)}`);
+        continue;
+      }
 
       const executeAfter = computeExecuteAfter(agent.archetype);
       const stakeAmount = computeStakeAmount(decision.confidence ?? 0.5);
@@ -209,13 +228,13 @@ export async function runAgentBatch(): Promise<{
       });
 
       scheduled++;
+      log(`[AgentRunner] ${agent.displayName} → ${market.title?.slice(0, 30)} (entry=${decision.entryId.slice(0, 8)}, confidence=${decision.confidence?.toFixed(2)}, stake=${stakeAmount}, execAfter=${executeAfter.toISOString()})`);
     }
   }
 
-  log(
-    `[AgentRunner] Batch complete: ${scheduled} scheduled, ${abstained} abstained, ${skipped} skipped (already exists)`
-  );
-  return { scheduled, abstained, skipped };
+  const exitStats = { scheduled, abstained, skipped, skippedCommunity, skippedNoEntries, skippedNoEntryId };
+  log(`[AgentRunner] Batch complete: ${JSON.stringify(exitStats)}`);
+  return { ...exitStats, diagnostics: diag };
 }
 
 function toAgentData(row: typeof agentConfigs.$inferSelect): AgentConfigData {
