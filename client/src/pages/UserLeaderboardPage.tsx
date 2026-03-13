@@ -1,7 +1,9 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
+import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { UserMenu } from "@/components/UserMenu";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,9 +25,15 @@ import {
   ChevronRight,
   Zap,
   Info,
+  ArrowLeft,
+  Flame,
+  Lock,
+  RefreshCw,
+  Shield,
 } from "lucide-react";
 
 type Period = "today" | "week" | "month" | "all";
+const PAGE_SIZE = 25;
 
 interface LeaderboardUser {
   rank: number;
@@ -36,6 +44,8 @@ interface LeaderboardUser {
   isPublic: boolean;
   isAgent?: boolean;
   userRank: string;
+  currentStreak?: number;
+  lastActiveAt?: string | null;
   profitLoss: number;
   volume: number;
   winCount: number;
@@ -55,6 +65,16 @@ const PERIOD_LABELS: Record<Period, string> = {
   month: "This Month",
   all: "All Time",
 };
+
+function formatLastUpdated(updatedAt: number) {
+  if (!updatedAt) return "just now";
+  return new Date(updatedAt).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 function RankCell({ rank }: { rank: number }) {
   if (rank === 1) {
@@ -149,6 +169,24 @@ function EmptyState() {
   );
 }
 
+function ErrorState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+      <div className="h-20 w-20 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-6">
+        <RefreshCw className="h-10 w-10 text-red-400/70" />
+      </div>
+      <h3 className="text-xl font-semibold mb-2">Couldn&apos;t load the leaderboard</h3>
+      <p className="text-muted-foreground text-sm max-w-sm mb-8">
+        We couldn&apos;t fetch predictor rankings right now. Try again in a moment.
+      </p>
+      <Button variant="outline" onClick={onRetry} data-testid="button-retry-leaderboard">
+        <RefreshCw className="h-4 w-4 mr-2" />
+        Retry
+      </Button>
+    </div>
+  );
+}
+
 function UserRow({
   user,
   isCurrentUser,
@@ -159,13 +197,19 @@ function UserRow({
   onRowClick: (user: LeaderboardUser) => void;
 }) {
   const initials = user.displayName.slice(0, 2).toUpperCase();
+  const canOpenProfile = Boolean(user.username && user.isPublic);
+  const showStreak = (user.currentStreak || 0) > 1;
 
   return (
     <button
-      className={`w-full flex items-center gap-3 px-4 py-3 border-b border-border/50 transition-colors text-left hover:bg-muted/30 ${
+      type="button"
+      disabled={!canOpenProfile}
+      className={`w-full flex items-center gap-3 px-4 py-3 border-b border-border/50 transition-colors text-left ${
         isCurrentUser ? "bg-cyan-500/5 border-l-2 border-l-cyan-500/50" : ""
-      }`}
-      onClick={() => onRowClick(user)}
+      } ${canOpenProfile ? "hover:bg-muted/30" : "cursor-default"}`}
+      onClick={() => {
+        if (canOpenProfile) onRowClick(user);
+      }}
       data-testid={`row-leaderboard-user-${user.userId}`}
     >
       <div className="shrink-0">
@@ -196,9 +240,27 @@ function UserRow({
             </Badge>
           )}
         </div>
-        {user.username && (
-          <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
-        )}
+        <p className="text-xs text-muted-foreground truncate">
+          {user.username ? `@${user.username}` : canOpenProfile ? "Public predictor" : "Private predictor"}
+        </p>
+        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+            <Shield className="h-3 w-3 mr-1" />
+            {user.userRank}
+          </Badge>
+          {showStreak && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-500/40 text-orange-300">
+              <Flame className="h-3 w-3 mr-1" />
+              {user.currentStreak} streak
+            </Badge>
+          )}
+          {!canOpenProfile && !isCurrentUser && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-muted-foreground/30 text-muted-foreground">
+              <Lock className="h-3 w-3 mr-1" />
+              Private
+            </Badge>
+          )}
+        </div>
       </div>
 
       <div className="shrink-0 min-w-[90px] text-right">
@@ -228,7 +290,9 @@ function UserRow({
         <p className="text-[10px] text-muted-foreground mt-0.5">bets</p>
       </div>
 
-      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
+      {canOpenProfile && (
+        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 hidden sm:block" />
+      )}
     </button>
   );
 }
@@ -240,14 +304,30 @@ export default function UserLeaderboardPage() {
   const [, setLocation] = useLocation();
   const { isLoggedIn, profile } = useAuth();
 
-  const { data, isLoading } = useQuery<LeaderboardResponse>({
+  const {
+    data,
+    isLoading,
+    isError,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    refetch,
+    dataUpdatedAt,
+  } = useInfiniteQuery<LeaderboardResponse>({
     queryKey: ["/api/leaderboard/users", period, debouncedSearch],
-    queryFn: async () => {
+    queryFn: async ({ pageParam = 0 }) => {
       const params = new URLSearchParams({ period });
       if (debouncedSearch) params.set("search", debouncedSearch);
+      params.set("page", String(pageParam));
+      params.set("limit", String(PAGE_SIZE));
       const res = await fetch(`/api/leaderboard/users?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((sum, page) => sum + page.data.length, 0);
+      return loaded < lastPage.total ? allPages.length : undefined;
     },
     staleTime: 30_000,
   });
@@ -267,15 +347,68 @@ export default function UserLeaderboardPage() {
   };
 
   const currentUserId = profile?.id;
-  const rows = data?.data ?? [];
-  const userEntry = data?.userEntry ?? null;
+  const rows = useMemo(() => data?.pages.flatMap((page) => page.data) ?? [], [data]);
+  const userEntry = data?.pages[0]?.userEntry ?? null;
+  const total = data?.pages[0]?.total ?? rows.length;
   const isUserVisibleOnPage = rows.some((r) => r.userId === currentUserId);
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-4 pt-10 pb-20">
+    <div className="min-h-screen bg-background pb-20 md:pb-0">
+      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={() => {
+                if (window.history.length > 1) {
+                  window.history.back();
+                } else {
+                  setLocation("/");
+                }
+              }}
+              aria-label="Go back"
+              data-testid="button-back"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <button
+              onClick={() => {
+                setLocation("/");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+              data-testid="button-logo-home"
+            >
+              <AuthoriDexLogo size={32} variant="predict" />
+              <span className="font-serif font-bold text-xl hidden sm:block">AuthoriDex</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-4">
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/")} data-testid="nav-leaderboard-desktop">
+                Main Site
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/vote")} data-testid="nav-vote-desktop">
+                Vote
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
+                Predict
+              </Button>
+              <Button variant="ghost" size="sm" className="text-amber-400" data-testid="nav-top-predictors-desktop">
+                Top Predictors
+              </Button>
+            </div>
+            <UserMenu />
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-5xl mx-auto px-4 pt-8 pb-20">
         {/* Page header */}
-        <div className="flex items-start gap-4 mb-8">
+        <div className="flex items-start gap-4 mb-6">
           <div className="h-12 w-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
             <Trophy className="h-6 w-6 text-amber-400" />
           </div>
@@ -290,8 +423,27 @@ export default function UserLeaderboardPage() {
           </div>
         </div>
 
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <div className="lg:col-span-2 rounded-xl border border-border/60 bg-card px-4 py-3">
+            <p className="text-sm font-medium">How rankings work</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Rankings use settled prediction profit and loss for the selected time window. Ties break by total wagered volume, then by earlier account creation.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-card px-4 py-3">
+            <p className="text-sm font-medium">Last updated</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {formatLastUpdated(dataUpdatedAt)}
+            </p>
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              Rankings change after markets settle.
+            </p>
+          </div>
+        </div>
+
         {/* Filter row */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <div className="sticky top-16 z-40 bg-background/90 backdrop-blur-xl py-3 mb-6 border-b border-border/40">
+          <div className="flex flex-col sm:flex-row gap-3">
           {/* Period tabs */}
           <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 border border-border/50">
             {(["today", "week", "month", "all"] as Period[]).map((p) => (
@@ -320,6 +472,7 @@ export default function UserLeaderboardPage() {
               onChange={(e) => handleSearchChange(e.target.value)}
               data-testid="input-search-predictors"
             />
+          </div>
           </div>
         </div>
 
@@ -354,6 +507,8 @@ export default function UserLeaderboardPage() {
                 <SkeletonRow key={i} />
               ))}
             </>
+          ) : isError ? (
+            <ErrorState onRetry={() => refetch()} />
           ) : rows.length === 0 ? (
             <EmptyState />
           ) : (
@@ -405,9 +560,21 @@ export default function UserLeaderboardPage() {
 
         {/* Result count */}
         {!isLoading && rows.length > 0 && (
-          <p className="text-xs text-muted-foreground text-center mt-4">
-            Showing {rows.length} of {data?.total ?? rows.length} predictors
-          </p>
+          <div className="flex flex-col items-center gap-3 mt-4">
+            <p className="text-xs text-muted-foreground text-center">
+              Showing {rows.length} of {total} predictors
+            </p>
+            {hasNextPage && (
+              <Button
+                variant="outline"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                data-testid="button-load-more-predictors"
+              >
+                {isFetchingNextPage ? "Loading..." : "Load More"}
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </div>

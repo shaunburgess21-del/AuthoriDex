@@ -2677,8 +2677,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const period = (req.query.period as string) || 'all';
       const search = (req.query.search as string) || '';
-      const page = parseInt(req.query.page as string) || 0;
-      const limit = parseInt(req.query.limit as string) || 50;
+      const page = Math.max(parseInt(req.query.page as string) || 0, 0);
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 100);
       const userId = req.userId;
 
       // Build period filter on settledAt
@@ -2715,37 +2715,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ data: [], total: 0, userEntry: null });
       }
 
-      // Sort by profitLoss desc, then volume desc, then earliest account as tiebreaker
-      statsRows.sort((a, b) => {
-        const pnlDiff = (Number(b.profitLoss) || 0) - (Number(a.profitLoss) || 0);
-        if (pnlDiff !== 0) return pnlDiff;
-        const volDiff = (Number(b.volume) || 0) - (Number(a.volume) || 0);
-        if (volDiff !== 0) return volDiff;
-        return a.userId.localeCompare(b.userId);
-      });
-
       // Fetch profile info for all user IDs, including public AI agents
       const userIds = statsRows.map(r => r.userId);
       const profileRows = await db
-        .select({ id: profiles.id, username: profiles.username, fullName: profiles.fullName, avatarUrl: profiles.avatarUrl, isPublic: profiles.isPublic, rank: profiles.rank, createdAt: profiles.createdAt, isAgent: profiles.isAgent })
+        .select({
+          id: profiles.id,
+          username: profiles.username,
+          fullName: profiles.fullName,
+          avatarUrl: profiles.avatarUrl,
+          isPublic: profiles.isPublic,
+          rank: profiles.rank,
+          createdAt: profiles.createdAt,
+          isAgent: profiles.isAgent,
+          currentStreak: profiles.currentStreak,
+          lastActiveAt: profiles.lastActiveAt,
+        })
         .from(profiles)
         .where(inArray(profiles.id, userIds));
       const profileMap = new Map(profileRows.map(p => [p.id, p]));
+
+      // Sort by profitLoss desc, then volume desc, then earliest account creation as tiebreaker
+      statsRows.sort((a, b) => {
+        const pnlDiff = (Number(b.profitLoss) || 0) - (Number(a.profitLoss) || 0);
+        if (pnlDiff !== 0) return pnlDiff;
+
+        const volDiff = (Number(b.volume) || 0) - (Number(a.volume) || 0);
+        if (volDiff !== 0) return volDiff;
+
+        const aCreatedAt = profileMap.get(a.userId)?.createdAt?.getTime?.() ?? Number.MAX_SAFE_INTEGER;
+        const bCreatedAt = profileMap.get(b.userId)?.createdAt?.getTime?.() ?? Number.MAX_SAFE_INTEGER;
+        if (aCreatedAt !== bCreatedAt) return aCreatedAt - bCreatedAt;
+
+        return a.userId.localeCompare(b.userId);
+      });
 
       // Build ranked list, apply search filter
       const searchLower = search.trim().toLowerCase();
       const ranked = statsRows
         .map((r, i) => {
           const profile = profileMap.get(r.userId);
+          const isViewer = userId === r.userId;
+          const isPublic = profile?.isPublic ?? true;
+          const shouldRevealIdentity = isPublic || isViewer;
           return {
             rank: i + 1,
             userId: r.userId,
-            username: profile?.username || null,
-            displayName: profile?.fullName || profile?.username || 'Anonymous',
-            avatarUrl: profile?.avatarUrl || null,
-            isPublic: profile?.isPublic ?? true,
+            username: shouldRevealIdentity ? (profile?.username || null) : null,
+            displayName: shouldRevealIdentity ? (profile?.fullName || profile?.username || 'Anonymous') : 'Private Predictor',
+            avatarUrl: shouldRevealIdentity ? (profile?.avatarUrl || null) : null,
+            isPublic,
             isAgent: profile?.isAgent ?? false,
             userRank: profile?.rank || 'Citizen',
+            currentStreak: profile?.currentStreak || 0,
+            lastActiveAt: profile?.lastActiveAt || null,
             profitLoss: Number(r.profitLoss) || 0,
             volume: Number(r.volume) || 0,
             winCount: Number(r.winCount) || 0,
