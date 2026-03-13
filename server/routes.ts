@@ -2724,12 +2724,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return a.userId.localeCompare(b.userId);
       });
 
-      // Fetch profile info for all user IDs
+      // Fetch profile info for all user IDs (excluding AI agents)
       const userIds = statsRows.map(r => r.userId);
       const profileRows = await db
         .select({ id: profiles.id, username: profiles.username, fullName: profiles.fullName, avatarUrl: profiles.avatarUrl, isPublic: profiles.isPublic, rank: profiles.rank, createdAt: profiles.createdAt })
         .from(profiles)
-        .where(inArray(profiles.id, userIds));
+        .where(and(inArray(profiles.id, userIds), eq(profiles.isAgent, false)));
       const profileMap = new Map(profileRows.map(p => [p.id, p]));
 
       // Build ranked list, apply search filter
@@ -4316,7 +4316,8 @@ Only return the JSON object.`;
         return res.status(404).json({ error: "Profile not found. Please sync your profile first." });
       }
       
-      res.json(profile[0]);
+      const { isAgent, ...publicProfile } = profile[0];
+      res.json(publicProfile);
     } catch (error: any) {
       console.error("Error fetching profile:", error.message);
       res.status(500).json({ error: "Failed to fetch profile" });
@@ -4363,7 +4364,7 @@ Only return the JSON object.`;
   app.get("/api/profile/u/:username", async (req, res) => {
     try {
       const { username } = req.params;
-      const profile = await db.select().from(profiles).where(eq(profiles.username, username)).limit(1);
+      const profile = await db.select().from(profiles).where(and(eq(profiles.username, username), eq(profiles.isAgent, false))).limit(1);
       
       if (profile.length === 0) {
         return res.status(404).json({ error: "Profile not found" });
@@ -10901,6 +10902,78 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error deleting induction candidate:", error);
       res.status(500).json({ error: "Failed to delete candidate" });
+    }
+  });
+
+  // ============================================================================
+  // AI AGENT ADMIN ROUTES
+  // ============================================================================
+
+  app.post("/api/admin/agents/seed", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { seedAgents } = await import("./agents/agentSeeder");
+      const result = await seedAgents();
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[AgentAdmin] Seed failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.post("/api/admin/agents/run", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { runAgentBatch } = await import("./agents/agentRunner");
+      const result = await runAgentBatch();
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[AgentAdmin] Run failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.get("/api/admin/agents/status", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { scheduledAgentActions, agentConfigs } = await import("@shared/schema");
+
+      const agents = await db.select({
+        id: agentConfigs.id,
+        displayName: agentConfigs.displayName,
+        username: agentConfigs.username,
+        archetype: agentConfigs.archetype,
+        isActive: agentConfigs.isActive,
+      }).from(agentConfigs);
+
+      const pendingActions = await db.select({
+        id: scheduledAgentActions.id,
+        agentId: scheduledAgentActions.agentId,
+        marketId: scheduledAgentActions.marketId,
+        status: scheduledAgentActions.status,
+        executeAfter: scheduledAgentActions.executeAfter,
+        stakeAmount: scheduledAgentActions.stakeAmount,
+      })
+      .from(scheduledAgentActions)
+      .where(eq(scheduledAgentActions.status, "pending"))
+      .orderBy(asc(scheduledAgentActions.executeAfter))
+      .limit(50);
+
+      const executedCount = await db.select({ count: sql<number>`count(*)` })
+        .from(scheduledAgentActions)
+        .where(eq(scheduledAgentActions.status, "executed"));
+
+      const failedCount = await db.select({ count: sql<number>`count(*)` })
+        .from(scheduledAgentActions)
+        .where(eq(scheduledAgentActions.status, "failed"));
+
+      res.json({
+        agents,
+        pending_count: pendingActions.length,
+        executed_count: executedCount[0]?.count ?? 0,
+        failed_count: failedCount[0]?.count ?? 0,
+        next_actions: pendingActions,
+      });
+    } catch (err: any) {
+      console.error("[AgentAdmin] Status failed:", err);
+      res.status(500).json({ error: err?.message ?? "Unknown error" });
     }
   });
 

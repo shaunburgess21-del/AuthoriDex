@@ -750,6 +750,7 @@ export const profiles = pgTable("profiles", {
   totalVotes: integer("total_votes").notNull().default(0),
   totalPredictions: integer("total_predictions").notNull().default(0),
   winRate: real("win_rate").notNull().default(0),
+  isAgent: boolean("is_agent").notNull().default(false),
   lastActiveAt: timestamp("last_active_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -884,6 +885,8 @@ export const marketBets = pgTable("market_bets", {
   status: text("status").notNull().default("active"), // 'active', 'won', 'lost', 'void', 'refunded'
   settledAt: timestamp("settled_at"),
   payoutAmount: integer("payout_amount"),
+  agentId: varchar("agent_id"),
+  confidence: numeric("confidence", { precision: 3, scale: 2 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   betMetadata: jsonb("bet_metadata"), // { confidence?: 1-5, thesis?: string, scoreAtEntry?: number }
 });
@@ -1286,3 +1289,86 @@ export const opinionPollCommentVotes = pgTable("opinion_poll_comment_votes", {
 }));
 
 export type OpinionPollCommentVote = typeof opinionPollCommentVotes.$inferSelect;
+
+// ============================================================================
+// AI AGENT PREDICTION SYSTEM
+// ============================================================================
+
+export const agentConfigs = pgTable("agent_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  displayName: text("display_name").notNull(),
+  username: text("username").notNull().unique(),
+  bio: text("bio"),
+  archetype: text("archetype").notNull(),
+  specialties: text("specialties").array().notNull().default(sql`'{}'`),
+
+  boldness: numeric("boldness", { precision: 3, scale: 2 }).notNull().default("0.50"),
+  contrarianism: numeric("contrarianism", { precision: 3, scale: 2 }).notNull().default("0.30"),
+  recencyWeight: numeric("recency_weight", { precision: 3, scale: 2 }).notNull().default("0.50"),
+  prestigeBias: numeric("prestige_bias", { precision: 3, scale: 2 }).notNull().default("0.50"),
+  confidenceCal: numeric("confidence_cal", { precision: 3, scale: 2 }).notNull().default("0.70"),
+  riskAppetite: numeric("risk_appetite", { precision: 3, scale: 2 }).notNull().default("0.50"),
+  consensusSensitivity: numeric("consensus_sensitivity", { precision: 3, scale: 2 }).notNull().default("0.50"),
+  activityRate: numeric("activity_rate", { precision: 3, scale: 2 }).notNull().default("0.60"),
+
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type AgentConfig = typeof agentConfigs.$inferSelect;
+
+export const agentPerformance = pgTable("agent_performance", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentId: varchar("agent_id").notNull().references(() => agentConfigs.id, { onDelete: "cascade" }),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  totalEntered: integer("total_entered").notNull().default(0),
+  totalResolved: integer("total_resolved").notNull().default(0),
+  correct: integer("correct").notNull().default(0),
+  avgBrierScore: numeric("avg_brier_score", { precision: 6, scale: 4 }),
+  accuracy: numeric("accuracy", { precision: 5, scale: 4 }),
+  categoryScores: jsonb("category_scores").notNull().default({}),
+  beatCrowd: integer("beat_crowd").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueAgentPeriod: unique("agent_perf_agent_period_unique").on(table.agentId, table.periodStart, table.periodEnd),
+  agentIdx: index("agent_performance_agent_idx").on(table.agentId),
+}));
+
+export type AgentPerformance = typeof agentPerformance.$inferSelect;
+
+export const agentMemory = pgTable("agent_memory", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentId: varchar("agent_id").notNull().references(() => agentConfigs.id, { onDelete: "cascade" }),
+  memoryType: text("memory_type").notNull(),
+  content: text("content").notNull(),
+  category: text("category"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  agentCreatedIdx: index("agent_memory_agent_created_idx").on(table.agentId, table.createdAt),
+}));
+
+export type AgentMemory = typeof agentMemory.$inferSelect;
+
+export const scheduledAgentActions = pgTable("scheduled_agent_actions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentId: varchar("agent_id").notNull().references(() => agentConfigs.id, { onDelete: "cascade" }),
+  marketId: varchar("market_id").notNull().references(() => predictionMarkets.id, { onDelete: "cascade" }),
+  entryId: varchar("entry_id").notNull().references(() => marketEntries.id, { onDelete: "cascade" }),
+  actionType: text("action_type").notNull().default("predict"),
+  decisionPayload: jsonb("decision_payload").notNull(),
+  stakeAmount: integer("stake_amount").notNull().default(100),
+  executeAfter: timestamp("execute_after").notNull(),
+  status: text("status").notNull().default("pending"),
+  executedAt: timestamp("executed_at"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  pendingIdx: index("saa_pending_idx").on(table.status, table.executeAfter),
+  agentMarketIdx: index("saa_agent_market_idx").on(table.agentId, table.marketId),
+}));
+
+export type ScheduledAgentAction = typeof scheduledAgentActions.$inferSelect;

@@ -11,6 +11,8 @@ import { runDataIngestion, hydrateTrendingPeopleFromSnapshots } from "./jobs/ing
 import { startLiveTickScheduler, setLastFullRefreshAt, applySnapBackDampening } from "./jobs/live-tick";
 import { startMarketResolverScheduler } from "./jobs/market-resolver";
 import { runSeedBatch } from "./jobs/seed-engine";
+import { startAgentRunnerScheduler } from "./agents/agentRunner";
+import { startActionWorkerScheduler } from "./agents/actionWorker";
 import { pool } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
 import { fetchBatchGdeltNews } from "./providers/gdelt";
@@ -508,6 +510,10 @@ async function startServer() {
 
     // Start staleness monitor (alerts when snapshots are >2h old)
     startScheduler("Staleness Monitor", startStalenessMonitor);
+
+    // Start AI agent prediction system
+    startScheduler("AgentRunner", startAgentRunnerScheduler);
+    startScheduler("ActionWorker", startActionWorkerScheduler);
   });
 }
 

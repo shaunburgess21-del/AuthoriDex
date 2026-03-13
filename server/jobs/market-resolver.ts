@@ -3,6 +3,7 @@ import { predictionMarkets, marketEntries, marketBets, trendSnapshots, profiles,
 import { eq, and, sql, inArray, lte, gte, desc, asc } from "drizzle-orm";
 import { log } from "../log";
 import { calculateSettlementPayouts } from "./settlement-utils";
+import { scoreResolvedMarket } from "../agents/performanceUpdater";
 
 const RESOLVER_INTERVAL_MS = 5 * 60 * 1000;
 const RESOLVER_STARTUP_DELAY_MS = 2 * 60 * 1000;
@@ -399,6 +400,8 @@ async function resolveUpDown(market: any): Promise<"resolved" | "voided" | "bloc
     updatedAt: new Date(),
   }).where(eq(predictionMarkets.id, market.id));
 
+  scoreResolvedMarket(market.id, winnerId).catch(e => log(`[MarketResolver] Agent scoring failed: ${e}`));
+
   log(`[MarketResolver] updown ${market.id}: ${winnerLabel} wins (${openSnap.score} → ${closeSnap.score}), pool=${result.totalPool}, winners=${result.winnersCount}`);
   return "resolved";
 }
@@ -454,6 +457,8 @@ async function resolveH2H(market: any): Promise<"resolved" | "voided" | "blocked
     resolutionNotes: JSON.stringify({ ...evidence, outcome: winner.label, settlement: result }),
     updatedAt: new Date(),
   }).where(eq(predictionMarkets.id, market.id));
+
+  scoreResolvedMarket(market.id, winner.id).catch(e => log(`[MarketResolver] Agent scoring failed: ${e}`));
 
   log(`[MarketResolver] h2h ${market.id}: ${winner.label} wins (${closeA.score} vs ${closeB.score}), pool=${result.totalPool}`);
   return "resolved";
@@ -525,6 +530,8 @@ async function resolveGainer(market: any): Promise<"resolved" | "voided" | "bloc
     resolutionNotes: JSON.stringify({ ...evidence, outcome: winner.label, settlement: result }),
     updatedAt: new Date(),
   }).where(eq(predictionMarkets.id, market.id));
+
+  scoreResolvedMarket(market.id, winner.id).catch(e => log(`[MarketResolver] Agent scoring failed: ${e}`));
 
   log(`[MarketResolver] gainer ${market.id}: ${winner.label} wins (+${gains[0].pctChange.toFixed(2)}%), pool=${result.totalPool}`);
   return "resolved";
