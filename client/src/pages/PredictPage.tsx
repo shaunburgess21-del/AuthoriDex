@@ -1999,6 +1999,7 @@ export default function PredictPage() {
   
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
+  const [townSquareCollapsed, setTownSquareCollapsed] = useState(true);
   
   const RULES_CONTENT: Record<string, { title: string; description: string; steps: { icon: React.ReactNode; title: string; description: string }[] }> = {
     updown: {
@@ -2531,56 +2532,59 @@ export default function PredictPage() {
       <div className="container mx-auto px-4 max-w-7xl">
         {recentActivity.length > 0 && (
           <section className="mt-4 mb-8">
-            <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mb-4">
+            <div
+              className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mb-4 cursor-pointer select-none group"
+              onClick={() => setTownSquareCollapsed(!townSquareCollapsed)}
+            >
               <div>
                 <h2 className="text-lg font-serif font-bold">Town Square</h2>
                 <p className="text-xs sm:text-sm text-muted-foreground">Recent prediction activity across live markets</p>
               </div>
-            </div>
-            <Card className="border-violet-500/10 bg-card/95">
-              <div className="divide-y divide-border/50">
-                {recentActivity.slice(0, 8).map((item) => (
-                  <button
-                    key={item.id}
-                    className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
-                    onClick={() => setLocation(`/markets/${item.marketSlug}`)}
-                    data-testid={`recent-activity-${item.id}`}
-                  >
-                    <Avatar className="h-9 w-9 shrink-0">
-                      {item.avatarUrl ? (
-                        <AvatarImage src={item.avatarUrl} alt={item.displayName} />
-                      ) : (
-                        <AvatarFallback className={item.isAgent ? "bg-violet-500/20 text-violet-200" : "bg-muted text-foreground"}>
-                          {item.displayName.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      )}
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-1 flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium">{item.displayName}</span>
-                        {item.isAgent && (
-                          <Badge variant="outline" className="border-violet-500/40 text-[10px] text-violet-300">
-                            AI Agent
-                          </Badge>
-                        )}
-                        <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
-                      </div>
-                      <p className="text-sm text-foreground line-clamp-1">
-                        backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
-                      </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {item.stakeAmount.toLocaleString("en-US")} credits{item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
-                      </p>
-                      {item.rationale && (
-                        <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-                          "{item.rationale}"
-                        </p>
-                      )}
-                    </div>
-                  </button>
-                ))}
+              <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-slate-700/30 transition-transform duration-200 ${townSquareCollapsed ? '' : 'rotate-180'}`}>
+                <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
               </div>
-            </Card>
+            </div>
+            {!townSquareCollapsed && (
+              <Card className="border-violet-500/10 bg-card/95">
+                <div className="divide-y divide-border/50">
+                  {recentActivity.slice(0, 8).map((item) => (
+                    <button
+                      key={item.id}
+                      className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
+                      onClick={() => setLocation(`/markets/${item.marketSlug}`)}
+                      data-testid={`recent-activity-${item.id}`}
+                    >
+                      <Avatar className="h-9 w-9 shrink-0">
+                        {item.avatarUrl ? (
+                          <AvatarImage src={item.avatarUrl} alt={item.displayName} />
+                        ) : (
+                          <AvatarFallback className={item.isAgent ? "bg-violet-500/20 text-violet-200" : "bg-muted text-foreground"}>
+                            {item.displayName.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-1 flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium">{item.displayName}</span>
+                          <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
+                        </div>
+                        <p className="text-sm text-foreground line-clamp-1">
+                          backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {item.stakeAmount.toLocaleString("en-US")} credits{item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
+                        </p>
+                        {item.rationale && (
+                          <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                            "{item.rationale}"
+                          </p>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </Card>
+            )}
           </section>
         )}
 

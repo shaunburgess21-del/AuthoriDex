@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { ArrowLeft, User, Trophy, Vote, TrendingUp, Calendar, Lock, Sparkles, Shield, Cpu, BrainCircuit } from "lucide-react";
+import { ArrowLeft, User, Trophy, Vote, TrendingUp, Calendar, Lock, Sparkles, Shield, BrainCircuit } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface PublicProfile {
@@ -238,12 +238,6 @@ export default function PublicProfilePage() {
               <p className="text-muted-foreground">@{profile.username}</p>
               <div className="flex items-center gap-2 mt-3 flex-wrap">
                 <RankBadge rank={profile.rank || "Citizen"} />
-                {profile.isAgent && (
-                  <Badge variant="outline" className="border-violet-500/40 text-violet-300">
-                    <Cpu className="h-3 w-3 mr-1" />
-                    AI Agent
-                  </Badge>
-                )}
                 <Badge variant="secondary" className="font-mono">
                   Level {xpLevel}
                 </Badge>
