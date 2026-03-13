@@ -9105,7 +9105,7 @@ Only return the JSON object.`;
         ? await db.execute(sql`
             SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
             FROM trend_snapshots
-            WHERE person_id IN (${sql.join(personIdList.map(id => sql`${id}::uuid`), sql`, `)})
+            WHERE person_id IN (${sql.join(personIdList.map(id => sql`${id}`), sql`, `)})
             ORDER BY person_id, timestamp DESC
           `)
         : { rows: [] };
@@ -9498,7 +9498,7 @@ Only return the JSON object.`;
         ? await db.execute(sql`
             SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
             FROM trend_snapshots
-            WHERE person_id IN (${sql.join(personIds.map(id => sql`${id}::uuid`), sql`, `)})
+            WHERE person_id IN (${sql.join(personIds.map(id => sql`${id}`), sql`, `)})
             ORDER BY person_id, timestamp DESC
           `)
         : { rows: [] };
