@@ -213,16 +213,21 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
         onClick={onVisitProfile}
         data-testid={`row-person-${person.id}`}
       >
-        <div className="flex items-center gap-2.5">
-          <span className="font-mono font-semibold text-slate-500 w-5 text-center text-[16px] sm:text-[18px]">
-            {rank}
-          </span>
+        <div
+          className="relative flex items-center rounded-lg overflow-hidden shrink-0"
+          data-testid={`rank-avatar-unit-${person.id}`}
+        >
+          <div className="flex items-center justify-center min-w-[32px] sm:min-w-[36px] h-12 lg:h-[58px] rounded-l-lg" style={{ backgroundColor: "#101318" }}>
+            <span className="font-mono font-semibold text-slate-400 text-[16px] sm:text-[18px]">
+              {rank}
+            </span>
+          </div>
           <PersonAvatar
             name={person.name}
             avatar={person.avatar}
             imageSlug={(person as any).imageSlug}
             size="md"
-            className="h-12 w-12 lg:h-[58px] lg:w-[58px]"
+            className="h-12 w-12 lg:h-[58px] lg:w-[58px] rounded-none rounded-r-md"
           />
         </div>
         <div className="flex-1 min-w-0">
@@ -267,21 +272,10 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               </span>
             )}
             {activeTab === "approval" && (
-              <span>
-                {person.approvalAvgRating != null ? (
-                  <>
-                    <span className="font-mono">
-                      <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}</span><span className="text-muted-foreground">/5</span>
-                    </span>
-                    {person.approvalVotesCount != null && (
-                      <span className="text-muted-foreground">
-                        {' '}&middot; {compactVotes(person.approvalVotesCount)} votes
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-muted-foreground">No votes yet</span>
-                )}
+              <span className="text-muted-foreground">
+                {person.approvalVotesCount != null
+                  ? `${compactVotes(person.approvalVotesCount)} votes`
+                  : "No votes yet"}
               </span>
             )}
           </p>
@@ -386,24 +380,24 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
                 Trend Score
               </p>
             </div>
-            <div className="w-[72px] shrink-0 flex justify-end">
+            <div className="w-[80px] shrink-0 flex justify-end">
               {hasVoted && sentimentScore != null ? (
                 <Popover modal>
                   <PopoverTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="no-default-hover-elevate no-default-active-elevate"
+                    <button
+                      type="button"
+                      className="no-default-hover-elevate no-default-active-elevate font-mono font-bold text-lg sm:text-xl tabular-nums cursor-pointer"
+                      style={{ color: getRatingColor(sentimentScore) }}
                       aria-label={`Rated ${person.name} ${sentimentScore}/5`}
                       onClick={(e) => e.stopPropagation()}
                       data-testid={`button-vote-icon-${person.id}`}
                     >
                       {justVoted ? (
-                        <Check style={{ width: 16, height: 16, color: '#22D3EE' }} strokeWidth={2.5} />
+                        <span className="text-[#22D3EE]">{sentimentScore}/5</span>
                       ) : (
-                        <Star style={{ width: 16, height: 16, color: '#3C83F6', fill: '#3C83F6' }} strokeWidth={1.5} />
+                        <span>{sentimentScore}/5</span>
                       )}
-                    </Button>
+                    </button>
                   </PopoverTrigger>
                   <PopoverContent
                     className="w-56 p-3 space-y-2"
