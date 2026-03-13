@@ -129,13 +129,33 @@ DISABLE_SCHEDULERS=true
 
 ## Schema Workflow
 
-Use the repository script rather than calling Drizzle directly:
+### Recommended: migration files (safe, reviewable)
+
+```bash
+# 1. Edit shared/schema.ts
+# 2. Generate a migration SQL file from the diff:
+npm run db:generate
+# 3. Review the SQL in migrations/XXXX_*.sql
+# 4. Apply pending migrations to the database:
+npm run db:migrate
+```
+
+### First-time setup on an existing database
+
+If the database already has all tables (e.g. production Supabase), run the baseline script once to tell Drizzle the initial migration is already applied:
+
+```bash
+npm run db:baseline
+```
+
+After that, `npm run db:migrate` will only apply new migrations.
+
+### Legacy: direct push (interactive)
 
 ```bash
 npm run db:push
 ```
 
-Notes:
-- `npm run db:push` now wraps `drizzle-kit push` with the project `.env` and auto-selects the non-destructive default if Drizzle prompts about truncation.
+- Wraps `drizzle-kit push` with the project `.env` and auto-selects the non-destructive default if Drizzle prompts about truncation.
 - `npm run db:push:raw` is available only for manual debugging when you explicitly want raw Drizzle behavior.
 - The app expects `xp_ledger.user_id` and `credit_ledger.user_id` to align with `profiles.id`, not the legacy `users.id`.
