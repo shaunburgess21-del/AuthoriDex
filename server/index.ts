@@ -270,7 +270,7 @@ async function checkStaleness(): Promise<void> {
         body: JSON.stringify({
           content: `**AuthoriDex Staleness ${level}**\nLatest snapshot is **${h}h ${m}m old**.\nIngestion may be stuck or failing. Latest: ${latest ?? "none"}`,
         }),
-      }).catch(() => {});
+      }).catch((err) => log(`[Staleness Monitor] Discord webhook failed: ${err?.message ?? err}`));
     }
   } catch (err) {
     log(`[Staleness Monitor] Check failed: ${err}`);

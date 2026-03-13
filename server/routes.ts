@@ -811,7 +811,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .set({ profileViews10m: sql`COALESCE(${trendingPeople.profileViews10m}, 0) + 1` })
           .where(eq(trendingPeople.id, id))
           .execute()
-          .catch(() => {});
+          .catch((err) => console.error("[ProfileView] Failed to increment view count:", err?.message ?? err));
       }
 
       const metrics = await db

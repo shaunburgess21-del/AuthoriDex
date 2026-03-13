@@ -166,36 +166,42 @@ export async function seedAgents(): Promise<{
 
       const userId = authData.user.id;
 
-      // Create profile
-      await db.insert(profiles).values({
-        id: userId,
-        username: seed.username,
-        fullName: seed.displayName,
-        avatarUrl: `https://api.dicebear.com/7.x/personas/svg?seed=${seed.username}`,
-        isPublic: true,
-        role: "user",
-        isAgent: true,
-        predictCredits: 50_000,
-        createdAt: pastDate(seed.daysAgo),
-      });
+      try {
+        await db.transaction(async (tx) => {
+          await tx.insert(profiles).values({
+            id: userId,
+            username: seed.username,
+            fullName: seed.displayName,
+            avatarUrl: `https://api.dicebear.com/7.x/personas/svg?seed=${seed.username}`,
+            isPublic: true,
+            role: "user",
+            isAgent: true,
+            predictCredits: 50_000,
+            createdAt: pastDate(seed.daysAgo),
+          });
 
-      // Create agent config
-      await db.insert(agentConfigs).values({
-        userId,
-        displayName: seed.displayName,
-        username: seed.username,
-        bio: seed.bio,
-        archetype: seed.archetype,
-        specialties: seed.specialties,
-        boldness: seed.boldness.toFixed(2),
-        contrarianism: seed.contrarianism.toFixed(2),
-        recencyWeight: seed.recencyWeight.toFixed(2),
-        prestigeBias: seed.prestigeBias.toFixed(2),
-        confidenceCal: seed.confidenceCal.toFixed(2),
-        riskAppetite: seed.riskAppetite.toFixed(2),
-        consensusSensitivity: seed.consensusSensitivity.toFixed(2),
-        activityRate: seed.activityRate.toFixed(2),
-      });
+          await tx.insert(agentConfigs).values({
+            userId,
+            displayName: seed.displayName,
+            username: seed.username,
+            bio: seed.bio,
+            archetype: seed.archetype,
+            specialties: seed.specialties,
+            boldness: seed.boldness.toFixed(2),
+            contrarianism: seed.contrarianism.toFixed(2),
+            recencyWeight: seed.recencyWeight.toFixed(2),
+            prestigeBias: seed.prestigeBias.toFixed(2),
+            confidenceCal: seed.confidenceCal.toFixed(2),
+            riskAppetite: seed.riskAppetite.toFixed(2),
+            consensusSensitivity: seed.consensusSensitivity.toFixed(2),
+            activityRate: seed.activityRate.toFixed(2),
+          });
+        });
+      } catch (txErr) {
+        log(`[AgentSeeder] DB insert failed for ${seed.username}, removing orphan auth user: ${txErr instanceof Error ? txErr.message : txErr}`);
+        await supabaseServer.auth.admin.deleteUser(userId).catch(() => {});
+        throw txErr;
+      }
 
       log(
         `[AgentSeeder] Created: ${seed.displayName} (user_id: ${userId})`
