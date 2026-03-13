@@ -1950,14 +1950,15 @@ export default function PredictPage() {
   const { data: nativeGainerData, isLoading: gainerLoading } = useQuery<any[]>({
     queryKey: ['/api/native-markets/gainer'],
   });
-  const { data: userBetsData } = useQuery<any[]>({
+  const { data: userBetsData } = useQuery<any>({
     queryKey: ['/api/me/predictions'],
     enabled: !!user,
   });
   const userBetsByMarket = useMemo(() => {
     const map = new Map<string, { result: string; payout: number; entryLabel: string; stakeAmount: number; marketId: string }>();
     const grouped = new Map<string, any[]>();
-    (userBetsData || []).forEach((b: any) => {
+    const betsArray = Array.isArray(userBetsData) ? userBetsData : (userBetsData as any)?.predictions ?? [];
+    (betsArray).forEach((b: any) => {
       const arr = grouped.get(b.marketId) || [];
       arr.push(b);
       grouped.set(b.marketId, arr);
