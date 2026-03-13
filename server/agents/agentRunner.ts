@@ -35,6 +35,7 @@ export async function runAgentBatch(): Promise<{
   scheduled: number;
   abstained: number;
   skipped: number;
+  diagnostics?: Record<string, unknown>;
 }> {
   const agents = await db
     .select()
@@ -43,10 +44,72 @@ export async function runAgentBatch(): Promise<{
 
   if (!agents.length) {
     log("[AgentRunner] No active agents found");
-    return { scheduled: 0, abstained: 0, skipped: 0 };
+    return { scheduled: 0, abstained: 0, skipped: 0, diagnostics: { reason: "no_agents" } };
   }
 
   const now = new Date();
+
+  // Diagnostic: count markets by various criteria to identify filter issues
+  const [totalCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(predictionMarkets);
+  const [nativeCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(predictionMarkets)
+    .where(sql`${predictionMarkets.marketType} != 'community'`);
+  const [openCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(predictionMarkets)
+    .where(eq(predictionMarkets.status, "OPEN"));
+  const [liveCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(predictionMarkets)
+    .where(
+      and(
+        eq(predictionMarkets.status, "OPEN"),
+        eq(predictionMarkets.visibility, "live")
+      )
+    );
+  const [futureCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(predictionMarkets)
+    .where(
+      and(
+        eq(predictionMarkets.status, "OPEN"),
+        eq(predictionMarkets.visibility, "live"),
+        gte(predictionMarkets.endAt, now)
+      )
+    );
+
+  // Also grab a sample of statuses and visibilities to see what's actually in the DB
+  const statusSample = await db
+    .select({
+      status: predictionMarkets.status,
+      visibility: predictionMarkets.visibility,
+      marketType: predictionMarkets.marketType,
+      endAt: predictionMarkets.endAt,
+    })
+    .from(predictionMarkets)
+    .where(sql`${predictionMarkets.marketType} != 'community'`)
+    .limit(5);
+
+  const diag = {
+    now: now.toISOString(),
+    total_markets: totalCount.count,
+    native_markets: nativeCount.count,
+    open_markets: openCount.count,
+    open_and_live: liveCount.count,
+    open_live_future: futureCount.count,
+    sample: statusSample.map(s => ({
+      status: s.status,
+      visibility: s.visibility,
+      marketType: s.marketType,
+      endAt: s.endAt?.toISOString?.() ?? String(s.endAt),
+    })),
+  };
+
+  log(`[AgentRunner] Diagnostics: ${JSON.stringify(diag)}`);
+
   const markets = await db
     .select({
       id: predictionMarkets.id,
@@ -56,7 +119,6 @@ export async function runAgentBatch(): Promise<{
       category: predictionMarkets.category,
       personId: predictionMarkets.personId,
       endAt: predictionMarkets.endAt,
-      closeAt: predictionMarkets.closeAt,
     })
     .from(predictionMarkets)
     .where(
@@ -69,7 +131,7 @@ export async function runAgentBatch(): Promise<{
 
   if (!markets.length) {
     log("[AgentRunner] No active markets found");
-    return { scheduled: 0, abstained: 0, skipped: 0 };
+    return { scheduled: 0, abstained: 0, skipped: 0, diagnostics: diag };
   }
 
   log(

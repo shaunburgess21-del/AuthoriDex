@@ -28,7 +28,6 @@ export interface MarketWithEntries {
   category: string | null;
   personId: string | null;
   endAt: Date | null;
-  closeAt: Date | null;
   entries: MarketEntryData[];
 }
 

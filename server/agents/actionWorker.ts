@@ -74,7 +74,6 @@ async function executeAction(action: {
         category: predictionMarkets.category,
         personId: predictionMarkets.personId,
         endAt: predictionMarkets.endAt,
-        closeAt: predictionMarkets.closeAt,
       })
       .from(predictionMarkets)
       .where(eq(predictionMarkets.id, action.marketId))
