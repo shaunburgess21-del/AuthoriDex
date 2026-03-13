@@ -8587,6 +8587,111 @@ Only return the JSON object.`;
     }
   });
 
+  async function placeMarketBet(params: {
+    userId: string;
+    marketId: string;
+    entryId: string;
+    stakeAmount: number;
+  }) {
+    const { userId, marketId, entryId, stakeAmount } = params;
+
+    const [entry] = await db
+      .select()
+      .from(marketEntries)
+      .where(
+        and(
+          eq(marketEntries.id, entryId),
+          eq(marketEntries.marketId, marketId)
+        )
+      )
+      .limit(1);
+
+    if (!entry) {
+      return { error: "Entry not found in this market", status: 400 as const };
+    }
+
+    const [profile] = await db
+      .select({ predictCredits: profiles.predictCredits })
+      .from(profiles)
+      .where(eq(profiles.id, userId))
+      .limit(1);
+
+    if (!profile) {
+      return { error: "User profile not found", status: 400 as const };
+    }
+
+    if (profile.predictCredits < stakeAmount) {
+      return { error: "Insufficient credits", status: 400 as const };
+    }
+
+    const allEntries = await db
+      .select({ totalStake: marketEntries.totalStake })
+      .from(marketEntries)
+      .where(eq(marketEntries.marketId, marketId));
+
+    const totalPool = allEntries.reduce((sum, e) => sum + e.totalStake, 0) + stakeAmount;
+    const entryPool = entry.totalStake + stakeAmount;
+    const entryShare = entryPool / totalPool;
+    const potentialPayout = Math.round(stakeAmount / Math.max(entryShare, 0.01));
+
+    const [bet] = await db.transaction(async (tx) => {
+      const [updatedProfile] = await tx
+        .update(profiles)
+        .set({
+          predictCredits: sql`${profiles.predictCredits} - ${stakeAmount}`,
+          totalPredictions: sql`${profiles.totalPredictions} + 1`,
+        })
+        .where(and(
+          eq(profiles.id, userId),
+          sql`${profiles.predictCredits} >= ${stakeAmount}`
+        ))
+        .returning({ predictCredits: profiles.predictCredits });
+
+      if (!updatedProfile) {
+        throw new Error("Insufficient credits");
+      }
+
+      const [insertedBet] = await tx
+        .insert(marketBets)
+        .values({
+          marketId,
+          entryId,
+          userId,
+          stakeAmount,
+          potentialPayout,
+          status: "active",
+        })
+        .returning();
+
+      await tx.insert(creditLedger).values({
+        userId,
+        txnType: 'prediction_stake',
+        amount: -stakeAmount,
+        walletType: 'VIRTUAL',
+        balanceAfter: updatedProfile.predictCredits,
+        source: 'user_action',
+        idempotencyKey: `stake_${marketId}_${insertedBet.id}`,
+        metadata: { marketId, entryId, betId: insertedBet.id },
+      });
+
+      await tx
+        .update(marketEntries)
+        .set({ totalStake: sql`${marketEntries.totalStake} + ${stakeAmount}` })
+        .where(eq(marketEntries.id, entryId));
+
+      return [{ ...insertedBet, remainingCredits: updatedProfile.predictCredits }];
+    });
+
+    return {
+      data: {
+        ...bet,
+        potentialPayout,
+        remainingCredits: bet.remainingCredits,
+      },
+      status: 200 as const,
+    };
+  }
+
   app.post("/api/open-markets/:slug/bet", requireAuth, async (req, res) => {
     try {
       const authReq = req as AuthRequest;
@@ -8606,7 +8711,7 @@ Only return the JSON object.`;
       }
 
       const [market] = await db
-        .select()
+        .select({ id: predictionMarkets.id, closeAt: predictionMarkets.closeAt })
         .from(predictionMarkets)
         .where(
           and(
@@ -8625,103 +8730,83 @@ Only return the JSON object.`;
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
 
-      const [entry] = await db
-        .select()
-        .from(marketEntries)
-        .where(
-          and(
-            eq(marketEntries.id, entryId),
-            eq(marketEntries.marketId, market.id)
-          )
-        )
-        .limit(1);
-
-      if (!entry) {
-        return res.status(400).json({ error: "Entry not found in this market" });
-      }
-
-      const [profile] = await db
-        .select({ predictCredits: profiles.predictCredits })
-        .from(profiles)
-        .where(eq(profiles.id, authReq.userId!))
-        .limit(1);
-
-      if (!profile) {
-        return res.status(400).json({ error: "User profile not found" });
-      }
-
-      if (profile.predictCredits < stakeAmount) {
-        return res.status(400).json({ error: "Insufficient credits" });
-      }
-
-      const allEntries = await db
-        .select({ totalStake: marketEntries.totalStake })
-        .from(marketEntries)
-        .where(eq(marketEntries.marketId, market.id));
-
-      const totalPool = allEntries.reduce((sum, e) => sum + e.totalStake, 0) + stakeAmount;
-      const entryPool = entry.totalStake + stakeAmount;
-      const entryShare = entryPool / totalPool;
-      const potentialPayout = Math.round(stakeAmount / Math.max(entryShare, 0.01));
-
-      const [bet] = await db.transaction(async (tx) => {
-        const [updatedProfile] = await tx
-          .update(profiles)
-          .set({
-            predictCredits: sql`${profiles.predictCredits} - ${stakeAmount}`,
-            totalPredictions: sql`${profiles.totalPredictions} + 1`,
-          })
-          .where(and(
-            eq(profiles.id, authReq.userId!),
-            sql`${profiles.predictCredits} >= ${stakeAmount}`
-          ))
-          .returning({ predictCredits: profiles.predictCredits });
-
-        if (!updatedProfile) {
-          throw new Error("Insufficient credits");
-        }
-
-        const [insertedBet] = await tx
-          .insert(marketBets)
-          .values({
-            marketId: market.id,
-            entryId,
-            userId: authReq.userId!,
-            stakeAmount,
-            potentialPayout,
-            status: "active",
-          })
-          .returning();
-
-        await tx.insert(creditLedger).values({
-          userId: authReq.userId!,
-          txnType: 'prediction_stake',
-          amount: -stakeAmount,
-          walletType: 'VIRTUAL',
-          balanceAfter: updatedProfile.predictCredits,
-          source: 'user_action',
-          idempotencyKey: `stake_${market.id}_${insertedBet.id}`,
-          metadata: { marketId: market.id, entryId, betId: insertedBet.id },
-        });
-
-        await tx
-          .update(marketEntries)
-          .set({ totalStake: sql`${marketEntries.totalStake} + ${stakeAmount}` })
-          .where(eq(marketEntries.id, entryId));
-
-        return [{ ...insertedBet, remainingCredits: updatedProfile.predictCredits }];
+      const result = await placeMarketBet({
+        userId: authReq.userId!,
+        marketId: market.id,
+        entryId,
+        stakeAmount,
       });
 
-      res.json({
-        ...bet,
-        potentialPayout,
-        remainingCredits: bet.remainingCredits,
-      });
+      if ("error" in result) {
+        return res.status(result.status).json({ error: result.error });
+      }
+
+      return res.json(result.data);
     } catch (error: any) {
       if (error?.message === "Insufficient credits") {
         return res.status(400).json({ error: "Insufficient credits" });
       }
       console.error("[Open Markets] Bet error:", error);
+      res.status(500).json({ error: "Failed to place bet" });
+    }
+  });
+
+  app.post("/api/native-markets/updown/:marketId/bet", requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      const { marketId } = req.params;
+      const { entryId, stakeAmount } = req.body;
+
+      if (!entryId || !stakeAmount || typeof stakeAmount !== "number" || stakeAmount <= 0) {
+        return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
+      }
+
+      if (stakeAmount > MAX_BET_STAKE) {
+        return res.status(400).json({ error: `Maximum stake is ${MAX_BET_STAKE} credits` });
+      }
+
+      if (!checkBetRateLimit(authReq.userId!)) {
+        return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
+      }
+
+      const [market] = await db
+        .select({ id: predictionMarkets.id, closeAt: predictionMarkets.closeAt })
+        .from(predictionMarkets)
+        .where(
+          and(
+            eq(predictionMarkets.id, marketId),
+            eq(predictionMarkets.marketType, "updown"),
+            eq(predictionMarkets.status, "OPEN"),
+            eq(predictionMarkets.visibility, "live")
+          )
+        )
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({ error: "Market not found or not open" });
+      }
+
+      if (market.closeAt && new Date(market.closeAt) < new Date()) {
+        return res.status(400).json({ error: "Betting is closed for this market" });
+      }
+
+      const result = await placeMarketBet({
+        userId: authReq.userId!,
+        marketId: market.id,
+        entryId,
+        stakeAmount,
+      });
+
+      if ("error" in result) {
+        return res.status(result.status).json({ error: result.error });
+      }
+
+      return res.json(result.data);
+    } catch (error: any) {
+      if (error?.message === "Insufficient credits") {
+        return res.status(400).json({ error: "Insufficient credits" });
+      }
+      console.error("[Native Markets] Updown bet error:", error);
       res.status(500).json({ error: "Failed to place bet" });
     }
   });

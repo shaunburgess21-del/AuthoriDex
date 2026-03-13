@@ -10,10 +10,11 @@ import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiRequest } from "@/lib/queryClient";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useScrollHint } from "@/hooks/use-scroll-hint";
@@ -100,6 +101,8 @@ interface PredictionMarket {
   totalPool: number;
   upPoolPercent: number;
   category: CategoryFilter;
+  upEntryId?: string;
+  downEntryId?: string;
 }
 
 const mockMarkets: PredictionMarket[] = [
@@ -1818,7 +1821,8 @@ function WeeklyJackpotHero({
 export default function PredictPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { user, profile } = useAuth();
+  const queryClient = useQueryClient();
+  const { user, profile, refreshProfile } = useAuth();
   const [showFirstTimeModal, setShowFirstTimeModal] = useState(false);
   const [selectedType, setSelectedType] = useState<PredictionType>("all");
   const [showMyPositions, setShowMyPositions] = useState(false);
@@ -1942,7 +1946,7 @@ export default function PredictPage() {
     if (!user) {
       toast({
         title: "Sign in required",
-        description: "Sign in to place predictions on live community markets.",
+        description: "Sign in to place predictions.",
       });
       setLocation("/login");
       return;
@@ -1984,6 +1988,8 @@ export default function PredictPage() {
           totalPool: Number(m.seedVolume || 0),
           upPoolPercent: upPercent || 50,
           category: (m.category || person.category || "misc") as CategoryFilter,
+          upEntryId: upEntry?.id,
+          downEntryId: downEntry?.id,
           totalBets: Number(m.seedConfig?.participants || 0),
         } as PredictionMarket;
       });
@@ -2103,10 +2109,65 @@ export default function PredictPage() {
     showNativeMarketUnavailable();
   };
 
+  const nativeUpdownBetMutation = useMutation({
+    mutationFn: async ({ marketId, entryId, stakeAmount }: { marketId: string; entryId: string; stakeAmount: number }) => {
+      const res = await apiRequest("POST", `/api/native-markets/updown/${marketId}/bet`, { entryId, stakeAmount });
+      return res.json();
+    },
+    onSuccess: async () => {
+      toast({
+        title: "Prediction placed!",
+        description: "Your weekly up/down prediction has been recorded.",
+      });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile(),
+        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Failed to place prediction",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleUpDownSelect = (market: PredictionMarket, choice: "up" | "down") => {
-    void market;
-    void choice;
-    showNativeMarketUnavailable();
+    if (!user) {
+      toast({
+        title: "Sign in required",
+        description: "Sign in to place predictions.",
+      });
+      setLocation("/login");
+      return;
+    }
+
+    const entryId = choice === "up" ? market.upEntryId : market.downEntryId;
+    if (!entryId) {
+      toast({
+        title: "Market unavailable",
+        description: "This market is missing required entries. Please try another market.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPendingSelection({
+      type: "updown",
+      choice: choice === "up" ? "Trend Score UP" : "Trend Score DOWN",
+      marketName: market.personName,
+      marketId: market.id,
+      startScore: market.startScore,
+      currentScore: market.currentScore,
+      crowdSentiment: choice === "up" ? market.upPoolPercent : 100 - market.upPoolPercent,
+      estimatedPayout: choice === "up" ? market.upMultiplier : market.downMultiplier,
+    });
+    setStakeModalOpen(true);
   };
 
   const handleH2HSelect = (market: HeadToHeadMarket, person: 1 | 2) => {
@@ -2122,14 +2183,36 @@ export default function PredictPage() {
   };
 
   const handleConfirmStake = (amount: number) => {
-    void amount;
-    setStakeModalOpen(false);
-    setPendingSelection(null);
-    toast({
-      title: "Native markets are read-only",
-      description: "Only Real-World Markets persist bets right now.",
-      variant: "destructive",
-    });
+    if (!pendingSelection || pendingSelection.type !== "updown" || !pendingSelection.marketId) {
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      return;
+    }
+
+    const market = hydratedMarkets.find((m) => m.id === pendingSelection.marketId);
+    if (!market) {
+      toast({
+        title: "Market unavailable",
+        description: "Could not find the selected market. Please refresh and try again.",
+        variant: "destructive",
+      });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      return;
+    }
+
+    const isDownPick = pendingSelection.choice.toUpperCase().includes("DOWN");
+    const entryId = isDownPick ? market.downEntryId : market.upEntryId;
+    if (!entryId) {
+      toast({
+        title: "Selection unavailable",
+        description: "This market selection is not available right now.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    nativeUpdownBetMutation.mutate({ marketId: market.id, entryId, stakeAmount: amount });
   };
 
   const handleCreatePrediction = (data: { title: string; type: string; category: CategoryFilter; description: string }) => {
@@ -2675,7 +2758,12 @@ export default function PredictPage() {
           const marketId = pendingSelection.marketId;
           const market = hydratedMarkets.find(m => m.id === marketId);
           if (!market) return;
-          handleUpDownSelect(market, dir);
+          setPendingSelection({
+            ...pendingSelection,
+            choice: dir === "up" ? "Trend Score UP" : "Trend Score DOWN",
+            crowdSentiment: dir === "up" ? market.upPoolPercent : 100 - market.upPoolPercent,
+            estimatedPayout: dir === "up" ? market.upMultiplier : market.downMultiplier,
+          });
         }}
       />
       <CreatePredictionModal
