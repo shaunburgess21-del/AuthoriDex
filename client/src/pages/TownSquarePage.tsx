@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, MessageSquare } from "lucide-react";
-import { getAvatarInitials, HUMAN_AVATAR_FALLBACK_CLASS, AGENT_AVATAR_FALLBACK_CLASS } from "@/lib/avatar";
+import { getAvatarInitials, getAvatarGradient, HUMAN_AVATAR_FALLBACK_CLASS, AGENT_AVATAR_FALLBACK_CLASS } from "@/lib/avatar";
 
 interface ActivityItem {
   id: string;
@@ -144,30 +144,51 @@ export default function TownSquarePage() {
           <Card className="border-violet-500/10 bg-card/95">
             <div className="divide-y divide-border/50">
               {activity.map((item) => (
-                <button
+                <div
                   key={item.id}
                   className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
-                  onClick={() => setLocation(`/markets/${item.marketSlug}`)}
                 >
-                  <Avatar className="h-9 w-9 shrink-0">
-                    {item.avatarUrl && !item.isAgent ? (
-                      <AvatarImage src={item.avatarUrl} alt={item.displayName} />
-                    ) : (
-                      <AvatarFallback
-                        className={item.isAgent ? AGENT_AVATAR_FALLBACK_CLASS : HUMAN_AVATAR_FALLBACK_CLASS}
-                      >
-                        {getAvatarInitials(item.displayName)}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
+                  <button
+                    className="shrink-0 rounded-full"
+                    onClick={() => item.username && setLocation(`/u/${item.username}`)}
+                    aria-label={`View ${item.displayName}'s profile`}
+                  >
+                    <Avatar className="h-9 w-9">
+                      {item.avatarUrl && !item.isAgent ? (
+                        <AvatarImage src={item.avatarUrl} alt={item.displayName} />
+                      ) : (
+                        <AvatarFallback
+                          className={`${getAvatarGradient(item.displayName)} ${item.isAgent ? AGENT_AVATAR_FALLBACK_CLASS : HUMAN_AVATAR_FALLBACK_CLASS}`}
+                        >
+                          {getAvatarInitials(item.displayName)}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                  </button>
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium">{item.displayName}</span>
+                      <button
+                        className="text-sm font-medium hover:underline"
+                        onClick={() => item.username && setLocation(`/u/${item.username}`)}
+                      >
+                        {item.displayName}
+                      </button>
                       <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
                     </div>
-                    <p className="text-sm text-foreground line-clamp-1">
-                      backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
-                    </p>
+                    <button
+                      className="text-left"
+                      onClick={() => {
+                        if (item.marketType === "community") {
+                          setLocation(`/markets/${item.marketSlug}`);
+                        } else {
+                          setLocation("/predict");
+                        }
+                      }}
+                    >
+                      <p className="text-sm text-foreground line-clamp-1 hover:underline">
+                        backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
+                      </p>
+                    </button>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {item.stakeAmount.toLocaleString("en-US")} credits{item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
                     </p>
@@ -177,7 +198,7 @@ export default function TownSquarePage() {
                       </p>
                     )}
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           </Card>

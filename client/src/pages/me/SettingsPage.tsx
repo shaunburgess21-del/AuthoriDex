@@ -13,7 +13,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
 import { UploadImageInput } from "@/components/ui/upload-image-input";
-import { getAvatarInitials, HUMAN_AVATAR_FALLBACK_CLASS } from "@/lib/avatar";
+import { getAvatarInitials, getAvatarGradient, HUMAN_AVATAR_FALLBACK_CLASS } from "@/lib/avatar";
 
 export default function SettingsPage() {
   const { user, profile, profileLoading, refreshProfile, signOut } = useAuth();
@@ -143,7 +143,7 @@ export default function SettingsPage() {
                 {avatarUrl ? (
                   <AvatarImage src={avatarUrl} alt={displayName} />
                 ) : (
-                  <AvatarFallback className={`${HUMAN_AVATAR_FALLBACK_CLASS} text-2xl`}>
+                  <AvatarFallback className={`${getAvatarGradient(displayName)} ${HUMAN_AVATAR_FALLBACK_CLASS} text-2xl`}>
                     {getAvatarInitials(displayName)}
                   </AvatarFallback>
                 )}

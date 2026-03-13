@@ -8,6 +8,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getAvatarGradient } from "@/lib/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -220,7 +221,7 @@ function UserRow({
         {user.avatarUrl && !user.isAgent ? (
           <AvatarImage src={user.avatarUrl} alt={user.displayName} />
         ) : (
-          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs font-semibold">
+          <AvatarFallback className={`${getAvatarGradient(user.displayName)} text-white text-xs font-semibold`}>
             {initials}
           </AvatarFallback>
         )}

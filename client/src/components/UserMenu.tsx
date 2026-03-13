@@ -17,7 +17,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { getAvatarInitials, HUMAN_AVATAR_FALLBACK_CLASS } from "@/lib/avatar";
+import { getAvatarInitials, getAvatarGradient, HUMAN_AVATAR_FALLBACK_CLASS } from "@/lib/avatar";
 import { 
   User,
   Menu,
@@ -217,7 +217,7 @@ function UserMenuContent({
             {profile?.avatarUrl ? (
               <AvatarImage src={profile.avatarUrl} alt={displayName} />
             ) : (
-              <AvatarFallback className={`rounded-full ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
+              <AvatarFallback className={`rounded-full ${getAvatarGradient(displayName)} ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
                 {getAvatarInitials(displayName)}
               </AvatarFallback>
             )}
@@ -393,7 +393,7 @@ export function UserMenu() {
             className="h-full w-full object-cover"
           />
         ) : (
-          <div className={`h-full w-full flex items-center justify-center text-sm ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
+          <div className={`h-full w-full flex items-center justify-center text-sm ${getAvatarGradient(avatarDisplayName)} ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
             {getAvatarInitials(avatarDisplayName)}
           </div>
         )
@@ -419,7 +419,7 @@ export function UserMenu() {
                 className="h-full w-full object-cover"
               />
             ) : (
-              <div className={`h-full w-full flex items-center justify-center text-sm ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
+              <div className={`h-full w-full flex items-center justify-center text-sm ${getAvatarGradient(avatarDisplayName)} ${HUMAN_AVATAR_FALLBACK_CLASS}`}>
                 {getAvatarInitials(avatarDisplayName)}
               </div>
             )

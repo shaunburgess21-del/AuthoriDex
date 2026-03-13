@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { getAvatarGradient, getAvatarInitials } from "@/lib/avatar";
 import { ArrowLeft, User, Trophy, Vote, TrendingUp, Calendar, Lock, Sparkles, Shield, BrainCircuit } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -228,8 +229,8 @@ export default function PublicProfilePage() {
               {profile.avatarUrl && !profile.isAgent ? (
                 <AvatarImage src={profile.avatarUrl} alt={displayName} />
               ) : (
-                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold text-2xl">
-                  {displayName.slice(0, 2).toUpperCase()}
+                <AvatarFallback className={`${getAvatarGradient(displayName)} text-white font-semibold text-2xl`}>
+                  {getAvatarInitials(displayName)}
                 </AvatarFallback>
               )}
             </Avatar>

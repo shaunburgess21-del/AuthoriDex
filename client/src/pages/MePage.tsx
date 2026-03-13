@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { UserMenu } from "@/components/UserMenu";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { getAvatarGradient, getAvatarInitials } from "@/lib/avatar";
 import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Sparkles, Eye, Lock, Flame } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -105,8 +106,8 @@ export default function MePage() {
                   {profile?.avatarUrl ? (
                     <AvatarImage src={profile.avatarUrl} alt={displayName} />
                   ) : (
-                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold text-xl">
-                      {displayName.slice(0, 2).toUpperCase()}
+                    <AvatarFallback className={`${getAvatarGradient(displayName)} text-white font-semibold text-xl`}>
+                      {getAvatarInitials(displayName)}
                     </AvatarFallback>
                   )}
                 </Avatar>
