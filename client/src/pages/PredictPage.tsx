@@ -385,10 +385,13 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
   },
 ];
 
+type GainerCandidate = { name: string; avatar: string; currentGain: number; percentGain: number; rank?: number; entryId?: string; personId?: string };
+
 interface TopGainerMarket {
   id: string;
   category: CategoryFilter;
-  leaders: { name: string; avatar: string; currentGain: number; percentGain: number; rank?: number; entryId?: string; personId?: string }[];
+  leaders: GainerCandidate[];
+  allCandidates?: GainerCandidate[];
   totalPool: number;
   endTime: string;
   totalEntries?: number;
@@ -1067,12 +1070,14 @@ function TopGainerCard({
   market, 
   isMarketClosed = false,
   onSelect,
+  onShowAllCandidates,
   isPredicted = false,
   isShimmering = false
 }: { 
   market: TopGainerMarket; 
   isMarketClosed?: boolean;
   onSelect?: (name: string, entryId?: string) => void;
+  onShowAllCandidates?: (market: TopGainerMarket) => void;
   isPredicted?: boolean;
   isShimmering?: boolean;
 }) {
@@ -1125,7 +1130,12 @@ function TopGainerCard({
           </div>
         ))}
         {(market.totalEntries ?? 0) > 3 && (
-          <p className="text-xs text-violet-400 text-center mt-1">+{(market.totalEntries ?? 0) - 3} more candidates</p>
+          <button
+            className="text-xs text-violet-400 hover:text-violet-300 text-center mt-1 w-full cursor-pointer transition-colors"
+            onClick={(e) => { e.stopPropagation(); onShowAllCandidates?.(market); }}
+          >
+            +{(market.totalEntries ?? 0) - 3} more candidates
+          </button>
         )}
       </div>
       
@@ -1165,6 +1175,69 @@ function TopGainerCard({
         )}
       </div>
     </PredictCard>
+  );
+}
+
+function GainerCandidatesDialog({
+  market,
+  open,
+  onClose,
+  onSelect,
+}: {
+  market: TopGainerMarket | null;
+  open: boolean;
+  onClose: () => void;
+  onSelect: (name: string, entryId?: string) => void;
+}) {
+  if (!market) return null;
+  const candidates = market.allCandidates || market.leaders;
+  const categoryLabel = market.category.charAt(0).toUpperCase() + market.category.slice(1);
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0">
+        <DialogHeader className="px-4 pt-4 pb-2">
+          <DialogTitle className="flex items-center gap-2">
+            <Trophy className="h-5 w-5 text-amber-500" />
+            Top Gainer: {categoryLabel}
+          </DialogTitle>
+          <DialogDescription>
+            Select a candidate to place your prediction
+          </DialogDescription>
+        </DialogHeader>
+        <ScrollArea className="flex-1 px-4 pb-4">
+          <div className="space-y-2">
+            {candidates.map((candidate, i) => (
+              <div
+                key={candidate.entryId || candidate.name}
+                className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${i === 0 ? 'border border-amber-500/30' : 'hover:bg-muted/50'}`}
+                onClick={() => { onSelect(candidate.name, candidate.entryId); onClose(); }}
+              >
+                <div className="relative">
+                  {i === 0 ? (
+                    <div className="h-5 w-5 rounded-full bg-background/80 backdrop-blur-sm border border-amber-500/50 flex items-center justify-center">
+                      <Crown className="h-3 w-3 text-amber-500" />
+                    </div>
+                  ) : (
+                    <span className="text-xs font-bold text-violet-500 w-5 text-center">#{candidate.rank || (i + 1)}</span>
+                  )}
+                </div>
+                <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="sm" />
+                <span className="text-sm flex-1 truncate">{candidate.name}</span>
+                <div className="text-right">
+                  <p className={`text-xs font-mono font-bold ${candidate.percentGain >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    {formatSignedPercent(candidate.percentGain)}
+                  </p>
+                  <p className={`text-[10px] font-mono ${candidate.currentGain >= 0 ? 'text-muted-foreground' : 'text-red-400/80'}`}>
+                    {formatSignedPoints(candidate.currentGain)} pts added
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1934,6 +2007,7 @@ export default function PredictPage() {
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [townSquareCollapsed, setTownSquareCollapsed] = useState(true);
+  const [allCandidatesMarket, setAllCandidatesMarket] = useState<TopGainerMarket | null>(null);
   
   const marketCycle = useMarketCycle();
   const isMarketClosed = marketCycle.status === "CLOSED";
@@ -2093,6 +2167,18 @@ export default function PredictPage() {
           id: m.id,
           category: (m.category || "misc") as CategoryFilter,
           leaders: entries.slice(0, 3).map((e: any) => {
+            const p = e.person || {};
+            return {
+              name: p.name || e.label || "?",
+              avatar: p.avatar || "",
+              currentGain: Number(p.change7d || 0) * Number(p.trendScore || 0) / 100,
+              percentGain: Number(p.change7d || 0),
+              rank: Number(p.rank || 0),
+              entryId: e.id,
+              personId: e.personId || "",
+            };
+          }),
+          allCandidates: entries.map((e: any) => {
             const p = e.person || {};
             return {
               name: p.name || e.label || "?",
@@ -2923,6 +3009,7 @@ export default function PredictPage() {
                     market={market} 
                     isMarketClosed={isMarketClosed}
                     onSelect={(name, entryId) => handleGainerSelect(market, name, entryId)}
+                    onShowAllCandidates={setAllCandidatesMarket}
                     isPredicted={predictedMarkets.has(market.id)}
                     isShimmering={false}
                   />
@@ -3040,6 +3127,7 @@ export default function PredictPage() {
               market={market} 
               isMarketClosed={isMarketClosed}
               onSelect={(name, entryId) => handleGainerSelect(market, name, entryId)}
+              onShowAllCandidates={setAllCandidatesMarket}
               isPredicted={predictedMarkets.has(market.id)}
               isShimmering={false}
             />
@@ -3109,6 +3197,16 @@ export default function PredictPage() {
           steps={RULES_CONTENT[rulesModalOpen].steps}
         />
       )}
+      <GainerCandidatesDialog
+        market={allCandidatesMarket}
+        open={!!allCandidatesMarket}
+        onClose={() => setAllCandidatesMarket(null)}
+        onSelect={(name, entryId) => {
+          if (allCandidatesMarket) {
+            handleGainerSelect(allCandidatesMarket, name, entryId);
+          }
+        }}
+      />
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-t md:hidden">
         <div className="flex items-center justify-around h-16">
           <Link href="/">
