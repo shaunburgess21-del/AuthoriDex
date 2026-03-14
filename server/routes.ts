@@ -2956,7 +2956,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(commentsWithVotes);
     } catch (error: any) {
       console.error("Error fetching comments:", error);
-      res.status(500).json({ error: error.message || "Failed to fetch comments" });
+      res.status(500).json({ error: "Failed to fetch comments" });
     }
   });
 
@@ -2993,7 +2993,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Error creating comment:", error);
-      res.status(500).json({ error: error.message || "Failed to create comment" });
+      res.status(500).json({ error: "Failed to create comment" });
     }
   });
 
@@ -4224,6 +4224,7 @@ Only return the JSON object.`;
       if (!checkVoteRateLimit(req.userId)) {
         return res.status(429).json({ error: "Too many votes. Please slow down." });
       }
+      const userId = req.userId!;
       const { commentId } = req.params;
       const { voteType } = req.body;
       if (!voteType || (voteType !== 'up' && voteType !== 'down')) {
@@ -4231,7 +4232,7 @@ Only return the JSON object.`;
       }
       await db.transaction(async (tx) => {
         const [existing] = await tx.select().from(matchupCommentVotes)
-          .where(and(eq(matchupCommentVotes.userId, req.userId), eq(matchupCommentVotes.commentId, commentId)));
+          .where(and(eq(matchupCommentVotes.userId, userId), eq(matchupCommentVotes.commentId, commentId)));
         if (existing) {
           if (existing.voteType === voteType) {
             await tx.delete(matchupCommentVotes).where(eq(matchupCommentVotes.id, existing.id));
@@ -4249,7 +4250,7 @@ Only return the JSON object.`;
             }
           }
         } else {
-          await tx.insert(matchupCommentVotes).values({ commentId, userId: req.userId, voteType });
+          await tx.insert(matchupCommentVotes).values({ commentId, userId, voteType });
           if (voteType === 'up') {
             await tx.update(matchupComments).set({ upvotes: sql`upvotes + 1` }).where(eq(matchupComments.id, commentId));
           } else {
@@ -7123,7 +7124,6 @@ Only return the JSON object.`;
         }
       });
       return res.json({ success: true, action });
-      }
     } catch (error: any) {
       console.error("Error voting on poll comment:", error.message);
       res.status(500).json({ error: "Failed to vote on comment" });
