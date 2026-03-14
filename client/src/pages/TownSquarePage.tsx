@@ -172,7 +172,7 @@ export default function TownSquarePage() {
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {item.stakeAmount.toLocaleString("en-US")} credits{item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
                     </p>
-                    {item.rationale && (
+                    {item.rationale && !item.isAgent && (
                       <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
                         "{item.rationale}"
                       </p>
