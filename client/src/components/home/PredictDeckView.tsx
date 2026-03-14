@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { CardDeckContainer } from "@/components/CardDeckContainer";
 import { CategoryPill } from "@/components/CategoryPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { WeeklyJackpotCard } from "@/components/predict/WeeklyJackpotCard";
@@ -167,18 +168,28 @@ function H2HCard({
       
       <div className="relative z-10 p-4">
         <div className="flex items-center justify-between mb-3">
-          <Badge variant="outline" className="text-xs">
-            <Clock className="h-3 w-3 mr-1" />
-            {market.endTime}
-          </Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="outline" className="text-xs cursor-help">
+                <Clock className="h-3 w-3 mr-1" />
+                {market.endTime}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">Market closes {market.endTime}</p>
+            </TooltipContent>
+          </Tooltip>
           <CategoryPill category={market.category} />
         </div>
         
         <div className="flex items-center justify-between mb-4">
-          <div className="flex flex-col items-center flex-1">
+          <div
+            className="flex flex-col items-center flex-1 cursor-pointer group/p1"
+            onClick={() => onPredict(market.id, 'person1', market.person1.name)}
+          >
             <div className="relative">
-              <div className="absolute -inset-3 rounded-full bg-blue-500/30 blur-md" />
-              <div className="relative">
+              <div className="absolute -inset-3 rounded-full bg-blue-500/30 blur-md transition-opacity group-hover/p1:bg-blue-500/50" />
+              <div className="relative rounded-full ring-2 ring-transparent transition-all group-hover/p1:ring-blue-500/60">
                 <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} size="xl" />
               </div>
             </div>
@@ -192,10 +203,13 @@ function H2HCard({
             </div>
           </div>
           
-          <div className="flex flex-col items-center flex-1">
+          <div
+            className="flex flex-col items-center flex-1 cursor-pointer group/p2"
+            onClick={() => onPredict(market.id, 'person2', market.person2.name)}
+          >
             <div className="relative">
-              <div className="absolute -inset-3 rounded-full bg-purple-500/30 blur-md" />
-              <div className="relative">
+              <div className="absolute -inset-3 rounded-full bg-purple-500/30 blur-md transition-opacity group-hover/p2:bg-purple-500/50" />
+              <div className="relative rounded-full ring-2 ring-transparent transition-all group-hover/p2:ring-purple-500/60">
                 <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} size="xl" />
               </div>
             </div>

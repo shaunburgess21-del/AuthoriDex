@@ -980,22 +980,39 @@ function HeadToHeadCard({
       
       <div className="relative z-10 flex flex-col h-full">
         <div className="flex items-center justify-between mb-3">
-          <Badge variant="outline" className="text-xs">
-            <Clock className="h-3 w-3 mr-1" />
-            {market.endTime}
-          </Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="outline" className="text-xs cursor-help">
+                <Clock className="h-3 w-3 mr-1" />
+                {market.endTime}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">Market closes {market.endTime}</p>
+            </TooltipContent>
+          </Tooltip>
           <CategoryPill category={market.category} />
         </div>
         
         <div className="relative mb-4" style={{ padding: '0 5px' }}>
           <div className="flex" style={{ gap: '7px' }}>
-            <div className="flex-1 relative">
-              <div className="absolute -inset-4 rounded-md bg-blue-500/20 blur-lg pointer-events-none" />
-              <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="h-auto w-full aspect-square" />
+            <div
+              className={`flex-1 relative ${!isMarketClosed ? 'cursor-pointer group/p1' : ''}`}
+              onClick={() => !isMarketClosed && onSelect?.(1)}
+            >
+              <div className="absolute -inset-4 rounded-md bg-blue-500/20 blur-lg pointer-events-none transition-opacity group-hover/p1:bg-blue-500/40" />
+              <div className="rounded-lg overflow-hidden ring-2 ring-transparent transition-all group-hover/p1:ring-blue-500/60">
+                <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="h-auto w-full aspect-square" />
+              </div>
             </div>
-            <div className="flex-1 relative">
-              <div className="absolute -inset-4 rounded-md bg-purple-500/20 blur-lg pointer-events-none" />
-              <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-auto w-full aspect-square" />
+            <div
+              className={`flex-1 relative ${!isMarketClosed ? 'cursor-pointer group/p2' : ''}`}
+              onClick={() => !isMarketClosed && onSelect?.(2)}
+            >
+              <div className="absolute -inset-4 rounded-md bg-purple-500/20 blur-lg pointer-events-none transition-opacity group-hover/p2:bg-purple-500/40" />
+              <div className="rounded-lg overflow-hidden ring-2 ring-transparent transition-all group-hover/p2:ring-purple-500/60">
+                <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-auto w-full aspect-square" />
+              </div>
             </div>
           </div>
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
@@ -1006,11 +1023,17 @@ function HeadToHeadCard({
         </div>
         
         <div className="flex items-center justify-between px-2 mb-2">
-          <div className="flex flex-col items-center flex-1">
+          <div
+            className={`flex flex-col items-center flex-1 ${!isMarketClosed ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
+            onClick={() => !isMarketClosed && onSelect?.(1)}
+          >
             <p className="text-sm font-semibold text-center">{market.person1.name.split(" ")[0]}</p>
             <span className="text-xs text-blue-400">{market.person1Percent}%</span>
           </div>
-          <div className="flex flex-col items-center flex-1">
+          <div
+            className={`flex flex-col items-center flex-1 ${!isMarketClosed ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
+            onClick={() => !isMarketClosed && onSelect?.(2)}
+          >
             <p className="text-sm font-semibold text-center">{market.person2.name.split(" ")[0]}</p>
             <span className="text-xs text-purple-400">{100 - market.person1Percent}%</span>
           </div>
