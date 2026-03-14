@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ComponentType } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -10,26 +10,49 @@ import { BottomNav } from "@/components/BottomNav";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const HomePage = lazy(() => import("@/pages/HomePage"));
-const PersonDetailPage = lazy(() => import("@/pages/PersonDetailPage"));
-const LoginPage = lazy(() => import("@/pages/LoginPage"));
-const UserProfilePage = lazy(() => import("@/pages/UserProfilePage"));
-const PredictPage = lazy(() => import("@/pages/PredictPage"));
-const VotePage = lazy(() => import("@/pages/VotePage"));
-const MePage = lazy(() => import("@/pages/MePage"));
-const VotesPage = lazy(() => import("@/pages/me/VotesPage"));
-const PredictionsPage = lazy(() => import("@/pages/me/PredictionsPage"));
-const FavoritesPage = lazy(() => import("@/pages/me/FavoritesPage"));
-const SettingsPage = lazy(() => import("@/pages/me/SettingsPage"));
-const PublicProfilePage = lazy(() => import("@/pages/PublicProfilePage"));
-const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
-const MarketDetailPage = lazy(() => import("@/pages/MarketDetailPage"));
-const PollDetailPage = lazy(() => import("@/pages/PollDetailPage"));
-const OpinionPollDetailPage = lazy(() => import("@/pages/OpinionPollDetailPage"));
-const MatchupDetailPage = lazy(() => import("@/pages/MatchupDetailPage"));
-const UserLeaderboardPage = lazy(() => import("@/pages/UserLeaderboardPage"));
-const TownSquarePage = lazy(() => import("@/pages/TownSquarePage"));
-const NotFound = lazy(() => import("@/pages/not-found"));
+/**
+ * Wraps React.lazy with automatic recovery from stale-chunk errors.
+ * After a deploy the old HTML may reference chunk filenames that no longer
+ * exist. When the dynamic import fails we do a single full-page reload so
+ * the browser fetches the new HTML with correct chunk URLs.
+ */
+function lazyWithRetry<T extends ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+) {
+  return lazy(() =>
+    factory().catch((err: unknown) => {
+      const alreadyRetried = sessionStorage.getItem("chunk_retry");
+      if (!alreadyRetried) {
+        sessionStorage.setItem("chunk_retry", "1");
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {});
+      }
+      sessionStorage.removeItem("chunk_retry");
+      throw err;
+    })
+  );
+}
+
+const HomePage = lazyWithRetry(() => import("@/pages/HomePage"));
+const PersonDetailPage = lazyWithRetry(() => import("@/pages/PersonDetailPage"));
+const LoginPage = lazyWithRetry(() => import("@/pages/LoginPage"));
+const UserProfilePage = lazyWithRetry(() => import("@/pages/UserProfilePage"));
+const PredictPage = lazyWithRetry(() => import("@/pages/PredictPage"));
+const VotePage = lazyWithRetry(() => import("@/pages/VotePage"));
+const MePage = lazyWithRetry(() => import("@/pages/MePage"));
+const VotesPage = lazyWithRetry(() => import("@/pages/me/VotesPage"));
+const PredictionsPage = lazyWithRetry(() => import("@/pages/me/PredictionsPage"));
+const FavoritesPage = lazyWithRetry(() => import("@/pages/me/FavoritesPage"));
+const SettingsPage = lazyWithRetry(() => import("@/pages/me/SettingsPage"));
+const PublicProfilePage = lazyWithRetry(() => import("@/pages/PublicProfilePage"));
+const AdminDashboard = lazyWithRetry(() => import("@/pages/AdminDashboard"));
+const MarketDetailPage = lazyWithRetry(() => import("@/pages/MarketDetailPage"));
+const PollDetailPage = lazyWithRetry(() => import("@/pages/PollDetailPage"));
+const OpinionPollDetailPage = lazyWithRetry(() => import("@/pages/OpinionPollDetailPage"));
+const MatchupDetailPage = lazyWithRetry(() => import("@/pages/MatchupDetailPage"));
+const UserLeaderboardPage = lazyWithRetry(() => import("@/pages/UserLeaderboardPage"));
+const TownSquarePage = lazyWithRetry(() => import("@/pages/TownSquarePage"));
+const NotFound = lazyWithRetry(() => import("@/pages/not-found"));
 
 function PageFallback() {
   return (
