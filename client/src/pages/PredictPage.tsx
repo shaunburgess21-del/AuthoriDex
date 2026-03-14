@@ -2229,6 +2229,11 @@ export default function PredictPage() {
     },
   });
 
+  const openStakeModal = () => {
+    refreshProfile?.();
+    openStakeModal();
+  };
+
   const handleUpDownSelect = (market: PredictionMarket, choice: "up" | "down") => {
     if (!user) {
       toast({
@@ -2263,7 +2268,7 @@ export default function PredictPage() {
       tieRule: market.tieRule || "refund",
       endAt: market.endAt,
     });
-    setStakeModalOpen(true);
+    openStakeModal();
   };
 
   const handleH2HSelect = (market: HeadToHeadMarket, person: 1 | 2) => {
@@ -2297,7 +2302,7 @@ export default function PredictPage() {
       crowdSentiment: sentiment,
       estimatedPayout,
     });
-    setStakeModalOpen(true);
+    openStakeModal();
   };
 
   const handleGainerSelect = (market: TopGainerMarket, name: string, entryId?: string) => {
@@ -2321,7 +2326,7 @@ export default function PredictPage() {
       marketId: market.id,
       entryId,
     });
-    setStakeModalOpen(true);
+    openStakeModal();
   };
 
   const handleConfirmStake = (amount: number) => {
@@ -2374,8 +2379,8 @@ export default function PredictPage() {
 
   const handleCreatePrediction = (data: { title: string; type: string; category: CategoryFilter; description: string }) => {
     toast({
-      title: "Market created!",
-      description: "Your prediction is now live for the community.",
+      title: "Suggestion submitted!",
+      description: "Your market suggestion has been submitted for admin review.",
     });
   };
 

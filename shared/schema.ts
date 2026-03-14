@@ -394,7 +394,10 @@ export const votes = pgTable("votes", {
   weight: real("weight").notNull().default(1.0),
   metadata: jsonb("metadata"),
   votedAt: timestamp("voted_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  userTargetUniq: unique("votes_user_target_uniq").on(table.userId, table.voteType, table.targetType, table.targetId),
+  targetIdx: index("votes_target_idx").on(table.targetType, table.targetId),
+}));
 
 export const insertVoteSchema = createInsertSchema(votes).omit({
   id: true,
@@ -443,6 +446,27 @@ export const insertCelebrityImageSchema = createInsertSchema(celebrityImages).om
 
 export type CelebrityImage = typeof celebrityImages.$inferSelect;
 export type InsertCelebrityImage = z.infer<typeof insertCelebrityImageSchema>;
+
+// Image Votes - deduplication table for curate profile image voting
+export const imageVotes = pgTable("image_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  imageId: varchar("image_id").notNull().references(() => celebrityImages.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  direction: text("direction").notNull(),
+  votedAt: timestamp("voted_at").notNull().defaultNow(),
+}, (table) => ({
+  userImageUnique: unique("image_votes_user_image_uniq").on(table.userId, table.imageId),
+}));
+
+// Induction Votes - deduplication table for induction candidate voting
+export const inductionVotes = pgTable("induction_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  candidateId: varchar("candidate_id").notNull().references(() => inductionCandidates.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  votedAt: timestamp("voted_at").notNull().defaultNow(),
+}, (table) => ({
+  userCandidateUnique: unique("induction_votes_user_candidate_uniq").on(table.userId, table.candidateId),
+}));
 
 // Matchups - A vs B binary choice voting questions
 export const matchups = pgTable("face_offs", {
@@ -838,7 +862,10 @@ export const predictionMarkets = pgTable("prediction_markets", {
   tieRule: text("tie_rule").default("refund"), // 'refund' | 'down_wins' | 'up_wins'
   cadence: text("cadence").default("weekly"), // 'daily' | 'weekly' | 'custom'
   baselineScore: integer("baseline_score"), // Denormalized from metadata.openingScore for easy API access
-});
+}, (table) => ({
+  statusEndIdx: index("prediction_markets_status_end_idx").on(table.status, table.endAt),
+  personIdx: index("prediction_markets_person_idx").on(table.personId),
+}));
 
 export const insertPredictionMarketSchema = createInsertSchema(predictionMarkets).omit({
   id: true,
@@ -864,7 +891,9 @@ export const marketEntries = pgTable("market_entries", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   seedCount: integer("seed_count").default(0), // Display seed for social proof on this entry
   imageUrl: text("image_url"), // Avatar/image for this entry (manual URL or resolved from linked person)
-});
+}, (table) => ({
+  marketIdx: index("market_entries_market_idx").on(table.marketId),
+}));
 
 export const insertMarketEntrySchema = createInsertSchema(marketEntries).omit({
   id: true,
@@ -890,7 +919,11 @@ export const marketBets = pgTable("market_bets", {
   confidence: numeric("confidence", { precision: 3, scale: 2 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   betMetadata: jsonb("bet_metadata"), // { confidence?: 1-5, thesis?: string, scoreAtEntry?: number }
-});
+}, (table) => ({
+  marketStatusIdx: index("market_bets_market_status_idx").on(table.marketId, table.status),
+  userStatusIdx: index("market_bets_user_status_idx").on(table.userId, table.status),
+  entryIdx: index("market_bets_entry_idx").on(table.entryId),
+}));
 
 export const insertMarketBetSchema = createInsertSchema(marketBets).omit({
   id: true,

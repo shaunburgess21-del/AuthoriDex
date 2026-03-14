@@ -8,6 +8,20 @@
       "when": 1773391669962,
       "tag": "0000_handy_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1773514083049,
+      "tag": "0001_clever_franklin_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773514322892,
+      "tag": "0002_stale_crystal",
+      "breakpoints": true
     }
   ]
 }

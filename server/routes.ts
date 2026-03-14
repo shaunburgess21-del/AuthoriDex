@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -250,6 +250,32 @@ setInterval(() => {
     const filtered = (ts as number[]).filter((t: number) => t > cutoff);
     if (filtered.length === 0) betRateMap.delete(uid);
     else betRateMap.set(uid, filtered);
+  }
+}, 300_000);
+
+const VOTE_RATE_WINDOW_MS = 60_000;
+const VOTE_RATE_MAX = 30;
+const voteRateMap = new Map<string, number[]>();
+
+function checkVoteRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const timestamps = voteRateMap.get(userId) || [];
+  const recent = timestamps.filter(t => now - t < VOTE_RATE_WINDOW_MS);
+  if (recent.length >= VOTE_RATE_MAX) {
+    voteRateMap.set(userId, recent);
+    return false;
+  }
+  recent.push(now);
+  voteRateMap.set(userId, recent);
+  return true;
+}
+
+setInterval(() => {
+  const cutoff = Date.now() - VOTE_RATE_WINDOW_MS * 2;
+  for (const [uid, ts] of Array.from(voteRateMap.entries())) {
+    const filtered = (ts as number[]).filter((t: number) => t > cutoff);
+    if (filtered.length === 0) voteRateMap.delete(uid);
+    else voteRateMap.set(uid, filtered);
   }
 }, 300_000);
 
@@ -1572,16 +1598,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Vote on a celebrity image (for Curate Profile feature)
-  app.post("/api/people/:personId/images/:imageId/vote", optionalAuth, async (req: AuthRequest, res) => {
+  app.post("/api/people/:personId/images/:imageId/vote", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { personId, imageId } = req.params;
       const { direction } = req.body;
+      const userId = req.userId!;
+
+      if (!checkVoteRateLimit(userId)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
       
       if (!direction || (direction !== 'up' && direction !== 'down')) {
         return res.status(400).json({ error: "Invalid direction. Must be 'up' or 'down'" });
       }
       
-      // Check if image exists and belongs to the person
       const [image] = await db.select()
         .from(celebrityImages)
         .where(and(
@@ -1592,22 +1622,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!image) {
         return res.status(404).json({ error: "Image not found" });
       }
-      
-      // Update the vote count
-      if (direction === 'up') {
-        await db.update(celebrityImages)
-          .set({ votesUp: sql`${celebrityImages.votesUp} + 1` })
-          .where(eq(celebrityImages.id, imageId));
+
+      const [existing] = await db.select()
+        .from(imageVotes)
+        .where(and(eq(imageVotes.userId, userId), eq(imageVotes.imageId, imageId)));
+
+      if (existing) {
+        if (existing.direction === direction) {
+          return res.json({ message: "Already voted", alreadyVoted: true });
+        }
+        // Changing direction: undo old vote, apply new one
+        await db.transaction(async (tx) => {
+          await tx.update(imageVotes)
+            .set({ direction, votedAt: new Date() })
+            .where(eq(imageVotes.id, existing.id));
+          if (existing.direction === 'up') {
+            await tx.update(celebrityImages)
+              .set({ votesUp: sql`GREATEST(${celebrityImages.votesUp} - 1, 0)`, votesDown: sql`${celebrityImages.votesDown} + 1` })
+              .where(eq(celebrityImages.id, imageId));
+          } else {
+            await tx.update(celebrityImages)
+              .set({ votesDown: sql`GREATEST(${celebrityImages.votesDown} - 1, 0)`, votesUp: sql`${celebrityImages.votesUp} + 1` })
+              .where(eq(celebrityImages.id, imageId));
+          }
+        });
       } else {
-        await db.update(celebrityImages)
-          .set({ votesDown: sql`${celebrityImages.votesDown} + 1` })
-          .where(eq(celebrityImages.id, imageId));
+        await db.transaction(async (tx) => {
+          await tx.insert(imageVotes).values({ imageId, userId, direction });
+          if (direction === 'up') {
+            await tx.update(celebrityImages)
+              .set({ votesUp: sql`${celebrityImages.votesUp} + 1` })
+              .where(eq(celebrityImages.id, imageId));
+          } else {
+            await tx.update(celebrityImages)
+              .set({ votesDown: sql`${celebrityImages.votesDown} + 1` })
+              .where(eq(celebrityImages.id, imageId));
+          }
+        });
       }
       
-      // Sync winning avatar to tracked_people and trending_people
       await syncWinningAvatarForPerson(personId);
 
-      // Fetch updated image
       const [updatedImage] = await db.select()
         .from(celebrityImages)
         .where(eq(celebrityImages.id, imageId));
@@ -1661,7 +1716,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a new community insight (protected route)
   app.post("/api/community-insights", requireAuth, async (req: AuthRequest, res) => {
     try {
-      const { personId, username, content, sentimentVote } = req.body;
+      const { personId, content, sentimentVote } = req.body;
       
       if (!personId || !content) {
         return res.status(400).json({ error: "Missing required fields: personId, content" });
@@ -1678,13 +1733,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ error: "Sentiment vote must be between 1 and 10" });
         }
       }
+
+      const [userProfile] = await db.select({ username: profiles.username }).from(profiles).where(eq(profiles.id, req.userId!)).limit(1);
+      const username = userProfile?.username || req.userId!.substring(0, 8);
       
       const [newInsight] = await db
         .insert(communityInsights)
         .values({
           personId,
           userId: req.userId!, // Use verified user ID from auth middleware
-          username: username || req.userId!.substring(0, 8),
+          username,
           content,
           sentimentVote: sentimentVote || null,
         })
@@ -1693,13 +1751,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(newInsight);
     } catch (error: any) {
       console.error("Error creating community insight:", error);
-      res.status(400).json({ error: error.message || "Failed to create insight" });
+      res.status(400).json({ error: "Failed to create insight" });
     }
   });
 
   // Vote on a community insight (protected route)
   app.post("/api/community-insights/:id/vote", requireAuth, async (req: AuthRequest, res) => {
     try {
+      if (!checkVoteRateLimit(req.userId!)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
       const { id } = req.params;
       const { voteType } = req.body;
 
@@ -1742,7 +1803,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error: any) {
       console.error("Error voting on insight:", error);
-      res.status(500).json({ error: error.message || "Failed to vote" });
+      res.status(500).json({ error: "Failed to vote" });
     }
   });
 
@@ -1793,6 +1854,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { personId, personName, voteType } = req.body;
       const userId = req.userId!;
+
+      if (!checkVoteRateLimit(userId)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
       
       if (!personId || !voteType) {
         return res.status(400).json({ error: "personId and voteType are required" });
@@ -1841,7 +1906,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, created: true });
     } catch (error: any) {
       console.error("Error submitting sentiment vote:", error);
-      res.status(500).json({ error: error.message || "Failed to submit vote" });
+      res.status(500).json({ error: "Failed to submit vote" });
     }
   });
   
@@ -2091,6 +2156,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const celebrityId = req.params.id;
       const userId = req.userId!;
+
+      if (!checkVoteRateLimit(userId)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
       const { vote } = req.body;
 
       if (!vote || !['underrated', 'overrated', 'fairly_rated'].includes(vote)) {
@@ -2137,7 +2206,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("[value-vote] Error:", error);
-      res.status(500).json({ error: error.message || "Failed to submit vote" });
+      res.status(500).json({ error: "Failed to submit vote" });
     }
   });
 
@@ -2181,7 +2250,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("[value-vote GET] Error:", error);
-      res.status(500).json({ error: error.message || "Failed to get vote" });
+      res.status(500).json({ error: "Failed to get vote" });
     }
   });
 
@@ -2265,7 +2334,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("[sentiment-stats GET] Error:", error);
-      res.status(500).json({ error: error.message || "Failed to get sentiment stats" });
+      res.status(500).json({ error: "Failed to get sentiment stats" });
     }
   });
 
@@ -2931,6 +3000,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Vote on a comment (protected route)
   app.post("/api/insight-comments/:id/vote", requireAuth, async (req: AuthRequest, res) => {
     try {
+      if (!checkVoteRateLimit(req.userId!)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
       const { id } = req.params;
       const { voteType } = req.body;
       const userId = req.userId!;
@@ -2982,7 +3054,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error: any) {
       console.error("Error voting on comment:", error);
-      res.status(500).json({ error: error.message || "Failed to vote" });
+      res.status(500).json({ error: "Failed to vote" });
     }
   });
 
@@ -3961,6 +4033,9 @@ Only return the JSON object.`;
     try {
       // Use userId if logged in, otherwise use session ID for anonymous voting
       const voterId = req.userId || req.sessionId;
+      if (voterId && !checkVoteRateLimit(voterId)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
       if (!voterId) {
         return res.status(400).json({ error: "Unable to track vote - no session available" });
       }
@@ -4146,37 +4221,42 @@ Only return the JSON object.`;
       if (!req.userId) {
         return res.status(401).json({ error: "Must be signed in to vote" });
       }
+      if (!checkVoteRateLimit(req.userId)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
       const { commentId } = req.params;
       const { voteType } = req.body;
       if (!voteType || (voteType !== 'up' && voteType !== 'down')) {
         return res.status(400).json({ error: "Invalid vote type" });
       }
-      const [existing] = await db.select().from(matchupCommentVotes)
-        .where(and(eq(matchupCommentVotes.userId, req.userId), eq(matchupCommentVotes.commentId, commentId)));
-      if (existing) {
-        if (existing.voteType === voteType) {
-          await db.delete(matchupCommentVotes).where(eq(matchupCommentVotes.id, existing.id));
-          if (voteType === 'up') {
-            await db.update(matchupComments).set({ upvotes: sql`GREATEST(upvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
+      await db.transaction(async (tx) => {
+        const [existing] = await tx.select().from(matchupCommentVotes)
+          .where(and(eq(matchupCommentVotes.userId, req.userId), eq(matchupCommentVotes.commentId, commentId)));
+        if (existing) {
+          if (existing.voteType === voteType) {
+            await tx.delete(matchupCommentVotes).where(eq(matchupCommentVotes.id, existing.id));
+            if (voteType === 'up') {
+              await tx.update(matchupComments).set({ upvotes: sql`GREATEST(upvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
+            } else {
+              await tx.update(matchupComments).set({ downvotes: sql`GREATEST(downvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
+            }
           } else {
-            await db.update(matchupComments).set({ downvotes: sql`GREATEST(downvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
+            await tx.update(matchupCommentVotes).set({ voteType }).where(eq(matchupCommentVotes.id, existing.id));
+            if (voteType === 'up') {
+              await tx.update(matchupComments).set({ upvotes: sql`upvotes + 1`, downvotes: sql`GREATEST(downvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
+            } else {
+              await tx.update(matchupComments).set({ downvotes: sql`downvotes + 1`, upvotes: sql`GREATEST(upvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
+            }
           }
         } else {
-          await db.update(matchupCommentVotes).set({ voteType }).where(eq(matchupCommentVotes.id, existing.id));
+          await tx.insert(matchupCommentVotes).values({ commentId, userId: req.userId, voteType });
           if (voteType === 'up') {
-            await db.update(matchupComments).set({ upvotes: sql`upvotes + 1`, downvotes: sql`GREATEST(downvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
+            await tx.update(matchupComments).set({ upvotes: sql`upvotes + 1` }).where(eq(matchupComments.id, commentId));
           } else {
-            await db.update(matchupComments).set({ downvotes: sql`downvotes + 1`, upvotes: sql`GREATEST(upvotes - 1, 0)` }).where(eq(matchupComments.id, commentId));
+            await tx.update(matchupComments).set({ downvotes: sql`downvotes + 1` }).where(eq(matchupComments.id, commentId));
           }
         }
-      } else {
-        await db.insert(matchupCommentVotes).values({ commentId, userId: req.userId, voteType });
-        if (voteType === 'up') {
-          await db.update(matchupComments).set({ upvotes: sql`upvotes + 1` }).where(eq(matchupComments.id, commentId));
-        } else {
-          await db.update(matchupComments).set({ downvotes: sql`downvotes + 1` }).where(eq(matchupComments.id, commentId));
-        }
-      }
+      });
       const [updated] = await db.select().from(matchupComments).where(eq(matchupComments.id, commentId));
       res.json(updated);
     } catch (error: any) {
@@ -6859,6 +6939,9 @@ Only return the JSON object.`;
   app.post("/api/polls/:slug/vote", requireAuth, async (req, res) => {
     try {
       const authReq = req as AuthRequest;
+      if (!checkVoteRateLimit(authReq.userId!)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
       const { slug } = req.params;
       const { choice } = req.body;
 
@@ -6990,6 +7073,9 @@ Only return the JSON object.`;
   app.post("/api/polls/comments/:commentId/vote", requireAuth, async (req, res) => {
     try {
       const authReq = req as AuthRequest;
+      if (!checkVoteRateLimit(authReq.userId!)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
       const { commentId } = req.params;
       const { voteType } = req.body;
 
@@ -6997,42 +7083,46 @@ Only return the JSON object.`;
         return res.status(400).json({ error: "voteType must be 'up' or 'down'" });
       }
 
-      const [existingVote] = await db
-        .select()
-        .from(trendingPollCommentVotes)
-        .where(and(
-          eq(trendingPollCommentVotes.commentId, commentId),
-          eq(trendingPollCommentVotes.userId, authReq.userId!)
-        ))
-        .limit(1);
+      const action = await db.transaction(async (tx) => {
+        const [existingVote] = await tx
+          .select()
+          .from(trendingPollCommentVotes)
+          .where(and(
+            eq(trendingPollCommentVotes.commentId, commentId),
+            eq(trendingPollCommentVotes.userId, authReq.userId!)
+          ))
+          .limit(1);
 
-      if (existingVote) {
-        if (existingVote.voteType === voteType) {
-          await db.delete(trendingPollCommentVotes).where(eq(trendingPollCommentVotes.id, existingVote.id));
-          await db.update(trendingPollComments).set({
-            [voteType === 'up' ? 'upvotes' : 'downvotes']: sql`${voteType === 'up' ? trendingPollComments.upvotes : trendingPollComments.downvotes} - 1`,
-          }).where(eq(trendingPollComments.id, commentId));
-          return res.json({ success: true, action: "removed" });
+        if (existingVote) {
+          if (existingVote.voteType === voteType) {
+            await tx.delete(trendingPollCommentVotes).where(eq(trendingPollCommentVotes.id, existingVote.id));
+            await tx.update(trendingPollComments).set({
+              [voteType === 'up' ? 'upvotes' : 'downvotes']: sql`${voteType === 'up' ? trendingPollComments.upvotes : trendingPollComments.downvotes} - 1`,
+            }).where(eq(trendingPollComments.id, commentId));
+            return "removed";
+          } else {
+            await tx.update(trendingPollCommentVotes).set({ voteType }).where(eq(trendingPollCommentVotes.id, existingVote.id));
+            const oldCol = existingVote.voteType === 'up' ? 'upvotes' : 'downvotes';
+            const newCol = voteType === 'up' ? 'upvotes' : 'downvotes';
+            await tx.update(trendingPollComments).set({
+              [oldCol]: sql`${oldCol === 'upvotes' ? trendingPollComments.upvotes : trendingPollComments.downvotes} - 1`,
+              [newCol]: sql`${newCol === 'upvotes' ? trendingPollComments.upvotes : trendingPollComments.downvotes} + 1`,
+            }).where(eq(trendingPollComments.id, commentId));
+            return "changed";
+          }
         } else {
-          await db.update(trendingPollCommentVotes).set({ voteType }).where(eq(trendingPollCommentVotes.id, existingVote.id));
-          const oldCol = existingVote.voteType === 'up' ? 'upvotes' : 'downvotes';
-          const newCol = voteType === 'up' ? 'upvotes' : 'downvotes';
-          await db.update(trendingPollComments).set({
-            [oldCol]: sql`${oldCol === 'upvotes' ? trendingPollComments.upvotes : trendingPollComments.downvotes} - 1`,
-            [newCol]: sql`${newCol === 'upvotes' ? trendingPollComments.upvotes : trendingPollComments.downvotes} + 1`,
+          await tx.insert(trendingPollCommentVotes).values({
+            commentId,
+            userId: authReq.userId!,
+            voteType,
+          });
+          await tx.update(trendingPollComments).set({
+            [voteType === 'up' ? 'upvotes' : 'downvotes']: sql`${voteType === 'up' ? trendingPollComments.upvotes : trendingPollComments.downvotes} + 1`,
           }).where(eq(trendingPollComments.id, commentId));
-          return res.json({ success: true, action: "changed" });
+          return "added";
         }
-      } else {
-        await db.insert(trendingPollCommentVotes).values({
-          commentId,
-          userId: authReq.userId!,
-          voteType,
-        });
-        await db.update(trendingPollComments).set({
-          [voteType === 'up' ? 'upvotes' : 'downvotes']: sql`${voteType === 'up' ? trendingPollComments.upvotes : trendingPollComments.downvotes} + 1`,
-        }).where(eq(trendingPollComments.id, commentId));
-        return res.json({ success: true, action: "added" });
+      });
+      return res.json({ success: true, action });
       }
     } catch (error: any) {
       console.error("Error voting on poll comment:", error.message);
@@ -7608,6 +7698,9 @@ Only return the JSON object.`;
       const { slug } = req.params;
       const { optionId } = req.body;
       const userId = req.userId!;
+      if (!checkVoteRateLimit(userId)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
 
       if (!optionId) {
         return res.status(400).json({ error: "optionId is required" });
@@ -7736,6 +7829,9 @@ Only return the JSON object.`;
 
   app.post("/api/opinion-polls/comments/:commentId/vote", requireAuth, async (req: AuthRequest, res) => {
     try {
+      if (!checkVoteRateLimit(req.userId!)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
       const { commentId } = req.params;
       const { voteType } = req.body;
       const userId = req.userId!;
@@ -7744,31 +7840,33 @@ Only return the JSON object.`;
         return res.status(400).json({ error: "voteType must be 'up' or 'down'" });
       }
 
-      const [existing] = await db
-        .select()
-        .from(opinionPollCommentVotes)
-        .where(and(eq(opinionPollCommentVotes.commentId, commentId), eq(opinionPollCommentVotes.userId, userId)))
-        .limit(1);
+      await db.transaction(async (tx) => {
+        const [existing] = await tx
+          .select()
+          .from(opinionPollCommentVotes)
+          .where(and(eq(opinionPollCommentVotes.commentId, commentId), eq(opinionPollCommentVotes.userId, userId)))
+          .limit(1);
 
-      if (existing) {
-        if (existing.voteType === voteType) {
-          await db.delete(opinionPollCommentVotes).where(eq(opinionPollCommentVotes.id, existing.id));
-          const col = voteType === 'up' ? opinionPollComments.upvotes : opinionPollComments.downvotes;
-          await db.update(opinionPollComments).set({ [voteType === 'up' ? 'upvotes' : 'downvotes']: sql`${col} - 1` }).where(eq(opinionPollComments.id, commentId));
+        if (existing) {
+          if (existing.voteType === voteType) {
+            await tx.delete(opinionPollCommentVotes).where(eq(opinionPollCommentVotes.id, existing.id));
+            const col = voteType === 'up' ? opinionPollComments.upvotes : opinionPollComments.downvotes;
+            await tx.update(opinionPollComments).set({ [voteType === 'up' ? 'upvotes' : 'downvotes']: sql`${col} - 1` }).where(eq(opinionPollComments.id, commentId));
+          } else {
+            await tx.update(opinionPollCommentVotes).set({ voteType }).where(eq(opinionPollCommentVotes.id, existing.id));
+            const oldCol = existing.voteType === 'up' ? 'upvotes' : 'downvotes';
+            const newCol = voteType === 'up' ? 'upvotes' : 'downvotes';
+            await tx.update(opinionPollComments).set({
+              [oldCol]: sql`${existing.voteType === 'up' ? opinionPollComments.upvotes : opinionPollComments.downvotes} - 1`,
+              [newCol]: sql`${voteType === 'up' ? opinionPollComments.upvotes : opinionPollComments.downvotes} + 1`,
+            }).where(eq(opinionPollComments.id, commentId));
+          }
         } else {
-          await db.update(opinionPollCommentVotes).set({ voteType }).where(eq(opinionPollCommentVotes.id, existing.id));
-          const oldCol = existing.voteType === 'up' ? 'upvotes' : 'downvotes';
-          const newCol = voteType === 'up' ? 'upvotes' : 'downvotes';
-          await db.update(opinionPollComments).set({
-            [oldCol]: sql`${existing.voteType === 'up' ? opinionPollComments.upvotes : opinionPollComments.downvotes} - 1`,
-            [newCol]: sql`${voteType === 'up' ? opinionPollComments.upvotes : opinionPollComments.downvotes} + 1`,
-          }).where(eq(opinionPollComments.id, commentId));
+          await tx.insert(opinionPollCommentVotes).values({ commentId, userId, voteType });
+          const col = voteType === 'up' ? 'upvotes' : 'downvotes';
+          await tx.update(opinionPollComments).set({ [col]: sql`${voteType === 'up' ? opinionPollComments.upvotes : opinionPollComments.downvotes} + 1` }).where(eq(opinionPollComments.id, commentId));
         }
-      } else {
-        await db.insert(opinionPollCommentVotes).values({ commentId, userId, voteType });
-        const col = voteType === 'up' ? 'upvotes' : 'downvotes';
-        await db.update(opinionPollComments).set({ [col]: sql`${voteType === 'up' ? opinionPollComments.upvotes : opinionPollComments.downvotes} + 1` }).where(eq(opinionPollComments.id, commentId));
-      }
+      });
 
       res.json({ success: true });
     } catch (error: any) {
@@ -8745,20 +8843,17 @@ Only return the JSON object.`;
       }
 
       const { settleMarketBets } = await import("./jobs/market-resolver");
-      const settlementResult = await settleMarketBets(id, winnerEntryId);
+      const settlementResult = await settleMarketBets(id, winnerEntryId, {
+        resolveMethod: "admin_manual",
+        resolutionNotes: resolutionNotes || null,
+        settledBy: authReq.userId,
+      });
 
       const [updatedMarket] = await db
-        .update(predictionMarkets)
-        .set({
-          status: "RESOLVED",
-          resolvedAt: new Date(),
-          settledBy: authReq.userId,
-          resolveMethod: "admin_manual",
-          resolutionNotes: resolutionNotes || null,
-          updatedAt: new Date(),
-        })
+        .select()
+        .from(predictionMarkets)
         .where(eq(predictionMarkets.id, id))
-        .returning();
+        .limit(1);
 
       res.json({ ...updatedMarket, settlement: settlementResult });
     } catch (error) {
@@ -8791,14 +8886,20 @@ Only return the JSON object.`;
         return res.status(404).json({ error: "Market not found" });
       }
 
+      if (market.status === "RESOLVED" || market.status === "VOID") {
+        return res.status(400).json({ error: "Market is already resolved or voided" });
+      }
+
       const { voidMarketBets } = await import("./jobs/market-resolver");
       await voidMarketBets(id);
 
       const [updatedMarket] = await db
         .update(predictionMarkets)
         .set({
+          status: "VOID",
           voidReason,
           settledBy: (req as AuthRequest).userId ?? null,
+          resolveMethod: "admin_manual",
           resolutionNotes: JSON.stringify({
             type: "community",
             pendingReason: "admin_voided",
@@ -8899,6 +9000,8 @@ Only return the JSON object.`;
     }
   });
 
+  const MIN_BET_STAKE = 5;
+
   async function placeMarketBet(params: {
     userId: string;
     marketId: string;
@@ -8906,6 +9009,10 @@ Only return the JSON object.`;
     stakeAmount: number;
   }) {
     const { userId, marketId, entryId, stakeAmount } = params;
+
+    if (!Number.isInteger(stakeAmount) || stakeAmount < MIN_BET_STAKE) {
+      return { error: `Stake must be a whole number of at least ${MIN_BET_STAKE} credits`, status: 400 as const };
+    }
 
     const [entry] = await db
       .select()
@@ -8922,31 +9029,7 @@ Only return the JSON object.`;
       return { error: "Entry not found in this market", status: 400 as const };
     }
 
-    const [profile] = await db
-      .select({ predictCredits: profiles.predictCredits })
-      .from(profiles)
-      .where(eq(profiles.id, userId))
-      .limit(1);
-
-    if (!profile) {
-      return { error: "User profile not found", status: 400 as const };
-    }
-
-    if (profile.predictCredits < stakeAmount) {
-      return { error: "Insufficient credits", status: 400 as const };
-    }
-
-    const allEntries = await db
-      .select({ totalStake: marketEntries.totalStake })
-      .from(marketEntries)
-      .where(eq(marketEntries.marketId, marketId));
-
-    const totalPool = allEntries.reduce((sum, e) => sum + e.totalStake, 0) + stakeAmount;
-    const entryPool = entry.totalStake + stakeAmount;
-    const entryShare = entryPool / totalPool;
-    const potentialPayout = Math.round(stakeAmount / Math.max(entryShare, 0.01));
-
-    const [bet] = await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       const [updatedProfile] = await tx
         .update(profiles)
         .set({
@@ -8962,6 +9045,17 @@ Only return the JSON object.`;
       if (!updatedProfile) {
         throw new Error("Insufficient credits");
       }
+
+      const allEntries = await tx
+        .select({ totalStake: marketEntries.totalStake, id: marketEntries.id })
+        .from(marketEntries)
+        .where(eq(marketEntries.marketId, marketId));
+
+      const totalPool = allEntries.reduce((sum, e) => sum + e.totalStake, 0) + stakeAmount;
+      const currentEntry = allEntries.find(e => e.id === entryId);
+      const entryPool = (currentEntry?.totalStake ?? 0) + stakeAmount;
+      const entryShare = entryPool / totalPool;
+      const potentialPayout = Math.round(stakeAmount / Math.max(entryShare, 0.01));
 
       const [insertedBet] = await tx
         .insert(marketBets)
@@ -8991,14 +9085,14 @@ Only return the JSON object.`;
         .set({ totalStake: sql`${marketEntries.totalStake} + ${stakeAmount}` })
         .where(eq(marketEntries.id, entryId));
 
-      return [{ ...insertedBet, remainingCredits: updatedProfile.predictCredits }];
+      return { bet: { ...insertedBet, remainingCredits: updatedProfile.predictCredits }, potentialPayout };
     });
 
     return {
       data: {
-        ...bet,
-        potentialPayout,
-        remainingCredits: bet.remainingCredits,
+        ...result.bet,
+        potentialPayout: result.potentialPayout,
+        remainingCredits: result.bet.remainingCredits,
       },
       status: 200 as const,
     };
@@ -10418,27 +10512,29 @@ Only return the JSON object.`;
 
       const [market] = await db.select().from(predictionMarkets).where(eq(predictionMarkets.id, id));
       if (!market) return res.status(404).json({ error: "Market not found" });
-      if (market.status === "RESOLVED") return res.status(400).json({ error: "Market already resolved" });
+      if (market.status === "RESOLVED" || market.status === "VOID") return res.status(400).json({ error: "Market already resolved or voided" });
 
       const { settleMarketBets, voidMarketBets } = await import("./jobs/market-resolver");
       let settlementResult = null;
 
       if (winnerEntryId) {
-        settlementResult = await settleMarketBets(id, winnerEntryId);
+        settlementResult = await settleMarketBets(id, winnerEntryId, {
+          resolveMethod: "admin_manual",
+          resolutionNotes: notes,
+          settledBy: req.userId!,
+          voidReason: null,
+        });
       } else {
         const refunded = await voidMarketBets(id);
         settlementResult = { voided: true, refunded };
+        await db.update(predictionMarkets).set({
+          settledBy: req.userId!,
+          resolveMethod: "admin_manual",
+          resolutionNotes: notes,
+          voidReason: notes || "Admin voided",
+          updatedAt: new Date(),
+        }).where(eq(predictionMarkets.id, id));
       }
-
-      await db.update(predictionMarkets).set({
-        status: winnerEntryId ? "RESOLVED" : "VOID",
-        resolvedAt: new Date(),
-        settledBy: req.userId!,
-        resolveMethod: "admin_manual",
-        resolutionNotes: notes,
-        voidReason: winnerEntryId ? null : (notes || "Admin voided"),
-        updatedAt: new Date(),
-      }).where(eq(predictionMarkets.id, id));
 
       await db.insert(adminAuditLog).values({
         adminId: req.userId!,
@@ -11618,17 +11714,32 @@ Only return the JSON object.`;
     }
   });
 
-  // POST /api/vote/induction/:id/vote - Public: vote for an induction candidate
+  // POST /api/vote/induction/:id/vote - Auth: vote for an induction candidate (one vote per user per candidate)
   app.post("/api/vote/induction/:id/vote", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+      const userId = req.userId!;
+      if (!checkVoteRateLimit(userId)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
       const [candidate] = await db.select().from(inductionCandidates).where(eq(inductionCandidates.id, id)).limit(1);
       if (!candidate) return res.status(404).json({ error: "Candidate not found" });
       if (!candidate.isActive) return res.status(400).json({ error: "Candidate is not active" });
 
-      await db.update(inductionCandidates)
-        .set({ seedVotes: sql`${inductionCandidates.seedVotes} + 1` })
-        .where(eq(inductionCandidates.id, id));
+      const [existing] = await db.select()
+        .from(inductionVotes)
+        .where(and(eq(inductionVotes.userId, userId), eq(inductionVotes.candidateId, id)));
+
+      if (existing) {
+        return res.json({ success: true, alreadyVoted: true });
+      }
+
+      await db.transaction(async (tx) => {
+        await tx.insert(inductionVotes).values({ candidateId: id, userId }).onConflictDoNothing();
+        await tx.update(inductionCandidates)
+          .set({ seedVotes: sql`${inductionCandidates.seedVotes} + 1` })
+          .where(eq(inductionCandidates.id, id));
+      });
 
       res.json({ success: true });
     } catch (error: any) {

@@ -7,6 +7,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useUserStats } from "@/hooks/useGamification";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useScrollHint } from "@/hooks/use-scroll-hint";
 import { 
@@ -1909,11 +1910,11 @@ export default function VotePage() {
   const [matchupContenderA, setMatchupContenderA] = useState<ContenderSelection>({ type: null, name: '' });
   const [matchupContenderB, setMatchupContenderB] = useState<ContenderSelection>({ type: null, name: '' });
   const [matchupCategory, setMatchupCategory] = useState("");
-  const [totalVotes] = useState(127843);
   const [countdown, setCountdown] = useState("2d 14h 32m");
-  
-  const [xp, setXp] = useState(120);
-  const [rank] = useState("Citizen");
+
+  const { data: userStats } = useUserStats(!!user);
+  const xp = userStats?.xpPoints ?? 0;
+  const rank = userStats?.rank?.name ?? "Citizen";
   const [xpFloaters, setXpFloaters] = useState<XPFloater[]>([]);
   const floaterIdRef = useRef(0);
   
@@ -2255,8 +2256,6 @@ export default function VotePage() {
   }, [valuePerceptionOverlayOpen]);
 
   const addXP = (amount: number, event?: React.MouseEvent) => {
-    setXp(prev => prev + amount);
-    
     const x = event ? event.clientX - 40 : window.innerWidth / 2;
     const y = event ? event.clientY - 20 : 100;
     
@@ -2268,6 +2267,7 @@ export default function VotePage() {
     };
     
     setXpFloaters(prev => [...prev, newFloater]);
+    queryClient.invalidateQueries({ queryKey: ['/api/gamification/stats'] });
   };
 
   const removeFloater = (id: number) => {
@@ -2329,7 +2329,22 @@ export default function VotePage() {
   };
 
 
+  const discourseVoteMutation = useMutation({
+    mutationFn: async ({ slug, choice }: { slug: string; choice: string }) => {
+      const res = await apiRequest('POST', `/api/polls/${slug}/vote`, { choice });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/gamification/stats'] });
+    },
+  });
+
   const handleDiscourseVote = (topicId: string, choice: 'support' | 'neutral' | 'oppose', event?: React.MouseEvent) => {
+    const topic = dbPolls.find((t: any) => t.id === topicId);
+    if (topic?.slug) {
+      discourseVoteMutation.mutate({ slug: topic.slug, choice });
+    }
     addXP(20, event as React.MouseEvent);
   };
 
