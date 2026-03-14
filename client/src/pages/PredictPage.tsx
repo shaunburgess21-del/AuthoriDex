@@ -318,6 +318,8 @@ interface HeadToHeadMarket {
   title: string;
   person1: { name: string; avatar: string; currentScore: number };
   person2: { name: string; avatar: string; currentScore: number };
+  person1EntryId?: string;
+  person2EntryId?: string;
   category: CategoryFilter;
   endTime: string;
   totalPool: number;
@@ -393,7 +395,7 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
 interface TopGainerMarket {
   id: string;
   category: CategoryFilter;
-  leaders: { name: string; avatar: string; currentGain: number; percentGain: number; rank?: number }[];
+  leaders: { name: string; avatar: string; currentGain: number; percentGain: number; rank?: number; entryId?: string }[];
   totalPool: number;
   endTime: string;
   totalEntries?: number;
@@ -1077,13 +1079,13 @@ function TopGainerCard({
 }: { 
   market: TopGainerMarket; 
   isMarketClosed?: boolean;
-  onSelect?: (name: string) => void;
+  onSelect?: (name: string, entryId?: string) => void;
   isPredicted?: boolean;
   isShimmering?: boolean;
 }) {
   const handlePlacePrediction = () => {
     if (market.leaders.length > 0) {
-      onSelect?.(market.leaders[0].name);
+      onSelect?.(market.leaders[0].name, market.leaders[0].entryId);
     }
   };
 
@@ -1101,7 +1103,7 @@ function TopGainerCard({
           <div 
             key={leader.name} 
             className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${i === 0 ? 'border border-amber-500/30' : 'hover:bg-muted/50'}`}
-            onClick={() => onSelect?.(leader.name)}
+            onClick={() => onSelect?.(leader.name, leader.entryId)}
           >
             <div className="relative">
               {i === 0 ? (
@@ -1999,24 +2001,6 @@ export default function PredictPage() {
     [userBetsByMarket]
   );
   const predictedMarkets = useMemo(() => new Set(Array.from(userBetsByMarket.keys())), [userBetsByMarket]);
-  const showNativeMarketUnavailable = useCallback(() => {
-    if (!user) {
-      toast({
-        title: "Sign in required",
-        description: "Sign in to place predictions.",
-      });
-      setLocation("/login");
-      return;
-    }
-
-    toast({
-      title: "Native markets are read-only",
-      description: "Only Real-World Markets persist bets right now. Native market staking is temporarily disabled.",
-      variant: "destructive",
-    });
-  }, [setLocation, toast, user]);
-
-
   const hydratedMarkets = useMemo((): PredictionMarket[] => {
     const dbMarkets = (nativeUpdownData || []).filter((m: any) => m.visibility === "live");
     if (dbMarkets.length > 0) {
@@ -2084,6 +2068,8 @@ export default function PredictPage() {
           title: m.title || `${p1.name || "?"} vs ${p2.name || "?"}`,
           person1: { name: p1.name || e1.label || "?", avatar: p1.avatar || "", currentScore: Number(p1.trendScore || 0) },
           person2: { name: p2.name || e2.label || "?", avatar: p2.avatar || "", currentScore: Number(p2.trendScore || 0) },
+          person1EntryId: e1.id,
+          person2EntryId: e2.id,
           category: (m.category || "misc") as CategoryFilter,
           endTime: "Sun 23:59 UTC",
           totalPool: Number(m.seedVolume || 0),
@@ -2114,6 +2100,7 @@ export default function PredictPage() {
               currentGain: Math.abs(Number(p.change7d || 0) * Number(p.trendScore || 0) / 100),
               percentGain: Math.abs(Number(p.change7d || 0)),
               rank: Number(p.rank || 0),
+              entryId: e.id,
             };
           }),
           totalPool: Number(m.seedVolume || 0),
@@ -2179,7 +2166,16 @@ export default function PredictPage() {
 
   const handleEnterJackpot = () => {
     if (!selectedJackpotPerson) return;
-    showNativeMarketUnavailable();
+    if (!user) {
+      toast({ title: "Sign in required", description: "Sign in to place predictions." });
+      setLocation("/login");
+      return;
+    }
+    toast({
+      title: "Jackpot coming soon",
+      description: "Weekly Jackpot predictions are not yet available. Stay tuned!",
+      variant: "destructive",
+    });
   };
 
   const nativeUpdownBetMutation = useMutation({
@@ -2197,6 +2193,34 @@ export default function PredictPage() {
       await Promise.all([
         refreshProfile(),
         queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Failed to place prediction",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const nativeMarketBetMutation = useMutation({
+    mutationFn: async ({ marketId, entryId, stakeAmount, marketType }: { marketId: string; entryId: string; stakeAmount: number; marketType: string }) => {
+      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, { entryId, stakeAmount });
+      return res.json();
+    },
+    onSuccess: async (_data, variables) => {
+      toast({
+        title: "Prediction placed!",
+        description: variables.marketType === "h2h" ? "Your head-to-head prediction has been recorded." : "Your top gainer prediction has been recorded.",
+      });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile(),
+        queryClient.invalidateQueries({ queryKey: [`/api/native-markets/${variables.marketType}`] }),
         queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
       ]);
@@ -2248,19 +2272,80 @@ export default function PredictPage() {
   };
 
   const handleH2HSelect = (market: HeadToHeadMarket, person: 1 | 2) => {
-    void market;
-    void person;
-    showNativeMarketUnavailable();
+    if (!user) {
+      toast({ title: "Sign in required", description: "Sign in to place predictions." });
+      setLocation("/login");
+      return;
+    }
+
+    const entryId = person === 1 ? market.person1EntryId : market.person2EntryId;
+    if (!entryId) {
+      toast({ title: "Market unavailable", description: "This market is missing required entries. Please try another market.", variant: "destructive" });
+      return;
+    }
+
+    const picked = person === 1 ? market.person1 : market.person2;
+    const opponent = person === 1 ? market.person2 : market.person1;
+    const sentiment = person === 1 ? market.person1Percent : 100 - market.person1Percent;
+    const stakePool = market.totalPool || 1;
+    const pickedPool = (sentiment / 100) * stakePool || 1;
+    const estimatedPayout = Math.round((stakePool / pickedPool) * 10) / 10;
+
+    setPendingSelection({
+      type: "h2h",
+      choice: picked.name,
+      marketName: market.title,
+      marketId: market.id,
+      entryId,
+      startScore: opponent.currentScore,
+      currentScore: picked.currentScore,
+      crowdSentiment: sentiment,
+      estimatedPayout,
+    });
+    setStakeModalOpen(true);
   };
 
-  const handleGainerSelect = (market: TopGainerMarket, name: string) => {
-    void market;
-    void name;
-    showNativeMarketUnavailable();
+  const handleGainerSelect = (market: TopGainerMarket, name: string, entryId?: string) => {
+    if (!user) {
+      toast({ title: "Sign in required", description: "Sign in to place predictions." });
+      setLocation("/login");
+      return;
+    }
+
+    if (!entryId) {
+      toast({ title: "Market unavailable", description: "This market is missing required entries. Please try another market.", variant: "destructive" });
+      return;
+    }
+
+    const categoryLabel = market.category.charAt(0).toUpperCase() + market.category.slice(1);
+
+    setPendingSelection({
+      type: "gainer",
+      choice: name,
+      marketName: `Top Gainer: ${categoryLabel}`,
+      marketId: market.id,
+      entryId,
+    });
+    setStakeModalOpen(true);
   };
 
   const handleConfirmStake = (amount: number) => {
-    if (!pendingSelection || pendingSelection.type !== "updown" || !pendingSelection.marketId) {
+    if (!pendingSelection || !pendingSelection.marketId) {
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      return;
+    }
+
+    if (pendingSelection.type === "h2h" || pendingSelection.type === "gainer") {
+      if (!pendingSelection.entryId) {
+        toast({ title: "Selection unavailable", description: "This market selection is not available right now.", variant: "destructive" });
+        return;
+      }
+      nativeMarketBetMutation.mutate({ marketId: pendingSelection.marketId, entryId: pendingSelection.entryId, stakeAmount: amount, marketType: pendingSelection.type });
+      return;
+    }
+
+    if (pendingSelection.type !== "updown") {
       setStakeModalOpen(false);
       setPendingSelection(null);
       return;
@@ -2762,7 +2847,7 @@ export default function PredictPage() {
                     key={market.id} 
                     market={market} 
                     isMarketClosed={isMarketClosed}
-                    onSelect={(name) => handleGainerSelect(market, name)}
+                    onSelect={(name, entryId) => handleGainerSelect(market, name, entryId)}
                     isPredicted={predictedMarkets.has(market.id)}
                     isShimmering={false}
                   />
@@ -2879,7 +2964,7 @@ export default function PredictPage() {
               key={market.id} 
               market={market} 
               isMarketClosed={isMarketClosed}
-              onSelect={(name) => handleGainerSelect(market, name)}
+              onSelect={(name, entryId) => handleGainerSelect(market, name, entryId)}
               isPredicted={predictedMarkets.has(market.id)}
               isShimmering={false}
             />

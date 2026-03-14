@@ -28,6 +28,7 @@ export interface StakeSelection {
   choice: string;
   marketName: string;
   marketId?: string;
+  entryId?: string;
   startScore?: number;
   currentScore?: number;
   crowdSentiment?: number;

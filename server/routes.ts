@@ -9091,6 +9091,66 @@ Only return the JSON object.`;
     }
   });
 
+  app.post("/api/native-markets/:marketId/bet", requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      const { marketId } = req.params;
+      const { entryId, stakeAmount } = req.body;
+
+      if (!entryId || !stakeAmount || typeof stakeAmount !== "number" || stakeAmount <= 0) {
+        return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
+      }
+
+      if (stakeAmount > MAX_BET_STAKE) {
+        return res.status(400).json({ error: `Maximum stake is ${MAX_BET_STAKE} credits` });
+      }
+
+      if (!checkBetRateLimit(authReq.userId!)) {
+        return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
+      }
+
+      const [market] = await db
+        .select({ id: predictionMarkets.id, closeAt: predictionMarkets.closeAt })
+        .from(predictionMarkets)
+        .where(
+          and(
+            eq(predictionMarkets.id, marketId),
+            inArray(predictionMarkets.marketType, ["updown", "h2h", "gainer"]),
+            eq(predictionMarkets.status, "OPEN"),
+            eq(predictionMarkets.visibility, "live")
+          )
+        )
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({ error: "Market not found or not open" });
+      }
+
+      if (market.closeAt && new Date(market.closeAt) < new Date()) {
+        return res.status(400).json({ error: "Betting is closed for this market" });
+      }
+
+      const result = await placeMarketBet({
+        userId: authReq.userId!,
+        marketId: market.id,
+        entryId,
+        stakeAmount,
+      });
+
+      if ("error" in result) {
+        return res.status(result.status).json({ error: result.error });
+      }
+
+      return res.json(result.data);
+    } catch (error: any) {
+      if (error?.message === "Insufficient credits") {
+        return res.status(400).json({ error: "Insufficient credits" });
+      }
+      console.error("[Native Markets] Bet error:", error);
+      res.status(500).json({ error: "Failed to place bet" });
+    }
+  });
+
   app.get("/api/native-markets/:marketId/history", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { marketId } = req.params;
@@ -9993,13 +10053,17 @@ Only return the JSON object.`;
           .map((s, i) => ({ personId: i === 0 ? personA.id : personB.id, score: s!.score, snapshotAt: s!.snapshotAt }));
         const h2hMeta = openingScores.length > 0 ? { openingScores } : undefined;
 
+        const h2hCategory = personA.category?.toLowerCase() === personB.category?.toLowerCase()
+          ? (personA.category?.toLowerCase() || "misc")
+          : "trending";
+
         let slug = baseSlug;
         try {
           const [market] = await db.insert(predictionMarkets).values({
             marketType: "h2h",
             title: `${personA.name} vs ${personB.name}`,
             slug,
-            category: personA.category?.toLowerCase() || "misc",
+            category: h2hCategory,
             visibility: "live",
             status: "OPEN",
             startAt: monday,
@@ -10026,7 +10090,7 @@ Only return the JSON object.`;
                 marketType: "h2h",
                 title: `${personA.name} vs ${personB.name}`,
                 slug,
-                category: personA.category?.toLowerCase() || "misc",
+                category: h2hCategory,
                 visibility: "live",
                 status: "OPEN",
                 startAt: monday,
