@@ -9110,7 +9110,11 @@ Only return the JSON object.`;
       }
 
       const [market] = await db
-        .select({ id: predictionMarkets.id, closeAt: predictionMarkets.closeAt })
+        .select({
+          id: predictionMarkets.id,
+          closeAt: predictionMarkets.closeAt,
+          endAt: predictionMarkets.endAt,
+        })
         .from(predictionMarkets)
         .where(
           and(
@@ -9126,7 +9130,11 @@ Only return the JSON object.`;
         return res.status(404).json({ error: "Market not found or not open" });
       }
 
-      if (market.closeAt && new Date(market.closeAt) < new Date()) {
+      const now = new Date();
+      if (
+        (market.closeAt && new Date(market.closeAt) < now) ||
+        (market.endAt && new Date(market.endAt) < now)
+      ) {
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
 

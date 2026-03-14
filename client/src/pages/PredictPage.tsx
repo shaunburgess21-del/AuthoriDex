@@ -1124,8 +1124,8 @@ function TopGainerCard({
             <PersonAvatar name={leader.name} avatar={leader.avatar} size="sm" />
             <span className="text-sm flex-1 truncate">{leader.name}</span>
             <div className="text-right">
-              <p className="text-xs font-mono font-bold text-green-500">+{leader.currentGain.toLocaleString('en-US')} pts</p>
-              <p className="text-[10px] font-mono text-muted-foreground">+{leader.percentGain}%</p>
+              <p className="text-xs font-mono font-bold text-green-500">+{leader.percentGain}%</p>
+              <p className="text-[10px] font-mono text-muted-foreground">+{leader.currentGain.toLocaleString('en-US')} pts added</p>
             </div>
           </div>
         ))}

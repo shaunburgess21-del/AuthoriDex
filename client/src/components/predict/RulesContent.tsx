@@ -25,21 +25,21 @@ export const RULES_CONTENT: Record<string, RulesEntry> = {
     ]
   },
   h2h: {
-    title: "How Head-to-Head Works",
-    description: "Predict who will gain more trend points this week",
+    title: "How Head-to-Head Settles",
+    description: "Predict who will finish the week with the higher Trend Score at market close.",
     steps: [
-      { icon: <Swords className="h-4 w-4 text-violet-500" />, title: "Pick Your Winner", description: "Choose which person you think will gain more trend points by the end of the week." },
-      { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Stake Your Credits", description: "Your potential multiplier depends on how many others picked the same side." },
-      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Winner Takes the Pool", description: "If your pick gains more points, you split the total pool with other winners." },
+      { icon: <Swords className="h-4 w-4 text-violet-500" />, title: "Pick The Higher Closer", description: "Choose which person you think will have the higher Trend Score when the weekly market closes." },
+      { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Closing Score Decides", description: "This market settles on the final closing Trend Score at weekly close, not on who gained more points during the week." },
+      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Winner Takes the Pool", description: "If your pick finishes with the higher closing Trend Score, you split the total pool with other winners." },
     ]
   },
   gainer: {
     title: "How Top Gainer Works",
-    description: "Predict which celebrity will add the most raw points",
+    description: "Predict which celebrity will post the highest percentage gain by market close.",
     steps: [
-      { icon: <BarChart3 className="h-4 w-4 text-violet-500" />, title: "Raw Points Focus", description: "This market tracks total points ADDED, not percentage gain. Big names can add more raw points." },
-      { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Pick Your Horse", description: "Choose who you think will add the most absolute trend points this week." },
-      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Winner Determined by Data", description: "The person with the highest raw point increase when the market closes wins." },
+      { icon: <BarChart3 className="h-4 w-4 text-violet-500" />, title: "Percentage Gain Focus", description: "This market is decided by percentage gain from the opening score, not raw points added." },
+      { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Pick The Best Climber", description: "Choose who you think will post the biggest percentage increase by the time the market closes." },
+      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Winner Determined by Data", description: "The person with the highest percentage gain at close wins the market." },
     ]
   },
   community: {
