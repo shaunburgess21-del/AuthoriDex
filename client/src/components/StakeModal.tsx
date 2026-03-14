@@ -13,6 +13,7 @@ import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo"
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent";
+import { shouldRenderCrowdSentiment } from "@/lib/predict-display";
 
 const MISSION_HEADERS: Record<string, string> = {
   jackpot: "Predict the exact Trend Score at week's end to win the pot.",
@@ -281,7 +282,7 @@ export function StakeModal({
             </p>
           )}
 
-          {selection.crowdSentiment && (
+          {shouldRenderCrowdSentiment(selection.crowdSentiment) && (
             <p className="text-xs text-muted-foreground text-center">
               Crowd Sentiment: <span className="font-mono font-medium text-foreground">{selection.crowdSentiment}% of the pool is backing this outcome</span>
             </p>

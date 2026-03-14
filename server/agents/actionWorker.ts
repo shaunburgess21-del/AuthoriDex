@@ -22,18 +22,24 @@ import {
   RATIONALE_CONFIDENCE_THRESHOLD,
 } from "./constants";
 import type { AgentConfigData, MarketWithEntries, PredictionDecision } from "./types";
+import { buildAgentActionStakeIdempotencyKey, buildAgentBetMetadata } from "./actionWorker-utils";
 
 const STALE_IN_PROGRESS_TIMEOUT_MINUTES = 30;
 
 async function processDueActions(): Promise<void> {
-  await db.execute(sql`
+  const reclaimed = await db.execute(sql`
     UPDATE scheduled_agent_actions
     SET status = 'pending',
         error_message = NULL,
         executed_at = NULL
     WHERE status = 'in_progress'
       AND execute_after <= NOW() - (${STALE_IN_PROGRESS_TIMEOUT_MINUTES} * INTERVAL '1 minute')
+    RETURNING id
   `);
+  const reclaimedCount = (reclaimed.rows || []).length;
+  if (reclaimedCount > 0) {
+    log(`[ActionWorker] Reclaimed ${reclaimedCount} stale in_progress actions`);
+  }
 
   const claimedActions = await db.execute(sql`
     WITH claimable AS (
@@ -100,6 +106,7 @@ async function executeAction(action: {
       .limit(1);
 
     if (existingBet) {
+      log(`[ActionWorker] reclaimed_then_already_executed action=${action.id} agent=${action.agentId} market=${action.marketId}`);
       await markExecuted(action.id);
       return;
     }
@@ -271,10 +278,7 @@ async function executeAction(action: {
           status: "active",
           agentId: agent.id,
           confidence: decision.confidence?.toFixed(2) ?? null,
-          betMetadata: {
-            actionId: action.id,
-            ...(rationale ? { rationale } : {}),
-          },
+          betMetadata: buildAgentBetMetadata(action.id, rationale),
         })
         .returning();
 
@@ -285,13 +289,13 @@ async function executeAction(action: {
         walletType: "VIRTUAL",
         balanceAfter: updatedProfile.predictCredits,
         source: "agent_action",
-        idempotencyKey: `agent_stake_action_${action.id}`,
+        idempotencyKey: buildAgentActionStakeIdempotencyKey(action.id),
         metadata: {
           marketId: action.marketId,
           entryId: action.entryId,
           betId: insertedBet.id,
           agentId: agent.id,
-          actionId: action.id,
+          ...buildAgentBetMetadata(action.id),
         },
       });
 

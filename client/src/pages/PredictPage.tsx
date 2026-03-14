@@ -16,6 +16,7 @@ import { TrendingPerson } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
+import { formatSignedPercent, formatSignedPoints, getRecentActivityMarketPath } from "@/lib/predict-display";
 import {
   AGENT_AVATAR_FALLBACK_CLASS,
   getAvatarGradient,
@@ -1114,8 +1115,10 @@ function TopGainerCard({
             <PersonAvatar name={leader.name} avatar={leader.avatar} size="sm" />
             <span className="text-sm flex-1 truncate">{leader.name}</span>
             <div className="text-right">
-              <p className="text-xs font-mono font-bold text-green-500">+{leader.percentGain}%</p>
-              <p className="text-[10px] font-mono text-muted-foreground">+{leader.currentGain.toLocaleString('en-US')} pts added</p>
+              <p className={`text-xs font-mono font-bold ${leader.percentGain >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatSignedPercent(leader.percentGain)}</p>
+              <p className={`text-[10px] font-mono ${leader.currentGain >= 0 ? 'text-muted-foreground' : 'text-red-400/80'}`}>
+                {formatSignedPoints(leader.currentGain)} pts added
+              </p>
             </div>
           </div>
         ))}
@@ -2089,8 +2092,8 @@ export default function PredictPage() {
             return {
               name: p.name || e.label || "?",
               avatar: p.avatar || "",
-              currentGain: Math.abs(Number(p.change7d || 0) * Number(p.trendScore || 0) / 100),
-              percentGain: Math.abs(Number(p.change7d || 0)),
+              currentGain: Number(p.change7d || 0) * Number(p.trendScore || 0) / 100,
+              percentGain: Number(p.change7d || 0),
               rank: Number(p.rank || 0),
               entryId: e.id,
             };
@@ -2651,41 +2654,46 @@ export default function PredictPage() {
                           {recentActivity.slice(0, 8).map((item) => (
                             <div
                               key={item.id}
-                              className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
+                              className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 cursor-pointer focus-within:bg-muted/30"
                               data-testid={`recent-activity-${item.id}`}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => {
+                                setLocation(getRecentActivityMarketPath(item.marketSlug));
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setLocation(getRecentActivityMarketPath(item.marketSlug));
+                                }
+                              }}
                             >
-                              <UserSocialAvatar
-                                displayName={item.displayName}
-                                avatarUrl={item.avatarUrl}
-                                isAgent={item.isAgent}
-                                className="h-9 w-9 shrink-0"
-                                onClick={item.username && item.isPublic ? () => setLocation(`/u/${item.username}`) : undefined}
-                              />
+                              <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                                <UserSocialAvatar
+                                  displayName={item.displayName}
+                                  avatarUrl={item.avatarUrl}
+                                  isAgent={item.isAgent}
+                                  className="h-9 w-9 shrink-0"
+                                  onClick={item.username && item.isPublic ? () => setLocation(`/u/${item.username}`) : undefined}
+                                />
+                              </div>
                               <div className="min-w-0 flex-1">
                                 <div className="mb-1 flex items-center gap-2 flex-wrap">
                                   <button
                                     className={`text-sm font-medium ${item.username && item.isPublic ? "hover:underline cursor-pointer" : "cursor-default"}`}
-                                    onClick={() => item.username && item.isPublic && setLocation(`/u/${item.username}`)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      item.username && item.isPublic && setLocation(`/u/${item.username}`);
+                                    }}
                                     aria-disabled={!(item.username && item.isPublic)}
                                   >
                                     {item.displayName}
                                   </button>
                                   <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
                                 </div>
-                                <button
-                                  className="text-left"
-                                  onClick={() => {
-                                    if (item.marketType === "community") {
-                                      setLocation(`/markets/${item.marketSlug}`);
-                                    } else {
-                                      setLocation("/predict");
-                                    }
-                                  }}
-                                >
-                                  <p className="text-sm text-foreground line-clamp-1 hover:underline">
-                                    backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
-                                  </p>
-                                </button>
+                                <p className="text-sm text-foreground line-clamp-1 hover:underline">
+                                  backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
+                                </p>
                                 <p className="mt-0.5 text-xs text-muted-foreground">
                                   {item.stakeAmount.toLocaleString("en-US")} credits{item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
                                 </p>

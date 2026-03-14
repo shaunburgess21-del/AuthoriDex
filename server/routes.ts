@@ -40,6 +40,7 @@ import { getLastFullRefreshAt } from "./jobs/live-tick";
 import { getLastRunMeta } from "./jobs/ingest";
 import { getMediastackBudgetSummary } from "./providers/mediastack";
 import pLimit from "p-limit";
+import { buildOpeningScores } from "./native-markets/openingScores";
 
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
@@ -10109,9 +10110,7 @@ Only return the JSON object.`;
         for (const [personA, personB] of pairings) {
           const baseSlug = `h2h-${personA.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-vs-${personB.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
 
-          const openingScores = [snapMap.get(personA.id), snapMap.get(personB.id)]
-            .filter(Boolean)
-            .map((s, i) => ({ personId: i === 0 ? personA.id : personB.id, score: s!.score, snapshotAt: s!.snapshotAt }));
+          const openingScores = buildOpeningScores([personA.id, personB.id], snapMap);
           const h2hMeta = openingScores.length > 0 ? { openingScores } : undefined;
 
           const h2hCategory = personA.category?.toLowerCase() === personB.category?.toLowerCase()
@@ -10230,10 +10229,7 @@ Only return the JSON object.`;
 
         // Pick top 5 in this category by fame index
         const ranked = [...catPeople].sort((a, b) => (scoreMap.get(b.id) ?? 0) - (scoreMap.get(a.id) ?? 0)).slice(0, 5);
-        const openingScores = ranked
-          .map(p => snapMap.get(p.id))
-          .filter(Boolean)
-          .map((s, i) => ({ personId: ranked[i].id, score: s!.score, snapshotAt: s!.snapshotAt }));
+        const openingScores = buildOpeningScores(ranked.map((person) => person.id), snapMap);
         const gainerMeta = openingScores.length > 0 ? { openingScores } : undefined;
 
         const title = `Top Gainer: ${cat.charAt(0).toUpperCase() + cat.slice(1)}`;
