@@ -23,7 +23,8 @@ export function computePrediction(
   market: MarketWithEntries,
   signals: TrendSignals,
   crowd: CrowdSplit,
-  rng: RNG = productionRNG
+  rng: RNG = productionRNG,
+  entrySignals?: Map<string, TrendSignals>
 ): PredictionDecision {
   const abstain = (
     reason: PredictionDecision["abstainReason"]
@@ -63,6 +64,17 @@ export function computePrediction(
       scores[entry.id] = Math.max(0.05, scores[entry.id] - signalBoost);
     }
   });
+
+  // Step 3a-bis: Per-entry trend signals (H2H/gainer — each entry has its own person)
+  if (entrySignals && entrySignals.size > 0) {
+    for (const [entryId, entrySig] of Array.from(entrySignals)) {
+      const momentum = entrySig.scoreDelta7d / 15;
+      const wikiBoost = entrySig.wikiPulse === "rising" ? 0.08 : entrySig.wikiPulse === "falling" ? -0.08 : 0;
+      const newsBoost = entrySig.newsLevel === "red" ? 0.05 : entrySig.newsLevel === "green" ? -0.03 : 0;
+      const entryBoost = (momentum * 0.12 + wikiBoost + newsBoost) * agent.recencyWeight;
+      scores[entryId] = Math.max(0.05, (scores[entryId] ?? (1 / n)) + entryBoost);
+    }
+  }
 
   // Step 3b: Prestige bias — favour positive outcomes for high-baseline figures
   if (signals.scoreBaseline > 6500 && agent.prestigeBias > 0.6) {

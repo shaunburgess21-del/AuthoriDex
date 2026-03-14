@@ -35,6 +35,7 @@ export interface MarketEntryData {
   id: string;
   label: string | null;
   totalStake: number;
+  personId?: string | null;
 }
 
 export interface TrendSignals {

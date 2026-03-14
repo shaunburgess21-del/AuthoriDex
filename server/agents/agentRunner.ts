@@ -252,6 +252,7 @@ async function runAgentBatchOnce(): Promise<{
           id: marketEntries.id,
           label: marketEntries.label,
           totalStake: marketEntries.totalStake,
+          personId: marketEntries.personId,
         })
         .from(marketEntries)
         .where(eq(marketEntries.marketId, market.id));
@@ -270,7 +271,17 @@ async function runAgentBatchOnce(): Promise<{
       const signals = await getTrendSignals(market.personId);
       const crowd = computeCrowdSplit(entries);
 
-      const decision = computePrediction(agentData, marketData, signals, crowd);
+      let entrySignals: Map<string, TrendSignals> | undefined;
+      if ((market.marketType === "h2h" || market.marketType === "gainer") && entries.some(e => e.personId)) {
+        entrySignals = new Map();
+        for (const entry of entries) {
+          if (entry.personId) {
+            entrySignals.set(entry.id, await getTrendSignals(entry.personId));
+          }
+        }
+      }
+
+      const decision = computePrediction(agentData, marketData, signals, crowd, undefined, entrySignals);
 
       if (decision.abstain) {
         abstained++;
@@ -411,6 +422,7 @@ async function runConvictionSweep(
           id: marketEntries.id,
           label: marketEntries.label,
           totalStake: marketEntries.totalStake,
+          personId: marketEntries.personId,
         })
         .from(marketEntries)
         .where(eq(marketEntries.marketId, market.id));
