@@ -10023,21 +10023,34 @@ Only return the JSON object.`;
         existingSlugs.clear();
       }
 
-      // Build pairings by rank proximity (1v2, 3v4, ...) then some random cross-pairings
+      // Group top people by category
+      const byCategory = new Map<string, typeof top>();
+      for (const person of top) {
+        const cat = (person.category || "misc").toLowerCase();
+        if (!byCategory.has(cat)) byCategory.set(cat, []);
+        byCategory.get(cat)!.push(person);
+      }
+
+      // Same-category pairings first (ranked 1v2, 3v4 within each category)
       const pairings: [typeof top[0], typeof top[0]][] = [];
-      for (let i = 0; i < top.length - 1 && pairings.length < 10; i += 2) {
-        pairings.push([top[i], top[i + 1]]);
+      const paired = new Set<string>();
+      for (const [, group] of Array.from(byCategory)) {
+        for (let i = 0; i < group.length - 1 && pairings.length < 15; i += 2) {
+          pairings.push([group[i], group[i + 1]]);
+          paired.add(group[i].id);
+          paired.add(group[i + 1].id);
+        }
       }
-      // Add ~5 random cross-category pairings
-      const shuffled = [...top];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      for (let i = 0; i < shuffled.length - 1 && pairings.length < 15; i += 2) {
-        const a = shuffled[i], b = shuffled[i + 1];
-        if (a.id !== b.id && !pairings.some(p => (p[0].id === a.id && p[1].id === b.id) || (p[0].id === b.id && p[1].id === a.id))) {
-          pairings.push([a, b]);
+
+      // Fill remaining slots with cross-category "trending" pairings from unpaired people
+      if (pairings.length < 15) {
+        const unpaired = top.filter(p => !paired.has(p.id));
+        for (let i = unpaired.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [unpaired[i], unpaired[j]] = [unpaired[j], unpaired[i]];
+        }
+        for (let i = 0; i < unpaired.length - 1 && pairings.length < 15; i += 2) {
+          pairings.push([unpaired[i], unpaired[i + 1]]);
         }
       }
 
