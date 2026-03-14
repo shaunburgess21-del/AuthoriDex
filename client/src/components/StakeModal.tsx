@@ -445,7 +445,7 @@ export function StakeModal({
               ref={confirmButtonRef}
               onClick={handleConfirm}
               className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-              disabled={!stakeAmount || parsedAmount <= 0 || balanceAfter < 0}
+              disabled={!stakeAmount || parsedAmount < MIN_STAKE || balanceAfter < 0}
               data-testid="button-confirm-stake"
             >
               Confirm

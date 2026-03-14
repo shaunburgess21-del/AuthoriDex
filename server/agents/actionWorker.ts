@@ -314,8 +314,25 @@ async function executeAction(action: {
       `[ActionWorker] Executed: agent=${agent.displayName} market=${action.marketId} entry=${entry.label} confidence=${decision.confidence} stake=${action.stakeAmount}`
     );
   } catch (err: any) {
-    await markFailed(action.id, err?.message ?? String(err));
-    console.error(`[ActionWorker] Action ${action.id} failed:`, err);
+    const [alreadyPlacedBet] = await db
+      .select({ id: marketBets.id })
+      .from(marketBets)
+      .where(
+        and(
+          eq(marketBets.marketId, action.marketId),
+          eq(marketBets.agentId, action.agentId),
+          sql`${marketBets.betMetadata} ->> 'actionId' = ${action.id}`
+        )
+      )
+      .limit(1);
+
+    if (alreadyPlacedBet) {
+      log(`[ActionWorker] Bet committed but post-commit step failed for action=${action.id}, marking executed`);
+      await markExecuted(action.id);
+    } else {
+      await markFailed(action.id, err?.message ?? String(err));
+      console.error(`[ActionWorker] Action ${action.id} failed:`, err);
+    }
   }
 }
 

@@ -311,6 +311,8 @@ interface HeadToHeadMarket {
   person2: { name: string; avatar: string; currentScore: number };
   person1EntryId?: string;
   person2EntryId?: string;
+  person1Id?: string;
+  person2Id?: string;
   category: CategoryFilter;
   endTime: string;
   totalPool: number;
@@ -386,7 +388,7 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
 interface TopGainerMarket {
   id: string;
   category: CategoryFilter;
-  leaders: { name: string; avatar: string; currentGain: number; percentGain: number; rank?: number; entryId?: string }[];
+  leaders: { name: string; avatar: string; currentGain: number; percentGain: number; rank?: number; entryId?: string; personId?: string }[];
   totalPool: number;
   endTime: string;
   totalEntries?: number;
@@ -1907,6 +1909,7 @@ export default function PredictPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user, profile, refreshProfile } = useAuth();
+  const { favoriteIds } = useFavorites();
   const [showFirstTimeModal, setShowFirstTimeModal] = useState(false);
   const [selectedType, setSelectedType] = useState<PredictionType>("all");
   const [showMyPositions, setShowMyPositions] = useState(false);
@@ -2024,7 +2027,7 @@ export default function PredictPage() {
           upMultiplier,
           downMultiplier,
           endTime: "Sun 23:59 UTC",
-          totalPool: Number(m.seedVolume || 0),
+          totalPool: upStake + downStake + Number(m.seedVolume || 0),
           upPoolPercent: upPercent || 50,
           category: (m.category || person.category || "misc") as CategoryFilter,
           upEntryId: upEntry?.id,
@@ -2064,6 +2067,8 @@ export default function PredictPage() {
           person2: { name: p2.name || e2.label || "?", avatar: p2.avatar || "", currentScore: Number(p2.trendScore || 0) },
           person1EntryId: e1.id,
           person2EntryId: e2.id,
+          person1Id: e1.personId || "",
+          person2Id: e2.personId || "",
           category: (m.category || "misc") as CategoryFilter,
           endTime: "Sun 23:59 UTC",
           totalPool,
@@ -2096,6 +2101,7 @@ export default function PredictPage() {
               percentGain: Number(p.change7d || 0),
               rank: Number(p.rank || 0),
               entryId: e.id,
+              personId: e.personId || "",
             };
           }),
           totalPool,
@@ -2385,22 +2391,31 @@ export default function PredictPage() {
   };
 
   // Section-specific filtering logic
-  const filteredUpDown = hydratedMarkets.filter(m => 
-    (updownCategory === "all" || updownCategory === "trending" || m.category === updownCategory) &&
+  const matchesCategory = (cat: CategoryFilter, marketCategory: string, personId?: string) => {
+    if (cat === "all") return true;
+    if (cat === "trending") return true;
+    if (cat === "favorites") return !!personId && favoriteIds.has(personId);
+    return marketCategory === cat;
+  };
+
+  const filteredUpDown = hydratedMarkets.filter(m =>
+    matchesCategory(updownCategory, m.category, m.personId) &&
     (!updownSearch || m.personName.toLowerCase().includes(updownSearch.toLowerCase())) &&
     (!showMyPositions || userBetsByMarket.has(m.id))
   ).sort((a: any, b: any) => updownCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
-  const filteredH2H = hydratedH2H.filter(m => 
-    (h2hCategory === "all" || h2hCategory === "trending" || m.category === h2hCategory) &&
-    (!h2hSearch || m.title.toLowerCase().includes(h2hSearch.toLowerCase()) || 
+  const filteredH2H = hydratedH2H.filter(m =>
+    (h2hCategory === "all" || h2hCategory === "trending" ||
+     (h2hCategory === "favorites" ? (favoriteIds.has(m.person1Id || "") || favoriteIds.has(m.person2Id || "")) : m.category === h2hCategory)) &&
+    (!h2hSearch || m.title.toLowerCase().includes(h2hSearch.toLowerCase()) ||
      m.person1.name.toLowerCase().includes(h2hSearch.toLowerCase()) ||
      m.person2.name.toLowerCase().includes(h2hSearch.toLowerCase())) &&
     (!showMyPositions || userBetsByMarket.has(m.id))
   ).sort((a: any, b: any) => h2hCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
-  const filteredGainers = hydratedGainers.filter(m => 
-    (gainerCategory === "all" || gainerCategory === "trending" || m.category === gainerCategory) &&
+  const filteredGainers = hydratedGainers.filter(m =>
+    (gainerCategory === "all" || gainerCategory === "trending" ||
+     (gainerCategory === "favorites" ? m.leaders.some(l => l.personId && favoriteIds.has(l.personId)) : m.category === gainerCategory)) &&
     (!gainerSearch || m.category.toLowerCase().includes(gainerSearch.toLowerCase()) ||
      m.leaders.some(l => l.name.toLowerCase().includes(gainerSearch.toLowerCase()))) &&
     (!showMyPositions || userBetsByMarket.has(m.id))

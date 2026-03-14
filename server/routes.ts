@@ -9176,7 +9176,11 @@ Only return the JSON object.`;
       }
 
       const [market] = await db
-        .select({ id: predictionMarkets.id, closeAt: predictionMarkets.closeAt })
+        .select({
+          id: predictionMarkets.id,
+          closeAt: predictionMarkets.closeAt,
+          endAt: predictionMarkets.endAt,
+        })
         .from(predictionMarkets)
         .where(
           and(
@@ -9192,7 +9196,11 @@ Only return the JSON object.`;
         return res.status(404).json({ error: "Market not found or not open" });
       }
 
-      if (market.closeAt && new Date(market.closeAt) < new Date()) {
+      const now = new Date();
+      if (
+        (market.closeAt && new Date(market.closeAt) < now) ||
+        (market.endAt && new Date(market.endAt) < now)
+      ) {
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
 
@@ -10330,39 +10338,9 @@ Only return the JSON object.`;
         let slug = `gainer-${cat}-week-${weekNumber}`;
 
         try {
-          const [market] = await db.insert(predictionMarkets).values({
-            marketType: "gainer",
-            title,
-            slug,
-            category: cat,
-            visibility: "live",
-            status: "OPEN",
-            startAt: monday,
-            endAt: sunday,
-            weekNumber,
-            seedParticipants: 0,
-            seedVolume: "0",
-            metadata: gainerMeta,
-            seedConfig: { enabled: true, targetParticipantsMin: 25, targetParticipantsMax: 60, targetPoolMin: 8000, targetPoolMax: 20000, distributionBias: {} },
-            featured: false,
-          }).returning();
-
-          const entryValues = ranked.map((person, idx) => ({
-            marketId: market.id,
-            entryType: "person" as const,
-            personId: person.id,
-            label: person.name,
-            displayOrder: idx,
-            seedCount: 0,
-            imageUrl: person.avatar,
-          }));
-          await db.insert(marketEntries).values(entryValues);
-          created++;
-        } catch (slugErr: any) {
-          if (slugErr.code === '23505') {
-            slug = `${slug}-${randomUUID().slice(0, 6)}`;
+          await db.transaction(async (tx) => {
             try {
-              const [market] = await db.insert(predictionMarkets).values({
+              const [market] = await tx.insert(predictionMarkets).values({
                 marketType: "gainer",
                 title,
                 slug,
@@ -10388,14 +10366,46 @@ Only return the JSON object.`;
                 seedCount: 0,
                 imageUrl: person.avatar,
               }));
-              await db.insert(marketEntries).values(entryValues);
+              await tx.insert(marketEntries).values(entryValues);
               created++;
-            } catch (retryErr) {
-              console.error(`[GenerateGainer] Retry failed for ${cat}:`, retryErr);
+            } catch (slugErr: any) {
+              if (slugErr.code === '23505') {
+                slug = `${slug}-${randomUUID().slice(0, 6)}`;
+                const [market] = await tx.insert(predictionMarkets).values({
+                  marketType: "gainer",
+                  title,
+                  slug,
+                  category: cat,
+                  visibility: "live",
+                  status: "OPEN",
+                  startAt: monday,
+                  endAt: sunday,
+                  weekNumber,
+                  seedParticipants: 0,
+                  seedVolume: "0",
+                  metadata: gainerMeta,
+                  seedConfig: { enabled: true, targetParticipantsMin: 25, targetParticipantsMax: 60, targetPoolMin: 8000, targetPoolMax: 20000, distributionBias: {} },
+                  featured: false,
+                }).returning();
+
+                const entryValues = ranked.map((person, idx) => ({
+                  marketId: market.id,
+                  entryType: "person" as const,
+                  personId: person.id,
+                  label: person.name,
+                  displayOrder: idx,
+                  seedCount: 0,
+                  imageUrl: person.avatar,
+                }));
+                await tx.insert(marketEntries).values(entryValues);
+                created++;
+              } else {
+                throw slugErr;
+              }
             }
-          } else {
-            console.error(`[GenerateGainer] Insert failed for ${cat}:`, slugErr.message);
-          }
+          });
+        } catch (txErr: any) {
+          console.error(`[GenerateGainer] Failed for ${cat}:`, txErr.message);
         }
       }
 

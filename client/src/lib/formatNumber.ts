@@ -4,10 +4,12 @@
  * @returns Formatted number string with commas (e.g., "515,809")
  */
 export function formatNumber(value: number): string {
+  if (!Number.isFinite(value)) return "0";
   return Math.round(value).toLocaleString('en-US');
 }
 
 export function compactNumber(num: number, decimals = 0): string {
+  if (!Number.isFinite(num)) return "0";
   const abs = Math.abs(num);
   if (abs >= 1_000_000) return `${(num / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
   if (abs >= 1_000) return `${(num / 1_000).toFixed(decimals).replace(/\.0$/, '')}k`;
@@ -21,7 +23,7 @@ export function formatDelta(value: number | null | undefined): string | null {
 }
 
 export function compactVotes(count: number | null | undefined): string {
-  if (count == null) return '0';
+  if (count == null || !Number.isFinite(count)) return '0';
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
   if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
   return count.toString();
@@ -31,6 +33,7 @@ const APPROVAL_SEGMENT_COLORS = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#0
 
 /** Returns a color for approval rating (1-5) or percentage (0-100). */
 export function getApprovalColor(ratingOrPct: number): string {
+  if (!Number.isFinite(ratingOrPct)) return APPROVAL_SEGMENT_COLORS[2];
   const rating = ratingOrPct > 5 ? Math.round((ratingOrPct / 100) * 4) + 1 : Math.round(ratingOrPct);
   const clampedRating = Math.max(1, Math.min(5, rating));
   return APPROVAL_SEGMENT_COLORS[clampedRating - 1];
