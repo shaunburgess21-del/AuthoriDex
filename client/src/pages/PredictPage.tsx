@@ -66,6 +66,7 @@ import {
   Gamepad2,
   UtensilsCrossed,
   Heart,
+  MessageSquare,
   type LucideIcon
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -78,6 +79,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CardSection } from "@/components/CardSection";
 import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 
 function MarketAvatar({ market }: { market: any }) {
   const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
@@ -2422,105 +2424,7 @@ export default function PredictPage() {
         </div>
       </div>
       <div className="container mx-auto px-4 max-w-7xl">
-        {recentActivity.length > 0 && (
-          <section className="mt-4 mb-8">
-            <div
-              className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mb-4 cursor-pointer select-none group"
-              onClick={() => setTownSquareCollapsed(!townSquareCollapsed)}
-            >
-              <div>
-                <h2 className="text-lg font-serif font-bold">Town Square</h2>
-                <p className="text-xs sm:text-sm text-muted-foreground">Recent prediction activity across live markets</p>
-              </div>
-              <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-slate-700/30 transition-transform duration-200 ${townSquareCollapsed ? '' : 'rotate-180'}`}>
-                <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
-              </div>
-            </div>
-            {!townSquareCollapsed && (
-              <Card className="border-violet-500/10 bg-card/95">
-                <div className="divide-y divide-border/50">
-                  {recentActivity.slice(0, 8).map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
-                      data-testid={`recent-activity-${item.id}`}
-                    >
-                      <button
-                        className={`shrink-0 rounded-full ${item.username && item.isPublic ? "cursor-pointer" : "cursor-default"}`}
-                        onClick={() => item.username && item.isPublic && setLocation(`/u/${item.username}`)}
-                        aria-label={item.username && item.isPublic ? `View ${item.displayName}'s profile` : item.displayName}
-                        aria-disabled={!(item.username && item.isPublic)}
-                      >
-                        <Avatar className="h-9 w-9">
-                          {item.avatarUrl && !item.isAgent ? (
-                            <AvatarImage src={item.avatarUrl} alt={item.displayName} />
-                          ) : (
-                            <AvatarFallback
-                              className={`${getAvatarGradient(item.displayName)} ${
-                                item.isAgent
-                                  ? AGENT_AVATAR_FALLBACK_CLASS
-                                  : HUMAN_AVATAR_FALLBACK_CLASS
-                              }`}
-                            >
-                              {getAvatarInitials(item.displayName)}
-                            </AvatarFallback>
-                          )}
-                        </Avatar>
-                      </button>
-                      <div className="min-w-0 flex-1">
-                        <div className="mb-1 flex items-center gap-2 flex-wrap">
-                          <button
-                            className={`text-sm font-medium ${item.username && item.isPublic ? "hover:underline cursor-pointer" : "cursor-default"}`}
-                            onClick={() => item.username && item.isPublic && setLocation(`/u/${item.username}`)}
-                            aria-disabled={!(item.username && item.isPublic)}
-                          >
-                            {item.displayName}
-                          </button>
-                          <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
-                        </div>
-                        <button
-                          className="text-left"
-                          onClick={() => {
-                            if (item.marketType === "community") {
-                              setLocation(`/markets/${item.marketSlug}`);
-                            } else {
-                              setLocation("/predict");
-                            }
-                          }}
-                        >
-                          <p className="text-sm text-foreground line-clamp-1 hover:underline">
-                            backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
-                          </p>
-                        </button>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {item.stakeAmount.toLocaleString("en-US")} credits{item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
-                        </p>
-                        {item.rationale && (
-                          <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-                            "{item.rationale}"
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t border-border/50 px-4 py-2.5 text-center">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setLocation("/predict/activity");
-                    }}
-                    className="text-sm font-medium text-violet-400 hover:text-violet-300 transition-colors"
-                  >
-                    Show more activity →
-                  </button>
-                </div>
-              </Card>
-            )}
-          </section>
-        )}
-
-        {/* Real-World Markets Section - Now First */}
+        {/* Real-World Markets Section - First */}
         {showSection("community") && (
           <section className="mb-12 mt-[5px]">
             <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mt-[15px] mb-[15px]">
@@ -2613,6 +2517,98 @@ export default function PredictPage() {
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
+
+            {/* Town Square - Daily Movers style, anchored after Real-World Markets */}
+            {recentActivity.length > 0 && (
+              <div className="mt-8 mb-8 min-w-0 shrink-0 rounded-xl pulse-card-blue transition-all duration-200" data-testid="town-square-card">
+                <div className={`p-4 ${townSquareCollapsed ? 'pt-4 pb-4' : 'pt-5'}`}>
+                  <div
+                    className="flex items-center gap-3 cursor-pointer select-none group"
+                    onClick={() => setTownSquareCollapsed(!townSquareCollapsed)}
+                    data-testid="town-square-header"
+                  >
+                    <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-blue shrink-0">
+                      <MessageSquare className="h-4 w-4 text-blue-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold text-slate-100">Town Square</h3>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider">Recent prediction activity across live markets</p>
+                    </div>
+                    <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-slate-700/30 transition-transform duration-200 shrink-0 ${townSquareCollapsed ? '' : 'rotate-180'}`}>
+                      <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
+                    </div>
+                  </div>
+                  {!townSquareCollapsed && (
+                    <div className="mt-4">
+                      <Card className="border-slate-700/50 bg-slate-800/30">
+                        <div className="divide-y divide-border/50">
+                          {recentActivity.slice(0, 8).map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
+                              data-testid={`recent-activity-${item.id}`}
+                            >
+                              <UserSocialAvatar
+                                displayName={item.displayName}
+                                avatarUrl={item.avatarUrl}
+                                isAgent={item.isAgent}
+                                className="h-9 w-9 shrink-0"
+                                onClick={item.username && item.isPublic ? () => setLocation(`/u/${item.username}`) : undefined}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="mb-1 flex items-center gap-2 flex-wrap">
+                                  <button
+                                    className={`text-sm font-medium ${item.username && item.isPublic ? "hover:underline cursor-pointer" : "cursor-default"}`}
+                                    onClick={() => item.username && item.isPublic && setLocation(`/u/${item.username}`)}
+                                    aria-disabled={!(item.username && item.isPublic)}
+                                  >
+                                    {item.displayName}
+                                  </button>
+                                  <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
+                                </div>
+                                <button
+                                  className="text-left"
+                                  onClick={() => {
+                                    if (item.marketType === "community") {
+                                      setLocation(`/markets/${item.marketSlug}`);
+                                    } else {
+                                      setLocation("/predict");
+                                    }
+                                  }}
+                                >
+                                  <p className="text-sm text-foreground line-clamp-1 hover:underline">
+                                    backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
+                                  </p>
+                                </button>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  {item.stakeAmount.toLocaleString("en-US")} credits{item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
+                                </p>
+                                {item.rationale && (
+                                  <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                                    "{item.rationale}"
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="border-t border-border/50 px-4 py-2.5 text-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLocation("/predict/activity");
+                            }}
+                            className="text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors"
+                          >
+                            Show more activity →
+                          </button>
+                        </div>
+                      </Card>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </section>
         )}
 

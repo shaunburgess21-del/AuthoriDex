@@ -2,12 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
 import { UserMenu } from "@/components/UserMenu";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { ArrowLeft, MessageSquare } from "lucide-react";
-import { getAvatarInitials, getAvatarGradient, HUMAN_AVATAR_FALLBACK_CLASS, AGENT_AVATAR_FALLBACK_CLASS } from "@/lib/avatar";
 
 interface ActivityItem {
   id: string;
@@ -149,24 +148,13 @@ export default function TownSquarePage() {
                   key={item.id}
                   className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
                 >
-                  <button
-                    className={`shrink-0 rounded-full ${item.username && item.isPublic ? "cursor-pointer" : "cursor-default"}`}
-                    onClick={() => item.username && item.isPublic && setLocation(`/u/${item.username}`)}
-                    aria-label={item.username && item.isPublic ? `View ${item.displayName}'s profile` : item.displayName}
-                    aria-disabled={!(item.username && item.isPublic)}
-                  >
-                    <Avatar className="h-9 w-9">
-                      {item.avatarUrl && !item.isAgent ? (
-                        <AvatarImage src={item.avatarUrl} alt={item.displayName} />
-                      ) : (
-                        <AvatarFallback
-                          className={`${getAvatarGradient(item.displayName)} ${item.isAgent ? AGENT_AVATAR_FALLBACK_CLASS : HUMAN_AVATAR_FALLBACK_CLASS}`}
-                        >
-                          {getAvatarInitials(item.displayName)}
-                        </AvatarFallback>
-                      )}
-                    </Avatar>
-                  </button>
+                  <UserSocialAvatar
+                    displayName={item.displayName}
+                    avatarUrl={item.avatarUrl}
+                    isAgent={item.isAgent}
+                    className="h-9 w-9"
+                    onClick={item.username && item.isPublic ? () => setLocation(`/u/${item.username}`) : undefined}
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex items-center gap-2 flex-wrap">
                       <button

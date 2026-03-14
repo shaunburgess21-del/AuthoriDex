@@ -627,6 +627,22 @@
     box-shadow: 0 0 20px -4px rgba(249, 115, 22, 0.4);
   }
 
+  /* ===== USER SOCIAL AVATAR - Circular with retro pixelated pattern ===== */
+  .user-social-avatar-fallback {
+    position: relative;
+  }
+  .user-social-avatar-fallback::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: 
+      linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px),
+      linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 4px 4px;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+
   /* ===== VOTE CTA PULSE ===== */
   @keyframes vote-cta-pulse {
     0%, 100% {
