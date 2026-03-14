@@ -1455,9 +1455,8 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
-    enabled: isAdmin && activeSection === "overview",
+    enabled: isAdmin,
     refetchInterval: 120000,
-    refetchOnWindowFocus: false,
   });
 
   // Fetch audit logs - only when admin and on overview section
