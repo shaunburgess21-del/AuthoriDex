@@ -10028,7 +10028,6 @@ Only return the JSON object.`;
                 eq(predictionMarkets.status, "OPEN")
               )
             );
-          existingSlugs.clear();
         }
 
         const byCategory = new Map<string, typeof top>();
@@ -10078,7 +10077,6 @@ Only return the JSON object.`;
         let createdCount = 0;
         for (const [personA, personB] of pairings) {
           const baseSlug = `h2h-${personA.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-vs-${personB.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
-          if (existingSlugs.has(baseSlug)) continue;
 
           const openingScores = [snapMap.get(personA.id), snapMap.get(personB.id)]
             .filter(Boolean)
@@ -10090,60 +10088,33 @@ Only return the JSON object.`;
             : "trending";
 
           let slug = baseSlug;
-          try {
-            const [market] = await tx.insert(predictionMarkets).values({
-              marketType: "h2h",
-              title: `${personA.name} vs ${personB.name}`,
-              slug,
-              category: h2hCategory,
-              visibility: "live",
-              status: "OPEN",
-              startAt: monday,
-              endAt: sunday,
-              weekNumber,
-              seedParticipants: 0,
-              seedVolume: "0",
-              metadata: h2hMeta,
-              seedConfig: { enabled: true, targetParticipantsMin: 40, targetParticipantsMax: 120, targetPoolMin: 10000, targetPoolMax: 35000, distributionBias: { personA: 50, personB: 50 } },
-              featured: false,
-            }).returning();
-
-            await tx.insert(marketEntries).values([
-              { marketId: market.id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, seedCount: 0, imageUrl: null },
-              { marketId: market.id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, seedCount: 0, imageUrl: null },
-            ]);
-            createdCount++;
-            existingSlugs.add(slug);
-          } catch (slugErr: any) {
-            if (slugErr.code !== "23505") {
-              throw slugErr;
-            }
-
+          while (existingSlugs.has(slug)) {
             slug = `${baseSlug}-${randomUUID().slice(0, 6)}`;
-            const [market] = await tx.insert(predictionMarkets).values({
-              marketType: "h2h",
-              title: `${personA.name} vs ${personB.name}`,
-              slug,
-              category: h2hCategory,
-              visibility: "live",
-              status: "OPEN",
-              startAt: monday,
-              endAt: sunday,
-              weekNumber,
-              seedParticipants: 0,
-              seedVolume: "0",
-              metadata: h2hMeta,
-              seedConfig: { enabled: true, targetParticipantsMin: 40, targetParticipantsMax: 120, targetPoolMin: 10000, targetPoolMax: 35000, distributionBias: { personA: 50, personB: 50 } },
-              featured: false,
-            }).returning();
-
-            await tx.insert(marketEntries).values([
-              { marketId: market.id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, seedCount: 0, imageUrl: null },
-              { marketId: market.id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, seedCount: 0, imageUrl: null },
-            ]);
-            createdCount++;
-            existingSlugs.add(slug);
           }
+
+          const [market] = await tx.insert(predictionMarkets).values({
+            marketType: "h2h",
+            title: `${personA.name} vs ${personB.name}`,
+            slug,
+            category: h2hCategory,
+            visibility: "live",
+            status: "OPEN",
+            startAt: monday,
+            endAt: sunday,
+            weekNumber,
+            seedParticipants: 0,
+            seedVolume: "0",
+            metadata: h2hMeta,
+            seedConfig: { enabled: true, targetParticipantsMin: 40, targetParticipantsMax: 120, targetPoolMin: 10000, targetPoolMax: 35000, distributionBias: { personA: 50, personB: 50 } },
+            featured: false,
+          }).returning();
+
+          await tx.insert(marketEntries).values([
+            { marketId: market.id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, seedCount: 0, imageUrl: null },
+            { marketId: market.id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, seedCount: 0, imageUrl: null },
+          ]);
+          createdCount++;
+          existingSlugs.add(slug);
         }
 
         return createdCount;
