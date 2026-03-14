@@ -259,7 +259,9 @@ export async function getDailyCallCount(date?: string): Promise<number> {
     if (row.length > 0 && row[0].responseData) {
       return JSON.parse(row[0].responseData).calls ?? 0;
     }
-  } catch (err) {}
+  } catch (err) {
+    console.error("[mediastack] Error fetching daily call count:", err);
+  }
   return 0;
 }
 

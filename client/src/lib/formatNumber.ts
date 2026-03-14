@@ -27,6 +27,15 @@ export function compactVotes(count: number | null | undefined): string {
   return count.toString();
 }
 
+const APPROVAL_SEGMENT_COLORS = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
+
+/** Returns a color for approval rating (1-5) or percentage (0-100). */
+export function getApprovalColor(ratingOrPct: number): string {
+  const rating = ratingOrPct > 5 ? Math.round((ratingOrPct / 100) * 4) + 1 : Math.round(ratingOrPct);
+  const clampedRating = Math.max(1, Math.min(5, rating));
+  return APPROVAL_SEGMENT_COLORS[clampedRating - 1];
+}
+
 /**
  * Format a net worth string to be more readable
  * Converts large numbers to B/M format and handles various input formats

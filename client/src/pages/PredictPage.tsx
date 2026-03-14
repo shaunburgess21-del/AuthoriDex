@@ -80,6 +80,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CardSection } from "@/components/CardSection";
 import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
+import { formatActivityAge } from "@/lib/formatDate";
 
 function MarketAvatar({ market }: { market: any }) {
   const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
@@ -90,17 +91,6 @@ function MarketAvatar({ market }: { market: any }) {
       <AvatarFallback className="text-sm rounded-md">{(market.title || "?")[0]}</AvatarFallback>
     </Avatar>
   );
-}
-
-function formatActivityAge(timestamp: string) {
-  const diffMs = Date.now() - new Date(timestamp).getTime();
-  const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
-  if (diffMinutes < 1) return "just now";
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
 }
 
 function ParticipantAvatarStack({
@@ -1942,30 +1932,30 @@ export default function PredictPage() {
   const marketCycle = useMarketCycle();
   const isMarketClosed = marketCycle.status === "CLOSED";
   
-  const { data: trendingResponse, isLoading: isLoadingPeople } = useQuery<{ data: TrendingPerson[], totalCount: number, hasMore: boolean }>({
+  const { data: trendingResponse, isLoading: isLoadingPeople, error: trendingError, refetch: refetchTrending } = useQuery<{ data: TrendingPerson[], totalCount: number, hasMore: boolean }>({
     queryKey: ['/api/trending?sort=rank'],
   });
   const trendingPeople = trendingResponse?.data || [];
   
-  const { data: openMarketsData, isLoading: isLoadingOpenMarkets } = useQuery<any[]>({
+  const { data: openMarketsData, isLoading: isLoadingOpenMarkets, error: openMarketsError, refetch: refetchOpenMarkets } = useQuery<any[]>({
     queryKey: ['/api/open-markets'],
   });
   const openMarkets = openMarketsData || [];
 
-  const { data: nativeUpdownData, isLoading: updownLoading } = useQuery<any[]>({
+  const { data: nativeUpdownData, isLoading: updownLoading, error: updownError, refetch: refetchUpdown } = useQuery<any[]>({
     queryKey: ['/api/native-markets/updown'],
   });
-  const { data: nativeH2hData, isLoading: h2hLoading } = useQuery<any[]>({
+  const { data: nativeH2hData, isLoading: h2hLoading, error: h2hError, refetch: refetchH2h } = useQuery<any[]>({
     queryKey: ['/api/native-markets/h2h'],
   });
-  const { data: nativeGainerData, isLoading: gainerLoading } = useQuery<any[]>({
+  const { data: nativeGainerData, isLoading: gainerLoading, error: gainerError, refetch: refetchGainers } = useQuery<any[]>({
     queryKey: ['/api/native-markets/gainer'],
   });
-  const { data: userBetsData } = useQuery<any>({
+  const { data: userBetsData, error: userBetsError, refetch: refetchUserBets } = useQuery<any>({
     queryKey: ['/api/me/predictions'],
     enabled: !!user,
   });
-  const { data: recentActivity = [] } = useQuery<RecentPredictionActivity[]>({
+  const { data: recentActivity = [], error: recentActivityError, refetch: refetchRecentActivity } = useQuery<RecentPredictionActivity[]>({
     queryKey: ['/api/predict/recent-activity'],
     staleTime: 60_000,
     refetchInterval: 90_000,
@@ -2496,7 +2486,18 @@ export default function PredictPage() {
               </button>
             ))}
           </HorizontalScroll>
-          {user && userBetsByMarket.size > 0 && (
+          {user && userBetsError && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetchUserBets()}
+              className="shrink-0 text-destructive border-destructive/50"
+              data-testid="button-retry-user-bets"
+            >
+              Retry loading bets
+            </Button>
+          )}
+          {user && userBetsByMarket.size > 0 && !userBetsError && (
             <Button
               variant={showMyPositions ? "default" : "outline"}
               size="sm"
@@ -2558,7 +2559,15 @@ export default function PredictPage() {
               onAuthRequired={() => setLocation("/login")}
               includeCustomTopic={true}
             />
-            {isLoadingOpenMarkets ? (
+            {openMarketsError ? (
+              <Card className="p-8 text-center">
+                <p className="text-destructive mb-2">Couldn&apos;t load Real-World Markets</p>
+                <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
+                <Button onClick={() => refetchOpenMarkets()} data-testid="button-retry-open-markets">
+                  Retry
+                </Button>
+              </Card>
+            ) : isLoadingOpenMarkets ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <Card key={i} className="p-4 space-y-3">
@@ -2606,7 +2615,17 @@ export default function PredictPage() {
             </div>
 
             {/* Town Square - Daily Movers style, anchored after Real-World Markets */}
-            {recentActivity.length > 0 && (
+            {recentActivityError ? (
+              <div className="mt-8 mb-8">
+                <Card className="p-6 text-center">
+                  <p className="text-destructive mb-2">Couldn&apos;t load Town Square</p>
+                  <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
+                  <Button onClick={() => refetchRecentActivity()} size="sm">
+                    Retry
+                  </Button>
+                </Card>
+              </div>
+            ) : recentActivity.length > 0 && (
               <div className="mt-8 mb-8 min-w-0 shrink-0 rounded-xl pulse-card-blue transition-all duration-200" data-testid="town-square-card">
                 <div className={`p-4 ${townSquareCollapsed ? 'pt-4 pb-4' : 'pt-5'}`}>
                   <div
@@ -2703,15 +2722,23 @@ export default function PredictPage() {
         <MarketCycleHero marketState={marketCycle} />
 
         {showSection("jackpot") && (
-          <WeeklyJackpotHero 
-            onEnterJackpot={handleEnterJackpot}
-            isMarketClosed={isMarketClosed}
-            timeRemaining={marketCycle.timeRemaining}
-            trendingPeople={trendingPeople}
-            selectedPerson={selectedJackpotPerson}
-            onSelectPerson={setSelectedJackpotPerson}
-            isLoading={isLoadingPeople}
-          />
+          trendingError ? (
+            <Card className="p-8 text-center mb-8">
+              <p className="text-destructive mb-2">Couldn&apos;t load trending data</p>
+              <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
+              <Button onClick={() => refetchTrending()} data-testid="button-retry-trending">Retry</Button>
+            </Card>
+          ) : (
+            <WeeklyJackpotHero 
+              onEnterJackpot={handleEnterJackpot}
+              isMarketClosed={isMarketClosed}
+              timeRemaining={marketCycle.timeRemaining}
+              trendingPeople={trendingPeople}
+              selectedPerson={selectedJackpotPerson}
+              onSelectPerson={setSelectedJackpotPerson}
+              isLoading={isLoadingPeople}
+            />
+          )
         )}
 
         {showSection("updown") && (
@@ -2732,7 +2759,13 @@ export default function PredictPage() {
               user={user}
               onAuthRequired={() => setLocation("/login")}
             />
-            {updownLoading ? (
+            {updownError ? (
+              <Card className="p-8 text-center">
+                <p className="text-destructive mb-2">Couldn&apos;t load Up/Down markets</p>
+                <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
+                <Button onClick={() => refetchUpdown()} data-testid="button-retry-updown">Retry</Button>
+              </Card>
+            ) : updownLoading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="h-8 w-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
               </div>
@@ -2785,7 +2818,13 @@ export default function PredictPage() {
               user={user}
               onAuthRequired={() => setLocation("/login")}
             />
-            {h2hLoading ? (
+            {h2hError ? (
+              <Card className="p-8 text-center">
+                <p className="text-destructive mb-2">Couldn&apos;t load Head-to-Head markets</p>
+                <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
+                <Button onClick={() => refetchH2h()} data-testid="button-retry-h2h">Retry</Button>
+              </Card>
+            ) : h2hLoading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="h-8 w-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
               </div>
@@ -2838,7 +2877,13 @@ export default function PredictPage() {
               user={user}
               onAuthRequired={() => setLocation("/login")}
             />
-            {gainerLoading ? (
+            {gainerError ? (
+              <Card className="p-8 text-center">
+                <p className="text-destructive mb-2">Couldn&apos;t load Top Gainer markets</p>
+                <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
+                <Button onClick={() => refetchGainers()} data-testid="button-retry-gainers">Retry</Button>
+              </Card>
+            ) : gainerLoading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="h-8 w-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
               </div>

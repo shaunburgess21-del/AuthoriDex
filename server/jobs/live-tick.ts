@@ -180,7 +180,9 @@ async function runLiveTickOnce(): Promise<{ processed: number; moved: number }> 
       if (latest?.ts) {
         _lastFullRefreshAt = new Date(latest.ts);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("[LiveTick] Error fetching last full refresh timestamp:", e);
+    }
   }
 
   console.log(`[LiveTick] Processed ${liveScores.length} people, ${written} rows written, ${moved} rank changes, ${voteCounts.size} with recent votes`);

@@ -52,18 +52,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { sharePage } from "@/lib/share";
 import { useFavorites } from "@/hooks/useFavorites";
-import { formatNumber } from "@/lib/formatNumber";
+import { formatNumber, getApprovalColor } from "@/lib/formatNumber";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { getExceptionalIndicator } from "@/components/LeaderboardRow";
 import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-
-const APPROVAL_COLORS = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
-const getApprovalColor = (ratingOrPct: number): string => {
-  const rating = ratingOrPct > 5 ? Math.round((ratingOrPct / 100) * 4) + 1 : Math.round(ratingOrPct);
-  const clampedRating = Math.max(1, Math.min(5, rating));
-  return APPROVAL_COLORS[clampedRating - 1];
-};
 
 interface ValueVoteMetrics {
   userVote: "underrated" | "overrated" | "fairly_rated" | null;

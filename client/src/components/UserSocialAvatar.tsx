@@ -25,7 +25,10 @@ export function UserSocialAvatar({
   const gradient = getAvatarGradient(displayName);
   const initials = getAvatarInitials(displayName);
 
-  const wrapperClass = cn("shrink-0 rounded-full overflow-hidden", onClick && "cursor-pointer");
+  const wrapperClass = cn(
+    "shrink-0 rounded-full overflow-hidden ring-2 ring-white/10",
+    onClick && "cursor-pointer"
+  );
   return (
     <div
       role={onClick ? "button" : undefined}
@@ -40,10 +43,7 @@ export function UserSocialAvatar({
           <AvatarImage src={avatarUrl} alt={displayName} className="rounded-full object-cover" />
         ) : (
           <AvatarFallback
-            className={cn(
-              "rounded-full text-white font-semibold user-social-avatar-fallback",
-              gradient
-            )}
+            className={cn("rounded-full text-white font-semibold", gradient)}
           >
             {initials}
           </AvatarFallback>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -373,16 +373,21 @@ function CopyDebugSummaryButton({ scoreBreakdown }: { scoreBreakdown: ScoreBreak
     navigator.clipboard.writeText(summary).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {
+    }).catch((err) => {
+      console.error("[AdminDashboard] Clipboard copy failed:", err);
       // Fallback: create temporary textarea for copying
-      const textarea = document.createElement('textarea');
-      textarea.value = summary;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = summary;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (fallbackErr) {
+        console.error("[AdminDashboard] Fallback copy also failed:", fallbackErr);
+      }
     });
   };
   
@@ -407,6 +412,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
   isPending: boolean;
   editMarket?: any;
 }) {
+  const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [openMarketType, setOpenMarketType] = useState<"binary" | "multi" | "updown">("binary");
@@ -502,7 +508,9 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
             setSelectedMarketCelebName(editMarket.personId.slice(0, 8) + "...");
             setMarketCelebSearch(editMarket.personId.slice(0, 8) + "...");
           }
-        }).catch(() => {
+        }).catch((err) => {
+          console.error("[AdminDashboard] Failed to fetch celebrity for market:", err);
+          toast({ title: "Could not load celebrity name", description: "Using ID fallback.", variant: "destructive" });
           setSelectedMarketCelebName(editMarket.personId.slice(0, 8) + "...");
           setMarketCelebSearch(editMarket.personId.slice(0, 8) + "...");
         });
@@ -2570,7 +2578,9 @@ export default function AdminDashboard() {
           setCelebritySearchInput(pid.slice(0, 8) + "...");
           setSelectedCelebrityName(pid.slice(0, 8) + "...");
         }
-      }).catch(() => {
+      }).catch((err) => {
+        console.error("[AdminDashboard] Failed to fetch celebrity for poll:", err);
+        toast({ title: "Could not load celebrity name", description: "Using ID fallback.", variant: "destructive" });
         setCelebritySearchInput(pid.slice(0, 8) + "...");
         setSelectedCelebrityName(pid.slice(0, 8) + "...");
       });
@@ -2713,14 +2723,14 @@ export default function AdminDashboard() {
     setOpOptionSearchResults(newResults);
   };
 
-  const filteredOpinionPolls = (opinionPollsList || []).filter((poll: any) => {
+  const filteredOpinionPolls = useMemo(() => (opinionPollsList || []).filter((poll: any) => {
     if (opinionPollFilter !== "all" && poll.visibility !== opinionPollFilter) return false;
     if (opinionPollCategoryFilter !== "all" && poll.category !== opinionPollCategoryFilter) return false;
     if (opinionPollSearchQuery && !poll.title?.toLowerCase().includes(opinionPollSearchQuery.toLowerCase())) return false;
     return true;
-  });
+  }), [opinionPollsList, opinionPollFilter, opinionPollCategoryFilter, opinionPollSearchQuery]);
 
-  const filteredPolls = trendingPollsList?.filter((poll) => {
+  const filteredPolls = useMemo(() => trendingPollsList?.filter((poll) => {
     if (pollFilter === "missing_image") {
       return poll.status === "draft" && !poll.personId && !poll.imageUrl;
     }
@@ -2728,16 +2738,16 @@ export default function AdminDashboard() {
     if (pollCategoryFilter !== "all" && poll.category !== pollCategoryFilter) return false;
     if (pollSearchQuery && !poll.headline?.toLowerCase().includes(pollSearchQuery.toLowerCase()) && !poll.subjectText?.toLowerCase().includes(pollSearchQuery.toLowerCase())) return false;
     return true;
-  });
+  }) ?? [], [trendingPollsList, pollFilter, pollCategoryFilter, pollSearchQuery]);
 
-  const filteredMatchups = (matchups || []).filter((matchup) => {
+  const filteredMatchups = useMemo(() => (matchups || []).filter((matchup) => {
     if (matchupVisFilter !== "all" && matchup.visibility !== matchupVisFilter) return false;
     if (matchupSearchQuery) {
       const q = matchupSearchQuery.toLowerCase();
       if (!matchup.title?.toLowerCase().includes(q) && !matchup.optionAText?.toLowerCase().includes(q) && !matchup.optionBText?.toLowerCase().includes(q) && !matchup.category?.toLowerCase().includes(q)) return false;
     }
     return true;
-  });
+  }), [matchups, matchupVisFilter, matchupSearchQuery]);
 
   const handleDeleteConfirm = () => {
     if (!deleteTarget) return;
@@ -2756,11 +2766,19 @@ export default function AdminDashboard() {
     }
   };
 
-  const filteredCelebrities = celebrities?.filter(c => 
-    celebritySearch === "" || 
+  const filteredCelebrities = useMemo(() => celebrities?.filter(c =>
+    celebritySearch === "" ||
     c.name.toLowerCase().includes(celebritySearch.toLowerCase()) ||
     c.category.toLowerCase().includes(celebritySearch.toLowerCase())
-  );
+  ) ?? [], [celebrities, celebritySearch]);
+
+  const rwMarkets = useMemo(() => (markets || []).filter(m => m.marketType === "community").filter(m => !rwMarketSearch || m.title?.toLowerCase().includes(rwMarketSearch.toLowerCase())), [markets, rwMarketSearch]);
+
+  const jMarkets = useMemo(() => (markets || []).filter(m => m.marketType === "jackpot").filter(m => {
+    if (nativeVisFilter !== "all" && m.visibility !== nativeVisFilter) return false;
+    if (nativeSearchQuery && !m.title?.toLowerCase().includes(nativeSearchQuery.toLowerCase())) return false;
+    return true;
+  }), [markets, nativeVisFilter, nativeSearchQuery]);
 
   const getActionBadgeColor = (actionType: string) => {
     if (actionType.startsWith("CREATE")) return "bg-emerald-500/20 text-emerald-400";
@@ -3322,9 +3340,7 @@ export default function AdminDashboard() {
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                       </div>
-                    ) : (() => {
-                      const rwMarkets = (markets || []).filter(m => m.marketType === "community").filter(m => !rwMarketSearch || m.title?.toLowerCase().includes(rwMarketSearch.toLowerCase()));
-                      return rwMarkets.length > 0 ? (
+                    ) : rwMarkets.length > 0 ? (
                         <div className="space-y-3">
                           {rwMarkets.map((market) => (
                             <div
@@ -3425,8 +3441,7 @@ export default function AdminDashboard() {
                             Create First Market
                           </Button>
                         </div>
-                      );
-                    })()}
+                      )}
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -3460,13 +3475,7 @@ export default function AdminDashboard() {
                     </div>
                     {marketsLoading ? (
                       <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
-                    ) : (() => {
-                      const jMarkets = (markets || []).filter(m => m.marketType === "jackpot").filter(m => {
-                        if (nativeVisFilter !== "all" && m.visibility !== nativeVisFilter) return false;
-                        if (nativeSearchQuery && !m.title?.toLowerCase().includes(nativeSearchQuery.toLowerCase())) return false;
-                        return true;
-                      });
-                      return jMarkets.length > 0 ? (
+                    ) : jMarkets.length > 0 ? (
                         <div className="space-y-2">
                           {jMarkets.map((market) => (
                             <div key={market.id} className="flex items-center justify-between p-3 rounded-lg border gap-3" data-testid={`jackpot-row-${market.id}`}>
@@ -3503,8 +3512,7 @@ export default function AdminDashboard() {
                             Generate Jackpot Markets
                           </Button>
                         </div>
-                      );
-                    })()}
+                      )}
                   </CardContent>
                 </Card>
               </TabsContent>

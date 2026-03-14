@@ -4,27 +4,14 @@ import { Button } from "@/components/ui/button";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { Popover, PopoverTrigger, PopoverContent, PopoverClose } from "@/components/ui/popover";
 import { useState, useEffect, useRef } from "react";
-import { compactNumber, formatDelta, compactVotes } from "@/lib/formatNumber";
+import { compactNumber, formatDelta, compactVotes, getApprovalColor } from "@/lib/formatNumber";
 import { ThumbsUp, Star, Rocket, Zap, TrendingUp, TrendingDown, Flame, Check, X } from "lucide-react";
 
-const SEGMENT_COLORS_5 = [
-  '#FF0000',
-  '#FF9100',
-  '#FFC400',
-  '#76FF03',
-  '#00C853',
-];
+const SEGMENT_COLORS_5 = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
 
 const getRatingColor = (rating: number): string => {
   const idx = Math.max(0, Math.min(4, rating - 1));
   return SEGMENT_COLORS_5[idx];
-};
-
-const getApprovalColor = (ratingOrPct: number): string => {
-  // Accept either a 1-5 rating or a 0-100 pct; normalise to 1-5 index
-  const rating = ratingOrPct > 5 ? Math.round((ratingOrPct / 100) * 4) + 1 : Math.round(ratingOrPct);
-  const clampedRating = Math.max(1, Math.min(5, rating));
-  return SEGMENT_COLORS_5[clampedRating - 1];
 };
 
 type LeaderboardTab = "fame" | "approval";

@@ -39,9 +39,11 @@ import {
 import { getLastFullRefreshAt } from "./jobs/live-tick";
 import { getLastRunMeta } from "./jobs/ingest";
 import { getMediastackBudgetSummary } from "./providers/mediastack";
+import pLimit from "p-limit";
 
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
+const COMMENT_MAX_LENGTH = 5000;
 const BOT_UA_PATTERNS = /bot|crawl|spider|slurp|wget|curl|fetch|headless|phantom|puppet|selenium|lighthouse|preview|embed|scrape/i;
 const PREFETCH_HEADERS = ['purpose', 'sec-purpose', 'x-purpose'];
 const SESSION_COOKIE_NAME = 'fdx_sid';
@@ -1051,7 +1053,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .select({ ts: sql<Date>`MAX(${trendingPeople.liveUpdatedAt})` })
           .from(trendingPeople);
         if (liveTs?.ts) liveUpdatedAt = new Date(liveTs.ts);
-      } catch (e) {}
+      } catch (e) {
+        console.error("[diagnostics] Error fetching liveUpdatedAt:", e);
+      }
 
       if (!fullRefresh || !liveUpdatedAt) {
         try {
@@ -1069,7 +1073,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (!fullRefresh) fullRefresh = completedDate;
             if (!liveUpdatedAt) liveUpdatedAt = completedDate;
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error("[diagnostics] Error fetching latest ingestion run:", e);
+        }
       }
 
       const lastScoredAt = fullRefresh || liveUpdatedAt;
@@ -1091,7 +1097,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             startedAtFormatted: formatRelativeTime(activeRun.startedAt),
           };
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error("[diagnostics] Error fetching run in progress:", e);
+      }
 
       res.json({
         freshness,
@@ -2796,16 +2804,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POST /api/celebrity-metrics/sync - Sync all celebrity metrics (admin)
-  app.post("/api/celebrity-metrics/sync", async (req, res) => {
+  app.post("/api/celebrity-metrics/sync", requireAuth, requireAdmin, async (req, res) => {
     try {
       // Get all celebrities from trending_people
       const celebrities = await db.select({ id: trendingPeople.id }).from(trendingPeople);
-      
-      let synced = 0;
-      for (const celebrity of celebrities) {
-        await recomputeCelebrityMetrics(celebrity.id);
-        synced++;
-      }
+      const limit = pLimit(5);
+      const results = await Promise.all(
+        celebrities.map((c) => limit(() => recomputeCelebrityMetrics(c.id)))
+      );
+      const synced = results.length;
 
       res.json({ success: true, synced });
     } catch (error: any) {
@@ -2892,6 +2899,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate required fields
       if (!insightId || !content) {
         return res.status(400).json({ error: "insightId and content are required" });
+      }
+      if (typeof content !== "string" || content.length > COMMENT_MAX_LENGTH) {
+        return res.status(400).json({ error: `Comment content must be at most ${COMMENT_MAX_LENGTH} characters` });
       }
 
       // Create the comment
@@ -3807,28 +3817,34 @@ Only return the JSON object.`;
         avatarById[celeb.id] = celeb.avatar;
       }
       
-      // Get vote counts for each matchup and dynamically resolve avatars
-      const matchupsWithVotes = await Promise.all(matchupList.map(async (matchup) => {
-        const voteResults = await db.select({
-          value: votes.value,
-          count: count(),
-        })
-        .from(votes)
-        .where(and(
-          eq(votes.voteType, 'face_off'),
-          eq(votes.targetId, matchup.id)
-        ))
-        .groupBy(votes.value);
-        
-        const realAVotes = Number(voteResults.find(v => v.value === 'option_a')?.count || 0);
-        const realBVotes = Number(voteResults.find(v => v.value === 'option_b')?.count || 0);
-        const displayAVotes = realAVotes + (matchup.seedVotesA || 0);
-        const displayBVotes = realBVotes + (matchup.seedVotesB || 0);
+      // Single query for all vote counts (batch instead of N+1)
+      const matchupIds = matchupList.map((m) => m.id);
+      const voteCountsMap = new Map<string, { option_a: number; option_b: number }>();
+      if (matchupIds.length > 0) {
+        const voteResults = await db
+          .select({
+            targetId: votes.targetId,
+            value: votes.value,
+            cnt: count(),
+          })
+          .from(votes)
+          .where(and(eq(votes.voteType, "face_off"), inArray(votes.targetId, matchupIds)))
+          .groupBy(votes.targetId, votes.value);
+        for (const row of voteResults) {
+          const existing = voteCountsMap.get(row.targetId) || { option_a: 0, option_b: 0 };
+          if (row.value === "option_a") existing.option_a = Number(row.cnt);
+          else if (row.value === "option_b") existing.option_b = Number(row.cnt);
+          voteCountsMap.set(row.targetId, existing);
+        }
+      }
+
+      const matchupsWithVotes = matchupList.map((matchup) => {
+        const counts = voteCountsMap.get(matchup.id) || { option_a: 0, option_b: 0 };
+        const displayAVotes = counts.option_a + (matchup.seedVotesA || 0);
+        const displayBVotes = counts.option_b + (matchup.seedVotesB || 0);
         const totalVotes = displayAVotes + displayBVotes;
-        
-        const optionAImageResolved = (matchup.personAId && avatarById[matchup.personAId]) || matchup.optionAImage || avatarByName[matchup.optionAText.toLowerCase()] || matchupBucketUrl(matchup.slug, matchup.optionAText) || null;
-        const optionBImageResolved = (matchup.personBId && avatarById[matchup.personBId]) || matchup.optionBImage || avatarByName[matchup.optionBText.toLowerCase()] || matchupBucketUrl(matchup.slug, matchup.optionBText) || null;
-        
+        const optionAImageResolved = (matchup.personAId && avatarById[matchup.personAId]) || matchup.optionAImage || avatarByName[matchup.optionAText?.toLowerCase()] || matchupBucketUrl(matchup.slug, matchup.optionAText) || null;
+        const optionBImageResolved = (matchup.personBId && avatarById[matchup.personBId]) || matchup.optionBImage || avatarByName[matchup.optionBText?.toLowerCase()] || matchupBucketUrl(matchup.slug, matchup.optionBText) || null;
         return {
           ...matchup,
           optionAImage: optionAImageResolved,
@@ -3839,7 +3855,7 @@ Only return the JSON object.`;
           optionAPercent: totalVotes > 0 ? Math.round((displayAVotes / totalVotes) * 100) : 50,
           optionBPercent: totalVotes > 0 ? Math.round((displayBVotes / totalVotes) * 100) : 50,
         };
-      }));
+      });
       
       res.json(matchupsWithVotes);
     } catch (error: any) {
@@ -4101,6 +4117,9 @@ Only return the JSON object.`;
       }
       if (!body || !body.trim()) {
         return res.status(400).json({ error: "Comment body is required" });
+      }
+      if (body.length > COMMENT_MAX_LENGTH) {
+        return res.status(400).json({ error: `Comment body must be at most ${COMMENT_MAX_LENGTH} characters` });
       }
       const [matchup] = await db.select().from(matchups).where(eq(matchups.slug, slug));
       if (!matchup) {
@@ -6646,9 +6665,13 @@ Only return the JSON object.`;
         return res.status(400).json({ error: "orderedIds must be an array" });
       }
       
-      // Update each matchup with its new order
-      for (let i = 0; i < orderedIds.length; i++) {
-        await db.update(matchups).set({ displayOrder: i + 1 }).where(eq(matchups.id, orderedIds[i]));
+      // Batch update display order in parallel
+      if (orderedIds.length > 0) {
+        await Promise.all(
+          orderedIds.map((id, i) =>
+            db.update(matchups).set({ displayOrder: i + 1 }).where(eq(matchups.id, id))
+          )
+        );
       }
       
       // Audit log
@@ -6923,6 +6946,9 @@ Only return the JSON object.`;
 
       if (!body || typeof body !== "string" || body.trim().length === 0) {
         return res.status(400).json({ error: "Comment body is required" });
+      }
+      if (body.length > COMMENT_MAX_LENGTH) {
+        return res.status(400).json({ error: `Comment body must be at most ${COMMENT_MAX_LENGTH} characters` });
       }
 
       const [poll] = await db
@@ -7671,6 +7697,9 @@ Only return the JSON object.`;
       if (!body?.trim()) {
         return res.status(400).json({ error: "Comment body is required" });
       }
+      if (body.length > COMMENT_MAX_LENGTH) {
+        return res.status(400).json({ error: `Comment body must be at most ${COMMENT_MAX_LENGTH} characters` });
+      }
 
       const [poll] = await db
         .select({ id: opinionPolls.id })
@@ -7809,16 +7838,17 @@ Only return the JSON object.`;
         createdBy: adminId,
       }).returning();
 
-      for (let i = 0; i < options.length; i++) {
-        const opt = options[i];
-        await db.insert(opinionPollOptions).values({
-          pollId: created.id,
-          name: opt.name,
-          imageUrl: opt.imageUrl || null,
-          personId: opt.personId || null,
-          orderIndex: i,
-          seedCount: opt.seedCount || 0,
-        });
+      if (options.length > 0) {
+        await db.insert(opinionPollOptions).values(
+          options.map((opt: any, i: number) => ({
+            pollId: created.id,
+            name: opt.name,
+            imageUrl: opt.imageUrl || null,
+            personId: opt.personId || null,
+            orderIndex: i,
+            seedCount: opt.seedCount || 0,
+          }))
+        );
       }
 
       await db.insert(adminAuditLog).values({
@@ -7867,16 +7897,17 @@ Only return the JSON object.`;
 
       if (options && Array.isArray(options)) {
         await db.delete(opinionPollOptions).where(eq(opinionPollOptions.pollId, id));
-        for (let i = 0; i < options.length; i++) {
-          const opt = options[i];
-          await db.insert(opinionPollOptions).values({
-            pollId: id,
-            name: opt.name,
-            imageUrl: opt.imageUrl || null,
-            personId: opt.personId || null,
-            orderIndex: i,
-            seedCount: opt.seedCount || 0,
-          });
+        if (options.length > 0) {
+          await db.insert(opinionPollOptions).values(
+            options.map((opt: any, i: number) => ({
+              pollId: id,
+              name: opt.name,
+              imageUrl: opt.imageUrl || null,
+              personId: opt.personId || null,
+              orderIndex: i,
+              seedCount: opt.seedCount || 0,
+            }))
+          );
         }
       }
 
@@ -10011,7 +10042,7 @@ Only return the JSON object.`;
         return res.json({ success: true, created: 0, reason: "Not enough people for matchups" });
       }
 
-      const created = await db.transaction(async (tx) => {
+      const created: number = await db.transaction(async (tx) => {
         const existingH2H = await tx
           .select({ slug: predictionMarkets.slug })
           .from(predictionMarkets)
@@ -11328,18 +11359,14 @@ Only return the JSON object.`;
       const existingMetrics = await db.select({ celebrityId: celebrityMetrics.celebrityId }).from(celebrityMetrics);
       const existingIds = new Set(existingMetrics.map(m => m.celebrityId));
 
-      let created = 0;
-      for (const person of allPeople) {
-        if (!existingIds.has(person.id)) {
-          await db.insert(celebrityMetrics).values({
-            celebrityId: person.id,
-            updatedAt: new Date(),
-          });
-          created++;
-        }
+      const toInsert = allPeople
+        .filter((p) => !existingIds.has(p.id))
+        .map((p) => ({ celebrityId: p.id, updatedAt: new Date() }));
+      if (toInsert.length > 0) {
+        await db.insert(celebrityMetrics).values(toInsert);
       }
 
-      res.json({ created, total: allPeople.length });
+      res.json({ created: toInsert.length, total: allPeople.length });
     } catch (error: any) {
       console.error("Error syncing U/O cards:", error);
       res.status(500).json({ error: "Failed to sync U/O cards" });

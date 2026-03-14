@@ -307,7 +307,9 @@ export async function getTrendContextBatch(personIds: string[]): Promise<Map<str
       try {
         const gdeltData = JSON.parse(gdeltCache.responseData);
         headlines = gdeltData.topHeadlines || [];
-      } catch (e) {}
+      } catch (e) {
+        console.error("[trend-context] Error parsing GDELT cache:", e);
+      }
     }
     
     const wikiDelta = snapshot?.wikiDelta || 0;

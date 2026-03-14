@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, ExternalLink, Clock, Newspaper, Sparkles, RefreshCw, AlertCircle } from "lucide-react";
+import { formatRelativeTime } from "@/lib/formatDate";
 
 interface WhyTrendingData {
   personId: string;
@@ -22,18 +23,6 @@ interface WhyTrendingCardProps {
   personId: string;
   personName: string;
   hotMover?: boolean;
-}
-
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 const categoryColors: Record<string, string> = {

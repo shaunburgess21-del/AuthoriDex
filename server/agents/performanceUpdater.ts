@@ -100,10 +100,6 @@ async function upsertAgentPerformance(
     },
   };
 
-  // Build a safe JSON literal for the new category entry
-  const newCatJson = JSON.stringify(initCategoryScores[category]);
-  const catKey = category.replace(/'/g, "''"); // escape single quotes for SQL literal
-
   await db
     .insert(agentPerformance)
     .values({
@@ -133,21 +129,20 @@ async function upsertAgentPerformance(
           THEN ((${agentPerformance.correct} + ${isCorrect ? 1 : 0})::numeric / (${agentPerformance.totalResolved} + 1))::text
           ELSE '0.0000'
         END`,
-        // Use jsonb_set to update only the specific category key rather than
-        // overwriting the whole object with ||, which erases prior category history
+        // Use jsonb_set with parameterized path (no sql.raw / manual escaping)
         categoryScores: sql`jsonb_set(
           COALESCE(${agentPerformance.categoryScores}, '{}'::jsonb),
-          ${sql.raw(`'{${catKey}}'`)},
+          ARRAY[${category}]::text[],
           jsonb_build_object(
-            'correct',   COALESCE((${agentPerformance.categoryScores}->>'${sql.raw(catKey)}')::jsonb->>'correct', '0')::int + ${isCorrect ? 1 : 0},
-            'total',     COALESCE((${agentPerformance.categoryScores}->'${sql.raw(catKey)}'->'total')::int, 0) + 1,
+            'correct',   COALESCE((${agentPerformance.categoryScores}->>${category})::jsonb->>'correct', '0')::int + ${isCorrect ? 1 : 0},
+            'total',     COALESCE((${agentPerformance.categoryScores}->${category}->'total')::int, 0) + 1,
             'avg_brier', CASE
-              WHEN COALESCE((${agentPerformance.categoryScores}->'${sql.raw(catKey)}'->'total')::int, 0) > 0
+              WHEN COALESCE((${agentPerformance.categoryScores}->${category}->'total')::int, 0) > 0
               THEN (
-                (COALESCE((${agentPerformance.categoryScores}->'${sql.raw(catKey)}'->'avg_brier')::numeric, 0)
-                  * COALESCE((${agentPerformance.categoryScores}->'${sql.raw(catKey)}'->'total')::int, 0)
+                (COALESCE((${agentPerformance.categoryScores}->${category}->'avg_brier')::numeric, 0)
+                  * COALESCE((${agentPerformance.categoryScores}->${category}->'total')::int, 0)
                   + ${brierScore})
-                / (COALESCE((${agentPerformance.categoryScores}->'${sql.raw(catKey)}'->'total')::int, 0) + 1)
+                / (COALESCE((${agentPerformance.categoryScores}->${category}->'total')::int, 0) + 1)
               )
               ELSE ${brierScore}
             END

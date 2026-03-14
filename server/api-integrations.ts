@@ -266,30 +266,7 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
       trendScore: mockMetrics.trendScore,
     });
 
-    // Skip database snapshot operations for now to speed up initial load
-    // Historical data generation can happen in background or on-demand
-    // try {
-    //   const anyHistory = await db
-    //     .select()
-    //     .from(trendSnapshots)
-    //     .where(eq(trendSnapshots.personId, celeb.id))
-    //     .limit(1);
-    //   
-    //   if (anyHistory.length === 0) {
-    //     await generateMockHistoricalData(celeb.id, mockMetrics.trendScore);
-    //   }
-    //   
-    //   await db.insert(trendSnapshots).values({
-    //     personId: celeb.id,
-    //     newsCount: mockMetrics.newsCount,
-    //     youtubeViews: mockMetrics.youtubeViews,
-    //     spotifyFollowers: mockMetrics.spotifyFollowers,
-    //     searchVolume: mockMetrics.searchVolume,
-    //     trendScore: mockMetrics.trendScore,
-    //   });
-    // } catch (snapshotError) {
-    //   // Ignore errors, continue
-    // }
+    // Snapshot operations skipped for design mode; ingest.ts writes snapshots in production
   }
 
   // Check if displayOrder values are unique/differentiated - if not, sort by trendScore for consistent ranking
