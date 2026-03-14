@@ -10009,6 +10009,20 @@ Only return the JSON object.`;
         .where(and(eq(predictionMarkets.marketType, "h2h"), eq(predictionMarkets.weekNumber, weekNumber)));
       const existingSlugs = new Set(existingH2H.map(e => e.slug));
 
+      // Archive any existing H2H markets for this week before generating new ones
+      if (existingH2H.length > 0) {
+        await db.update(predictionMarkets)
+          .set({ visibility: "archived", updatedAt: new Date() })
+          .where(
+            and(
+              eq(predictionMarkets.marketType, "h2h"),
+              eq(predictionMarkets.weekNumber, weekNumber),
+              eq(predictionMarkets.status, "OPEN")
+            )
+          );
+        existingSlugs.clear();
+      }
+
       // Build pairings by rank proximity (1v2, 3v4, ...) then some random cross-pairings
       const pairings: [typeof top[0], typeof top[0]][] = [];
       for (let i = 0; i < top.length - 1 && pairings.length < 10; i += 2) {
