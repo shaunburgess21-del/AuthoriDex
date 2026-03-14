@@ -8,13 +8,14 @@ import {
   agentConfigs,
   predictionMarkets,
   marketEntries,
+  marketBets,
   trendingPeople,
   trendSnapshots,
   scheduledAgentActions,
   profiles,
   creditLedger,
 } from "@shared/schema";
-import { eq, and, sql, gte, desc, ne } from "drizzle-orm";
+import { eq, and, sql, gte, desc, ne, inArray } from "drizzle-orm";
 import { log } from "../log";
 import { computePrediction } from "./decisionEngine";
 import type {
@@ -33,6 +34,9 @@ import {
   AGENT_RUNNER_STARTUP_DELAY_MS,
   AGENT_CREDIT_LOW_THRESHOLD,
   AGENT_CREDIT_TOPUP_TARGET,
+  MARKETS_PER_SWEEP,
+  CONVICTION_SCORE_THRESHOLD_PCT,
+  CONVICTION_MAX_PER_MARKET,
 } from "./constants";
 
 const AGENT_RUNNER_LOCK_KEY = 5_201;
@@ -190,14 +194,25 @@ async function runAgentBatchOnce(): Promise<{
     return { scheduled: 0, abstained: 0, skipped: 0, diagnostics: diag };
   }
 
-  const marketSummary = markets.map(m => ({
+  log(`[AgentRunner] Found ${markets.length} open markets total`);
+
+  // Fisher-Yates shuffle then slice to MARKETS_PER_SWEEP so agents encounter
+  // different markets on each 30-min sweep rather than blitzing everything at once
+  const shuffled = [...markets];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  const sweepMarkets = shuffled.slice(0, MARKETS_PER_SWEEP);
+
+  const marketSummary = sweepMarkets.map(m => ({
     id: m.id.slice(0, 8),
     type: m.marketType,
     title: m.title?.slice(0, 40),
     personId: m.personId?.slice(0, 8) ?? null,
     endAt: m.endAt?.toISOString?.() ?? null,
   }));
-  log(`[AgentRunner] Found ${markets.length} open markets: ${JSON.stringify(marketSummary)}`);
+  log(`[AgentRunner] Sweep subset: ${sweepMarkets.length} of ${markets.length} markets: ${JSON.stringify(marketSummary)}`);
 
   let scheduled = 0;
   let abstained = 0;
@@ -209,7 +224,7 @@ async function runAgentBatchOnce(): Promise<{
   for (const agent of agents) {
     const agentData = toAgentData(agent);
 
-    for (const market of markets) {
+    for (const market of sweepMarkets) {
       if (market.marketType === "community") {
         skippedCommunity++;
         continue;
@@ -288,7 +303,18 @@ async function runAgentBatchOnce(): Promise<{
     }
   }
 
-  const exitStats = { scheduled, abstained, skipped, skippedCommunity, skippedNoEntries, skippedNoEntryId };
+  // --- Conviction re-bet sweep ---
+  // After the initial scheduling pass, check markets where agents already bet.
+  // If the person's score has moved significantly from the baseline, allow a
+  // second "conviction" bet (up to CONVICTION_MAX_PER_MARKET per agent per market).
+  let convictionScheduled = 0;
+  try {
+    convictionScheduled = await runConvictionSweep(agents, markets, now);
+  } catch (convErr) {
+    log(`[AgentRunner] Conviction sweep error: ${convErr instanceof Error ? convErr.message : convErr}`);
+  }
+
+  const exitStats = { scheduled, abstained, skipped, skippedCommunity, skippedNoEntries, skippedNoEntryId, convictionScheduled };
   log(`[AgentRunner] Batch complete: ${JSON.stringify(exitStats)}`);
   return { ...exitStats, diagnostics: diag };
 }
@@ -321,6 +347,145 @@ export async function runAgentBatch(): Promise<{
     skipped: 0,
     diagnostics: { reason: "no_result" },
   };
+}
+
+/**
+ * Conviction re-bet sweep: for each agent, look at markets they already bet on
+ * where the score has moved significantly, and schedule a follow-up bet.
+ */
+async function runConvictionSweep(
+  agents: (typeof agentConfigs.$inferSelect)[],
+  allMarkets: { id: string; personId: string | null; marketType: string | null; title: string | null }[],
+  _now: Date
+): Promise<number> {
+  let convictionScheduled = 0;
+
+  const updownMarkets = allMarkets.filter(m => m.personId && m.marketType === "updown");
+  if (!updownMarkets.length) return 0;
+
+  const personIds = Array.from(new Set(updownMarkets.map(m => m.personId!)));
+  if (!personIds.length) return 0;
+
+  const liveScores = await db
+    .select({ id: trendingPeople.id, fameIndex: trendingPeople.fameIndex })
+    .from(trendingPeople)
+    .where(inArray(trendingPeople.id, personIds));
+  const scoreMap = new Map(liveScores.map(p => [p.id, p.fameIndex ?? 0]));
+
+  for (const agent of agents) {
+    const existingBets = await db
+      .select({
+        marketId: marketBets.marketId,
+        entryId: marketBets.entryId,
+      })
+      .from(marketBets)
+      .where(eq(marketBets.agentId, agent.id));
+
+    if (!existingBets.length) continue;
+
+    const betByMarket = new Map(existingBets.map(b => [b.marketId, b.entryId]));
+
+    for (const market of updownMarkets) {
+      if (!betByMarket.has(market.id)) continue;
+
+      const convictionExists = await db
+        .select({ id: scheduledAgentActions.id })
+        .from(scheduledAgentActions)
+        .where(
+          and(
+            eq(scheduledAgentActions.agentId, agent.id),
+            eq(scheduledAgentActions.marketId, market.id),
+            eq(scheduledAgentActions.actionType, "conviction"),
+            sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`
+          )
+        )
+        .limit(1);
+
+      if (convictionExists.length >= CONVICTION_MAX_PER_MARKET) continue;
+
+      const liveScore = scoreMap.get(market.personId!);
+      if (liveScore == null) continue;
+
+      const entries = await db
+        .select({
+          id: marketEntries.id,
+          label: marketEntries.label,
+          totalStake: marketEntries.totalStake,
+        })
+        .from(marketEntries)
+        .where(eq(marketEntries.marketId, market.id));
+
+      if (entries.length < 2) continue;
+
+      const baselineRow = await db
+        .select({ metadata: predictionMarkets.metadata })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, market.id))
+        .limit(1);
+
+      const metadata = baselineRow[0]?.metadata as Record<string, any> | null;
+      const baseline = metadata?.openingScore?.score as number | undefined;
+      if (baseline == null || baseline === 0) continue;
+
+      const delta = (liveScore - baseline) / baseline;
+      if (Math.abs(delta) < CONVICTION_SCORE_THRESHOLD_PCT) continue;
+
+      // Significant move detected — schedule a conviction bet
+      const originalEntryId = betByMarket.get(market.id)!;
+      const originalEntry = entries.find(e => e.id === originalEntryId);
+      const originalLabel = (originalEntry?.label ?? "").toLowerCase();
+      const isOriginalUp = originalLabel.includes("up");
+
+      let chosenEntryId: string;
+      const scoreMovedUp = delta > 0;
+
+      if (scoreMovedUp === isOriginalUp) {
+        // Score moved in agent's favour — double down (same entry)
+        chosenEntryId = originalEntryId;
+      } else {
+        // Score moved against agent — 30% flip chance (higher for contrarians)
+        const flipChance = 0.30 + (agent.contrarianism ? parseFloat(String(agent.contrarianism)) * 0.15 : 0);
+        if (Math.random() < flipChance) {
+          const otherEntry = entries.find(e => e.id !== originalEntryId);
+          chosenEntryId = otherEntry?.id ?? originalEntryId;
+        } else {
+          chosenEntryId = originalEntryId;
+        }
+      }
+
+      const confidence = Math.min(0.95, 0.6 + Math.abs(delta));
+      const stakeAmount = computeStakeAmount(confidence);
+      const executeAfter = computeExecuteAfter(agent.archetype);
+
+      await db.insert(scheduledAgentActions).values({
+        agentId: agent.id,
+        marketId: market.id,
+        entryId: chosenEntryId,
+        actionType: "conviction",
+        decisionPayload: {
+          abstain: false,
+          entryId: chosenEntryId,
+          confidence: parseFloat(confidence.toFixed(3)),
+          convictionDelta: parseFloat(delta.toFixed(4)),
+          originalEntryId,
+          doubled: chosenEntryId === originalEntryId,
+        },
+        stakeAmount,
+        executeAfter,
+        status: "pending",
+      });
+
+      convictionScheduled++;
+      const action = chosenEntryId === originalEntryId ? "doubled down" : "flipped";
+      log(`[AgentRunner] Conviction: ${agent.displayName} ${action} on ${market.title?.slice(0, 30)} (delta=${(delta * 100).toFixed(1)}%, stake=${stakeAmount})`);
+    }
+  }
+
+  if (convictionScheduled > 0) {
+    log(`[AgentRunner] Conviction sweep scheduled ${convictionScheduled} re-bets`);
+  }
+
+  return convictionScheduled;
 }
 
 function toAgentData(row: typeof agentConfigs.$inferSelect): AgentConfigData {

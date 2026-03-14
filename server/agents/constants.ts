@@ -32,3 +32,10 @@ export const AGENT_CREDIT_TOPUP_TARGET = 50_000;
 // Agent runner sweep interval (checks for new markets every 30 min)
 export const AGENT_RUNNER_INTERVAL_MS = 30 * 60 * 1000;
 export const AGENT_RUNNER_STARTUP_DELAY_MS = 3 * 60 * 1000;
+
+// Stagger: only evaluate this many markets per sweep (rest deferred to next sweep)
+export const MARKETS_PER_SWEEP = 15;
+
+// Conviction re-bets: allow agents to bet again on markets with significant score movement
+export const CONVICTION_SCORE_THRESHOLD_PCT = 0.05; // 5% move from baseline
+export const CONVICTION_MAX_PER_MARKET = 1; // max 1 conviction bet per agent per market

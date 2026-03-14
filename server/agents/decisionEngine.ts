@@ -39,7 +39,7 @@ export function computePrediction(
     agent.specialties.some(
       (s) => marketCategory.includes(s) || s.includes(marketCategory)
     );
-  const skipProbability = domainMatch ? 0.15 : 0.55;
+  const skipProbability = domainMatch ? 0.15 : 0.70;
   if (rng.nextFloat() < skipProbability) return abstain("domain");
 
   // Step 2: Activity gate
@@ -138,8 +138,8 @@ export function computePrediction(
     Math.min(0.97, confidence)
   );
 
-  // Step 7: Final random abstain (8% chance)
-  if (rng.nextFloat() < 0.08) return abstain("random");
+  // Step 7: Final random abstain (15% chance — spreads decisions across more sweeps)
+  if (rng.nextFloat() < 0.15) return abstain("random");
 
   return {
     abstain: false,

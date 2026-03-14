@@ -9918,6 +9918,315 @@ Only return the JSON object.`;
     }
   });
 
+  // Batch-generate ~15 H2H matchups from the top-ranked people for this week
+  app.post("/api/admin/native-markets/generate-h2h", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const now = new Date();
+      const dayOfWeek = now.getUTCDay();
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(now);
+      monday.setUTCDate(now.getUTCDate() + mondayOffset);
+      monday.setUTCHours(0, 0, 0, 0);
+      const sunday = new Date(monday);
+      sunday.setUTCDate(monday.getUTCDate() + 6);
+      sunday.setUTCHours(23, 59, 59, 999);
+      const jan1 = new Date(now.getUTCFullYear(), 0, 1);
+      const weekNumber = Math.ceil(((now.getTime() - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
+
+      const top = await db
+        .select({ id: trendingPeople.id, name: trendingPeople.name, category: trendingPeople.category, fameIndex: trendingPeople.fameIndex })
+        .from(trendingPeople)
+        .orderBy(desc(trendingPeople.fameIndex))
+        .limit(30);
+
+      if (top.length < 2) {
+        return res.json({ success: true, created: 0, reason: "Not enough people for matchups" });
+      }
+
+      const existingH2H = await db
+        .select({ slug: predictionMarkets.slug })
+        .from(predictionMarkets)
+        .where(and(eq(predictionMarkets.marketType, "h2h"), eq(predictionMarkets.weekNumber, weekNumber)));
+      const existingSlugs = new Set(existingH2H.map(e => e.slug));
+
+      // Build pairings by rank proximity (1v2, 3v4, ...) then some random cross-pairings
+      const pairings: [typeof top[0], typeof top[0]][] = [];
+      for (let i = 0; i < top.length - 1 && pairings.length < 10; i += 2) {
+        pairings.push([top[i], top[i + 1]]);
+      }
+      // Add ~5 random cross-category pairings
+      const shuffled = [...top];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      for (let i = 0; i < shuffled.length - 1 && pairings.length < 15; i += 2) {
+        const a = shuffled[i], b = shuffled[i + 1];
+        if (a.id !== b.id && !pairings.some(p => (p[0].id === a.id && p[1].id === b.id) || (p[0].id === b.id && p[1].id === a.id))) {
+          pairings.push([a, b]);
+        }
+      }
+
+      const allPersonIds = Array.from(new Set(pairings.flatMap(([a, b]) => [a.id, b.id])));
+      const snapRows = allPersonIds.length > 0
+        ? await db.execute(sql`
+            SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
+            FROM trend_snapshots
+            WHERE person_id IN (${sql.join(allPersonIds.map(id => sql`${id}`), sql`, `)})
+            ORDER BY person_id, timestamp DESC
+          `)
+        : { rows: [] };
+      const snapMap = new Map<string, { score: number; snapshotAt: string }>();
+      for (const row of (snapRows.rows || [])) {
+        if (row.fame_index != null) {
+          snapMap.set(String(row.person_id), { score: Number(row.fame_index), snapshotAt: new Date(row.timestamp as string).toISOString() });
+        }
+      }
+
+      let created = 0;
+      for (const [personA, personB] of pairings) {
+        const baseSlug = `h2h-${personA.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-vs-${personB.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
+        if (existingSlugs.has(baseSlug)) continue;
+
+        const openingScores = [snapMap.get(personA.id), snapMap.get(personB.id)]
+          .filter(Boolean)
+          .map((s, i) => ({ personId: i === 0 ? personA.id : personB.id, score: s!.score, snapshotAt: s!.snapshotAt }));
+        const h2hMeta = openingScores.length > 0 ? { openingScores } : undefined;
+
+        let slug = baseSlug;
+        try {
+          const [market] = await db.insert(predictionMarkets).values({
+            marketType: "h2h",
+            title: `${personA.name} vs ${personB.name}`,
+            slug,
+            category: personA.category?.toLowerCase() || "misc",
+            visibility: "live",
+            status: "OPEN",
+            startAt: monday,
+            endAt: sunday,
+            weekNumber,
+            seedParticipants: 0,
+            seedVolume: "0",
+            metadata: h2hMeta,
+            seedConfig: { enabled: true, targetParticipantsMin: 40, targetParticipantsMax: 120, targetPoolMin: 10000, targetPoolMax: 35000, distributionBias: { personA: 50, personB: 50 } },
+            featured: false,
+          }).returning();
+
+          await db.insert(marketEntries).values([
+            { marketId: market.id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, seedCount: 0, imageUrl: null },
+            { marketId: market.id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, seedCount: 0, imageUrl: null },
+          ]);
+          created++;
+          existingSlugs.add(slug);
+        } catch (slugErr: any) {
+          if (slugErr.code === '23505') {
+            slug = `${baseSlug}-${randomUUID().slice(0, 6)}`;
+            try {
+              const [market] = await db.insert(predictionMarkets).values({
+                marketType: "h2h",
+                title: `${personA.name} vs ${personB.name}`,
+                slug,
+                category: personA.category?.toLowerCase() || "misc",
+                visibility: "live",
+                status: "OPEN",
+                startAt: monday,
+                endAt: sunday,
+                weekNumber,
+                seedParticipants: 0,
+                seedVolume: "0",
+                metadata: h2hMeta,
+                seedConfig: { enabled: true, targetParticipantsMin: 40, targetParticipantsMax: 120, targetPoolMin: 10000, targetPoolMax: 35000, distributionBias: { personA: 50, personB: 50 } },
+                featured: false,
+              }).returning();
+
+              await db.insert(marketEntries).values([
+                { marketId: market.id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, seedCount: 0, imageUrl: null },
+                { marketId: market.id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, seedCount: 0, imageUrl: null },
+              ]);
+              created++;
+            } catch (retryErr) {
+              console.error(`[GenerateH2H] Retry failed for ${personA.name} vs ${personB.name}:`, retryErr);
+            }
+          } else {
+            console.error(`[GenerateH2H] Insert failed for ${personA.name} vs ${personB.name}:`, slugErr.message);
+          }
+        }
+      }
+
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId!,
+        adminEmail: null,
+        actionType: "create",
+        targetTable: "prediction_markets",
+        targetId: "bulk-h2h",
+        metadata: { type: "h2h", created, weekNumber },
+      });
+
+      res.json({ success: true, created, weekNumber });
+    } catch (error: any) {
+      console.error("Error generating H2H markets:", error.message);
+      res.status(500).json({ error: "Failed to generate H2H markets" });
+    }
+  });
+
+  // Batch-generate Top Gainer markets grouped by category for this week
+  app.post("/api/admin/native-markets/generate-gainer", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const now = new Date();
+      const dayOfWeek = now.getUTCDay();
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(now);
+      monday.setUTCDate(now.getUTCDate() + mondayOffset);
+      monday.setUTCHours(0, 0, 0, 0);
+      const sunday = new Date(monday);
+      sunday.setUTCDate(monday.getUTCDate() + 6);
+      sunday.setUTCHours(23, 59, 59, 999);
+      const jan1 = new Date(now.getUTCFullYear(), 0, 1);
+      const weekNumber = Math.ceil(((now.getTime() - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
+
+      const existingGainers = await db
+        .select({ category: predictionMarkets.category })
+        .from(predictionMarkets)
+        .where(and(eq(predictionMarkets.marketType, "gainer"), eq(predictionMarkets.weekNumber, weekNumber)));
+      const existingCategories = new Set(existingGainers.map(e => e.category));
+
+      const people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
+
+      // Group people by category
+      const byCategory = new Map<string, typeof people>();
+      for (const person of people) {
+        const cat = (person.category || "misc").toLowerCase();
+        if (!byCategory.has(cat)) byCategory.set(cat, []);
+        byCategory.get(cat)!.push(person);
+      }
+
+      // Fetch latest scores for all people to pick top 5 per category
+      const allIds = people.map(p => p.id);
+      const liveScores = allIds.length > 0
+        ? await db
+            .select({ id: trendingPeople.id, fameIndex: trendingPeople.fameIndex })
+            .from(trendingPeople)
+            .where(inArray(trendingPeople.id, allIds))
+        : [];
+      const scoreMap = new Map(liveScores.map(p => [p.id, p.fameIndex ?? 0]));
+
+      const snapRows = allIds.length > 0
+        ? await db.execute(sql`
+            SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
+            FROM trend_snapshots
+            WHERE person_id IN (${sql.join(allIds.map(id => sql`${id}`), sql`, `)})
+            ORDER BY person_id, timestamp DESC
+          `)
+        : { rows: [] };
+      const snapMap = new Map<string, { score: number; snapshotAt: string }>();
+      for (const row of (snapRows.rows || [])) {
+        if (row.fame_index != null) {
+          snapMap.set(String(row.person_id), { score: Number(row.fame_index), snapshotAt: new Date(row.timestamp as string).toISOString() });
+        }
+      }
+
+      let created = 0;
+      for (const [cat, catPeople] of Array.from(byCategory.entries())) {
+        if (catPeople.length < 3) continue;
+        if (existingCategories.has(cat)) continue;
+
+        // Pick top 5 in this category by fame index
+        const ranked = [...catPeople].sort((a, b) => (scoreMap.get(b.id) ?? 0) - (scoreMap.get(a.id) ?? 0)).slice(0, 5);
+        const openingScores = ranked
+          .map(p => snapMap.get(p.id))
+          .filter(Boolean)
+          .map((s, i) => ({ personId: ranked[i].id, score: s!.score, snapshotAt: s!.snapshotAt }));
+        const gainerMeta = openingScores.length > 0 ? { openingScores } : undefined;
+
+        const title = `Top Gainer: ${cat.charAt(0).toUpperCase() + cat.slice(1)}`;
+        let slug = `gainer-${cat}-week-${weekNumber}`;
+
+        try {
+          const [market] = await db.insert(predictionMarkets).values({
+            marketType: "gainer",
+            title,
+            slug,
+            category: cat,
+            visibility: "live",
+            status: "OPEN",
+            startAt: monday,
+            endAt: sunday,
+            weekNumber,
+            seedParticipants: 0,
+            seedVolume: "0",
+            metadata: gainerMeta,
+            seedConfig: { enabled: true, targetParticipantsMin: 25, targetParticipantsMax: 60, targetPoolMin: 8000, targetPoolMax: 20000, distributionBias: {} },
+            featured: false,
+          }).returning();
+
+          const entryValues = ranked.map((person, idx) => ({
+            marketId: market.id,
+            entryType: "person" as const,
+            personId: person.id,
+            label: person.name,
+            displayOrder: idx,
+            seedCount: 0,
+            imageUrl: person.avatar,
+          }));
+          await db.insert(marketEntries).values(entryValues);
+          created++;
+        } catch (slugErr: any) {
+          if (slugErr.code === '23505') {
+            slug = `${slug}-${randomUUID().slice(0, 6)}`;
+            try {
+              const [market] = await db.insert(predictionMarkets).values({
+                marketType: "gainer",
+                title,
+                slug,
+                category: cat,
+                visibility: "live",
+                status: "OPEN",
+                startAt: monday,
+                endAt: sunday,
+                weekNumber,
+                seedParticipants: 0,
+                seedVolume: "0",
+                metadata: gainerMeta,
+                seedConfig: { enabled: true, targetParticipantsMin: 25, targetParticipantsMax: 60, targetPoolMin: 8000, targetPoolMax: 20000, distributionBias: {} },
+                featured: false,
+              }).returning();
+
+              const entryValues = ranked.map((person, idx) => ({
+                marketId: market.id,
+                entryType: "person" as const,
+                personId: person.id,
+                label: person.name,
+                displayOrder: idx,
+                seedCount: 0,
+                imageUrl: person.avatar,
+              }));
+              await db.insert(marketEntries).values(entryValues);
+              created++;
+            } catch (retryErr) {
+              console.error(`[GenerateGainer] Retry failed for ${cat}:`, retryErr);
+            }
+          } else {
+            console.error(`[GenerateGainer] Insert failed for ${cat}:`, slugErr.message);
+          }
+        }
+      }
+
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId!,
+        adminEmail: null,
+        actionType: "create",
+        targetTable: "prediction_markets",
+        targetId: "bulk-gainer",
+        metadata: { type: "gainer", created, categoriesProcessed: Array.from(byCategory.keys()).filter(c => byCategory.get(c)!.length >= 3 && !existingCategories.has(c)), weekNumber },
+      });
+
+      res.json({ success: true, created, weekNumber, categories: Array.from(byCategory.keys()).filter(c => byCategory.get(c)!.length >= 3) });
+    } catch (error: any) {
+      console.error("Error generating gainer markets:", error.message);
+      res.status(500).json({ error: "Failed to generate gainer markets" });
+    }
+  });
+
   app.patch("/api/admin/native-markets/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
