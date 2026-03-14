@@ -17,13 +17,10 @@ function formatScore(n: number): string {
 
 function formatTimestamp(ts?: string): string {
   if (!ts) return "Mon 00:00 UTC";
-  try {
-    const d = new Date(ts);
-    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    return `${days[d.getUTCDay()]} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`;
-  } catch {
-    return ts;
-  }
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return ts;
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return `${days[d.getUTCDay()]} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`;
 }
 
 const TIE_RULE_LABELS: Record<string, string> = {

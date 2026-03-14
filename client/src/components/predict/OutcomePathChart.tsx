@@ -74,7 +74,7 @@ function ChartTooltip({ active, payload, baseline }: any) {
     <div className="bg-card border border-border rounded-lg p-2 shadow-xl text-xs">
       <p className="text-muted-foreground">{formatTooltipTime(point.timestamp)}</p>
       <p className="font-mono font-bold text-sm">{formatScore(score)}</p>
-      {baseline && (
+      {baseline != null && (
         <p className={`font-semibold ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>
           {delta >= 0 ? "+" : ""}{formatScore(delta)} ({delta >= 0 ? "+" : ""}{pct}%) vs baseline
         </p>
@@ -109,7 +109,7 @@ export function OutcomePathChart({
   const yDomain = useMemo(() => {
     if (chartData.length === 0) return [0, 100];
     const scores = chartData.map((d) => d.fameIndex);
-    if (baselineScore) scores.push(baselineScore);
+    if (baselineScore != null) scores.push(baselineScore);
     const min = Math.min(...scores);
     const max = Math.max(...scores);
     const padding = (max - min) * 0.15 || 1000;
@@ -193,7 +193,7 @@ export function OutcomePathChart({
               mirror={compact}
             />
             <Tooltip content={<ChartTooltip baseline={baselineScore} />} />
-            {baselineScore > 0 && (
+            {baselineScore != null && (
               <ReferenceLine
                 y={baselineScore}
                 stroke="hsl(var(--muted-foreground))"
@@ -207,7 +207,7 @@ export function OutcomePathChart({
               dataKey="fameIndex"
               stroke="hsl(var(--primary))"
               strokeWidth={2}
-              fill={`url(#aboveBaseline-${marketId})`}
+              fill={delta >= 0 ? `url(#aboveBaseline-${marketId})` : `url(#belowBaseline-${marketId})`}
               dot={false}
               activeDot={{
                 r: compact ? 3 : 5,

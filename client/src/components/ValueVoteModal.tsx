@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Button } from "@/components/ui/button";
@@ -26,10 +26,20 @@ export function ValueVoteModal({ open, onOpenChange, person }: ValueVoteModalPro
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const queryClient = useQueryClient();
+  const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (successTimeoutRef.current) {
+        clearTimeout(successTimeoutRef.current);
+        successTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (person) {
-      setLocalUserVote(person.userValueVote || null);
+      setLocalUserVote(person.userValueVote ?? null);
       setError(null);
       setSuccess(false);
     }
@@ -52,12 +62,14 @@ export function ValueVoteModal({ open, onOpenChange, person }: ValueVoteModalPro
       queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
       queryClient.invalidateQueries({ queryKey: ['/api/leaderboard?tab=value&limit=20'] });
       setSuccess(true);
-      setTimeout(() => {
+      if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current);
+      successTimeoutRef.current = setTimeout(() => {
         onOpenChange(false);
+        successTimeoutRef.current = null;
       }, 1000);
     },
     onError: (error: any) => {
-      setLocalUserVote(person?.userValueVote || null);
+      setLocalUserVote(person?.userValueVote ?? null);
       const errorMsg = error.message || "";
       if (errorMsg.includes("401") || errorMsg.includes("Unauthorized")) {
         setError("Please sign in to vote.");

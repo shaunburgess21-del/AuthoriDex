@@ -348,15 +348,15 @@ class GamificationService {
     if (!profile) return null;
 
     const userRank = this.ranksCache.find(r => r.name === profile.rank);
-
+    const tier = userRank?.tier || 1;
     const capabilities: Record<Capability, boolean> = {
-      can_vote_sentiment: await this.checkPermission(userId, 'can_vote_sentiment'),
-      can_vote_matchup: await this.checkPermission(userId, 'can_vote_matchup'),
-      can_vote_induction: await this.checkPermission(userId, 'can_vote_induction'),
-      can_vote_curation: await this.checkPermission(userId, 'can_vote_curation'),
-      can_post_insight: await this.checkPermission(userId, 'can_post_insight'),
-      can_comment: await this.checkPermission(userId, 'can_comment'),
-      can_predict: await this.checkPermission(userId, 'can_predict')
+      can_vote_sentiment: canAccessCapability(tier, 'can_vote_sentiment'),
+      can_vote_matchup: canAccessCapability(tier, 'can_vote_matchup'),
+      can_vote_induction: canAccessCapability(tier, 'can_vote_induction'),
+      can_vote_curation: canAccessCapability(tier, 'can_vote_curation'),
+      can_post_insight: canAccessCapability(tier, 'can_post_insight'),
+      can_comment: canAccessCapability(tier, 'can_comment'),
+      can_predict: canAccessCapability(tier, 'can_predict'),
     };
 
     return {

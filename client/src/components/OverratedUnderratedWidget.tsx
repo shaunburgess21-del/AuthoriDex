@@ -78,7 +78,7 @@ export function OverratedUnderratedWidget({
   const totalVotes = underratedCount + overratedCount;
   
   const underratedPct = totalVotes > 0 ? Math.round((underratedCount / totalVotes) * 100) : 50;
-  const overratedPct = totalVotes > 0 ? Math.round((overratedCount / totalVotes) * 100) : 50;
+  const overratedPct = 100 - underratedPct;
 
   if (compact) {
     return (

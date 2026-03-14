@@ -63,6 +63,8 @@ function formatCountdown(days: number, hours: number, minutes: number, seconds: 
   return parts.join(" ");
 }
 
+const MIN_STAKE = 5;
+
 export function StakeModal({
   open,
   onClose,
@@ -112,16 +114,11 @@ export function StakeModal({
   };
 
   const handleConfirm = () => {
-    if (parsedAmount > 0 && balanceAfter >= 0) {
+    if (parsedAmount >= MIN_STAKE && balanceAfter >= 0) {
       try {
         triggerConfetti();
       } catch (e) {
         console.error("Confetti error:", e);
-      }
-
-      if (selection) {
-        selection.confidence = confidence || undefined;
-        selection.thesis = thesis.trim() || undefined;
       }
 
       if (onConfirmWithMeta) {
@@ -148,7 +145,15 @@ export function StakeModal({
     "text-muted-foreground";
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      if (!isOpen) {
+        setStakeAmount("");
+        setConfidence(0);
+        setThesis("");
+        setShowThesisSection(false);
+        onClose();
+      }
+    }}>
       <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto premium-scrollbar">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

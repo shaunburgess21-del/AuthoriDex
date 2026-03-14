@@ -73,7 +73,7 @@ function CommunityResultsView({ personName, personId, userVote, onBackToVoting }
   const defaultStats: SentimentStats = {
     totalVotes: 0,
     averageRating: 3.0,
-    distribution: { Hate: 10, Dislike: 15, Neutral: 30, Like: 25, Love: 20 }
+    distribution: { Hate: 0, Dislike: 0, Neutral: 0, Like: 0, Love: 0 }
   };
 
   const displayStats = stats || defaultStats;

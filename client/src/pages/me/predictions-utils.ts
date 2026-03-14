@@ -7,11 +7,13 @@ export function inferPredictionDirection(entryLabel?: string | null): Prediction
     return "neutral";
   }
 
-  if (["up", "yes", "above", "over", "for"].some((token) => label.includes(token))) {
+  const matchesWord = (token: string) => new RegExp(`\\b${token}\\b`).test(label);
+
+  if (["up", "yes", "above", "over", "for"].some(matchesWord)) {
     return "up";
   }
 
-  if (["down", "no", "below", "under", "against"].some((token) => label.includes(token))) {
+  if (["down", "no", "below", "under", "against"].some(matchesWord)) {
     return "down";
   }
 

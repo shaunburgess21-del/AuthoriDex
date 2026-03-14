@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useId } from "react";
 import {
   AreaChart,
   Area,
@@ -46,6 +46,10 @@ function PLTooltip({ active, payload }: any) {
 }
 
 export function PLChart({ predictions, height = 240 }: PLChartProps) {
+  const id = useId();
+  const greenGradId = `plGreenGrad-${id.replace(/:/g, "")}`;
+  const redGradId = `plRedGrad-${id.replace(/:/g, "")}`;
+
   const chartData = useMemo(() => {
     const resolved = predictions
       .filter((p) => p.result === "won" || p.result === "lost")
@@ -94,11 +98,11 @@ export function PLChart({ predictions, height = 240 }: PLChartProps) {
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData} margin={{ top: 5, right: 8, left: 4, bottom: 5 }}>
             <defs>
-              <linearGradient id="plGreenGrad" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={greenGradId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#22c55e" stopOpacity={0.3} />
                 <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
               </linearGradient>
-              <linearGradient id="plRedGrad" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={redGradId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#ef4444" stopOpacity={0} />
                 <stop offset="100%" stopColor="#ef4444" stopOpacity={0.3} />
               </linearGradient>
@@ -128,7 +132,7 @@ export function PLChart({ predictions, height = 240 }: PLChartProps) {
               dataKey="cumulative"
               stroke={latestValue >= 0 ? "#22c55e" : "#ef4444"}
               strokeWidth={2}
-              fill={latestValue >= 0 ? "url(#plGreenGrad)" : "url(#plRedGrad)"}
+              fill={latestValue >= 0 ? `url(#${greenGradId})` : `url(#${redGradId})`}
               dot={false}
               activeDot={{
                 r: 5,

@@ -27,6 +27,7 @@ interface ResolverStats {
   lastRunAt: string | null;
   marketsFound: number;
   resolved: number;
+  voided: number;
   blocked: number;
   skipped: number;
   errors: number;
@@ -37,6 +38,7 @@ let _resolverStats: ResolverStats = {
   lastRunAt: null,
   marketsFound: 0,
   resolved: 0,
+  voided: 0,
   blocked: 0,
   skipped: 0,
   errors: 0,
@@ -47,12 +49,36 @@ export function getResolverStats(): ResolverStats {
   return { ..._resolverStats };
 }
 
-export async function settleMarketBets(marketId: string, winnerEntryId: string): Promise<SettlementResult> {
+export interface SettlementMeta {
+  resolveMethod?: string;
+  resolutionNotes?: string;
+  settledBy?: string;
+  voidReason?: string | null;
+}
+
+export async function settleMarketBets(marketId: string, winnerEntryId: string, meta?: SettlementMeta): Promise<SettlementResult> {
   const result = await db.transaction(async (tx) => {
     const now = new Date();
+
+    const [winnerEntry] = await tx
+      .select({ id: marketEntries.id })
+      .from(marketEntries)
+      .where(and(eq(marketEntries.id, winnerEntryId), eq(marketEntries.marketId, marketId)));
+    if (!winnerEntry) {
+      throw new Error(`Entry ${winnerEntryId} does not belong to market ${marketId}`);
+    }
+
     const claimed = await tx
       .update(predictionMarkets)
-      .set({ status: "RESOLVED", resolvedAt: now, updatedAt: now })
+      .set({
+        status: "RESOLVED",
+        resolvedAt: now,
+        updatedAt: now,
+        ...(meta?.resolveMethod && { resolveMethod: meta.resolveMethod }),
+        ...(meta?.resolutionNotes && { resolutionNotes: meta.resolutionNotes }),
+        ...(meta?.settledBy && { settledBy: meta.settledBy }),
+        ...(meta?.voidReason !== undefined && { voidReason: meta.voidReason }),
+      })
       .where(and(
         eq(predictionMarkets.id, marketId),
         sql`${predictionMarkets.status} NOT IN ('RESOLVED', 'VOID')`
@@ -245,7 +271,9 @@ export async function voidMarketBets(marketId: string): Promise<number> {
 
 function ensureDate(val: any): Date {
   if (val instanceof Date) return val;
-  return new Date(val);
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return new Date();
+  return d;
 }
 
 function getStoredOpeningScore(market: any, personId: string): { score: number; capturedAt: Date } | null {
@@ -376,13 +404,25 @@ async function resolveUpDown(market: any): Promise<"resolved" | "voided" | "bloc
   };
 
   if (closeSnap.score === openSnap.score) {
+    const tieRule = market.tieRule || "refund";
+    if (tieRule === "up_wins" || tieRule === "down_wins") {
+      const tieWinnerId = tieRule === "up_wins" ? upEntry.id : downEntry.id;
+      const tieWinnerLabel = tieRule === "up_wins" ? "Up" : "Down";
+      const result = await settleMarketBets(market.id, tieWinnerId, {
+        resolveMethod: "auto",
+        resolutionNotes: JSON.stringify({ ...evidence, outcome: tieWinnerLabel, tieRule }),
+      });
+      log(`[MarketResolver] updown ${market.id}: tie resolved by tieRule=${tieRule}, ${tieWinnerLabel} wins, pool=${result.totalPool}`);
+      scoreResolvedMarket(market.id, tieWinnerId).catch(e => log(`[MarketResolver] Agent scoring failed: ${e}`));
+      return "resolved";
+    }
     const refunded = await voidMarketBets(market.id);
     await db.update(predictionMarkets).set({
       status: "VOID",
       resolvedAt: new Date(),
       resolveMethod: "auto",
       voidReason: "Tie — score unchanged",
-      resolutionNotes: JSON.stringify({ ...evidence, outcome: "void_tie" }),
+      resolutionNotes: JSON.stringify({ ...evidence, outcome: "void_tie", tieRule }),
       updatedAt: new Date(),
     }).where(eq(predictionMarkets.id, market.id));
     log(`[MarketResolver] updown ${market.id}: VOID (tie), ${refunded} bets refunded`);
@@ -391,15 +431,10 @@ async function resolveUpDown(market: any): Promise<"resolved" | "voided" | "bloc
 
   const winnerId = closeSnap.score > openSnap.score ? upEntry.id : downEntry.id;
   const winnerLabel = closeSnap.score > openSnap.score ? "Up" : "Down";
-  const result = await settleMarketBets(market.id, winnerId);
-
-  await db.update(predictionMarkets).set({
-    status: "RESOLVED",
-    resolvedAt: new Date(),
+  const result = await settleMarketBets(market.id, winnerId, {
     resolveMethod: "auto",
-    resolutionNotes: JSON.stringify({ ...evidence, outcome: winnerLabel, settlement: result }),
-    updatedAt: new Date(),
-  }).where(eq(predictionMarkets.id, market.id));
+    resolutionNotes: JSON.stringify({ ...evidence, outcome: winnerLabel }),
+  });
 
   scoreResolvedMarket(market.id, winnerId).catch(e => log(`[MarketResolver] Agent scoring failed: ${e}`));
 
@@ -435,13 +470,24 @@ async function resolveH2H(market: any): Promise<"resolved" | "voided" | "blocked
   };
 
   if (closeA.score === closeB.score) {
+    const tieRule = market.tieRule || "refund";
+    if (tieRule === "up_wins" || tieRule === "down_wins") {
+      const tieWinner = tieRule === "up_wins" ? entryA : entryB;
+      const result = await settleMarketBets(market.id, tieWinner.id, {
+        resolveMethod: "auto",
+        resolutionNotes: JSON.stringify({ ...evidence, outcome: tieWinner.label, tieRule }),
+      });
+      log(`[MarketResolver] h2h ${market.id}: tie resolved by tieRule=${tieRule}, ${tieWinner.label} wins, pool=${result.totalPool}`);
+      scoreResolvedMarket(market.id, tieWinner.id).catch(e => log(`[MarketResolver] Agent scoring failed: ${e}`));
+      return "resolved";
+    }
     const refunded = await voidMarketBets(market.id);
     await db.update(predictionMarkets).set({
       status: "VOID",
       resolvedAt: new Date(),
       resolveMethod: "auto",
       voidReason: "Tie — identical scores",
-      resolutionNotes: JSON.stringify({ ...evidence, outcome: "void_tie" }),
+      resolutionNotes: JSON.stringify({ ...evidence, outcome: "void_tie", tieRule }),
       updatedAt: new Date(),
     }).where(eq(predictionMarkets.id, market.id));
     log(`[MarketResolver] h2h ${market.id}: VOID (tie at ${closeA.score}), ${refunded} bets refunded`);
@@ -449,15 +495,10 @@ async function resolveH2H(market: any): Promise<"resolved" | "voided" | "blocked
   }
 
   const winner = closeA.score > closeB.score ? entryA : entryB;
-  const result = await settleMarketBets(market.id, winner.id);
-
-  await db.update(predictionMarkets).set({
-    status: "RESOLVED",
-    resolvedAt: new Date(),
+  const result = await settleMarketBets(market.id, winner.id, {
     resolveMethod: "auto",
-    resolutionNotes: JSON.stringify({ ...evidence, outcome: winner.label, settlement: result }),
-    updatedAt: new Date(),
-  }).where(eq(predictionMarkets.id, market.id));
+    resolutionNotes: JSON.stringify({ ...evidence, outcome: winner.label }),
+  });
 
   scoreResolvedMarket(market.id, winner.id).catch(e => log(`[MarketResolver] Agent scoring failed: ${e}`));
 
@@ -507,7 +548,7 @@ async function resolveGainer(market: any): Promise<"resolved" | "voided" | "bloc
     })),
   };
 
-  if (gains.length >= 2 && gains[0].pctChange === gains[1].pctChange) {
+  if (gains.length >= 2 && Math.abs(gains[0].pctChange - gains[1].pctChange) < 0.001) {
     const refunded = await voidMarketBets(market.id);
     await db.update(predictionMarkets).set({
       status: "VOID",
@@ -522,15 +563,10 @@ async function resolveGainer(market: any): Promise<"resolved" | "voided" | "bloc
   }
 
   const winner = gains[0].entry;
-  const result = await settleMarketBets(market.id, winner.id);
-
-  await db.update(predictionMarkets).set({
-    status: "RESOLVED",
-    resolvedAt: new Date(),
+  const result = await settleMarketBets(market.id, winner.id, {
     resolveMethod: "auto",
-    resolutionNotes: JSON.stringify({ ...evidence, outcome: winner.label, settlement: result }),
-    updatedAt: new Date(),
-  }).where(eq(predictionMarkets.id, market.id));
+    resolutionNotes: JSON.stringify({ ...evidence, outcome: winner.label }),
+  });
 
   scoreResolvedMarket(market.id, winner.id).catch(e => log(`[MarketResolver] Agent scoring failed: ${e}`));
 
@@ -640,6 +676,7 @@ async function resolveExpiredMarketsOnce(): Promise<void> {
       lastRunAt: now.toISOString(),
       marketsFound: expiredMarkets.length,
       resolved,
+      voided,
       blocked,
       skipped,
       errors,

@@ -80,7 +80,7 @@ export function SentimentVotingWidget({
   useEffect(() => {
     const storedVote = localStorage.getItem(`vote_${personId}`);
     if (storedVote) {
-      setSelectedValue(parseInt(storedVote));
+      setSelectedValue(parseInt(storedVote, 10));
     }
   }, [personId]);
 
