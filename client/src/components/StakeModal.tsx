@@ -155,7 +155,7 @@ export function StakeModal({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="ml-auto h-6 w-6 rounded-full flex items-center justify-center hover:bg-violet-500/10 transition-colors"
+                    className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-violet-500/10 transition-colors"
                     aria-label="How it works"
                   >
                     <HelpCircle className="h-4 w-4 text-violet-500" />

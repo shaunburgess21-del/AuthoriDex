@@ -141,24 +141,6 @@ function ParticipantAvatarStack({
   );
 }
 
-function MarketRationaleCallout({ rationale }: { rationale?: MarketRationalePreview | null }) {
-  if (!rationale?.text) return null;
-
-  return (
-    <div className="mb-3 rounded-md border border-violet-500/20 bg-violet-500/5 p-2.5">
-      <div className="mb-1 flex items-center gap-2">
-        <Badge variant="outline" className="border-violet-500/30 text-[10px] text-violet-300">
-          AI Take
-        </Badge>
-        <span className="text-[11px] font-medium text-violet-200">
-          {rationale.authorDisplayName}
-        </span>
-      </div>
-      <p className="line-clamp-2 text-xs leading-[1.45] text-muted-foreground">{rationale.text}</p>
-    </div>
-  );
-}
-
 // Prediction Type definitions
 type PredictionType = "all" | "jackpot" | "updown" | "h2h" | "gainer" | "community";
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
@@ -188,7 +170,6 @@ interface PredictionMarket {
   featured?: boolean;
   activeParticipantCount?: number;
   recentParticipants?: ParticipantPreview[];
-  latestRationale?: MarketRationalePreview | null;
 }
 
 interface ParticipantPreview {
@@ -196,14 +177,6 @@ interface ParticipantPreview {
   username: string | null;
   displayName: string;
   avatarUrl: string | null;
-  isAgent: boolean;
-}
-
-interface MarketRationalePreview {
-  text: string;
-  authorUsername: string | null;
-  authorDisplayName: string;
-  authorAvatarUrl: string | null;
   isAgent: boolean;
 }
 
@@ -350,7 +323,6 @@ interface HeadToHeadMarket {
   totalBets?: number;
   activeParticipantCount?: number;
   recentParticipants?: ParticipantPreview[];
-  latestRationale?: MarketRationalePreview | null;
 }
 
 const headToHeadMarkets: HeadToHeadMarket[] = [
@@ -426,7 +398,6 @@ interface TopGainerMarket {
   totalBets?: number;
   activeParticipantCount?: number;
   recentParticipants?: ParticipantPreview[];
-  latestRationale?: MarketRationalePreview | null;
 }
 
 interface RecentPredictionActivity {
@@ -928,8 +899,6 @@ function WeeklyUpDownCard({
         Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
       </p>
 
-      <MarketRationaleCallout rationale={market.latestRationale} />
-
       <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mb-2 px-0.5">
         <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
         <span>Now: <span className="font-mono text-foreground">{market.currentScore.toLocaleString('en-US')}</span></span>
@@ -1322,7 +1291,6 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
       </a>
       {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
-      <MarketRationaleCallout rationale={market.latestRationale} />
       
       <div className="mt-auto pt-1">
         <div className="mb-3">
@@ -1387,7 +1355,6 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
         </div>
       </a>
       {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
-      <MarketRationaleCallout rationale={market.latestRationale} />
       
       <div className="mb-3 flex items-center gap-2">
         <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
@@ -1466,7 +1433,6 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
           </div>
         </div>
       )}
-      <MarketRationaleCallout rationale={market.latestRationale} />
       
       <div className="mt-auto pt-1">
         <div className="mb-2">
@@ -2092,7 +2058,6 @@ export default function PredictPage() {
           featured: m.featured || false,
           activeParticipantCount: Number(m.activeParticipantCount || 0),
           recentParticipants: m.recentParticipants || [],
-          latestRationale: m.latestRationale || null,
         } as PredictionMarket;
       });
     }
@@ -2124,7 +2089,6 @@ export default function PredictPage() {
           totalBets: (Number(m.activeParticipantCount || 0) || 0) + Number(m.seedConfig?.participants || 0),
           activeParticipantCount: Number(m.activeParticipantCount || 0),
           recentParticipants: m.recentParticipants || [],
-          latestRationale: m.latestRationale || null,
         } as HeadToHeadMarket;
       });
     }
@@ -2156,7 +2120,6 @@ export default function PredictPage() {
           totalEntries: entries.length,
           activeParticipantCount: Number(m.activeParticipantCount || 0),
           recentParticipants: m.recentParticipants || [],
-          latestRationale: m.latestRationale || null,
         } as TopGainerMarket;
       });
     }
