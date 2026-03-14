@@ -4,13 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Target, Clock, TrendingUp, TrendingDown, LogIn, Star, MessageSquarePlus } from "lucide-react";
+import { Target, Clock, TrendingUp, TrendingDown, LogIn, Star, MessageSquarePlus, HelpCircle } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
+import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent";
 
 const MISSION_HEADERS: Record<string, string> = {
   jackpot: "Predict the exact Trend Score at week's end to win the pot.",
@@ -148,6 +150,22 @@ export function StakeModal({
           <DialogTitle className="flex items-center gap-2">
             <Target className="h-5 w-5 text-violet-500" />
             Confirm Prediction
+            {selection?.type && RULES_CONTENT[selection.type] && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="ml-auto h-6 w-6 rounded-full flex items-center justify-center hover:bg-violet-500/10 transition-colors"
+                    aria-label="How it works"
+                  >
+                    <HelpCircle className="h-4 w-4 text-violet-500" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 max-h-[70vh] overflow-y-auto" side="bottom" align="end">
+                  <RulesExplainer {...RULES_CONTENT[selection.type]} />
+                </PopoverContent>
+              </Popover>
+            )}
           </DialogTitle>
           <DialogDescription>
             {missionText}
