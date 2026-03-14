@@ -40,7 +40,10 @@ export function computePrediction(
     agent.specialties.some(
       (s) => marketCategory.includes(s) || s.includes(marketCategory)
     );
-  const skipProbability = domainMatch ? 0.15 : 0.70;
+  const skipProbability =
+    domainMatch ? 0.15 :
+    marketCategory === "trending" ? 0.4 :
+    0.70;
   if (rng.nextFloat() < skipProbability) return abstain("domain");
 
   // Step 2: Activity gate

@@ -10011,146 +10011,143 @@ Only return the JSON object.`;
         return res.json({ success: true, created: 0, reason: "Not enough people for matchups" });
       }
 
-      const existingH2H = await db
-        .select({ slug: predictionMarkets.slug })
-        .from(predictionMarkets)
-        .where(and(eq(predictionMarkets.marketType, "h2h"), eq(predictionMarkets.weekNumber, weekNumber)));
-      const existingSlugs = new Set(existingH2H.map(e => e.slug));
+      const created = await db.transaction(async (tx) => {
+        const existingH2H = await tx
+          .select({ slug: predictionMarkets.slug })
+          .from(predictionMarkets)
+          .where(and(eq(predictionMarkets.marketType, "h2h"), eq(predictionMarkets.weekNumber, weekNumber)));
+        const existingSlugs = new Set(existingH2H.map(e => e.slug));
 
-      // Archive any existing H2H markets for this week before generating new ones
-      if (existingH2H.length > 0) {
-        await db.update(predictionMarkets)
-          .set({ visibility: "archived", updatedAt: new Date() })
-          .where(
-            and(
-              eq(predictionMarkets.marketType, "h2h"),
-              eq(predictionMarkets.weekNumber, weekNumber),
-              eq(predictionMarkets.status, "OPEN")
-            )
-          );
-        existingSlugs.clear();
-      }
-
-      // Group top people by category
-      const byCategory = new Map<string, typeof top>();
-      for (const person of top) {
-        const cat = (person.category || "misc").toLowerCase();
-        if (!byCategory.has(cat)) byCategory.set(cat, []);
-        byCategory.get(cat)!.push(person);
-      }
-
-      // Same-category pairings first (ranked 1v2, 3v4 within each category)
-      const pairings: [typeof top[0], typeof top[0]][] = [];
-      const paired = new Set<string>();
-      for (const [, group] of Array.from(byCategory)) {
-        for (let i = 0; i < group.length - 1 && pairings.length < 15; i += 2) {
-          pairings.push([group[i], group[i + 1]]);
-          paired.add(group[i].id);
-          paired.add(group[i + 1].id);
+        if (existingH2H.length > 0) {
+          await tx.update(predictionMarkets)
+            .set({ visibility: "archived", updatedAt: new Date() })
+            .where(
+              and(
+                eq(predictionMarkets.marketType, "h2h"),
+                eq(predictionMarkets.weekNumber, weekNumber),
+                eq(predictionMarkets.status, "OPEN")
+              )
+            );
+          existingSlugs.clear();
         }
-      }
 
-      // Fill remaining slots with cross-category "trending" pairings from unpaired people
-      if (pairings.length < 15) {
-        const unpaired = top.filter(p => !paired.has(p.id));
-        for (let i = unpaired.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [unpaired[i], unpaired[j]] = [unpaired[j], unpaired[i]];
+        const byCategory = new Map<string, typeof top>();
+        for (const person of top) {
+          const cat = (person.category || "misc").toLowerCase();
+          if (!byCategory.has(cat)) byCategory.set(cat, []);
+          byCategory.get(cat)!.push(person);
         }
-        for (let i = 0; i < unpaired.length - 1 && pairings.length < 15; i += 2) {
-          pairings.push([unpaired[i], unpaired[i + 1]]);
-        }
-      }
 
-      const allPersonIds = Array.from(new Set(pairings.flatMap(([a, b]) => [a.id, b.id])));
-      const snapRows = allPersonIds.length > 0
-        ? await db.execute(sql`
-            SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
-            FROM trend_snapshots
-            WHERE person_id IN (${sql.join(allPersonIds.map(id => sql`${id}`), sql`, `)})
-            ORDER BY person_id, timestamp DESC
-          `)
-        : { rows: [] };
-      const snapMap = new Map<string, { score: number; snapshotAt: string }>();
-      for (const row of (snapRows.rows || [])) {
-        if (row.fame_index != null) {
-          snapMap.set(String(row.person_id), { score: Number(row.fame_index), snapshotAt: new Date(row.timestamp as string).toISOString() });
-        }
-      }
-
-      let created = 0;
-      for (const [personA, personB] of pairings) {
-        const baseSlug = `h2h-${personA.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-vs-${personB.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
-        if (existingSlugs.has(baseSlug)) continue;
-
-        const openingScores = [snapMap.get(personA.id), snapMap.get(personB.id)]
-          .filter(Boolean)
-          .map((s, i) => ({ personId: i === 0 ? personA.id : personB.id, score: s!.score, snapshotAt: s!.snapshotAt }));
-        const h2hMeta = openingScores.length > 0 ? { openingScores } : undefined;
-
-        const h2hCategory = personA.category?.toLowerCase() === personB.category?.toLowerCase()
-          ? (personA.category?.toLowerCase() || "misc")
-          : "trending";
-
-        let slug = baseSlug;
-        try {
-          const [market] = await db.insert(predictionMarkets).values({
-            marketType: "h2h",
-            title: `${personA.name} vs ${personB.name}`,
-            slug,
-            category: h2hCategory,
-            visibility: "live",
-            status: "OPEN",
-            startAt: monday,
-            endAt: sunday,
-            weekNumber,
-            seedParticipants: 0,
-            seedVolume: "0",
-            metadata: h2hMeta,
-            seedConfig: { enabled: true, targetParticipantsMin: 40, targetParticipantsMax: 120, targetPoolMin: 10000, targetPoolMax: 35000, distributionBias: { personA: 50, personB: 50 } },
-            featured: false,
-          }).returning();
-
-          await db.insert(marketEntries).values([
-            { marketId: market.id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, seedCount: 0, imageUrl: null },
-            { marketId: market.id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, seedCount: 0, imageUrl: null },
-          ]);
-          created++;
-          existingSlugs.add(slug);
-        } catch (slugErr: any) {
-          if (slugErr.code === '23505') {
-            slug = `${baseSlug}-${randomUUID().slice(0, 6)}`;
-            try {
-              const [market] = await db.insert(predictionMarkets).values({
-                marketType: "h2h",
-                title: `${personA.name} vs ${personB.name}`,
-                slug,
-                category: h2hCategory,
-                visibility: "live",
-                status: "OPEN",
-                startAt: monday,
-                endAt: sunday,
-                weekNumber,
-                seedParticipants: 0,
-                seedVolume: "0",
-                metadata: h2hMeta,
-                seedConfig: { enabled: true, targetParticipantsMin: 40, targetParticipantsMax: 120, targetPoolMin: 10000, targetPoolMax: 35000, distributionBias: { personA: 50, personB: 50 } },
-                featured: false,
-              }).returning();
-
-              await db.insert(marketEntries).values([
-                { marketId: market.id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, seedCount: 0, imageUrl: null },
-                { marketId: market.id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, seedCount: 0, imageUrl: null },
-              ]);
-              created++;
-            } catch (retryErr) {
-              console.error(`[GenerateH2H] Retry failed for ${personA.name} vs ${personB.name}:`, retryErr);
-            }
-          } else {
-            console.error(`[GenerateH2H] Insert failed for ${personA.name} vs ${personB.name}:`, slugErr.message);
+        const pairings: [typeof top[0], typeof top[0]][] = [];
+        const paired = new Set<string>();
+        for (const [, group] of Array.from(byCategory)) {
+          for (let i = 0; i < group.length - 1 && pairings.length < 15; i += 2) {
+            pairings.push([group[i], group[i + 1]]);
+            paired.add(group[i].id);
+            paired.add(group[i + 1].id);
           }
         }
-      }
+
+        if (pairings.length < 15) {
+          const unpaired = top.filter(p => !paired.has(p.id));
+          for (let i = unpaired.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [unpaired[i], unpaired[j]] = [unpaired[j], unpaired[i]];
+          }
+          for (let i = 0; i < unpaired.length - 1 && pairings.length < 15; i += 2) {
+            pairings.push([unpaired[i], unpaired[i + 1]]);
+          }
+        }
+
+        const allPersonIds = Array.from(new Set(pairings.flatMap(([a, b]) => [a.id, b.id])));
+        const snapRows = allPersonIds.length > 0
+          ? await tx.execute(sql`
+              SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
+              FROM trend_snapshots
+              WHERE person_id IN (${sql.join(allPersonIds.map(id => sql`${id}`), sql`, `)})
+              ORDER BY person_id, timestamp DESC
+            `)
+          : { rows: [] };
+        const snapMap = new Map<string, { score: number; snapshotAt: string }>();
+        for (const row of (snapRows.rows || [])) {
+          if (row.fame_index != null) {
+            snapMap.set(String(row.person_id), { score: Number(row.fame_index), snapshotAt: new Date(row.timestamp as string).toISOString() });
+          }
+        }
+
+        let createdCount = 0;
+        for (const [personA, personB] of pairings) {
+          const baseSlug = `h2h-${personA.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-vs-${personB.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
+          if (existingSlugs.has(baseSlug)) continue;
+
+          const openingScores = [snapMap.get(personA.id), snapMap.get(personB.id)]
+            .filter(Boolean)
+            .map((s, i) => ({ personId: i === 0 ? personA.id : personB.id, score: s!.score, snapshotAt: s!.snapshotAt }));
+          const h2hMeta = openingScores.length > 0 ? { openingScores } : undefined;
+
+          const h2hCategory = personA.category?.toLowerCase() === personB.category?.toLowerCase()
+            ? (personA.category?.toLowerCase() || "misc")
+            : "trending";
+
+          let slug = baseSlug;
+          try {
+            const [market] = await tx.insert(predictionMarkets).values({
+              marketType: "h2h",
+              title: `${personA.name} vs ${personB.name}`,
+              slug,
+              category: h2hCategory,
+              visibility: "live",
+              status: "OPEN",
+              startAt: monday,
+              endAt: sunday,
+              weekNumber,
+              seedParticipants: 0,
+              seedVolume: "0",
+              metadata: h2hMeta,
+              seedConfig: { enabled: true, targetParticipantsMin: 40, targetParticipantsMax: 120, targetPoolMin: 10000, targetPoolMax: 35000, distributionBias: { personA: 50, personB: 50 } },
+              featured: false,
+            }).returning();
+
+            await tx.insert(marketEntries).values([
+              { marketId: market.id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, seedCount: 0, imageUrl: null },
+              { marketId: market.id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, seedCount: 0, imageUrl: null },
+            ]);
+            createdCount++;
+            existingSlugs.add(slug);
+          } catch (slugErr: any) {
+            if (slugErr.code !== "23505") {
+              throw slugErr;
+            }
+
+            slug = `${baseSlug}-${randomUUID().slice(0, 6)}`;
+            const [market] = await tx.insert(predictionMarkets).values({
+              marketType: "h2h",
+              title: `${personA.name} vs ${personB.name}`,
+              slug,
+              category: h2hCategory,
+              visibility: "live",
+              status: "OPEN",
+              startAt: monday,
+              endAt: sunday,
+              weekNumber,
+              seedParticipants: 0,
+              seedVolume: "0",
+              metadata: h2hMeta,
+              seedConfig: { enabled: true, targetParticipantsMin: 40, targetParticipantsMax: 120, targetPoolMin: 10000, targetPoolMax: 35000, distributionBias: { personA: 50, personB: 50 } },
+              featured: false,
+            }).returning();
+
+            await tx.insert(marketEntries).values([
+              { marketId: market.id, entryType: "person", personId: personA.id, label: personA.name, displayOrder: 0, seedCount: 0, imageUrl: null },
+              { marketId: market.id, entryType: "person", personId: personB.id, label: personB.name, displayOrder: 1, seedCount: 0, imageUrl: null },
+            ]);
+            createdCount++;
+            existingSlugs.add(slug);
+          }
+        }
+
+        return createdCount;
+      });
 
       await db.insert(adminAuditLog).values({
         adminId: req.userId!,

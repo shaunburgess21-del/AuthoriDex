@@ -23,7 +23,18 @@ import {
 } from "./constants";
 import type { AgentConfigData, MarketWithEntries, PredictionDecision } from "./types";
 
+const STALE_IN_PROGRESS_TIMEOUT_MINUTES = 30;
+
 async function processDueActions(): Promise<void> {
+  await db.execute(sql`
+    UPDATE scheduled_agent_actions
+    SET status = 'pending',
+        error_message = NULL,
+        executed_at = NULL
+    WHERE status = 'in_progress'
+      AND execute_after <= NOW() - (${STALE_IN_PROGRESS_TIMEOUT_MINUTES} * INTERVAL '1 minute')
+  `);
+
   const claimedActions = await db.execute(sql`
     WITH claimable AS (
       SELECT id
@@ -76,6 +87,23 @@ async function executeAction(action: {
   const decision = action.decisionPayload as PredictionDecision;
 
   try {
+    const [existingBet] = await db
+      .select({ id: marketBets.id })
+      .from(marketBets)
+      .where(
+        and(
+          eq(marketBets.marketId, action.marketId),
+          eq(marketBets.agentId, action.agentId),
+          sql`${marketBets.betMetadata} ->> 'actionId' = ${action.id}`
+        )
+      )
+      .limit(1);
+
+    if (existingBet) {
+      await markExecuted(action.id);
+      return;
+    }
+
     // Verify market is still open
     const [market] = await db
       .select({
@@ -243,7 +271,10 @@ async function executeAction(action: {
           status: "active",
           agentId: agent.id,
           confidence: decision.confidence?.toFixed(2) ?? null,
-          betMetadata: rationale ? { rationale } : null,
+          betMetadata: {
+            actionId: action.id,
+            ...(rationale ? { rationale } : {}),
+          },
         })
         .returning();
 
@@ -254,12 +285,13 @@ async function executeAction(action: {
         walletType: "VIRTUAL",
         balanceAfter: updatedProfile.predictCredits,
         source: "agent_action",
-        idempotencyKey: `agent_stake_${action.marketId}_${insertedBet.id}`,
+        idempotencyKey: `agent_stake_action_${action.id}`,
         metadata: {
           marketId: action.marketId,
           entryId: action.entryId,
           betId: insertedBet.id,
           agentId: agent.id,
+          actionId: action.id,
         },
       });
 
@@ -272,10 +304,7 @@ async function executeAction(action: {
     });
 
     // Mark action as executed
-    await db
-      .update(scheduledAgentActions)
-      .set({ status: "executed", executedAt: new Date() })
-      .where(eq(scheduledAgentActions.id, action.id));
+    await markExecuted(action.id);
 
     log(
       `[ActionWorker] Executed: agent=${agent.displayName} market=${action.marketId} entry=${entry.label} confidence=${decision.confidence} stake=${action.stakeAmount}`
@@ -290,6 +319,13 @@ async function markFailed(actionId: string, errorMessage: string) {
   await db
     .update(scheduledAgentActions)
     .set({ status: "failed", errorMessage, executedAt: new Date() })
+    .where(eq(scheduledAgentActions.id, actionId));
+}
+
+async function markExecuted(actionId: string) {
+  await db
+    .update(scheduledAgentActions)
+    .set({ status: "executed", executedAt: new Date(), errorMessage: null })
     .where(eq(scheduledAgentActions.id, actionId));
 }
 

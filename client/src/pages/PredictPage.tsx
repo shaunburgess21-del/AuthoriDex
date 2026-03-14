@@ -2063,6 +2063,7 @@ export default function PredictPage() {
         const s1 = Number(e1.totalStake || 0);
         const s2 = Number(e2.totalStake || 0);
         const total = s1 + s2 || 1;
+        const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0) + Number(m.seedVolume || 0);
         return {
           id: m.id,
           title: m.title || `${p1.name || "?"} vs ${p2.name || "?"}`,
@@ -2072,7 +2073,7 @@ export default function PredictPage() {
           person2EntryId: e2.id,
           category: (m.category || "misc") as CategoryFilter,
           endTime: "Sun 23:59 UTC",
-          totalPool: Number(m.seedVolume || 0),
+          totalPool,
           person1Percent: Math.round((s1 / total) * 100) || 50,
           totalBets: (Number(m.activeParticipantCount || 0) || 0) + Number(m.seedConfig?.participants || 0),
           activeParticipantCount: Number(m.activeParticipantCount || 0),
@@ -2089,6 +2090,7 @@ export default function PredictPage() {
     if (dbMarkets.length > 0) {
       return dbMarkets.map((m: any) => {
         const entries = m.entries || [];
+        const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0) + Number(m.seedVolume || 0);
         return {
           id: m.id,
           category: (m.category || "misc") as CategoryFilter,
@@ -2103,7 +2105,7 @@ export default function PredictPage() {
               entryId: e.id,
             };
           }),
-          totalPool: Number(m.seedVolume || 0),
+          totalPool,
           endTime: "Sun 23:59 UTC",
           totalBets: (Number(m.activeParticipantCount || 0) || 0) + Number(m.seedConfig?.participants || 0),
           totalEntries: entries.length,
@@ -2297,8 +2299,8 @@ export default function PredictPage() {
       marketName: market.title,
       marketId: market.id,
       entryId,
-      startScore: opponent.currentScore,
       currentScore: picked.currentScore,
+      opponentScore: opponent.currentScore,
       crowdSentiment: sentiment,
       estimatedPayout,
     });

@@ -31,6 +31,7 @@ export interface StakeSelection {
   entryId?: string;
   startScore?: number;
   currentScore?: number;
+  opponentScore?: number;
   crowdSentiment?: number;
   estimatedPayout?: number;
   baselineScore?: number;
@@ -86,6 +87,7 @@ export function StakeModal({
   const missionText = MISSION_HEADERS[selection.type] || "Place your prediction on this market.";
   const showJackpotWarning = selection.type === "jackpot";
   const isUpDown = selection.type === "updown";
+  const isH2H = selection.type === "h2h";
   const isUp = selection.choice.includes("UP");
   const isDown = selection.choice.includes("DOWN");
 
@@ -227,15 +229,15 @@ export function StakeModal({
             </p>
           )}
 
-          {(selection.startScore || selection.currentScore) && (
+          {isUpDown && (selection.startScore != null || selection.currentScore != null) && (
             <div className="grid grid-cols-2 gap-3">
-              {selection.startScore && (
+              {selection.startScore != null && (
                 <Card className="p-2.5 bg-muted/30">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Baseline Score</p>
                   <p className="font-mono font-bold text-sm">{selection.startScore.toLocaleString('en-US')}</p>
                 </Card>
               )}
-              {selection.currentScore && (
+              {selection.currentScore != null && (
                 <Card className="p-2.5 bg-muted/30">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Score</p>
                   <p className="font-mono font-bold text-sm">{selection.currentScore.toLocaleString('en-US')}</p>
@@ -244,7 +246,20 @@ export function StakeModal({
             </div>
           )}
 
-          {selection.startScore != null && selection.currentScore != null && (() => {
+          {isH2H && selection.currentScore != null && selection.opponentScore != null && (
+            <div className="grid grid-cols-2 gap-3">
+              <Card className="p-2.5 bg-muted/30">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Your Pick Score</p>
+                <p className="font-mono font-bold text-sm">{selection.currentScore.toLocaleString("en-US")}</p>
+              </Card>
+              <Card className="p-2.5 bg-muted/30">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Opponent Score</p>
+                <p className="font-mono font-bold text-sm">{selection.opponentScore.toLocaleString("en-US")}</p>
+              </Card>
+            </div>
+          )}
+
+          {isUpDown && selection.startScore != null && selection.currentScore != null && (() => {
             const baseline = selection.startScore as number;
             const delta = (selection.currentScore as number) - baseline;
             const pct = baseline !== 0 ? (delta / baseline) * 100 : 0;
