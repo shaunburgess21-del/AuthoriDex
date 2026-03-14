@@ -1484,7 +1484,7 @@ function SuggestMarketCard({ onClick }: { onClick: () => void }) {
         <Plus className="h-6 w-6 text-violet-500" />
       </div>
       <p className="text-sm font-medium text-violet-500">Suggest a Market</p>
-      <p className="text-xs text-muted-foreground text-center">Create your own prediction for the community</p>
+      <p className="text-xs text-muted-foreground text-center">Suggest a prediction for admin review</p>
     </div>
   );
 }
@@ -1616,10 +1616,10 @@ function CreatePredictionModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plus className="h-5 w-5 text-violet-500" />
-            Start a Prediction
+            Suggest a Market
           </DialogTitle>
           <DialogDescription>
-            Create a market for the community to predict on
+            Suggest a prediction market for the community. Your submission will be reviewed by an admin before going live.
           </DialogDescription>
         </DialogHeader>
         
@@ -1687,7 +1687,7 @@ function CreatePredictionModal({
             disabled={!title.trim() || !description.trim()}
             data-testid="button-submit-prediction"
           >
-            Create Market
+            Submit Suggestion
           </Button>
         </div>
       </DialogContent>
