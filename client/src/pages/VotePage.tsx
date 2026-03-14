@@ -1121,7 +1121,7 @@ function OpinionPollCard({
                 data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
               >
                 {option.imageUrl ? (
-                  <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0" />
+                  <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0 bg-white" />
                 ) : (
                   <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
                     <ListChecks className="h-4 w-4 text-cyan-400" />
@@ -1157,7 +1157,7 @@ function OpinionPollCard({
                   />
                   <div className="relative flex items-center gap-2.5">
                     {option.imageUrl ? (
-                      <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0" />
+                      <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0 bg-white" />
                     ) : (
                       <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
                         <ListChecks className="h-4 w-4 text-cyan-400" />

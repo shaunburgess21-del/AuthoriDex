@@ -241,7 +241,7 @@ export default function OpinionPollDetailPage() {
                   data-testid={`button-vote-option-${option.id}`}
                 >
                   {option.imageUrl ? (
-                    <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0" />
+                    <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0 bg-white" />
                   ) : (
                     <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
                       <span className="text-sm font-medium text-cyan-400">{option.orderIndex + 1}</span>
@@ -262,7 +262,7 @@ export default function OpinionPollDetailPage() {
                 return (
                   <div key={option.id} className="flex items-center gap-2.5">
                     {option.imageUrl ? (
-                      <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0" />
+                      <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0 bg-white" />
                     ) : (
                       <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
                         <span className="text-xs font-medium text-cyan-400">{option.orderIndex + 1}</span>
