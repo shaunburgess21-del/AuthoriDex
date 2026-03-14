@@ -2231,7 +2231,7 @@ export default function PredictPage() {
 
   const openStakeModal = () => {
     refreshProfile?.();
-    openStakeModal();
+    setStakeModalOpen(true);
   };
 
   const handleUpDownSelect = (market: PredictionMarket, choice: "up" | "down") => {
