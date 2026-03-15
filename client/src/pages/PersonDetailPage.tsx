@@ -1370,6 +1370,11 @@ export default function PersonDetailPage() {
           </div>
         </div>
 
+        {/* Profile Tabs Section */}
+        <div id="profile-tabs-section">
+          <ProfileTabs activeTab={activeTab} onTabChange={handleTabChange} />
+        </div>
+
         <InlineCelebrityBio personId={person.id} personName={person.name} />
 
         {/* 2. Stats Cards */}
@@ -1420,34 +1425,26 @@ export default function PersonDetailPage() {
           </Card>
         </div>
 
-        {activeTab === "overview" && (
-          <div className="flex justify-end mb-2">
-            <a
-              href="#momentum-signals"
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              data-testid="link-jump-to-signals"
-            >
-              Jump to Signals
-              <ChevronDown className="inline h-3 w-3 ml-0.5" />
-            </a>
-          </div>
-        )}
-
-        {/* Why They're Trending - AI-powered news summary (top 10 + Hot Movers) */}
-        {((person.rank && person.rank <= 10) || isHotMover) && (
-          <div className="mb-8">
-            <WhyTrendingCard personId={person.id} personName={person.name} hotMover={isHotMover && !(person.rank && person.rank <= 10)} />
-          </div>
-        )}
-
-        {/* Profile Tabs Section */}
-        <div id="profile-tabs-section">
-          <ProfileTabs activeTab={activeTab} onTabChange={handleTabChange} />
-        </div>
-
         {/* OVERVIEW TAB */}
         {activeTab === "overview" && (
           <>
+            <div className="flex justify-end mb-2">
+              <a
+                href="#momentum-signals"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                data-testid="link-jump-to-signals"
+              >
+                Jump to Signals
+                <ChevronDown className="inline h-3 w-3 ml-0.5" />
+              </a>
+            </div>
+
+            {((person.rank && person.rank <= 10) || isHotMover) && (
+              <div className="mb-8">
+                <WhyTrendingCard personId={person.id} personName={person.name} hotMover={isHotMover && !(person.rank && person.rank <= 10)} />
+              </div>
+            )}
+
             {/* 5. Trend History Chart */}
             <TrendChart personId={person.id} personName={person.name} />
             

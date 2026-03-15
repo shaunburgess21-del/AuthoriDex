@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { Eye, Vote, TrendingUp } from "lucide-react";
 
 interface ProfileTabsProps {
@@ -7,30 +6,15 @@ interface ProfileTabsProps {
 }
 
 const tabs = [
-  { id: "overview", label: "Overview", icon: Eye },
-  { id: "vote", label: "Vote", icon: Vote },
-  { id: "predict", label: "Predict", icon: TrendingUp },
+  { id: "overview", label: "Overview", icon: Eye, accent: "#3C83F6" },
+  { id: "vote", label: "Vote", icon: Vote, accent: "#22D3EE" },
+  { id: "predict", label: "Predict", icon: TrendingUp, accent: "#8B5CF6" },
 ];
 
 export function ProfileTabs({ activeTab, onTabChange }: ProfileTabsProps) {
-  const [hasAnimated, setHasAnimated] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setHasAnimated(true);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, []);
-
   return (
-    <div className="mb-8" data-testid="profile-tabs">
-      <div 
-        className={`
-          w-full grid grid-cols-3 gap-2 p-2 bg-muted/80 rounded-xl 
-          border-2 border-primary/30
-          ${!hasAnimated ? 'attention-pulse-once' : ''}
-        `}
-      >
+    <div className="mb-6" data-testid="profile-tabs">
+      <div className="flex items-center rounded-lg bg-muted/50 p-0.5 w-full">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
@@ -39,16 +23,25 @@ export function ProfileTabs({ activeTab, onTabChange }: ProfileTabsProps) {
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               className={`
-                flex items-center justify-center gap-2
-                px-4 py-3 rounded-lg text-base font-semibold transition-all duration-200
+                relative flex items-center justify-center gap-2 flex-1
+                whitespace-nowrap px-5 py-2 rounded-md text-[15px] font-medium transition-all
                 ${isActive
-                  ? "border-2 border-primary bg-primary/15 text-primary shadow-[0_0_20px_rgba(59,130,246,0.35)]"
-                  : "border-2 border-transparent bg-transparent text-muted-foreground hover:text-foreground hover:bg-muted"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
                 }
               `}
               data-testid={`tab-${tab.id}`}
             >
-              <Icon className={`h-4 w-4 ${isActive ? 'text-primary' : ''}`} />
+              {isActive && (
+                <span
+                  className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full"
+                  style={{ backgroundColor: tab.accent }}
+                />
+              )}
+              <Icon
+                className="h-[18px] w-[18px]"
+                style={isActive ? { color: tab.accent } : undefined}
+              />
               {tab.label}
             </button>
           );
