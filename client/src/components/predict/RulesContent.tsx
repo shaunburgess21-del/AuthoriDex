@@ -43,7 +43,7 @@ export const RULES_CONTENT: Record<string, RulesEntry> = {
     ]
   },
   community: {
-    title: "Real-World Markets",
+    title: "World Markets",
     description: "These markets track verifiable global events (e.g., elections, business acquisitions, viral moments). Predictions are settled based on definitive public outcomes.",
     steps: [
       { icon: <Globe className="h-4 w-4 text-violet-500" />, title: "Verifiable Events", description: "Markets are based on real-world outcomes that can be publicly verified - elections, acquisitions, viral milestones, and more." },

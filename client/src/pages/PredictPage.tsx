@@ -472,7 +472,7 @@ const FIRST_VISIT_KEY = "authoridex_predict_first_visit";
 
 const PREDICTION_TYPES: { id: PredictionType; label: string; mobileLabel: string; icon: React.ReactNode }[] = [
   { id: "all", label: "All Markets", mobileLabel: "All", icon: <Sparkles className="h-4 w-4" /> },
-  { id: "community", label: "Real-World", mobileLabel: "Markets", icon: <Scale className="h-4 w-4" /> },
+  { id: "community", label: "World", mobileLabel: "Markets", icon: <Scale className="h-4 w-4" /> },
   { id: "jackpot", label: "Weekly Jackpot", mobileLabel: "Jackpot", icon: <Crown className="h-4 w-4" /> },
   { id: "updown", label: "Up/Down", mobileLabel: "Up/Down", icon: <TrendingUp className="h-4 w-4" /> },
   { id: "h2h", label: "Head-to-Head", mobileLabel: "H2H", icon: <Swords className="h-4 w-4" /> },
@@ -727,7 +727,7 @@ function FirstTimeModal({ open, onClose }: { open: boolean; onClose: () => void 
               <Globe className="h-4 w-4 text-violet-500" />
             </div>
             <div>
-              <h4 className="font-semibold text-sm">Real-World Events</h4>
+              <h4 className="font-semibold text-sm">World Events</h4>
               <p className="text-xs text-muted-foreground">
                 Predict elections, acquisitions, viral moments, and more.
               </p>
@@ -2644,12 +2644,12 @@ export default function PredictPage() {
         </div>
       </div>
       <div className="container mx-auto px-4 max-w-7xl">
-        {/* Real-World Markets Section - First */}
+        {/* World Markets Section - First */}
         {showSection("community") && (
           <section className="mb-12 mt-[5px]">
             <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mt-[15px] mb-[15px]">
               <div className="flex-1 min-w-0">
-                <h2 className="text-lg sm:text-xl font-serif font-bold truncate">Real-World Markets</h2>
+                <h2 className="text-lg sm:text-xl font-serif font-bold truncate">World Markets</h2>
                 <p className="text-xs sm:text-sm text-muted-foreground truncate">Predict the outcome of verifiable global events</p>
               </div>
               <div className="flex items-center gap-2 shrink-0 ml-3">
@@ -2693,7 +2693,7 @@ export default function PredictPage() {
             />
             {openMarketsError ? (
               <Card className="p-8 text-center">
-                <p className="text-destructive mb-2">Couldn&apos;t load Real-World Markets</p>
+                <p className="text-destructive mb-2">Couldn&apos;t load World Markets</p>
                 <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
                 <Button onClick={() => refetchOpenMarkets()} data-testid="button-retry-open-markets">
                   Retry
@@ -2746,7 +2746,7 @@ export default function PredictPage() {
               </Button>
             </div>
 
-            {/* Town Square - Daily Movers style, anchored after Real-World Markets */}
+            {/* Town Square - Daily Movers style, anchored after World Markets */}
             {recentActivityError ? (
               <div className="mt-8 mb-8">
                 <Card className="p-6 text-center">
@@ -3159,7 +3159,7 @@ export default function PredictPage() {
       <FullScreenOverlay
         open={viewAllCategory === "community"}
         onClose={closePredictOverlay}
-        title="All Real-World Markets"
+        title="All World Markets"
         overlayName="community"
         categoryFilter={overlayCategoryFilter}
         onCategoryChange={setOverlayCategoryFilter}

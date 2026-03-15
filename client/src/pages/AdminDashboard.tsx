@@ -734,7 +734,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editMarket ? "Edit Real-World Market" : "Create Real-World Market"}</DialogTitle>
+          <DialogTitle>{editMarket ? "Edit World Market" : "Create World Market"}</DialogTitle>
           <DialogDescription>{editMarket ? "Update an existing prediction market" : "Create a new prediction market for real-world events"}</DialogDescription>
         </DialogHeader>
 
@@ -3298,7 +3298,7 @@ export default function AdminDashboard() {
             <Tabs value={predictionSubTab} onValueChange={setPredictionSubTab} className="w-full">
               <TabsList className="flex-wrap">
                 <TabsTrigger value="real-world" data-testid="tab-real-world-markets">
-                  Real-World Markets {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "community").length})</span> : null}
+                  World Markets {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "community").length})</span> : null}
                 </TabsTrigger>
                 <TabsTrigger value="weekly-jackpot" data-testid="tab-weekly-jackpot">
                   Weekly Jackpot {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "jackpot").length})</span> : null}
@@ -3318,7 +3318,7 @@ export default function AdminDashboard() {
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between gap-2">
                     <div>
-                      <CardTitle>Real-World Markets</CardTitle>
+                      <CardTitle>World Markets</CardTitle>
                       <CardDescription>Prediction markets for real-world events</CardDescription>
                     </div>
                     <Button onClick={() => setCreateMarketOpen(true)} size="sm" data-testid="button-create-rw-market">

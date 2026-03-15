@@ -842,7 +842,7 @@ function ViewAllCommunityOverlay({
         <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b p-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-serif font-bold">Real-World Predictions</h2>
+              <h2 className="text-lg font-serif font-bold">World Predictions</h2>
               <p className="text-sm text-muted-foreground">{filteredMarkets.length} predictions about {personName}</p>
             </div>
             <Button variant="ghost" size="icon" onClick={onClose} className="relative z-20" aria-label="Close" data-testid="button-close-community-overlay">
@@ -977,11 +977,11 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         </div>
       </Card>
 
-      {/* Real-World Markets (Open Markets) */}
+      {/* World Markets (Open Markets) */}
       <section>
         <SectionHeader
           icon={<Users className="h-4 w-4 text-violet-400" />}
-          title="Real-World Markets"
+          title="World Markets"
           subtitle="Predict the outcome of verifiable global events"
           count={communityPredictions.length || undefined}
           showViewAll={communityPredictions.length > 3}
@@ -1251,7 +1251,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         </Card>
       )}
 
-      {/* View-all overlay for Real-World Markets */}
+      {/* View-all overlay for World Markets */}
       <ViewAllCommunityOverlay
         open={showCommunityOverlay}
         onClose={() => setShowCommunityOverlay(false)}
@@ -1299,7 +1299,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         <section>
           <SectionHeader
             icon={<Users className="h-4 w-4 text-violet-400" />}
-            title="Real-World Predictions"
+            title="World Predictions"
             subtitle="Markets for real-world event predictions"
             count={communityPredictions.length}
             showViewAll={communityPredictions.length > 3}

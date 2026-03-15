@@ -1,5 +1,5 @@
 export const MARKET_TYPE_LABELS: Record<string, string> = {
-  community: "Real-World Markets",
+  community: "World Markets",
   updown: "Weekly Up/Down",
   h2h: "Head-to-Head Battles",
   gainer: "Top Gainer Predictions",

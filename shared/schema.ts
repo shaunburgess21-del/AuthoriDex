@@ -965,7 +965,7 @@ export const marketBetsRelations = relations(marketBets, ({ one }) => ({
   }),
 }));
 
-// Open Market Comments - Discussion on Real-World Markets (marketType='community')
+// Open Market Comments - Discussion on World Markets (marketType='community')
 export const openMarketComments = pgTable("open_market_comments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   marketId: varchar("market_id").notNull().references(() => predictionMarkets.id, { onDelete: "cascade" }),

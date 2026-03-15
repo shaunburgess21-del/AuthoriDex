@@ -55,8 +55,8 @@ const PREDICT_CATEGORY_FILTERS = getFilterCategories(false).map(cat => ({
   label: cat
 }));
 
-type PredictSection = "All" | "Real-World" | "Weekly Jackpot" | "Up/Down" | "Head-to-Head" | "Gainer";
-const SECTION_TOGGLES: PredictSection[] = ["All", "Real-World", "Weekly Jackpot", "Up/Down", "Head-to-Head", "Gainer"];
+type PredictSection = "All" | "World" | "Weekly Jackpot" | "Up/Down" | "Head-to-Head" | "Gainer";
+const SECTION_TOGGLES: PredictSection[] = ["All", "World", "Weekly Jackpot", "Up/Down", "Head-to-Head", "Gainer"];
 
 interface PredictDeckViewProps {
   trendingPeople: TrendingPerson[];
@@ -617,7 +617,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
   const dragScrollRef1 = useDragScroll<HTMLDivElement>();
   const dragScrollRef2 = useDragScroll<HTMLDivElement>();
 
-  const showRealWorld = activeSection === "All" || activeSection === "Real-World";
+  const showRealWorld = activeSection === "All" || activeSection === "World";
   const showJackpot = activeSection === "All" || activeSection === "Weekly Jackpot";
   const showUpDown = activeSection === "All" || activeSection === "Up/Down";
   const showH2H = activeSection === "All" || activeSection === "Head-to-Head";
@@ -642,7 +642,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             }`}
             data-testid={`toggle-predict-section-${section.toLowerCase().replace(/[\s\/]/g, '-')}`}
           >
-            {section === "Real-World" && <MessageSquare className="h-3 w-3" />}
+            {section === "World" && <MessageSquare className="h-3 w-3" />}
             {section === "Weekly Jackpot" && <Trophy className="h-3 w-3" />}
             {section === "Up/Down" && <TrendingUp className="h-3 w-3" />}
             {section === "Head-to-Head" && <Swords className="h-3 w-3" />}
@@ -701,14 +701,14 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
           <HomeSectionHeader
             theme="predict"
             icon={MessageSquare}
-            title="Real-World Markets"
+            title="World Markets"
             subtitle="Predict outcomes of verifiable events."
-            help={{ title: "How Real-World Markets Work", bullets: ["Bet on outcomes of real-world events using credits.", "Markets resolve based on verifiable results and trusted sources.", "Win credits proportional to the odds when you predicted."] }}
+            help={{ title: "How World Markets Work", bullets: ["Bet on outcomes of real-world events using credits.", "Markets resolve based on verifiable results and trusted sources.", "Win credits proportional to the odds when you predicted."] }}
             onViewAll={onExplore}
           />
           {openMarkets.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredCommunity.slice(0, activeSection === "Real-World" ? 20 : 3).map((market: any) => (
+              {filteredCommunity.slice(0, activeSection === "World" ? 20 : 3).map((market: any) => (
                 <CommunityCard
                   key={market.id}
                   market={market}
