@@ -2536,16 +2536,6 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative w-full sm:w-[184px] sm:flex-none">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search matchups..."
-                value={matchupsSearchQuery}
-                onChange={(e) => setMatchupsSearchQuery(e.target.value)}
-                className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
-                data-testid="input-matchups-search"
-              />
-            </div>
           </div>
           
           {matchupsLoading ? (
@@ -2653,16 +2643,6 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative w-full sm:w-[184px] sm:flex-none">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search topics..."
-                value={topicsSearchQuery}
-                onChange={(e) => setTopicsSearchQuery(e.target.value)}
-                className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
-                data-testid="input-topics-search"
-              />
-            </div>
           </div>
           
           {pollsLoading ? (
@@ -2764,16 +2744,6 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative w-full sm:w-[184px] sm:flex-none">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search polls..."
-                value={opinionPollsSearchQuery}
-                onChange={(e) => setOpinionPollsSearchQuery(e.target.value)}
-                className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
-                data-testid="input-opinion-search"
-              />
-            </div>
           </div>
 
           {opinionPollsLoading ? (
@@ -2866,16 +2836,6 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               ))}
-            </div>
-            <div className="relative w-full sm:w-[184px] sm:flex-none">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search celebrities..."
-                value={valuePerceptionSearchQuery}
-                onChange={(e) => setValuePerceptionSearchQuery(e.target.value)}
-                className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
-                data-testid="input-value-search"
-              />
             </div>
           </div>
           
@@ -3014,16 +2974,6 @@ export default function VotePage() {
                 />
               ))}
             </div>
-            <div className="relative w-full sm:w-[184px] sm:flex-none">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by name..."
-                value={inductionSearchQuery}
-                onChange={(e) => setInductionSearchQuery(e.target.value)}
-                className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
-                data-testid="input-induction-search"
-              />
-            </div>
           </div>
 
           {inductionLoading ? (
@@ -3128,16 +3078,6 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               ))}
-            </div>
-            <div className="relative w-full sm:w-[184px] sm:flex-none">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search celebrities..."
-                value={curateSearchQuery}
-                onChange={(e) => setCurateSearchQuery(e.target.value)}
-                className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
-                data-testid="input-curate-search"
-              />
             </div>
           </div>
 

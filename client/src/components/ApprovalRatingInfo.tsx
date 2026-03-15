@@ -1,12 +1,16 @@
 import { Info, Star, Users } from "lucide-react";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 
-export function ApprovalRatingInfoContent() {
+interface ApprovalRatingInfoContentProps {
+  onRateNow?: () => void;
+}
+
+export function ApprovalRatingInfoContent({ onRateNow }: ApprovalRatingInfoContentProps = {}) {
   return (
     <div className="space-y-3 normal-case tracking-normal">
       <p className="font-semibold text-sm">How Approval Rating Works</p>
       <p className="text-xs text-muted-foreground">
-        Approval Rating is based only on votes from verified AuthoriDex users — not external public sentiment or APIs.
+        Approval Rating is based on votes from verified AuthoriDex users.
       </p>
       <ul className="space-y-1.5">
         <li className="flex items-center gap-2 text-xs">
@@ -19,16 +23,30 @@ export function ApprovalRatingInfoContent() {
         </li>
       </ul>
       <p className="text-[10px] text-muted-foreground/60 pt-1 border-t border-border/50">
-        Shown as a % based on community ratings.
+        Displayed as an aggregate rating out of 5.
       </p>
+      {onRateNow && (
+        <button
+          onClick={onRateNow}
+          className="w-full mt-1 px-3 py-1.5 rounded-md bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 text-xs font-medium hover:bg-cyan-500/25 transition-colors"
+        >
+          Rate Now
+        </button>
+      )}
     </div>
   );
 }
 
-export function ApprovalRatingInfoIcon({ className, testId }: { className?: string; testId: string }) {
+interface ApprovalRatingInfoIconProps {
+  className?: string;
+  testId: string;
+  onRateNow?: () => void;
+}
+
+export function ApprovalRatingInfoIcon({ className, testId, onRateNow }: ApprovalRatingInfoIconProps) {
   return (
     <TouchTooltip
-      content={<ApprovalRatingInfoContent />}
+      content={<ApprovalRatingInfoContent onRateNow={onRateNow} />}
       side="bottom"
       align="start"
       contentClassName="max-w-[280px]"

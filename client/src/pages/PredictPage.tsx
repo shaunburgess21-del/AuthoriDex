@@ -619,7 +619,8 @@ function SectionFilterBar({
   testIdPrefix,
   user,
   onAuthRequired,
-  includeCustomTopic = false
+  includeCustomTopic = false,
+  showSearch = true
 }: {
   categoryFilter: CategoryFilter;
   onCategoryChange: (cat: CategoryFilter) => void;
@@ -630,6 +631,7 @@ function SectionFilterBar({
   user?: any;
   onAuthRequired?: () => void;
   includeCustomTopic?: boolean;
+  showSearch?: boolean;
 }) {
   const dragScrollRef = useDragScroll<HTMLDivElement>();
   useScrollHint(dragScrollRef);
@@ -672,16 +674,18 @@ function SectionFilterBar({
           );
         })}
       </div>
-      <div className="relative sm:ml-auto">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder={searchPlaceholder}
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="pl-10 h-8 w-full sm:w-48 bg-slate-800/30 border-slate-700/40"
-          data-testid={`${testIdPrefix}-search`}
-        />
-      </div>
+      {showSearch && (
+        <div className="relative sm:ml-auto">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder={searchPlaceholder}
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="pl-10 h-8 w-full sm:w-48 bg-slate-800/30 border-slate-700/40"
+            data-testid={`${testIdPrefix}-search`}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -2826,6 +2830,7 @@ export default function PredictPage() {
               user={user}
               onAuthRequired={() => setLocation("/login")}
               includeCustomTopic={true}
+              showSearch={false}
             />
             {openMarketsError ? (
               <Card className="p-8 text-center">
@@ -3033,6 +3038,7 @@ export default function PredictPage() {
               testIdPrefix="updown"
               user={user}
               onAuthRequired={() => setLocation("/login")}
+              showSearch={false}
             />
             {updownError ? (
               <Card className="p-8 text-center">
@@ -3092,6 +3098,7 @@ export default function PredictPage() {
               testIdPrefix="h2h"
               user={user}
               onAuthRequired={() => setLocation("/login")}
+              showSearch={false}
             />
             {h2hError ? (
               <Card className="p-8 text-center">
@@ -3151,6 +3158,7 @@ export default function PredictPage() {
               testIdPrefix="gainer"
               user={user}
               onAuthRequired={() => setLocation("/login")}
+              showSearch={false}
             />
             {gainerError ? (
               <Card className="p-8 text-center">

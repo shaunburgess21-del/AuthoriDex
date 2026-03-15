@@ -14,7 +14,8 @@ import { ProfileTabs } from "@/components/ProfileTabs";
 import { PredictTab } from "@/components/PredictTab";
 import { MomentumSignals } from "@/components/MomentumSignals";
 import { InlineCelebrityBio } from "@/components/InlineCelebrityBio";
-import { CategoryPill } from "@/components/CategoryPill";
+import { CategoryPill, getCategoryStyle } from "@/components/CategoryPill";
+import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { TrendScoreInfoIcon } from "@/components/TrendScoreInfo";
 import { ApprovalRatingInfoIcon } from "@/components/ApprovalRatingInfo";
 import { CardSection } from "@/components/CardSection";
@@ -1302,7 +1303,7 @@ export default function PersonDetailPage() {
           </div>
         </div>
       </header>
-      <div className="container mx-auto px-4 py-12 max-w-6xl">
+      <div className="container mx-auto px-4 pt-4 md:pt-12 pb-12 max-w-6xl">
         {/* 1. Header: Name + Category */}
         <div className="mb-8">
           <div className="flex gap-6">
@@ -1318,22 +1319,55 @@ export default function PersonDetailPage() {
               </div>
               <div className="flex flex-row flex-wrap items-center gap-2">
                 <div className="flex flex-row gap-2">
-                  <div
-                    className="inline-flex items-center gap-1.5 px-2 sm:px-3 min-h-9 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono text-xs sm:text-sm font-semibold"
-                    data-testid="text-header-rank"
+                  <TouchTooltip
+                    content={
+                      <div className="space-y-1.5 normal-case tracking-normal">
+                        <p className="font-semibold text-sm">Overall Rank</p>
+                        <p className="text-xs text-muted-foreground">
+                          {person.name}'s position across all categories on the AuthoriDex leaderboard, based on their aggregated Trend Score.
+                        </p>
+                      </div>
+                    }
+                    side="bottom"
+                    align="start"
+                    contentClassName="max-w-[240px]"
+                    showCloseButton
                   >
-                    <Trophy className="h-3.5 w-3.5" />
-                    <span><span className="hidden sm:inline">Overall </span>#{person.rank}</span>
-                  </div>
-                  {momentumData?.categoryRank && (
                     <div
-                      className="inline-flex items-center gap-1.5 px-2 sm:px-3 min-h-9 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400 font-mono text-xs sm:text-sm font-semibold"
-                      data-testid="text-header-category-rank"
+                      className="inline-flex items-center gap-1.5 px-2 sm:px-3 min-h-9 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono text-xs sm:text-sm font-semibold cursor-help"
+                      data-testid="text-header-rank"
                     >
                       <Trophy className="h-3.5 w-3.5" />
-                      <span>{momentumData.categoryRank.category} #{momentumData.categoryRank.categoryRank}</span>
+                      <span><span className="hidden sm:inline">Overall </span>#{person.rank}</span>
                     </div>
-                  )}
+                  </TouchTooltip>
+                  {momentumData?.categoryRank && (() => {
+                    const catStyle = getCategoryStyle(momentumData.categoryRank.category);
+                    return (
+                      <TouchTooltip
+                        content={
+                          <div className="space-y-1.5 normal-case tracking-normal">
+                            <p className="font-semibold text-sm">{momentumData.categoryRank.category} Rank</p>
+                            <p className="text-xs text-muted-foreground">
+                              {person.name}'s position within the {momentumData.categoryRank.category} category, ranked against others in the same field.
+                            </p>
+                          </div>
+                        }
+                        side="bottom"
+                        align="start"
+                        contentClassName="max-w-[240px]"
+                        showCloseButton
+                      >
+                        <div
+                          className={`inline-flex items-center gap-1.5 px-2 sm:px-3 min-h-9 rounded-md ${catStyle.bg} border ${catStyle.border} ${catStyle.text} font-mono text-xs sm:text-sm font-semibold cursor-help`}
+                          data-testid="text-header-category-rank"
+                        >
+                          <Trophy className="h-3.5 w-3.5" />
+                          <span><span className="hidden sm:inline">{momentumData.categoryRank.category} </span>#{momentumData.categoryRank.categoryRank}</span>
+                        </div>
+                      </TouchTooltip>
+                    );
+                  })()}
                 </div>
                 <div className="flex flex-row gap-2">
                   <Button variant="outline" size="icon" className="sm:hidden" onClick={() => sharePage(`${person.name} on AuthoriDex`)} aria-label="Share" data-testid="button-share-mobile">
@@ -1404,7 +1438,12 @@ export default function PersonDetailPage() {
               <p className="text-sm text-muted-foreground uppercase tracking-wide">
                 Approval
               </p>
-              <ApprovalRatingInfoIcon testId="icon-approval-profile" className="h-3 w-3 text-muted-foreground/40 cursor-help" />
+              <ApprovalRatingInfoIcon testId="icon-approval-profile" className="h-3 w-3 text-muted-foreground/40 cursor-help" onRateNow={() => {
+                handleTabChange("vote");
+                setTimeout(() => {
+                  document.getElementById("voting-widget")?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }, 150);
+              }} />
             </div>
             {(person as any).approvalAvgRating != null ? (
               <p className="text-3xl font-mono font-bold" data-testid="text-approval-pct">
