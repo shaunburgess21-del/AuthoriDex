@@ -3856,9 +3856,10 @@ Only return the JSON object.`;
     return s.toLowerCase().replace(/[''`]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
 
-  function matchupBucketUrl(slug: string | null | undefined, optionText: string): string | null {
-    if (!MATCHUP_BUCKET_BASE || !slug) return null;
-    return `${MATCHUP_BUCKET_BASE}/${slug}/${slugifyMatchupName(optionText)}.webp`;
+  function matchupBucketUrl(optionAText: string, optionBText: string, optionText: string): string | null {
+    if (!MATCHUP_BUCKET_BASE) return null;
+    const folder = `${slugifyMatchupName(optionAText)}-vs-${slugifyMatchupName(optionBText)}`;
+    return `${MATCHUP_BUCKET_BASE}/${folder}/${slugifyMatchupName(optionText)}.webp`;
   }
   
   // Get all matchups with vote counts (with dynamic avatar lookup from tracked_people)
@@ -3918,8 +3919,8 @@ Only return the JSON object.`;
         const displayBVotes = counts.option_b + (matchup.seedVotesB || 0);
         const totalVotes = displayAVotes + displayBVotes;
 
-        const optionAImageResolved = matchup.optionAImage || matchupBucketUrl(matchup.slug, matchup.optionAText) || null;
-        const optionBImageResolved = matchup.optionBImage || matchupBucketUrl(matchup.slug, matchup.optionBText) || null;
+        const optionAImageResolved = matchup.optionAImage || matchupBucketUrl(matchup.optionAText, matchup.optionBText, matchup.optionAText) || null;
+        const optionBImageResolved = matchup.optionBImage || matchupBucketUrl(matchup.optionAText, matchup.optionBText, matchup.optionBText) || null;
         const optionAFallback = (matchup.personAId && avatarById[matchup.personAId]) || avatarByName[matchup.optionAText?.toLowerCase()] || null;
         const optionBFallback = (matchup.personBId && avatarById[matchup.personBId]) || avatarByName[matchup.optionBText?.toLowerCase()] || null;
 
@@ -3987,8 +3988,8 @@ Only return the JSON object.`;
       const displayBVotes = realBVotes + (matchup.seedVotesB || 0);
       const totalVotes = displayAVotes + displayBVotes;
       
-      const optionAImageResolved = matchup.optionAImage || matchupBucketUrl(matchup.slug, matchup.optionAText) || null;
-      const optionBImageResolved = matchup.optionBImage || matchupBucketUrl(matchup.slug, matchup.optionBText) || null;
+      const optionAImageResolved = matchup.optionAImage || matchupBucketUrl(matchup.optionAText, matchup.optionBText, matchup.optionAText) || null;
+      const optionBImageResolved = matchup.optionBImage || matchupBucketUrl(matchup.optionAText, matchup.optionBText, matchup.optionBText) || null;
       const optionAFallback = (matchup.personAId && avatarById[matchup.personAId]) || avatarByName[matchup.optionAText.toLowerCase()] || null;
       const optionBFallback = (matchup.personBId && avatarById[matchup.personBId]) || avatarByName[matchup.optionBText.toLowerCase()] || null;
 
