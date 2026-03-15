@@ -116,6 +116,7 @@ async function executeAction(action: {
       .select({
         id: predictionMarkets.id,
         status: predictionMarkets.status,
+        visibility: predictionMarkets.visibility,
         title: predictionMarkets.title,
         marketType: predictionMarkets.marketType,
         category: predictionMarkets.category,
@@ -126,12 +127,12 @@ async function executeAction(action: {
       .where(eq(predictionMarkets.id, action.marketId))
       .limit(1);
 
-    if (!market || market.status !== "OPEN") {
+    if (!market || market.status !== "OPEN" || market.visibility !== "live") {
       await db
         .update(scheduledAgentActions)
         .set({
           status: "skipped",
-          errorMessage: "Market no longer open",
+          errorMessage: "Market no longer live",
           executedAt: new Date(),
         })
         .where(eq(scheduledAgentActions.id, action.id));

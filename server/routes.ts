@@ -8545,7 +8545,9 @@ Only return the JSON object.`;
         .where(
           and(
             eq(predictionMarkets.slug, slug),
-            eq(predictionMarkets.marketType, "community")
+            eq(predictionMarkets.marketType, "community"),
+            eq(predictionMarkets.status, "OPEN"),
+            inArray(predictionMarkets.visibility, ["live", "inactive"])
           )
         )
         .limit(1);
@@ -9062,7 +9064,7 @@ Only return the JSON object.`;
         else {
           const endDate = new Date(endAtRaw);
           if (isNaN(endDate.getTime())) { msgs.push({ severity: "error", field: "resolutionDate", message: "Invalid resolution date" }); hasError = true; }
-          else if (endDate <= new Date()) { msgs.push({ severity: "warning", field: "resolutionDate", message: "Resolution date is in the past" }); }
+          else if (endDate <= new Date()) { msgs.push({ severity: "error", field: "resolutionDate", message: "Resolution date is in the past" }); hasError = true; }
         }
 
         if (category && !VALID_CATEGORIES.includes(category)) {
