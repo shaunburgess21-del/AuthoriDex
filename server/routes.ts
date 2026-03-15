@@ -9800,11 +9800,6 @@ Only return the JSON object.`;
           .set({ totalStake: sql`${marketEntries.totalStake} + ${JACKPOT_TICKET_COST}` })
           .where(eq(marketEntries.id, entryId));
 
-        await tx
-          .update(predictionMarkets)
-          .set({ totalBets: sql`COALESCE(${predictionMarkets.totalBets}, 0) + 1` })
-          .where(eq(predictionMarkets.id, marketId));
-
         const [entryStats] = await tx
           .select({ totalStake: marketEntries.totalStake })
           .from(marketEntries)
