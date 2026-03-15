@@ -1317,17 +1317,17 @@ export default function PersonDetailPage() {
                 </div>
               </div>
               <div className="flex flex-row flex-wrap items-center gap-2">
-                <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex flex-row gap-2">
                   <div
-                    className="inline-flex items-center gap-1.5 px-3 min-h-9 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono text-sm font-semibold"
+                    className="inline-flex items-center gap-1.5 px-2 sm:px-3 min-h-9 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono text-xs sm:text-sm font-semibold"
                     data-testid="text-header-rank"
                   >
                     <Trophy className="h-3.5 w-3.5" />
-                    <span>Overall #{person.rank}</span>
+                    <span><span className="hidden sm:inline">Overall </span>#{person.rank}</span>
                   </div>
                   {momentumData?.categoryRank && (
                     <div
-                      className="inline-flex items-center gap-1.5 px-3 min-h-9 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400 font-mono text-sm font-semibold"
+                      className="inline-flex items-center gap-1.5 px-2 sm:px-3 min-h-9 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400 font-mono text-xs sm:text-sm font-semibold"
                       data-testid="text-header-category-rank"
                     >
                       <Trophy className="h-3.5 w-3.5" />

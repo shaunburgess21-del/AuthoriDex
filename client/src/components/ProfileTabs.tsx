@@ -24,7 +24,7 @@ export function ProfileTabs({ activeTab, onTabChange }: ProfileTabsProps) {
               onClick={() => onTabChange(tab.id)}
               className={`
                 relative flex items-center justify-center gap-2 flex-1
-                whitespace-nowrap px-5 py-2 rounded-md text-[15px] font-medium transition-all
+                whitespace-nowrap px-5 py-[13px] rounded-md text-[15px] font-medium transition-all
                 ${isActive
                   ? "bg-background shadow-sm text-foreground"
                   : "text-muted-foreground hover:text-foreground"
