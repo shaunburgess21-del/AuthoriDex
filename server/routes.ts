@@ -6790,6 +6790,15 @@ Only return the JSON object.`;
   // PUBLIC: TRENDING POLLS
   // ===========================================
 
+  function slugifyHeadline(s: string): string {
+    return s.toLowerCase().replace(/[''`"]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  }
+
+  function sentimentPollImageUrl(slug: string): string | null {
+    if (!process.env.SUPABASE_URL) return null;
+    return `${process.env.SUPABASE_URL}/storage/v1/object/public/sentiment-polls/${slug}/1.webp`;
+  }
+
   app.get("/api/trending-polls", async (req, res) => {
     try {
       const polls = await db
@@ -6817,10 +6826,8 @@ Only return the JSON object.`;
 
       const result = polls.map(p => {
         const total = (p.seedSupportCount || 0) + (p.seedNeutralCount || 0) + (p.seedOpposeCount || 0);
-        let imageUrl = p.imageUrl || null;
-        if (!imageUrl && p.slug && process.env.SUPABASE_URL) {
-          imageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/sentiment-polls/${p.slug}/1.webp`;
-        }
+        const effectiveSlug = p.slug || slugifyHeadline(p.headline);
+        let imageUrl = p.imageUrl || sentimentPollImageUrl(effectiveSlug);
         return {
           id: p.id,
           headline: p.headline,
@@ -6920,10 +6927,8 @@ Only return the JSON object.`;
         if (uv) userVote = uv.choice;
       }
 
-      let imageUrl = poll.imageUrl || null;
-      if (!imageUrl && poll.slug && process.env.SUPABASE_URL) {
-        imageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/sentiment-polls/${poll.slug}/1.webp`;
-      }
+      const effectiveSlug = poll.slug || slugifyHeadline(poll.headline);
+      const imageUrl = poll.imageUrl || sentimentPollImageUrl(effectiveSlug);
 
       res.json({
         ...poll,
