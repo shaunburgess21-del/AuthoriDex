@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, type SyntheticEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 const CELEBRITY_BUCKET = "celebrity-large";
@@ -67,4 +67,42 @@ export function useResolvedImage(
   const src = candidateIndex < candidates.length ? candidates[candidateIndex] : null;
 
   return { src, onError };
+}
+
+const IMG_EXTENSIONS = ['.webp', '.jpeg', '.jpg', '.png'];
+
+function stripExtension(url: string): string | null {
+  const ext = IMG_EXTENSIONS.find(e => url.toLowerCase().endsWith(e));
+  return ext ? url.slice(0, -ext.length) : null;
+}
+
+/**
+ * Generic onError handler for matchup / bucket-derived images.
+ * Tries alternate extensions (.webp -> .jpeg -> .jpg -> .png),
+ * then a fallback URL (e.g. celebrity avatar), then hides the element.
+ */
+export function handleImageError(
+  e: SyntheticEvent<HTMLImageElement>,
+  fallbackUrl?: string | null,
+) {
+  const img = e.currentTarget;
+  const src = img.src;
+
+  const base = stripExtension(src);
+  if (base) {
+    const currentExt = IMG_EXTENSIONS.find(ext => src.toLowerCase().endsWith(ext))!;
+    const nextIdx = IMG_EXTENSIONS.indexOf(currentExt) + 1;
+    if (nextIdx < IMG_EXTENSIONS.length) {
+      img.src = base + IMG_EXTENSIONS[nextIdx];
+      return;
+    }
+  }
+
+  if (fallbackUrl && !img.dataset.triedFallback) {
+    img.dataset.triedFallback = 'true';
+    img.src = fallbackUrl;
+    return;
+  }
+
+  img.style.display = 'none';
 }

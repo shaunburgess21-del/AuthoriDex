@@ -15,6 +15,7 @@ import path from "path";
 import { gamificationService } from "./services/gamification";
 import { isAdminRole } from "./utils/authz";
 import { applyAdminCreditAdjustment } from "./utils/admin-credits";
+import { optimizeImage } from "./utils/image-optimize";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext } from "./providers/serper";
 import { getSourceStats } from "./scoring/sourceStats";
@@ -3916,12 +3917,18 @@ Only return the JSON object.`;
         const displayAVotes = counts.option_a + (matchup.seedVotesA || 0);
         const displayBVotes = counts.option_b + (matchup.seedVotesB || 0);
         const totalVotes = displayAVotes + displayBVotes;
-        const optionAImageResolved = (matchup.personAId && avatarById[matchup.personAId]) || matchup.optionAImage || avatarByName[matchup.optionAText?.toLowerCase()] || matchupBucketUrl(matchup.slug, matchup.optionAText) || null;
-        const optionBImageResolved = (matchup.personBId && avatarById[matchup.personBId]) || matchup.optionBImage || avatarByName[matchup.optionBText?.toLowerCase()] || matchupBucketUrl(matchup.slug, matchup.optionBText) || null;
+
+        const optionAImageResolved = matchup.optionAImage || matchupBucketUrl(matchup.slug, matchup.optionAText) || null;
+        const optionBImageResolved = matchup.optionBImage || matchupBucketUrl(matchup.slug, matchup.optionBText) || null;
+        const optionAFallback = (matchup.personAId && avatarById[matchup.personAId]) || avatarByName[matchup.optionAText?.toLowerCase()] || null;
+        const optionBFallback = (matchup.personBId && avatarById[matchup.personBId]) || avatarByName[matchup.optionBText?.toLowerCase()] || null;
+
         return {
           ...matchup,
           optionAImage: optionAImageResolved,
           optionBImage: optionBImageResolved,
+          optionAFallbackImage: optionAFallback !== optionAImageResolved ? optionAFallback : null,
+          optionBFallbackImage: optionBFallback !== optionBImageResolved ? optionBFallback : null,
           optionAVotes: displayAVotes,
           optionBVotes: displayBVotes,
           totalVotes,
@@ -3980,13 +3987,17 @@ Only return the JSON object.`;
       const displayBVotes = realBVotes + (matchup.seedVotesB || 0);
       const totalVotes = displayAVotes + displayBVotes;
       
-      const optionAImageResolved = (matchup.personAId && avatarById[matchup.personAId]) || matchup.optionAImage || avatarByName[matchup.optionAText.toLowerCase()] || matchupBucketUrl(matchup.slug, matchup.optionAText) || null;
-      const optionBImageResolved = (matchup.personBId && avatarById[matchup.personBId]) || matchup.optionBImage || avatarByName[matchup.optionBText.toLowerCase()] || matchupBucketUrl(matchup.slug, matchup.optionBText) || null;
-      
+      const optionAImageResolved = matchup.optionAImage || matchupBucketUrl(matchup.slug, matchup.optionAText) || null;
+      const optionBImageResolved = matchup.optionBImage || matchupBucketUrl(matchup.slug, matchup.optionBText) || null;
+      const optionAFallback = (matchup.personAId && avatarById[matchup.personAId]) || avatarByName[matchup.optionAText.toLowerCase()] || null;
+      const optionBFallback = (matchup.personBId && avatarById[matchup.personBId]) || avatarByName[matchup.optionBText.toLowerCase()] || null;
+
       res.json({
         ...matchup,
         optionAImage: optionAImageResolved,
         optionBImage: optionBImageResolved,
+        optionAFallbackImage: optionAFallback !== optionAImageResolved ? optionAFallback : null,
+        optionBFallbackImage: optionBFallback !== optionBImageResolved ? optionBFallback : null,
         optionAVotes: displayAVotes,
         optionBVotes: displayBVotes,
         totalVotes,
@@ -5755,7 +5766,7 @@ Only return the JSON object.`;
   // Admin image upload to Supabase Storage
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 2 * 1024 * 1024 },
+    limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
       const allowed = ['image/png', 'image/jpeg', 'image/webp'];
       if (allowed.includes(file.mimetype)) {
@@ -5773,11 +5784,12 @@ Only return the JSON object.`;
         return res.status(400).json({ error: "No file uploaded" });
       }
 
+      const optimized = await optimizeImage(file.buffer);
+
       const moduleName = (req.body.moduleName as string) || "general";
       const slugOrId = (req.body.slugOrId as string) || "unnamed";
-      const ext = path.extname(file.originalname).toLowerCase() || '.png';
       const timestamp = Date.now();
-      const filePath = `${moduleName}/${slugOrId}/${timestamp}${ext}`;
+      const filePath = `${moduleName}/${slugOrId}/${timestamp}${optimized.extension}`;
       const bucketName = "public-images";
 
       const { data: buckets } = await supabaseServer.storage.listBuckets();
@@ -5786,7 +5798,7 @@ Only return the JSON object.`;
         const { error: createError } = await supabaseServer.storage.createBucket(bucketName, {
           public: true,
           allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
-          fileSizeLimit: 2 * 1024 * 1024,
+          fileSizeLimit: 5 * 1024 * 1024,
         });
         if (createError) {
           console.error("Failed to create bucket:", createError);
@@ -5796,8 +5808,8 @@ Only return the JSON object.`;
 
       const { data, error } = await supabaseServer.storage
         .from(bucketName)
-        .upload(filePath, file.buffer, {
-          contentType: file.mimetype,
+        .upload(filePath, optimized.buffer, {
+          contentType: optimized.contentType,
           upsert: false,
         });
 
@@ -7522,6 +7534,24 @@ Only return the JSON object.`;
   // PUBLIC: OPINION POLLS (Multi-option polls)
   // ===========================================
 
+  const OPINION_POLL_BUCKET_BASE = process.env.SUPABASE_URL
+    ? `${process.env.SUPABASE_URL}/storage/v1/object/public/opinion-polls`
+    : null;
+
+  function slugifyOptionName(name: string): string {
+    return name.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+  }
+
+  function opinionPollImageUrl(pollSlug: string | null | undefined): string | null {
+    if (!OPINION_POLL_BUCKET_BASE || !pollSlug) return null;
+    return `${OPINION_POLL_BUCKET_BASE}/${pollSlug}/1.webp`;
+  }
+
+  function opinionOptionImageUrl(pollSlug: string | null | undefined, optionName: string): string | null {
+    if (!OPINION_POLL_BUCKET_BASE || !pollSlug) return null;
+    return `${OPINION_POLL_BUCKET_BASE}/${pollSlug}/${slugifyOptionName(optionName)}.webp`;
+  }
+
   app.get("/api/opinion-polls", async (req, res) => {
     try {
       const authContext = await resolveAuthContextFromHeader(req.headers.authorization);
@@ -7579,12 +7609,15 @@ Only return the JSON object.`;
           if (uv) userVote = uv.optionId;
         }
 
+        const pollImage = poll.imageUrl || opinionPollImageUrl(poll.slug);
+
         return {
           ...poll,
+          imageUrl: pollImage,
           options: optionsWithVotes.map(o => ({
             id: o.id,
             name: o.name,
-            imageUrl: o.personAvatar || o.imageUrl || null,
+            imageUrl: o.personAvatar || o.imageUrl || opinionOptionImageUrl(poll.slug, o.name),
             personId: o.personId,
             personName: o.personName || null,
             votes: o.displayVotes,
@@ -7669,12 +7702,15 @@ Only return the JSON object.`;
         .from(opinionPollComments)
         .where(eq(opinionPollComments.pollId, poll.id));
 
+      const pollImage = poll.imageUrl || opinionPollImageUrl(poll.slug);
+
       res.json({
         ...poll,
+        imageUrl: pollImage,
         options: optionsWithVotes.map(o => ({
           id: o.id,
           name: o.name,
-          imageUrl: o.personAvatar || o.imageUrl || null,
+          imageUrl: o.personAvatar || o.imageUrl || opinionOptionImageUrl(poll.slug, o.name),
           personId: o.personId,
           personName: o.personName || null,
           orderIndex: o.orderIndex,
@@ -11617,9 +11653,10 @@ Only return the JSON object.`;
         return res.status(400).json({ error: "No file uploaded" });
       }
 
-      const ext = path.extname(file.originalname).toLowerCase() || '.png';
+      const optimized = await optimizeImage(file.buffer, { maxWidth: 800 });
+
       const timestamp = Date.now();
-      const filePath = `curate-profile/${id}/${timestamp}${ext}`;
+      const filePath = `curate-profile/${id}/${timestamp}${optimized.extension}`;
       const bucketName = "public-images";
 
       const { data: buckets } = await supabaseServer.storage.listBuckets();
@@ -11628,7 +11665,7 @@ Only return the JSON object.`;
         const { error: createError } = await supabaseServer.storage.createBucket(bucketName, {
           public: true,
           allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
-          fileSizeLimit: 2 * 1024 * 1024,
+          fileSizeLimit: 5 * 1024 * 1024,
         });
         if (createError) {
           console.error("Failed to create bucket:", createError);
@@ -11638,8 +11675,8 @@ Only return the JSON object.`;
 
       const { error: uploadError } = await supabaseServer.storage
         .from(bucketName)
-        .upload(filePath, file.buffer, {
-          contentType: file.mimetype,
+        .upload(filePath, optimized.buffer, {
+          contentType: optimized.contentType,
           upsert: false,
         });
 

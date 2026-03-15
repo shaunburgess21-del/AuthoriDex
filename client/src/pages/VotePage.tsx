@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback, Children } from "react";
+import { handleImageError } from "@/lib/imageResolver";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -239,8 +240,10 @@ interface MatchupData {
   title: string;
   optionAText: string;
   optionAImage: string | null;
+  optionAFallbackImage?: string | null;
   optionBText: string;
   optionBImage: string | null;
+  optionBFallbackImage?: string | null;
   promptText: string | null;
   isActive: boolean;
   visibility: string;
@@ -320,19 +323,7 @@ function VersusCard({
                     src={matchup.optionAImage} 
                     alt={matchup.optionAText}
                     className="w-full h-full object-cover"
-                    onError={(e) => {
-                      const img = e.currentTarget;
-                      const exts = ['.webp', '.png', '.jpg', '.jpeg'];
-                      const src = img.src;
-                      const currentExt = exts.find(ext => src.toLowerCase().endsWith(ext));
-                      const nextIdx = currentExt ? exts.indexOf(currentExt) + 1 : exts.length;
-                      if (nextIdx < exts.length) {
-                        const next = src.substring(0, src.length - (currentExt?.length ?? 0)) + exts[nextIdx];
-                        img.src = next;
-                      } else {
-                        img.style.display = 'none';
-                      }
-                    }}
+                    onError={(e) => handleImageError(e, matchup.optionAFallbackImage)}
                   />
                 </div>
               ) : (
@@ -370,19 +361,7 @@ function VersusCard({
                     src={matchup.optionBImage} 
                     alt={matchup.optionBText}
                     className="w-full h-full object-cover"
-                    onError={(e) => {
-                      const img = e.currentTarget;
-                      const exts = ['.webp', '.png', '.jpg', '.jpeg'];
-                      const src = img.src;
-                      const currentExt = exts.find(ext => src.toLowerCase().endsWith(ext));
-                      const nextIdx = currentExt ? exts.indexOf(currentExt) + 1 : exts.length;
-                      if (nextIdx < exts.length) {
-                        const next = src.substring(0, src.length - (currentExt?.length ?? 0)) + exts[nextIdx];
-                        img.src = next;
-                      } else {
-                        img.style.display = 'none';
-                      }
-                    }}
+                    onError={(e) => handleImageError(e, matchup.optionBFallbackImage)}
                   />
                 </div>
               ) : (

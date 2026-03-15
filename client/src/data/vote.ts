@@ -4,8 +4,10 @@ export interface MatchupData {
   title: string;
   optionAText: string;
   optionAImage: string | null;
+  optionAFallbackImage?: string | null;
   optionBText: string;
   optionBImage: string | null;
+  optionBFallbackImage?: string | null;
   promptText?: string | null;
   isActive: boolean;
   createdAt: string;

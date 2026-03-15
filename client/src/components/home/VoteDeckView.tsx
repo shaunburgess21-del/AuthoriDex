@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { handleImageError } from "@/lib/imageResolver";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -118,6 +119,7 @@ function VersusCard({
                   src={matchup.optionAImage} 
                   alt={matchup.optionAText}
                   className="w-full h-full object-cover object-center"
+                  onError={(e) => handleImageError(e, matchup.optionAFallbackImage)}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
               </div>
@@ -159,6 +161,7 @@ function VersusCard({
                   src={matchup.optionBImage} 
                   alt={matchup.optionBText}
                   className="w-full h-full object-cover object-center"
+                  onError={(e) => handleImageError(e, matchup.optionBFallbackImage)}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
               </div>

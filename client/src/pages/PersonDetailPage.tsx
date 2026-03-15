@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { handleImageError } from "@/lib/imageResolver";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -96,8 +97,10 @@ interface MatchupData {
   title: string;
   optionAText: string;
   optionAImage: string | null;
+  optionAFallbackImage?: string | null;
   optionBText: string;
   optionBImage: string | null;
+  optionBFallbackImage?: string | null;
   promptText?: string | null;
   isActive?: boolean;
   visibility?: string;
@@ -227,6 +230,7 @@ function ProfileMatchupCard({
                       src={matchup.optionAImage}
                       alt={matchup.optionAText}
                       className="w-full h-full object-cover"
+                      onError={(e) => handleImageError(e, matchup.optionAFallbackImage)}
                     />
                   </div>
                 ) : (
@@ -268,6 +272,7 @@ function ProfileMatchupCard({
                       src={matchup.optionBImage}
                       alt={matchup.optionBText}
                       className="w-full h-full object-cover"
+                      onError={(e) => handleImageError(e, matchup.optionBFallbackImage)}
                     />
                   </div>
                 ) : (

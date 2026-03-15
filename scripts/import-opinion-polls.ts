@@ -290,15 +290,13 @@ async function main() {
 
       for (let o = 0; o < options.length; o++) {
         const opt = options[o];
-        // TODO: uncomment when option images are uploaded to Supabase
-        // Option image path: opinion-polls/[poll-slug]/[option-slug].webp
-        // const optionImageUrl = SUPABASE_URL
-        //   ? `${SUPABASE_URL}/storage/v1/object/public/opinion-polls/${slug}/${slugifyOptionName(opt.name)}.webp`
-        //   : null;
+        const optionImageUrl = SUPABASE_URL
+          ? `${SUPABASE_URL}/storage/v1/object/public/opinion-polls/${slug}/${slugifyOptionName(opt.name)}.webp`
+          : null;
         await db.insert(opinionPollOptions).values({
           pollId: createdPoll.id,
           name: opt.name,
-          imageUrl: null, // set optionImageUrl when option images are in Supabase
+          imageUrl: optionImageUrl,
           personId: opt.personId,
           orderIndex: o,
           seedCount: opt.seedCount,
