@@ -13,6 +13,7 @@ import { startMarketResolverScheduler } from "./jobs/market-resolver";
 import { runSeedBatch } from "./jobs/seed-engine";
 import { startAgentRunnerScheduler } from "./agents/agentRunner";
 import { startActionWorkerScheduler } from "./agents/actionWorker";
+import { startMarketGeneratorScheduler } from "./jobs/market-generator";
 import { pool, startDbPoolMonitor } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
 import { fetchBatchGdeltNews } from "./providers/gdelt";
@@ -487,7 +488,7 @@ async function startServer() {
 
     const schedulersDisabled = process.env.DISABLE_SCHEDULERS === "true";
     if (schedulersDisabled) {
-      log("[Schedulers] DISABLE_SCHEDULERS=true — skipping all background schedulers (Ingestion, LiveTick, Seed Engine, MarketResolver, Staleness Monitor, Snapshot).");
+      log("[Schedulers] DISABLE_SCHEDULERS=true — skipping all background schedulers (Ingestion, LiveTick, Seed Engine, MarketResolver, MarketGenerator, Staleness Monitor, Snapshot).");
       return;
     }
     
@@ -511,6 +512,9 @@ async function startServer() {
 
     // Start staleness monitor (alerts when snapshots are >2h old)
     startScheduler("Staleness Monitor", startStalenessMonitor);
+
+    // Start weekly market generation (updown, jackpot, h2h, gainer)
+    startScheduler("MarketGenerator", startMarketGeneratorScheduler);
 
     // Start AI agent prediction system
     startScheduler("AgentRunner", startAgentRunnerScheduler);
