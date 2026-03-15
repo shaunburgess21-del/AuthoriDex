@@ -10,6 +10,11 @@ import { BottomNav } from "@/components/BottomNav";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { Skeleton } from "@/components/ui/skeleton";
 
+// If we got here the page loaded successfully -- clear any leftover retry
+// flag from a previous stale-chunk reload so the mechanism works on the
+// next deploy too.
+sessionStorage.removeItem("chunk_retry");
+
 /**
  * Wraps React.lazy with automatic recovery from stale-chunk errors.
  * After a deploy the old HTML may reference chunk filenames that no longer

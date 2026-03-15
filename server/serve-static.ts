@@ -11,9 +11,18 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  // Hashed assets (JS/CSS chunks) are immutable -- cache them long-term.
+  // index.html is handled separately below with no-cache headers.
+  app.use(express.static(distPath, {
+    maxAge: "1y",
+    immutable: true,
+    index: false,
+  }));
 
+  // SPA fallback: always serve the latest index.html with no-cache so
+  // browsers never use a stale entry point after a deploy.
   app.use("*", (_req, res) => {
+    res.set("Cache-Control", "no-cache, no-store, must-revalidate");
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
