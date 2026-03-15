@@ -509,7 +509,7 @@ const PREDICTION_TYPES: { id: PredictionType; label: string; mobileLabel: string
   { id: "jackpot", label: "Weekly Jackpot", mobileLabel: "Jackpot", icon: <Crown className="h-4 w-4" /> },
   { id: "updown", label: "Up/Down", mobileLabel: "Up/Down", icon: <TrendingUp className="h-4 w-4" /> },
   { id: "h2h", label: "Head-to-Head", mobileLabel: "H2H", icon: <Swords className="h-4 w-4" /> },
-  { id: "gainer", label: "Top Gainer", mobileLabel: "Gainer", icon: <BarChart3 className="h-4 w-4" /> },
+  { id: "gainer", label: "Category Races", mobileLabel: "Races", icon: <BarChart3 className="h-4 w-4" /> },
 ];
 
 function HorizontalScroll({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -1150,7 +1150,7 @@ function TopGainerCard({
         <CategoryPill category={market.category} />
       </div>
       
-      <h3 className="text-[16px] font-semibold mb-3 leading-[1.4]">Top Gainer: {market.category.charAt(0).toUpperCase() + market.category.slice(1)}</h3>
+      <h3 className="text-[16px] font-semibold mb-3 leading-[1.4]">Category Race: {market.category.charAt(0).toUpperCase() + market.category.slice(1)}</h3>
       
       <div className="space-y-2 mb-3">
         {market.leaders.map((leader, i) => (
@@ -1255,7 +1255,7 @@ function GainerCandidatesDialog({
         <DialogHeader className="px-4 pt-4 pb-2">
           <DialogTitle className="flex items-center gap-2">
             <Trophy className="h-5 w-5 text-amber-500" />
-            Top Gainer: {categoryLabel}
+            Category Race: {categoryLabel}
           </DialogTitle>
           <DialogDescription>
             Select a candidate to place your prediction
@@ -2482,7 +2482,7 @@ export default function PredictPage() {
     setPendingSelection({
       type: "gainer",
       choice: name,
-      marketName: `Top Gainer: ${categoryLabel}`,
+      marketName: `Category Race: ${categoryLabel}`,
       marketId: market.id,
       entryId,
     });
@@ -3044,7 +3044,7 @@ export default function PredictPage() {
         {showSection("gainer") && (
           <section className="mb-10">
             <SectionHeader
-              title="Top Gainer Predictions"
+              title="Category Races"
               onRulesClick={() => setRulesModalOpen("gainer")}
             >
               <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain the most points</p>
@@ -3061,7 +3061,7 @@ export default function PredictPage() {
             />
             {gainerError ? (
               <Card className="p-8 text-center">
-                <p className="text-destructive mb-2">Couldn&apos;t load Top Gainer markets</p>
+                <p className="text-destructive mb-2">Couldn&apos;t load Category Race markets</p>
                 <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
                 <Button onClick={() => refetchGainers()} data-testid="button-retry-gainers">Retry</Button>
               </Card>
@@ -3175,7 +3175,7 @@ export default function PredictPage() {
       <FullScreenOverlay
         open={viewAllCategory === "gainers"}
         onClose={closePredictOverlay}
-        title="All Top Gainer Predictions"
+        title="All Category Races"
         overlayName="gainers"
         categoryFilter={overlayCategoryFilter}
         onCategoryChange={setOverlayCategoryFilter}

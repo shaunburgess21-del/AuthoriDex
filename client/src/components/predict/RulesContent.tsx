@@ -34,7 +34,7 @@ export const RULES_CONTENT: Record<string, RulesEntry> = {
     ]
   },
   gainer: {
-    title: "How Top Gainer Works",
+    title: "How Category Races Work",
     description: "Predict which celebrity will post the highest percentage gain by market close.",
     steps: [
       { icon: <BarChart3 className="h-4 w-4 text-violet-500" />, title: "Percentage Gain Focus", description: "This market is decided by percentage gain from the opening score, not raw points added." },

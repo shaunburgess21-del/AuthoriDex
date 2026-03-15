@@ -10342,7 +10342,7 @@ Only return the JSON object.`;
         eq(predictionMarkets.weekNumber, weekNumber)
       ));
       if (existingGainer) {
-        return res.status(409).json({ error: `A Top Gainer market for ${category} already exists this week`, existingId: existingGainer.id });
+        return res.status(409).json({ error: `A Category Race market for ${category} already exists this week`, existingId: existingGainer.id });
       }
 
       const persons = await db.select().from(trackedPeople).where(inArray(trackedPeople.id, personIds));
@@ -10350,7 +10350,7 @@ Only return the JSON object.`;
         return res.status(400).json({ error: "Some person IDs not found" });
       }
 
-      const title = `Top Gainer: ${category.charAt(0).toUpperCase() + category.slice(1)}`;
+      const title = `Category Race: ${category.charAt(0).toUpperCase() + category.slice(1)}`;
       let slug = `gainer-${category}-week-${weekNumber}`;
 
       const gainerSnapRows = personIds.length > 0
@@ -10596,7 +10596,7 @@ Only return the JSON object.`;
     }
   });
 
-  // Batch-generate Top Gainer markets grouped by category for this week
+  // Batch-generate Category Race markets grouped by category for this week
   app.post("/api/admin/native-markets/generate-gainer", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const now = new Date();
@@ -10662,7 +10662,7 @@ Only return the JSON object.`;
         const openingScores = buildOpeningScores(ranked.map((person) => person.id), snapMap);
         const gainerMeta = openingScores.length > 0 ? { openingScores } : undefined;
 
-        const title = `Top Gainer: ${cat.charAt(0).toUpperCase() + cat.slice(1)}`;
+        const title = `Category Race: ${cat.charAt(0).toUpperCase() + cat.slice(1)}`;
         let slug = `gainer-${cat}-week-${weekNumber}`;
 
         try {

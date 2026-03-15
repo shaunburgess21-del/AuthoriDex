@@ -2070,7 +2070,7 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Created", description: "Top Gainer market created" });
+      toast({ title: "Created", description: "Category Race market created" });
       setGainerModalOpen(false);
       setGainerPersonIds([]);
       setGainerPersonSearch("");
@@ -3348,7 +3348,7 @@ export default function AdminDashboard() {
                   Head-to-Head Battles {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "h2h").length})</span> : null}
                 </TabsTrigger>
                 <TabsTrigger value="top-gainer" data-testid="tab-top-gainer">
-                  Top Gainer Predictions {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "gainer").length})</span> : null}
+                  Category Races {markets ? <span className="ml-1 text-xs opacity-60">({markets.filter(m => m.marketType === "gainer").length})</span> : null}
                 </TabsTrigger>
               </TabsList>
 
@@ -3873,7 +3873,7 @@ export default function AdminDashboard() {
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between gap-2">
                     <div>
-                      <CardTitle>Top Gainer Predictions</CardTitle>
+                      <CardTitle>Category Races</CardTitle>
                       <CardDescription>One per category: Tech, Politics, Business, Sports, Creator, Music</CardDescription>
                     </div>
                     <Button onClick={() => { setGainerPersonIds([]); setGainerPersonSearch(""); setGainerCategory("tech"); setGainerModalOpen(true); }} size="sm" data-testid="button-create-gainer">
@@ -3927,7 +3927,7 @@ export default function AdminDashboard() {
                       ) : (
                         <div className="text-center py-8 text-muted-foreground">
                           <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                          <p>No Top Gainer markets yet</p>
+                          <p>No Category Race markets yet</p>
                           <Button className="mt-4" onClick={() => { setGainerPersonIds([]); setGainerCategory("tech"); setGainerModalOpen(true); }} data-testid="button-create-first-gainer">
                             <Plus className="h-4 w-4 mr-2" />Create First Market
                           </Button>
@@ -4009,7 +4009,7 @@ export default function AdminDashboard() {
             <Dialog open={gainerModalOpen} onOpenChange={setGainerModalOpen}>
               <DialogContent className="max-w-md">
                 <DialogHeader>
-                  <DialogTitle>Create Top Gainer Market</DialogTitle>
+                  <DialogTitle>Create Category Race Market</DialogTitle>
                   <DialogDescription>Select a category and link up to 20 celebrities</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">

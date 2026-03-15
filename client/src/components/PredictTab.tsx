@@ -688,7 +688,7 @@ function TopGainerCard({
         <span className="text-xs text-muted-foreground">7-day gain</span>
       </div>
       
-      <h3 className="font-semibold mb-3">Top Gainer: {market.category.charAt(0).toUpperCase() + market.category.slice(1)}</h3>
+      <h3 className="font-semibold mb-3">Category Race: {market.category.charAt(0).toUpperCase() + market.category.slice(1)}</h3>
       
       {personLeader && (
         <div className="flex items-center gap-2 p-2 rounded-lg bg-green-500/10 border border-green-500/20 mb-3">
@@ -1209,11 +1209,11 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         )}
       </section>
 
-      {/* Top Gainer Predictions */}
+      {/* Category Races */}
       <section>
         <SectionHeader
           icon={<BarChart3 className="h-4 w-4 text-violet-400" />}
-          title="Top Gainer Predictions"
+          title="Category Races"
           subtitle="Who will add the most raw trend points"
           count={gainerMarkets.length || undefined}
           infoTooltip="Tracks raw points gained over the week, not percentage changes"
@@ -1282,7 +1282,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         <section>
           <SectionHeader
             icon={<BarChart3 className="h-4 w-4 text-violet-400" />}
-            title="Top Gainer Predictions"
+            title="Category Races"
             subtitle="Raw points added leaderboard"
             count={gainerMarkets.length}
             infoTooltip="Tracks total points added, not percentage gain. Big names can add more raw points."

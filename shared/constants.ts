@@ -2,7 +2,7 @@ export const MARKET_TYPE_LABELS: Record<string, string> = {
   community: "World Markets",
   updown: "Weekly Up/Down",
   h2h: "Head-to-Head Battles",
-  gainer: "Top Gainer Predictions",
+  gainer: "Category Races",
   jackpot: "Weekly Jackpot",
 };
 

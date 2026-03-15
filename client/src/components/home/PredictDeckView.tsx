@@ -365,7 +365,7 @@ function GainerCard({
           <CategoryPill category={market.category} />
         </div>
         
-        <h3 className="text-sm font-semibold mb-3">Top Gainer: {categoryLabel}</h3>
+        <h3 className="text-sm font-semibold mb-3">Category Race: {categoryLabel}</h3>
         
         <div className="space-y-2 mb-4">
           {market.leaders.map((leader, idx) => (
@@ -818,9 +818,9 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
           <HomeSectionHeader
             theme="predict"
             icon={TrendingUp}
-            title="Top Gainer Predictions"
+            title="Category Races"
             subtitle="Pick the biggest mover in 7 days."
-            help={{ title: "How Top Gainer Predictions Work", bullets: ["Predict which celebrity will have the biggest Trend Score increase.", "Choose from trending celebrities across all categories.", "The closest prediction to the actual top gainer wins."] }}
+            help={{ title: "How Category Races Work", bullets: ["Predict which celebrity will have the biggest Trend Score increase.", "Choose from trending celebrities across all categories.", "The closest prediction to the actual top gainer wins."] }}
             onViewAll={onExplore}
           />
           <CardDeckContainer
