@@ -6817,9 +6817,8 @@ Only return the JSON object.`;
 
       const result = polls.map(p => {
         const total = (p.seedSupportCount || 0) + (p.seedNeutralCount || 0) + (p.seedOpposeCount || 0);
-        // Use stored imageUrl, or derive from slug when missing (sentiment-polls/[slug]/1.webp)
         let imageUrl = p.imageUrl || null;
-        if (!imageUrl && !p.personAvatar && p.slug && process.env.SUPABASE_URL) {
+        if (!imageUrl && p.slug && process.env.SUPABASE_URL) {
           imageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/sentiment-polls/${p.slug}/1.webp`;
         }
         return {
@@ -6921,9 +6920,8 @@ Only return the JSON object.`;
         if (uv) userVote = uv.choice;
       }
 
-      // Derive imageUrl from slug when missing (sentiment-polls/[slug]/1.webp)
       let imageUrl = poll.imageUrl || null;
-      if (!imageUrl && !poll.personAvatar && poll.slug && process.env.SUPABASE_URL) {
+      if (!imageUrl && poll.slug && process.env.SUPABASE_URL) {
         imageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/sentiment-polls/${poll.slug}/1.webp`;
       }
 

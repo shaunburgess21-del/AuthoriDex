@@ -854,11 +854,23 @@ function DiscourseCard({
   onVote: (choice: 'support' | 'neutral' | 'oppose') => void;
 }) {
   const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(null);
-  const [imageError, setImageError] = useState(false);
+
+  const imgSources = [topic.personAvatar, topic.imageUrl].filter(Boolean) as string[];
+  const [imgIdx, setImgIdx] = useState(0);
 
   useEffect(() => {
-    setImageError(false);
+    setImgIdx(0);
   }, [topic.id, topic.imageUrl, topic.personAvatar]);
+
+  const currentImgSrc = imgSources[imgIdx] ?? null;
+
+  const handleImgError = () => {
+    if (imgIdx + 1 < imgSources.length) {
+      setImgIdx(imgIdx + 1);
+    } else {
+      setImgIdx(imgSources.length);
+    }
+  };
 
   const handleVote = (choice: 'support' | 'neutral' | 'oppose') => {
     if (!voted) {
@@ -886,13 +898,13 @@ function DiscourseCard({
         <span>{topic.totalVotes.toLocaleString('en-US')} votes</span>
       </div>
       <div className="flex items-start gap-3 mb-3">
-        {(topic.personAvatar || topic.imageUrl) && !imageError ? (
+        {currentImgSrc ? (
           <div className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-slate-800">
             <img 
-              src={topic.personAvatar || topic.imageUrl!} 
+              src={currentImgSrc} 
               alt={topic.personName || topic.headline}
               className="w-full h-full object-cover"
-              onError={() => setImageError(true)}
+              onError={handleImgError}
             />
           </div>
         ) : (
