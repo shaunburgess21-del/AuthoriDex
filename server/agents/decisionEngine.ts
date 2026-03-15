@@ -49,6 +49,13 @@ export function computePrediction(
   // Step 2: Activity gate
   if (rng.nextFloat() > agent.activityRate) return abstain("activity_gate");
 
+  // Step 2b: Community cadence — spread agent participation across sweeps so
+  // pools build gradually over the pre-launch window rather than spiking on
+  // the first sweep after publish. 40% skip per sweep per agent.
+  if (market.marketType === "community" && rng.nextFloat() < 0.40) {
+    return abstain("domain");
+  }
+
   // Step 3: Score each entry
   const n = entries.length;
   const scores: Record<string, number> = {};
@@ -133,9 +140,33 @@ export function computePrediction(
     }
   }
 
-  // Step 4: Select best entry
+  // Step 4: Select entry
+  // For multi-outcome community markets (3+ entries), use weighted random
+  // selection so agents distribute across options rather than all piling
+  // onto the top pick. Binary/updown markets still use deterministic top-1.
   const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-  const [chosenEntryId, rawProbability] = sorted[0];
+  let chosenEntryId: string;
+  let rawProbability: number;
+
+  const isMultiCommunity =
+    market.marketType === "community" &&
+    market.openMarketType === "multi" &&
+    n >= 3;
+
+  if (isMultiCommunity) {
+    const candidates = sorted.slice(0, Math.min(3, n));
+    const totalWeight = candidates.reduce((s, [, v]) => s + v, 0);
+    const roll = rng.nextFloat() * totalWeight;
+    let cumulative = 0;
+    let picked = candidates[0];
+    for (const candidate of candidates) {
+      cumulative += candidate[1];
+      if (roll <= cumulative) { picked = candidate; break; }
+    }
+    [chosenEntryId, rawProbability] = picked;
+  } else {
+    [chosenEntryId, rawProbability] = sorted[0];
+  }
 
   // Step 5: Edge check
   const chanceLevel = 1 / n;

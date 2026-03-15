@@ -8504,6 +8504,7 @@ Only return the JSON object.`;
 
       const personIds = markets.map(m => m.personId).filter(Boolean) as string[];
       let personAvatars = new Map<string, string>();
+      let personNames = new Map<string, string>();
       if (personIds.length > 0) {
         const people = await db
           .select({ id: trendingPeople.id, avatar: trendingPeople.avatar, name: trendingPeople.name })
@@ -8511,6 +8512,7 @@ Only return the JSON object.`;
           .where(inArray(trendingPeople.id, personIds));
         for (const p of people) {
           if (p.avatar) personAvatars.set(p.id, p.avatar);
+          if (p.name) personNames.set(p.id, p.name);
         }
       }
 
@@ -8520,6 +8522,7 @@ Only return the JSON object.`;
         ...m,
         entries: entriesByMarket.get(m.id) || [],
         linkedPersonAvatar: m.personId ? personAvatars.get(m.personId) || null : null,
+        linkedPersonName: m.personId ? personNames.get(m.personId) || null : null,
         recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
         activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
         latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
@@ -8590,11 +8593,27 @@ Only return the JSON object.`;
         .from(marketBets)
         .where(eq(marketBets.marketId, market.id));
 
+      let linkedPersonName: string | null = null;
+      let linkedPersonAvatar: string | null = null;
+      if (market.personId) {
+        const [person] = await db
+          .select({ name: trendingPeople.name, avatar: trendingPeople.avatar })
+          .from(trendingPeople)
+          .where(eq(trendingPeople.id, market.personId))
+          .limit(1);
+        if (person) {
+          linkedPersonName = person.name;
+          linkedPersonAvatar = person.avatar;
+        }
+      }
+
       res.json({
         ...market,
         entries: entriesWithCounts,
         comments,
         totalParticipants: Number(participantResult?.uniqueParticipants || 0),
+        linkedPersonName,
+        linkedPersonAvatar,
       });
     } catch (error) {
       console.error("[Open Markets] Detail error:", error);
@@ -8954,6 +8973,273 @@ Only return the JSON object.`;
     } catch (error) {
       console.error("[Open Markets] Void error:", error);
       res.status(500).json({ error: "Failed to void market" });
+    }
+  });
+
+  // ── Bulk import World Markets ──────────────────────────────────────
+  app.post("/api/admin/open-markets/import", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      const dryRun = req.query.dryRun === "true";
+      const { markets: importRows } = req.body;
+
+      if (!Array.isArray(importRows) || importRows.length === 0) {
+        return res.status(400).json({ error: "markets array is required and must not be empty" });
+      }
+
+      const VALID_TYPES = ["binary", "multi", "updown"];
+      const VALID_CATEGORIES = ["politics", "tech", "music", "sports", "business", "creator", "Film & TV", "gaming", "misc", "Food & Drink", "Lifestyle"];
+      const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+      const allPeople = await db.select({ id: trackedPeople.id, name: trackedPeople.name }).from(trackedPeople);
+      const peopleByName = new Map(allPeople.map(p => [p.name.toLowerCase(), p.id]));
+
+      const existingSlugs = new Set(
+        (await db.select({ slug: predictionMarkets.slug }).from(predictionMarkets)).map(m => m.slug)
+      );
+
+      type Severity = "error" | "warning" | "info";
+      interface ImportMessage { severity: Severity; field?: string; message: string }
+      interface RowResult {
+        index: number;
+        slug: string;
+        title: string;
+        status: "created" | "skipped" | "error";
+        messages: ImportMessage[];
+        marketId?: string;
+      }
+
+      const results: RowResult[] = [];
+      const seenSlugs = new Set<string>();
+
+      for (let i = 0; i < importRows.length; i++) {
+        const row = importRows[i];
+        const msgs: ImportMessage[] = [];
+        let hasError = false;
+
+        const title = row.title?.trim();
+        const slug = row.slug?.trim();
+        const openMarketType = row.type?.toLowerCase();
+        const teaser = row.teaser?.trim() || null;
+        const category = row.category?.trim().toLowerCase() || null;
+        const linkedPersonName = row.linkedPerson?.trim() || null;
+        const endAtRaw = row.resolutionDate || row.endAt;
+        const resolutionCriteria = row.resolutionCriteria?.trim() || null;
+        const closeAtRaw = row.closeAt || null;
+        const sourceNote = row.sourceNote || row.source || null;
+
+        // Up/Down fields
+        const underlying = row.underlying?.trim() || null;
+        const metric = row.metric?.trim() || null;
+        const strike = row.strike != null ? String(row.strike) : null;
+        const unit = row.unit?.trim() || "$";
+
+        // Entries
+        const entries: { label: string; seedCount: number; description?: string }[] = [];
+        if (Array.isArray(row.entries)) {
+          for (const e of row.entries) {
+            if (e.label?.trim()) entries.push({ label: e.label.trim(), seedCount: e.seedCount || 0, description: e.description || undefined });
+          }
+        } else {
+          for (let o = 1; o <= 20; o++) {
+            const label = row[`option${o}`]?.toString().trim();
+            const seed = parseInt(row[`seed${o}`]) || 0;
+            if (label) entries.push({ label, seedCount: seed });
+          }
+        }
+
+        // ── Validation ──
+        if (!title) { msgs.push({ severity: "error", field: "title", message: "Title is required" }); hasError = true; }
+        if (!slug) { msgs.push({ severity: "error", field: "slug", message: "Slug is required" }); hasError = true; }
+        else if (!SLUG_REGEX.test(slug)) { msgs.push({ severity: "error", field: "slug", message: "Slug must be URL-safe (lowercase, numbers, dashes)" }); hasError = true; }
+        else if (existingSlugs.has(slug) || seenSlugs.has(slug)) { msgs.push({ severity: "error", field: "slug", message: `Duplicate slug: ${slug}` }); hasError = true; }
+
+        if (!openMarketType || !VALID_TYPES.includes(openMarketType)) {
+          msgs.push({ severity: "error", field: "type", message: `Invalid type "${row.type}". Must be binary, multi, or updown` }); hasError = true;
+        }
+
+        if (!endAtRaw) { msgs.push({ severity: "error", field: "resolutionDate", message: "Resolution date is required" }); hasError = true; }
+        else {
+          const endDate = new Date(endAtRaw);
+          if (isNaN(endDate.getTime())) { msgs.push({ severity: "error", field: "resolutionDate", message: "Invalid resolution date" }); hasError = true; }
+          else if (endDate <= new Date()) { msgs.push({ severity: "warning", field: "resolutionDate", message: "Resolution date is in the past" }); }
+        }
+
+        if (category && !VALID_CATEGORIES.includes(category)) {
+          msgs.push({ severity: "warning", field: "category", message: `Category "${category}" not in standard list; will be used as-is` });
+        }
+
+        if (entries.length === 0) { msgs.push({ severity: "error", field: "entries", message: "At least one entry is required" }); hasError = true; }
+        else if (openMarketType === "binary" && entries.length !== 2) { msgs.push({ severity: "error", field: "entries", message: "Binary markets must have exactly 2 entries" }); hasError = true; }
+        else if (openMarketType === "multi" && (entries.length < 3 || entries.length > 20)) { msgs.push({ severity: "error", field: "entries", message: "Multi markets must have 3-20 entries" }); hasError = true; }
+        else if (openMarketType === "updown" && entries.length !== 2) { msgs.push({ severity: "error", field: "entries", message: "Up/Down markets must have exactly 2 entries" }); hasError = true; }
+
+        if (openMarketType === "updown") {
+          if (!underlying) msgs.push({ severity: "error", field: "underlying", message: "Up/Down markets require underlying asset" });
+          if (!strike) msgs.push({ severity: "error", field: "strike", message: "Up/Down markets require strike value" });
+          if (!underlying || !strike) hasError = true;
+        }
+
+        // Resolve linked person
+        let resolvedPersonId: string | null = null;
+        let secondaryPersonName: string | null = null;
+        if (linkedPersonName) {
+          if (linkedPersonName.includes("/")) {
+            const parts = linkedPersonName.split("/").map((s: string) => s.trim());
+            const primaryName = parts[0];
+            secondaryPersonName = parts.slice(1).join(", ");
+            resolvedPersonId = peopleByName.get(primaryName.toLowerCase()) || null;
+            if (!resolvedPersonId) msgs.push({ severity: "warning", field: "linkedPerson", message: `Primary person "${primaryName}" not found in tracked people` });
+            msgs.push({ severity: "info", field: "linkedPerson", message: `Secondary person "${secondaryPersonName}" stored in metadata` });
+          } else {
+            resolvedPersonId = peopleByName.get(linkedPersonName.toLowerCase()) || null;
+            if (!resolvedPersonId) msgs.push({ severity: "warning", field: "linkedPerson", message: `Person "${linkedPersonName}" not found in tracked people` });
+          }
+        }
+
+        if (hasError) {
+          results.push({ index: i, slug: slug || `row-${i}`, title: title || "(missing)", status: "error", messages: msgs });
+          continue;
+        }
+
+        seenSlugs.add(slug);
+
+        if (dryRun) {
+          msgs.push({ severity: "info", message: "Dry run — would create this market" });
+          results.push({ index: i, slug, title, status: "created", messages: msgs });
+          continue;
+        }
+
+        // ── Insert ──
+        try {
+          const endAt = new Date(endAtRaw);
+          const closeAt = closeAtRaw ? new Date(closeAtRaw) : endAt;
+          const metadata: Record<string, unknown> = {};
+          if (sourceNote) metadata.source = sourceNote;
+          if (secondaryPersonName) metadata.secondaryPerson = secondaryPersonName;
+          if (row.fitScore != null) metadata.fitScore = row.fitScore;
+          if (row.settlementDifficulty) metadata.settlementDifficulty = row.settlementDifficulty;
+          if (row.timeHorizon) metadata.timeHorizon = row.timeHorizon;
+          if (row.launchWave) metadata.launchWave = row.launchWave;
+
+          const [created] = await db.insert(predictionMarkets).values({
+            marketType: "community",
+            title,
+            slug,
+            openMarketType,
+            teaser,
+            category,
+            personId: resolvedPersonId,
+            endAt,
+            closeAt,
+            startAt: new Date(),
+            resolutionCriteria: resolutionCriteria ? [resolutionCriteria] : null,
+            resolveMethod: "admin_manual",
+            status: "OPEN",
+            visibility: "draft",
+            isLive: false,
+            featured: false,
+            timezone: "UTC",
+            underlying,
+            metric,
+            strike,
+            unit: openMarketType === "updown" ? unit : null,
+            metadata: Object.keys(metadata).length > 0 ? metadata : null,
+            createdBy: authReq.userId,
+            seedParticipants: 0,
+            seedVolume: "0",
+          }).returning();
+
+          await db.insert(marketEntries).values(
+            entries.map((e, idx) => ({
+              marketId: created.id,
+              entryType: "custom" as const,
+              label: e.label,
+              description: e.description || null,
+              displayOrder: idx,
+              seedCount: 0,
+            }))
+          );
+
+          existingSlugs.add(slug);
+          results.push({ index: i, slug, title, status: "created", messages: msgs, marketId: created.id });
+        } catch (insertErr: any) {
+          if (insertErr?.code === "23505") {
+            msgs.push({ severity: "error", message: "Slug conflict during insert" });
+            results.push({ index: i, slug, title, status: "error", messages: msgs });
+          } else {
+            throw insertErr;
+          }
+        }
+      }
+
+      const summary = {
+        dryRun,
+        total: importRows.length,
+        created: results.filter(r => r.status === "created").length,
+        skipped: results.filter(r => r.status === "skipped").length,
+        errors: results.filter(r => r.status === "error").length,
+        results,
+      };
+
+      res.json(summary);
+    } catch (error) {
+      console.error("[Open Markets] Import error:", error);
+      res.status(500).json({ error: "Failed to import markets" });
+    }
+  });
+
+  // ── Batch update visibility for World Markets ──────────────────────
+  app.post("/api/admin/open-markets/batch-visibility", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { marketIds, visibility } = req.body;
+
+      if (!Array.isArray(marketIds) || marketIds.length === 0) {
+        return res.status(400).json({ error: "marketIds array is required" });
+      }
+      if (!["draft", "live", "inactive", "archived"].includes(visibility)) {
+        return res.status(400).json({ error: "visibility must be draft, live, inactive, or archived" });
+      }
+
+      const updated = await db.update(predictionMarkets)
+        .set({
+          visibility,
+          isLive: visibility === "live" || visibility === "inactive",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            inArray(predictionMarkets.id, marketIds),
+            eq(predictionMarkets.marketType, "community")
+          )
+        )
+        .returning({ id: predictionMarkets.id, title: predictionMarkets.title, visibility: predictionMarkets.visibility });
+
+      res.json({ updated: updated.length, markets: updated });
+    } catch (error) {
+      console.error("[Open Markets] Batch visibility error:", error);
+      res.status(500).json({ error: "Failed to update visibility" });
+    }
+  });
+
+  // ── Get market with entries (for admin edit) ───────────────────────
+  app.get("/api/admin/open-markets/:id", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const [market] = await db.select().from(predictionMarkets)
+        .where(and(eq(predictionMarkets.id, id), eq(predictionMarkets.marketType, "community")))
+        .limit(1);
+
+      if (!market) return res.status(404).json({ error: "Market not found" });
+
+      const entries = await db.select().from(marketEntries)
+        .where(eq(marketEntries.marketId, id))
+        .orderBy(asc(marketEntries.displayOrder));
+
+      res.json({ ...market, entries });
+    } catch (error) {
+      console.error("[Open Markets] Admin detail error:", error);
+      res.status(500).json({ error: "Failed to fetch market" });
     }
   });
 

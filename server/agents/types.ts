@@ -23,6 +23,7 @@ export interface AgentConfigData {
 export interface MarketWithEntries {
   id: string;
   marketType: string;
+  openMarketType?: string | null;
   status: string;
   title: string;
   category: string | null;

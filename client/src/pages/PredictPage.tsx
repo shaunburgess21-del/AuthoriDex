@@ -94,6 +94,39 @@ function MarketAvatar({ market }: { market: any }) {
   );
 }
 
+function LinkedPersonChip({ market }: { market: any }) {
+  const name = market.linkedPersonName;
+  if (!name) return null;
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] text-purple-400/80 bg-purple-500/10 rounded-full px-2 py-0.5">
+      <span className="opacity-60">Linked to</span> {name}
+    </span>
+  );
+}
+
+function FreshnessBadge({ market }: { market: any }) {
+  const endAt = new Date(market.closeAt || market.endAt);
+  const now = Date.now();
+  const daysLeft = Math.ceil((endAt.getTime() - now) / (1000 * 60 * 60 * 24));
+  const createdDaysAgo = Math.floor((now - new Date(market.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+
+  if (daysLeft <= 0) return null;
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {createdDaysAgo <= 7 && (
+        <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400 px-1.5 py-0">New</Badge>
+      )}
+      {daysLeft <= 7 && (
+        <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-400 px-1.5 py-0">Closing soon</Badge>
+      )}
+      <span className="text-[11px] text-muted-foreground">
+        {daysLeft === 1 ? "Closes tomorrow" : `Closes in ${daysLeft} days`}
+      </span>
+    </div>
+  );
+}
+
 function ParticipantAvatarStack({
   participants = [],
   totalCount = 0,
@@ -1340,10 +1373,10 @@ function UserBetResult({ betResult, isMarketClosed = false }: { betResult?: { re
 
 function OpenMarketCard({ market, onNavigate, isMarketClosed = false, userBetResult }: { market: any; onNavigate: (slug: string, pick?: string) => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number } }) {
   const entries = market.entries || [];
+  const isCommunity = market.marketType === "community";
   const totalStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0), 0);
-  const totalPool = totalStake + Number(market.seedVolume || 0);
-  const entrySeedTotal = entries.reduce((sum: number, e: any) => sum + (e.seedCount || 0), 0);
-  const participants = (market.activeParticipantCount || market.betCount || 0) + entrySeedTotal;
+  const totalPool = isCommunity ? totalStake : totalStake + Number(market.seedVolume || 0);
+  const participants = market.activeParticipantCount || market.betCount || 0;
   const isInactive = market.visibility === "inactive";
   
   const endDate = market.endAt ? new Date(market.endAt) : null;
@@ -1363,8 +1396,8 @@ function OpenMarketCard({ market, onNavigate, isMarketClosed = false, userBetRes
 function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number } }) {
   const yesEntry = entries.find((e: any) => e.label === "Yes") || entries[0];
   const noEntry = entries.find((e: any) => e.label === "No") || entries[1];
-  const yesStake = (yesEntry?.totalStake || 0) + (yesEntry?.seedCount || 0);
-  const noStake = (noEntry?.totalStake || 0) + (noEntry?.seedCount || 0);
+  const yesStake = yesEntry?.totalStake || 0;
+  const noStake = noEntry?.totalStake || 0;
   const total = yesStake + noStake || 1;
   const yesPercent = Math.round((yesStake / total) * 100);
   const noPercent = 100 - yesPercent;
@@ -1380,11 +1413,15 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
       </div>
       
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-3 mb-2">
           <MarketAvatar market={market} />
           <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <LinkedPersonChip market={market} />
+        <FreshnessBadge market={market} />
+      </div>
       {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
       
       <div className="mt-auto pt-1">
@@ -1431,7 +1468,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
 
 function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number } }) {
   const sortedEntries = [...entries].sort((a: any, b: any) => (a.displayOrder || 0) - (b.displayOrder || 0));
-  const totalEntryStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0) + (e.seedCount || 0), 0) || 1;
+  const totalEntryStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0), 0) || 1;
   
   return (
     <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
@@ -1444,11 +1481,15 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
       </div>
       
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-3 mb-2">
           <MarketAvatar market={market} />
           <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <LinkedPersonChip market={market} />
+        <FreshnessBadge market={market} />
+      </div>
       {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
       
       <div className="mb-3 flex items-center gap-2">
@@ -1458,7 +1499,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
       
       <div className="space-y-2 mb-2">
         {sortedEntries.slice(0, 2).map((entry: any) => {
-          const entryStake = (entry.totalStake || 0) + (entry.seedCount || 0);
+          const entryStake = entry.totalStake || 0;
           const pct = Math.round((entryStake / totalEntryStake) * 100);
           return (
             <div key={entry.id} className="flex items-center gap-3">
@@ -1496,8 +1537,8 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
 function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number } }) {
   const aboveEntry = entries.find((e: any) => e.label === "Above") || entries[0];
   const belowEntry = entries.find((e: any) => e.label === "Below") || entries[1];
-  const aboveStake = (aboveEntry?.totalStake || 0) + (aboveEntry?.seedCount || 0);
-  const belowStake = (belowEntry?.totalStake || 0) + (belowEntry?.seedCount || 0);
+  const aboveStake = aboveEntry?.totalStake || 0;
+  const belowStake = belowEntry?.totalStake || 0;
   const total = aboveStake + belowStake || 1;
   const abovePercent = Math.round((aboveStake / total) * 100);
   const belowPercent = 100 - abovePercent;
@@ -1513,11 +1554,15 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
       </div>
       
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-3 mb-2">
           <MarketAvatar market={market} />
           <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <LinkedPersonChip market={market} />
+        <FreshnessBadge market={market} />
+      </div>
       
       {market.underlying && (
         <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-violet-500/5 border border-violet-500/10">
@@ -2534,7 +2579,7 @@ export default function PredictPage() {
     (communityCategory === "all" || communityCategory === "trending" || m.category === communityCategory) &&
     (!communitySearch || m.title?.toLowerCase().includes(communitySearch.toLowerCase())) &&
     (!showMyPositions || userBetsByMarket.has(m.id))
-  ).sort((a: any, b: any) => communityCategory === "trending" ? ((b.seedVolume ?? 0) - (a.seedVolume ?? 0)) : 0);
+  ).sort((a: any, b: any) => communityCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
   const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
 
@@ -3173,7 +3218,7 @@ export default function PredictPage() {
             (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" || m.category === overlayCategoryFilter) &&
             (!overlaySearchQuery || m.title?.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
           )
-          .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.seedVolume ?? 0) - (a.seedVolume ?? 0)) : 0)
+          .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0)
           .map((market: any) => (
             <OpenMarketCard 
               key={market.id} 

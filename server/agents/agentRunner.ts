@@ -15,7 +15,7 @@ import {
   profiles,
   creditLedger,
 } from "@shared/schema";
-import { eq, and, sql, gte, desc, ne, inArray } from "drizzle-orm";
+import { eq, and, sql, gte, desc, inArray } from "drizzle-orm";
 import { log } from "../log";
 import { computePrediction } from "./decisionEngine";
 import type {
@@ -173,6 +173,7 @@ async function runAgentBatchOnce(): Promise<{
     .select({
       id: predictionMarkets.id,
       marketType: predictionMarkets.marketType,
+      openMarketType: predictionMarkets.openMarketType,
       status: predictionMarkets.status,
       title: predictionMarkets.title,
       category: predictionMarkets.category,
@@ -185,7 +186,6 @@ async function runAgentBatchOnce(): Promise<{
         eq(predictionMarkets.status, "OPEN"),
         eq(predictionMarkets.visibility, "live"),
         gte(predictionMarkets.endAt, now),
-        ne(predictionMarkets.marketType, "community")
       )
     );
 
@@ -217,7 +217,6 @@ async function runAgentBatchOnce(): Promise<{
   let scheduled = 0;
   let abstained = 0;
   let skipped = 0;
-  let skippedCommunity = 0;
   let skippedNoEntries = 0;
   let skippedNoEntryId = 0;
 
@@ -225,11 +224,6 @@ async function runAgentBatchOnce(): Promise<{
     const agentData = toAgentData(agent);
 
     for (const market of sweepMarkets) {
-      if (market.marketType === "community") {
-        skippedCommunity++;
-        continue;
-      }
-
       const alreadyExists = await db
         .select({ id: scheduledAgentActions.id })
         .from(scheduledAgentActions)
@@ -325,7 +319,7 @@ async function runAgentBatchOnce(): Promise<{
     log(`[AgentRunner] Conviction sweep error: ${convErr instanceof Error ? convErr.message : convErr}`);
   }
 
-  const exitStats = { scheduled, abstained, skipped, skippedCommunity, skippedNoEntries, skippedNoEntryId, convictionScheduled };
+  const exitStats = { scheduled, abstained, skipped, skippedNoEntries, skippedNoEntryId, convictionScheduled };
   log(`[AgentRunner] Batch complete: ${JSON.stringify(exitStats)}`);
   return { ...exitStats, diagnostics: diag };
 }
@@ -366,12 +360,14 @@ export async function runAgentBatch(): Promise<{
  */
 async function runConvictionSweep(
   agents: (typeof agentConfigs.$inferSelect)[],
-  allMarkets: { id: string; personId: string | null; marketType: string | null; title: string | null }[],
+  allMarkets: { id: string; personId: string | null; marketType: string | null; openMarketType?: string | null; title: string | null }[],
   _now: Date
 ): Promise<number> {
   let convictionScheduled = 0;
 
-  const updownMarkets = allMarkets.filter(m => m.personId && m.marketType === "updown");
+  const updownMarkets = allMarkets.filter(m =>
+    m.personId && (m.marketType === "updown" || (m.marketType === "community" && m.openMarketType === "updown"))
+  );
   if (!updownMarkets.length) return 0;
 
   const personIds = Array.from(new Set(updownMarkets.map(m => m.personId!)));

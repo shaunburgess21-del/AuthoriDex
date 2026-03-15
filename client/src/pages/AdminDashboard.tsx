@@ -88,6 +88,20 @@ import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { TrendingPoll } from "@shared/schema";
 
+const MARKET_CATEGORIES = [
+  { value: "politics", label: "Politics" },
+  { value: "tech", label: "Tech" },
+  { value: "music", label: "Music" },
+  { value: "sports", label: "Sports" },
+  { value: "business", label: "Business" },
+  { value: "creator", label: "Creator" },
+  { value: "Film & TV", label: "Film & TV" },
+  { value: "gaming", label: "Gaming" },
+  { value: "misc", label: "Misc" },
+  { value: "Food & Drink", label: "Food & Drink" },
+  { value: "Lifestyle", label: "Lifestyle" },
+];
+
 type AdminSection = "overview" | "celebrities" | "predictions" | "voting" | "moderation" | "settlement" | "users" | "tools";
 
 interface AdminStats {
@@ -518,7 +532,24 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
         setSelectedMarketCelebName("");
         setMarketCelebSearch("");
       }
-      if (editMarket.entries?.length) {
+      // Fetch entries from dedicated admin endpoint for accurate edit state
+      if (editMarket.id && !editMarket.entries?.length) {
+        fetch(`/api/admin/open-markets/${editMarket.id}`, { credentials: "include" })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (data?.entries?.length) {
+              setEntries(data.entries.map((e: any) => ({
+                label: e.label || "",
+                description: e.description || "",
+                seedCount: e.seedCount || 0,
+                imageUrl: e.imageUrl || "",
+                entryPersonId: e.personId || "",
+                entryPersonName: "",
+              })));
+            }
+          })
+          .catch(() => {});
+      } else if (editMarket.entries?.length) {
         setEntries(editMarket.entries.map((e: any) => ({
           label: e.label || "",
           description: e.description || "",
@@ -700,19 +731,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
     });
   };
 
-  const CATEGORIES = [
-    { value: "politics", label: "Politics" },
-    { value: "tech", label: "Tech" },
-    { value: "music", label: "Music" },
-    { value: "sports", label: "Sports" },
-    { value: "business", label: "Business" },
-    { value: "creator", label: "Creator" },
-    { value: "Film & TV", label: "Film & TV" },
-    { value: "gaming", label: "Gaming" },
-    { value: "misc", label: "Misc" },
-    { value: "Food & Drink", label: "Food & Drink" },
-    { value: "Lifestyle", label: "Lifestyle" },
-  ];
+  const CATEGORIES = MARKET_CATEGORIES;
 
   const titlePlaceholders: Record<string, string> = {
     binary: "Will the Save America Act require voter ID by Dec 2026?",
@@ -1363,6 +1382,13 @@ export default function AdminDashboard() {
   const [nativeCatFilter, setNativeCatFilter] = useState("all");
   const [nativeSearchQuery, setNativeSearchQuery] = useState("");
   const [rwMarketSearch, setRwMarketSearch] = useState("");
+  const [rwVisFilter, setRwVisFilter] = useState("all");
+  const [rwCatFilter, setRwCatFilter] = useState("all");
+  const [rwStatusFilter, setRwStatusFilter] = useState("all");
+  const [rwTypeFilter, setRwTypeFilter] = useState("all");
+  const [rwSortBy, setRwSortBy] = useState<"created" | "endAt">("endAt");
+  const [rwSelectedIds, setRwSelectedIds] = useState<Set<string>>(new Set());
+  const [rwBatchPublishing, setRwBatchPublishing] = useState(false);
   const [h2hMarketSearch, setH2hMarketSearch] = useState("");
   const [gainerMarketSearch, setGainerMarketSearch] = useState("");
   const [pollSearchQuery, setPollSearchQuery] = useState("");
@@ -2772,7 +2798,19 @@ export default function AdminDashboard() {
     c.category.toLowerCase().includes(celebritySearch.toLowerCase())
   ) ?? [], [celebrities, celebritySearch]);
 
-  const rwMarkets = useMemo(() => (markets || []).filter(m => m.marketType === "community").filter(m => !rwMarketSearch || m.title?.toLowerCase().includes(rwMarketSearch.toLowerCase())), [markets, rwMarketSearch]);
+  const rwMarkets = useMemo(() => {
+    let list = (markets || []).filter(m => m.marketType === "community");
+    if (rwVisFilter !== "all") list = list.filter(m => (m as any).visibility === rwVisFilter);
+    if (rwCatFilter !== "all") list = list.filter(m => m.category === rwCatFilter);
+    if (rwStatusFilter !== "all") list = list.filter(m => m.status === rwStatusFilter);
+    if (rwTypeFilter !== "all") list = list.filter(m => m.openMarketType === rwTypeFilter);
+    if (rwMarketSearch) list = list.filter(m => m.title?.toLowerCase().includes(rwMarketSearch.toLowerCase()));
+    list.sort((a, b) => {
+      if (rwSortBy === "endAt") return new Date(a.endAt).getTime() - new Date(b.endAt).getTime();
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+    return list;
+  }, [markets, rwMarketSearch, rwVisFilter, rwCatFilter, rwStatusFilter, rwTypeFilter, rwSortBy]);
 
   const jMarkets = useMemo(() => (markets || []).filter(m => m.marketType === "jackpot").filter(m => {
     if (nativeVisFilter !== "all" && m.visibility !== nativeVisFilter) return false;
@@ -3321,10 +3359,67 @@ export default function AdminDashboard() {
                       <CardTitle>World Markets</CardTitle>
                       <CardDescription>Prediction markets for real-world events</CardDescription>
                     </div>
-                    <Button onClick={() => setCreateMarketOpen(true)} size="sm" data-testid="button-create-rw-market">
-                      <Plus className="h-4 w-4 mr-1" />
-                      Create
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {rwSelectedIds.size > 0 && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          disabled={rwBatchPublishing}
+                          onClick={async () => {
+                            setRwBatchPublishing(true);
+                            try {
+                              const resp = await apiRequest("POST", "/api/admin/open-markets/batch-visibility", {
+                                marketIds: Array.from(rwSelectedIds),
+                                visibility: "live",
+                              });
+                              const data = await resp.json();
+                              queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+                              setRwSelectedIds(new Set());
+                              toast({ title: "Markets Published", description: `${data.updated} markets set to live.` });
+                            } catch {
+                              toast({ title: "Error", description: "Failed to publish markets.", variant: "destructive" });
+                            } finally {
+                              setRwBatchPublishing(false);
+                            }
+                          }}
+                          data-testid="button-batch-publish"
+                        >
+                          {rwBatchPublishing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Eye className="h-4 w-4 mr-1" />}
+                          Publish {rwSelectedIds.size}
+                        </Button>
+                      )}
+                      {rwSelectedIds.size > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={rwBatchPublishing}
+                          onClick={async () => {
+                            setRwBatchPublishing(true);
+                            try {
+                              const resp = await apiRequest("POST", "/api/admin/open-markets/batch-visibility", {
+                                marketIds: Array.from(rwSelectedIds),
+                                visibility: "archived",
+                              });
+                              const data = await resp.json();
+                              queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+                              setRwSelectedIds(new Set());
+                              toast({ title: "Markets Archived", description: `${data.updated} markets archived.` });
+                            } catch {
+                              toast({ title: "Error", description: "Failed to archive markets.", variant: "destructive" });
+                            } finally {
+                              setRwBatchPublishing(false);
+                            }
+                          }}
+                          data-testid="button-batch-archive"
+                        >
+                          Archive {rwSelectedIds.size}
+                        </Button>
+                      )}
+                      <Button onClick={() => setCreateMarketOpen(true)} size="sm" data-testid="button-create-rw-market">
+                        <Plus className="h-4 w-4 mr-1" />
+                        Create
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -3332,22 +3427,93 @@ export default function AdminDashboard() {
                         placeholder="Search..."
                         value={rwMarketSearch}
                         onChange={(e) => setRwMarketSearch(e.target.value)}
-                        className="w-[200px]"
+                        className="w-[160px]"
                         data-testid="input-rw-market-search"
                       />
+                      <Select value={rwVisFilter} onValueChange={setRwVisFilter}>
+                        <SelectTrigger className="w-[120px]"><SelectValue placeholder="Visibility" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Visibility</SelectItem>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="live">Live</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                          <SelectItem value="archived">Archived</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={rwStatusFilter} onValueChange={setRwStatusFilter}>
+                        <SelectTrigger className="w-[130px]"><SelectValue placeholder="Status" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Status</SelectItem>
+                          <SelectItem value="OPEN">Open</SelectItem>
+                          <SelectItem value="CLOSED_PENDING">Pending</SelectItem>
+                          <SelectItem value="RESOLVED">Resolved</SelectItem>
+                          <SelectItem value="VOID">Void</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={rwCatFilter} onValueChange={setRwCatFilter}>
+                        <SelectTrigger className="w-[120px]"><SelectValue placeholder="Category" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Categories</SelectItem>
+                          {MARKET_CATEGORIES.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Select value={rwTypeFilter} onValueChange={setRwTypeFilter}>
+                        <SelectTrigger className="w-[110px]"><SelectValue placeholder="Type" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          <SelectItem value="binary">Yes/No</SelectItem>
+                          <SelectItem value="multi">Multi</SelectItem>
+                          <SelectItem value="updown">Up/Down</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={rwSortBy} onValueChange={(v) => setRwSortBy(v as "created" | "endAt")}>
+                        <SelectTrigger className="w-[140px]"><SelectValue placeholder="Sort" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="endAt">Resolution date</SelectItem>
+                          <SelectItem value="created">Newest first</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <span className="text-xs text-muted-foreground ml-auto">{rwMarkets.length} shown</span>
                     </div>
                     {marketsLoading ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                       </div>
                     ) : rwMarkets.length > 0 ? (
-                        <div className="space-y-3">
-                          {rwMarkets.map((market) => (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 px-3 pb-1">
+                            <input
+                              type="checkbox"
+                              checked={rwSelectedIds.size === rwMarkets.length && rwMarkets.length > 0}
+                              onChange={(e) => {
+                                if (e.target.checked) setRwSelectedIds(new Set(rwMarkets.map(m => m.id)));
+                                else setRwSelectedIds(new Set());
+                              }}
+                              className="rounded"
+                            />
+                            <span className="text-xs text-muted-foreground">Select all</span>
+                          </div>
+                          {rwMarkets.map((market) => {
+                            const daysUntilEnd = Math.ceil((new Date(market.endAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                            const resolvesSoon = daysUntilEnd >= 0 && daysUntilEnd <= 7 && market.status === "OPEN";
+                            const overdue = daysUntilEnd < 0 && (market.status === "OPEN" || market.status === "CLOSED_PENDING");
+                            const vis = (market as any).visibility;
+                            return (
                             <div
                               key={market.id}
                               className="flex items-center justify-between p-3 rounded-lg border gap-3"
                               data-testid={`market-row-${market.id}`}
                             >
+                              <input
+                                type="checkbox"
+                                checked={rwSelectedIds.has(market.id)}
+                                onChange={(e) => {
+                                  const next = new Set(rwSelectedIds);
+                                  e.target.checked ? next.add(market.id) : next.delete(market.id);
+                                  setRwSelectedIds(next);
+                                }}
+                                className="rounded shrink-0"
+                              />
                               <div className="min-w-0 flex-1">
                                 <p className="font-medium truncate">{market.title}</p>
                                 <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -3368,29 +3534,43 @@ export default function AdminDashboard() {
                                   {market.category && (
                                     <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>
                                   )}
+                                  {vis === "draft" && (
+                                    <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500">Draft</Badge>
+                                  )}
+                                  {vis === "live" && (
+                                    <Badge variant="outline" className="text-xs border-green-500/30 text-green-500">Live</Badge>
+                                  )}
+                                  {vis === "inactive" && (
+                                    <Badge variant="outline" className="text-xs border-orange-500/30 text-orange-500">Inactive</Badge>
+                                  )}
+                                  {vis === "archived" && (
+                                    <Badge variant="outline" className="text-xs border-red-500/30 text-red-500">Archived</Badge>
+                                  )}
                                   {market.featured && (
                                     <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500">
-                                      <Star className="h-3 w-3 mr-1" />
-                                      Featured
+                                      <Star className="h-3 w-3 mr-1" />Featured
                                     </Badge>
                                   )}
-                                  {((market as any).visibility === "draft") && (
-                                    <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-500">
-                                      Draft
+                                  {resolvesSoon && (
+                                    <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-500">
+                                      <Clock className="h-3 w-3 mr-1" />Resolves soon
                                     </Badge>
                                   )}
-                                  {((market as any).visibility === "inactive") && (
-                                    <Badge variant="outline" className="text-xs border-orange-500/30 text-orange-500">
-                                      Inactive
+                                  {overdue && (
+                                    <Badge variant="outline" className="text-xs border-red-500/30 text-red-400">
+                                      <AlertTriangle className="h-3 w-3 mr-1" />Overdue
                                     </Badge>
                                   )}
-                                  {((market as any).visibility === "archived") && (
-                                    <Badge variant="outline" className="text-xs border-red-500/30 text-red-500">
-                                      Archived
+                                  {market.personId && (
+                                    <Badge variant="outline" className="text-xs border-purple-500/30 text-purple-400">
+                                      Linked
                                     </Badge>
                                   )}
                                   <span className="text-xs text-muted-foreground">
-                                    Ends: {new Date(market.endAt).toLocaleDateString()}
+                                    {daysUntilEnd >= 0
+                                      ? `Resolves in ${daysUntilEnd}d`
+                                      : `Ended ${Math.abs(daysUntilEnd)}d ago`}
+                                    {" · "}{new Date(market.endAt).toLocaleDateString()}
                                   </span>
                                 </div>
                               </div>
@@ -3409,9 +3589,7 @@ export default function AdminDashboard() {
                                     <Button 
                                       variant="ghost" 
                                       size="icon"
-                                      onClick={() => {
-                                        setSettleMarketId(market.id);
-                                      }}
+                                      onClick={() => setSettleMarketId(market.id)}
                                       aria-label="Settle"
                                       data-testid={`button-settle-${market.id}`}
                                     >
@@ -3430,12 +3608,13 @@ export default function AdminDashboard() {
                                 )}
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       ) : (
                         <div className="text-center py-8 text-muted-foreground">
                           <Gamepad2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                          <p>No real-world markets yet</p>
+                          <p>No World Markets match your filters</p>
                           <Button className="mt-4" onClick={() => setCreateMarketOpen(true)} data-testid="button-create-first-market">
                             <Plus className="h-4 w-4 mr-2" />
                             Create First Market

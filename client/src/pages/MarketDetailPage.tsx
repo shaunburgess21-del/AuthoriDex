@@ -98,6 +98,8 @@ interface MarketData {
   entries: MarketEntry[];
   comments?: MarketComment[];
   totalParticipants?: number;
+  linkedPersonName?: string | null;
+  linkedPersonAvatar?: string | null;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
@@ -575,6 +577,26 @@ export default function MarketDetailPage() {
             <p className="text-muted-foreground text-sm sm:text-base mb-3" data-testid="text-market-teaser">
               {market.teaser}
             </p>
+          )}
+
+          {(market.linkedPersonName || market.endAt) && (
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
+              {market.linkedPersonName && (
+                <span className="inline-flex items-center gap-1 text-xs text-purple-400/90 bg-purple-500/10 rounded-full px-2.5 py-1">
+                  <span className="opacity-60">Linked to</span> {market.linkedPersonName}
+                </span>
+              )}
+              {market.endAt && (() => {
+                const daysLeft = Math.ceil((new Date(market.closeAt || market.endAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                if (daysLeft <= 0) return null;
+                return (
+                  <span className="text-xs text-muted-foreground">
+                    Resolves by {new Date(market.endAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    {daysLeft <= 7 && <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-400 ml-2 px-1.5 py-0">Closing soon</Badge>}
+                  </span>
+                );
+              })()}
+            </div>
           )}
 
           <div className="flex items-center gap-4 flex-wrap text-xs text-muted-foreground">
