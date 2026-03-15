@@ -1517,7 +1517,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
             </div>
           );
         })}
-        {entries.length > 2 && <p className="text-xs text-muted-foreground text-center font-medium">+{entries.length - 2} more</p>}
+        {entries.length > 2 && <button className="text-xs text-violet-400 hover:text-violet-300 text-center mt-1 w-full cursor-pointer transition-colors font-medium" onClick={(e) => { e.stopPropagation(); onNavigate(market.slug); }}>+{entries.length - 2} more</button>}
       </div>
       
       <div className="mt-auto">
@@ -2214,7 +2214,7 @@ export default function PredictPage() {
           category: (m.category || "misc") as CategoryFilter,
           endTime: "Sun 23:59 UTC",
           totalPool,
-          person1Percent: Math.round((s1 / total) * 100) || 50,
+          person1Percent: (s1 + s2) === 0 ? 50 : Math.round((s1 / total) * 100),
           totalBets: (Number(m.activeParticipantCount || 0) || 0) + Number(m.seedConfig?.participants || 0),
           activeParticipantCount: Number(m.activeParticipantCount || 0),
           recentParticipants: m.recentParticipants || [],

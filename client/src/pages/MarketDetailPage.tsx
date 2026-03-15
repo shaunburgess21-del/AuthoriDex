@@ -659,23 +659,28 @@ export default function MarketDetailPage() {
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium mb-2 block">Your Pick</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className={market.openMarketType === "multi" ? "flex flex-col gap-2" : "grid grid-cols-2 gap-2"}>
                     {entriesWithPercentages.sort((a, b) => a.displayOrder - b.displayOrder).map((entry) => {
                       const isSelected = selectedEntry === entry.id;
-                      const isYesLike = entry.label.toLowerCase() === "yes" || entry.label.toLowerCase() === "above" || entry.displayOrder === 0;
+                      const isMulti = market.openMarketType === "multi";
+                      const isYesLike = !isMulti && (entry.label.toLowerCase() === "yes" || entry.label.toLowerCase() === "above" || entry.displayOrder === 0);
+                      const colorClass = isMulti
+                        ? isSelected
+                          ? "bg-violet-600 text-white border-violet-600"
+                          : "border-violet-500/30 text-violet-400"
+                        : isSelected
+                          ? isYesLike
+                            ? "bg-green-600 text-white border-green-600"
+                            : "bg-red-600 text-white border-red-600"
+                          : isYesLike
+                            ? "border-green-500/30 text-green-500"
+                            : "border-red-500/30 text-red-500";
                       return (
                         <Button
                           key={entry.id}
                           size="sm"
                           variant={isSelected ? "default" : "outline"}
-                          className={isSelected
-                            ? isYesLike
-                              ? "bg-green-600 text-white border-green-600"
-                              : "bg-red-600 text-white border-red-600"
-                            : isYesLike
-                              ? "border-green-500/30 text-green-500"
-                              : "border-red-500/30 text-red-500"
-                          }
+                          className={`${colorClass} min-w-0 whitespace-normal text-left h-auto py-2`}
                           onClick={() => setSelectedEntry(entry.id)}
                           data-testid={`button-pick-${entry.label.toLowerCase()}`}
                         >
