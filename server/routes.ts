@@ -9621,6 +9621,394 @@ Only return the JSON object.`;
     }
   });
 
+  // --- Weekly Jackpot endpoints ---
+
+  const JACKPOT_TICKET_COST = 100;
+  const JACKPOT_MAX_PREDICTED_SCORE = 2_000_000;
+
+  function getJackpotBettingCutoff(endAt: Date): Date {
+    const cutoff = new Date(endAt);
+    cutoff.setUTCDate(cutoff.getUTCDate() - 2);
+    cutoff.setUTCHours(23, 59, 59, 999);
+    return cutoff;
+  }
+
+  async function ensureJackpotEntry(marketId: string, txOrDb: any = db): Promise<string> {
+    const [existing] = await txOrDb
+      .select({ id: marketEntries.id })
+      .from(marketEntries)
+      .where(eq(marketEntries.marketId, marketId))
+      .limit(1);
+    if (existing) return existing.id;
+    try {
+      const [created] = await txOrDb.insert(marketEntries).values({
+        marketId,
+        entryType: "custom",
+        label: "Score Prediction",
+        displayOrder: 0,
+      }).returning({ id: marketEntries.id });
+      return created.id;
+    } catch (e: any) {
+      if (e.code === "23505") {
+        const [retry] = await txOrDb
+          .select({ id: marketEntries.id })
+          .from(marketEntries)
+          .where(eq(marketEntries.marketId, marketId))
+          .limit(1);
+        if (retry) return retry.id;
+      }
+      throw e;
+    }
+  }
+
+  app.post("/api/native-markets/:marketId/jackpot-bet", requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      const { marketId } = req.params;
+      const { predictedScore } = req.body;
+
+      if (typeof predictedScore !== "number" || !Number.isInteger(predictedScore) || predictedScore <= 0) {
+        return res.status(400).json({ error: "predictedScore must be a positive integer" });
+      }
+      if (predictedScore > JACKPOT_MAX_PREDICTED_SCORE) {
+        return res.status(400).json({ error: `Predicted score cannot exceed ${JACKPOT_MAX_PREDICTED_SCORE.toLocaleString()}` });
+      }
+
+      if (!checkBetRateLimit(authReq.userId!)) {
+        return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
+      }
+
+      const [market] = await db
+        .select({
+          id: predictionMarkets.id,
+          endAt: predictionMarkets.endAt,
+          status: predictionMarkets.status,
+          visibility: predictionMarkets.visibility,
+          marketType: predictionMarkets.marketType,
+        })
+        .from(predictionMarkets)
+        .where(
+          and(
+            eq(predictionMarkets.id, marketId),
+            eq(predictionMarkets.marketType, "jackpot"),
+            eq(predictionMarkets.status, "OPEN"),
+            eq(predictionMarkets.visibility, "live")
+          )
+        )
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({ error: "Jackpot market not found or not open" });
+      }
+
+      const now = new Date();
+      const bettingCutoff = getJackpotBettingCutoff(market.endAt!);
+      if (now > bettingCutoff) {
+        return res.status(400).json({
+          error: "Jackpot entries close on Friday at 23:59 UTC. This jackpot is now locked.",
+          bettingCutoff: bettingCutoff.toISOString(),
+        });
+      }
+
+      const result = await db.transaction(async (tx) => {
+        const entryId = await ensureJackpotEntry(marketId, tx);
+
+        const [existingClaim] = await tx
+          .select({ id: marketBets.id, userId: marketBets.userId })
+          .from(marketBets)
+          .where(
+            and(
+              eq(marketBets.marketId, marketId),
+              eq(marketBets.status, "active"),
+              sql`${marketBets.betMetadata}->>'predictedScore' = ${String(predictedScore)}`
+            )
+          )
+          .limit(1);
+
+        if (existingClaim) {
+          const isSelf = existingClaim.userId === authReq.userId;
+          const suggestions: number[] = [];
+          if (!isSelf) {
+            for (const offset of [1, -1, 2, -2, 5, -5, 10, -10]) {
+              const candidate = predictedScore + offset;
+              if (candidate <= 0) continue;
+              const [taken] = await tx
+                .select({ id: marketBets.id })
+                .from(marketBets)
+                .where(
+                  and(
+                    eq(marketBets.marketId, marketId),
+                    eq(marketBets.status, "active"),
+                    sql`${marketBets.betMetadata}->>'predictedScore' = ${String(candidate)}`
+                  )
+                )
+                .limit(1);
+              if (!taken) {
+                suggestions.push(candidate);
+                if (suggestions.length >= 3) break;
+              }
+            }
+          }
+          return {
+            conflict: true as const,
+            isSelf,
+            suggestions,
+          };
+        }
+
+        const [updatedProfile] = await tx
+          .update(profiles)
+          .set({
+            predictCredits: sql`${profiles.predictCredits} - ${JACKPOT_TICKET_COST}`,
+            totalPredictions: sql`${profiles.totalPredictions} + 1`,
+          })
+          .where(and(
+            eq(profiles.id, authReq.userId!),
+            sql`${profiles.predictCredits} >= ${JACKPOT_TICKET_COST}`
+          ))
+          .returning({ predictCredits: profiles.predictCredits });
+
+        if (!updatedProfile) {
+          throw new Error("Insufficient credits");
+        }
+
+        const [insertedBet] = await tx
+          .insert(marketBets)
+          .values({
+            marketId,
+            entryId,
+            userId: authReq.userId!,
+            stakeAmount: JACKPOT_TICKET_COST,
+            status: "active",
+            betMetadata: { predictedScore },
+          })
+          .returning();
+
+        await tx.insert(creditLedger).values({
+          userId: authReq.userId!,
+          txnType: "prediction_stake",
+          amount: -JACKPOT_TICKET_COST,
+          walletType: "VIRTUAL",
+          balanceAfter: updatedProfile.predictCredits,
+          source: "user_action",
+          idempotencyKey: `jackpot_stake_${marketId}_${insertedBet.id}`,
+          metadata: { marketId, entryId, betId: insertedBet.id, predictedScore },
+        });
+
+        await tx
+          .update(marketEntries)
+          .set({ totalStake: sql`${marketEntries.totalStake} + ${JACKPOT_TICKET_COST}` })
+          .where(eq(marketEntries.id, entryId));
+
+        await tx
+          .update(predictionMarkets)
+          .set({ totalBets: sql`COALESCE(${predictionMarkets.totalBets}, 0) + 1` })
+          .where(eq(predictionMarkets.id, marketId));
+
+        const [entryStats] = await tx
+          .select({ totalStake: marketEntries.totalStake })
+          .from(marketEntries)
+          .where(eq(marketEntries.id, entryId));
+
+        const totalBetsCount = await tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(marketBets)
+          .where(and(eq(marketBets.marketId, marketId), eq(marketBets.status, "active")));
+
+        return {
+          conflict: false as const,
+          betId: insertedBet.id,
+          remainingCredits: updatedProfile.predictCredits,
+          totalPool: entryStats?.totalStake ?? JACKPOT_TICKET_COST,
+          totalEntries: totalBetsCount[0]?.count ?? 1,
+        };
+      });
+
+      if (result.conflict) {
+        if (result.isSelf) {
+          return res.status(409).json({
+            error: "NUMBER_TAKEN",
+            message: "You already claimed this number.",
+            predictedScore,
+          });
+        }
+        return res.status(409).json({
+          error: "NUMBER_TAKEN",
+          message: "That number is already claimed. Try a nearby number.",
+          predictedScore,
+          suggestions: result.suggestions,
+        });
+      }
+
+      return res.json({
+        betId: (result as any).betId,
+        predictedScore,
+        remainingCredits: (result as any).remainingCredits,
+        totalPool: (result as any).totalPool,
+        totalEntries: (result as any).totalEntries,
+      });
+    } catch (error: any) {
+      if (error?.message === "Insufficient credits") {
+        return res.status(400).json({ error: "Insufficient credits. You need 100 credits to enter." });
+      }
+      console.error("[Jackpot] Bet error:", error);
+      res.status(500).json({ error: "Failed to place jackpot entry" });
+    }
+  });
+
+  app.get("/api/native-markets/:marketId/jackpot-entries", requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      const { marketId } = req.params;
+
+      const [market] = await db
+        .select({ id: predictionMarkets.id, endAt: predictionMarkets.endAt, marketType: predictionMarkets.marketType })
+        .from(predictionMarkets)
+        .where(and(eq(predictionMarkets.id, marketId), eq(predictionMarkets.marketType, "jackpot")))
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({ error: "Jackpot market not found" });
+      }
+
+      const userBets = await db
+        .select({
+          id: marketBets.id,
+          betMetadata: marketBets.betMetadata,
+          createdAt: marketBets.createdAt,
+          status: marketBets.status,
+        })
+        .from(marketBets)
+        .where(
+          and(
+            eq(marketBets.marketId, marketId),
+            eq(marketBets.userId, authReq.userId!),
+            eq(marketBets.status, "active")
+          )
+        )
+        .orderBy(marketBets.createdAt);
+
+      const [entryStats] = await db
+        .select({ totalStake: marketEntries.totalStake })
+        .from(marketEntries)
+        .where(eq(marketEntries.marketId, marketId))
+        .limit(1);
+
+      const totalBetsResult = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(marketBets)
+        .where(and(eq(marketBets.marketId, marketId), eq(marketBets.status, "active")));
+
+      const bettingCutoff = getJackpotBettingCutoff(market.endAt!);
+
+      return res.json({
+        entries: userBets.map(b => ({
+          betId: b.id,
+          predictedScore: (b.betMetadata as any)?.predictedScore ?? null,
+          placedAt: b.createdAt.toISOString(),
+        })),
+        totalPool: entryStats?.totalStake ?? 0,
+        totalEntries: totalBetsResult[0]?.count ?? 0,
+        bettingCutoff: bettingCutoff.toISOString(),
+        isCutoffPassed: new Date() > bettingCutoff,
+      });
+    } catch (error: any) {
+      console.error("[Jackpot] Entries error:", error);
+      res.status(500).json({ error: "Failed to fetch jackpot entries" });
+    }
+  });
+
+  app.get("/api/native-markets/:marketId/jackpot-taken-numbers", async (req, res) => {
+    try {
+      const { marketId } = req.params;
+
+      const bets = await db
+        .select({ betMetadata: marketBets.betMetadata })
+        .from(marketBets)
+        .where(
+          and(
+            eq(marketBets.marketId, marketId),
+            eq(marketBets.status, "active")
+          )
+        );
+
+      const takenNumbers = bets
+        .map(b => (b.betMetadata as any)?.predictedScore)
+        .filter((n): n is number => typeof n === "number");
+
+      return res.json({ takenNumbers });
+    } catch (error: any) {
+      console.error("[Jackpot] Taken numbers error:", error);
+      res.status(500).json({ error: "Failed to fetch taken numbers" });
+    }
+  });
+
+  app.get("/api/native-markets/jackpot-last-winner/:personId", async (req, res) => {
+    try {
+      const { personId } = req.params;
+
+      const [resolved] = await db
+        .select({
+          id: predictionMarkets.id,
+          resolutionNotes: predictionMarkets.resolutionNotes,
+          resolvedAt: predictionMarkets.resolvedAt,
+          title: predictionMarkets.title,
+        })
+        .from(predictionMarkets)
+        .where(
+          and(
+            eq(predictionMarkets.personId, personId),
+            eq(predictionMarkets.marketType, "jackpot"),
+            eq(predictionMarkets.status, "RESOLVED")
+          )
+        )
+        .orderBy(desc(predictionMarkets.resolvedAt))
+        .limit(1);
+
+      if (!resolved || !resolved.resolutionNotes) {
+        return res.json({ hasResult: false });
+      }
+
+      let notes: any;
+      try {
+        notes = JSON.parse(resolved.resolutionNotes);
+      } catch {
+        return res.json({ hasResult: false });
+      }
+
+      if (!notes.actualScore || notes.outcome === "no_entries") {
+        return res.json({ hasResult: false });
+      }
+
+      let winnerUsername: string | null = null;
+      const winnerIds = Array.isArray(notes.winnerUserId) ? notes.winnerUserId : notes.winnerUserId ? [notes.winnerUserId] : [];
+      if (winnerIds.length > 0) {
+        const winnerProfiles = await db
+          .select({ id: profiles.id, username: profiles.username, fullName: profiles.fullName })
+          .from(profiles)
+          .where(inArray(profiles.id, winnerIds));
+        const names = winnerProfiles
+          .map(p => p.username || p.fullName)
+          .filter(Boolean);
+        winnerUsername = names.length > 0 ? names.join(", ") : null;
+      }
+
+      return res.json({
+        hasResult: true,
+        actualScore: notes.actualScore,
+        winningPrediction: notes.winningPrediction,
+        margin: notes.margin,
+        payout: notes.payout,
+        totalEntries: notes.totalEntries,
+        winnerUsername,
+        resolvedAt: resolved.resolvedAt?.toISOString() ?? null,
+      });
+    } catch (error: any) {
+      console.error("[Jackpot] Last winner error:", error);
+      res.status(500).json({ error: "Failed to fetch last winner" });
+    }
+  });
+
   app.get("/api/native-markets/:marketId/history", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { marketId } = req.params;
@@ -10108,15 +10496,14 @@ Only return the JSON object.`;
       for (const person of people) {
         if (existingPersonIds.has(person.id)) continue;
         const slug = `jackpot-${person.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
-        try {
-          await db.insert(predictionMarkets).values({
-            marketType: "jackpot",
+        const jackpotValues = {
+            marketType: "jackpot" as const,
             title: `${person.name}: Predict Exact Score`,
             slug,
             personId: person.id,
             category: person.category?.toLowerCase() || "misc",
-            visibility: "live",
-            status: "OPEN",
+            visibility: "live" as const,
+            status: "OPEN" as const,
             startAt: monday,
             endAt: sunday,
             weekNumber,
@@ -10130,26 +10517,25 @@ Only return the JSON object.`;
               targetPoolMax: 8000,
             },
             featured: false,
+          };
+        try {
+          const [newMarket] = await db.insert(predictionMarkets).values(jackpotValues).returning({ id: predictionMarkets.id });
+          await db.insert(marketEntries).values({
+            marketId: newMarket.id,
+            entryType: "custom",
+            label: "Score Prediction",
+            displayOrder: 0,
           });
           created++;
         } catch (slugErr: any) {
           if (slugErr.code === '23505') {
             const slugRetry = `${slug}-${randomUUID().slice(0, 6)}`;
-            await db.insert(predictionMarkets).values({
-              marketType: "jackpot",
-              title: `${person.name}: Predict Exact Score`,
-              slug: slugRetry,
-              personId: person.id,
-              category: person.category?.toLowerCase() || "misc",
-              visibility: "live",
-              status: "OPEN",
-              startAt: monday,
-              endAt: sunday,
-              weekNumber,
-              seedParticipants: 0,
-              seedVolume: "0",
-              seedConfig: { enabled: true, targetParticipantsMin: 10, targetParticipantsMax: 40, targetPoolMin: 2000, targetPoolMax: 8000 },
-              featured: false,
+            const [newMarket] = await db.insert(predictionMarkets).values({ ...jackpotValues, slug: slugRetry }).returning({ id: predictionMarkets.id });
+            await db.insert(marketEntries).values({
+              marketId: newMarket.id,
+              entryType: "custom",
+              label: "Score Prediction",
+              displayOrder: 0,
             });
             created++;
           }

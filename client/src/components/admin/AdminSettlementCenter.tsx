@@ -681,7 +681,20 @@ export function AdminSettlementCenter() {
                         )}
                         <span>by {market.resolverName}</span>
                         <span>{formatTimeAgo(market.resolvedAt)}</span>
-                        {market.resolutionNotes && <span className="italic">"{market.resolutionNotes}"</span>}
+                        {market.resolutionNotes && (() => {
+                          try {
+                            const notes = JSON.parse(market.resolutionNotes);
+                            if (notes.type === "jackpot") {
+                              if (notes.outcome === "no_entries") {
+                                return <span className="italic">"Jackpot: no entries, voided (actual={notes.actualScore})"</span>;
+                              }
+                              return <span className="italic">"Jackpot: actual={notes.actualScore}, closest={notes.winningPrediction}, margin={notes.margin}, entries={notes.totalEntries}, payout={notes.payout?.toLocaleString?.() ?? notes.payout}"</span>;
+                            }
+                            return <span className="italic">"{market.resolutionNotes}"</span>;
+                          } catch {
+                            return <span className="italic">"{market.resolutionNotes}"</span>;
+                          }
+                        })()}
                         {market.voidReason && <span className="text-destructive italic">Void: {market.voidReason}</span>}
                       </div>
                     </div>

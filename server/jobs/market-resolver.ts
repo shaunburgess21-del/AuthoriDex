@@ -582,22 +582,128 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
   }
 
   const closeSnap = await getCloseSnapshot(personId, market.endAt);
+  if (!closeSnap) {
+    log(`[MarketResolver] jackpot ${market.id}: no snapshot available yet, will retry`);
+    return "blocked";
+  }
 
-  const evidence: any = {
-    type: "jackpot",
-    pendingReason: "jackpot_requires_manual_cleanup",
-    personId,
-    closeScore: closeSnap?.score ?? null,
-    closeSnapshotAt: closeSnap?.capturedAt?.toISOString() ?? null,
-  };
+  const actualScore = Math.round(closeSnap.score);
 
-  await db.update(predictionMarkets).set({
-    status: "CLOSED_PENDING",
-    resolutionNotes: JSON.stringify(evidence),
-    updatedAt: new Date(),
-  }).where(eq(predictionMarkets.id, market.id));
+  const allBets = await db
+    .select({
+      id: marketBets.id,
+      userId: marketBets.userId,
+      stakeAmount: marketBets.stakeAmount,
+      betMetadata: marketBets.betMetadata,
+    })
+    .from(marketBets)
+    .where(and(eq(marketBets.marketId, market.id), eq(marketBets.status, "active")));
 
-  log(`[MarketResolver] jackpot ${market.id}: moved to CLOSED_PENDING (closeScore=${closeSnap?.score ?? 'N/A'})`);
+  if (allBets.length === 0) {
+    await db.update(predictionMarkets).set({
+      status: "RESOLVED",
+      resolvedAt: new Date(),
+      updatedAt: new Date(),
+      resolutionNotes: JSON.stringify({
+        type: "jackpot",
+        actualScore,
+        totalEntries: 0,
+        outcome: "no_entries",
+      }),
+    }).where(eq(predictionMarkets.id, market.id));
+    log(`[MarketResolver] jackpot ${market.id}: no bets, resolved as empty`);
+    return "resolved";
+  }
+
+  const PLATFORM_FEE = 0.05;
+  const totalPool = allBets.reduce((sum, b) => sum + b.stakeAmount, 0);
+  const distributablePool = Math.floor(totalPool * (1 - PLATFORM_FEE));
+
+  const betsWithDiff = allBets.map(b => {
+    const meta = b.betMetadata as any;
+    const raw = Number(meta?.predictedScore);
+    const predictedScore = Number.isFinite(raw) && raw > 0 ? Math.round(raw) : 0;
+    return {
+      ...b,
+      predictedScore,
+      diff: Math.abs(predictedScore - actualScore),
+    };
+  });
+
+  betsWithDiff.sort((a, b) => a.diff - b.diff);
+  const smallestDiff = betsWithDiff[0].diff;
+  const winners = betsWithDiff.filter(b => b.diff === smallestDiff);
+  const losers = betsWithDiff.filter(b => b.diff !== smallestDiff);
+
+  const now = new Date();
+
+  await db.transaction(async (tx) => {
+    const perWinnerShare = Math.floor(distributablePool / winners.length);
+    let distributed = 0;
+
+    for (let i = 0; i < winners.length; i++) {
+      const w = winners[i];
+      const isLast = i === winners.length - 1;
+      const share = isLast ? distributablePool - distributed : perWinnerShare;
+      distributed += share;
+
+      await tx.update(marketBets)
+        .set({ status: "won", settledAt: now, payoutAmount: share })
+        .where(eq(marketBets.id, w.id));
+
+      const [updatedProfile] = await tx.update(profiles)
+        .set({ predictCredits: sql`${profiles.predictCredits} + ${share}` })
+        .where(eq(profiles.id, w.userId))
+        .returning({ predictCredits: profiles.predictCredits });
+
+      await tx.insert(creditLedger).values({
+        userId: w.userId,
+        txnType: "prediction_payout",
+        amount: share,
+        walletType: "VIRTUAL",
+        balanceAfter: updatedProfile?.predictCredits ?? 0,
+        source: "market_settlement",
+        idempotencyKey: `jackpot_payout_${market.id}_${w.id}`,
+        metadata: {
+          marketId: market.id,
+          betId: w.id,
+          predictedScore: w.predictedScore,
+          actualScore,
+          margin: w.diff,
+          payout: share,
+          tiedWinners: winners.length,
+        },
+      }).onConflictDoNothing();
+    }
+
+    for (const loser of losers) {
+      await tx.update(marketBets)
+        .set({ status: "lost", settledAt: now, payoutAmount: 0 })
+        .where(eq(marketBets.id, loser.id));
+    }
+
+    const winner = winners[0];
+    await tx.update(predictionMarkets).set({
+      status: "RESOLVED",
+      resolvedAt: now,
+      updatedAt: now,
+      resolutionNotes: JSON.stringify({
+        type: "jackpot",
+        actualScore,
+        winningPrediction: winner.predictedScore,
+        winnerUserId: winners.length === 1 ? winner.userId : winners.map(w => w.userId),
+        margin: winner.diff,
+        totalPool,
+        payout: distributablePool,
+        totalEntries: allBets.length,
+        tiedWinners: winners.length,
+        closeSnapshotAt: closeSnap.capturedAt?.toISOString?.() ?? null,
+      }),
+    }).where(eq(predictionMarkets.id, market.id));
+  });
+
+  const w = winners[0];
+  log(`[MarketResolver] jackpot ${market.id}: resolved. actual=${actualScore}, winner predicted ${w.predictedScore} (off by ${w.diff}), pool=${totalPool}, payout=${distributablePool}, entries=${allBets.length}, tied=${winners.length}`);
   return "resolved";
 }
 
@@ -658,7 +764,7 @@ async function resolveExpiredMarketsOnce(): Promise<void> {
             break;
           case "jackpot":
             outcome = await resolveJackpot(market);
-            if (outcome === "resolved") pending++;
+            if (outcome === "resolved") resolved++;
             else blocked++;
             break;
           default:

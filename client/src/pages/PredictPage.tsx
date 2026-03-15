@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
+import { JackpotEntryModal } from "@/components/JackpotEntryModal";
 import { RulesModal, RULES_CONTENT } from "@/components/predict/RulesContent";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1934,7 +1935,9 @@ function WeeklyJackpotHero({
   trendingPeople,
   selectedPerson,
   onSelectPerson,
-  isLoading
+  isLoading,
+  jackpotMarket,
+  onRulesClick,
 }: {
   onEnterJackpot: () => void;
   isMarketClosed: boolean;
@@ -1943,8 +1946,35 @@ function WeeklyJackpotHero({
   selectedPerson: TrendingPerson | null;
   onSelectPerson: (person: TrendingPerson) => void;
   isLoading: boolean;
+  jackpotMarket: any | null;
+  onRulesClick: () => void;
 }) {
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+
+  const { data: lastWinnerData } = useQuery({
+    queryKey: ["/api/native-markets/jackpot-last-winner", selectedPerson?.id],
+    queryFn: async () => {
+      if (!selectedPerson?.id) return { hasResult: false };
+      const res = await fetch(`/api/native-markets/jackpot-last-winner/${selectedPerson.id}`);
+      return res.json();
+    },
+    enabled: !!selectedPerson?.id,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const poolSize = useMemo(() => {
+    if (!jackpotMarket) return 0;
+    const entries = jackpotMarket.entries || [];
+    return entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0), 0);
+  }, [jackpotMarket]);
+
+  const entryCount = jackpotMarket?.totalBets || jackpotMarket?.activeParticipantCount || 0;
+
+  const isCutoffPassed = useMemo(() => {
+    if (!jackpotMarket?.endAt) return false;
+    const cutoff = new Date(new Date(jackpotMarket.endAt).getTime() - 48 * 60 * 60 * 1000);
+    return new Date() > cutoff;
+  }, [jackpotMarket]);
 
   return (
     <div 
@@ -1965,6 +1995,14 @@ function WeeklyJackpotHero({
               <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/40">
                 WEEKLY JACKPOT
               </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-amber-500/60 hover:text-amber-500" onClick={onRulesClick} aria-label="How the Jackpot works">
+                    <HelpCircle className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>How it works</TooltipContent>
+              </Tooltip>
             </div>
             
             <div className="mb-4">
@@ -1999,6 +2037,11 @@ function WeeklyJackpotHero({
                 <Lock className="h-5 w-5 mr-2" />
                 Market Closed
               </Button>
+            ) : isCutoffPassed ? (
+              <Button size="lg" className="bg-muted text-muted-foreground cursor-not-allowed" disabled>
+                <Lock className="h-5 w-5 mr-2" />
+                Entries Closed — Results Sunday
+              </Button>
             ) : (
               <Button 
                 size="lg"
@@ -2008,7 +2051,7 @@ function WeeklyJackpotHero({
                 data-testid="button-enter-jackpot"
               >
                 <Crown className="h-5 w-5 mr-2" />
-                Enter Jackpot
+                Enter Jackpot — 100 Credits
               </Button>
             )}
           </div>
@@ -2028,10 +2071,42 @@ function WeeklyJackpotHero({
               ))}
             </div>
             <p className="text-sm font-semibold text-amber-500 mt-2">
-              Pool: 50,000+ credits
+              Pool: {poolSize > 0 ? poolSize.toLocaleString() : "0"} credits
             </p>
+            {entryCount > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {entryCount} {entryCount === 1 ? "entry" : "entries"}
+              </p>
+            )}
           </div>
         </div>
+        {lastWinnerData?.hasResult && (
+          <div className="mt-4 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 mx-6 md:mx-8 mb-2">
+            <p className="text-xs text-amber-400 font-medium mb-1">
+              <Trophy className="h-3 w-3 inline mr-1" />
+              Last week's result
+            </p>
+            <p className="text-sm">
+              {lastWinnerData.winnerUsername ? (
+                <>
+                  <span className="font-semibold text-amber-400">@{lastWinnerData.winnerUsername}</span>
+                  {" guessed "}
+                  <span className="font-bold">{Number(lastWinnerData.winningPrediction).toLocaleString()}</span>
+                  {" (actual: "}
+                  <span className="font-bold">{Number(lastWinnerData.actualScore).toLocaleString()}</span>
+                  {lastWinnerData.margin === 0 ? " — EXACT match!" : `, off by ${Number(lastWinnerData.margin).toLocaleString()}`}
+                  {") and won "}
+                  <span className="font-bold text-amber-400">{Number(lastWinnerData.payout).toLocaleString()} credits</span>
+                </>
+              ) : (
+                <>
+                  Actual score: <span className="font-bold">{Number(lastWinnerData.actualScore).toLocaleString()}</span>
+                  {" — No entries last week"}
+                </>
+              )}
+            </p>
+          </div>
+        )}
       </div>
       <CelebritySearchModal
         open={searchModalOpen}
@@ -2272,6 +2347,7 @@ export default function PredictPage() {
   }, [nativeGainerData]);
   
   const [selectedJackpotPerson, setSelectedJackpotPerson] = useState<TrendingPerson | null>(null);
+  const [jackpotModalOpen, setJackpotModalOpen] = useState(false);
   
   useEffect(() => {
     if (trendingPeople.length > 0 && !selectedJackpotPerson) {
@@ -2279,6 +2355,17 @@ export default function PredictPage() {
       setSelectedJackpotPerson(rank1Person);
     }
   }, [trendingPeople, selectedJackpotPerson]);
+
+  const { data: nativeJackpotData } = useQuery<any[]>({
+    queryKey: ['/api/native-markets/jackpot'],
+  });
+
+  const jackpotMarketForPerson = useMemo(() => {
+    if (!selectedJackpotPerson || !nativeJackpotData) return null;
+    return nativeJackpotData.find(
+      (m: any) => m.personId === selectedJackpotPerson.id && m.status === "OPEN" && m.visibility === "live"
+    ) || null;
+  }, [selectedJackpotPerson, nativeJackpotData]);
 
   useEffect(() => {
     const hasVisited = localStorage.getItem(FIRST_VISIT_KEY);
@@ -2326,11 +2413,7 @@ export default function PredictPage() {
       setLocation("/login");
       return;
     }
-    toast({
-      title: "Jackpot coming soon",
-      description: "Weekly Jackpot predictions are not yet available. Stay tuned!",
-      variant: "destructive",
-    });
+    setJackpotModalOpen(true);
   };
 
   const nativeUpdownBetMutation = useMutation({
@@ -2663,6 +2746,14 @@ export default function PredictPage() {
               </button>
             ))}
           </HorizontalScroll>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setRulesModalOpen("predictions")} aria-label="How predictions work">
+                <HelpCircle className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>How predictions work</TooltipContent>
+          </Tooltip>
           {user && userBetsError && (
             <Button
               variant="outline"
@@ -2919,6 +3010,8 @@ export default function PredictPage() {
               selectedPerson={selectedJackpotPerson}
               onSelectPerson={setSelectedJackpotPerson}
               isLoading={isLoadingPeople}
+              jackpotMarket={jackpotMarketForPerson}
+              onRulesClick={() => setRulesModalOpen("jackpot")}
             />
           )
         )}
@@ -3275,6 +3368,17 @@ export default function PredictPage() {
           }
         }}
       />
+      {selectedJackpotPerson && (
+        <JackpotEntryModal
+          open={jackpotModalOpen}
+          onClose={() => setJackpotModalOpen(false)}
+          person={selectedJackpotPerson}
+          marketId={jackpotMarketForPerson?.id || null}
+          userCredits={walletCredits}
+          bettingCutoff={jackpotMarketForPerson?.endAt ? new Date(new Date(jackpotMarketForPerson.endAt).getTime() - 48 * 60 * 60 * 1000).toISOString() : null}
+          isCutoffPassed={jackpotMarketForPerson?.endAt ? new Date() > new Date(new Date(jackpotMarketForPerson.endAt).getTime() - 48 * 60 * 60 * 1000) : false}
+        />
+      )}
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-t md:hidden">
         <div className="flex items-center justify-around h-16">
           <Link href="/">
