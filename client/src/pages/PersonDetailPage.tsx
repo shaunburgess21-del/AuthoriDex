@@ -25,7 +25,6 @@ import {
   ArrowLeft,
   Share2,
   Star,
-  TrendingUp,
   Users,
   MessageSquare,
   Trophy,
@@ -889,6 +888,34 @@ function ViewAllPollsOverlay({
   );
 }
 
+function CategoryRankPill({ category, rank, personName }: { category: string; rank: number; personName: string }) {
+  const catStyle = getCategoryStyle(category);
+  return (
+    <TouchTooltip
+      content={
+        <div className="space-y-1.5 normal-case tracking-normal">
+          <p className="font-semibold text-sm">{category} Rank</p>
+          <p className="text-xs text-muted-foreground">
+            {personName}'s position within the {category} category, ranked against others in the same field.
+          </p>
+        </div>
+      }
+      side="bottom"
+      align="start"
+      contentClassName="max-w-[240px]"
+      showCloseButton
+    >
+      <div
+        className={`inline-flex items-center gap-1.5 px-2 sm:px-3 min-h-9 rounded-md ${catStyle.bg} border ${catStyle.border} ${catStyle.text} font-mono text-xs sm:text-sm font-semibold cursor-help`}
+        data-testid="text-header-category-rank"
+      >
+        <Trophy className="h-3.5 w-3.5" />
+        <span><span className="hidden sm:inline">{category} </span>#{rank}</span>
+      </div>
+    </TouchTooltip>
+  );
+}
+
 export default function PersonDetailPage() {
   const { user, session } = useAuth();
   const { toast } = useToast();
@@ -939,7 +966,7 @@ export default function PersonDetailPage() {
   const { data: momentumData } = useQuery<{ categoryRank: { overall: number; category: string; categoryRank: number } | null }>({
     queryKey: ['/api/people', person?.id, 'momentum'],
     queryFn: async () => {
-      const res = await fetch(`/api/people/${person!.id}/momentum`);
+      const res = await fetch(`/api/people/${person?.id ?? ""}/momentum`);
       if (!res.ok) throw new Error('Failed to fetch momentum');
       return res.json();
     },
@@ -1341,33 +1368,13 @@ export default function PersonDetailPage() {
                       <span><span className="hidden sm:inline">Overall </span>#{person.rank}</span>
                     </div>
                   </TouchTooltip>
-                  {momentumData?.categoryRank && (() => {
-                    const catStyle = getCategoryStyle(momentumData.categoryRank.category);
-                    return (
-                      <TouchTooltip
-                        content={
-                          <div className="space-y-1.5 normal-case tracking-normal">
-                            <p className="font-semibold text-sm">{momentumData.categoryRank.category} Rank</p>
-                            <p className="text-xs text-muted-foreground">
-                              {person.name}'s position within the {momentumData.categoryRank.category} category, ranked against others in the same field.
-                            </p>
-                          </div>
-                        }
-                        side="bottom"
-                        align="start"
-                        contentClassName="max-w-[240px]"
-                        showCloseButton
-                      >
-                        <div
-                          className={`inline-flex items-center gap-1.5 px-2 sm:px-3 min-h-9 rounded-md ${catStyle.bg} border ${catStyle.border} ${catStyle.text} font-mono text-xs sm:text-sm font-semibold cursor-help`}
-                          data-testid="text-header-category-rank"
-                        >
-                          <Trophy className="h-3.5 w-3.5" />
-                          <span><span className="hidden sm:inline">{momentumData.categoryRank.category} </span>#{momentumData.categoryRank.categoryRank}</span>
-                        </div>
-                      </TouchTooltip>
-                    );
-                  })()}
+                  {momentumData?.categoryRank && (
+                    <CategoryRankPill
+                      category={momentumData.categoryRank.category}
+                      rank={momentumData.categoryRank.categoryRank}
+                      personName={person.name}
+                    />
+                  )}
                 </div>
                 <div className="flex flex-row gap-2">
                   <Button variant="outline" size="icon" className="sm:hidden" onClick={() => sharePage(`${person.name} on AuthoriDex`)} aria-label="Share" data-testid="button-share-mobile">

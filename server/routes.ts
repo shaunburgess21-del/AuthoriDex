@@ -13,6 +13,7 @@ import { createHash, randomUUID } from "crypto";
 import multer from "multer";
 import path from "path";
 import { gamificationService } from "./services/gamification";
+import { JACKPOT_TICKET_COST, JACKPOT_MAX_PREDICTED_SCORE } from "./config/constants";
 import { isAdminRole } from "./utils/authz";
 import { applyAdminCreditAdjustment } from "./utils/admin-credits";
 import { optimizeImage } from "./utils/image-optimize";
@@ -9624,8 +9625,7 @@ Only return the JSON object.`;
 
   // --- Weekly Jackpot endpoints ---
 
-  const JACKPOT_TICKET_COST = 100;
-  const JACKPOT_MAX_PREDICTED_SCORE = 2_000_000;
+  interface JackpotBetMetadata { predictedScore: number; }
 
   function getJackpotBettingCutoff(endAt: Date): Date {
     const cutoff = new Date(endAt);
@@ -9900,7 +9900,7 @@ Only return the JSON object.`;
       return res.json({
         entries: userBets.map(b => ({
           betId: b.id,
-          predictedScore: (b.betMetadata as any)?.predictedScore ?? null,
+          predictedScore: (b.betMetadata as JackpotBetMetadata | null)?.predictedScore ?? null,
           placedAt: b.createdAt.toISOString(),
         })),
         totalPool: entryStats?.totalStake ?? 0,
@@ -9914,7 +9914,7 @@ Only return the JSON object.`;
     }
   });
 
-  app.get("/api/native-markets/:marketId/jackpot-taken-numbers", async (req, res) => {
+  app.get("/api/native-markets/:marketId/jackpot-taken-numbers", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { marketId } = req.params;
 
@@ -9929,7 +9929,7 @@ Only return the JSON object.`;
         );
 
       const takenNumbers = bets
-        .map(b => (b.betMetadata as any)?.predictedScore)
+        .map(b => (b.betMetadata as JackpotBetMetadata | null)?.predictedScore)
         .filter((n): n is number => typeof n === "number");
 
       return res.json({ takenNumbers });
@@ -10745,6 +10745,10 @@ Only return the JSON object.`;
       if (!market) return res.status(404).json({ error: "Market not found" });
       if (market.status === "RESOLVED" || market.status === "VOID") return res.status(400).json({ error: "Market already resolved or voided" });
 
+      if (market.marketType === "jackpot" && winnerEntryId) {
+        return res.status(400).json({ error: "Jackpot markets cannot be settled by entry. Use void or let the auto-resolver handle it." });
+      }
+
       const { settleMarketBets, voidMarketBets } = await import("./jobs/market-resolver");
       let settlementResult = null;
 
@@ -10838,6 +10842,8 @@ Only return the JSON object.`;
   app.get("/api/admin/markets/:id/payout-summary", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!UUID_RE.test(id)) return res.status(400).json({ error: "Invalid market ID" });
 
       const [market] = await db.select().from(predictionMarkets).where(eq(predictionMarkets.id, id)).limit(1);
       if (!market) return res.status(404).json({ error: "Market not found" });

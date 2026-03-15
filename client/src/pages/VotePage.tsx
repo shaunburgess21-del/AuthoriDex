@@ -2001,7 +2001,7 @@ export default function VotePage() {
   const [valuePerceptionOverlayOpen, setValuePerceptionOverlayOpen] = useState(() => window.history.state?.overlay === "value-perception");
   const [valuePerceptionCategoryFilter, setValuePerceptionCategoryFilter] = useState<FilterCategory>("All");
   const [valuePerceptionSearchQuery, setValuePerceptionSearchQuery] = useState("");
-  const [curateSearchQuery, setCurateSearchQuery] = useState("");
+
 
   const [opinionPollsCategoryFilter, setOpinionPollsCategoryFilter] = useState<FilterCategory>("All");
   const [opinionPollsSearchQuery, setOpinionPollsSearchQuery] = useState("");

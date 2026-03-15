@@ -277,7 +277,7 @@ function ResolutionDialog({
                             <div className="mt-2 space-y-1">
                               <p className="text-xs text-muted-foreground">Top payouts:</p>
                               {entry.payoutDetails.map((p, i) => (
-                                <div key={i} className="flex items-center justify-between text-xs">
+                                <div key={p.userId || `payout-${i}`} className="flex items-center justify-between text-xs">
                                   <span className="text-muted-foreground">{p.username}</span>
                                   <span className="font-medium">{p.stake} → {p.payout} credits</span>
                                 </div>

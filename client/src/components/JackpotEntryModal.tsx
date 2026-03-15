@@ -12,6 +12,12 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent";
 import type { TrendingPerson } from "@shared/schema";
 
+interface JackpotEntry {
+  betId: string;
+  predictedScore: number;
+  placedAt: string;
+}
+
 interface JackpotEntryModalProps {
   open: boolean;
   onClose: () => void;
@@ -21,6 +27,8 @@ interface JackpotEntryModalProps {
   bettingCutoff: string | null;
   isCutoffPassed: boolean;
 }
+
+const JACKPOT_TICKET_COST = 100;
 
 function formatNumber(n: number): string {
   return n.toLocaleString("en-US");
@@ -137,7 +145,6 @@ export function JackpotEntryModal({
       queryClient.invalidateQueries({ queryKey: ["/api/native-markets", marketId, "jackpot-taken-numbers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/native-markets", marketId, "jackpot-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
-      refetchEntries();
     },
     onError: (error: any) => {
       if (error.code === "NUMBER_TAKEN") {
@@ -184,7 +191,7 @@ export function JackpotEntryModal({
     setAvailabilityStatus("idle");
   };
 
-  const canSubmit = parsedScore && marketId && availabilityStatus === "available" && userCredits >= 100 && !betMutation.isPending && !isCutoffPassed;
+  const canSubmit = parsedScore && marketId && availabilityStatus === "available" && userCredits >= JACKPOT_TICKET_COST && !betMutation.isPending && !isCutoffPassed;
 
   const existingEntries = userEntries?.entries || [];
 
@@ -230,7 +237,7 @@ export function JackpotEntryModal({
               <div className="mt-4 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
                 <p className="text-xs font-medium text-amber-500 mb-2">Your predictions</p>
                 <div className="flex flex-wrap gap-2 justify-center">
-                  {existingEntries.map((e: any) => (
+                  {existingEntries.map((e: JackpotEntry) => (
                     <Badge key={e.betId} variant="outline" className="border-amber-500/30 text-amber-400 font-mono">
                       {formatNumber(e.predictedScore)}
                     </Badge>
@@ -332,19 +339,19 @@ export function JackpotEntryModal({
             <div className="space-y-2 p-3 rounded-lg bg-muted/30 border">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Entry cost</span>
-                <span className="font-semibold">100 credits</span>
+                <span className="font-semibold">{JACKPOT_TICKET_COST} credits</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Your balance</span>
-                <span className={`font-semibold ${userCredits < 100 ? "text-red-400" : ""}`}>
+                <span className={`font-semibold ${userCredits < JACKPOT_TICKET_COST ? "text-red-400" : ""}`}>
                   {formatNumber(userCredits)} credits
                 </span>
               </div>
             </div>
 
-            {userCredits < 100 && (
+            {userCredits < JACKPOT_TICKET_COST && (
               <p className="text-xs text-red-400 text-center">
-                You need at least 100 credits to enter.
+                You need at least {JACKPOT_TICKET_COST} credits to enter.
               </p>
             )}
 
@@ -370,7 +377,7 @@ export function JackpotEntryModal({
                   Your predictions ({existingEntries.length})
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {existingEntries.map((e: any) => (
+                  {existingEntries.map((e: JackpotEntry) => (
                     <Badge key={e.betId} variant="outline" className="border-amber-500/30 text-amber-400 font-mono">
                       {formatNumber(e.predictedScore)}
                     </Badge>

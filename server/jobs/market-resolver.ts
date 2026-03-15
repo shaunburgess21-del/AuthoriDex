@@ -4,6 +4,7 @@ import { eq, and, sql, inArray, lte, gte, desc, asc } from "drizzle-orm";
 import { log } from "../log";
 import { calculateSettlementPayouts } from "./settlement-utils";
 import { scoreResolvedMarket } from "../agents/performanceUpdater";
+import { PLATFORM_FEE } from "../config/constants";
 
 const RESOLVER_INTERVAL_MS = 5 * 60 * 1000;
 const RESOLVER_STARTUP_DELAY_MS = 2 * 60 * 1000;
@@ -269,10 +270,11 @@ export async function voidMarketBets(marketId: string): Promise<number> {
   return refundedCount;
 }
 
-function ensureDate(val: any): Date {
+function ensureDate(val: unknown): Date | null {
   if (val instanceof Date) return val;
-  const d = new Date(val);
-  if (isNaN(d.getTime())) return new Date();
+  if (val == null) return null;
+  const d = new Date(val as string | number);
+  if (isNaN(d.getTime())) return null;
   return d;
 }
 
@@ -281,13 +283,17 @@ function getStoredOpeningScore(market: any, personId: string): { score: number; 
   if (!meta) return null;
 
   if (meta.openingScore && meta.openingScore.personId === personId) {
-    return { score: meta.openingScore.score, capturedAt: ensureDate(meta.openingScore.snapshotAt) };
+    const capturedAt = ensureDate(meta.openingScore.snapshotAt);
+    if (!capturedAt) return null;
+    return { score: meta.openingScore.score, capturedAt };
   }
 
   if (Array.isArray(meta.openingScores)) {
     const match = meta.openingScores.find((s: any) => s.personId === personId);
     if (match) {
-      return { score: match.score, capturedAt: ensureDate(match.snapshotAt) };
+      const capturedAt = ensureDate(match.snapshotAt);
+      if (!capturedAt) return null;
+      return { score: match.score, capturedAt };
     }
   }
 
@@ -296,6 +302,7 @@ function getStoredOpeningScore(market: any, personId: string): { score: number; 
 
 async function findSnapshotScore(personId: string, rawTargetTime: Date | string, direction: "before" | "after"): Promise<{ score: number; capturedAt: Date } | null> {
   const targetTime = ensureDate(rawTargetTime);
+  if (!targetTime) return null;
   const toleranceMs = SNAPSHOT_TOLERANCE_HOURS * 60 * 60 * 1000;
 
   if (direction === "before") {
@@ -310,7 +317,7 @@ async function findSnapshotScore(personId: string, rawTargetTime: Date | string,
       .orderBy(desc(trendSnapshots.timestamp))
       .limit(1);
     if (rows.length > 0 && rows[0].fameIndex != null) {
-      return { score: rows[0].fameIndex, capturedAt: ensureDate(rows[0].timestamp) };
+      return { score: rows[0].fameIndex, capturedAt: ensureDate(rows[0].timestamp)! };
     }
   }
 
@@ -326,7 +333,7 @@ async function findSnapshotScore(personId: string, rawTargetTime: Date | string,
       .orderBy(asc(trendSnapshots.timestamp))
       .limit(1);
     if (rows.length > 0 && rows[0].fameIndex != null) {
-      return { score: rows[0].fameIndex, capturedAt: ensureDate(rows[0].timestamp) };
+      return { score: rows[0].fameIndex, capturedAt: ensureDate(rows[0].timestamp)! };
     }
   }
 
@@ -343,6 +350,7 @@ async function getOpenSnapshot(personId: string, rawStartAt: Date | string, mark
   if (stored) return stored;
 
   const startAt = ensureDate(rawStartAt);
+  if (!startAt) return null;
   const result = (await findSnapshotScore(personId, startAt, "after"))
     ?? (await findSnapshotScore(personId, startAt, "before"));
   if (result) return result;
@@ -364,7 +372,7 @@ async function getOpenSnapshot(personId: string, rawStartAt: Date | string, mark
     .orderBy(sql`ABS(EXTRACT(EPOCH FROM ${trendSnapshots.timestamp} - ${startAt}::timestamp))`)
     .limit(1);
   if (wideRows.length > 0 && wideRows[0].fameIndex != null) {
-    return { score: wideRows[0].fameIndex, capturedAt: ensureDate(wideRows[0].timestamp) };
+    return { score: wideRows[0].fameIndex, capturedAt: ensureDate(wideRows[0].timestamp)! };
   }
   return null;
 }
@@ -615,25 +623,36 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
     return "resolved";
   }
 
-  const PLATFORM_FEE = 0.05;
   const totalPool = allBets.reduce((sum, b) => sum + b.stakeAmount, 0);
   const distributablePool = Math.floor(totalPool * (1 - PLATFORM_FEE));
 
-  const betsWithDiff = allBets.map(b => {
-    const meta = b.betMetadata as any;
+  const allBetsWithScore = allBets.map(b => {
+    const meta = b.betMetadata as Record<string, unknown> | null;
     const raw = Number(meta?.predictedScore);
-    const predictedScore = Number.isFinite(raw) && raw > 0 ? Math.round(raw) : 0;
-    return {
-      ...b,
-      predictedScore,
-      diff: Math.abs(predictedScore - actualScore),
-    };
+    const predictedScore = Number.isFinite(raw) && raw > 0 ? Math.round(raw) : null;
+    return { ...b, predictedScore };
   });
 
+  const validBets = allBetsWithScore.filter(b => b.predictedScore !== null) as (typeof allBetsWithScore[number] & { predictedScore: number })[];
+  const invalidBets = allBetsWithScore.filter(b => b.predictedScore === null);
+
+  if (invalidBets.length > 0) {
+    log(`[MarketResolver] jackpot ${market.id}: ${invalidBets.length} bet(s) with invalid predictedScore, treating as losers`);
+  }
+
+  const betsWithDiff = validBets.map(b => ({
+    ...b,
+    diff: Math.abs(b.predictedScore - actualScore),
+  }));
+
+  if (betsWithDiff.length === 0) {
+    log(`[MarketResolver] jackpot ${market.id}: all bets have invalid predictions, treating as losers`);
+  }
+
   betsWithDiff.sort((a, b) => a.diff - b.diff);
-  const smallestDiff = betsWithDiff[0].diff;
+  const smallestDiff = betsWithDiff.length > 0 ? betsWithDiff[0].diff : Infinity;
   const winners = betsWithDiff.filter(b => b.diff === smallestDiff);
-  const losers = betsWithDiff.filter(b => b.diff !== smallestDiff);
+  const losers = [...betsWithDiff.filter(b => b.diff !== smallestDiff), ...invalidBets];
 
   const now = new Date();
 
@@ -681,6 +700,11 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
         .set({ status: "lost", settledAt: now, payoutAmount: 0 })
         .where(eq(marketBets.id, loser.id));
     }
+
+    // Mark the single jackpot entry as resolved (consistent with settleMarketBets)
+    await tx.update(marketEntries)
+      .set({ resolutionStatus: "winner" })
+      .where(eq(marketEntries.marketId, market.id));
 
     const winner = winners[0];
     await tx.update(predictionMarkets).set({
