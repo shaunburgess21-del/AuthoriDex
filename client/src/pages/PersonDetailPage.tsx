@@ -1370,13 +1370,6 @@ export default function PersonDetailPage() {
           </div>
         </div>
 
-        {/* Profile Tabs Section */}
-        <div id="profile-tabs-section">
-          <ProfileTabs activeTab={activeTab} onTabChange={handleTabChange} />
-        </div>
-
-        <InlineCelebrityBio personId={person.id} personName={person.name} />
-
         {/* 2. Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card className="text-center p-4">
@@ -1425,9 +1418,16 @@ export default function PersonDetailPage() {
           </Card>
         </div>
 
+        {/* Profile Tabs Section */}
+        <div id="profile-tabs-section">
+          <ProfileTabs activeTab={activeTab} onTabChange={handleTabChange} />
+        </div>
+
         {/* OVERVIEW TAB */}
         {activeTab === "overview" && (
           <>
+            <InlineCelebrityBio personId={person.id} personName={person.name} />
+
             <div className="flex justify-end mb-2">
               <a
                 href="#momentum-signals"
