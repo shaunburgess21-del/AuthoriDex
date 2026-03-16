@@ -560,21 +560,30 @@ function HorizontalScroll({ children, className = "" }: { children: React.ReactN
 function SectionHeader({ 
   title, 
   children, 
+  icon,
   onViewAll, 
   onRulesClick,
   rulesTitle 
 }: { 
   title: string; 
   children?: React.ReactNode; 
+  icon?: React.ReactNode;
   onViewAll?: () => void;
   onRulesClick?: () => void;
   rulesTitle?: string;
 }) {
   return (
     <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mt-[15px] mb-[15px]">
-      <div className="flex-1 min-w-0">
-        <h2 className="text-lg sm:text-xl font-serif font-bold truncate">{title}</h2>
-        {children}
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        {icon && (
+          <div className="h-10 w-10 rounded-lg bg-violet-500/10 hidden sm:flex items-center justify-center shrink-0">
+            {icon}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <h2 className="text-lg sm:text-xl font-serif font-bold truncate">{title}</h2>
+          {children}
+        </div>
       </div>
       <div className="flex items-center gap-2 shrink-0 ml-3">
         {onRulesClick && (
@@ -2788,9 +2797,14 @@ export default function PredictPage() {
         {showSection("community") && (
           <section className="mb-12 mt-[5px]">
             <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mt-[15px] mb-[15px]">
-              <div className="flex-1 min-w-0">
-                <h2 className="text-lg sm:text-xl font-serif font-bold truncate">World Markets</h2>
-                <p className="text-xs sm:text-sm text-muted-foreground truncate">Predict the outcome of verifiable global events</p>
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="h-10 w-10 rounded-lg bg-violet-500/10 hidden sm:flex items-center justify-center shrink-0">
+                  <Globe className="h-5 w-5 text-violet-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-lg sm:text-xl font-serif font-bold truncate">World Markets</h2>
+                  <p className="text-xs sm:text-sm text-muted-foreground truncate">Predict the outcome of verifiable global events</p>
+                </div>
               </div>
               <div className="flex items-center gap-2 shrink-0 ml-3">
                 <Tooltip>
@@ -3025,6 +3039,7 @@ export default function PredictPage() {
           <section className="mb-10">
             <SectionHeader
               title="Weekly Up / Down"
+              icon={<TrendingUp className="h-5 w-5 text-violet-400" />}
               onRulesClick={() => setRulesModalOpen("updown")}
             >
               <p className="text-xs sm:text-sm text-muted-foreground truncate">Will their trend score be higher / lower</p>
@@ -3085,6 +3100,7 @@ export default function PredictPage() {
           <section className="mb-10">
             <SectionHeader
               title="Head-to-Head Battles"
+              icon={<Swords className="h-5 w-5 text-violet-400" />}
               onRulesClick={() => setRulesModalOpen("h2h")}
             >
               <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain more points</p>
@@ -3145,6 +3161,7 @@ export default function PredictPage() {
           <section className="mb-10">
             <SectionHeader
               title="Category Races"
+              icon={<Trophy className="h-5 w-5 text-violet-400" />}
               onRulesClick={() => setRulesModalOpen("gainer")}
             >
               <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain the most points</p>

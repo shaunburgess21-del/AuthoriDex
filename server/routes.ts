@@ -6884,6 +6884,10 @@ Only return the JSON object.`;
     return s.toLowerCase().replace(/[''`"]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
 
+  function isConventionImageUrl(url: string | null): boolean {
+    return url != null && url.includes('/sentiment-polls/') && url.endsWith('/1.webp');
+  }
+
   function sentimentPollImageUrl(slug: string): string | null {
     if (!process.env.SUPABASE_URL) return null;
     return `${process.env.SUPABASE_URL}/storage/v1/object/public/sentiment-polls/${slug}/1.webp`;
@@ -7334,6 +7338,12 @@ Only return the JSON object.`;
       if (slug !== undefined) updates.slug = slug || null;
       if (featured !== undefined) updates.featured = featured;
 
+      if ((slug !== undefined || headline !== undefined) && imageUrl === undefined) {
+        if (isConventionImageUrl(existing.imageUrl)) {
+          updates.imageUrl = null;
+        }
+      }
+
       const [updated] = await db.update(trendingPolls).set(updates).where(eq(trendingPolls.id, id)).returning();
 
       await db.insert(adminAuditLog).values({
@@ -7383,6 +7393,31 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error deleting trending poll:", error.message);
       res.status(500).json({ error: "Failed to delete trending poll" });
+    }
+  });
+
+  app.post("/api/admin/trending-polls/sync-image-urls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const polls = await db.select({
+        id: trendingPolls.id,
+        imageUrl: trendingPolls.imageUrl,
+        personId: trendingPolls.personId,
+      }).from(trendingPolls);
+
+      let cleared = 0;
+      for (const p of polls) {
+        if (!p.personId && isConventionImageUrl(p.imageUrl)) {
+          await db.update(trendingPolls)
+            .set({ imageUrl: null })
+            .where(eq(trendingPolls.id, p.id));
+          cleared++;
+        }
+      }
+
+      res.json({ success: true, cleared, total: polls.length });
+    } catch (error: any) {
+      console.error("Error syncing image URLs:", error.message);
+      res.status(500).json({ error: "Failed to sync image URLs" });
     }
   });
 

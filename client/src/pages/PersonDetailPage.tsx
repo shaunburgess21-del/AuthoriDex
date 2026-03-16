@@ -905,13 +905,13 @@ function CategoryRankPill({ category, rank, personName }: { category: string; ra
       contentClassName="max-w-[240px]"
       showCloseButton
     >
-      <div
-        className={`inline-flex items-center gap-1.5 px-2 sm:px-3 min-h-9 rounded-md ${catStyle.bg} border ${catStyle.border} ${catStyle.text} font-mono text-xs sm:text-sm font-semibold cursor-help`}
+      <span
+        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold cursor-help ${catStyle.bg} border ${catStyle.border} ${catStyle.text}`}
         data-testid="text-header-category-rank"
       >
-        <Trophy className="h-3.5 w-3.5" />
-        <span><span className="hidden sm:inline">{category} </span>#{rank}</span>
-      </div>
+        <Trophy className="h-3 w-3" />
+        #{rank}
+      </span>
     </TouchTooltip>
   );
 }
@@ -1342,6 +1342,13 @@ export default function PersonDetailPage() {
                 </h1>
                 <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
                   <p className="text-lg text-muted-foreground">{person.category}</p>
+                  {momentumData?.categoryRank && (
+                    <CategoryRankPill
+                      category={momentumData.categoryRank.category}
+                      rank={momentumData.categoryRank.categoryRank}
+                      personName={person.name}
+                    />
+                  )}
                 </div>
               </div>
               <div className="flex flex-row flex-wrap items-center gap-2">
@@ -1368,13 +1375,6 @@ export default function PersonDetailPage() {
                       <span><span className="hidden sm:inline">Overall </span>#{person.rank}</span>
                     </div>
                   </TouchTooltip>
-                  {momentumData?.categoryRank && (
-                    <CategoryRankPill
-                      category={momentumData.categoryRank.category}
-                      rank={momentumData.categoryRank.categoryRank}
-                      personName={person.name}
-                    />
-                  )}
                 </div>
                 <div className="flex flex-row gap-2">
                   <Button variant="outline" size="icon" className="sm:hidden" onClick={() => sharePage(`${person.name} on AuthoriDex`)} aria-label="Share" data-testid="button-share-mobile">
