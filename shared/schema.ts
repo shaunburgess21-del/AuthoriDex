@@ -1406,3 +1406,17 @@ export const scheduledAgentActions = pgTable("scheduled_agent_actions", {
 }));
 
 export type ScheduledAgentAction = typeof scheduledAgentActions.$inferSelect;
+
+export const cardRelatedPeople = pgTable("card_related_people", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cardType: text("card_type").notNull(),
+  cardId: varchar("card_id").notNull(),
+  personId: varchar("person_id").notNull().references(() => trackedPeople.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueCardPerson: uniqueIndex("card_related_people_unique_idx").on(table.cardType, table.cardId, table.personId),
+  personIdx: index("card_related_people_person_idx").on(table.personId),
+  cardIdx: index("card_related_people_card_idx").on(table.cardType, table.cardId),
+}));
+
+export type CardRelatedPerson = typeof cardRelatedPeople.$inferSelect;

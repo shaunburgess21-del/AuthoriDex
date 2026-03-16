@@ -419,6 +419,97 @@ function CopyDebugSummaryButton({ scoreBreakdown }: { scoreBreakdown: ScoreBreak
   );
 }
 
+function RelatedCelebritiesField({
+  value,
+  onChange,
+  fetchFn,
+}: {
+  value: { id: string; name: string }[];
+  onChange: (people: { id: string; name: string }[]) => void;
+  fetchFn: (url: string, opts?: any) => Promise<Response>;
+}) {
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<any[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const doSearch = useCallback(async (query: string) => {
+    if (!query || query.length < 2) {
+      setResults([]);
+      setShowDropdown(false);
+      return;
+    }
+    try {
+      const res = await fetchFn(`/api/admin/celebrities?search=${encodeURIComponent(query)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const selectedIds = new Set(value.map(p => p.id));
+        setResults(data.filter((c: any) => !selectedIds.has(c.id)).slice(0, 8));
+        setShowDropdown(true);
+      }
+    } catch {}
+  }, [fetchFn, value]);
+
+  const handleChange = (val: string) => {
+    setSearch(val);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => doSearch(val), 300);
+  };
+
+  const select = (celeb: any) => {
+    onChange([...value, { id: celeb.id, name: celeb.name }]);
+    setSearch("");
+    setResults([]);
+    setShowDropdown(false);
+  };
+
+  const remove = (id: string) => {
+    onChange(value.filter(p => p.id !== id));
+  };
+
+  return (
+    <div className="space-y-2 relative">
+      <Label className="text-xs text-muted-foreground">Display on Profiles (optional)</Label>
+      {value.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {value.map(p => (
+            <span key={p.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs">
+              {p.name}
+              <button type="button" className="hover:text-destructive" onClick={() => remove(p.id)}>
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <Input
+        value={search}
+        onChange={(e) => handleChange(e.target.value)}
+        onFocus={() => { if (results.length > 0) setShowDropdown(true); }}
+        onBlur={() => { setTimeout(() => setShowDropdown(false), 200); }}
+        placeholder="Search celebrities to add..."
+        className="h-8 text-sm"
+      />
+      {showDropdown && results.length > 0 && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-40 overflow-y-auto">
+          {results.map((c: any) => (
+            <button
+              key={c.id}
+              type="button"
+              className="w-full px-3 py-1.5 text-left text-sm hover:bg-accent/50 flex items-center gap-2"
+              onMouseDown={(e) => { e.preventDefault(); select(c); }}
+            >
+              <span className="truncate">{c.name}</span>
+              <span className="text-xs text-muted-foreground ml-auto">{c.category}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground">Select celebrities whose profile pages should show this card</p>
+    </div>
+  );
+}
+
 function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: { 
   open: boolean; 
   onClose: () => void; 
@@ -455,6 +546,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
   const [marketCelebResults, setMarketCelebResults] = useState<any[]>([]);
   const [showMarketCelebDropdown, setShowMarketCelebDropdown] = useState(false);
   const [selectedMarketCelebName, setSelectedMarketCelebName] = useState("");
+  const [relatedPeople, setRelatedPeople] = useState<{ id: string; name: string }[]>([]);
   const [expandedEntryImage, setExpandedEntryImage] = useState<number | null>(null);
   const [entrySearches, setEntrySearches] = useState<Record<number, string>>({});
   const [entrySearchResults, setEntrySearchResults] = useState<Record<number, any[]>>({});
@@ -509,6 +601,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
       setInactiveMessage(editMarket.inactiveMessage || "");
       setPersonId(editMarket.personId || "");
       setImageUrl(editMarket.coverImageUrl || "");
+      setRelatedPeople(editMarket.relatedPeople || []);
       if (editMarket.personId) {
         setSelectedMarketCelebName("Loading...");
         setMarketCelebSearch("Loading...");
@@ -583,6 +676,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
       setSelectedMarketCelebName("");
       setMarketCelebSearch("");
       setMarketCelebResults([]);
+      setRelatedPeople([]);
       setEntries([
         { label: "Yes", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
         { label: "No", description: "", seedCount: 0, imageUrl: "", entryPersonId: "", entryPersonName: "" },
@@ -720,6 +814,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
       inactiveMessage: visibility === "inactive" ? inactiveMessage : undefined,
       personId: personId || undefined,
       coverImageUrl: imageUrl || undefined,
+      relatedPersonIds: relatedPeople.map(p => p.id),
       entries: entries.map((e, i) => ({
         label: e.label,
         description: e.description || undefined,
@@ -928,6 +1023,12 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
               </p>
             </div>
           </div>
+
+          <RelatedCelebritiesField
+            value={relatedPeople}
+            onChange={setRelatedPeople}
+            fetchFn={fetch}
+          />
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -1330,6 +1431,7 @@ export default function AdminDashboard() {
   });
   const [matchupSearchA, setMatchupSearchA] = useState("");
   const [matchupSearchB, setMatchupSearchB] = useState("");
+  const [matchupRelatedPeople, setMatchupRelatedPeople] = useState<{ id: string; name: string }[]>([]);
   
   const [showPollModal, setShowPollModal] = useState(false);
   const [editingPoll, setEditingPoll] = useState<TrendingPoll | null>(null);
@@ -1360,6 +1462,7 @@ export default function AdminDashboard() {
   const [showCelebrityDropdown, setShowCelebrityDropdown] = useState(false);
   const [selectedCelebrityName, setSelectedCelebrityName] = useState("");
   const celebritySearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pollRelatedPeople, setPollRelatedPeople] = useState<{ id: string; name: string }[]>([]);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; name: string } | null>(null);
@@ -1424,6 +1527,7 @@ export default function AdminDashboard() {
   const [opOptionSearchInputs, setOpOptionSearchInputs] = useState<string[]>(["", "", ""]);
   const [opOptionSearchResults, setOpOptionSearchResults] = useState<any[][]>([[], [], []]);
   const [opOptionShowDropdown, setOpOptionShowDropdown] = useState<boolean[]>([false, false, false]);
+  const [opinionPollRelatedPeople, setOpinionPollRelatedPeople] = useState<{ id: string; name: string }[]>([]);
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS (React rules of hooks)
   
@@ -1930,7 +2034,7 @@ export default function AdminDashboard() {
       setShowMatchupModal(false);
       setEditingMatchup(null);
       setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
-      setMatchupSearchA(""); setMatchupSearchB("");
+      setMatchupSearchA(""); setMatchupSearchB(""); setMatchupRelatedPeople([]);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
     onError: (error: any) => {
@@ -1952,7 +2056,7 @@ export default function AdminDashboard() {
       setShowMatchupModal(false);
       setEditingMatchup(null);
       setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
-      setMatchupSearchA(""); setMatchupSearchB("");
+      setMatchupSearchA(""); setMatchupSearchB(""); setMatchupRelatedPeople([]);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
     onError: (error: any) => {
@@ -2367,6 +2471,58 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  const filteredOpinionPolls = useMemo(() => (opinionPollsList || []).filter((poll: any) => {
+    if (opinionPollFilter !== "all" && poll.visibility !== opinionPollFilter) return false;
+    if (opinionPollCategoryFilter !== "all" && poll.category !== opinionPollCategoryFilter) return false;
+    if (opinionPollSearchQuery && !poll.title?.toLowerCase().includes(opinionPollSearchQuery.toLowerCase())) return false;
+    return true;
+  }), [opinionPollsList, opinionPollFilter, opinionPollCategoryFilter, opinionPollSearchQuery]);
+
+  const filteredPolls = useMemo(() => trendingPollsList?.filter((poll) => {
+    if (pollFilter === "missing_image") {
+      return poll.status === "draft" && !poll.personId && !poll.imageUrl;
+    }
+    if (pollFilter !== "all" && poll.status !== pollFilter) return false;
+    if (pollCategoryFilter !== "all" && poll.category !== pollCategoryFilter) return false;
+    if (pollSearchQuery && !poll.headline?.toLowerCase().includes(pollSearchQuery.toLowerCase()) && !poll.subjectText?.toLowerCase().includes(pollSearchQuery.toLowerCase())) return false;
+    return true;
+  }) ?? [], [trendingPollsList, pollFilter, pollCategoryFilter, pollSearchQuery]);
+
+  const filteredMatchups = useMemo(() => (matchups || []).filter((matchup) => {
+    if (matchupVisFilter !== "all" && matchup.visibility !== matchupVisFilter) return false;
+    if (matchupSearchQuery) {
+      const q = matchupSearchQuery.toLowerCase();
+      if (!matchup.title?.toLowerCase().includes(q) && !matchup.optionAText?.toLowerCase().includes(q) && !matchup.optionBText?.toLowerCase().includes(q) && !matchup.category?.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  }), [matchups, matchupVisFilter, matchupSearchQuery]);
+
+  const filteredCelebrities = useMemo(() => celebrities?.filter(c =>
+    celebritySearch === "" ||
+    c.name.toLowerCase().includes(celebritySearch.toLowerCase()) ||
+    c.category.toLowerCase().includes(celebritySearch.toLowerCase())
+  ) ?? [], [celebrities, celebritySearch]);
+
+  const rwMarkets = useMemo(() => {
+    let list = (markets || []).filter(m => m.marketType === "community");
+    if (rwVisFilter !== "all") list = list.filter(m => (m as any).visibility === rwVisFilter);
+    if (rwCatFilter !== "all") list = list.filter(m => m.category === rwCatFilter);
+    if (rwStatusFilter !== "all") list = list.filter(m => m.status === rwStatusFilter);
+    if (rwTypeFilter !== "all") list = list.filter(m => m.openMarketType === rwTypeFilter);
+    if (rwMarketSearch) list = list.filter(m => m.title?.toLowerCase().includes(rwMarketSearch.toLowerCase()));
+    list.sort((a, b) => {
+      if (rwSortBy === "endAt") return new Date(a.endAt).getTime() - new Date(b.endAt).getTime();
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+    return list;
+  }, [markets, rwMarketSearch, rwVisFilter, rwCatFilter, rwStatusFilter, rwTypeFilter, rwSortBy]);
+
+  const jMarkets = useMemo(() => (markets || []).filter(m => m.marketType === "jackpot").filter(m => {
+    if (nativeVisFilter !== "all" && m.visibility !== nativeVisFilter) return false;
+    if (nativeSearchQuery && !m.title?.toLowerCase().includes(nativeSearchQuery.toLowerCase())) return false;
+    return true;
+  }), [markets, nativeVisFilter, nativeSearchQuery]);
+
   // ============ CONDITIONAL RENDERING (after all hooks) ============
   
   // Show loading while auth is initializing
@@ -2489,6 +2645,7 @@ export default function AdminDashboard() {
     });
     setMatchupSearchA("");
     setMatchupSearchB("");
+    setMatchupRelatedPeople((matchup as any).relatedPeople || []);
     setShowMatchupModal(true);
   };
 
@@ -2510,6 +2667,7 @@ export default function AdminDashboard() {
       personBId: matchupForm.personBId || null,
       optionAImage: matchupForm.optionAImage || null,
       optionBImage: matchupForm.optionBImage || null,
+      relatedPersonIds: matchupRelatedPeople.map(p => p.id),
     };
     if (editingMatchup) {
       updateMatchupMutation.mutate({ id: editingMatchup.id, data: dataToSend });
@@ -2540,6 +2698,7 @@ export default function AdminDashboard() {
     setSelectedCelebrityName("");
     setCelebritySearchResults([]);
     setShowCelebrityDropdown(false);
+    setPollRelatedPeople([]);
   };
 
   const handleCelebritySearchChange = (value: string) => {
@@ -2614,14 +2773,16 @@ export default function AdminDashboard() {
       setCelebritySearchInput("");
       setSelectedCelebrityName("");
     }
+    setPollRelatedPeople((poll as any).relatedPeople || []);
     setShowPollModal(true);
   };
 
   const handleSavePoll = () => {
+    const dataToSend = { ...pollForm, relatedPersonIds: pollRelatedPeople.map(p => p.id) };
     if (editingPoll) {
-      updatePollMutation.mutate({ id: editingPoll.id, data: pollForm });
+      updatePollMutation.mutate({ id: editingPoll.id, data: dataToSend });
     } else {
-      createPollMutation.mutate(pollForm);
+      createPollMutation.mutate(dataToSend);
     }
   };
 
@@ -2640,6 +2801,7 @@ export default function AdminDashboard() {
     setOpOptionSearchInputs(["", "", ""]);
     setOpOptionSearchResults([[], [], []]);
     setOpOptionShowDropdown([false, false, false]);
+    setOpinionPollRelatedPeople([]);
   };
 
   const openEditOpinionPoll = (poll: any) => {
@@ -2665,14 +2827,16 @@ export default function AdminDashboard() {
     setOpOptionSearchInputs(opts.map((o: any) => o.name || ""));
     setOpOptionSearchResults(opts.map(() => []));
     setOpOptionShowDropdown(opts.map(() => false));
+    setOpinionPollRelatedPeople(poll.relatedPeople || []);
     setShowOpinionPollModal(true);
   };
 
   const handleSaveOpinionPoll = () => {
+    const dataToSend = { ...opinionPollForm, relatedPersonIds: opinionPollRelatedPeople.map(p => p.id) };
     if (editingOpinionPoll) {
-      updateOpinionPollMutation.mutate({ id: editingOpinionPoll.id, data: opinionPollForm });
+      updateOpinionPollMutation.mutate({ id: editingOpinionPoll.id, data: dataToSend });
     } else {
-      createOpinionPollMutation.mutate(opinionPollForm);
+      createOpinionPollMutation.mutate(dataToSend);
     }
   };
 
@@ -2749,32 +2913,6 @@ export default function AdminDashboard() {
     setOpOptionSearchResults(newResults);
   };
 
-  const filteredOpinionPolls = useMemo(() => (opinionPollsList || []).filter((poll: any) => {
-    if (opinionPollFilter !== "all" && poll.visibility !== opinionPollFilter) return false;
-    if (opinionPollCategoryFilter !== "all" && poll.category !== opinionPollCategoryFilter) return false;
-    if (opinionPollSearchQuery && !poll.title?.toLowerCase().includes(opinionPollSearchQuery.toLowerCase())) return false;
-    return true;
-  }), [opinionPollsList, opinionPollFilter, opinionPollCategoryFilter, opinionPollSearchQuery]);
-
-  const filteredPolls = useMemo(() => trendingPollsList?.filter((poll) => {
-    if (pollFilter === "missing_image") {
-      return poll.status === "draft" && !poll.personId && !poll.imageUrl;
-    }
-    if (pollFilter !== "all" && poll.status !== pollFilter) return false;
-    if (pollCategoryFilter !== "all" && poll.category !== pollCategoryFilter) return false;
-    if (pollSearchQuery && !poll.headline?.toLowerCase().includes(pollSearchQuery.toLowerCase()) && !poll.subjectText?.toLowerCase().includes(pollSearchQuery.toLowerCase())) return false;
-    return true;
-  }) ?? [], [trendingPollsList, pollFilter, pollCategoryFilter, pollSearchQuery]);
-
-  const filteredMatchups = useMemo(() => (matchups || []).filter((matchup) => {
-    if (matchupVisFilter !== "all" && matchup.visibility !== matchupVisFilter) return false;
-    if (matchupSearchQuery) {
-      const q = matchupSearchQuery.toLowerCase();
-      if (!matchup.title?.toLowerCase().includes(q) && !matchup.optionAText?.toLowerCase().includes(q) && !matchup.optionBText?.toLowerCase().includes(q) && !matchup.category?.toLowerCase().includes(q)) return false;
-    }
-    return true;
-  }), [matchups, matchupVisFilter, matchupSearchQuery]);
-
   const handleDeleteConfirm = () => {
     if (!deleteTarget) return;
     if (deleteTarget.type === "celebrity") {
@@ -2791,32 +2929,6 @@ export default function AdminDashboard() {
       deleteOpinionPollMutation.mutate(deleteTarget.id);
     }
   };
-
-  const filteredCelebrities = useMemo(() => celebrities?.filter(c =>
-    celebritySearch === "" ||
-    c.name.toLowerCase().includes(celebritySearch.toLowerCase()) ||
-    c.category.toLowerCase().includes(celebritySearch.toLowerCase())
-  ) ?? [], [celebrities, celebritySearch]);
-
-  const rwMarkets = useMemo(() => {
-    let list = (markets || []).filter(m => m.marketType === "community");
-    if (rwVisFilter !== "all") list = list.filter(m => (m as any).visibility === rwVisFilter);
-    if (rwCatFilter !== "all") list = list.filter(m => m.category === rwCatFilter);
-    if (rwStatusFilter !== "all") list = list.filter(m => m.status === rwStatusFilter);
-    if (rwTypeFilter !== "all") list = list.filter(m => m.openMarketType === rwTypeFilter);
-    if (rwMarketSearch) list = list.filter(m => m.title?.toLowerCase().includes(rwMarketSearch.toLowerCase()));
-    list.sort((a, b) => {
-      if (rwSortBy === "endAt") return new Date(a.endAt).getTime() - new Date(b.endAt).getTime();
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-    return list;
-  }, [markets, rwMarketSearch, rwVisFilter, rwCatFilter, rwStatusFilter, rwTypeFilter, rwSortBy]);
-
-  const jMarkets = useMemo(() => (markets || []).filter(m => m.marketType === "jackpot").filter(m => {
-    if (nativeVisFilter !== "all" && m.visibility !== nativeVisFilter) return false;
-    if (nativeSearchQuery && !m.title?.toLowerCase().includes(nativeSearchQuery.toLowerCase())) return false;
-    return true;
-  }), [markets, nativeVisFilter, nativeSearchQuery]);
 
   const getActionBadgeColor = (actionType: string) => {
     if (actionType.startsWith("CREATE")) return "bg-emerald-500/20 text-emerald-400";
@@ -4453,7 +4565,7 @@ export default function AdminDashboard() {
                       onClick={() => {
                         setEditingMatchup(null);
                         setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
-                        setMatchupSearchA(""); setMatchupSearchB("");
+                        setMatchupSearchA(""); setMatchupSearchB(""); setMatchupRelatedPeople([]);
                         setShowMatchupModal(true);
                       }}
                       data-testid="button-add-matchup"
@@ -4550,7 +4662,7 @@ export default function AdminDashboard() {
                             onClick={() => {
                               setEditingMatchup(null);
                               setMatchupForm({ title: "", category: "Tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
-                              setMatchupSearchA(""); setMatchupSearchB("");
+                              setMatchupSearchA(""); setMatchupSearchB(""); setMatchupRelatedPeople([]);
                               setShowMatchupModal(true);
                             }}
                             data-testid="button-create-first-matchup"
@@ -6281,6 +6393,12 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            <RelatedCelebritiesField
+              value={matchupRelatedPeople}
+              onChange={setMatchupRelatedPeople}
+              fetchFn={fetchWithAuth}
+            />
+
             <Label className="text-sm font-medium">Seed Votes</Label>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -6504,6 +6622,12 @@ export default function AdminDashboard() {
               />
               <Label>Featured</Label>
             </div>
+
+            <RelatedCelebritiesField
+              value={opinionPollRelatedPeople}
+              onChange={setOpinionPollRelatedPeople}
+              fetchFn={fetchWithAuth}
+            />
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -6825,6 +6949,11 @@ export default function AdminDashboard() {
                 />
               </div>
             </div>
+            <RelatedCelebritiesField
+              value={pollRelatedPeople}
+              onChange={setPollRelatedPeople}
+              fetchFn={fetchWithAuth}
+            />
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="poll-timeline">Timeline</Label>

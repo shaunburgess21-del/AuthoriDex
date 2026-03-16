@@ -83,6 +83,7 @@ interface CommunityMarket {
   endTime: string;
   participants: number;
   category: CategoryFilter;
+  relatedPersonIds?: string[];
 }
 
 const mockMarkets: PredictionMarket[] = [
@@ -959,7 +960,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
   );
   
   const communityPredictions = communityMarkets.filter(
-    c => c.personName === personName
+    c => c.personName === personName ||
+      (c.relatedPersonIds || []).includes(personId)
   );
 
   const hasAnyMarkets = weeklyMarket || h2hBattles.length > 0 || gainerMarkets.length > 0 || communityPredictions.length > 0;

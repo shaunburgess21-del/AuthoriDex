@@ -114,6 +114,7 @@ interface MatchupData {
   optionBPercent: number;
   personAId?: string | null;
   personBId?: string | null;
+  relatedPersonIds?: string[];
 }
 
 interface TrendingPoll {
@@ -131,6 +132,7 @@ interface TrendingPoll {
   approvePercent: number;
   neutralPercent: number;
   disapprovePercent: number;
+  relatedPersonIds?: string[];
 }
 
 interface OpinionPollOption {
@@ -152,6 +154,7 @@ interface OpinionPoll {
   options: OpinionPollOption[];
   totalVotes: number;
   userVote?: string | null;
+  relatedPersonIds?: string[];
 }
 
 function ProfileMatchupCard({
@@ -1147,20 +1150,25 @@ export default function PersonDetailPage() {
         m.personAId === personId ||
         m.personBId === personId ||
         aName.includes(nameLower) ||
-        bName.includes(nameLower)
+        bName.includes(nameLower) ||
+        (m.relatedPersonIds || []).includes(personId)
       );
     });
   }, [matchups, person]);
 
   const personTrendingPolls = useMemo(() => {
     if (!person) return [] as TrendingPoll[];
-    return (trendingPolls || []).filter((p) => p.personId === person.id);
+    return (trendingPolls || []).filter((p) =>
+      p.personId === person.id ||
+      (p.relatedPersonIds || []).includes(person.id)
+    );
   }, [trendingPolls, person]);
 
   const personOpinionPolls = useMemo(() => {
     if (!person) return [] as OpinionPoll[];
     return (opinionPolls || []).filter((poll) =>
-      (poll.options || []).some((opt) => opt.personId === person.id)
+      (poll.options || []).some((opt) => opt.personId === person.id) ||
+      (poll.relatedPersonIds || []).includes(person.id)
     );
   }, [opinionPolls, person]);
 

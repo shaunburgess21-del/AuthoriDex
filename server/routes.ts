@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, cardRelatedPeople, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -281,6 +281,35 @@ setInterval(() => {
     else voteRateMap.set(uid, filtered);
   }
 }, 300_000);
+
+async function getRelatedPeopleForCards(cardType: string, cardIds: string[]): Promise<Record<string, { id: string; name: string }[]>> {
+  if (cardIds.length === 0) return {};
+  const rows = await db
+    .select({
+      cardId: cardRelatedPeople.cardId,
+      personId: cardRelatedPeople.personId,
+      personName: trackedPeople.name,
+    })
+    .from(cardRelatedPeople)
+    .innerJoin(trackedPeople, eq(cardRelatedPeople.personId, trackedPeople.id))
+    .where(and(eq(cardRelatedPeople.cardType, cardType), inArray(cardRelatedPeople.cardId, cardIds)));
+  const map: Record<string, { id: string; name: string }[]> = {};
+  for (const r of rows) {
+    (map[r.cardId] ||= []).push({ id: r.personId, name: r.personName });
+  }
+  return map;
+}
+
+async function syncRelatedPeople(cardType: string, cardId: string, personIds: string[]): Promise<void> {
+  await db.delete(cardRelatedPeople).where(
+    and(eq(cardRelatedPeople.cardType, cardType), eq(cardRelatedPeople.cardId, cardId))
+  );
+  if (personIds.length > 0) {
+    await db.insert(cardRelatedPeople).values(
+      personIds.map(pid => ({ cardType, cardId, personId: pid }))
+    );
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Using local PostgreSQL database instead of Supabase
@@ -3915,6 +3944,8 @@ Only return the JSON object.`;
         }
       }
 
+      const relatedMap = await getRelatedPeopleForCards("matchup", matchupIds);
+
       const matchupsWithVotes = matchupList.map((matchup) => {
         const counts = voteCountsMap.get(matchup.id) || { option_a: 0, option_b: 0 };
         const displayAVotes = counts.option_a + (matchup.seedVotesA || 0);
@@ -3937,6 +3968,8 @@ Only return the JSON object.`;
           totalVotes,
           optionAPercent: totalVotes > 0 ? Math.round((displayAVotes / totalVotes) * 100) : 50,
           optionBPercent: totalVotes > 0 ? Math.round((displayBVotes / totalVotes) * 100) : 50,
+          relatedPersonIds: (relatedMap[matchup.id] || []).map(p => p.id),
+          relatedPeople: relatedMap[matchup.id] || [],
         };
       });
       
@@ -6698,7 +6731,7 @@ Only return the JSON object.`;
 
   app.post("/api/admin/matchups", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, visibility, featured, slug, personAId, personBId, promptText, description, seedVotesA, seedVotesB } = req.body;
+      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, visibility, featured, slug, personAId, personBId, promptText, description, seedVotesA, seedVotesB, relatedPersonIds } = req.body;
       const adminId = req.userId!;
       
       if (!title || !optionAText || !optionBText) {
@@ -6729,6 +6762,10 @@ Only return the JSON object.`;
         seedVotesA: parseInt(seedVotesA) || 0,
         seedVotesB: parseInt(seedVotesB) || 0,
       }).returning();
+
+      if (Array.isArray(relatedPersonIds)) {
+        await syncRelatedPeople("matchup", created.id, relatedPersonIds.filter(Boolean));
+      }
       
       // Audit log
       await db.insert(adminAuditLog).values({
@@ -6764,7 +6801,7 @@ Only return the JSON object.`;
   app.patch("/api/admin/matchups/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, displayOrder, visibility, featured, slug, personAId, personBId, promptText, description, seedVotesA, seedVotesB } = req.body;
+      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, displayOrder, visibility, featured, slug, personAId, personBId, promptText, description, seedVotesA, seedVotesB, relatedPersonIds } = req.body;
       const adminId = req.userId!;
       
       const [existing] = await db.select().from(matchups).where(eq(matchups.id, id));
@@ -6792,6 +6829,10 @@ Only return the JSON object.`;
       if (seedVotesB !== undefined) updates.seedVotesB = parseInt(seedVotesB) || 0;
       
       await db.update(matchups).set(updates).where(eq(matchups.id, id));
+
+      if (Array.isArray(relatedPersonIds)) {
+        await syncRelatedPeople("matchup", id, relatedPersonIds.filter(Boolean));
+      }
       
       // Audit log
       await db.insert(adminAuditLog).values({
@@ -6921,6 +6962,9 @@ Only return the JSON object.`;
         .where(eq(trendingPolls.status, 'live'))
         .orderBy(desc(trendingPolls.createdAt));
 
+      const pollIds = polls.map(p => p.id);
+      const relatedMap = await getRelatedPeopleForCards("sentiment_poll", pollIds);
+
       const result = polls.map(p => {
         const total = (p.seedSupportCount || 0) + (p.seedNeutralCount || 0) + (p.seedOpposeCount || 0);
         const effectiveSlug = p.slug || slugifyHeadline(p.headline);
@@ -6941,6 +6985,8 @@ Only return the JSON object.`;
           neutralPercent: total > 0 ? Math.round(((p.seedNeutralCount || 0) / total) * 100) : 0,
           disapprovePercent: total > 0 ? Math.round(((p.seedOpposeCount || 0) / total) * 100) : 0,
           status: p.status,
+          relatedPersonIds: (relatedMap[p.id] || []).map(rp => rp.id),
+          relatedPeople: relatedMap[p.id] || [],
         };
       });
 
@@ -7259,7 +7305,7 @@ Only return the JSON object.`;
 
   app.post("/api/admin/trending-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility } = req.body;
+      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility, relatedPersonIds } = req.body;
       const adminId = req.userId!;
 
       if (!headline || !subjectText || !category) {
@@ -7286,6 +7332,10 @@ Only return the JSON object.`;
         visibility: effectiveVisibility,
         createdBy: adminId,
       }).returning();
+
+      if (Array.isArray(relatedPersonIds)) {
+        await syncRelatedPeople("sentiment_poll", created.id, relatedPersonIds.filter(Boolean));
+      }
 
       await db.insert(adminAuditLog).values({
         adminId,
@@ -7318,7 +7368,7 @@ Only return the JSON object.`;
         return res.status(404).json({ error: "Trending poll not found" });
       }
 
-      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility } = req.body;
+      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility, relatedPersonIds } = req.body;
 
       const updates: any = { updatedAt: new Date() };
       if (visibility !== undefined) {
@@ -7348,6 +7398,10 @@ Only return the JSON object.`;
       }
 
       const [updated] = await db.update(trendingPolls).set(updates).where(eq(trendingPolls.id, id)).returning();
+
+      if (Array.isArray(relatedPersonIds)) {
+        await syncRelatedPeople("sentiment_poll", id, relatedPersonIds.filter(Boolean));
+      }
 
       await db.insert(adminAuditLog).values({
         adminId,
@@ -7695,6 +7749,9 @@ Only return the JSON object.`;
         .where(eq(opinionPolls.visibility, 'live'))
         .orderBy(desc(opinionPolls.createdAt));
 
+      const opPollIds = polls.map(p => p.id);
+      const relatedMap = await getRelatedPeopleForCards("opinion_poll", opPollIds);
+
       const result = await Promise.all(polls.map(async (poll) => {
         const options = await db
           .select({
@@ -7758,6 +7815,8 @@ Only return the JSON object.`;
           totalOptions: options.length,
           totalVotes: totalDisplayVotes,
           userVote,
+          relatedPersonIds: (relatedMap[poll.id] || []).map(rp => rp.id),
+          relatedPeople: relatedMap[poll.id] || [],
         };
       }));
 
@@ -8082,7 +8141,7 @@ Only return the JSON object.`;
 
   app.post("/api/admin/opinion-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { title, slug, category, description, summary, imageUrl, featured, visibility, options } = req.body;
+      const { title, slug, category, description, summary, imageUrl, featured, visibility, options, relatedPersonIds } = req.body;
       const adminId = req.userId!;
 
       if (!title || !slug || !category) {
@@ -8118,6 +8177,10 @@ Only return the JSON object.`;
         );
       }
 
+      if (Array.isArray(relatedPersonIds)) {
+        await syncRelatedPeople("opinion_poll", created.id, relatedPersonIds.filter(Boolean));
+      }
+
       await db.insert(adminAuditLog).values({
         adminId,
         adminEmail: null,
@@ -8143,7 +8206,7 @@ Only return the JSON object.`;
     try {
       const { id } = req.params;
       const adminId = req.userId!;
-      const { title, slug, category, description, summary, imageUrl, featured, visibility, options } = req.body;
+      const { title, slug, category, description, summary, imageUrl, featured, visibility, options, relatedPersonIds } = req.body;
 
       const [existing] = await db.select().from(opinionPolls).where(eq(opinionPolls.id, id));
       if (!existing) {
@@ -8176,6 +8239,10 @@ Only return the JSON object.`;
             }))
           );
         }
+      }
+
+      if (Array.isArray(relatedPersonIds)) {
+        await syncRelatedPeople("opinion_poll", id, relatedPersonIds.filter(Boolean));
       }
 
       await db.insert(adminAuditLog).values({
@@ -8645,6 +8712,7 @@ Only return the JSON object.`;
       }
 
       const engagement = await getMarketEngagementPreview(marketIds);
+      const relatedMap = await getRelatedPeopleForCards("world_market", marketIds);
 
       const result = markets.map((m) => ({
         ...m,
@@ -8654,6 +8722,8 @@ Only return the JSON object.`;
         recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
         activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
         latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
+        relatedPersonIds: (relatedMap[m.id] || []).map(rp => rp.id),
+        relatedPeople: relatedMap[m.id] || [],
       }));
 
       res.json(result);
@@ -8794,6 +8864,7 @@ Only return the JSON object.`;
         closeAt, resolutionCriteria, resolutionSources, resolveMethod, rules,
         seedParticipants, seedVolume, underlying, metric, strike, unit,
         entries: entryList, personId, isLive, visibility, inactiveMessage,
+        relatedPersonIds,
       } = req.body;
 
       if (!openMarketType || !["binary", "multi", "updown"].includes(openMarketType)) {
@@ -8883,6 +8954,10 @@ Only return the JSON object.`;
         )
         .returning();
 
+      if (Array.isArray(relatedPersonIds)) {
+        await syncRelatedPeople("world_market", createdMarket.id, relatedPersonIds.filter(Boolean));
+      }
+
       res.json({ ...createdMarket, entries: createdEntries });
     } catch (error: any) {
       console.error("[Open Markets] Create error:", error);
@@ -8922,6 +8997,7 @@ Only return the JSON object.`;
         resolutionCriteria, resolutionSources, resolveMethod, rules,
         seedParticipants, seedVolume, underlying, metric, strike, unit,
         openMarketType, personId, isLive, visibility, inactiveMessage, entries: entryList,
+        relatedPersonIds,
       } = req.body;
 
       const updates: Record<string, any> = { updatedAt: new Date() };
@@ -9006,6 +9082,10 @@ Only return the JSON object.`;
             await db.delete(marketEntries).where(inArray(marketEntries.id, idsToRemove));
           }
         }
+      }
+
+      if (Array.isArray(relatedPersonIds)) {
+        await syncRelatedPeople("world_market", id, relatedPersonIds.filter(Boolean));
       }
 
       const finalEntries = await db
