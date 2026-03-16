@@ -4580,6 +4580,16 @@ Only return the JSON object.`;
           message: "This profile is private"
         });
       }
+
+      const [betStats] = await db
+        .select({
+          profitLoss: sql<number>`COALESCE(SUM(CASE WHEN ${marketBets.status} = 'won' THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0) - ${marketBets.stakeAmount} WHEN ${marketBets.status} = 'lost' THEN -${marketBets.stakeAmount} ELSE 0 END), 0)`.as("profit_loss"),
+          volume: sql<number>`COALESCE(SUM(${marketBets.stakeAmount}), 0)`.as("volume"),
+          totalBets: sql<number>`COUNT(*)::int`.as("total_bets"),
+          biggestWin: sql<number>`COALESCE(MAX(CASE WHEN ${marketBets.status} = 'won' THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0) - ${marketBets.stakeAmount} ELSE 0 END), 0)`.as("biggest_win"),
+        })
+        .from(marketBets)
+        .where(and(eq(marketBets.userId, baseProfile.id), inArray(marketBets.status, ["won", "lost"])));
       
       // Return full public profile
       res.json({
@@ -4595,6 +4605,10 @@ Only return the JSON object.`;
         isPublic: true,
         createdAt: baseProfile.createdAt,
         agentProfile,
+        profitLoss: Number(betStats?.profitLoss ?? 0),
+        volume: Number(betStats?.volume ?? 0),
+        totalBets: Number(betStats?.totalBets ?? 0),
+        biggestWin: Number(betStats?.biggestWin ?? 0),
       });
     } catch (error: any) {
       console.error("Error fetching public profile:", error.message);
@@ -4602,6 +4616,80 @@ Only return the JSON object.`;
     }
   });
   
+  app.get("/api/profile/u/:username/bets", async (req, res) => {
+    try {
+      const { username } = req.params;
+      const tab = (req.query.tab as string) || "settled";
+      const limit = Math.min(Number(req.query.limit) || 50, 100);
+      const offset = Number(req.query.offset) || 0;
+
+      const [user] = await db.select({ id: profiles.id, isPublic: profiles.isPublic })
+        .from(profiles).where(eq(profiles.username, username)).limit(1);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      if (!user.isPublic) return res.status(403).json({ error: "Profile is private" });
+
+      const statusFilter = tab === "active"
+        ? eq(marketBets.status, "active")
+        : inArray(marketBets.status, ["won", "lost", "void", "refunded"]);
+
+      const bets = await db
+        .select({
+          betId: marketBets.id,
+          marketId: marketBets.marketId,
+          stakeAmount: marketBets.stakeAmount,
+          potentialPayout: marketBets.potentialPayout,
+          payoutAmount: marketBets.payoutAmount,
+          betStatus: marketBets.status,
+          betCreatedAt: marketBets.createdAt,
+          settledAt: marketBets.settledAt,
+          betMetadata: marketBets.betMetadata,
+          confidence: marketBets.confidence,
+          marketSlug: predictionMarkets.slug,
+          marketTitle: predictionMarkets.title,
+          marketType: predictionMarkets.marketType,
+          marketCategory: predictionMarkets.category,
+          entryLabel: marketEntries.label,
+        })
+        .from(marketBets)
+        .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
+        .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
+        .where(and(eq(marketBets.userId, user.id), statusFilter))
+        .orderBy(tab === "active" ? desc(marketBets.createdAt) : desc(marketBets.settledAt))
+        .limit(limit)
+        .offset(offset);
+
+      const formatted = bets.map(b => {
+        const payout = b.betStatus === "won" ? (b.payoutAmount ?? b.potentialPayout ?? 0) : 0;
+        const pnl = b.betStatus === "won" ? payout - b.stakeAmount
+          : b.betStatus === "lost" ? -b.stakeAmount
+          : 0;
+        const meta = b.betMetadata as Record<string, any> | null;
+        return {
+          betId: b.betId,
+          marketSlug: b.marketSlug,
+          marketTitle: b.marketTitle,
+          marketType: b.marketType,
+          marketCategory: b.marketCategory,
+          entryLabel: b.entryLabel,
+          stakeAmount: b.stakeAmount,
+          payout,
+          pnl,
+          status: b.betStatus,
+          confidence: b.confidence ? Number(b.confidence) : meta?.confidence ?? null,
+          thesis: meta?.thesis ?? null,
+          predictedScore: meta?.predictedScore ?? null,
+          placedAt: b.betCreatedAt,
+          settledAt: b.settledAt,
+        };
+      });
+
+      res.json({ bets: formatted, offset, limit, hasMore: formatted.length === limit });
+    } catch (error: any) {
+      console.error("Error fetching user bets:", error.message);
+      res.status(500).json({ error: "Failed to fetch bets" });
+    }
+  });
+
   // Check if current user is admin
   app.get("/api/profile/is-admin", requireAuth, async (req: AuthRequest, res) => {
     try {
