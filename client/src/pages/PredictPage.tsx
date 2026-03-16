@@ -2778,7 +2778,7 @@ export default function PredictPage() {
               Retry loading bets
             </Button>
           )}
-          {user && userBetsByMarket.size > 0 && !userBetsError && (
+          {user && activePredictions > 0 && !userBetsError && (
             <Button
               variant={showMyPositions ? "default" : "outline"}
               size="sm"
@@ -2787,7 +2787,7 @@ export default function PredictPage() {
               data-testid="toggle-my-positions"
             >
               <Wallet className="h-3.5 w-3.5 mr-1.5" />
-              My Positions ({userBetsByMarket.size})
+              My Positions ({activePredictions})
             </Button>
           )}
         </div>
