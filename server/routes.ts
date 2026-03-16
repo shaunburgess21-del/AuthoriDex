@@ -8585,11 +8585,12 @@ Only return the JSON object.`;
     };
   }
 
-  app.get("/api/open-markets", async (req, res) => {
+  app.get("/api/open-markets", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { category, featured, limit } = req.query;
+      const userId = req.userId;
 
-      const conditions = [
+      const conditions: SQL[] = [
         eq(predictionMarkets.marketType, "community"),
         eq(predictionMarkets.status, "OPEN"),
         inArray(predictionMarkets.visibility, ["live", "inactive"]),
@@ -8609,6 +8610,31 @@ Only return the JSON object.`;
         .where(and(...conditions))
         .orderBy(desc(predictionMarkets.featured), desc(predictionMarkets.createdAt))
         .limit(limit && typeof limit === "string" ? parseInt(limit, 10) || 50 : 50);
+
+      // If authenticated, also include community markets the user has active bets on
+      // (handles archived/closed markets where the user still has pending positions)
+      if (userId) {
+        const existingIds = new Set(markets.map(m => m.id));
+        const userPositionedRows = await db
+          .selectDistinct({ marketId: marketBets.marketId })
+          .from(marketBets)
+          .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
+          .where(and(
+            eq(marketBets.userId, userId),
+            eq(marketBets.status, "active"),
+            eq(predictionMarkets.marketType, "community"),
+          ));
+        const missingIds = userPositionedRows
+          .map(r => r.marketId)
+          .filter(id => !existingIds.has(id));
+        if (missingIds.length > 0) {
+          const extraMarkets = await db
+            .select()
+            .from(predictionMarkets)
+            .where(inArray(predictionMarkets.id, missingIds));
+          markets.push(...extraMarkets);
+        }
+      }
 
       const marketIds = markets.map((m) => m.id);
       let entries: any[] = [];
@@ -8670,9 +8696,7 @@ Only return the JSON object.`;
         .where(
           and(
             eq(predictionMarkets.slug, slug),
-            eq(predictionMarkets.marketType, "community"),
-            eq(predictionMarkets.status, "OPEN"),
-            inArray(predictionMarkets.visibility, ["live", "inactive"])
+            ne(predictionMarkets.visibility, "draft")
           )
         )
         .limit(1);
