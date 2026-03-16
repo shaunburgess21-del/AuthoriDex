@@ -322,9 +322,7 @@ export default function PublicProfilePage() {
               <p className="text-muted-foreground">@{profile.username}</p>
               <div className="flex items-center gap-2 mt-3 flex-wrap">
                 <RankBadge rank={profile.rank || "Citizen"} />
-                {!profile.isAgent && (
-                  <Badge variant="secondary" className="font-mono">Level {xpLevel}</Badge>
-                )}
+                <Badge variant="secondary" className="font-mono">Level {xpLevel}</Badge>
               </div>
             </div>
           </div>
@@ -389,8 +387,8 @@ export default function PublicProfilePage() {
             </div>
           )}
 
-          {/* Votes for non-agents */}
-          {!profile.isAgent && (profile.totalVotes ?? 0) > 0 && (
+          {/* Votes Cast */}
+          {(profile.totalVotes ?? 0) > 0 && (
             <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30">
               <Vote className="h-4 w-4 text-cyan-400 shrink-0" />
               <span className="text-sm text-muted-foreground">
@@ -400,10 +398,9 @@ export default function PublicProfilePage() {
           )}
         </Card>
 
-        {/* XP Progress - only for non-agents */}
-        {!profile.isAgent && (
-          <Card className="p-6">
-            <h2 className="font-semibold mb-4">XP Progress</h2>
+        {/* XP Progress */}
+        <Card className="p-6">
+          <h2 className="font-semibold mb-4">XP Progress</h2>
             <div className="flex items-center gap-4">
               <div className="flex-1">
                 <div className="flex justify-between text-sm mb-2">
@@ -422,7 +419,6 @@ export default function PublicProfilePage() {
               </div>
             </div>
           </Card>
-        )}
 
         {/* Bet History */}
         {username && <BetHistorySection username={username} />}

@@ -14,6 +14,7 @@ import { runSeedBatch } from "./jobs/seed-engine";
 import { startAgentRunnerScheduler } from "./agents/agentRunner";
 import { startActionWorkerScheduler } from "./agents/actionWorker";
 import { startMarketGeneratorScheduler } from "./jobs/market-generator";
+import { startVoteWorkerScheduler } from "./agents/voteWorker";
 import { pool, startDbPoolMonitor } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
 import { fetchBatchGdeltNews } from "./providers/gdelt";
@@ -488,7 +489,7 @@ async function startServer() {
 
     const schedulersDisabled = process.env.DISABLE_SCHEDULERS === "true";
     if (schedulersDisabled) {
-      log("[Schedulers] DISABLE_SCHEDULERS=true — skipping all background schedulers (Ingestion, LiveTick, Seed Engine, MarketResolver, MarketGenerator, Staleness Monitor, Snapshot).");
+      log("[Schedulers] DISABLE_SCHEDULERS=true — skipping all background schedulers (Ingestion, LiveTick, Seed Engine, MarketResolver, MarketGenerator, VoteWorker, Staleness Monitor, Snapshot).");
       return;
     }
     
@@ -519,6 +520,9 @@ async function startServer() {
     // Start AI agent prediction system
     startScheduler("AgentRunner", startAgentRunnerScheduler);
     startScheduler("ActionWorker", startActionWorkerScheduler);
+
+    // Start agent voting system (daily sweep, max 3 votes/agent/week)
+    startScheduler("VoteWorker", startVoteWorkerScheduler);
   });
 }
 
