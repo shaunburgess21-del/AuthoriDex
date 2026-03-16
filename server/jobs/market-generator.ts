@@ -393,6 +393,9 @@ export async function generateAllWeeklyMarkets(): Promise<{ updown: number; jack
 export function startMarketGeneratorScheduler() {
   log("[MarketGenerator] Starting scheduler (checks on boot, then every Monday 00:05 UTC)");
 
+  const BOOT_DELAY_MS = 120_000;
+  log(`[MarketGenerator] Will check/generate markets in ${BOOT_DELAY_MS / 1000}s to let other services stabilize`);
+
   setTimeout(async () => {
     try {
       log("[MarketGenerator] Boot: ensuring all market types exist for current week");
@@ -402,7 +405,7 @@ export function startMarketGeneratorScheduler() {
     }
 
     scheduleNextMonday();
-  }, 10_000);
+  }, BOOT_DELAY_MS);
 
   function scheduleNextMonday() {
     const now = new Date();
