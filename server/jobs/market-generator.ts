@@ -256,7 +256,11 @@ export async function generateWeeklyGainer(): Promise<number> {
   const existingGainers = await db
     .select({ category: predictionMarkets.category })
     .from(predictionMarkets)
-    .where(and(eq(predictionMarkets.marketType, "gainer"), eq(predictionMarkets.weekNumber, weekNumber)));
+    .where(and(
+      eq(predictionMarkets.marketType, "gainer"),
+      eq(predictionMarkets.weekNumber, weekNumber),
+      inArray(predictionMarkets.visibility, ["live", "inactive"])
+    ));
   const existingCategories = new Set(existingGainers.map(e => e.category));
 
   const people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
@@ -391,21 +395,10 @@ export function startMarketGeneratorScheduler() {
 
   setTimeout(async () => {
     try {
-      const { weekNumber } = getWeekContext();
-      const [anyThisWeek] = await db
-        .select({ id: predictionMarkets.id })
-        .from(predictionMarkets)
-        .where(and(eq(predictionMarkets.weekNumber, weekNumber), eq(predictionMarkets.status, "OPEN")))
-        .limit(1);
-
-      if (!anyThisWeek) {
-        log("[MarketGenerator] No markets for current week — generating now");
-        await generateAllWeeklyMarkets();
-      } else {
-        log("[MarketGenerator] Markets already exist for current week, skipping boot generation");
-      }
+      log("[MarketGenerator] Boot: ensuring all market types exist for current week");
+      await generateAllWeeklyMarkets();
     } catch (e) {
-      log(`[MarketGenerator] Boot check error: ${e}`);
+      log(`[MarketGenerator] Boot generation error: ${e}`);
     }
 
     scheduleNextMonday();
