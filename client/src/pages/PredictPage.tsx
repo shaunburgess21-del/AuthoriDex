@@ -2221,9 +2221,20 @@ export default function PredictPage() {
     return map;
   }, [userBetsData]);
   const walletCredits = profile?.predictCredits ?? 0;
+  const visibleMarketIds = useMemo(() => {
+    const ids = new Set<string>();
+    openMarkets.forEach((m: any) => ids.add(m.id));
+    (nativeUpdownData || []).forEach((m: any) => ids.add(m.id));
+    (nativeH2hData || []).forEach((m: any) => ids.add(m.id));
+    (nativeGainerData || []).forEach((m: any) => ids.add(m.id));
+    return ids;
+  }, [openMarkets, nativeUpdownData, nativeH2hData, nativeGainerData]);
+
   const activePredictions = useMemo(
-    () => Array.from(userBetsByMarket.values()).filter((bet) => bet.result === "pending").length,
-    [userBetsByMarket]
+    () => Array.from(userBetsByMarket.values()).filter(
+      (bet) => bet.result === "pending" && visibleMarketIds.has(bet.marketId)
+    ).length,
+    [userBetsByMarket, visibleMarketIds]
   );
   const predictedMarkets = useMemo(() => new Set(Array.from(userBetsByMarket.keys())), [userBetsByMarket]);
   const hydratedMarkets = useMemo((): PredictionMarket[] => {
