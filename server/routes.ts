@@ -4635,7 +4635,6 @@ Only return the JSON object.`;
       const bets = await db
         .select({
           betId: marketBets.id,
-          marketId: marketBets.marketId,
           stakeAmount: marketBets.stakeAmount,
           potentialPayout: marketBets.potentialPayout,
           payoutAmount: marketBets.payoutAmount,
@@ -4653,7 +4652,11 @@ Only return the JSON object.`;
         .from(marketBets)
         .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
         .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
-        .where(and(eq(marketBets.userId, user.id), statusFilter))
+        .where(and(
+          eq(marketBets.userId, user.id),
+          statusFilter,
+          ne(predictionMarkets.visibility, "draft"),
+        ))
         .orderBy(tab === "active" ? desc(marketBets.createdAt) : desc(marketBets.settledAt))
         .limit(limit)
         .offset(offset);
@@ -8665,12 +8668,48 @@ Only return the JSON object.`;
       const { slug } = req.params;
 
       const [market] = await db
-        .select()
+        .select({
+          id: predictionMarkets.id,
+          marketType: predictionMarkets.marketType,
+          status: predictionMarkets.status,
+          title: predictionMarkets.title,
+          slug: predictionMarkets.slug,
+          summary: predictionMarkets.summary,
+          rules: predictionMarkets.rules,
+          startAt: predictionMarkets.startAt,
+          endAt: predictionMarkets.endAt,
+          resolvedAt: predictionMarkets.resolvedAt,
+          openMarketType: predictionMarkets.openMarketType,
+          teaser: predictionMarkets.teaser,
+          description: predictionMarkets.description,
+          category: predictionMarkets.category,
+          tags: predictionMarkets.tags,
+          coverImageUrl: predictionMarkets.coverImageUrl,
+          sourceUrl: predictionMarkets.sourceUrl,
+          featured: predictionMarkets.featured,
+          timezone: predictionMarkets.timezone,
+          resolutionCriteria: predictionMarkets.resolutionCriteria,
+          closeAt: predictionMarkets.closeAt,
+          personId: predictionMarkets.personId,
+          visibility: predictionMarkets.visibility,
+          inactiveMessage: predictionMarkets.inactiveMessage,
+          weekNumber: predictionMarkets.weekNumber,
+          tieRule: predictionMarkets.tieRule,
+          cadence: predictionMarkets.cadence,
+          baselineScore: predictionMarkets.baselineScore,
+          seedParticipants: predictionMarkets.seedParticipants,
+          seedVolume: predictionMarkets.seedVolume,
+          underlying: predictionMarkets.underlying,
+          metric: predictionMarkets.metric,
+          strike: predictionMarkets.strike,
+          unit: predictionMarkets.unit,
+          createdAt: predictionMarkets.createdAt,
+        })
         .from(predictionMarkets)
         .where(
           and(
             eq(predictionMarkets.slug, slug),
-            ne(predictionMarkets.visibility, "draft")
+            inArray(predictionMarkets.visibility, ["live", "inactive"])
           )
         )
         .limit(1);

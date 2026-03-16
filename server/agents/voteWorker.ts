@@ -13,7 +13,6 @@ import {
   trendingPolls,
   trendingPollVotes,
   sentimentVotes,
-  trackedPeople,
   trendingPeople,
 } from "@shared/schema";
 import { eq, and, sql, gte, count, desc } from "drizzle-orm";
@@ -46,7 +45,6 @@ function getMondayOfWeek(): Date {
 
 async function countAgentVotesThisWeek(userId: string): Promise<number> {
   const monday = getMondayOfWeek();
-  const mondayStr = monday.toISOString().split("T")[0];
 
   const [matchupCount] = await db
     .select({ c: count() })
@@ -293,10 +291,13 @@ async function runVoteSweep(): Promise<AgentVoteResult[]> {
       const specialties = agent.specialties || [];
 
       const voteTypes: VoteType[] = ["matchup", "sentiment_poll", "underrated_overrated"];
-      const shuffled = voteTypes.sort(() => Math.random() - 0.5);
+      for (let i = voteTypes.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [voteTypes[i], voteTypes[j]] = [voteTypes[j], voteTypes[i]];
+      }
       let voted = false;
 
-      for (const voteType of shuffled) {
+      for (const voteType of voteTypes) {
         if (voted) break;
 
         if (voteType === "matchup") {
@@ -311,19 +312,23 @@ async function runVoteSweep(): Promise<AgentVoteResult[]> {
             crowd
           );
 
-          await db.insert(votes).values({
-            userId: agent.userId,
-            voteType: "face_off",
-            targetType: "face_off",
-            targetId: matchup.id,
-            value: choice,
-            weight: 1.0,
+          const inserted = await db.transaction(async (tx) => {
+            const [row] = await tx.insert(votes).values({
+              userId: agent.userId,
+              voteType: "face_off",
+              targetType: "face_off",
+              targetId: matchup.id,
+              value: choice,
+              weight: 1.0,
+            }).onConflictDoNothing().returning({ id: votes.id });
+            if (!row) return false;
+            await tx
+              .update(profiles)
+              .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+              .where(eq(profiles.id, agent.userId));
+            return true;
           });
-
-          await db
-            .update(profiles)
-            .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
-            .where(eq(profiles.id, agent.userId));
+          if (!inserted) continue;
 
           let xpAwarded = 0;
           try {
@@ -348,9 +353,7 @@ async function runVoteSweep(): Promise<AgentVoteResult[]> {
           });
           voted = true;
           log(`[VoteWorker] ${agent.displayName} voted "${choiceLabel}" on matchup "${matchup.optionAText} vs ${matchup.optionBText}" (+${xpAwarded} XP)`);
-        }
-
-        if (voteType === "sentiment_poll") {
+        } else if (voteType === "sentiment_poll") {
           const eligible = await getEligibleSentimentPolls(agent.userId);
           if (!eligible.length) continue;
 
@@ -358,16 +361,20 @@ async function runVoteSweep(): Promise<AgentVoteResult[]> {
           const crowd = await getPollCrowdSplit(poll.id);
           const choice = decideSentimentPoll({ contrarianism }, poll, crowd);
 
-          await db.insert(trendingPollVotes).values({
-            pollId: poll.id,
-            userId: agent.userId,
-            choice,
+          const inserted = await db.transaction(async (tx) => {
+            const [row] = await tx.insert(trendingPollVotes).values({
+              pollId: poll.id,
+              userId: agent.userId,
+              choice,
+            }).onConflictDoNothing().returning({ id: trendingPollVotes.id });
+            if (!row) return false;
+            await tx
+              .update(profiles)
+              .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+              .where(eq(profiles.id, agent.userId));
+            return true;
           });
-
-          await db
-            .update(profiles)
-            .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
-            .where(eq(profiles.id, agent.userId));
+          if (!inserted) continue;
 
           let xpAwarded = 0;
           try {
@@ -391,9 +398,7 @@ async function runVoteSweep(): Promise<AgentVoteResult[]> {
           });
           voted = true;
           log(`[VoteWorker] ${agent.displayName} voted "${choice}" on poll "${poll.headline}" (+${xpAwarded} XP)`);
-        }
-
-        if (voteType === "underrated_overrated") {
+        } else if (voteType === "underrated_overrated") {
           const eligible = await getEligiblePeopleForSentiment(agent.userId);
           if (!eligible.length) continue;
 
@@ -404,18 +409,22 @@ async function runVoteSweep(): Promise<AgentVoteResult[]> {
           );
           const today = new Date().toISOString().split("T")[0];
 
-          await db.insert(sentimentVotes).values({
-            userId: agent.userId,
-            personId: person.id,
-            personName: person.name,
-            voteType: choice,
-            votedDate: today,
+          const inserted = await db.transaction(async (tx) => {
+            const [row] = await tx.insert(sentimentVotes).values({
+              userId: agent.userId,
+              personId: person.id,
+              personName: person.name,
+              voteType: choice,
+              votedDate: today,
+            }).onConflictDoNothing().returning({ id: sentimentVotes.id });
+            if (!row) return false;
+            await tx
+              .update(profiles)
+              .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+              .where(eq(profiles.id, agent.userId));
+            return true;
           });
-
-          await db
-            .update(profiles)
-            .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
-            .where(eq(profiles.id, agent.userId));
+          if (!inserted) continue;
 
           let xpAwarded = 0;
           try {
@@ -501,9 +510,11 @@ export function startVoteWorkerScheduler(): void {
     runVoteSweep()
       .then((results) => {
         log(`[VoteWorker] Initial sweep: ${results.length} votes cast`);
+        scheduleNextSweep();
       })
-      .catch((e) => console.error("[VoteWorker] Initial sweep failed:", e));
-
-    scheduleNextSweep();
+      .catch((e) => {
+        console.error("[VoteWorker] Initial sweep failed:", e);
+        scheduleNextSweep();
+      });
   }, BOOT_DELAY_MS);
 }

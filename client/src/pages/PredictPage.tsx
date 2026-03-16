@@ -2236,6 +2236,12 @@ export default function PredictPage() {
     ).length,
     [userBetsByMarket, visibleMarketIds]
   );
+  useEffect(() => {
+    if (activePredictions === 0 && showMyPositions) {
+      setShowMyPositions(false);
+    }
+  }, [activePredictions, showMyPositions]);
+
   const predictedMarkets = useMemo(() => new Set(Array.from(userBetsByMarket.keys())), [userBetsByMarket]);
   const hydratedMarkets = useMemo((): PredictionMarket[] => {
     const dbMarkets = (nativeUpdownData || []).filter((m: any) => m.visibility === "live");

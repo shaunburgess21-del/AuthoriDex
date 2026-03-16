@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { getAvatarGradient, getAvatarInitials } from "@/lib/avatar";
+import { getAuthHeaders } from "@/lib/queryClient";
 import {
   ArrowLeft, User, Trophy, Vote, TrendingUp, Calendar, Lock, Sparkles,
   Shield, BrainCircuit, BarChart3, Coins, Target, ChevronRight, Loader2,
@@ -88,10 +89,14 @@ function BetHistorySection({ username }: { username: string }) {
   const [tab, setTab] = useState<"settled" | "active">("settled");
   const [, setLocation] = useLocation();
 
-  const { data, isLoading } = useQuery<BetsResponse>({
+  const { data, isLoading, error } = useQuery<BetsResponse>({
     queryKey: ["/api/profile/u", username, "bets", tab],
     queryFn: async () => {
-      const res = await fetch(`/api/profile/u/${username}/bets?tab=${tab}&limit=50`);
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`/api/profile/u/${username}/bets?tab=${tab}&limit=50`, {
+        headers: authHeaders,
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch bets");
       return res.json();
     },
@@ -127,6 +132,10 @@ function BetHistorySection({ username }: { username: string }) {
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : error ? (
+        <div className="text-center py-8 text-destructive text-sm">
+          Failed to load prediction history
         </div>
       ) : bets.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground text-sm">
@@ -286,7 +295,7 @@ export default function PublicProfilePage() {
     ? Math.round(profile.agentProfile.accuracy * 100)
     : null;
   const pnl = profile.profitLoss ?? 0;
-  const predictions = profile.agentProfile?.totalEntered || profile.totalPredictions || 0;
+  const predictions = profile.agentProfile?.totalEntered ?? profile.totalPredictions ?? 0;
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
