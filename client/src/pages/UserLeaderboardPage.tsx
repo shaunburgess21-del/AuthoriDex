@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getAvatarGradient } from "@/lib/avatar";
+import { getAuthHeaders } from "@/lib/queryClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -316,7 +317,11 @@ export default function UserLeaderboardPage() {
       if (debouncedSearch) params.set("search", debouncedSearch);
       params.set("page", String(pageParam));
       params.set("limit", String(PAGE_SIZE));
-      const res = await fetch(`/api/leaderboard/users?${params.toString()}`);
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`/api/leaderboard/users?${params.toString()}`, {
+        headers: authHeaders,
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },

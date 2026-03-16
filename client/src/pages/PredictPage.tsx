@@ -54,7 +54,6 @@ import {
   Swords,
   Star,
   Cpu,
-  Globe,
   Scale,
   Landmark,
   Briefcase,
@@ -771,7 +770,7 @@ function FirstTimeModal({ open, onClose }: { open: boolean; onClose: () => void 
         <div className="space-y-4 py-4">
           <div className="flex items-start gap-3">
             <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-              <Globe className="h-4 w-4 text-violet-500" />
+              <Scale className="h-4 w-4 text-violet-500" />
             </div>
             <div>
               <h4 className="font-semibold text-sm">World Events</h4>
@@ -2649,13 +2648,13 @@ export default function PredictPage() {
   };
 
   const filteredUpDown = hydratedMarkets.filter(m =>
-    matchesCategory(updownCategory, m.category, m.personId) &&
+    (showMyPositions || matchesCategory(updownCategory, m.category, m.personId)) &&
     (!updownSearch || m.personName.toLowerCase().includes(updownSearch.toLowerCase())) &&
     (!showMyPositions || userBetsByMarket.has(m.id))
   ).sort((a: any, b: any) => updownCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
   const filteredH2H = hydratedH2H.filter(m =>
-    (h2hCategory === "all" || h2hCategory === "trending" ||
+    (showMyPositions || h2hCategory === "all" || h2hCategory === "trending" ||
      (h2hCategory === "favorites" ? (favoriteIds.has(m.person1Id || "") || favoriteIds.has(m.person2Id || "")) : m.category === h2hCategory)) &&
     (!h2hSearch || m.title.toLowerCase().includes(h2hSearch.toLowerCase()) ||
      m.person1.name.toLowerCase().includes(h2hSearch.toLowerCase()) ||
@@ -2664,15 +2663,15 @@ export default function PredictPage() {
   ).sort((a: any, b: any) => h2hCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
   const filteredGainers = hydratedGainers.filter(m =>
-    (gainerCategory === "all" || gainerCategory === "trending" ||
+    (showMyPositions || gainerCategory === "all" || gainerCategory === "trending" ||
      (gainerCategory === "favorites" ? m.leaders.some(l => l.personId && favoriteIds.has(l.personId)) : m.category === gainerCategory)) &&
     (!gainerSearch || m.category.toLowerCase().includes(gainerSearch.toLowerCase()) ||
      m.leaders.some(l => l.name.toLowerCase().includes(gainerSearch.toLowerCase()))) &&
     (!showMyPositions || userBetsByMarket.has(m.id))
   ).sort((a: any, b: any) => gainerCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
-  const filteredCommunity = openMarkets.filter((m: any) => 
-    (communityCategory === "all" || communityCategory === "trending" || m.category === communityCategory) &&
+  const filteredCommunity = openMarkets.filter((m: any) =>
+    (showMyPositions || communityCategory === "all" || communityCategory === "trending" || m.category === communityCategory) &&
     (!communitySearch || m.title?.toLowerCase().includes(communitySearch.toLowerCase())) &&
     (!showMyPositions || userBetsByMarket.has(m.id))
   ).sort((a: any, b: any) => communityCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
@@ -2799,7 +2798,7 @@ export default function PredictPage() {
             <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mt-[15px] mb-[15px]">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div className="h-10 w-10 rounded-lg bg-violet-500/10 hidden sm:flex items-center justify-center shrink-0">
-                  <Globe className="h-5 w-5 text-violet-400" />
+                  <Scale className="h-5 w-5 text-violet-400" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h2 className="text-lg sm:text-xl font-serif font-bold truncate">World Markets</h2>

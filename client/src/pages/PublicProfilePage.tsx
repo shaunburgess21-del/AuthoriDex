@@ -138,12 +138,7 @@ function BetHistorySection({ username }: { username: string }) {
             <div
               key={bet.betId}
               className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer group"
-              onClick={() => {
-                const path = bet.marketType === "community"
-                  ? `/predict/market/${bet.marketSlug}`
-                  : `/predict/${bet.marketSlug}`;
-                setLocation(path);
-              }}
+              onClick={() => setLocation(`/markets/${bet.marketSlug}`)}
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
