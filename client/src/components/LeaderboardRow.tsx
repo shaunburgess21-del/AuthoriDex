@@ -37,6 +37,7 @@ interface LeaderboardRowProps {
   onPredictDown?: () => void;
   showExceptional?: boolean;
   thresholds?: PercentileThresholds;
+  approvalShowResults?: boolean;
 }
 
 interface PercentileThresholds {
@@ -117,7 +118,7 @@ function markEverVoted() {
   } catch {}
 }
 
-export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onVoteClick, onPredictUp, onPredictDown, showExceptional = true, thresholds }: LeaderboardRowProps) {
+export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onVoteClick, onPredictUp, onPredictDown, showExceptional = true, thresholds, approvalShowResults }: LeaderboardRowProps) {
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
   const [hasEverVoted, setHasEverVoted] = useState(getHasEverVoted);
 
@@ -368,7 +369,20 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               </p>
             </div>
             <div className="w-[80px] shrink-0 flex justify-end">
-              {hasVoted && sentimentScore != null ? (
+              {approvalShowResults ? (
+                <span className="font-mono font-bold text-lg tabular-nums">
+                  {person.approvalAvgRating != null ? (
+                    <>
+                      <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>
+                        {person.approvalAvgRating.toFixed(1)}
+                      </span>
+                      <span className="text-muted-foreground">/5</span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">--</span>
+                  )}
+                </span>
+              ) : hasVoted && sentimentScore != null ? (
                 <Popover modal>
                   <PopoverTrigger asChild>
                     <button

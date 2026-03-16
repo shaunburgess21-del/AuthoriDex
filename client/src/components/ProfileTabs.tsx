@@ -14,7 +14,7 @@ const tabs = [
 export function ProfileTabs({ activeTab, onTabChange }: ProfileTabsProps) {
   return (
     <div className="mb-6" data-testid="profile-tabs">
-      <div className="flex items-center rounded-lg bg-muted/50 p-0.5 w-full">
+      <div className="flex items-center rounded-lg bg-muted/50 p-0.5 w-full overflow-hidden">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
@@ -24,7 +24,7 @@ export function ProfileTabs({ activeTab, onTabChange }: ProfileTabsProps) {
               onClick={() => onTabChange(tab.id)}
               className={`
                 relative flex items-center justify-center gap-2 flex-1
-                whitespace-nowrap px-5 py-[13px] rounded-md text-[15px] font-medium transition-all
+                whitespace-nowrap px-2 sm:px-5 py-[13px] rounded-md text-[15px] font-medium transition-all
                 ${isActive
                   ? "bg-background shadow-sm text-foreground"
                   : "text-muted-foreground hover:text-foreground"

@@ -498,6 +498,7 @@ export default function HomePage() {
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
   const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [approvalShowResults, setApprovalShowResults] = useState(false);
   const [moversCollapsed, setMoversCollapsed] = useState(true);
 
   const { toast } = useToast();
@@ -1060,6 +1061,17 @@ export default function HomePage() {
                       <span className="ml-auto lg:hidden text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Predict</span>
                     </div>
                   )}
+                  {leaderboardTab === "approval" && (
+                    <div className="px-4 sm:px-6 py-2.5 border-b border-t bg-muted/20 flex items-center sm:hidden">
+                      <button
+                        type="button"
+                        onClick={() => setApprovalShowResults(v => !v)}
+                        className="ml-auto text-[11px] font-medium uppercase tracking-wider text-cyan-400 hover:text-cyan-300 transition-colors"
+                      >
+                        {approvalShowResults ? "Rate" : "View Results"}
+                      </button>
+                    </div>
+                  )}
                   {displayPeople.length > 0 && (
                     <div className="hidden lg:flex items-center gap-6 lg:gap-5 px-4 py-2 border-b text-[11px] font-medium uppercase tracking-wider text-muted-foreground" data-testid="leaderboard-column-header">
                       <div className="flex-1" />
@@ -1107,6 +1119,7 @@ export default function HomePage() {
                         onPredictDown={() => handleLeaderboardPredict(person.id, "down")}
                         showExceptional={exceptionalIds.has(person.id)}
                         thresholds={percentileThresholds}
+                        approvalShowResults={approvalShowResults}
                       />
                     ))}
                   </div>

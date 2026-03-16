@@ -1507,7 +1507,7 @@ export default function PersonDetailPage() {
               <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
                       <ThumbsUp className="h-5 w-5 text-cyan-400" />
                     </div>
                     <div>
@@ -1530,7 +1530,7 @@ export default function PersonDetailPage() {
               <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
                       <Swords className="h-5 w-5 text-cyan-400" />
                     </div>
                     <div>
@@ -1571,7 +1571,7 @@ export default function PersonDetailPage() {
               <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
                       <MessageSquare className="h-5 w-5 text-cyan-400" />
                     </div>
                     <div>
@@ -1639,7 +1639,7 @@ export default function PersonDetailPage() {
               <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
                       <ListChecks className="h-5 w-5 text-cyan-400" />
                     </div>
                     <div>
@@ -1683,7 +1683,7 @@ export default function PersonDetailPage() {
               <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
                       <BarChart3 className="h-5 w-5 text-cyan-400" />
                     </div>
                     <div>
@@ -1706,7 +1706,7 @@ export default function PersonDetailPage() {
               <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
                       <Camera className="h-5 w-5 text-cyan-400" />
                     </div>
                     <div>
