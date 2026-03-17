@@ -87,6 +87,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { TrendingPoll } from "@shared/schema";
+import { MARKET_CATEGORY_OPTIONS, type CanonicalMarketCategory } from "@shared/constants";
 
 const MARKET_CATEGORIES = [
   { value: "politics", label: "Politics" },
@@ -101,6 +102,8 @@ const MARKET_CATEGORIES = [
   { value: "Food & Drink", label: "Food & Drink" },
   { value: "Lifestyle", label: "Lifestyle" },
 ];
+
+const GAINER_MARKET_CATEGORIES = MARKET_CATEGORY_OPTIONS;
 
 type AdminSection = "overview" | "celebrities" | "predictions" | "voting" | "moderation" | "settlement" | "users" | "tools";
 
@@ -1505,7 +1508,7 @@ export default function AdminDashboard() {
   const [h2hPersonAId, setH2hPersonAId] = useState("");
   const [h2hPersonBId, setH2hPersonBId] = useState("");
   const [h2hCategory, setH2hCategory] = useState("misc");
-  const [gainerCategory, setGainerCategory] = useState("tech");
+  const [gainerCategory, setGainerCategory] = useState<CanonicalMarketCategory>("tech");
   const [gainerPersonIds, setGainerPersonIds] = useState<string[]>([]);
   const [gainerPersonSearch, setGainerPersonSearch] = useState("");
   const [showOpinionPollModal, setShowOpinionPollModal] = useState(false);
@@ -4127,15 +4130,14 @@ export default function AdminDashboard() {
                 <div className="space-y-4">
                   <div>
                     <Label>Category</Label>
-                    <Select value={gainerCategory} onValueChange={setGainerCategory}>
+                    <Select value={gainerCategory} onValueChange={(value) => setGainerCategory(value as CanonicalMarketCategory)}>
                       <SelectTrigger data-testid="select-gainer-category"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="tech">Tech</SelectItem>
-                        <SelectItem value="music">Music</SelectItem>
-                        <SelectItem value="sports">Sports</SelectItem>
-                        <SelectItem value="politics">Politics</SelectItem>
-                        <SelectItem value="business">Business</SelectItem>
-                        <SelectItem value="creator">Creator</SelectItem>
+                        {GAINER_MARKET_CATEGORIES.map((category) => (
+                          <SelectItem key={category.value} value={category.value}>
+                            {category.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

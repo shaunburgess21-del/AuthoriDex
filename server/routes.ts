@@ -44,6 +44,7 @@ import { getMediastackBudgetSummary } from "./providers/mediastack";
 import pLimit from "p-limit";
 import { buildOpeningScores } from "./native-markets/openingScores";
 import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer } from "./jobs/market-generator";
+import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
@@ -10722,9 +10723,9 @@ Only return the JSON object.`;
   app.post("/api/admin/native-markets/gainer", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { category, personIds, visibility = "live", featured = false, seedConfig } = req.body;
+      const normalizedCategory = normalizeMarketCategory(category);
 
-      const validCategories = ['tech', 'politics', 'business', 'sports', 'creator', 'music'];
-      if (!validCategories.includes(category)) {
+      if (!CANONICAL_MARKET_CATEGORIES.includes(normalizedCategory as typeof CANONICAL_MARKET_CATEGORIES[number])) {
         return res.status(400).json({ error: "Invalid category" });
       }
       if (!personIds || !Array.isArray(personIds) || personIds.length === 0) {
@@ -10747,13 +10748,13 @@ Only return the JSON object.`;
       const jan1 = new Date(now.getUTCFullYear(), 0, 1);
       const weekNumber = Math.ceil(((now.getTime() - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
 
-      const [existingGainer] = await db.select().from(predictionMarkets).where(and(
+      const existingGainers = await db.select().from(predictionMarkets).where(and(
         eq(predictionMarkets.marketType, "gainer"),
-        eq(predictionMarkets.category, category),
         eq(predictionMarkets.weekNumber, weekNumber)
       ));
+      const existingGainer = existingGainers.find((market) => normalizeMarketCategory(market.category) === normalizedCategory);
       if (existingGainer) {
-        return res.status(409).json({ error: `A Category Race market for ${category} already exists this week`, existingId: existingGainer.id });
+        return res.status(409).json({ error: `A Category Race market for ${getMarketCategoryLabel(normalizedCategory)} already exists this week`, existingId: existingGainer.id });
       }
 
       const persons = await db.select().from(trackedPeople).where(inArray(trackedPeople.id, personIds));
@@ -10761,8 +10762,8 @@ Only return the JSON object.`;
         return res.status(400).json({ error: "Some person IDs not found" });
       }
 
-      const title = `Category Race: ${category.charAt(0).toUpperCase() + category.slice(1)}`;
-      let slug = `gainer-${category}-week-${weekNumber}`;
+      const title = `Category Race: ${getMarketCategoryLabel(normalizedCategory)}`;
+      let slug = `gainer-${normalizedCategory}-week-${weekNumber}`;
 
       const gainerSnapRows = personIds.length > 0
         ? await db.execute(sql`
@@ -10795,7 +10796,7 @@ Only return the JSON object.`;
           marketType: "gainer",
           title,
           slug,
-          category,
+          category: normalizedCategory,
           visibility,
           featured,
           status: "OPEN",
@@ -10814,7 +10815,7 @@ Only return the JSON object.`;
             marketType: "gainer",
             title,
             slug,
-            category,
+            category: normalizedCategory,
             visibility,
             featured,
             status: "OPEN",
@@ -10883,6 +10884,45 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error generating gainer markets:", error.message);
       res.status(500).json({ error: "Failed to generate gainer markets" });
+    }
+  });
+
+  app.post("/api/admin/native-markets/gainer/normalize-categories", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const gainerMarkets = await db.select({
+        id: predictionMarkets.id,
+        category: predictionMarkets.category,
+        title: predictionMarkets.title,
+      }).from(predictionMarkets).where(eq(predictionMarkets.marketType, "gainer"));
+
+      const updates = gainerMarkets
+        .map((market) => {
+          const normalizedCategory = normalizeMarketCategory(market.category);
+          const normalizedTitle = `Category Race: ${getMarketCategoryLabel(normalizedCategory)}`;
+          const needsUpdate = market.category !== normalizedCategory || market.title !== normalizedTitle;
+
+          return needsUpdate
+            ? {
+                id: market.id,
+                category: normalizedCategory,
+                title: normalizedTitle,
+              }
+            : null;
+        })
+        .filter((market): market is { id: string; category: string; title: string } => market !== null);
+
+      for (const market of updates) {
+        await db.update(predictionMarkets).set({
+          category: market.category,
+          title: market.title,
+          updatedAt: new Date(),
+        }).where(eq(predictionMarkets.id, market.id));
+      }
+
+      res.json({ success: true, updated: updates.length });
+    } catch (error: any) {
+      console.error("Error normalizing gainer categories:", error.message);
+      res.status(500).json({ error: "Failed to normalize gainer categories" });
     }
   });
 

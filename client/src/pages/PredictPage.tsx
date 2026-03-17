@@ -82,6 +82,7 @@ import { CardSection } from "@/components/CardSection";
 import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { formatActivityAge } from "@/lib/formatDate";
+import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 
 function MarketAvatar({ market }: { market: any }) {
   const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
@@ -2275,7 +2276,7 @@ export default function PredictPage() {
           endTime: "Sun 23:59 UTC",
           totalPool: upStake + downStake + Number(m.seedVolume || 0),
           upPoolPercent: upPercent || 50,
-          category: (m.category || person.category || "misc") as CategoryFilter,
+          category: normalizeMarketCategory(m.category || person.category || "misc") as CategoryFilter,
           upEntryId: upEntry?.id,
           downEntryId: downEntry?.id,
           cadence: m.cadence || "weekly",
@@ -2315,7 +2316,7 @@ export default function PredictPage() {
           person2EntryId: e2.id,
           person1Id: e1.personId || "",
           person2Id: e2.personId || "",
-          category: (m.category || "misc") as CategoryFilter,
+          category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
           endTime: "Sun 23:59 UTC",
           totalPool,
           person1Percent: (s1 + s2) === 0 ? 50 : Math.round((s1 / total) * 100),
@@ -2337,7 +2338,7 @@ export default function PredictPage() {
         const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0) + Number(m.seedVolume || 0);
         return {
           id: m.id,
-          category: (m.category || "misc") as CategoryFilter,
+          category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
           leaders: entries.slice(0, 3).map((e: any) => {
             const p = e.person || {};
             return {
@@ -2661,7 +2662,7 @@ export default function PredictPage() {
     if (cat === "all") return true;
     if (cat === "trending") return true;
     if (cat === "favorites") return !!personId && favoriteIds.has(personId);
-    return marketCategory === cat;
+    return normalizeMarketCategory(marketCategory) === cat;
   };
 
   const filteredUpDown = hydratedMarkets.filter(m =>
@@ -2672,7 +2673,7 @@ export default function PredictPage() {
 
   const filteredH2H = hydratedH2H.filter(m =>
     (showMyPositions || h2hCategory === "all" || h2hCategory === "trending" ||
-     (h2hCategory === "favorites" ? (favoriteIds.has(m.person1Id || "") || favoriteIds.has(m.person2Id || "")) : m.category === h2hCategory)) &&
+     (h2hCategory === "favorites" ? (favoriteIds.has(m.person1Id || "") || favoriteIds.has(m.person2Id || "")) : matchesCategory(h2hCategory, m.category))) &&
     (!h2hSearch || m.title.toLowerCase().includes(h2hSearch.toLowerCase()) ||
      m.person1.name.toLowerCase().includes(h2hSearch.toLowerCase()) ||
      m.person2.name.toLowerCase().includes(h2hSearch.toLowerCase())) &&
@@ -2681,11 +2682,31 @@ export default function PredictPage() {
 
   const filteredGainers = hydratedGainers.filter(m =>
     (showMyPositions || gainerCategory === "all" || gainerCategory === "trending" ||
-     (gainerCategory === "favorites" ? m.leaders.some(l => l.personId && favoriteIds.has(l.personId)) : m.category === gainerCategory)) &&
-    (!gainerSearch || m.category.toLowerCase().includes(gainerSearch.toLowerCase()) ||
+     (gainerCategory === "favorites" ? m.leaders.some(l => l.personId && favoriteIds.has(l.personId)) : matchesCategory(gainerCategory, m.category))) &&
+    (!gainerSearch || getMarketCategoryLabel(m.category).toLowerCase().includes(gainerSearch.toLowerCase()) ||
      m.leaders.some(l => l.name.toLowerCase().includes(gainerSearch.toLowerCase()))) &&
     (!showMyPositions || userBetsByMarket.has(m.id))
   ).sort((a: any, b: any) => gainerCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
+
+  const hasLiveGainers = hydratedGainers.length > 0;
+  const hasInactiveOnlyGainers = (nativeGainerData || []).length > 0 && !hasLiveGainers;
+  const filteredOverlayGainers = hydratedGainers
+    .filter(m =>
+      (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" ||
+       (overlayCategoryFilter === "favorites"
+         ? m.leaders.some(l => l.personId && favoriteIds.has(l.personId))
+         : matchesCategory(overlayCategoryFilter, m.category))) &&
+      (!overlaySearchQuery || getMarketCategoryLabel(m.category).toLowerCase().includes(overlaySearchQuery.toLowerCase()) ||
+       m.leaders.some(l => l.name.toLowerCase().includes(overlaySearchQuery.toLowerCase())))
+    )
+    .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
+  const gainerEmptyMessage = showMyPositions
+    ? "You don't have any active Category Race positions yet"
+    : hasInactiveOnlyGainers
+      ? "No live Category Races are open right now"
+      : hasLiveGainers
+        ? "No gainers match your filters"
+        : "No Category Races are available right now";
 
   const filteredCommunity = openMarkets.filter((m: any) =>
     (showMyPositions || communityCategory === "all" || communityCategory === "trending" || m.category === communityCategory) &&
@@ -3219,7 +3240,7 @@ export default function PredictPage() {
               </CardSection>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                No gainers match your filters
+                {gainerEmptyMessage}
               </div>
             )}
             <div className="flex justify-center mt-6">
@@ -3318,12 +3339,8 @@ export default function PredictPage() {
         user={user}
         onAuthRequired={() => setLocation("/login")}
       >
-        {hydratedGainers
-          .filter(m => 
-            (overlayCategoryFilter === "all" || overlayCategoryFilter === "trending" || m.category === overlayCategoryFilter) &&
-            (!overlaySearchQuery || m.category.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
-          )
-          .map((market) => (
+        {filteredOverlayGainers.length > 0 ? (
+          filteredOverlayGainers.map((market) => (
             <TopGainerCard 
               key={market.id} 
               market={market} 
@@ -3333,7 +3350,12 @@ export default function PredictPage() {
               isPredicted={predictedMarkets.has(market.id)}
               isShimmering={false}
             />
-          ))}
+          ))
+        ) : (
+          <div className="text-center py-8 text-muted-foreground">
+            {gainerEmptyMessage}
+          </div>
+        )}
       </FullScreenOverlay>
       <FullScreenOverlay
         open={viewAllCategory === "community"}

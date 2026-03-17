@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { db } from "../db";
 import { predictionMarkets, marketEntries, trackedPeople, trendingPeople } from "@shared/schema";
+import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { buildOpeningScores } from "../native-markets/openingScores";
 import { log } from "../log";
@@ -261,13 +262,13 @@ export async function generateWeeklyGainer(): Promise<number> {
       eq(predictionMarkets.weekNumber, weekNumber),
       inArray(predictionMarkets.visibility, ["live", "inactive"])
     ));
-  const existingCategories = new Set(existingGainers.map(e => e.category));
+  const existingCategories = new Set(existingGainers.map(e => normalizeMarketCategory(e.category)));
 
   const people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
 
   const byCategory = new Map<string, typeof people>();
   for (const person of people) {
-    const cat = (person.category || "misc").toLowerCase();
+    const cat = normalizeMarketCategory(person.category || "misc");
     if (!byCategory.has(cat)) byCategory.set(cat, []);
     byCategory.get(cat)!.push(person);
   }
@@ -302,7 +303,7 @@ export async function generateWeeklyGainer(): Promise<number> {
     const openingScores = buildOpeningScores(ranked.map(p => p.id), snapMap);
     const gainerMeta = openingScores.length > 0 ? { openingScores } : undefined;
 
-    const title = `Category Race: ${cat.charAt(0).toUpperCase() + cat.slice(1)}`;
+    const title = `Category Race: ${getMarketCategoryLabel(cat)}`;
     let slug = `gainer-${cat}-week-${weekNumber}`;
 
     try {

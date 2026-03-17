@@ -1,65 +1,52 @@
-const CATEGORY_LABEL_MAP: Record<string, string> = {
-  misc: "Misc",
-  Acting: "Film & TV",
-  "film-tv": "Film & TV",
-  "Food & Drink": "Food & Drink",
-  "food-drink": "Food & Drink",
-  Lifestyle: "Lifestyle",
-  lifestyle: "Lifestyle",
-};
+import { getMarketCategoryLabel, normalizeMarketCategory, type CanonicalMarketCategory } from "@shared/constants";
 
-const CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string }> = {
-  Tech: {
+const CATEGORY_STYLES: Record<CanonicalMarketCategory, { bg: string; border: string; text: string }> = {
+  tech: {
     bg: 'bg-[#1E90FF]/10',
     border: 'border-[#1E90FF]/40',
     text: 'text-[#1E90FF]',
   },
-  Music: {
+  music: {
     bg: 'bg-[#EC4899]/10',
     border: 'border-[#EC4899]/40',
     text: 'text-[#EC4899]',
   },
-  Politics: {
+  politics: {
     bg: 'bg-[#94A3B8]/10',
     border: 'border-[#94A3B8]/40',
     text: 'text-[#94A3B8]',
   },
-  Business: {
+  business: {
     bg: 'bg-[#B8860B]/10',
     border: 'border-[#B8860B]/40',
     text: 'text-[#B8860B]',
   },
-  Sports: {
+  sports: {
     bg: 'bg-[#FB923C]/10',
     border: 'border-[#FB923C]/40',
     text: 'text-[#FB923C]',
   },
-  "Film & TV": {
+  "film-tv": {
     bg: 'bg-[#A855F7]/10',
     border: 'border-[#A855F7]/40',
     text: 'text-[#A855F7]',
   },
-  Acting: {
-    bg: 'bg-[#A855F7]/10',
-    border: 'border-[#A855F7]/40',
-    text: 'text-[#A855F7]',
-  },
-  Gaming: {
+  gaming: {
     bg: 'bg-[#7C3AED]/10',
     border: 'border-[#7C3AED]/40',
     text: 'text-[#7C3AED]',
   },
-  Creator: {
+  creator: {
     bg: 'bg-[#FACC15]/10',
     border: 'border-[#FACC15]/40',
     text: 'text-[#FACC15]',
   },
-  "Food & Drink": {
+  "food-drink": {
     bg: 'bg-[#D97706]/10',
     border: 'border-[#D97706]/40',
     text: 'text-[#D97706]',
   },
-  Lifestyle: {
+  lifestyle: {
     bg: 'bg-[#DB2777]/10',
     border: 'border-[#DB2777]/40',
     text: 'text-[#DB2777]',
@@ -78,10 +65,11 @@ const DEFAULT_CATEGORY_STYLE = {
 };
 
 export function getCategoryStyle(category: string) {
-  const display = CATEGORY_LABEL_MAP[category] || category;
-  if (CATEGORY_STYLES[display]) return CATEGORY_STYLES[display];
-  const normalized = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
-  return CATEGORY_STYLES[normalized] || DEFAULT_CATEGORY_STYLE;
+  const normalized = normalizeMarketCategory(category);
+  if (normalized in CATEGORY_STYLES) {
+    return CATEGORY_STYLES[normalized as CanonicalMarketCategory];
+  }
+  return DEFAULT_CATEGORY_STYLE;
 }
 
 export function getCategoryTextColor(category: string) {
@@ -103,7 +91,7 @@ export function CategoryPill({ category, className = "", "data-testid": testId }
       className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border w-fit whitespace-nowrap transition-all duration-200 hover:opacity-80 ${style.bg} ${style.border} ${style.text} ${className}`}
       data-testid={testId}
     >
-      {CATEGORY_LABEL_MAP[category] || category}
+      {getMarketCategoryLabel(category)}
     </span>
   );
 }

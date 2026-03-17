@@ -103,3 +103,93 @@ export function getFilterCategories(includeCustomTopic: boolean) {
 export function getCategoryFilterOptions(includeCustomTopic: boolean) {
   return includeCustomTopic ? CATEGORY_FILTER_OPTIONS_WITH_CUSTOM : BASE_CATEGORY_FILTER_OPTIONS;
 }
+
+export const CANONICAL_MARKET_CATEGORIES = [
+  "tech",
+  "politics",
+  "business",
+  "music",
+  "sports",
+  "film-tv",
+  "gaming",
+  "creator",
+  "food-drink",
+  "lifestyle",
+  "misc",
+] as const;
+
+export type CanonicalMarketCategory = (typeof CANONICAL_MARKET_CATEGORIES)[number];
+
+export const MARKET_CATEGORY_LABELS: Record<CanonicalMarketCategory, string> = {
+  tech: "Tech",
+  politics: "Politics",
+  business: "Business",
+  music: "Music",
+  sports: "Sports",
+  "film-tv": "Film & TV",
+  gaming: "Gaming",
+  creator: "Creator",
+  "food-drink": "Food & Drink",
+  lifestyle: "Lifestyle",
+  misc: "Misc",
+};
+
+const MARKET_CATEGORY_ALIASES: Record<string, CanonicalMarketCategory> = {
+  tech: "tech",
+  politics: "politics",
+  business: "business",
+  music: "music",
+  sports: "sports",
+  "film tv": "film-tv",
+  "film & tv": "film-tv",
+  acting: "film-tv",
+  gaming: "gaming",
+  creator: "creator",
+  "food drink": "food-drink",
+  "food & drink": "food-drink",
+  lifestyle: "lifestyle",
+  misc: "misc",
+};
+
+function normalizeCategoryLookupKey(category: string) {
+  return category
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/-/g, " ")
+    .replace(/\s*&\s*/g, " & ")
+    .replace(/\s+/g, " ");
+}
+
+export function normalizeMarketCategory(category: string | null | undefined): string {
+  if (!category) return "misc";
+
+  const lookupKey = normalizeCategoryLookupKey(category);
+  const canonical = MARKET_CATEGORY_ALIASES[lookupKey];
+  if (canonical) return canonical;
+
+  return (
+    lookupKey
+      .replace(/\s*&\s*/g, " and ")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "misc"
+  );
+}
+
+export function getMarketCategoryLabel(category: string | null | undefined): string {
+  const normalized = normalizeMarketCategory(category);
+  if (normalized in MARKET_CATEGORY_LABELS) {
+    return MARKET_CATEGORY_LABELS[normalized as CanonicalMarketCategory];
+  }
+
+  return normalized
+    .split("-")
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ") || "Misc";
+}
+
+export const MARKET_CATEGORY_OPTIONS = CANONICAL_MARKET_CATEGORIES.map((value) => ({
+  value,
+  label: MARKET_CATEGORY_LABELS[value],
+}));
