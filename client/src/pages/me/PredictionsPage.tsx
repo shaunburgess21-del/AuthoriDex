@@ -16,10 +16,13 @@ import {
   ChevronDown,
   ChevronUp,
   Zap,
+  Share2,
+  Check,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -104,12 +107,25 @@ function normalizeResponse(data: unknown): { predictions: UserPrediction[]; stat
   return { predictions: resp.predictions ?? [], stats: resp.stats ?? null };
 }
 
+function useCopyToClipboard() {
+  const { toast } = useToast();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copy = (text: string, label: string, id?: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: label });
+    setCopiedId(id ?? "_stats");
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+  return { copiedId, copy };
+}
+
 export default function PredictionsPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [expandedBet, setExpandedBet] = useState<string | null>(null);
+  const { copiedId, copy } = useCopyToClipboard();
 
   const { data: rawData, isLoading, error } = useQuery<PredictionsResponse | UserPrediction[]>({
     queryKey: ["/api/me/predictions"],
@@ -244,6 +260,23 @@ export default function PredictionsPage() {
             </Card>
           </div>
         ) : null}
+
+        {stats && (
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => copy(
+                `My AuthoriDex predictions: ${stats.winRate}% win rate | ${stats.netCredits >= 0 ? "+" : ""}${stats.netCredits.toLocaleString()} net credits | ${stats.total} predictions\n${window.location.origin}/predict`,
+                "Stats copied to clipboard!"
+              )}
+            >
+              {copiedId === "_stats" ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Share2 className="h-3.5 w-3.5" />}
+              Share Stats
+            </Button>
+          </div>
+        )}
 
         {/* ---------- P/L Chart ---------- */}
         {!isLoading && predictions.length > 0 && (
@@ -410,6 +443,24 @@ export default function PredictionsPage() {
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                           {prediction.marketCadence}
                         </Badge>
+                      )}
+                      {prediction.result === "won" && (
+                        <button
+                          className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                          title="Share this win"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const pnl = prediction.payout - prediction.stakeAmount;
+                            copy(
+                              `I won +${pnl.toLocaleString()} credits on "${prediction.marketTitle}" on AuthoriDex!\n${window.location.origin}/predict/${prediction.marketSlug}`,
+                              "Win shared to clipboard!",
+                              prediction.betId
+                            );
+                          }}
+                        >
+                          {copiedId === prediction.betId ? <Check className="h-3 w-3 text-green-400" /> : <Share2 className="h-3 w-3" />}
+                          Share
+                        </button>
                       )}
                     </div>
                   </div>

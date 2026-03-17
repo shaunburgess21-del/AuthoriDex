@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Star, Heart, TrendingUp, Minus } from "lucide-react";
+import { ArrowLeft, Star, Heart, TrendingUp, Minus, Eye, LineChart } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -116,28 +116,51 @@ export default function FavoritesPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="flex items-center gap-1">
-                      {(fav.change ?? 0) > 0 ? (
-                        <TrendingUp className="h-4 w-4 text-green-400" />
-                      ) : (fav.change ?? 0) < 0 ? (
-                        <TrendingUp className="h-4 w-4 text-red-400 rotate-180" />
-                      ) : (
-                        <Minus className="h-4 w-4 text-muted-foreground" />
-                      )}
-                      <span className={`font-mono ${(fav.change ?? 0) > 0 ? "text-green-400" : (fav.change ?? 0) < 0 ? "text-red-400" : "text-muted-foreground"}`}>
-                        {(fav.change ?? 0) > 0 ? "+" : ""}{fav.change ?? 0}%
-                      </span>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="flex items-center gap-1">
+                        {(fav.change ?? 0) > 0 ? (
+                          <TrendingUp className="h-4 w-4 text-green-400" />
+                        ) : (fav.change ?? 0) < 0 ? (
+                          <TrendingUp className="h-4 w-4 text-red-400 rotate-180" />
+                        ) : (
+                          <Minus className="h-4 w-4 text-muted-foreground" />
+                        )}
+                        <span className={`font-mono text-sm ${(fav.change ?? 0) > 0 ? "text-green-400" : (fav.change ?? 0) < 0 ? "text-red-400" : "text-muted-foreground"}`}>
+                          {(fav.change ?? 0) > 0 ? "+" : ""}{fav.change ?? 0}%
+                        </span>
+                      </div>
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="mt-1"
-                      onClick={(e) => handleUnfavorite(e, fav.celebrityId, fav.name)}
-                      data-testid={`button-unfavorite-${fav.id}`}
-                    >
-                      <Heart className="h-4 w-4 text-red-400 fill-red-400" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => { e.stopPropagation(); setLocation(`/person/${fav.celebrityId}`); }}
+                        title="View Profile"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-cyan-400"
+                        onClick={(e) => { e.stopPropagation(); setLocation(`/predict`); }}
+                        title="Predict"
+                      >
+                        <LineChart className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => handleUnfavorite(e, fav.celebrityId, fav.name)}
+                        data-testid={`button-unfavorite-${fav.id}`}
+                        title="Remove from favorites"
+                      >
+                        <Heart className="h-4 w-4 text-red-400 fill-red-400" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </Card>

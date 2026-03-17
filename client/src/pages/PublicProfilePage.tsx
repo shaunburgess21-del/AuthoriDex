@@ -7,9 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { getAvatarGradient, getAvatarInitials } from "@/lib/avatar";
 import { getAuthHeaders } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, User, Trophy, Vote, TrendingUp, Calendar, Lock, Sparkles,
-  Shield, BrainCircuit, BarChart3, Coins, Target, ChevronRight, Loader2,
+  Shield, BrainCircuit, BarChart3, Coins, Target, ChevronRight, Loader2, Share2, Check,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -63,6 +64,25 @@ interface BetsResponse {
   offset: number;
   limit: number;
   hasMore: boolean;
+}
+
+function ShareLinkButton({ url, label }: { url: string; label: string }) {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    toast({ title: label });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleCopy} title="Copy link">
+      {copied ? <Check className="h-4 w-4 text-green-400" /> : <Share2 className="h-4 w-4" />}
+    </Button>
+  );
 }
 
 function RankBadge({ rank }: { rank: string }) {
@@ -166,7 +186,11 @@ function BetHistorySection({ username }: { username: string }) {
                   <span className="text-sm font-medium truncate">{bet.marketTitle}</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="text-violet-400 font-medium">{bet.entryLabel}</span>
+                  <span className="text-violet-400 font-medium">
+                    {bet.predictedScore != null ? bet.entryLabel
+                      : bet.marketType === 'updown' ? `Picked: ${bet.entryLabel}`
+                      : `Backed: ${bet.entryLabel}`}
+                  </span>
                   {bet.predictedScore != null && (
                     <span className="text-amber-400">Score: {Number(bet.predictedScore).toLocaleString()}</span>
                   )}
@@ -304,7 +328,8 @@ export default function PublicProfilePage() {
           <Button variant="ghost" size="icon" onClick={() => window.history.length > 1 ? window.history.back() : setLocation("/")} data-testid="button-back">
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <span className="font-semibold">@{profile.username}</span>
+          <span className="font-semibold flex-1">@{profile.username}</span>
+          <ShareLinkButton url={`${window.location.origin}/u/${profile.username}`} label="Profile link copied!" />
         </div>
       </header>
 
