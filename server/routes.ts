@@ -4550,7 +4550,7 @@ Only return the JSON object.`;
     try {
       const { seedGamification } = await import("./scripts/seed-gamification");
       const result = await seedGamification();
-      res.json({ success: true, ...result });
+      res.json(result);
     } catch (error: any) {
       console.error("Error seeding gamification:", error.message);
       res.status(500).json({ error: "Failed to seed gamification" });
