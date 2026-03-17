@@ -268,7 +268,7 @@ export default function PredictionsPage() {
               size="sm"
               className="gap-1.5 text-xs"
               onClick={() => copy(
-                `My AuthoriDex predictions: ${stats.winRate}% win rate | ${stats.netCredits >= 0 ? "+" : ""}${stats.netCredits.toLocaleString()} net credits | ${stats.total} predictions\n${window.location.origin}/predict`,
+                `My VoxDex predictions: ${stats.winRate}% win rate | ${stats.netCredits >= 0 ? "+" : ""}${stats.netCredits.toLocaleString()} net credits | ${stats.total} predictions\n${window.location.origin}/predict`,
                 "Stats copied to clipboard!"
               )}
             >
@@ -452,7 +452,7 @@ export default function PredictionsPage() {
                             e.stopPropagation();
                             const pnl = prediction.payout - prediction.stakeAmount;
                             copy(
-                              `I won +${pnl.toLocaleString()} credits on "${prediction.marketTitle}" on AuthoriDex!\n${window.location.origin}/predict/${prediction.marketSlug}`,
+                              `I won +${pnl.toLocaleString()} credits on "${prediction.marketTitle}" on VoxDex!\n${window.location.origin}/predict/${prediction.marketSlug}`,
                               "Win shared to clipboard!",
                               prediction.betId
                             );
