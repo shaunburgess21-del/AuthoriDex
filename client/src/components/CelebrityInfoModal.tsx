@@ -170,7 +170,7 @@ export function CelebrityInfoModal({ personId, personName }: CelebrityInfoModalP
             <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
               <div className="flex items-center gap-2 text-primary mb-1">
                 <DollarSign className="h-4 w-4" />
-                <span className="text-xs uppercase tracking-wide font-medium">Estimated Net Worth (2025)</span>
+                <span className="text-xs uppercase tracking-wide font-medium">Estimated Net Worth (2026)</span>
               </div>
               <p className="text-xl font-mono font-bold" data-testid="text-celebrity-net-worth">
                 {formatNetWorth(profile.estimatedNetWorth)}
