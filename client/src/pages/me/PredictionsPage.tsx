@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -110,11 +110,17 @@ function normalizeResponse(data: unknown): { predictions: UserPrediction[]; stat
 function useCopyToClipboard() {
   const { toast } = useToast();
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const copy = (text: string, label: string, id?: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: label });
-    setCopiedId(id ?? "_stats");
-    setTimeout(() => setCopiedId(null), 2000);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copy = async (text: string, label: string, id?: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      setCopiedId(id ?? "_stats");
+      toast({ title: label });
+      timeoutRef.current = setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      toast({ title: "Failed to copy to clipboard", variant: "destructive" });
+    }
   };
   return { copiedId, copy };
 }
@@ -452,7 +458,7 @@ export default function PredictionsPage() {
                             e.stopPropagation();
                             const pnl = prediction.payout - prediction.stakeAmount;
                             copy(
-                              `I won +${pnl.toLocaleString()} credits on "${prediction.marketTitle}" on VoxDex!\n${window.location.origin}/predict/${prediction.marketSlug}`,
+                              `I won +${pnl.toLocaleString()} credits on "${prediction.marketTitle}" on VoxDex!\n${window.location.origin}/markets/${prediction.marketSlug}`,
                               "Win shared to clipboard!",
                               prediction.betId
                             );

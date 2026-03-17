@@ -743,6 +743,16 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
     }).where(eq(predictionMarkets.id, market.id));
   });
 
+  for (const w of winners) {
+    try {
+      await gamificationService.awardXp(
+        w.userId, 'prediction_win',
+        `prediction_win_${market.id}_${w.id}`,
+        { marketId: market.id, betId: w.id }
+      );
+    } catch (e) { console.error("XP award for jackpot win failed:", e); }
+  }
+
   const w = winners[0];
   log(`[MarketResolver] jackpot ${market.id}: resolved. actual=${actualScore}, winner predicted ${w.predictedScore} (off by ${w.diff}), pool=${totalPool}, payout=${distributablePool}, entries=${allBets.length}, tied=${winners.length}`);
   return "resolved";
