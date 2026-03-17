@@ -4,11 +4,12 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BottomNav } from "@/components/BottomNav";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useXpCelebration } from "@/hooks/useGamification";
 
 // If we got here the page loaded successfully -- clear any leftover retry
 // flag from a previous stale-chunk reload so the mechanism works on the
@@ -99,6 +100,12 @@ function Router() {
   );
 }
 
+function XpCelebrationWatcher() {
+  const { isLoggedIn } = useAuth();
+  useXpCelebration(isLoggedIn);
+  return null;
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -107,6 +114,7 @@ function App() {
           <TooltipProvider>
             <ScrollToTop />
             <Toaster />
+            <XpCelebrationWatcher />
             <ErrorBoundary>
               <Router />
             </ErrorBoundary>

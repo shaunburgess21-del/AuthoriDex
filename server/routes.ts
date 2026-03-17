@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, cardRelatedPeople, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, cardRelatedPeople, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -1695,6 +1695,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
             .where(eq(profiles.id, userId));
         });
+
+        try {
+          await gamificationService.awardXp(
+            userId, 'vote_curation',
+            `curation_${imageId}_${userId}`,
+            { imageId, personId, direction }
+          );
+        } catch (e) { console.error("XP award failed:", e); }
       }
       
       await syncWinningAvatarForPerson(personId);
@@ -1777,14 +1785,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .insert(communityInsights)
         .values({
           personId,
-          userId: req.userId!, // Use verified user ID from auth middleware
+          userId: req.userId!,
           username,
           content,
           sentimentVote: sentimentVote || null,
         })
         .returning();
 
-      res.json(newInsight);
+      let xpResult;
+      try {
+        xpResult = await gamificationService.awardXp(
+          req.userId!, 'post_insight',
+          `insight_${newInsight.id}_${req.userId}`,
+          { insightId: newInsight.id, personId }
+        );
+      } catch (e) { console.error("XP award failed:", e); }
+
+      res.json({ ...newInsight, xp: xpResult ?? null });
     } catch (error: any) {
       console.error("Error creating community insight:", error);
       res.status(400).json({ error: "Failed to create insight" });
@@ -1816,8 +1833,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ))
         .limit(1);
 
+      let isNewVote = false;
       if (existingVote.length > 0) {
-        // Update existing vote
         await db
           .update(insightVotes)
           .set({ voteType })
@@ -1826,7 +1843,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             eq(insightVotes.userId, userId)
           ));
       } else {
-        // Create new vote
+        isNewVote = true;
         await db
           .insert(insightVotes)
           .values({
@@ -1836,7 +1853,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
       }
 
-      res.json({ success: true });
+      let xpResult;
+      if (isNewVote) {
+        const actionKey = voteType === 'up' ? 'upvote_insight' : 'downvote_insight';
+        try {
+          xpResult = await gamificationService.awardXp(
+            userId, actionKey,
+            `insight_vote_${id}_${userId}`,
+            { insightId: id, voteType }
+          );
+        } catch (e) { console.error("XP award failed:", e); }
+      }
+
+      res.json({ success: true, xp: xpResult ?? null });
     } catch (error: any) {
       console.error("Error voting on insight:", error);
       res.status(500).json({ error: "Failed to vote" });
@@ -1944,8 +1973,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
           .where(eq(profiles.id, userId));
       });
+
+      let xpResult;
+      try {
+        xpResult = await gamificationService.awardXp(
+          userId, 'vote_sentiment',
+          `sentiment_${personId}_${today}_${userId}`,
+          { personId, voteType }
+        );
+      } catch (e) { console.error("XP award failed:", e); }
       
-      res.json({ success: true, created: true });
+      res.json({ success: true, created: true, xp: xpResult ?? null });
     } catch (error: any) {
       console.error("Error submitting sentiment vote:", error);
       res.status(500).json({ error: "Failed to submit vote" });
@@ -2248,6 +2286,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
 
+      let xpResult;
+      try {
+        xpResult = await gamificationService.awardXp(
+          userId, 'vote_sentiment',
+          `value_vote_${celebrityId}_${userId}`,
+          { celebrityId, vote }
+        );
+      } catch (e) { console.error("XP award failed:", e); }
+
       // Recompute metrics for this celebrity
       const metrics = await recomputeCelebrityMetrics(celebrityId);
 
@@ -2258,6 +2305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         overratedPct: metrics.overratedPct,
         fairlyRatedPct: metrics.fairlyRatedPct,
         valueScore: metrics.valueScore,
+        xp: xpResult ?? null,
       });
     } catch (error: any) {
       console.error("[value-vote] Error:", error);
@@ -3029,7 +3077,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: `Comment content must be at most ${COMMENT_MAX_LENGTH} characters` });
       }
 
-      // Create the comment
       const [newComment] = await db
         .insert(insightComments)
         .values({
@@ -3041,10 +3088,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .returning();
 
+      let xpResult;
+      try {
+        xpResult = await gamificationService.awardXp(
+          userId, 'post_comment',
+          `comment_${newComment.id}_${userId}`,
+          { commentId: newComment.id, insightId }
+        );
+      } catch (e) { console.error("XP award failed:", e); }
+
       res.status(201).json({
         ...newComment,
         upvotes: 0,
         downvotes: 0,
+        xp: xpResult ?? null,
       });
     } catch (error: any) {
       console.error("Error creating comment:", error);
@@ -3076,9 +3133,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ))
         .limit(1);
 
+      let isNewVote = false;
       if (existingVote.length > 0) {
         if (existingVote[0].voteType === voteType) {
-          // Same vote - remove it (toggle off)
           await db
             .delete(commentVotes)
             .where(and(
@@ -3086,7 +3143,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               eq(commentVotes.userId, userId)
             ));
         } else {
-          // Different vote - update it
           await db
             .update(commentVotes)
             .set({ voteType })
@@ -3096,7 +3152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ));
         }
       } else {
-        // Create new vote
+        isNewVote = true;
         await db
           .insert(commentVotes)
           .values({
@@ -3106,7 +3162,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
       }
 
-      res.json({ success: true });
+      let xpResult;
+      if (isNewVote) {
+        const actionKey = voteType === 'up' ? 'upvote_insight' : 'downvote_insight';
+        try {
+          xpResult = await gamificationService.awardXp(
+            userId, actionKey,
+            `comment_vote_${id}_${userId}`,
+            { commentId: id, voteType }
+          );
+        } catch (e) { console.error("XP award failed:", e); }
+      }
+
+      res.json({ success: true, xp: xpResult ?? null });
     } catch (error: any) {
       console.error("Error voting on comment:", error);
       res.status(500).json({ error: "Failed to vote" });
@@ -4238,6 +4306,7 @@ Only return the JSON object.`;
         optionBPercent: totalVotes > 0 ? Math.round((dispB2 / totalVotes) * 100) : 50,
         votedOption: option,
         xpAwarded: xpResult?.success ? xpResult.xpAwarded : 0,
+        xp: xpResult ?? null,
       });
     } catch (error: any) {
       console.error("Error submitting matchup vote:", error.message);
@@ -4355,7 +4424,51 @@ Only return the JSON object.`;
   // Get user gamification stats (XP, rank, capabilities, credits)
   app.get("/api/gamification/stats", requireAuth, async (req: AuthRequest, res) => {
     try {
-      const stats = await gamificationService.getUserStats(req.userId!);
+      const userId = req.userId!;
+
+      // Award daily login XP (idempotent per day)
+      const today = new Date().toISOString().split('T')[0];
+      let loginXp;
+      try {
+        loginXp = await gamificationService.awardXp(
+          userId, 'daily_login',
+          `daily_login_${today}_${userId}`,
+          { date: today }
+        );
+
+        if (loginXp?.success) {
+          // Check yesterday's login to maintain/increment streak
+          const yesterday = new Date(Date.now() - 86_400_000).toISOString().split('T')[0];
+          const [yesterdayLogin] = await db.select({ id: xpLedger.id })
+            .from(xpLedger)
+            .where(and(
+              eq(xpLedger.userId, userId),
+              eq(xpLedger.idempotencyKey, `daily_login_${yesterday}_${userId}`)
+            ))
+            .limit(1);
+
+          if (yesterdayLogin) {
+            await db.update(profiles)
+              .set({ currentStreak: sql`${profiles.currentStreak} + 1` })
+              .where(eq(profiles.id, userId));
+
+            try {
+              await gamificationService.awardXp(
+                userId, 'streak_bonus',
+                `streak_bonus_${today}_${userId}`,
+                { date: today }
+              );
+            } catch (e) { /* streak bonus already awarded or failed */ }
+          } else {
+            // Reset streak to 1 (today is day 1)
+            await db.update(profiles)
+              .set({ currentStreak: 1 })
+              .where(eq(profiles.id, userId));
+          }
+        }
+      } catch (e) { /* daily login XP already awarded or failed */ }
+
+      const stats = await gamificationService.getUserStats(userId);
       if (!stats) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -4429,6 +4542,18 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error fetching XP actions:", error.message);
       res.status(500).json({ error: "Failed to fetch XP actions" });
+    }
+  });
+
+  // Admin: Re-seed gamification actions and ranks (idempotent upsert)
+  app.post("/api/admin/seed-gamification", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { seedGamification } = await import("./scripts/seed-gamification");
+      const result = await seedGamification();
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      console.error("Error seeding gamification:", error.message);
+      res.status(500).json({ error: "Failed to seed gamification" });
     }
   });
 
@@ -7338,6 +7463,7 @@ Only return the JSON object.`;
         ))
         .limit(1);
 
+      let xpResult;
       if (existing) {
         await db
           .update(trendingPollVotes)
@@ -7357,9 +7483,17 @@ Only return the JSON object.`;
             .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
             .where(eq(profiles.id, authReq.userId!));
         });
+
+        try {
+          xpResult = await gamificationService.awardXp(
+            authReq.userId!, 'vote_sentiment',
+            `trending_poll_${poll.id}_${authReq.userId}`,
+            { pollId: poll.id, choice }
+          );
+        } catch (e) { console.error("XP award failed:", e); }
       }
 
-      res.json({ success: true, choice });
+      res.json({ success: true, choice, xp: xpResult ?? null });
     } catch (error: any) {
       console.error("Error voting on poll:", error.message);
       res.status(500).json({ error: "Failed to cast vote" });
@@ -8175,6 +8309,7 @@ Only return the JSON object.`;
         .where(and(eq(opinionPollVotes.pollId, poll.id), eq(opinionPollVotes.userId, userId)))
         .limit(1);
 
+      let xpResult;
       if (existing) {
         await db.update(opinionPollVotes)
           .set({ optionId, updatedAt: new Date() })
@@ -8191,9 +8326,17 @@ Only return the JSON object.`;
             .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
             .where(eq(profiles.id, userId));
         });
+
+        try {
+          xpResult = await gamificationService.awardXp(
+            userId, 'vote_opinion',
+            `opinion_poll_${poll.id}_${userId}`,
+            { pollId: poll.id, optionId }
+          );
+        } catch (e) { console.error("XP award failed:", e); }
       }
 
-      res.json({ success: true });
+      res.json({ success: true, xp: xpResult ?? null });
     } catch (error: any) {
       console.error("Error voting on opinion poll:", error.message);
       res.status(500).json({ error: "Failed to vote" });
@@ -9880,11 +10023,21 @@ Only return the JSON object.`;
       return { bet: { ...insertedBet, remainingCredits: updatedProfile.predictCredits }, potentialPayout };
     });
 
+    let xpResult;
+    try {
+      xpResult = await gamificationService.awardXp(
+        userId, 'place_prediction',
+        `prediction_${marketId}_${result.bet.id}_${userId}`,
+        { marketId, entryId, stakeAmount }
+      );
+    } catch (e) { console.error("XP award failed:", e); }
+
     return {
       data: {
         ...result.bet,
         potentialPayout: result.potentialPayout,
         remainingCredits: result.bet.remainingCredits,
+        xp: xpResult ?? null,
       },
       status: 200 as const,
     };
@@ -12527,7 +12680,16 @@ Only return the JSON object.`;
           .where(eq(profiles.id, userId));
       });
 
-      res.json({ success: true });
+      let xpResult;
+      try {
+        xpResult = await gamificationService.awardXp(
+          userId, 'vote_induction',
+          `induction_${id}_${userId}`,
+          { candidateId: id }
+        );
+      } catch (e) { console.error("XP award failed:", e); }
+
+      res.json({ success: true, xp: xpResult ?? null });
     } catch (error: any) {
       console.error("Error voting for induction candidate:", error);
       res.status(500).json({ error: "Failed to vote" });

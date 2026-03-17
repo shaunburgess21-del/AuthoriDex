@@ -5,6 +5,7 @@ import { log } from "../log";
 import { calculateSettlementPayouts } from "./settlement-utils";
 import { scoreResolvedMarket } from "../agents/performanceUpdater";
 import { PLATFORM_FEE } from "../config/constants";
+import { gamificationService } from "../services/gamification";
 
 const RESOLVER_INTERVAL_MS = 5 * 60 * 1000;
 const RESOLVER_STARTUP_DELAY_MS = 2 * 60 * 1000;
@@ -211,6 +212,22 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string, 
     console.log(`[PAYOUT REMAINDER LARGE] marketId=${marketId} remainder=${remainder} pool=${result.totalPool} winners=${result.winnersCount}`);
   }
   log(`[MarketResolver] Settlement: market=${marketId}, pool=${result.totalPool}, payouts=${result.payoutsDistributed}, remainder=${remainder} (burned), winners=${result.winnersCount}, losers=${result.losersCount}`);
+
+  if (!result.alreadySettled && result.winnersCount > 0) {
+    const winnerBets = await db.select({ userId: marketBets.userId, id: marketBets.id })
+      .from(marketBets)
+      .where(and(eq(marketBets.marketId, marketId), eq(marketBets.status, "won")));
+
+    for (const bet of winnerBets) {
+      try {
+        await gamificationService.awardXp(
+          bet.userId, 'prediction_win',
+          `prediction_win_${marketId}_${bet.id}`,
+          { marketId, betId: bet.id }
+        );
+      } catch (e) { console.error("XP award for prediction win failed:", e); }
+    }
+  }
 
   return result;
 }

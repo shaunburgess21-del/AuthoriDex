@@ -72,15 +72,25 @@ function useMediaQuery(query: string) {
   return matches;
 }
 
+const RANK_THRESHOLDS = [
+  { name: 'Citizen', minXp: 0, maxXp: 499 },
+  { name: 'Aspirant', minXp: 500, maxXp: 1999 },
+  { name: 'Insider', minXp: 2000, maxXp: 4999 },
+  { name: 'Analyst', minXp: 5000, maxXp: 9999 },
+  { name: 'Expert', minXp: 10000, maxXp: 24999 },
+  { name: 'Maven', minXp: 25000, maxXp: 49999 },
+  { name: 'Hall of Famer', minXp: 50000, maxXp: null },
+];
+
 function RankBadgeDisplay({ rank }: { rank: string }) {
   const badgeConfig: Record<string, { color: string; icon: typeof User }> = {
-    "Citizen": { color: "bg-blue-500/20 text-blue-300 border-blue-500/30", icon: Shield },
-    "Engaged": { color: "bg-green-500/20 text-green-300 border-green-500/30", icon: Shield },
-    "Contributor": { color: "bg-teal-500/20 text-teal-300 border-teal-500/30", icon: Sparkles },
-    "Influencer": { color: "bg-purple-500/20 text-purple-300 border-purple-500/30", icon: Sparkles },
-    "Trendsetter": { color: "bg-pink-500/20 text-pink-300 border-pink-500/30", icon: Sparkles },
-    "Fame Maker": { color: "bg-orange-500/20 text-orange-300 border-orange-500/30", icon: Trophy },
-    "Hall of Famer": { color: "bg-amber-500/20 text-amber-300 border-amber-500/30", icon: Trophy },
+    "Citizen": { color: "bg-gray-500/20 text-gray-300 border-gray-500/30", icon: Shield },
+    "Aspirant": { color: "bg-green-500/20 text-green-300 border-green-500/30", icon: Shield },
+    "Insider": { color: "bg-blue-500/20 text-blue-300 border-blue-500/30", icon: Sparkles },
+    "Analyst": { color: "bg-purple-500/20 text-purple-300 border-purple-500/30", icon: Sparkles },
+    "Expert": { color: "bg-amber-500/20 text-amber-300 border-amber-500/30", icon: Trophy },
+    "Maven": { color: "bg-red-500/20 text-red-300 border-red-500/30", icon: Trophy },
+    "Hall of Famer": { color: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30", icon: Trophy },
   };
 
   const config = badgeConfig[rank] || badgeConfig["Citizen"];
@@ -95,9 +105,13 @@ function RankBadgeDisplay({ rank }: { rank: string }) {
 }
 
 function XPProgressBar({ xp, level }: { xp: number; level: number }) {
-  const xpForCurrentLevel = (level - 1) * 500;
-  const xpForNextLevel = level * 500;
-  const progress = ((xp - xpForCurrentLevel) / (xpForNextLevel - xpForCurrentLevel)) * 100;
+  const currentRank = RANK_THRESHOLDS.find(r => xp >= r.minXp && (r.maxXp === null || xp <= r.maxXp));
+  const currentIdx = RANK_THRESHOLDS.indexOf(currentRank!);
+  const nextRank = currentIdx < RANK_THRESHOLDS.length - 1 ? RANK_THRESHOLDS[currentIdx + 1] : null;
+
+  const rankProgress = nextRank
+    ? ((xp - currentRank!.minXp) / (nextRank.minXp - currentRank!.minXp)) * 100
+    : 100;
 
   return (
     <div className="space-y-1.5">
@@ -108,11 +122,13 @@ function XPProgressBar({ xp, level }: { xp: number; level: number }) {
       <div className="h-2 bg-muted/50 rounded-full overflow-hidden">
         <div 
           className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all duration-500"
-          style={{ width: `${Math.min(progress, 100)}%` }}
+          style={{ width: `${Math.min(rankProgress, 100)}%` }}
         />
       </div>
       <p className="text-[10px] text-muted-foreground text-right">
-        {xpForNextLevel - xp} XP to Level {level + 1}
+        {nextRank
+          ? `${(nextRank.minXp - xp).toLocaleString()} XP to ${nextRank.name}`
+          : "Max rank achieved"}
       </p>
     </div>
   );

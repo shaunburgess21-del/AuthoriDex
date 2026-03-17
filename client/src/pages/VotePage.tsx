@@ -2171,7 +2171,7 @@ export default function VotePage() {
     setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [matchupId]: option }));
     matchupVoteMutation.mutate({ matchupId, option, previousVote });
     if (event && !previousVote) {
-      addXP(5, event);
+      addXP(15, event);
     }
   };
   
@@ -2316,7 +2316,7 @@ export default function VotePage() {
   };
 
   const handleInductionXP = (event: React.MouseEvent) => {
-    addXP(10, event);
+    addXP(30, event);
   };
 
 
@@ -2336,7 +2336,7 @@ export default function VotePage() {
     if (topic?.slug) {
       discourseVoteMutation.mutate({ slug: topic.slug, choice });
     }
-    addXP(20, event as React.MouseEvent);
+    addXP(25, event as React.MouseEvent);
   };
 
   const handleSuggestSubmit = () => {
@@ -3709,7 +3709,7 @@ export default function VotePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <Sparkles className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-400 font-medium">+5 XP</span> for each vote</span>
+                    <span>Earn <span className="text-cyan-400 font-medium">+30 XP</span> for each vote</span>
                   </div>
                   <div className="flex items-start gap-2">
                     <Zap className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
@@ -3732,7 +3732,7 @@ export default function VotePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <Sparkles className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-400 font-medium">+3 XP</span> for each vote</span>
+                    <span>Earn <span className="text-cyan-400 font-medium">+20 XP</span> for each vote</span>
                   </div>
                   <div className="flex items-start gap-2">
                     <Clock className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
@@ -3755,7 +3755,7 @@ export default function VotePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <Sparkles className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-400 font-medium">+20 XP</span> for each vote</span>
+                    <span>Earn <span className="text-cyan-400 font-medium">+25 XP</span> for each vote</span>
                   </div>
                   <div className="flex items-start gap-2">
                     <Plus className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
@@ -3778,7 +3778,7 @@ export default function VotePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <Zap className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Earn <span className="text-cyan-400 font-medium">+20 XP</span>: Get rewarded for every Matchup vote you cast.</span>
+                    <span>Earn <span className="text-cyan-400 font-medium">+15 XP</span>: Get rewarded for every Matchup vote you cast.</span>
                   </div>
                   <div className="flex items-start gap-2">
                     <BarChart3 className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />

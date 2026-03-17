@@ -412,13 +412,46 @@ export default function PublicProfilePage() {
                   <span className="font-mono text-amber-400">{profile.xpPoints?.toLocaleString('en-US') || 0} XP</span>
                 </div>
                 <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
-                    style={{ width: `${((profile.xpPoints || 0) % 500) / 5}%` }}
-                  />
+                  {(() => {
+                    const xp = profile.xpPoints || 0;
+                    const ranks = [
+                      { name: 'Citizen', minXp: 0, maxXp: 499 },
+                      { name: 'Aspirant', minXp: 500, maxXp: 1999 },
+                      { name: 'Insider', minXp: 2000, maxXp: 4999 },
+                      { name: 'Analyst', minXp: 5000, maxXp: 9999 },
+                      { name: 'Expert', minXp: 10000, maxXp: 24999 },
+                      { name: 'Maven', minXp: 25000, maxXp: 49999 },
+                      { name: 'Hall of Famer', minXp: 50000, maxXp: null },
+                    ];
+                    const cur = ranks.find(r => xp >= r.minXp && (r.maxXp === null || xp <= r.maxXp));
+                    const idx = ranks.indexOf(cur!);
+                    const next = idx < ranks.length - 1 ? ranks[idx + 1] : null;
+                    const pct = next ? ((xp - cur!.minXp) / (next.minXp - cur!.minXp)) * 100 : 100;
+                    return (
+                      <div
+                        className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
+                        style={{ width: `${Math.min(pct, 100)}%` }}
+                      />
+                    );
+                  })()}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {500 - ((profile.xpPoints || 0) % 500)} XP to next level
+                  {(() => {
+                    const xp = profile.xpPoints || 0;
+                    const ranks = [
+                      { name: 'Citizen', minXp: 0 },
+                      { name: 'Aspirant', minXp: 500 },
+                      { name: 'Insider', minXp: 2000 },
+                      { name: 'Analyst', minXp: 5000 },
+                      { name: 'Expert', minXp: 10000 },
+                      { name: 'Maven', minXp: 25000 },
+                      { name: 'Hall of Famer', minXp: 50000 },
+                    ];
+                    const next = ranks.find(r => r.minXp > xp);
+                    return next
+                      ? `${(next.minXp - xp).toLocaleString()} XP to ${next.name}`
+                      : "Max rank achieved";
+                  })()}
                 </p>
               </div>
             </div>

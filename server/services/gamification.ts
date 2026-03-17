@@ -370,6 +370,12 @@ class GamificationService {
     };
   }
 
+  /**
+   * @deprecated Not currently wired into vote handlers. The voteMultiplier
+   * column exists in the ranks table but all votes use weight 1.0. Keeping
+   * this method for potential future use; remove if vote weighting by rank
+   * is explicitly ruled out.
+   */
   async getVoteMultiplier(userId: string, voteType: string): Promise<number> {
     if (voteType === 'face_off' || voteType === 'poll') {
       return 1.0;

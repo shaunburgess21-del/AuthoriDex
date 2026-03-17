@@ -11,6 +11,7 @@ async function seedXpActions() {
     { actionKey: 'vote_face_off', displayName: 'Matchup Vote', xpValue: 15, dailyCap: 25, description: 'Vote in a Matchup' },
     { actionKey: 'vote_induction', displayName: 'Induction Vote', xpValue: 30, dailyCap: 10, description: 'Vote on candidate for main leaderboard' },
     { actionKey: 'vote_curation', displayName: 'Image Curation Vote', xpValue: 20, dailyCap: 30, description: 'Vote on profile images (hot-or-not)' },
+    { actionKey: 'vote_opinion', displayName: 'Opinion Poll Vote', xpValue: 15, dailyCap: 20, description: 'Vote on an opinion poll' },
     
     // Content Creation Actions
     { actionKey: 'post_insight', displayName: 'Post Insight', xpValue: 50, dailyCap: 5, description: 'Post a community insight' },
