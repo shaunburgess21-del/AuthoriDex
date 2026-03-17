@@ -208,6 +208,7 @@ function UserMenuContent({
 
   const displayName = profile?.fullName || profile?.username || "User";
   const xpLevel = Math.floor((profile?.xpPoints || 0) / 500) + 1;
+  const showStreakBadge = (profile?.currentStreak || 0) > 1;
 
   return (
     <div className="space-y-1">
@@ -258,13 +259,23 @@ function UserMenuContent({
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/30 text-violet-400">VIRTUAL</Badge>
           </div>
         </div>
-        <div className="flex items-center justify-between p-2.5 rounded-lg bg-orange-500/10 border border-orange-500/30">
+        <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
           <div className="flex items-center gap-2">
-            <Flame className="h-4 w-4 text-orange-400" />
-            <span className="text-sm text-muted-foreground">Win Streak</span>
+            <Zap className="h-4 w-4 text-amber-400" />
+            <span className="text-sm text-muted-foreground">Win Rate</span>
           </div>
-          <span className="font-mono font-bold text-sm text-orange-400">{profile?.currentStreak || 0}</span>
+          <span className="font-mono font-bold text-sm text-amber-400">
+            {profile?.winRate != null ? `${Math.round(profile.winRate)}%` : "--"}
+          </span>
         </div>
+        {showStreakBadge && (
+          <div className="flex justify-end pt-0.5">
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-500/40 text-orange-300">
+              <Flame className="h-3 w-3 mr-1" />
+              {profile?.currentStreak} streak
+            </Badge>
+          </div>
+        )}
       </div>
 
       <Separator className="my-1" />
@@ -307,10 +318,6 @@ function UserMenuContent({
         >
           <Trophy className="h-4 w-4 text-amber-400" />
           <span className="flex-1 text-sm">Top Predictors</span>
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-            <Zap className="h-2.5 w-2.5 mr-0.5" />
-            {profile?.winRate != null ? `${Math.round(profile.winRate)}%` : "--"}
-          </Badge>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
       </div>
