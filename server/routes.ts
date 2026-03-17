@@ -4689,7 +4689,8 @@ Only return the JSON object.`;
         .where(and(
           eq(marketBets.userId, user.id),
           statusFilter,
-          ne(predictionMarkets.visibility, "draft"),
+          sql`${predictionMarkets.visibility} NOT IN ('draft', 'hidden')`,
+          sql`NOT (${predictionMarkets.visibility} = 'archived' AND ${marketBets.status} = 'active')`,
         ))
         .orderBy(tab === "active" ? desc(marketBets.createdAt) : desc(marketBets.settledAt))
         .limit(limit)
@@ -4818,7 +4819,11 @@ Only return the JSON object.`;
           .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
           .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
           .leftJoin(trendingPeople, eq(predictionMarkets.personId, trendingPeople.id))
-          .where(eq(marketBets.userId, userId))
+          .where(and(
+            eq(marketBets.userId, userId),
+            sql`${predictionMarkets.visibility} NOT IN ('draft', 'hidden')`,
+            sql`NOT (${predictionMarkets.visibility} = 'archived' AND ${marketBets.status} = 'active')`,
+          ))
           .orderBy(desc(marketBets.createdAt))
           .limit(100),
       ]);
