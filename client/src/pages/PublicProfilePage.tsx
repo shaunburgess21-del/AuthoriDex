@@ -323,7 +323,7 @@ export default function PublicProfilePage() {
     ? Math.round(profile.agentProfile.accuracy * 100)
     : null;
   const pnl = profile.profitLoss ?? 0;
-  const predictions = profile.agentProfile?.totalEntered ?? profile.totalPredictions ?? 0;
+  const predictions = profile.agentProfile?.totalEntered || profile.totalPredictions || 0;
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
