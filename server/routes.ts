@@ -1691,6 +1691,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               .set({ votesDown: sql`${celebrityImages.votesDown} + 1` })
               .where(eq(celebrityImages.id, imageId));
           }
+          await tx.update(profiles)
+            .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+            .where(eq(profiles.id, userId));
         });
       }
       
@@ -1935,6 +1938,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         voteType,
         votedDate: today,
       });
+
+      await db.update(profiles)
+        .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+        .where(eq(profiles.id, userId));
       
       res.json({ success: true, created: true });
     } catch (error: any) {
@@ -2210,6 +2217,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Celebrity not found" });
       }
 
+      const [existingValVote] = await db.select({ id: celebrityValueVotes.id })
+        .from(celebrityValueVotes)
+        .where(and(eq(celebrityValueVotes.userId, userId), eq(celebrityValueVotes.celebrityId, celebrityId)))
+        .limit(1);
+
       // Upsert the vote (1 vote per user per celebrity, no daily limit)
       await db
         .insert(celebrityValueVotes)
@@ -2225,6 +2237,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             updatedAt: new Date(),
           },
         });
+
+      if (!existingValVote) {
+        await db.update(profiles)
+          .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+          .where(eq(profiles.id, userId));
+      }
 
       // Recompute metrics for this celebrity
       const metrics = await recomputeCelebrityMetrics(celebrityId);
@@ -4110,6 +4128,11 @@ Only return the JSON object.`;
       if (remove === true) {
         if (existingVote) {
           await db.delete(votes).where(eq(votes.id, existingVote.id));
+          if (req.userId) {
+            await db.update(profiles)
+              .set({ totalVotes: sql`GREATEST(${profiles.totalVotes} - 1, 0)` })
+              .where(eq(profiles.id, req.userId));
+          }
         }
         const voteResults = await db.select({
           value: votes.value,
@@ -4174,6 +4197,10 @@ Only return the JSON object.`;
           } catch (xpError) {
             console.error("XP award failed:", xpError);
           }
+
+          await db.update(profiles)
+            .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+            .where(eq(profiles.id, req.userId));
         }
       }
       
@@ -4749,32 +4776,214 @@ Only return the JSON object.`;
   app.get("/api/me/votes", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
-      
-      // Get votes from votes table
-      const userVotes = await db.select().from(votes).where(eq(votes.userId, userId)).orderBy(desc(votes.votedAt)).limit(50);
-      
-      // Transform votes to include target names
-      const votesWithDetails = await Promise.all(userVotes.map(async (vote) => {
-        let targetName = "Unknown";
-        
-        // Try to get celebrity name if it's a celebrity-related vote
-        if (vote.targetId) {
-          const person = await db.select({ name: trackedPeople.name }).from(trackedPeople).where(eq(trackedPeople.id, vote.targetId)).limit(1);
-          if (person.length > 0) {
-            targetName = person[0].name;
-          }
+      const typeFilter = req.query.type as string | undefined;
+
+      type UnifiedVote = {
+        id: string;
+        voteType: string;
+        value: number;
+        targetName: string;
+        detail: string | null;
+        createdAt: Date;
+      };
+
+      const results: UnifiedVote[] = [];
+
+      // 1) Face-off votes (from polymorphic `votes` table)
+      if (!typeFilter || typeFilter === "face_off") {
+        const faceOffVotes = await db
+          .select({
+            id: votes.id,
+            targetId: votes.targetId,
+            value: votes.value,
+            weight: votes.weight,
+            votedAt: votes.votedAt,
+            matchupTitle: matchups.title,
+            optionA: matchups.optionAText,
+            optionB: matchups.optionBText,
+          })
+          .from(votes)
+          .leftJoin(matchups, eq(matchups.id, votes.targetId))
+          .where(and(eq(votes.userId, userId), eq(votes.voteType, "face_off")))
+          .orderBy(desc(votes.votedAt))
+          .limit(50);
+
+        for (const v of faceOffVotes) {
+          const name = v.matchupTitle || (v.optionA && v.optionB ? `${v.optionA} vs ${v.optionB}` : "Matchup");
+          const side = v.value === "option_a" ? v.optionA : v.value === "option_b" ? v.optionB : null;
+          results.push({
+            id: v.id,
+            voteType: "face_off",
+            value: 1,
+            targetName: name,
+            detail: side ? `Voted: ${side}` : null,
+            createdAt: v.votedAt!,
+          });
         }
-        
-        return {
-          id: vote.id,
-          voteType: vote.voteType,
-          value: vote.weight || 1,
-          targetName,
-          createdAt: vote.votedAt,
-        };
-      }));
-      
-      res.json(votesWithDetails);
+      }
+
+      // 2) Sentiment votes (overrated/underrated)
+      if (!typeFilter || typeFilter === "sentiment") {
+        const sentVotes = await db
+          .select()
+          .from(sentimentVotes)
+          .where(eq(sentimentVotes.userId, userId))
+          .orderBy(desc(sentimentVotes.votedAt))
+          .limit(50);
+
+        for (const v of sentVotes) {
+          results.push({
+            id: v.id,
+            voteType: "sentiment",
+            value: v.voteType === "overrated" ? -1 : 1,
+            targetName: v.personName || "Unknown",
+            detail: v.voteType === "overrated" ? "Overrated" : "Underrated",
+            createdAt: v.votedAt!,
+          });
+        }
+      }
+
+      // 3) Celebrity value votes (underrated/overrated/fairly_rated)
+      if (!typeFilter || typeFilter === "value_vote") {
+        const valVotes = await db
+          .select({
+            id: celebrityValueVotes.id,
+            vote: celebrityValueVotes.vote,
+            createdAt: celebrityValueVotes.createdAt,
+            personName: trackedPeople.name,
+          })
+          .from(celebrityValueVotes)
+          .leftJoin(trackedPeople, eq(trackedPeople.id, celebrityValueVotes.celebrityId))
+          .where(eq(celebrityValueVotes.userId, userId))
+          .orderBy(desc(celebrityValueVotes.createdAt))
+          .limit(50);
+
+        for (const v of valVotes) {
+          const label = v.vote === "underrated" ? "Underrated" : v.vote === "overrated" ? "Overrated" : "Fairly Rated";
+          results.push({
+            id: v.id,
+            voteType: "value_vote",
+            value: v.vote === "underrated" ? 1 : v.vote === "overrated" ? -1 : 0,
+            targetName: v.personName || "Unknown",
+            detail: label,
+            createdAt: v.createdAt!,
+          });
+        }
+      }
+
+      // 4) Trending poll votes (support/neutral/oppose)
+      if (!typeFilter || typeFilter === "trending_poll") {
+        const pollVotes = await db
+          .select({
+            id: trendingPollVotes.id,
+            choice: trendingPollVotes.choice,
+            createdAt: trendingPollVotes.createdAt,
+            headline: trendingPolls.headline,
+          })
+          .from(trendingPollVotes)
+          .leftJoin(trendingPolls, eq(trendingPolls.id, trendingPollVotes.pollId))
+          .where(eq(trendingPollVotes.userId, userId))
+          .orderBy(desc(trendingPollVotes.createdAt))
+          .limit(50);
+
+        for (const v of pollVotes) {
+          const choiceLabel = v.choice === "support" ? "Support" : v.choice === "oppose" ? "Oppose" : "Neutral";
+          results.push({
+            id: v.id,
+            voteType: "trending_poll",
+            value: v.choice === "support" ? 1 : v.choice === "oppose" ? -1 : 0,
+            targetName: v.headline || "Poll",
+            detail: choiceLabel,
+            createdAt: v.createdAt!,
+          });
+        }
+      }
+
+      // 5) Opinion poll votes
+      if (!typeFilter || typeFilter === "opinion_poll") {
+        const opVotes = await db
+          .select({
+            id: opinionPollVotes.id,
+            createdAt: opinionPollVotes.createdAt,
+            pollTitle: opinionPolls.title,
+            optionName: opinionPollOptions.name,
+          })
+          .from(opinionPollVotes)
+          .leftJoin(opinionPolls, eq(opinionPolls.id, opinionPollVotes.pollId))
+          .leftJoin(opinionPollOptions, eq(opinionPollOptions.id, opinionPollVotes.optionId))
+          .where(eq(opinionPollVotes.userId, userId))
+          .orderBy(desc(opinionPollVotes.createdAt))
+          .limit(50);
+
+        for (const v of opVotes) {
+          results.push({
+            id: v.id,
+            voteType: "opinion_poll",
+            value: 1,
+            targetName: v.pollTitle || "Opinion Poll",
+            detail: v.optionName ? `Chose: ${v.optionName}` : null,
+            createdAt: v.createdAt!,
+          });
+        }
+      }
+
+      // 6) Image curate votes
+      if (!typeFilter || typeFilter === "image_curate") {
+        const imgVotes = await db
+          .select({
+            id: imageVotes.id,
+            direction: imageVotes.direction,
+            votedAt: imageVotes.votedAt,
+            personName: trackedPeople.name,
+          })
+          .from(imageVotes)
+          .leftJoin(celebrityImages, eq(celebrityImages.id, imageVotes.imageId))
+          .leftJoin(trackedPeople, eq(trackedPeople.id, celebrityImages.personId))
+          .where(eq(imageVotes.userId, userId))
+          .orderBy(desc(imageVotes.votedAt))
+          .limit(50);
+
+        for (const v of imgVotes) {
+          results.push({
+            id: v.id,
+            voteType: "image_curate",
+            value: v.direction === "up" ? 1 : -1,
+            targetName: v.personName || "Unknown",
+            detail: `Image ${v.direction === "up" ? "upvote" : "downvote"}`,
+            createdAt: v.votedAt!,
+          });
+        }
+      }
+
+      // 7) Induction votes
+      if (!typeFilter || typeFilter === "induction") {
+        const indVotes = await db
+          .select({
+            id: inductionVotes.id,
+            votedAt: inductionVotes.votedAt,
+            candidateName: inductionCandidates.displayName,
+          })
+          .from(inductionVotes)
+          .leftJoin(inductionCandidates, eq(inductionCandidates.id, inductionVotes.candidateId))
+          .where(eq(inductionVotes.userId, userId))
+          .orderBy(desc(inductionVotes.votedAt))
+          .limit(50);
+
+        for (const v of indVotes) {
+          results.push({
+            id: v.id,
+            voteType: "induction",
+            value: 1,
+            targetName: v.candidateName || "Candidate",
+            detail: "Induction vote",
+            createdAt: v.votedAt!,
+          });
+        }
+      }
+
+      results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      res.json(results.slice(0, 50));
     } catch (error: any) {
       console.error("Error fetching user votes:", error.message);
       res.status(500).json({ error: "Failed to fetch votes" });
@@ -7147,6 +7356,10 @@ Only return the JSON object.`;
             userId: authReq.userId!,
             choice,
           });
+
+        await db.update(profiles)
+          .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+          .where(eq(profiles.id, authReq.userId!));
       }
 
       res.json({ success: true, choice });
@@ -7975,6 +8188,10 @@ Only return the JSON object.`;
           optionId,
           userId,
         });
+
+        await db.update(profiles)
+          .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+          .where(eq(profiles.id, userId));
       }
 
       res.json({ success: true });
@@ -10931,6 +11148,36 @@ Only return the JSON object.`;
     }
   });
 
+  app.post("/api/admin/backfill-total-votes", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const allProfiles = await db.select({ userId: profiles.id }).from(profiles);
+      let updated = 0;
+
+      for (const p of allProfiles) {
+        const uid = p.userId;
+        const [faceOff] = await db.select({ c: count() }).from(votes).where(eq(votes.userId, uid));
+        const [sentiment] = await db.select({ c: count() }).from(sentimentVotes).where(eq(sentimentVotes.userId, uid));
+        const [valueVote] = await db.select({ c: count() }).from(celebrityValueVotes).where(eq(celebrityValueVotes.userId, uid));
+        const [trendPoll] = await db.select({ c: count() }).from(trendingPollVotes).where(eq(trendingPollVotes.userId, uid));
+        const [opPoll] = await db.select({ c: count() }).from(opinionPollVotes).where(eq(opinionPollVotes.userId, uid));
+        const [imgVote] = await db.select({ c: count() }).from(imageVotes).where(eq(imageVotes.userId, uid));
+        const [indVote] = await db.select({ c: count() }).from(inductionVotes).where(eq(inductionVotes.userId, uid));
+
+        const total =
+          Number(faceOff.c) + Number(sentiment.c) + Number(valueVote.c) +
+          Number(trendPoll.c) + Number(opPoll.c) + Number(imgVote.c) + Number(indVote.c);
+
+        await db.update(profiles).set({ totalVotes: total }).where(eq(profiles.id, uid));
+        updated++;
+      }
+
+      res.json({ success: true, profilesUpdated: updated });
+    } catch (error: any) {
+      console.error("Error backfilling total votes:", error.message);
+      res.status(500).json({ error: "Failed to backfill total votes" });
+    }
+  });
+
   app.patch("/api/admin/native-markets/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
@@ -12262,6 +12509,9 @@ Only return the JSON object.`;
         await tx.update(inductionCandidates)
           .set({ seedVotes: sql`${inductionCandidates.seedVotes} + 1` })
           .where(eq(inductionCandidates.id, id));
+        await tx.update(profiles)
+          .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+          .where(eq(profiles.id, userId));
       });
 
       res.json({ success: true });
