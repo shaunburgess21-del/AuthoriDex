@@ -1931,17 +1931,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Create new vote
-      await db.insert(sentimentVotes).values({
-        userId,
-        personId,
-        personName: personName || "Unknown",
-        voteType,
-        votedDate: today,
-      });
+      await db.transaction(async (tx) => {
+        await tx.insert(sentimentVotes).values({
+          userId,
+          personId,
+          personName: personName || "Unknown",
+          voteType,
+          votedDate: today,
+        });
 
-      await db.update(profiles)
-        .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
-        .where(eq(profiles.id, userId));
+        await tx.update(profiles)
+          .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+          .where(eq(profiles.id, userId));
+      });
       
       res.json({ success: true, created: true });
     } catch (error: any) {
@@ -2217,32 +2219,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Celebrity not found" });
       }
 
-      const [existingValVote] = await db.select({ id: celebrityValueVotes.id })
-        .from(celebrityValueVotes)
-        .where(and(eq(celebrityValueVotes.userId, userId), eq(celebrityValueVotes.celebrityId, celebrityId)))
-        .limit(1);
+      await db.transaction(async (tx) => {
+        const [existingValVote] = await tx.select({ id: celebrityValueVotes.id })
+          .from(celebrityValueVotes)
+          .where(and(eq(celebrityValueVotes.userId, userId), eq(celebrityValueVotes.celebrityId, celebrityId)))
+          .limit(1);
 
-      // Upsert the vote (1 vote per user per celebrity, no daily limit)
-      await db
-        .insert(celebrityValueVotes)
-        .values({
-          celebrityId,
-          userId,
-          vote,
-        })
-        .onConflictDoUpdate({
-          target: [celebrityValueVotes.userId, celebrityValueVotes.celebrityId],
-          set: {
+        // Upsert the vote (1 vote per user per celebrity, no daily limit)
+        await tx
+          .insert(celebrityValueVotes)
+          .values({
+            celebrityId,
+            userId,
             vote,
-            updatedAt: new Date(),
-          },
-        });
+          })
+          .onConflictDoUpdate({
+            target: [celebrityValueVotes.userId, celebrityValueVotes.celebrityId],
+            set: {
+              vote,
+              updatedAt: new Date(),
+            },
+          });
 
-      if (!existingValVote) {
-        await db.update(profiles)
-          .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
-          .where(eq(profiles.id, userId));
-      }
+        if (!existingValVote) {
+          await tx.update(profiles)
+            .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+            .where(eq(profiles.id, userId));
+        }
+      });
 
       // Recompute metrics for this celebrity
       const metrics = await recomputeCelebrityMetrics(celebrityId);
@@ -4176,16 +4180,23 @@ Only return the JSON object.`;
             .where(eq(votes.id, existingVote.id));
         }
       } else {
-        await db.insert(votes).values({
-          userId: voterId,
-          voteType: 'face_off',
-          targetType: 'face_off',
-          targetId: id,
-          value: option,
-          weight: 1.0,
+        await db.transaction(async (tx) => {
+          await tx.insert(votes).values({
+            userId: voterId,
+            voteType: 'face_off',
+            targetType: 'face_off',
+            targetId: id,
+            value: option,
+            weight: 1.0,
+          });
+
+          if (req.userId) {
+            await tx.update(profiles)
+              .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+              .where(eq(profiles.id, req.userId));
+          }
         });
-        
-        // Award XP for authenticated users only on first vote (not vote changes)
+
         if (req.userId) {
           try {
             xpResult = await gamificationService.awardXp(
@@ -4197,10 +4208,6 @@ Only return the JSON object.`;
           } catch (xpError) {
             console.error("XP award failed:", xpError);
           }
-
-          await db.update(profiles)
-            .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
-            .where(eq(profiles.id, req.userId));
         }
       }
       
@@ -4778,6 +4785,11 @@ Only return the JSON object.`;
       const userId = req.userId!;
       const typeFilter = req.query.type as string | undefined;
 
+      const VALID_VOTE_TYPES = ["face_off", "sentiment", "value_vote", "trending_poll", "opinion_poll", "image_curate", "induction"] as const;
+      if (typeFilter && !VALID_VOTE_TYPES.includes(typeFilter as any)) {
+        return res.status(400).json({ error: `Invalid vote type. Must be one of: ${VALID_VOTE_TYPES.join(", ")}` });
+      }
+
       type UnifiedVote = {
         id: string;
         voteType: string;
@@ -4787,11 +4799,10 @@ Only return the JSON object.`;
         createdAt: Date;
       };
 
-      const results: UnifiedVote[] = [];
+      const want = (t: string) => !typeFilter || typeFilter === t;
 
-      // 1) Face-off votes (from polymorphic `votes` table)
-      if (!typeFilter || typeFilter === "face_off") {
-        const faceOffVotes = await db
+      const [faceOffVotes, sentVotes, valVotes, pollVotes, opVotes, imgVotes, indVotes] = await Promise.all([
+        want("face_off") ? db
           .select({
             id: votes.id,
             targetId: votes.targetId,
@@ -4806,46 +4817,16 @@ Only return the JSON object.`;
           .leftJoin(matchups, eq(matchups.id, votes.targetId))
           .where(and(eq(votes.userId, userId), eq(votes.voteType, "face_off")))
           .orderBy(desc(votes.votedAt))
-          .limit(50);
+          .limit(50) : Promise.resolve([]),
 
-        for (const v of faceOffVotes) {
-          const name = v.matchupTitle || (v.optionA && v.optionB ? `${v.optionA} vs ${v.optionB}` : "Matchup");
-          const side = v.value === "option_a" ? v.optionA : v.value === "option_b" ? v.optionB : null;
-          results.push({
-            id: v.id,
-            voteType: "face_off",
-            value: 1,
-            targetName: name,
-            detail: side ? `Voted: ${side}` : null,
-            createdAt: v.votedAt!,
-          });
-        }
-      }
-
-      // 2) Sentiment votes (overrated/underrated)
-      if (!typeFilter || typeFilter === "sentiment") {
-        const sentVotes = await db
+        want("sentiment") ? db
           .select()
           .from(sentimentVotes)
           .where(eq(sentimentVotes.userId, userId))
           .orderBy(desc(sentimentVotes.votedAt))
-          .limit(50);
+          .limit(50) : Promise.resolve([]),
 
-        for (const v of sentVotes) {
-          results.push({
-            id: v.id,
-            voteType: "sentiment",
-            value: v.voteType === "overrated" ? -1 : 1,
-            targetName: v.personName || "Unknown",
-            detail: v.voteType === "overrated" ? "Overrated" : "Underrated",
-            createdAt: v.votedAt!,
-          });
-        }
-      }
-
-      // 3) Celebrity value votes (underrated/overrated/fairly_rated)
-      if (!typeFilter || typeFilter === "value_vote") {
-        const valVotes = await db
+        want("value_vote") ? db
           .select({
             id: celebrityValueVotes.id,
             vote: celebrityValueVotes.vote,
@@ -4856,24 +4837,9 @@ Only return the JSON object.`;
           .leftJoin(trackedPeople, eq(trackedPeople.id, celebrityValueVotes.celebrityId))
           .where(eq(celebrityValueVotes.userId, userId))
           .orderBy(desc(celebrityValueVotes.createdAt))
-          .limit(50);
+          .limit(50) : Promise.resolve([]),
 
-        for (const v of valVotes) {
-          const label = v.vote === "underrated" ? "Underrated" : v.vote === "overrated" ? "Overrated" : "Fairly Rated";
-          results.push({
-            id: v.id,
-            voteType: "value_vote",
-            value: v.vote === "underrated" ? 1 : v.vote === "overrated" ? -1 : 0,
-            targetName: v.personName || "Unknown",
-            detail: label,
-            createdAt: v.createdAt!,
-          });
-        }
-      }
-
-      // 4) Trending poll votes (support/neutral/oppose)
-      if (!typeFilter || typeFilter === "trending_poll") {
-        const pollVotes = await db
+        want("trending_poll") ? db
           .select({
             id: trendingPollVotes.id,
             choice: trendingPollVotes.choice,
@@ -4884,24 +4850,9 @@ Only return the JSON object.`;
           .leftJoin(trendingPolls, eq(trendingPolls.id, trendingPollVotes.pollId))
           .where(eq(trendingPollVotes.userId, userId))
           .orderBy(desc(trendingPollVotes.createdAt))
-          .limit(50);
+          .limit(50) : Promise.resolve([]),
 
-        for (const v of pollVotes) {
-          const choiceLabel = v.choice === "support" ? "Support" : v.choice === "oppose" ? "Oppose" : "Neutral";
-          results.push({
-            id: v.id,
-            voteType: "trending_poll",
-            value: v.choice === "support" ? 1 : v.choice === "oppose" ? -1 : 0,
-            targetName: v.headline || "Poll",
-            detail: choiceLabel,
-            createdAt: v.createdAt!,
-          });
-        }
-      }
-
-      // 5) Opinion poll votes
-      if (!typeFilter || typeFilter === "opinion_poll") {
-        const opVotes = await db
+        want("opinion_poll") ? db
           .select({
             id: opinionPollVotes.id,
             createdAt: opinionPollVotes.createdAt,
@@ -4913,23 +4864,9 @@ Only return the JSON object.`;
           .leftJoin(opinionPollOptions, eq(opinionPollOptions.id, opinionPollVotes.optionId))
           .where(eq(opinionPollVotes.userId, userId))
           .orderBy(desc(opinionPollVotes.createdAt))
-          .limit(50);
+          .limit(50) : Promise.resolve([]),
 
-        for (const v of opVotes) {
-          results.push({
-            id: v.id,
-            voteType: "opinion_poll",
-            value: 1,
-            targetName: v.pollTitle || "Opinion Poll",
-            detail: v.optionName ? `Chose: ${v.optionName}` : null,
-            createdAt: v.createdAt!,
-          });
-        }
-      }
-
-      // 6) Image curate votes
-      if (!typeFilter || typeFilter === "image_curate") {
-        const imgVotes = await db
+        want("image_curate") ? db
           .select({
             id: imageVotes.id,
             direction: imageVotes.direction,
@@ -4941,23 +4878,9 @@ Only return the JSON object.`;
           .leftJoin(trackedPeople, eq(trackedPeople.id, celebrityImages.personId))
           .where(eq(imageVotes.userId, userId))
           .orderBy(desc(imageVotes.votedAt))
-          .limit(50);
+          .limit(50) : Promise.resolve([]),
 
-        for (const v of imgVotes) {
-          results.push({
-            id: v.id,
-            voteType: "image_curate",
-            value: v.direction === "up" ? 1 : -1,
-            targetName: v.personName || "Unknown",
-            detail: `Image ${v.direction === "up" ? "upvote" : "downvote"}`,
-            createdAt: v.votedAt!,
-          });
-        }
-      }
-
-      // 7) Induction votes
-      if (!typeFilter || typeFilter === "induction") {
-        const indVotes = await db
+        want("induction") ? db
           .select({
             id: inductionVotes.id,
             votedAt: inductionVotes.votedAt,
@@ -4967,18 +4890,90 @@ Only return the JSON object.`;
           .leftJoin(inductionCandidates, eq(inductionCandidates.id, inductionVotes.candidateId))
           .where(eq(inductionVotes.userId, userId))
           .orderBy(desc(inductionVotes.votedAt))
-          .limit(50);
+          .limit(50) : Promise.resolve([]),
+      ]);
 
-        for (const v of indVotes) {
-          results.push({
-            id: v.id,
-            voteType: "induction",
-            value: 1,
-            targetName: v.candidateName || "Candidate",
-            detail: "Induction vote",
-            createdAt: v.votedAt!,
-          });
-        }
+      const results: UnifiedVote[] = [];
+
+      for (const v of faceOffVotes) {
+        const name = v.matchupTitle || (v.optionA && v.optionB ? `${v.optionA} vs ${v.optionB}` : "Matchup");
+        const side = v.value === "option_a" ? v.optionA : v.value === "option_b" ? v.optionB : null;
+        results.push({
+          id: v.id,
+          voteType: "face_off",
+          value: 1,
+          targetName: name,
+          detail: side ? `Voted: ${side}` : null,
+          createdAt: v.votedAt ?? new Date(),
+        });
+      }
+
+      for (const v of sentVotes) {
+        results.push({
+          id: v.id,
+          voteType: "sentiment",
+          value: v.voteType === "overrated" ? -1 : 1,
+          targetName: v.personName || "Unknown",
+          detail: v.voteType === "overrated" ? "Overrated" : "Underrated",
+          createdAt: v.votedAt ?? new Date(),
+        });
+      }
+
+      for (const v of valVotes) {
+        const label = v.vote === "underrated" ? "Underrated" : v.vote === "overrated" ? "Overrated" : "Fairly Rated";
+        results.push({
+          id: v.id,
+          voteType: "value_vote",
+          value: v.vote === "underrated" ? 1 : v.vote === "overrated" ? -1 : 0,
+          targetName: v.personName || "Unknown",
+          detail: label,
+          createdAt: v.createdAt ?? new Date(),
+        });
+      }
+
+      for (const v of pollVotes) {
+        const choiceLabel = v.choice === "support" ? "Support" : v.choice === "oppose" ? "Oppose" : "Neutral";
+        results.push({
+          id: v.id,
+          voteType: "trending_poll",
+          value: v.choice === "support" ? 1 : v.choice === "oppose" ? -1 : 0,
+          targetName: v.headline || "Poll",
+          detail: choiceLabel,
+          createdAt: v.createdAt ?? new Date(),
+        });
+      }
+
+      for (const v of opVotes) {
+        results.push({
+          id: v.id,
+          voteType: "opinion_poll",
+          value: 1,
+          targetName: v.pollTitle || "Opinion Poll",
+          detail: v.optionName ? `Chose: ${v.optionName}` : null,
+          createdAt: v.createdAt ?? new Date(),
+        });
+      }
+
+      for (const v of imgVotes) {
+        results.push({
+          id: v.id,
+          voteType: "image_curate",
+          value: v.direction === "up" ? 1 : -1,
+          targetName: v.personName || "Unknown",
+          detail: `Image ${v.direction === "up" ? "upvote" : "downvote"}`,
+          createdAt: v.votedAt ?? new Date(),
+        });
+      }
+
+      for (const v of indVotes) {
+        results.push({
+          id: v.id,
+          voteType: "induction",
+          value: 1,
+          targetName: v.candidateName || "Candidate",
+          detail: "Induction vote",
+          createdAt: v.votedAt ?? new Date(),
+        });
       }
 
       results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -7349,17 +7344,19 @@ Only return the JSON object.`;
           .set({ choice, updatedAt: new Date() })
           .where(eq(trendingPollVotes.id, existing.id));
       } else {
-        await db
-          .insert(trendingPollVotes)
-          .values({
-            pollId: poll.id,
-            userId: authReq.userId!,
-            choice,
-          });
+        await db.transaction(async (tx) => {
+          await tx
+            .insert(trendingPollVotes)
+            .values({
+              pollId: poll.id,
+              userId: authReq.userId!,
+              choice,
+            });
 
-        await db.update(profiles)
-          .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
-          .where(eq(profiles.id, authReq.userId!));
+          await tx.update(profiles)
+            .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+            .where(eq(profiles.id, authReq.userId!));
+        });
       }
 
       res.json({ success: true, choice });
@@ -8183,15 +8180,17 @@ Only return the JSON object.`;
           .set({ optionId, updatedAt: new Date() })
           .where(eq(opinionPollVotes.id, existing.id));
       } else {
-        await db.insert(opinionPollVotes).values({
-          pollId: poll.id,
-          optionId,
-          userId,
-        });
+        await db.transaction(async (tx) => {
+          await tx.insert(opinionPollVotes).values({
+            pollId: poll.id,
+            optionId,
+            userId,
+          });
 
-        await db.update(profiles)
-          .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
-          .where(eq(profiles.id, userId));
+          await tx.update(profiles)
+            .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+            .where(eq(profiles.id, userId));
+        });
       }
 
       res.json({ success: true });
@@ -11148,30 +11147,44 @@ Only return the JSON object.`;
     }
   });
 
-  app.post("/api/admin/backfill-total-votes", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+  app.post("/api/admin/backfill-total-votes", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const allProfiles = await db.select({ userId: profiles.id }).from(profiles);
-      let updated = 0;
+      const result = await db.transaction(async (tx) => {
+        const rows: { userId: string; cnt: string }[] = await tx.execute(sql`
+          WITH all_votes AS (
+            SELECT user_id FROM votes WHERE vote_type = 'face_off'
+            UNION ALL SELECT user_id FROM sentiment_votes
+            UNION ALL SELECT user_id FROM celebrity_value_votes
+            UNION ALL SELECT user_id FROM trending_poll_votes
+            UNION ALL SELECT user_id FROM opinion_poll_votes
+            UNION ALL SELECT user_id FROM image_votes
+            UNION ALL SELECT user_id FROM induction_votes
+          ),
+          counts AS (
+            SELECT user_id, COUNT(*)::int AS cnt FROM all_votes GROUP BY user_id
+          )
+          UPDATE profiles
+          SET total_votes = COALESCE(counts.cnt, 0)
+          FROM counts
+          WHERE profiles.id = counts.user_id
+            AND profiles.total_votes IS DISTINCT FROM counts.cnt
+          RETURNING profiles.id
+        `) as any;
 
-      for (const p of allProfiles) {
-        const uid = p.userId;
-        const [faceOff] = await db.select({ c: count() }).from(votes).where(eq(votes.userId, uid));
-        const [sentiment] = await db.select({ c: count() }).from(sentimentVotes).where(eq(sentimentVotes.userId, uid));
-        const [valueVote] = await db.select({ c: count() }).from(celebrityValueVotes).where(eq(celebrityValueVotes.userId, uid));
-        const [trendPoll] = await db.select({ c: count() }).from(trendingPollVotes).where(eq(trendingPollVotes.userId, uid));
-        const [opPoll] = await db.select({ c: count() }).from(opinionPollVotes).where(eq(opinionPollVotes.userId, uid));
-        const [imgVote] = await db.select({ c: count() }).from(imageVotes).where(eq(imageVotes.userId, uid));
-        const [indVote] = await db.select({ c: count() }).from(inductionVotes).where(eq(inductionVotes.userId, uid));
+        const updatedCount = Array.isArray(rows) ? rows.length : 0;
 
-        const total =
-          Number(faceOff.c) + Number(sentiment.c) + Number(valueVote.c) +
-          Number(trendPoll.c) + Number(opPoll.c) + Number(imgVote.c) + Number(indVote.c);
+        await tx.insert(adminAuditLog).values({
+          adminId: req.userId!,
+          actionType: "backfill_total_votes",
+          targetTable: "profiles",
+          targetId: "all",
+          newData: { profilesUpdated: updatedCount },
+        });
 
-        await db.update(profiles).set({ totalVotes: total }).where(eq(profiles.id, uid));
-        updated++;
-      }
+        return updatedCount;
+      });
 
-      res.json({ success: true, profilesUpdated: updated });
+      res.json({ success: true, profilesUpdated: result });
     } catch (error: any) {
       console.error("Error backfilling total votes:", error.message);
       res.status(500).json({ error: "Failed to backfill total votes" });

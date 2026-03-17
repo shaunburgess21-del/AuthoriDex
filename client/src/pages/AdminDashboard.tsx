@@ -89,19 +89,7 @@ import { cn } from "@/lib/utils";
 import type { TrendingPoll } from "@shared/schema";
 import { MARKET_CATEGORY_OPTIONS, type CanonicalMarketCategory } from "@shared/constants";
 
-const MARKET_CATEGORIES = [
-  { value: "politics", label: "Politics" },
-  { value: "tech", label: "Tech" },
-  { value: "music", label: "Music" },
-  { value: "sports", label: "Sports" },
-  { value: "business", label: "Business" },
-  { value: "creator", label: "Creator" },
-  { value: "Film & TV", label: "Film & TV" },
-  { value: "gaming", label: "Gaming" },
-  { value: "misc", label: "Misc" },
-  { value: "Food & Drink", label: "Food & Drink" },
-  { value: "Lifestyle", label: "Lifestyle" },
-];
+const MARKET_CATEGORIES = MARKET_CATEGORY_OPTIONS;
 
 const GAINER_MARKET_CATEGORIES = MARKET_CATEGORY_OPTIONS;
 

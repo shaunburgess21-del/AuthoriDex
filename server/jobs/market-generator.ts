@@ -59,7 +59,7 @@ export async function generateWeeklyUpDown(): Promise<number> {
       title: `${person.name}: Up or Down?`,
       slug,
       personId: person.id,
-      category: person.category?.toLowerCase() || "misc",
+      category: normalizeMarketCategory(person.category),
       visibility: "live" as const,
       status: "OPEN" as const,
       startAt: monday,
@@ -114,7 +114,7 @@ export async function generateWeeklyJackpot(): Promise<number> {
       title: `${person.name}: Predict Exact Score`,
       slug,
       personId: person.id,
-      category: person.category?.toLowerCase() || "misc",
+      category: normalizeMarketCategory(person.category),
       visibility: "live" as const,
       status: "OPEN" as const,
       startAt: monday,
@@ -214,9 +214,9 @@ export async function generateWeeklyH2H(): Promise<number> {
       const baseSlug = `h2h-${personA.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-vs-${personB.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
       const openingScores = buildOpeningScores([personA.id, personB.id], snapMap);
       const h2hMeta = openingScores.length > 0 ? { openingScores } : undefined;
-      const h2hCategory = personA.category?.toLowerCase() === personB.category?.toLowerCase()
-        ? (personA.category?.toLowerCase() || "misc")
-        : "trending";
+      const catA = normalizeMarketCategory(personA.category);
+      const catB = normalizeMarketCategory(personB.category);
+      const h2hCategory = catA === catB ? catA : "trending";
 
       let slug = baseSlug;
       while (existingSlugs.has(slug)) slug = `${baseSlug}-${randomUUID().slice(0, 6)}`;

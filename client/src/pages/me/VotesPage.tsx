@@ -27,6 +27,15 @@ import {
 } from "@/components/ui/popover";
 import { getAuthHeaders } from "@/lib/queryClient";
 
+interface UnifiedVote {
+  id: string;
+  voteType: string;
+  value: number;
+  targetName: string;
+  detail: string | null;
+  createdAt: string;
+}
+
 const VOTE_TYPES = [
   { value: "face_off", label: "Matchups", icon: Swords },
   { value: "sentiment", label: "Sentiment", icon: TrendingUp },
@@ -76,7 +85,7 @@ export default function VotesPage() {
   const [activeFilter, setActiveFilter] = useState<VoteTypeValue | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const { data: votes, isLoading, error } = useQuery<any[]>({
+  const { data: votes, isLoading, isFetching, error } = useQuery<UnifiedVote[]>({
     queryKey: ["/api/me/votes", activeFilter],
     queryFn: async () => {
       const url = activeFilter
@@ -206,9 +215,9 @@ export default function VotesPage() {
             </Button>
           </Card>
         ) : votes && Array.isArray(votes) && votes.length > 0 ? (
-          <div className="space-y-3">
-            {votes.map((vote: any) => (
-              <Card key={vote.id} className="p-4" data-testid={`vote-item-${vote.id}`}>
+          <div className={`space-y-3 transition-opacity ${isFetching && !isLoading ? "opacity-50" : ""}`}>
+            {votes.map((vote) => (
+              <Card key={`${vote.voteType}-${vote.id}`} className="p-4" data-testid={`vote-item-${vote.id}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     {getVoteIcon(vote.voteType, vote.value)}

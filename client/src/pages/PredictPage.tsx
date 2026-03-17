@@ -1164,7 +1164,7 @@ function TopGainerCard({
         <CategoryPill category={market.category} />
       </div>
       
-      <h3 className="text-[16px] font-semibold mb-3 leading-[1.4]">Category Race: {market.category.charAt(0).toUpperCase() + market.category.slice(1)}</h3>
+      <h3 className="text-[16px] font-semibold mb-3 leading-[1.4]">Category Race: {getMarketCategoryLabel(market.category)}</h3>
       
       <div className="space-y-2 mb-3">
         {market.leaders.map((leader, i) => (
@@ -1261,7 +1261,7 @@ function GainerCandidatesDialog({
 }) {
   if (!market) return null;
   const candidates = market.allCandidates || market.leaders;
-  const categoryLabel = market.category.charAt(0).toUpperCase() + market.category.slice(1);
+  const categoryLabel = getMarketCategoryLabel(market.category);
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -2590,7 +2590,7 @@ export default function PredictPage() {
       return;
     }
 
-    const categoryLabel = market.category.charAt(0).toUpperCase() + market.category.slice(1);
+    const categoryLabel = getMarketCategoryLabel(market.category);
 
     setPendingSelection({
       type: "gainer",

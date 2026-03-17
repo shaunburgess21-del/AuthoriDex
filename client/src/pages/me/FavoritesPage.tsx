@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ArrowLeft, Star, Heart, TrendingUp, Search } from "lucide-react";
+import { ArrowLeft, Star, Heart, TrendingUp, Minus } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -8,7 +8,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 export default function FavoritesPage() {
@@ -74,15 +73,6 @@ export default function FavoritesPage() {
       </header>
 
       <div className="container mx-auto px-4 py-6 max-w-2xl">
-        <div className="relative mb-6">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search favorites..." 
-            className="pl-10"
-            data-testid="input-search-favorites"
-          />
-        </div>
-
         {isLoading ? (
           <div className="space-y-4">
             {[1, 2, 3, 4, 5].map((i) => (
@@ -128,9 +118,15 @@ export default function FavoritesPage() {
                   </div>
                   <div className="text-right">
                     <div className="flex items-center gap-1">
-                      <TrendingUp className={`h-4 w-4 ${fav.change > 0 ? "text-green-400" : "text-red-400"}`} />
-                      <span className={`font-mono ${fav.change > 0 ? "text-green-400" : "text-red-400"}`}>
-                        {fav.change > 0 ? "+" : ""}{fav.change}%
+                      {(fav.change ?? 0) > 0 ? (
+                        <TrendingUp className="h-4 w-4 text-green-400" />
+                      ) : (fav.change ?? 0) < 0 ? (
+                        <TrendingUp className="h-4 w-4 text-red-400 rotate-180" />
+                      ) : (
+                        <Minus className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span className={`font-mono ${(fav.change ?? 0) > 0 ? "text-green-400" : (fav.change ?? 0) < 0 ? "text-red-400" : "text-muted-foreground"}`}>
+                        {(fav.change ?? 0) > 0 ? "+" : ""}{fav.change ?? 0}%
                       </span>
                     </div>
                     <Button 

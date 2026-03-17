@@ -81,7 +81,7 @@ export function JackpotEntryModal({
   });
 
   const { data: userEntries, refetch: refetchEntries } = useQuery({
-    queryKey: ["/api/native-markets", marketId, "jackpot-entries"],
+    queryKey: ["/api/native-markets", marketId, "jackpot-entries", session?.access_token],
     queryFn: async () => {
       if (!marketId) return { entries: [], totalPool: 0, totalEntries: 0 };
       const sb = await getSupabase();
