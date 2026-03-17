@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest } from "@/lib/queryClient";
 import { formatTimeAgo, formatDate } from "@/lib/formatDate";
-import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { VoxDexLogo } from "@/components/VoxDexLogo";
 import {
   ArrowLeft,
   Star,
@@ -508,8 +508,8 @@ export default function MarketDetailPage() {
               </Button>
               <Link href="/">
                 <button className="flex items-center gap-2 hover:opacity-80 transition-opacity" data-testid="button-logo-home">
-                  <AuthoriDexLogo size={32} />
-                  <span className="font-serif font-bold text-xl hidden sm:block">AuthoriDex</span>
+                  <VoxDexLogo size={32} />
+                  <span className="font-serif font-bold text-xl hidden sm:block">VoxDex</span>
                 </button>
               </Link>
             </div>
@@ -545,8 +545,8 @@ export default function MarketDetailPage() {
                 className="flex items-center gap-2 hover:opacity-80 transition-opacity"
                 data-testid="button-logo-home"
               >
-                <AuthoriDexLogo size={32} />
-                <span className="font-serif font-bold text-xl hidden sm:block">AuthoriDex</span>
+                <VoxDexLogo size={32} />
+                <span className="font-serif font-bold text-xl hidden sm:block">VoxDex</span>
               </button>
             </Link>
           </div>
@@ -621,7 +621,7 @@ export default function MarketDetailPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => sharePage(`${market.title} on AuthoriDex`)}
+              onClick={() => sharePage(`${market.title} on VoxDex`)}
               className="ml-auto"
               data-testid="button-share"
             >

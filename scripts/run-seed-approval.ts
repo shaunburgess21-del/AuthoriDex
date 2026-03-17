@@ -10,7 +10,7 @@ import { seedApprovalDataDirect } from "../server/seed-approval-data";
 
 async function main() {
   console.log("=".repeat(60));
-  console.log("AuthoriDex Approval Seed Runner (Direct Mode)");
+  console.log("VoxDex Approval Seed Runner (Direct Mode)");
   console.log("Using data from AuthoriDex_Seed_Data_For_Replit.csv");
   console.log("=".repeat(60));
   console.log("");

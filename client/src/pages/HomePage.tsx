@@ -28,7 +28,7 @@ import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { Loader2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
-import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { motion, AnimatePresence } from "framer-motion";
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -800,8 +800,8 @@ export default function HomePage() {
             className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             data-testid="button-logo-home"
           >
-            <AuthoriDexLogo size={32} />
-            <span className="font-serif font-bold text-xl">AuthoriDex</span>
+            <VoxDexLogo size={32} />
+            <span className="font-serif font-bold text-xl">VoxDex</span>
           </button>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-1 mr-2">
@@ -1189,7 +1189,7 @@ export default function HomePage() {
       <footer className="border-t mt-24 py-12">
         <div className="container mx-auto px-4 text-center">
           <p className="text-sm text-muted-foreground">
-            AuthoriDex - Real-time celebrity trending tracker powered by live data APIs
+            VoxDex - Real-time celebrity trending tracker powered by live data APIs
           </p>
         </div>
       </footer>

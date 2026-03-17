@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AuthoriDex — Snapshot Freshness Check
+VoxDex — Snapshot Freshness Check
 Verifies trend_snapshots are being written on schedule.
 Run: python ops/check_snapshots.py
 """

@@ -19,7 +19,7 @@ export function HeroSection({ onCastVoteClick, onPredictClick }: HeroSectionProp
       <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/70 to-background" />
       <div className="relative h-full flex flex-col items-center justify-center px-4 pt-4 pb-6 text-center">
         <h1 className="text-5xl md:text-7xl font-serif font-bold mb-4 md:mb-6 tracking-tight max-w-4xl">
-          <span>Authority</span> <span className="text-primary">Index</span>
+          <span>Vox Populi</span> <span className="text-primary">Index</span>
         </h1>
         
         <p className="text-lg md:text-xl text-muted-foreground mb-5 md:mb-8 max-w-2xl">Discover real-time insights, cast your vote and make your prediction on the world's most influential people</p>

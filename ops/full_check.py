@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AuthoriDex — Full Production Health Check
+VoxDex — Full Production Health Check
 Run: python ops/full_check.py
 """
 
@@ -28,7 +28,7 @@ def emoji(status):
 
 def main():
     print("=" * 60)
-    print("  AuthoriDex — Trend Score Engine Health Report")
+    print("  VoxDex — Trend Score Engine Health Report")
     print(f"  {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
     print("=" * 60)
 

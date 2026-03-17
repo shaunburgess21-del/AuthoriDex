@@ -108,7 +108,7 @@ export function CurateSection({
             </div>
 
             {/* Mobile: Swiper carousel */}
-            <div className="md:hidden authoridex-swiper w-screen relative left-1/2 -ml-[50vw]" data-dot-active="cyan">
+            <div className="md:hidden voxdex-swiper w-screen relative left-1/2 -ml-[50vw]" data-dot-active="cyan">
               <Swiper
                 modules={[Pagination, A11y, Virtual]}
                 spaceBetween={0}

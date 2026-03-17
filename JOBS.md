@@ -1,8 +1,8 @@
-# AuthoriDex — Background Jobs & Schedulers
+# VoxDex — Background Jobs & Schedulers
 
 ## Overview
 
-AuthoriDex runs multiple background jobs on the backend service. They are bootstrapped in `server/index.ts`, do not run during frontend-only builds, and can all be skipped with `DISABLE_SCHEDULERS=true`.
+VoxDex runs multiple background jobs on the backend service. They are bootstrapped in `server/index.ts`, do not run during frontend-only builds, and can all be skipped with `DISABLE_SCHEDULERS=true`.
 
 ---
 

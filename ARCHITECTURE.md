@@ -1,8 +1,8 @@
-# AuthoriDex — Architecture Overview
+# VoxDex — Architecture Overview
 
-## What Is AuthoriDex?
+## What Is VoxDex?
 
-AuthoriDex is a live influence index and prediction platform. It measures, ranks, and gamifies real-world influence across Politics, Business, Tech, Sports, and Entertainment. Users vote, predict outcomes, and track influence momentum in real time.
+VoxDex is a live influence index and prediction platform. It measures, ranks, and gamifies real-world influence across Politics, Business, Tech, Sports, and Entertainment. Users vote, predict outcomes, and track influence momentum in real time.
 
 ---
 
@@ -38,7 +38,7 @@ External APIs (Serper, Mediastack, Wiki, GDELT)
 ## Folder Structure
 
 ```
-AuthoriDex-main/
+VoxDex-main/
 ├── client/          # React frontend (Vite)
 │   ├── src/
 │   │   ├── components/   # UI components

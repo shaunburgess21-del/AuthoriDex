@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserMenu } from "@/components/UserMenu";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -57,8 +57,8 @@ export default function TownSquarePage() {
               }}
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             >
-              <AuthoriDexLogo size={32} variant="predict" />
-              <span className="font-serif font-bold text-xl hidden sm:block">AuthoriDex</span>
+              <VoxDexLogo size={32} variant="predict" />
+              <span className="font-serif font-bold text-xl hidden sm:block">VoxDex</span>
             </button>
           </div>
 

@@ -12,7 +12,7 @@ import { ArrowLeft, Star, TrendingUp, Calendar, Award } from "lucide-react";
 import { UserVote, UserFavourite } from "@shared/schema";
 import { format } from "date-fns";
 import { voteToApprovalPercent } from "@/lib/utils";
-import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { VoxDexLogo } from "@/components/VoxDexLogo";
 
 // 1-5 scale colors: vivid gradient from red (1) to green (5)
 const SEGMENT_COLORS_5 = [
@@ -127,8 +127,8 @@ export default function UserProfilePage() {
               onClick={() => setLocation("/")}
               data-testid="link-logo-home"
             >
-              <AuthoriDexLogo size={32} />
-              <span className="font-serif font-bold text-xl">AuthoriDex</span>
+              <VoxDexLogo size={32} />
+              <span className="font-serif font-bold text-xl">VoxDex</span>
             </div>
           </div>
           <div className="flex items-center gap-3">

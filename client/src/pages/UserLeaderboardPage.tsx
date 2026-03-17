@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useCallback } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserMenu } from "@/components/UserMenu";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -383,8 +383,8 @@ export default function UserLeaderboardPage() {
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
               data-testid="button-logo-home"
             >
-              <AuthoriDexLogo size={32} variant="predict" />
-              <span className="font-serif font-bold text-xl hidden sm:block">AuthoriDex</span>
+              <VoxDexLogo size={32} variant="predict" />
+              <span className="font-serif font-bold text-xl hidden sm:block">VoxDex</span>
             </button>
           </div>
 

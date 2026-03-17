@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AuthoriDex — Scheduler Frequency Check
+VoxDex — Scheduler Frequency Check
 Verifies ingestion and LiveTick are firing on schedule.
 Run: python ops/check_frequencies.py
 """

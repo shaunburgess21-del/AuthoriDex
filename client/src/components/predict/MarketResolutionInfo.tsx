@@ -43,7 +43,7 @@ export function MarketResolutionInfo({
   const resolutionLabel =
     resolveMethod === "admin_manual"
       ? "Admin resolution"
-      : "Auto-calculated from AuthoriDex trend engine";
+      : "Auto-calculated from VoxDex trend engine";
 
   if (compact) {
     return (

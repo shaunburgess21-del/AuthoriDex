@@ -213,7 +213,7 @@ export function CurateViewResultsOverlay({
           )}
           
           <p className="text-center text-xs text-muted-foreground mt-6 max-w-md mx-auto">
-            The photo with the most votes becomes the official profile image for {person.name} across AuthoriDex.
+            The photo with the most votes becomes the official profile image for {person.name} across VoxDex.
           </p>
         </div>
       </motion.div>

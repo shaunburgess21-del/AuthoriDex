@@ -1,8 +1,8 @@
-# AuthoriDex — Environment Variables
+# VoxDex — Environment Variables
 
 ## Overview
 
-AuthoriDex uses environment variables for all secrets and configuration. These must never be committed to GitHub.
+VoxDex uses environment variables for all secrets and configuration. These must never be committed to GitHub.
 
 - **Local dev:** stored in `.env` file in project root (gitignored)
 - **Railway (backend):** set in Railway → Service → Variables

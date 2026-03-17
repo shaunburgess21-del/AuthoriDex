@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AuthoriDex — Ingest Health Check
+VoxDex — Ingest Health Check
 Checks ingestion status via the freshness API.
 Run: python ops/check_ingests.py
 """

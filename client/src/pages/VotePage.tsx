@@ -75,7 +75,7 @@ import type { TrendingPerson } from "@shared/schema";
 import { CurateSection } from "@/components/curate";
 import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
 import { CardSection } from "@/components/CardSection";
-import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 
@@ -200,7 +200,7 @@ const isPublicOpinionSection = (section: SectionToggle) =>
 const SECTION_RULES = {
   induction: {
     title: "Induction Queue Rules",
-    content: "Voted candidates with the most support at the end of the cycle are officially inducted into the AuthoriDex Main Leaderboard. Your vote helps shape who defines the future of fame."
+    content: "Voted candidates with the most support at the end of the cycle are officially inducted into the VoxDex Main Leaderboard. Your vote helps shape who defines the future of fame."
   },
   curate: {
     title: "Curate Profile Rules",
@@ -1215,7 +1215,7 @@ function CarouselSection({
         </div>
       </div>
 
-      <div className="predict-carousel w-screen relative left-1/2 -ml-[50vw] md:w-auto md:relative md:left-0 md:ml-0 md:-mx-2 authoridex-swiper authoridex-swiper-multi" data-dot-active="cyan">
+      <div className="predict-carousel w-screen relative left-1/2 -ml-[50vw] md:w-auto md:relative md:left-0 md:ml-0 md:-mx-2 voxdex-swiper voxdex-swiper-multi" data-dot-active="cyan">
         <Swiper
           modules={[Pagination, A11y]}
           spaceBetween={12}
@@ -1570,7 +1570,7 @@ function ContenderSelector({
             <p className="font-medium truncate">{value.name}</p>
             <p className="text-xs text-muted-foreground">
               {value.type === 'celebrity' ? (
-                <span className="text-cyan-400">AuthoriDex Celebrity</span>
+                <span className="text-cyan-400">VoxDex Celebrity</span>
               ) : (
                 <span className="text-violet-400">Custom Contender</span>
               )}
@@ -1666,7 +1666,7 @@ function ContenderSelector({
               {hasMatchingCelebrities ? (
                 <>
                   <div className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/30 border-b border-border">
-                    AuthoriDex Celebrities
+                    VoxDex Celebrities
                   </div>
                   {filteredCelebrities.map((celebrity, index) => (
                     <button
@@ -1697,7 +1697,7 @@ function ContenderSelector({
                 </>
               ) : searchQuery.length === 0 ? (
                 <div className="px-4 py-3 text-sm text-muted-foreground text-center">
-                  Type to search AuthoriDex celebrities or enter a custom name
+                  Type to search VoxDex celebrities or enter a custom name
                 </div>
               ) : searchQuery.length < 2 ? (
                 <div className="px-4 py-3 text-sm text-muted-foreground text-center">
@@ -2419,8 +2419,8 @@ export default function VotePage() {
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
               data-testid="button-logo-home"
             >
-              <AuthoriDexLogo size={32} variant="vote" />
-              <span className="font-serif font-bold text-xl">AuthoriDex</span>
+              <VoxDexLogo size={32} variant="vote" />
+              <span className="font-serif font-bold text-xl">VoxDex</span>
             </button>
           </div>
           <div className="flex items-center gap-3">
@@ -2882,7 +2882,7 @@ export default function VotePage() {
           <div className="relative py-4">
             <div className="text-center">
               <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-governance-title">
-                Shape the AuthoriDex
+                Shape the VoxDex
               </h2>
               <p className="text-muted-foreground max-w-2xl mx-auto mb-3">Vote on new inductees and curate profile images</p>
               <button
@@ -3340,7 +3340,7 @@ export default function VotePage() {
               Suggest a Candidate
             </DialogTitle>
             <DialogDescription>
-              Who are we missing? Suggest someone NEW to be added to AuthoriDex.
+              Who are we missing? Suggest someone NEW to be added to VoxDex.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -3385,7 +3385,7 @@ export default function VotePage() {
               </Select>
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Why should they be on AuthoriDex? (optional)</label>
+              <label className="text-sm font-medium mb-1 block">Why should they be on VoxDex? (optional)</label>
               <Input
                 value={suggestReason}
                 onChange={(e) => setSuggestReason(e.target.value)}
@@ -3697,7 +3697,7 @@ export default function VotePage() {
           <div className="space-y-4 py-4 text-sm">
             {rulesModalOpen === "induction" && (
               <div className="space-y-3">
-                <p className="text-muted-foreground">Vote for celebrities you want to see added to the AuthoriDex leaderboard.</p>
+                <p className="text-muted-foreground">Vote for celebrities you want to see added to the VoxDex leaderboard.</p>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
                     <Vote className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
@@ -3720,7 +3720,7 @@ export default function VotePage() {
             )}
             {rulesModalOpen === "curate" && (
               <div className="space-y-3">
-                <p className="text-muted-foreground">Help choose the official profile photo displayed across AuthoriDex.</p>
+                <p className="text-muted-foreground">Help choose the official profile photo displayed across VoxDex.</p>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
                     <Camera className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />

@@ -10,7 +10,7 @@ export function ApprovalRatingInfoContent({ onRateNow }: ApprovalRatingInfoConte
     <div className="space-y-3 normal-case tracking-normal">
       <p className="font-semibold text-sm">How Approval Rating Works</p>
       <p className="text-xs text-muted-foreground">
-        Approval Rating is based on votes from verified AuthoriDex users.
+        Approval Rating is based on votes from verified VoxDex users.
       </p>
       <ul className="space-y-1.5">
         <li className="flex items-center gap-2 text-xs">

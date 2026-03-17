@@ -56,7 +56,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { formatNumber, getApprovalColor } from "@/lib/formatNumber";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { getExceptionalIndicator } from "@/components/LeaderboardRow";
-import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface ValueVoteMetrics {
@@ -1318,8 +1318,8 @@ export default function PersonDetailPage() {
               onClick={() => setLocation("/")}
               data-testid="link-logo-home"
             >
-              <AuthoriDexLogo size={32} />
-              <span className="font-serif font-bold text-xl">AuthoriDex</span>
+              <VoxDexLogo size={32} />
+              <span className="font-serif font-bold text-xl">VoxDex</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -1366,7 +1366,7 @@ export default function PersonDetailPage() {
                       <div className="space-y-1.5 normal-case tracking-normal">
                         <p className="font-semibold text-sm">Overall Rank</p>
                         <p className="text-xs text-muted-foreground">
-                          {person.name}'s position across all categories on the AuthoriDex leaderboard, based on their aggregated Trend Score.
+                          {person.name}'s position across all categories on the VoxDex leaderboard, based on their aggregated Trend Score.
                         </p>
                       </div>
                     }
@@ -1385,7 +1385,7 @@ export default function PersonDetailPage() {
                   </TouchTooltip>
                 </div>
                 <div className="flex flex-row gap-2">
-                  <Button variant="outline" size="icon" className="sm:hidden" onClick={() => sharePage(`${person.name} on AuthoriDex`)} aria-label="Share" data-testid="button-share-mobile">
+                  <Button variant="outline" size="icon" className="sm:hidden" onClick={() => sharePage(`${person.name} on VoxDex`)} aria-label="Share" data-testid="button-share-mobile">
                     <Share2 className="h-4 w-4" />
                   </Button>
                   <Button
@@ -1399,7 +1399,7 @@ export default function PersonDetailPage() {
                   >
                     <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
                   </Button>
-                  <Button variant="outline" className="hidden sm:inline-flex gap-2" onClick={() => sharePage(`${person.name} on AuthoriDex`)} data-testid="button-share">
+                  <Button variant="outline" className="hidden sm:inline-flex gap-2" onClick={() => sharePage(`${person.name} on VoxDex`)} data-testid="button-share">
                     <Share2 className="h-4 w-4" />
                     Share
                   </Button>

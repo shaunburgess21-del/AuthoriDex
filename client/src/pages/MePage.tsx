@@ -7,7 +7,7 @@ import { getAvatarGradient, getAvatarInitials } from "@/lib/avatar";
 import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Sparkles, Eye, Lock, Flame } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { VoxDexLogo } from "@/components/VoxDexLogo";
 
 function RankBadge({ rank }: { rank: string }) {
   const badgeConfig: Record<string, { color: string; icon: typeof Shield }> = {
@@ -64,8 +64,8 @@ export default function MePage() {
               onClick={() => setLocation("/")}
               data-testid="link-logo-home"
             >
-              <AuthoriDexLogo size={32} />
-              <span className="font-serif font-bold text-xl">AuthoriDex</span>
+              <VoxDexLogo size={32} />
+              <span className="font-serif font-bold text-xl">VoxDex</span>
             </div>
           </div>
           <div className="flex items-center gap-3">

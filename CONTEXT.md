@@ -1,4 +1,4 @@
-# AuthoriDex — Project Context
+# VoxDex — Project Context
 
 > **This file is the single source of truth for AI agents working on this project.**
 > At the end of every Cursor Agent session, update this file with what was built, changed, or decided.
@@ -7,7 +7,7 @@
 
 ## Project Overview
 
-AuthoriDex is a fame/popularity trend tracking app. It tracks public figures' trending status using a trend score engine, AI-powered summaries, polling features, and real-time data ingestion.
+VoxDex is a fame/popularity trend tracking app. It tracks public figures' trending status using a trend score engine, AI-powered summaries, polling features, and real-time data ingestion.
 
 **Founders:** Andrew & Shaun
 

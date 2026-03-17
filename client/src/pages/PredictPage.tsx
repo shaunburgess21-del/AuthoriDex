@@ -79,7 +79,7 @@ import { useLocation, Link } from "wouter";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CardSection } from "@/components/CardSection";
-import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { formatActivityAge } from "@/lib/formatDate";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
@@ -2745,8 +2745,8 @@ export default function PredictPage() {
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
               data-testid="button-logo-home"
             >
-              <AuthoriDexLogo size={32} variant="predict" />
-              <span className="font-serif font-bold text-xl hidden sm:block">AuthoriDex</span>
+              <VoxDexLogo size={32} variant="predict" />
+              <span className="font-serif font-bold text-xl hidden sm:block">VoxDex</span>
             </button>
           </div>
           

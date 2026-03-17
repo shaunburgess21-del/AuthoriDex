@@ -62,7 +62,7 @@ export function PredictionMarketsTeaser() {
         </Button>
       </div>
 
-      <div className="predict-carousel w-screen relative left-1/2 -ml-[50vw] md:w-auto md:relative md:left-0 md:ml-0 md:-mx-2 authoridex-swiper authoridex-swiper-multi" data-dot-active="violet">
+      <div className="predict-carousel w-screen relative left-1/2 -ml-[50vw] md:w-auto md:relative md:left-0 md:ml-0 md:-mx-2 voxdex-swiper voxdex-swiper-multi" data-dot-active="violet">
         <Swiper
           modules={[Pagination, A11y]}
           spaceBetween={12}

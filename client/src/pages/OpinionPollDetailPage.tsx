@@ -14,7 +14,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest } from "@/lib/queryClient";
 import { formatTimeAgo, formatDate } from "@/lib/formatDate";
-import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { VoxDexLogo } from "@/components/VoxDexLogo";
 import {
   ArrowLeft,
   Clock,
@@ -122,7 +122,7 @@ export default function OpinionPollDetailPage() {
   }, [comments, commentSort]);
 
   const handleShare = () => {
-    sharePage(poll ? `${poll.title} on AuthoriDex` : "AuthoriDex");
+    sharePage(poll ? `${poll.title} on VoxDex` : "VoxDex");
   };
 
   if (isLoading) {
@@ -160,7 +160,7 @@ export default function OpinionPollDetailPage() {
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
             <Link href="/" data-testid="link-logo-home">
-              <AuthoriDexLogo size={28} />
+              <VoxDexLogo size={28} />
             </Link>
             <Button variant="ghost" size="sm" onClick={() => { window.history.length > 1 ? window.history.back() : setLocation("/vote"); }} data-testid="button-back">
               <ArrowLeft className="h-4 w-4 mr-1" />

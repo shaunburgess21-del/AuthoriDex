@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Mail, Chrome } from "lucide-react";
-import { AuthoriDexLogo } from "@/components/AuthoriDexLogo";
+import { VoxDexLogo } from "@/components/VoxDexLogo";
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
@@ -87,8 +87,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <AuthoriDexLogo size={48} />
-            <span className="font-serif font-bold text-3xl">AuthoriDex</span>
+            <VoxDexLogo size={48} />
+            <span className="font-serif font-bold text-3xl">VoxDex</span>
           </div>
           <p className="text-muted-foreground">Track fame, vote sentiment, discover trends</p>
         </div>
@@ -99,7 +99,7 @@ export default function LoginPage() {
             <CardDescription>
               {isLogin
                 ? "Sign in to access your profile and save votes"
-                : "Join AuthoriDex to track your favorite celebrities"}
+                : "Join VoxDex to track your favorite celebrities"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

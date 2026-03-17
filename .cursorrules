@@ -1,7 +1,7 @@
-# AuthoriDex — Cursor Agent Rules
+# VoxDex — Cursor Agent Rules
 
 ## Project Overview
-AuthoriDex is a live influence index and prediction platform. It ranks 100 public figures by influence score, updated hourly via external APIs. Users vote, predict outcomes, and track momentum in real time.
+VoxDex is a live influence index and prediction platform. It ranks 100 public figures by influence score, updated hourly via external APIs. Users vote, predict outcomes, and track momentum in real time.
 
 ## Stack
 - Frontend: React 18, Vite, TailwindCSS, shadcn/ui, Wouter (routing), TanStack Query (data fetching)

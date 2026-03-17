@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AuthoriDex — External Source Health Check
+VoxDex — External Source Health Check
 Checks all external API sources via the freshness endpoint.
 Run: python ops/check_sources.py
 """

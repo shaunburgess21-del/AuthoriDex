@@ -1,6 +1,6 @@
-# AuthoriDex — Ops Health Checks
+# VoxDex — Ops Health Checks
 
-Production observability scripts for the AuthoriDex trend score engine.
+Production observability scripts for the VoxDex trend score engine.
 
 ## Quick Start
 
