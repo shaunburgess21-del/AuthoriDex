@@ -10451,12 +10451,22 @@ Only return the JSON object.`;
         });
       }
 
+      let xpResult;
+      try {
+        xpResult = await gamificationService.awardXp(
+          authReq.userId!, 'place_prediction',
+          `prediction_${marketId}_${(result as any).betId}_${authReq.userId}`,
+          { marketId, stakeAmount: JACKPOT_TICKET_COST }
+        );
+      } catch (e) { console.error("XP award for jackpot entry failed:", e); }
+
       return res.json({
         betId: (result as any).betId,
         predictedScore,
         remainingCredits: (result as any).remainingCredits,
         totalPool: (result as any).totalPool,
         totalEntries: (result as any).totalEntries,
+        xpResult,
       });
     } catch (error: any) {
       if (error?.message === "Insufficient credits") {
