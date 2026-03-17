@@ -1448,7 +1448,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             if (searchDelta / Math.max(searchWeighted, 1) < 0.03) quietSources.push("Search");
             if (newsDelta / Math.max(newsWeighted, 1) < 0.03) quietSources.push("News");
-            if (wikiDelta / Math.max(wikiWeighted, 1) < 0.03) quietSources.push("Wikipedia");
+            if (wikiDelta / Math.max(wikiWeighted, 1) < 0.015) quietSources.push("Wikipedia");
             driverSourceCount = 3 - quietSources.length;
 
             if (totalDelta > 0 && hasSignificantMovement) {
@@ -1476,7 +1476,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const wikiBase = Math.max(snap24hAgo.wikiPageviews ?? 1, 1);
             if (searchChange / searchBase < 0.03) quietSources.push("Search");
             if (newsChange / newsBase < 0.03) quietSources.push("News");
-            if (wikiChange / wikiBase < 0.03) quietSources.push("Wikipedia");
+            if (wikiChange / wikiBase < 0.015) quietSources.push("Wikipedia");
             driverSourceCount = 3 - quietSources.length;
 
             if (totalContrib > 0 && hasSignificantMovement) {

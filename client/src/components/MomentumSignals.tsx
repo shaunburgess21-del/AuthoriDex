@@ -490,7 +490,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
                   <div className="space-y-0.5">
                     {signals.drivers.quietSources.length > 0 && (
                       <p className="text-[10px] text-muted-foreground/60" data-testid="text-quiet-sources">
-                        Based on {signals.drivers.activeSources}/3 sources ({signals.drivers.quietSources.join(" & ")} quiet)
+                        Based on {signals.drivers.activeSources}/3 sources ({signals.drivers.quietSources.join(" & ")} minimal)
                       </p>
                     )}
                     <p className="text-[10px] text-muted-foreground/60" data-testid="text-drivers-clarifier">
