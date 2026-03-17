@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { PersonAvatar } from "@/components/PersonAvatar";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSupabase } from "@/lib/supabase";
@@ -43,6 +44,7 @@ export function JackpotEntryModal({
   bettingCutoff,
   isCutoffPassed,
 }: JackpotEntryModalProps) {
+  const { session, loading } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [scoreInput, setScoreInput] = useState("");
@@ -57,15 +59,24 @@ export function JackpotEntryModal({
     return isNaN(num) || num <= 0 ? null : num;
   }, [scoreInput]);
 
+  const isAuthReady = !!session?.access_token && !loading;
+
   const { data: takenData } = useQuery({
-    queryKey: ["/api/native-markets", marketId, "jackpot-taken-numbers"],
+    queryKey: ["/api/native-markets", marketId, "jackpot-taken-numbers", session?.access_token],
     queryFn: async () => {
       if (!marketId) return { takenNumbers: [] };
-      const res = await fetch(`/api/native-markets/${marketId}/jackpot-taken-numbers`);
+      const sb = await getSupabase();
+      const { data: { session: currentSession } } = await sb.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (currentSession?.access_token) headers["Authorization"] = `Bearer ${currentSession.access_token}`;
+      const res = await fetch(`/api/native-markets/${marketId}/jackpot-taken-numbers`, {
+        headers,
+        credentials: "include",
+      });
       if (!res.ok) throw new Error(`Failed to load taken numbers: ${res.status}`);
       return res.json();
     },
-    enabled: open && !!marketId,
+    enabled: open && !!marketId && isAuthReady,
     refetchInterval: 30000,
   });
 
@@ -81,7 +92,7 @@ export function JackpotEntryModal({
       if (!res.ok) throw new Error(`Failed to load entries: ${res.status}`);
       return res.json();
     },
-    enabled: open && !!marketId,
+    enabled: open && !!marketId && isAuthReady,
   });
 
   const takenNumbers = useMemo(() => new Set<number>(takenData?.takenNumbers || []), [takenData]);
