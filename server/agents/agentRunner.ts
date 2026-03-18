@@ -244,6 +244,7 @@ async function runAgentBatchOnce(): Promise<{
             id: scheduledAgentActions.id,
             status: scheduledAgentActions.status,
             executedAt: scheduledAgentActions.executedAt,
+            createdAt: scheduledAgentActions.createdAt,
           })
           .from(scheduledAgentActions)
           .where(
@@ -253,10 +254,28 @@ async function runAgentBatchOnce(): Promise<{
               sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed', 'world_abstained')`
             )
           )
-          .limit(1);
+          .orderBy(
+            sql`CASE WHEN ${scheduledAgentActions.status} IN ('pending', 'in_progress') THEN 0 ELSE 1 END`,
+            desc(sql`COALESCE(${scheduledAgentActions.executedAt}, ${scheduledAgentActions.createdAt})`)
+          )
+          .limit(5);
 
         if (existingActions.length > 0) {
-          const existing = existingActions[0];
+          const blockingAction = existingActions.find(
+            (action) => action.status === "pending" || action.status === "in_progress"
+          );
+          if (blockingAction) {
+            skipped++;
+            continue;
+          }
+
+          const existing = existingActions.find(
+            (action) => action.status === "world_abstained" || action.status === "executed"
+          );
+          if (!existing) {
+            skipped++;
+            continue;
+          }
 
           if (existing.status === "world_abstained") {
             // Allow re-eval if abstention is older than WORLD_REEVAL_INTERVAL_DAYS
@@ -288,10 +307,6 @@ async function runAgentBatchOnce(): Promise<{
               skipped++;
               continue;
             }
-          } else {
-            // pending or in_progress — skip
-            skipped++;
-            continue;
           }
         }
       } else {
@@ -389,6 +404,7 @@ async function runAgentBatchOnce(): Promise<{
         ? computeWorldMarketExecuteAfter(agent.archetype)
         : computeExecuteAfter(agent.archetype);
 
+      const chosenEntry = entries.find((entry) => entry.id === decision.entryId);
       let stakeAmount = computeStakeAmount(decision.confidence ?? 0.5);
 
       // Agent-specific stake overrides
@@ -396,7 +412,14 @@ async function runAgentBatchOnce(): Promise<{
       if (override) {
         if (override.multiplier) stakeAmount = Math.round(stakeAmount * override.multiplier);
         if (override.cap) stakeAmount = Math.min(stakeAmount, override.cap);
-        if (override.floor) stakeAmount = Math.max(stakeAmount, override.floor);
+        if (override.floor) {
+          const shouldApplyFloor =
+            agent.username !== "wildcard_za" ||
+            isOtherStyleOutcome(chosenEntry?.label ?? null);
+          if (shouldApplyFloor) {
+            stakeAmount = Math.max(stakeAmount, override.floor);
+          }
+        }
       }
       stakeAmount = Math.max(BASE_STAKE_AMOUNT, Math.min(MAX_AGENT_STAKE * 3, stakeAmount));
 
@@ -732,6 +755,16 @@ function computeStakeAmount(confidence: number): number {
     BASE_STAKE_AMOUNT +
     Math.round((confidence - 0.5) * 2 * (MAX_AGENT_STAKE - BASE_STAKE_AMOUNT));
   return Math.max(BASE_STAKE_AMOUNT, Math.min(MAX_AGENT_STAKE, scaled));
+}
+
+function isOtherStyleOutcome(label: string | null): boolean {
+  const normalized = (label ?? "").trim().toLowerCase();
+  return (
+    normalized === "other" ||
+    normalized.includes(" other") ||
+    normalized.startsWith("other ") ||
+    normalized.includes("field")
+  );
 }
 
 export function startAgentRunnerScheduler(): void {

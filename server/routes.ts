@@ -10252,11 +10252,6 @@ Aim for 3-5 substantive paragraphs. Be informative, engaging, and balanced. Help
         if (person) linkedPerson = person;
       }
 
-      const newsContext = await fetchTrendingNewsContext(market.title || "");
-      const headlinesBlock = newsContext?.sources?.length
-        ? `\nRecent news headlines for context:\n${newsContext.sources.map(s => `- ${s.title}`).join("\n")}`
-        : "";
-
       const outcomesStr = entries.map(e => e.label).join(", ");
       const resolutionCriteria = Array.isArray(market.resolutionCriteria) && market.resolutionCriteria.length > 0
         ? market.resolutionCriteria.join("; ")
@@ -10273,7 +10268,7 @@ Category: ${market.category || "General"}
 ${market.teaser ? `Teaser: "${market.teaser}"` : ""}
 Resolution Date: ${resolutionDate}
 Resolution Criteria: ${resolutionCriteria}
-Outcomes: ${outcomesStr}${linkedPersonBlock}${headlinesBlock}
+Outcomes: ${outcomesStr}${linkedPersonBlock}
 
 Write a 2-5 sentence summary that helps users make an informed prediction. Focus on enduring background context, the stakes involved, historical precedent, and the key factors that will ultimately decide the outcome. Avoid referencing specific recent results, upcoming fixtures, or time-sensitive developments — the summary should remain accurate and useful for weeks or months. Be factual and neutral — do not recommend a side.`;
 

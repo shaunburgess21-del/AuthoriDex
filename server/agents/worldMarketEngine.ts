@@ -22,41 +22,55 @@ const API_TIMEOUT_MS = 30_000;
 
 interface PredictionAssessment {
   decision: "bet" | "abstain";
-  selectedOutcome: string;
+  selectedOutcomeIndex: number;
   confidence: number;
-  probabilities: Array<{ outcome: string; probability: number }>;
+  probabilities: Array<{ outcomeIndex: number; probability: number }>;
   briefReasoning: string;
 }
 
-const PREDICTION_SCHEMA = {
-  type: "object" as const,
-  properties: {
-    decision: { type: "string" as const, enum: ["bet", "abstain"] },
-    selectedOutcome: { type: "string" as const },
-    confidence: { type: "number" as const },
-    probabilities: {
-      type: "array" as const,
-      items: {
-        type: "object" as const,
-        properties: {
-          outcome: { type: "string" as const },
-          probability: { type: "number" as const },
-        },
-        required: ["outcome", "probability"] as const,
-        additionalProperties: false,
+function getOutcomeLabel(entry: MarketEntryData, index: number): string {
+  return entry.label?.trim() || `Outcome ${index + 1}`;
+}
+
+function buildPredictionSchema(outcomeCount: number) {
+  return {
+    type: "object" as const,
+    properties: {
+      decision: { type: "string" as const, enum: ["bet", "abstain"] },
+      selectedOutcomeIndex: {
+        type: "integer" as const,
+        minimum: 1,
+        maximum: outcomeCount,
       },
+      confidence: { type: "number" as const },
+      probabilities: {
+        type: "array" as const,
+        items: {
+          type: "object" as const,
+          properties: {
+            outcomeIndex: {
+              type: "integer" as const,
+              minimum: 1,
+              maximum: outcomeCount,
+            },
+            probability: { type: "number" as const },
+          },
+          required: ["outcomeIndex", "probability"] as const,
+          additionalProperties: false,
+        },
+      },
+      briefReasoning: { type: "string" as const },
     },
-    briefReasoning: { type: "string" as const },
-  },
-  required: [
-    "decision",
-    "selectedOutcome",
-    "confidence",
-    "probabilities",
-    "briefReasoning",
-  ] as const,
-  additionalProperties: false,
-};
+    required: [
+      "decision",
+      "selectedOutcomeIndex",
+      "confidence",
+      "probabilities",
+      "briefReasoning",
+    ] as const,
+    additionalProperties: false,
+  };
+}
 
 function buildSystemPrompt(agent: AgentConfigData): string {
   return `You are ${agent.displayName}, a prediction market analyst on VoxDex.
@@ -64,7 +78,7 @@ function buildSystemPrompt(agent: AgentConfigData): string {
 Your personality: ${agent.archetype}
 Your bio: "${agent.bio}"
 Your specialties: ${agent.specialties.join(", ")}
-Your traits: boldness=${agent.boldness}, contrarianism=${agent.contrarianism}, riskAppetite=${agent.riskAppetite}
+Your traits: boldness=${agent.boldness}, contrarianism=${agent.contrarianism}, recencyWeight=${agent.recencyWeight}, prestigeBias=${agent.prestigeBias}, confidenceCal=${agent.confidenceCal}, consensusSensitivity=${agent.consensusSensitivity}, riskAppetite=${agent.riskAppetite}, activityRate=${agent.activityRate}
 
 TASK: Evaluate a prediction market and decide whether to place a bet.
 
@@ -95,12 +109,12 @@ function buildUserPrompt(
 ): string {
   const totalPool = entries.reduce((s, e) => s + e.totalStake, 0);
   const outcomesBlock = entries
-    .map((e) => `- ${e.label ?? "Unknown"}`)
+    .map((e, index) => `${index + 1}. ${getOutcomeLabel(e, index)}`)
     .join("\n");
   const poolBlock = entries
-    .map((e) => {
+    .map((e, index) => {
       const pct = totalPool > 0 ? ((e.totalStake / totalPool) * 100).toFixed(1) : "0.0";
-      return `- ${e.label ?? "Unknown"}: ${e.totalStake} credits staked (${pct}%)`;
+      return `${index + 1}. ${getOutcomeLabel(e, index)}: ${e.totalStake} credits staked (${pct}%)`;
     })
     .join("\n");
 
@@ -124,7 +138,7 @@ CURRENT POOL:
 ${poolBlock}
 Total pool: ${totalPool} credits
 
-Evaluate this market and provide your prediction.`;
+Evaluate this market and provide your prediction. Use the numbered outcomes exactly as listed.`;
 }
 
 export async function computeWorldMarketPrediction(
@@ -178,7 +192,7 @@ export async function computeWorldMarketPrediction(
             type: "json_schema",
             name: "prediction_assessment",
             strict: true,
-            schema: PREDICTION_SCHEMA,
+            schema: buildPredictionSchema(entries.length),
           },
         },
       } as any,
@@ -208,14 +222,11 @@ export async function computeWorldMarketPrediction(
     };
   }
 
-  // Map selected outcome to entry ID
-  const selectedEntry = entries.find(
-    (e) =>
-      (e.label ?? "").toLowerCase() === assessment.selectedOutcome.toLowerCase()
-  );
+  // Map selected outcome index to entry ID
+  const selectedEntry = entries[assessment.selectedOutcomeIndex - 1];
   if (!selectedEntry) {
     log(
-      `[WorldEngine] Could not match outcome "${assessment.selectedOutcome}" to entries for market=${market.id.slice(0, 8)}`
+      `[WorldEngine] Could not match outcome index "${assessment.selectedOutcomeIndex}" to entries for market=${market.id.slice(0, 8)}`
     );
     return abstain("api_error");
   }
@@ -238,11 +249,7 @@ export async function computeWorldMarketPrediction(
         );
         const secondPick = sorted.length > 1 ? sorted[1] : null;
         if (secondPick) {
-          const altEntry = entries.find(
-            (e) =>
-              (e.label ?? "").toLowerCase() ===
-              secondPick.outcome.toLowerCase()
-          );
+          const altEntry = entries[secondPick.outcomeIndex - 1];
           if (altEntry) {
             chosenEntryId = altEntry.id;
             rawConfidence = Math.max(0.4, Math.min(0.95, secondPick.probability));

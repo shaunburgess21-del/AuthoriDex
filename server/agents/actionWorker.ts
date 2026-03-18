@@ -15,13 +15,11 @@ import {
 } from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { log } from "../log";
-import { generateRationale } from "./rationaleGenerator";
 import {
   ACTION_WORKER_BATCH_SIZE,
   ACTION_WORKER_INTERVAL_MS,
-  RATIONALE_CONFIDENCE_THRESHOLD,
 } from "./constants";
-import type { AgentConfigData, MarketWithEntries, PredictionDecision } from "./types";
+import type { PredictionDecision } from "./types";
 import { buildAgentActionStakeIdempotencyKey, buildAgentBetMetadata } from "./actionWorker-utils";
 
 const STALE_IN_PROGRESS_TIMEOUT_MINUTES = 30;
@@ -206,48 +204,6 @@ async function executeAction(action: {
       action.stakeAmount / Math.max(entryShare, 0.01)
     );
 
-    // Optionally generate rationale
-    let rationale: string | undefined;
-    if (
-      decision.confidence &&
-      decision.confidence > RATIONALE_CONFIDENCE_THRESHOLD
-    ) {
-      const entries = await db
-        .select({
-          id: marketEntries.id,
-          label: marketEntries.label,
-          totalStake: marketEntries.totalStake,
-        })
-        .from(marketEntries)
-        .where(eq(marketEntries.marketId, action.marketId));
-
-      const marketData: MarketWithEntries = {
-        ...market,
-        entries,
-      };
-
-      const agentData: AgentConfigData = {
-        id: agent.id,
-        userId: agent.userId,
-        displayName: agent.displayName,
-        username: agent.username,
-        bio: agent.bio ?? "",
-        archetype: agent.archetype,
-        specialties: agent.specialties ?? [],
-        boldness: parseFloat(String(agent.boldness)),
-        contrarianism: parseFloat(String(agent.contrarianism)),
-        recencyWeight: parseFloat(String(agent.recencyWeight)),
-        prestigeBias: parseFloat(String(agent.prestigeBias)),
-        confidenceCal: parseFloat(String(agent.confidenceCal)),
-        riskAppetite: parseFloat(String(agent.riskAppetite)),
-        consensusSensitivity: parseFloat(String(agent.consensusSensitivity)),
-        activityRate: parseFloat(String(agent.activityRate)),
-        isActive: agent.isActive,
-      };
-
-      rationale = await generateRationale(agentData, marketData, decision);
-    }
-
     // Place the bet (same transactional logic as placeMarketBet)
     await db.transaction(async (tx) => {
       const [updatedProfile] = await tx
@@ -279,7 +235,7 @@ async function executeAction(action: {
           status: "active",
           agentId: agent.id,
           confidence: decision.confidence?.toFixed(2) ?? null,
-          betMetadata: buildAgentBetMetadata(action.id, rationale),
+          betMetadata: buildAgentBetMetadata(action.id),
         })
         .returning();
 
