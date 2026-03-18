@@ -18,14 +18,17 @@ import {
 import { eq, and, sql, gte, desc, inArray } from "drizzle-orm";
 import { log } from "../log";
 import { computePrediction } from "./decisionEngine";
+import { computeWorldMarketPrediction } from "./worldMarketEngine";
 import type {
   AgentConfigData,
   MarketWithEntries,
   TrendSignals,
   CrowdSplit,
+  PredictionDecision,
 } from "./types";
 import {
   ARCHETYPE_DELAY_RANGES,
+  WORLD_MARKET_DELAY_RANGES,
   QUIET_HOUR_START_SAST,
   QUIET_HOUR_END_SAST,
   BASE_STAKE_AMOUNT,
@@ -37,6 +40,11 @@ import {
   MARKETS_PER_SWEEP,
   CONVICTION_SCORE_THRESHOLD_PCT,
   CONVICTION_MAX_PER_MARKET,
+  AGENT_STAKE_OVERRIDES,
+  WORLD_REEVAL_INTERVAL_DAYS,
+  WORLD_CONVICTION_INTERVAL_DAYS,
+  WORLD_CONVICTION_CHANCE,
+  WORLD_CONVICTION_MIN_DAYS_OPEN,
 } from "./constants";
 
 const AGENT_RUNNER_LOCK_KEY = 5_201;
@@ -179,6 +187,8 @@ async function runAgentBatchOnce(): Promise<{
       category: predictionMarkets.category,
       personId: predictionMarkets.personId,
       endAt: predictionMarkets.endAt,
+      teaser: predictionMarkets.teaser,
+      resolutionCriteria: predictionMarkets.resolutionCriteria,
     })
     .from(predictionMarkets)
     .where(
@@ -224,21 +234,84 @@ async function runAgentBatchOnce(): Promise<{
     const agentData = toAgentData(agent);
 
     for (const market of sweepMarkets) {
-      const alreadyExists = await db
-        .select({ id: scheduledAgentActions.id })
-        .from(scheduledAgentActions)
-        .where(
-          and(
-            eq(scheduledAgentActions.agentId, agent.id),
-            eq(scheduledAgentActions.marketId, market.id),
-            sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`
-          )
-        )
-        .limit(1);
+      const isCommunity = market.marketType === "community";
 
-      if (alreadyExists.length > 0) {
-        skipped++;
-        continue;
+      // --- Duplicate / re-evaluation gate ---
+      if (isCommunity) {
+        // World Markets: check for existing actions including world_abstained
+        const existingActions = await db
+          .select({
+            id: scheduledAgentActions.id,
+            status: scheduledAgentActions.status,
+            executedAt: scheduledAgentActions.executedAt,
+          })
+          .from(scheduledAgentActions)
+          .where(
+            and(
+              eq(scheduledAgentActions.agentId, agent.id),
+              eq(scheduledAgentActions.marketId, market.id),
+              sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed', 'world_abstained')`
+            )
+          )
+          .limit(1);
+
+        if (existingActions.length > 0) {
+          const existing = existingActions[0];
+
+          if (existing.status === "world_abstained") {
+            // Allow re-eval if abstention is older than WORLD_REEVAL_INTERVAL_DAYS
+            const ageMs = Date.now() - (existing.executedAt?.getTime() ?? Date.now());
+            const ageDays = ageMs / (1000 * 60 * 60 * 24);
+            if (ageDays < WORLD_REEVAL_INTERVAL_DAYS) {
+              skipped++;
+              continue;
+            }
+            // Stale abstain — delete so a fresh evaluation can proceed
+            await db.delete(scheduledAgentActions).where(eq(scheduledAgentActions.id, existing.id));
+          } else if (existing.status === "executed") {
+            // Conviction re-eval: allow after WORLD_CONVICTION_INTERVAL_DAYS
+            const ageMs = Date.now() - (existing.executedAt?.getTime() ?? Date.now());
+            const ageDays = ageMs / (1000 * 60 * 60 * 24);
+            const daysToResolution = market.endAt
+              ? (market.endAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+              : 0;
+            const agentRisk = parseFloat(String(agent.riskAppetite));
+            if (
+              ageDays >= WORLD_CONVICTION_INTERVAL_DAYS &&
+              daysToResolution > WORLD_CONVICTION_MIN_DAYS_OPEN &&
+              agentRisk > 0.6 &&
+              Math.random() < WORLD_CONVICTION_CHANCE
+            ) {
+              log(`[AgentRunner] World conviction re-eval: ${agent.displayName} on ${market.id.slice(0, 8)}`);
+              // Allow fall-through to GPT evaluation
+            } else {
+              skipped++;
+              continue;
+            }
+          } else {
+            // pending or in_progress — skip
+            skipped++;
+            continue;
+          }
+        }
+      } else {
+        // Native markets: original duplicate check
+        const alreadyExists = await db
+          .select({ id: scheduledAgentActions.id })
+          .from(scheduledAgentActions)
+          .where(
+            and(
+              eq(scheduledAgentActions.agentId, agent.id),
+              eq(scheduledAgentActions.marketId, market.id),
+              sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`
+            )
+          )
+          .limit(1);
+
+        if (alreadyExists.length > 0) {
+          skipped++;
+          continue;
+        }
       }
 
       const entries = await db
@@ -262,24 +335,46 @@ async function runAgentBatchOnce(): Promise<{
         entries,
       };
 
-      const signals = await getTrendSignals(market.personId);
-      const crowd = computeCrowdSplit(entries);
+      // --- Route decision by market type ---
+      let decision: PredictionDecision;
 
-      let entrySignals: Map<string, TrendSignals> | undefined;
-      if ((market.marketType === "h2h" || market.marketType === "gainer") && entries.some(e => e.personId)) {
-        entrySignals = new Map();
-        for (const entry of entries) {
-          if (entry.personId) {
-            entrySignals.set(entry.id, await getTrendSignals(entry.personId));
+      if (isCommunity) {
+        decision = await computeWorldMarketPrediction(agentData, marketData, entries);
+      } else {
+        const signals = await getTrendSignals(market.personId);
+        const crowd = computeCrowdSplit(entries);
+
+        let entrySignals: Map<string, TrendSignals> | undefined;
+        if ((market.marketType === "h2h" || market.marketType === "gainer") && entries.some(e => e.personId)) {
+          entrySignals = new Map();
+          for (const entry of entries) {
+            if (entry.personId) {
+              entrySignals.set(entry.id, await getTrendSignals(entry.personId));
+            }
           }
         }
-      }
 
-      const decision = computePrediction(agentData, marketData, signals, crowd, undefined, entrySignals);
+        decision = computePrediction(agentData, marketData, signals, crowd, undefined, entrySignals);
+      }
 
       if (decision.abstain) {
         abstained++;
         log(`[AgentRunner] ${agent.displayName} abstained on ${market.id.slice(0, 8)}: ${decision.abstainReason}`);
+
+        // Track World Market abstentions to prevent re-calling GPT every sweep
+        if (isCommunity) {
+          await db.insert(scheduledAgentActions).values({
+            agentId: agent.id,
+            marketId: market.id,
+            entryId: entries[0]?.id ?? "",
+            actionType: "world_eval",
+            decisionPayload: decision,
+            stakeAmount: 0,
+            executeAfter: now,
+            executedAt: now,
+            status: "world_abstained",
+          });
+        }
         continue;
       }
 
@@ -289,8 +384,21 @@ async function runAgentBatchOnce(): Promise<{
         continue;
       }
 
-      const executeAfter = computeExecuteAfter(agent.archetype);
-      const stakeAmount = computeStakeAmount(decision.confidence ?? 0.5);
+      // Use World Market delay ranges for community markets
+      const executeAfter = isCommunity
+        ? computeWorldMarketExecuteAfter(agent.archetype)
+        : computeExecuteAfter(agent.archetype);
+
+      let stakeAmount = computeStakeAmount(decision.confidence ?? 0.5);
+
+      // Agent-specific stake overrides
+      const override = AGENT_STAKE_OVERRIDES[agent.username];
+      if (override) {
+        if (override.multiplier) stakeAmount = Math.round(stakeAmount * override.multiplier);
+        if (override.cap) stakeAmount = Math.min(stakeAmount, override.cap);
+        if (override.floor) stakeAmount = Math.max(stakeAmount, override.floor);
+      }
+      stakeAmount = Math.max(BASE_STAKE_AMOUNT, Math.min(MAX_AGENT_STAKE * 3, stakeAmount));
 
       await db.insert(scheduledAgentActions).values({
         agentId: agent.id,
@@ -304,7 +412,7 @@ async function runAgentBatchOnce(): Promise<{
       });
 
       scheduled++;
-      log(`[AgentRunner] ${agent.displayName} → ${market.title?.slice(0, 30)} (entry=${decision.entryId.slice(0, 8)}, confidence=${decision.confidence?.toFixed(2)}, stake=${stakeAmount}, execAfter=${executeAfter.toISOString()})`);
+      log(`[AgentRunner] ${agent.displayName} → ${market.title?.slice(0, 30)} (entry=${decision.entryId.slice(0, 8)}, confidence=${decision.confidence?.toFixed(2)}, stake=${stakeAmount}, source=${decision.source ?? "deterministic"}, execAfter=${executeAfter.toISOString()})`);
     }
   }
 
@@ -593,11 +701,18 @@ function computeCrowdSplit(
 
 function computeExecuteAfter(archetype: string): Date {
   const [min, max] = ARCHETYPE_DELAY_RANGES[archetype] ?? [3_600, 21_600];
-  const delaySec = Math.floor(Math.random() * (max - min) + min);
+  return applyQuietHours(min, max);
+}
+
+function computeWorldMarketExecuteAfter(archetype: string): Date {
+  const [min, max] = WORLD_MARKET_DELAY_RANGES[archetype] ?? [3_600, 86_400];
+  return applyQuietHours(min, max);
+}
+
+function applyQuietHours(minSec: number, maxSec: number): Date {
+  const delaySec = Math.floor(Math.random() * (maxSec - minSec) + minSec);
   const executeAt = new Date(Date.now() + delaySec * 1000);
 
-  // SAST quiet window: push to 07:00 SAST if in quiet hours
-  // Use fractional hours so the 22:00–22:29 SAST window is also caught
   const sastHour = (executeAt.getUTCHours() + executeAt.getUTCMinutes() / 60 + 2) % 24;
   if (sastHour >= QUIET_HOUR_START_SAST || sastHour < QUIET_HOUR_END_SAST) {
     const nextMorning = new Date(executeAt);

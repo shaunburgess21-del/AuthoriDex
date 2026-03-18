@@ -29,6 +29,8 @@ export interface MarketWithEntries {
   category: string | null;
   personId: string | null;
   endAt: Date | null;
+  teaser?: string | null;
+  resolutionCriteria?: string[] | null;
   entries: MarketEntryData[];
 }
 
@@ -54,10 +56,12 @@ export interface CrowdSplit {
 
 export interface PredictionDecision {
   abstain: boolean;
-  abstainReason?: "domain" | "activity_gate" | "low_edge" | "random";
+  abstainReason?: "domain" | "activity_gate" | "low_edge" | "random" | "world_abstain" | "api_error";
   entryId?: string;
   rawProbability?: number;
   confidence?: number;
+  source?: "deterministic" | "gpt-5.4-world";
+  reasoning?: string;
 }
 
 export interface ScheduledActionData {
