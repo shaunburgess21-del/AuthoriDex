@@ -7803,6 +7803,91 @@ Only return the JSON object.`;
     }
   });
 
+  app.post("/api/admin/trending-polls/:id/generate-ai-draft", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { field } = req.body;
+
+      if (!field || !["subjectText", "description"].includes(field)) {
+        return res.status(400).json({ error: "field must be 'subjectText' or 'description'" });
+      }
+
+      const [poll] = await db.select().from(trendingPolls).where(eq(trendingPolls.id, id)).limit(1);
+      if (!poll) return res.status(404).json({ error: "Poll not found" });
+
+      let linkedPerson: { name: string; trendScore: number | null; category: string | null } | null = null;
+      if (poll.personId) {
+        const [person] = await db.select({
+          name: trendingPeople.name,
+          trendScore: trendingPeople.trendScore,
+          category: trendingPeople.category,
+        }).from(trendingPeople).where(eq(trendingPeople.id, poll.personId)).limit(1);
+        if (person) linkedPerson = person;
+      }
+
+      const newsContext = await fetchTrendingNewsContext(poll.headline || "");
+      const headlinesBlock = newsContext?.sources?.length
+        ? `\nRecent news headlines for context:\n${newsContext.sources.map(s => `- ${s.title}`).join("\n")}`
+        : "";
+      const linkedPersonBlock = linkedPerson
+        ? `\nLinked celebrity: ${linkedPerson.name} (trend score: ${linkedPerson.trendScore?.toLocaleString() ?? "N/A"}, category: ${linkedPerson.category ?? "N/A"})`
+        : "";
+      const existingContent = poll[field as keyof typeof poll];
+      const existingBlock = existingContent
+        ? `\nCurrent content for reference (improve upon this):\n"${existingContent}"`
+        : "";
+
+      const systemPrompt = `You are writing content for a sentiment poll on VoxDex, a trend-tracking and prediction platform. Sentiment polls let users vote Support, Neutral, or Oppose on current topics. Write plain text only — no markdown, no headers, no bullets, no bold.`;
+
+      let userPrompt: string;
+      let maxTokens: number;
+
+      if (field === "subjectText") {
+        userPrompt = `Poll headline: "${poll.headline}"
+Category: ${poll.category || "General"}${linkedPersonBlock}${headlinesBlock}${existingBlock}
+
+Write a compelling 1-3 sentence question or statement for this sentiment poll card. It should clearly frame the debate and invite users to weigh in with Support, Neutral, or Oppose. Be provocative but fair — present the tension without taking a side.`;
+        maxTokens = 250;
+      } else {
+        userPrompt = `Poll headline: "${poll.headline}"
+Category: ${poll.category || "General"}
+Subject/Question: "${poll.subjectText || ""}"${linkedPersonBlock}${headlinesBlock}${existingBlock}
+
+Write a detailed, multi-paragraph context section for this sentiment poll. This will be shown on the poll's detail page under a "Context" heading. Cover:
+- Background and history of the topic
+- Key perspectives on both sides of the debate
+- Recent developments and why this matters now
+- Important facts and figures where relevant
+
+Aim for 3-5 substantive paragraphs. Be factual, balanced, and informative. Help readers understand the full picture so they can form their own opinion. Use a journalistic, engaging tone.`;
+        maxTokens = 1000;
+      }
+
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+      });
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        max_tokens: maxTokens,
+        temperature: 0.7,
+      });
+
+      const content = response.choices[0]?.message?.content?.trim() || "";
+      if (!content) return res.status(500).json({ error: "AI returned empty content" });
+
+      console.log(`[Sentiment Polls] AI draft generated for poll ${id}, field=${field}`);
+      res.json({ content });
+    } catch (error: any) {
+      console.error("[Sentiment Polls] AI draft error:", error?.message || error);
+      res.status(500).json({ error: "Failed to generate draft" });
+    }
+  });
+
   app.post("/api/admin/trending-polls/sync-image-urls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const polls = await db.select({
@@ -8653,6 +8738,85 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error deleting opinion poll:", error.message);
       res.status(500).json({ error: "Failed to delete opinion poll" });
+    }
+  });
+
+  app.post("/api/admin/opinion-polls/:id/generate-ai-draft", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { field } = req.body;
+
+      if (!field || !["description", "summary"].includes(field)) {
+        return res.status(400).json({ error: "field must be 'description' or 'summary'" });
+      }
+
+      const [poll] = await db.select().from(opinionPolls).where(eq(opinionPolls.id, id)).limit(1);
+      if (!poll) return res.status(404).json({ error: "Poll not found" });
+
+      const options = await db.select().from(opinionPollOptions)
+        .where(eq(opinionPollOptions.pollId, id))
+        .orderBy(asc(opinionPollOptions.orderIndex));
+
+      const optionNames = options.map(o => o.name).join(", ");
+      const newsContext = await fetchTrendingNewsContext(poll.title || "");
+      const headlinesBlock = newsContext?.sources?.length
+        ? `\nRecent news headlines for context:\n${newsContext.sources.map(s => `- ${s.title}`).join("\n")}`
+        : "";
+      const existingContent = poll[field as keyof typeof poll];
+      const existingBlock = existingContent
+        ? `\nCurrent content for reference (improve upon this):\n"${existingContent}"`
+        : "";
+
+      const systemPrompt = `You are writing content for an opinion poll on VoxDex, a trend-tracking and prediction platform. Opinion polls let users pick their favorite option from a list. Write plain text only — no markdown, no headers, no bullets, no bold.`;
+
+      let userPrompt: string;
+      let maxTokens: number;
+
+      if (field === "description") {
+        userPrompt = `Poll title: "${poll.title}"
+Category: ${poll.category || "General"}
+Options: ${optionNames}${headlinesBlock}${existingBlock}
+
+Write a compelling 1-3 sentence question or framing statement for this opinion poll card. It should clearly present the choice and invite engagement. Make it conversational and intriguing.`;
+        maxTokens = 250;
+      } else {
+        userPrompt = `Poll title: "${poll.title}"
+Category: ${poll.category || "General"}
+Options: ${optionNames}
+${poll.description ? `Subject/Question: "${poll.description}"` : ""}${headlinesBlock}${existingBlock}
+
+Write a detailed, multi-paragraph context section for this opinion poll. This will be shown on the poll's detail page under a "Context" heading. Cover:
+- Background on the topic and why it's interesting
+- What makes each option compelling or noteworthy
+- Relevant context, history, or recent developments
+- Why this debate matters to people
+
+Aim for 3-5 substantive paragraphs. Be informative, engaging, and balanced. Help readers appreciate the nuances of each option so they can make a thoughtful choice.`;
+        maxTokens = 1000;
+      }
+
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+      });
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        max_tokens: maxTokens,
+        temperature: 0.7,
+      });
+
+      const content = response.choices[0]?.message?.content?.trim() || "";
+      if (!content) return res.status(500).json({ error: "AI returned empty content" });
+
+      console.log(`[Opinion Polls] AI draft generated for poll ${id}, field=${field}`);
+      res.json({ content });
+    } catch (error: any) {
+      console.error("[Opinion Polls] AI draft error:", error?.message || error);
+      res.status(500).json({ error: "Failed to generate draft" });
     }
   });
 
@@ -9849,6 +10013,79 @@ Only return the JSON object.`;
     } catch (error) {
       console.error("[Open Markets] Admin detail error:", error);
       res.status(500).json({ error: "Failed to fetch market" });
+    }
+  });
+
+  app.post("/api/admin/open-markets/:id/generate-summary", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+
+      const [market] = await db.select().from(predictionMarkets)
+        .where(and(eq(predictionMarkets.id, id), eq(predictionMarkets.marketType, "community")))
+        .limit(1);
+      if (!market) return res.status(404).json({ error: "Market not found" });
+
+      const entries = await db.select().from(marketEntries)
+        .where(eq(marketEntries.marketId, id))
+        .orderBy(asc(marketEntries.displayOrder));
+
+      let linkedPerson: { name: string; trendScore: number | null; category: string | null } | null = null;
+      if (market.personId) {
+        const [person] = await db.select({
+          name: trendingPeople.name,
+          trendScore: trendingPeople.trendScore,
+          category: trendingPeople.category,
+        }).from(trendingPeople).where(eq(trendingPeople.id, market.personId)).limit(1);
+        if (person) linkedPerson = person;
+      }
+
+      const newsContext = await fetchTrendingNewsContext(market.title || "");
+      const headlinesBlock = newsContext?.sources?.length
+        ? `\nRecent news headlines for context:\n${newsContext.sources.map(s => `- ${s.title}`).join("\n")}`
+        : "";
+
+      const outcomesStr = entries.map(e => e.label).join(", ");
+      const resolutionCriteria = Array.isArray(market.resolutionCriteria) && market.resolutionCriteria.length > 0
+        ? market.resolutionCriteria.join("; ")
+        : "Not specified";
+      const resolutionDate = market.endAt ? new Date(market.endAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "Not specified";
+      const linkedPersonBlock = linkedPerson
+        ? `\nLinked to: ${linkedPerson.name} (current trend score: ${linkedPerson.trendScore?.toLocaleString() ?? "N/A"}, category: ${linkedPerson.category ?? "N/A"})`
+        : "";
+
+      const systemPrompt = `You are writing a brief market context summary for a prediction market on VoxDex, a trend-tracking and prediction platform. Write plain text only — no markdown, no headers, no bullets, no bold.`;
+
+      const userPrompt = `Market: "${market.title}"
+Category: ${market.category || "General"}
+${market.teaser ? `Teaser: "${market.teaser}"` : ""}
+Resolution Date: ${resolutionDate}
+Resolution Criteria: ${resolutionCriteria}
+Outcomes: ${outcomesStr}${linkedPersonBlock}${headlinesBlock}
+
+Write a 2-5 sentence summary that helps users make an informed prediction. Include relevant background context, key factors that could influence the outcome, and any recent developments. Be factual and neutral — do not recommend a side.`;
+
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+      });
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        max_tokens: 350,
+        temperature: 0.7,
+      });
+
+      const summary = response.choices[0]?.message?.content?.trim() || "";
+      if (!summary) return res.status(500).json({ error: "AI returned an empty summary" });
+
+      console.log(`[World Markets] AI summary generated for market ${id} ("${market.title?.slice(0, 50)}")`);
+      res.json({ summary });
+    } catch (error: any) {
+      console.error("[World Markets] AI summary generation error:", error?.message || error);
+      res.status(500).json({ error: "Failed to generate summary" });
     }
   });
 

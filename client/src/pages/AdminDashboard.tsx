@@ -52,6 +52,7 @@ import {
   ChevronDown,
   ChevronUp,
   Upload,
+  Sparkles,
 } from "lucide-react";
 import { AdminUnderratedOverrated } from "@/components/admin/AdminUnderratedOverrated";
 import { AdminCurateProfile } from "@/components/admin/AdminCurateProfile";
@@ -542,6 +543,27 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
   const [entrySearches, setEntrySearches] = useState<Record<number, string>>({});
   const [entrySearchResults, setEntrySearchResults] = useState<Record<number, any[]>>({});
   const [showEntryDropdown, setShowEntryDropdown] = useState<Record<number, boolean>>({});
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const handleGenerateSummary = async () => {
+    if (!editMarket?.id) return;
+    setIsGeneratingSummary(true);
+    try {
+      const res = await fetchWithAuth(`/api/admin/open-markets/${editMarket.id}/generate-summary`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to generate summary" }));
+        throw new Error(err.error || "Failed to generate summary");
+      }
+      const data = await res.json();
+      setSummary(data.summary);
+      toast({ title: "Summary drafted", description: "Review and edit before saving." });
+    } catch (err: any) {
+      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
 
   useEffect(() => {
     const generated = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
@@ -618,7 +640,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
       }
       // Fetch entries from dedicated admin endpoint for accurate edit state
       if (editMarket.id && !editMarket.entries?.length) {
-        fetch(`/api/admin/open-markets/${editMarket.id}`, { credentials: "include" })
+        fetchWithAuth(`/api/admin/open-markets/${editMarket.id}`)
           .then(r => r.ok ? r.json() : null)
           .then(data => {
             if (data?.entries?.length) {
@@ -890,7 +912,26 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
             />
           </div>
           <div className="space-y-2">
-            <Label>Summary</Label>
+            <div className="flex items-center justify-between">
+              <Label>Summary</Label>
+              {editMarket && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  disabled={isGeneratingSummary}
+                  onClick={handleGenerateSummary}
+                  data-testid="button-generate-summary"
+                >
+                  {isGeneratingSummary ? (
+                    <><Loader2 className="h-3 w-3 animate-spin" /> Generating...</>
+                  ) : (
+                    <><Sparkles className="h-3 w-3" /> Draft with AI</>
+                  )}
+                </Button>
+              )}
+            </div>
             <Textarea 
               value={summary} 
               onChange={(e) => setSummary(e.target.value)} 
@@ -1519,6 +1560,10 @@ export default function AdminDashboard() {
   const [opOptionSearchResults, setOpOptionSearchResults] = useState<any[][]>([[], [], []]);
   const [opOptionShowDropdown, setOpOptionShowDropdown] = useState<boolean[]>([false, false, false]);
   const [opinionPollRelatedPeople, setOpinionPollRelatedPeople] = useState<{ id: string; name: string }[]>([]);
+  const [isGeneratingPollSubject, setIsGeneratingPollSubject] = useState(false);
+  const [isGeneratingPollDescription, setIsGeneratingPollDescription] = useState(false);
+  const [isGeneratingOpSubject, setIsGeneratingOpSubject] = useState(false);
+  const [isGeneratingOpDescription, setIsGeneratingOpDescription] = useState(false);
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS (React rules of hooks)
   
@@ -2774,6 +2819,54 @@ export default function AdminDashboard() {
       updatePollMutation.mutate({ id: editingPoll.id, data: dataToSend });
     } else {
       createPollMutation.mutate(dataToSend);
+    }
+  };
+
+  const handleGeneratePollDraft = async (field: "subjectText" | "description") => {
+    if (!editingPoll?.id) return;
+    const setLoading = field === "subjectText" ? setIsGeneratingPollSubject : setIsGeneratingPollDescription;
+    setLoading(true);
+    try {
+      const res = await fetchWithAuth(`/api/admin/trending-polls/${editingPoll.id}/generate-ai-draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to generate draft" }));
+        throw new Error(err.error || "Failed to generate draft");
+      }
+      const data = await res.json();
+      setPollForm(prev => ({ ...prev, [field]: data.content }));
+      toast({ title: "Draft generated", description: "Review and edit before saving." });
+    } catch (err: any) {
+      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGenerateOpinionPollDraft = async (field: "description" | "summary") => {
+    if (!editingOpinionPoll?.id) return;
+    const setLoading = field === "description" ? setIsGeneratingOpSubject : setIsGeneratingOpDescription;
+    setLoading(true);
+    try {
+      const res = await fetchWithAuth(`/api/admin/opinion-polls/${editingOpinionPoll.id}/generate-ai-draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to generate draft" }));
+        throw new Error(err.error || "Failed to generate draft");
+      }
+      const data = await res.json();
+      setOpinionPollForm(prev => ({ ...prev, [field]: data.content }));
+      toast({ title: "Draft generated", description: "Review and edit before saving." });
+    } catch (err: any) {
+      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -6575,20 +6668,57 @@ export default function AdminDashboard() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Description</Label>
-              <Input
+              <div className="flex items-center justify-between">
+                <Label>Subject / Question</Label>
+                {editingOpinionPoll && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    disabled={isGeneratingOpSubject}
+                    onClick={() => handleGenerateOpinionPollDraft("description")}
+                  >
+                    {isGeneratingOpSubject ? (
+                      <><Loader2 className="h-3 w-3 animate-spin" /> Generating...</>
+                    ) : (
+                      <><Sparkles className="h-3 w-3" /> Draft with AI</>
+                    )}
+                  </Button>
+                )}
+              </div>
+              <Textarea
                 value={opinionPollForm.description}
                 onChange={(e) => setOpinionPollForm(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Optional description"
+                placeholder="The main question shown on the poll card"
+                className="resize-none"
                 data-testid="input-opinion-poll-description"
               />
             </div>
             <div className="space-y-2">
-              <Label>Summary (detail page context)</Label>
+              <div className="flex items-center justify-between">
+                <Label>Description (optional)</Label>
+                {editingOpinionPoll && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    disabled={isGeneratingOpDescription}
+                    onClick={() => handleGenerateOpinionPollDraft("summary")}
+                  >
+                    {isGeneratingOpDescription ? (
+                      <><Loader2 className="h-3 w-3 animate-spin" /> Generating...</>
+                    ) : (
+                      <><Sparkles className="h-3 w-3" /> Draft with AI</>
+                    )}
+                  </Button>
+                )}
+              </div>
               <Textarea
                 value={opinionPollForm.summary}
                 onChange={(e) => setOpinionPollForm(prev => ({ ...prev, summary: e.target.value }))}
-                placeholder="Extended context shown on the poll's dedicated page (optional)"
+                placeholder="Additional context or details"
                 rows={3}
                 data-testid="input-opinion-poll-summary"
               />
@@ -6856,7 +6986,25 @@ export default function AdminDashboard() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="poll-subject">Subject / Question</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="poll-subject">Subject / Question</Label>
+                {editingPoll && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    disabled={isGeneratingPollSubject}
+                    onClick={() => handleGeneratePollDraft("subjectText")}
+                  >
+                    {isGeneratingPollSubject ? (
+                      <><Loader2 className="h-3 w-3 animate-spin" /> Generating...</>
+                    ) : (
+                      <><Sparkles className="h-3 w-3" /> Draft with AI</>
+                    )}
+                  </Button>
+                )}
+              </div>
               <Textarea
                 id="poll-subject"
                 value={pollForm.subjectText}
@@ -6867,7 +7015,25 @@ export default function AdminDashboard() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="poll-description">Description (optional)</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="poll-description">Description (optional)</Label>
+                {editingPoll && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    disabled={isGeneratingPollDescription}
+                    onClick={() => handleGeneratePollDraft("description")}
+                  >
+                    {isGeneratingPollDescription ? (
+                      <><Loader2 className="h-3 w-3 animate-spin" /> Generating...</>
+                    ) : (
+                      <><Sparkles className="h-3 w-3" /> Draft with AI</>
+                    )}
+                  </Button>
+                )}
+              </div>
               <Textarea
                 id="poll-description"
                 value={pollForm.description}
