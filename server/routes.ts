@@ -7806,7 +7806,7 @@ Only return the JSON object.`;
   app.post("/api/admin/trending-polls/:id/generate-ai-draft", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { field } = req.body;
+      const { field, currentContent } = req.body;
 
       if (!field || !["subjectText", "description"].includes(field)) {
         return res.status(400).json({ error: "field must be 'subjectText' or 'description'" });
@@ -7832,7 +7832,9 @@ Only return the JSON object.`;
       const linkedPersonBlock = linkedPerson
         ? `\nLinked celebrity: ${linkedPerson.name} (trend score: ${linkedPerson.trendScore?.toLocaleString() ?? "N/A"}, category: ${linkedPerson.category ?? "N/A"})`
         : "";
-      const existingContent = poll[field as keyof typeof poll];
+      const requestContent = typeof currentContent === "string" ? currentContent.trim() : "";
+      const dbContent = String(poll[field as keyof typeof poll] || "").trim();
+      const existingContent = requestContent || dbContent;
       const existingBlock = existingContent
         ? `\nCurrent content for reference (improve upon this):\n"${existingContent}"`
         : "";
@@ -8744,7 +8746,7 @@ Aim for 3-5 substantive paragraphs. Be factual, balanced, and informative. Help 
   app.post("/api/admin/opinion-polls/:id/generate-ai-draft", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { field } = req.body;
+      const { field, currentContent } = req.body;
 
       if (!field || !["description", "summary"].includes(field)) {
         return res.status(400).json({ error: "field must be 'description' or 'summary'" });
@@ -8762,7 +8764,9 @@ Aim for 3-5 substantive paragraphs. Be factual, balanced, and informative. Help 
       const headlinesBlock = newsContext?.sources?.length
         ? `\nRecent news headlines for context:\n${newsContext.sources.map(s => `- ${s.title}`).join("\n")}`
         : "";
-      const existingContent = poll[field as keyof typeof poll];
+      const requestContent = typeof currentContent === "string" ? currentContent.trim() : "";
+      const dbContent = String(poll[field as keyof typeof poll] || "").trim();
+      const existingContent = requestContent || dbContent;
       const existingBlock = existingContent
         ? `\nCurrent content for reference (improve upon this):\n"${existingContent}"`
         : "";

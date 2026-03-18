@@ -538,6 +538,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
   const [marketCelebResults, setMarketCelebResults] = useState<any[]>([]);
   const [showMarketCelebDropdown, setShowMarketCelebDropdown] = useState(false);
   const [selectedMarketCelebName, setSelectedMarketCelebName] = useState("");
+  const latestEditMarketIdRef = useRef<string | null>(null);
   const [relatedPeople, setRelatedPeople] = useState<{ id: string; name: string }[]>([]);
   const [expandedEntryImage, setExpandedEntryImage] = useState<number | null>(null);
   const [entrySearches, setEntrySearches] = useState<Record<number, string>>({});
@@ -592,6 +593,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
   }, [openMarketType]);
 
   useEffect(() => {
+    latestEditMarketIdRef.current = editMarket?.id ?? null;
     if (editMarket) {
       setTitle(editMarket.title || "");
       setSlug(editMarket.slug || "");
@@ -640,9 +642,11 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
       }
       // Fetch entries from dedicated admin endpoint for accurate edit state
       if (editMarket.id && !editMarket.entries?.length) {
-        fetchWithAuth(`/api/admin/open-markets/${editMarket.id}`)
+        const requestedMarketId = editMarket.id;
+        fetchWithAuth(`/api/admin/open-markets/${requestedMarketId}`)
           .then(r => r.ok ? r.json() : null)
           .then(data => {
+            if (latestEditMarketIdRef.current !== requestedMarketId) return;
             if (data?.entries?.length) {
               setEntries(data.entries.map((e: any) => ({
                 label: e.label || "",
@@ -2825,12 +2829,13 @@ export default function AdminDashboard() {
   const handleGeneratePollDraft = async (field: "subjectText" | "description") => {
     if (!editingPoll?.id) return;
     const setLoading = field === "subjectText" ? setIsGeneratingPollSubject : setIsGeneratingPollDescription;
+    const currentContent = field === "subjectText" ? pollForm.subjectText : pollForm.description;
     setLoading(true);
     try {
       const res = await fetchWithAuth(`/api/admin/trending-polls/${editingPoll.id}/generate-ai-draft`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ field }),
+        body: JSON.stringify({ field, currentContent }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Failed to generate draft" }));
@@ -2849,12 +2854,13 @@ export default function AdminDashboard() {
   const handleGenerateOpinionPollDraft = async (field: "description" | "summary") => {
     if (!editingOpinionPoll?.id) return;
     const setLoading = field === "description" ? setIsGeneratingOpSubject : setIsGeneratingOpDescription;
+    const currentContent = field === "description" ? opinionPollForm.description : opinionPollForm.summary;
     setLoading(true);
     try {
       const res = await fetchWithAuth(`/api/admin/opinion-polls/${editingOpinionPoll.id}/generate-ai-draft`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ field }),
+        body: JSON.stringify({ field, currentContent }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Failed to generate draft" }));

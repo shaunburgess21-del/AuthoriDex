@@ -629,41 +629,60 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
   const isLoading = updownLoading || h2hLoading || gainerLoading || jackpotLoading || openMarketsLoading;
 
   const weeklyMarket = useMemo((): PredictionMarket | undefined => {
-    const dbMarkets = (nativeUpdownData || []).filter((m: any) => m.visibility === "live");
-    for (const m of dbMarkets) {
-      if (m.personId !== personId) continue;
-      const person = m.person || {};
-      const entries = m.entries || [];
-      const upEntry = entries.find((e: any) => e.label?.toLowerCase() === "up");
-      const downEntry = entries.find((e: any) => e.label?.toLowerCase() === "down");
-      const upStake = Number(upEntry?.totalStake || 0);
-      const downStake = Number(downEntry?.totalStake || 0);
-      const total = upStake + downStake || 1;
-      const upPercent = Math.round((upStake / total) * 100);
-      const upMultiplier = upStake > 0 ? +(total / upStake).toFixed(1) : 2.0;
-      const downMultiplier = downStake > 0 ? +(total / downStake).toFixed(1) : 2.0;
-      const cs = Number(person.trendScore || person.fameIndex || 0);
-      const storedBaseline = m.metadata?.openingScore?.score;
-      const fallbackBaseline = cs - Math.floor(cs * (Number(person.change7d || 0) / 100));
-      const baselineScore = storedBaseline ? Number(storedBaseline) : fallbackBaseline;
-      return {
-        id: m.id,
-        personId: m.personId || "",
-        personName: person.name || m.title?.replace(/: Up or Down\?$/, "") || "Unknown",
-        personAvatar: person.avatar || "",
-        currentScore: cs,
-        baselineScore,
-        startScore: baselineScore,
-        change7d: Number(person.change7d || 0),
-        upMultiplier,
-        downMultiplier,
-        endTime: "Sun 23:59 UTC",
-        totalPool: upStake + downStake + Number(m.seedVolume || 0),
-        upPoolPercent: upPercent || 50,
-        category: normalizeMarketCategory(m.category || person.category || "misc") as CategoryFilter,
-      };
-    }
-    return undefined;
+    const toTimestamp = (value: unknown, fallback: number) => {
+      if (!value) return fallback;
+      const ts = Date.parse(String(value));
+      return Number.isFinite(ts) ? ts : fallback;
+    };
+
+    const candidateMarkets = (nativeUpdownData || [])
+      .filter((m: any) => m.visibility === "live" && m.personId === personId)
+      .slice()
+      .sort((a: any, b: any) => {
+        const aEnd = toTimestamp(a.endAt, Number.POSITIVE_INFINITY);
+        const bEnd = toTimestamp(b.endAt, Number.POSITIVE_INFINITY);
+        if (aEnd !== bEnd) return aEnd - bEnd;
+
+        const aCreated = toTimestamp(a.createdAt, 0);
+        const bCreated = toTimestamp(b.createdAt, 0);
+        if (aCreated !== bCreated) return bCreated - aCreated;
+
+        return String(a.id || "").localeCompare(String(b.id || ""));
+      });
+
+    const m = candidateMarkets[0];
+    if (!m) return undefined;
+
+    const person = m.person || {};
+    const entries = m.entries || [];
+    const upEntry = entries.find((e: any) => e.label?.toLowerCase() === "up");
+    const downEntry = entries.find((e: any) => e.label?.toLowerCase() === "down");
+    const upStake = Number(upEntry?.totalStake || 0);
+    const downStake = Number(downEntry?.totalStake || 0);
+    const total = upStake + downStake || 1;
+    const upPercent = Math.round((upStake / total) * 100);
+    const upMultiplier = upStake > 0 ? +(total / upStake).toFixed(1) : 2.0;
+    const downMultiplier = downStake > 0 ? +(total / downStake).toFixed(1) : 2.0;
+    const cs = Number(person.trendScore || person.fameIndex || 0);
+    const storedBaseline = m.metadata?.openingScore?.score;
+    const fallbackBaseline = cs - Math.floor(cs * (Number(person.change7d || 0) / 100));
+    const baselineScore = storedBaseline ? Number(storedBaseline) : fallbackBaseline;
+    return {
+      id: m.id,
+      personId: m.personId || "",
+      personName: person.name || m.title?.replace(/: Up or Down\?$/, "") || "Unknown",
+      personAvatar: person.avatar || "",
+      currentScore: cs,
+      baselineScore,
+      startScore: baselineScore,
+      change7d: Number(person.change7d || 0),
+      upMultiplier,
+      downMultiplier,
+      endTime: "Sun 23:59 UTC",
+      totalPool: upStake + downStake + Number(m.seedVolume || 0),
+      upPoolPercent: upPercent || 50,
+      category: normalizeMarketCategory(m.category || person.category || "misc") as CategoryFilter,
+    };
   }, [nativeUpdownData, personId]);
 
   const h2hBattles = useMemo((): HeadToHeadMarket[] => {
