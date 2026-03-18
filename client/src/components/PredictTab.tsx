@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,10 +24,11 @@ import {
   Swords,
   X,
   Search,
-  HelpCircle
+  HelpCircle,
+  Loader2
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { normalizeMarketCategory } from "@shared/constants";
 
 interface PredictTabProps {
   personId: string;
@@ -59,6 +61,8 @@ interface HeadToHeadMarket {
   title: string;
   person1: { name: string; avatar: string; currentScore: number };
   person2: { name: string; avatar: string; currentScore: number };
+  person1Id?: string;
+  person2Id?: string;
   category: CategoryFilter;
   endTime: string;
   totalPool: number;
@@ -68,7 +72,7 @@ interface HeadToHeadMarket {
 interface TopGainerMarket {
   id: string;
   category: CategoryFilter;
-  leaders: { name: string; avatar: string; currentGain: number; percentGain: number }[];
+  leaders: { name: string; avatar: string; currentGain: number; percentGain: number; personId?: string }[];
   totalPool: number;
   endTime: string;
 }
@@ -86,339 +90,6 @@ interface CommunityMarket {
   relatedPersonIds?: string[];
 }
 
-const mockMarkets: PredictionMarket[] = [
-  {
-    id: "market-1",
-    personId: "1",
-    personName: "Elon Musk",
-    personAvatar: "",
-    currentScore: 515809,
-    baselineScore: 492100,
-    startScore: 492100,
-    change7d: 4.78,
-    upMultiplier: 1.7,
-    downMultiplier: 2.3,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 15420,
-    upPoolPercent: 58,
-    category: "tech",
-  },
-  {
-    id: "market-2",
-    personId: "2",
-    personName: "Taylor Swift",
-    personAvatar: "",
-    currentScore: 489234,
-    baselineScore: 505500,
-    startScore: 505500,
-    change7d: -3.2,
-    upMultiplier: 2.1,
-    downMultiplier: 1.8,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 12350,
-    upPoolPercent: 45,
-    category: "music",
-  },
-  {
-    id: "market-3",
-    personId: "3",
-    personName: "MrBeast",
-    personAvatar: "",
-    currentScore: 504734,
-    baselineScore: 531000,
-    startScore: 531000,
-    change7d: -4.95,
-    upMultiplier: 1.5,
-    downMultiplier: 2.8,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 9870,
-    upPoolPercent: 65,
-    category: "creator",
-  },
-  {
-    id: "market-4",
-    personId: "4",
-    personName: "Donald Trump",
-    personAvatar: "",
-    currentScore: 484531,
-    baselineScore: 501300,
-    startScore: 501300,
-    change7d: -3.35,
-    upMultiplier: 1.4,
-    downMultiplier: 3.2,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 22100,
-    upPoolPercent: 72,
-    category: "politics",
-  },
-  {
-    id: "market-5",
-    personId: "5",
-    personName: "Kim Kardashian",
-    personAvatar: "",
-    currentScore: 398456,
-    baselineScore: 405800,
-    startScore: 405800,
-    change7d: -1.8,
-    upMultiplier: 2.2,
-    downMultiplier: 1.7,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 8540,
-    upPoolPercent: 42,
-    category: "creator",
-  },
-  {
-    id: "market-6",
-    personId: "6",
-    personName: "Cristiano Ronaldo",
-    personAvatar: "",
-    currentScore: 445678,
-    baselineScore: 436500,
-    startScore: 436500,
-    change7d: 2.1,
-    upMultiplier: 1.9,
-    downMultiplier: 2.0,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 11200,
-    upPoolPercent: 51,
-    category: "sports",
-  },
-  {
-    id: "market-7",
-    personId: "7",
-    personName: "Jensen Huang",
-    personAvatar: "",
-    currentScore: 412300,
-    baselineScore: 381000,
-    startScore: 381000,
-    change7d: 8.2,
-    upMultiplier: 1.3,
-    downMultiplier: 3.1,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 18900,
-    upPoolPercent: 78,
-    category: "tech",
-  },
-  {
-    id: "market-8",
-    personId: "8",
-    personName: "Beyoncé",
-    personAvatar: "",
-    currentScore: 478200,
-    baselineScore: 471100,
-    startScore: 471100,
-    change7d: 1.5,
-    upMultiplier: 1.8,
-    downMultiplier: 2.1,
-    endTime: "Sun 23:59 UTC",
-    totalPool: 14200,
-    upPoolPercent: 52,
-    category: "music",
-  },
-];
-
-const headToHeadMarkets: HeadToHeadMarket[] = [
-  {
-    id: "h2h-1",
-    title: "Drake vs Kendrick",
-    person1: { name: "Drake", avatar: "", currentScore: 425600 },
-    person2: { name: "Kendrick Lamar", avatar: "", currentScore: 398200 },
-    category: "music",
-    endTime: "Sun 23:59 UTC",
-    totalPool: 28450,
-    person1Percent: 42,
-  },
-  {
-    id: "h2h-2",
-    title: "Musk vs Zuckerberg",
-    person1: { name: "Elon Musk", avatar: "", currentScore: 515809 },
-    person2: { name: "Mark Zuckerberg", avatar: "", currentScore: 312400 },
-    category: "tech",
-    endTime: "Sun 23:59 UTC",
-    totalPool: 19200,
-    person1Percent: 68,
-  },
-  {
-    id: "h2h-3",
-    title: "Swift vs Beyoncé",
-    person1: { name: "Taylor Swift", avatar: "", currentScore: 489234 },
-    person2: { name: "Beyoncé", avatar: "", currentScore: 478200 },
-    category: "music",
-    endTime: "Sun 23:59 UTC",
-    totalPool: 15780,
-    person1Percent: 55,
-  },
-  {
-    id: "h2h-4",
-    title: "Ronaldo vs Messi",
-    person1: { name: "Cristiano Ronaldo", avatar: "", currentScore: 445678 },
-    person2: { name: "Lionel Messi", avatar: "", currentScore: 432100 },
-    category: "sports",
-    endTime: "Sun 23:59 UTC",
-    totalPool: 34100,
-    person1Percent: 48,
-  },
-  {
-    id: "h2h-5",
-    title: "Biden vs Trump",
-    person1: { name: "Joe Biden", avatar: "", currentScore: 298400 },
-    person2: { name: "Donald Trump", avatar: "", currentScore: 484531 },
-    category: "politics",
-    endTime: "Sun 23:59 UTC",
-    totalPool: 45200,
-    person1Percent: 38,
-  },
-  {
-    id: "h2h-6",
-    title: "Bezos vs Musk",
-    person1: { name: "Jeff Bezos", avatar: "", currentScore: 287600 },
-    person2: { name: "Elon Musk", avatar: "", currentScore: 515809 },
-    category: "business",
-    endTime: "Sun 23:59 UTC",
-    totalPool: 21800,
-    person1Percent: 35,
-  },
-];
-
-const topGainerMarkets: TopGainerMarket[] = [
-  {
-    id: "gainer-1",
-    category: "music",
-    leaders: [
-      { name: "Taylor Swift", avatar: "", currentGain: 12450, percentGain: 4.2 },
-      { name: "Drake", avatar: "", currentGain: 8920, percentGain: 3.8 },
-      { name: "Bad Bunny", avatar: "", currentGain: 7340, percentGain: 2.9 },
-    ],
-    totalPool: 14200,
-    endTime: "Sun 23:59 UTC",
-  },
-  {
-    id: "gainer-2",
-    category: "tech",
-    leaders: [
-      { name: "Jensen Huang", avatar: "", currentGain: 15780, percentGain: 8.5 },
-      { name: "Elon Musk", avatar: "", currentGain: 11200, percentGain: 2.1 },
-      { name: "Sam Altman", avatar: "", currentGain: 9850, percentGain: 5.2 },
-    ],
-    totalPool: 19800,
-    endTime: "Sun 23:59 UTC",
-  },
-  {
-    id: "gainer-3",
-    category: "creator",
-    leaders: [
-      { name: "MrBeast", avatar: "", currentGain: 18900, percentGain: 6.1 },
-      { name: "Logan Paul", avatar: "", currentGain: 12100, percentGain: 4.8 },
-      { name: "KSI", avatar: "", currentGain: 8750, percentGain: 3.5 },
-    ],
-    totalPool: 11500,
-    endTime: "Sun 23:59 UTC",
-  },
-  {
-    id: "gainer-4",
-    category: "sports",
-    leaders: [
-      { name: "Cristiano Ronaldo", avatar: "", currentGain: 9800, percentGain: 2.4 },
-      { name: "LeBron James", avatar: "", currentGain: 8900, percentGain: 1.9 },
-      { name: "Lionel Messi", avatar: "", currentGain: 7200, percentGain: 1.6 },
-    ],
-    totalPool: 13400,
-    endTime: "Sun 23:59 UTC",
-  },
-];
-
-const communityMarkets: CommunityMarket[] = [
-  {
-    id: "community-1",
-    creatorName: "CryptoKing99",
-    question: "Will Elon tweet about Dogecoin this week?",
-    personName: "Elon Musk",
-    personAvatar: "",
-    totalPool: 3420,
-    endTime: "Sun 23:59 UTC",
-    participants: 47,
-    category: "tech",
-  },
-  {
-    id: "community-2",
-    creatorName: "SwiftieForever",
-    question: "Taylor Swift album announcement before month end?",
-    personName: "Taylor Swift",
-    personAvatar: "",
-    totalPool: 2890,
-    endTime: "Sun 23:59 UTC",
-    participants: 89,
-    category: "music",
-  },
-  {
-    id: "community-3",
-    creatorName: "TechWatcher",
-    question: "Jensen Huang keynote will break 1M views in 24h?",
-    personName: "Jensen Huang",
-    personAvatar: "",
-    totalPool: 1560,
-    endTime: "Sun 23:59 UTC",
-    participants: 23,
-    category: "tech",
-  },
-  {
-    id: "community-4",
-    creatorName: "SportsGuru",
-    question: "Ronaldo will post about Al Nassr victory?",
-    personName: "Cristiano Ronaldo",
-    personAvatar: "",
-    totalPool: 2100,
-    endTime: "Sun 23:59 UTC",
-    participants: 56,
-    category: "sports",
-  },
-  {
-    id: "community-5",
-    creatorName: "PoliticsNerd",
-    question: "Trump rally attendance over 50k?",
-    personName: "Donald Trump",
-    personAvatar: "",
-    totalPool: 4200,
-    endTime: "Sun 23:59 UTC",
-    participants: 112,
-    category: "politics",
-  },
-  {
-    id: "community-6",
-    creatorName: "ElonFanatic",
-    question: "Will Tesla stock rise 5%+ this week?",
-    personName: "Elon Musk",
-    personAvatar: "",
-    totalPool: 5600,
-    endTime: "Sun 23:59 UTC",
-    participants: 78,
-    category: "tech",
-  },
-  {
-    id: "community-7",
-    creatorName: "SpaceEnthusiast",
-    question: "SpaceX Starship test before Friday?",
-    personName: "Elon Musk",
-    personAvatar: "",
-    totalPool: 4100,
-    endTime: "Sun 23:59 UTC",
-    participants: 92,
-    category: "tech",
-  },
-  {
-    id: "community-8",
-    creatorName: "XPlatformFan",
-    question: "Will X (Twitter) add new AI features?",
-    personName: "Elon Musk",
-    personAvatar: "",
-    totalPool: 2850,
-    endTime: "Sun 23:59 UTC",
-    participants: 64,
-    category: "tech",
-  },
-];
-
-const BASE_JACKPOT_POOL = 50000;
 
 function PredictCard({ 
   children, 
@@ -949,22 +620,150 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
   const [exactPrediction, setExactPrediction] = useState("");
   const [showCommunityOverlay, setShowCommunityOverlay] = useState(false);
 
-  const weeklyMarket = mockMarkets.find(m => m.personName === personName);
-  
-  const h2hBattles = headToHeadMarkets.filter(
-    h => h.person1.name === personName || h.person2.name === personName
-  );
-  
-  const gainerMarkets = topGainerMarkets.filter(
-    g => g.leaders.some(leader => leader.name === personName)
-  );
-  
-  const communityPredictions = communityMarkets.filter(
-    c => c.personName === personName ||
-      (c.relatedPersonIds || []).includes(personId)
-  );
+  const { data: nativeUpdownData, isLoading: updownLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/updown'] });
+  const { data: nativeH2hData, isLoading: h2hLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/h2h'] });
+  const { data: nativeGainerData, isLoading: gainerLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/gainer'] });
+  const { data: nativeJackpotData, isLoading: jackpotLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/jackpot'] });
+  const { data: openMarketsData, isLoading: openMarketsLoading } = useQuery<any[]>({ queryKey: ['/api/open-markets'] });
 
-  const hasAnyMarkets = weeklyMarket || h2hBattles.length > 0 || gainerMarkets.length > 0 || communityPredictions.length > 0;
+  const isLoading = updownLoading || h2hLoading || gainerLoading || jackpotLoading || openMarketsLoading;
+
+  const weeklyMarket = useMemo((): PredictionMarket | undefined => {
+    const dbMarkets = (nativeUpdownData || []).filter((m: any) => m.visibility === "live");
+    for (const m of dbMarkets) {
+      if (m.personId !== personId) continue;
+      const person = m.person || {};
+      const entries = m.entries || [];
+      const upEntry = entries.find((e: any) => e.label?.toLowerCase() === "up");
+      const downEntry = entries.find((e: any) => e.label?.toLowerCase() === "down");
+      const upStake = Number(upEntry?.totalStake || 0);
+      const downStake = Number(downEntry?.totalStake || 0);
+      const total = upStake + downStake || 1;
+      const upPercent = Math.round((upStake / total) * 100);
+      const upMultiplier = upStake > 0 ? +(total / upStake).toFixed(1) : 2.0;
+      const downMultiplier = downStake > 0 ? +(total / downStake).toFixed(1) : 2.0;
+      const cs = Number(person.trendScore || person.fameIndex || 0);
+      const storedBaseline = m.metadata?.openingScore?.score;
+      const fallbackBaseline = cs - Math.floor(cs * (Number(person.change7d || 0) / 100));
+      const baselineScore = storedBaseline ? Number(storedBaseline) : fallbackBaseline;
+      return {
+        id: m.id,
+        personId: m.personId || "",
+        personName: person.name || m.title?.replace(/: Up or Down\?$/, "") || "Unknown",
+        personAvatar: person.avatar || "",
+        currentScore: cs,
+        baselineScore,
+        startScore: baselineScore,
+        change7d: Number(person.change7d || 0),
+        upMultiplier,
+        downMultiplier,
+        endTime: "Sun 23:59 UTC",
+        totalPool: upStake + downStake + Number(m.seedVolume || 0),
+        upPoolPercent: upPercent || 50,
+        category: normalizeMarketCategory(m.category || person.category || "misc") as CategoryFilter,
+      };
+    }
+    return undefined;
+  }, [nativeUpdownData, personId]);
+
+  const h2hBattles = useMemo((): HeadToHeadMarket[] => {
+    const dbMarkets = (nativeH2hData || []).filter((m: any) => m.visibility === "live");
+    const all: HeadToHeadMarket[] = dbMarkets.map((m: any) => {
+      const entries = m.entries || [];
+      const e1 = entries[0] || {};
+      const e2 = entries[1] || {};
+      const p1 = e1.person || {};
+      const p2 = e2.person || {};
+      const s1 = Number(e1.totalStake || 0);
+      const s2 = Number(e2.totalStake || 0);
+      const total = s1 + s2 || 1;
+      const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0) + Number(m.seedVolume || 0);
+      return {
+        id: m.id,
+        title: m.title || `${p1.name || "?"} vs ${p2.name || "?"}`,
+        person1: { name: p1.name || e1.label || "?", avatar: p1.avatar || "", currentScore: Number(p1.trendScore || 0) },
+        person2: { name: p2.name || e2.label || "?", avatar: p2.avatar || "", currentScore: Number(p2.trendScore || 0) },
+        person1Id: e1.personId || "",
+        person2Id: e2.personId || "",
+        category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
+        endTime: "Sun 23:59 UTC",
+        totalPool,
+        person1Percent: (s1 + s2) === 0 ? 50 : Math.round((s1 / total) * 100),
+      };
+    });
+    return all.filter(h => h.person1Id === personId || h.person2Id === personId);
+  }, [nativeH2hData, personId]);
+
+  const gainerMarkets = useMemo((): TopGainerMarket[] => {
+    const dbMarkets = (nativeGainerData || []).filter((m: any) => m.visibility === "live");
+    const all: TopGainerMarket[] = dbMarkets.map((m: any) => {
+      const entries = m.entries || [];
+      const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0) + Number(m.seedVolume || 0);
+      return {
+        id: m.id,
+        category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
+        leaders: entries.slice(0, 3).map((e: any) => {
+          const p = e.person || {};
+          return {
+            name: p.name || e.label || "?",
+            avatar: p.avatar || "",
+            currentGain: Number(p.change7d || 0) * Number(p.trendScore || 0) / 100,
+            percentGain: Number(p.change7d || 0),
+            personId: e.personId || "",
+          };
+        }),
+        totalPool,
+        endTime: "Sun 23:59 UTC",
+      };
+    });
+    return all.filter(g => g.leaders.some(l => l.personId === personId));
+  }, [nativeGainerData, personId]);
+
+  const communityPredictions = useMemo((): CommunityMarket[] => {
+    const markets = (openMarketsData || []).filter((m: any) => m.visibility === "live");
+    return markets
+      .filter((m: any) => m.personId === personId || (m.relatedPersonIds || []).includes(personId))
+      .map((m: any) => {
+        const entries = m.entries || [];
+        const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0) + Number(m.seedVolume || 0);
+        return {
+          id: m.id,
+          creatorName: m.linkedPersonName || "Community",
+          question: m.title || "",
+          personName: m.linkedPersonName || personName,
+          personAvatar: m.linkedPersonAvatar || "",
+          totalPool,
+          endTime: "Sun 23:59 UTC",
+          participants: m.activeParticipantCount || 0,
+          category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
+          relatedPersonIds: m.relatedPersonIds || [],
+        };
+      });
+  }, [openMarketsData, personId, personName]);
+
+  const jackpotMarket = useMemo(() => {
+    if (!nativeJackpotData) return null;
+    return nativeJackpotData.find(
+      (m: any) => m.personId === personId && m.status === "OPEN" && m.visibility === "live"
+    ) || null;
+  }, [nativeJackpotData, personId]);
+
+  const jackpotPoolSize = useMemo(() => {
+    if (!jackpotMarket) return 0;
+    const entries = jackpotMarket.entries || [];
+    return entries.reduce((sum: number, e: any) => sum + Number(e.totalStake || 0), 0) + Number(jackpotMarket.seedVolume || 0);
+  }, [jackpotMarket]);
+
+  const hasAnyMarkets = weeklyMarket || h2hBattles.length > 0 || gainerMarkets.length > 0 || communityPredictions.length > 0 || jackpotMarket;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+        <span className="ml-2 text-sm text-muted-foreground">Loading prediction markets...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -1020,6 +819,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
           infoTooltip="Closest prediction to the final score wins the jackpot pot"
         />
 
+        {jackpotMarket ? (
         <div 
         className="relative overflow-hidden rounded-xl border-2 border-amber-500/50"
         style={{
@@ -1063,7 +863,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Pot</p>
               <p className="text-xl font-mono font-bold text-amber-500">
-                {BASE_JACKPOT_POOL.toLocaleString('en-US')}
+                {jackpotPoolSize.toLocaleString('en-US')}
                 <span className="text-xs ml-1 text-muted-foreground">credits</span>
               </p>
             </div>
@@ -1098,6 +898,11 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
           )}
         </div>
       </div>
+        ) : (
+          <div className="text-center py-6 text-muted-foreground">
+            No weekly jackpot market for {personName} yet.
+          </div>
+        )}
 
       <Dialog open={showPredictionModal} onOpenChange={setShowPredictionModal}>
         <DialogContent className="max-w-md">
@@ -1261,75 +1066,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         markets={communityPredictions}
         isMarketClosed={isMarketClosed}
       />
-
-      {/*
-      {h2hBattles.length > 0 && (
-        <section>
-          <SectionHeader
-            icon={<Swords className="h-4 w-4 text-violet-400" />}
-            title="Head-to-Head Battles"
-            subtitle={`${h2hBattles.length} battle${h2hBattles.length !== 1 ? 's' : ''} involving ${personName}`}
-            count={h2hBattles.length}
-            infoTooltip="Predict who will gain more trend points by week's end"
-          />
-          <div className={`grid gap-4 ${h2hBattles.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
-            {h2hBattles.map(battle => (
-              <HeadToHeadCard key={battle.id} market={battle} isMarketClosed={isMarketClosed} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {gainerMarkets.length > 0 && (
-        <section>
-          <SectionHeader
-            icon={<BarChart3 className="h-4 w-4 text-violet-400" />}
-            title="Category Races"
-            subtitle="Raw points added leaderboard"
-            count={gainerMarkets.length}
-            infoTooltip="Tracks total points added, not percentage gain. Big names can add more raw points."
-          />
-          <div className={`grid gap-4 ${gainerMarkets.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
-            {gainerMarkets.map(gainer => (
-              <TopGainerCard key={gainer.id} market={gainer} personName={personName} isMarketClosed={isMarketClosed} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {communityPredictions.length > 0 && (
-        <section>
-          <SectionHeader
-            icon={<Users className="h-4 w-4 text-violet-400" />}
-            title="World Predictions"
-            subtitle="Markets for real-world event predictions"
-            count={communityPredictions.length}
-            showViewAll={communityPredictions.length > 3}
-            onViewAll={() => setShowCommunityOverlay(true)}
-            infoTooltip="Real-world prediction markets about this celebrity"
-          />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {communityPredictions.slice(0, 3).map(community => (
-              <CommunityCard key={community.id} market={community} onClick={() => {}} isMarketClosed={isMarketClosed} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {!hasAnyMarkets && (
-        <Card className="p-8 text-center border-dashed">
-          <div className="space-y-3">
-            <p className="text-lg font-semibold">No active markets</p>
-            <p className="text-muted-foreground">
-              There are currently no prediction markets for {personName}.
-            </p>
-            <p className="text-sm text-muted-foreground mt-4">
-              Check back later or visit the main Prediction Markets page to explore all available markets.
-            </p>
-          </div>
-        </Card>
-      )}
-      */}
     </div>
   );
 }
