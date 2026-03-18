@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, cardRelatedPeople, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, cardRelatedPeople, approvalSnapshots, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -904,6 +904,215 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching person:", error);
       res.status(500).json({ error: "Failed to fetch person data" });
+    }
+  });
+
+  // ===================== VoxDex Pulse Endpoints =====================
+
+  app.get("/api/pulse/trend-history", async (req, res) => {
+    try {
+      const days = Math.min(Math.max(parseInt(req.query.days as string) || 7, 1), 3650);
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 20);
+      const category = (req.query.category as string || "").toLowerCase();
+
+      const trendWhere = category && category !== "all"
+        ? sql`lower(${trendingPeople.category}) = ${category}`
+        : undefined;
+
+      const topPeople = await db
+        .select({
+          id: trendingPeople.id,
+          name: trendingPeople.name,
+          category: trendingPeople.category,
+          trendScore: trendingPeople.trendScore,
+          change24h: trendingPeople.change24h,
+        })
+        .from(trendingPeople)
+        .where(trendWhere)
+        .orderBy(desc(trendingPeople.trendScore))
+        .limit(limit);
+      if (topPeople.length === 0) return res.json({ people: [], series: {} });
+
+      const personIds = topPeople.map((p) => p.id);
+      const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const imageSlugs = await db
+        .select({ id: trackedPeople.id, imageSlug: trackedPeople.imageSlug })
+        .from(trackedPeople)
+        .where(inArray(trackedPeople.id, personIds));
+      const slugMap = Object.fromEntries(imageSlugs.map((r) => [r.id, r.imageSlug]));
+
+      const seriesConditions = [
+        inArray(trendSnapshots.personId, personIds),
+        sql`${trendSnapshots.timestamp} >= ${cutoff}`,
+        sql`${trendSnapshots.timestamp} = date_trunc('hour', ${trendSnapshots.timestamp})`,
+        eq(trendSnapshots.snapshotOrigin, "ingest"),
+      ];
+      if (days > 7 && days <= 30) {
+        seriesConditions.push(sql`extract(hour from ${trendSnapshots.timestamp})::int % 6 = 0`);
+      } else if (days > 30) {
+        seriesConditions.push(sql`extract(hour from ${trendSnapshots.timestamp})::int = 0`);
+      }
+
+      const snapshots = await db
+        .select({
+          personId: trendSnapshots.personId,
+          timestamp: trendSnapshots.timestamp,
+          trendScore: trendSnapshots.trendScore,
+        })
+        .from(trendSnapshots)
+        .where(and(...seriesConditions))
+        .orderBy(trendSnapshots.timestamp);
+
+      const series: Record<string, { timestamp: string; trendScore: number }[]> = {};
+      const sparkMap: Record<string, number[]> = {};
+      const sparkCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      for (const s of snapshots) {
+        (series[s.personId] ||= []).push({
+          timestamp: s.timestamp.toISOString(),
+          trendScore: s.trendScore,
+        });
+        if (s.timestamp.getTime() >= sparkCutoff) {
+          (sparkMap[s.personId] ||= []).push(s.trendScore);
+        }
+      }
+      for (const id of personIds) {
+        const full = sparkMap[id] ?? [];
+        if (full.length > 12) {
+          const step = (full.length - 1) / 11;
+          sparkMap[id] = Array.from({ length: 12 }, (_, i) => full[Math.round(i * step)]);
+        }
+      }
+
+      res.json({
+        people: topPeople.map((p) => ({
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          trendScore: p.trendScore,
+          change24h: p.change24h,
+          imageSlug: slugMap[p.id] || null,
+          sparkline: sparkMap[p.id] ?? [],
+        })),
+        series,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to fetch pulse trend history" });
+    }
+  });
+
+  app.get("/api/pulse/approval-history", async (req, res) => {
+    try {
+      const days = Math.min(Math.max(parseInt(req.query.days as string) || 7, 1), 3650);
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 20);
+      const category = (req.query.category as string || "").toLowerCase();
+
+      const approvalWhere = category && category !== "all"
+        ? sql`lower(${trendingPeople.category}) = ${category}`
+        : undefined;
+
+      const topPeople = await db
+        .select({
+          id: trendingPeople.id,
+          name: trendingPeople.name,
+          category: trendingPeople.category,
+        })
+        .from(trendingPeople)
+        .innerJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId))
+        .where(approvalWhere)
+        .orderBy(desc(celebrityMetrics.approvalAvgRating))
+        .limit(limit);
+      if (topPeople.length === 0) return res.json({ people: [], series: {} });
+
+      const personIds = topPeople.map((p) => p.id);
+      const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const imageSlugs = await db
+        .select({ id: trackedPeople.id, imageSlug: trackedPeople.imageSlug })
+        .from(trackedPeople)
+        .where(inArray(trackedPeople.id, personIds));
+      const slugMap = Object.fromEntries(imageSlugs.map((r) => [r.id, r.imageSlug]));
+
+      const snapshots = await db
+        .select({
+          personId: approvalSnapshots.personId,
+          timestamp: approvalSnapshots.timestamp,
+          approvalAvgRating: approvalSnapshots.approvalAvgRating,
+        })
+        .from(approvalSnapshots)
+        .where(
+          and(
+            inArray(approvalSnapshots.personId, personIds),
+            sql`${approvalSnapshots.timestamp} >= ${cutoff}`
+          )
+        )
+        .orderBy(approvalSnapshots.timestamp);
+
+      const series: Record<string, { timestamp: string; approvalAvgRating: number | null }[]> = {};
+      for (const s of snapshots) {
+        (series[s.personId] ||= []).push({
+          timestamp: s.timestamp.toISOString(),
+          approvalAvgRating: s.approvalAvgRating,
+        });
+      }
+
+      res.json({
+        people: topPeople.map((p) => ({
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          imageSlug: slugMap[p.id] || null,
+        })),
+        series,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to fetch pulse approval history" });
+    }
+  });
+
+  app.get("/api/pulse/approval-current", async (req, res) => {
+    try {
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 20);
+      const category = (req.query.category as string || "").toLowerCase();
+
+      const conditions: SQL[] = [gt(celebrityMetrics.approvalAvgRating, 0)];
+      if (category && category !== "all") {
+        conditions.push(sql`lower(${trendingPeople.category}) = ${category}`);
+      }
+
+      const rows = await db
+        .select({
+          id: trendingPeople.id,
+          name: trendingPeople.name,
+          category: trendingPeople.category,
+          approvalAvgRating: celebrityMetrics.approvalAvgRating,
+          approvalVotesCount: celebrityMetrics.approvalVotesCount,
+        })
+        .from(trendingPeople)
+        .innerJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId))
+        .where(and(...conditions))
+        .orderBy(desc(celebrityMetrics.approvalAvgRating))
+        .limit(limit);
+
+      const personIds = rows.map((r) => r.id);
+      const imageSlugs = personIds.length > 0
+        ? await db.select({ id: trackedPeople.id, imageSlug: trackedPeople.imageSlug })
+            .from(trackedPeople).where(inArray(trackedPeople.id, personIds))
+        : [];
+      const slugMap = Object.fromEntries(imageSlugs.map((r) => [r.id, r.imageSlug]));
+
+      res.json({
+        people: rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          category: r.category,
+          imageSlug: slugMap[r.id] || null,
+          approvalAvgRating: r.approvalAvgRating,
+          approvalVotesCount: r.approvalVotesCount,
+        })),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to fetch pulse approval current" });
     }
   });
 

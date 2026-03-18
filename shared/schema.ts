@@ -1420,3 +1420,17 @@ export const cardRelatedPeople = pgTable("card_related_people", {
 }));
 
 export type CardRelatedPerson = typeof cardRelatedPeople.$inferSelect;
+
+// Approval Snapshots — periodic snapshots of approval metrics for time-series charts
+export const approvalSnapshots = pgTable("approval_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  personId: varchar("person_id").notNull().references(() => trackedPeople.id, { onDelete: "cascade" }),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  approvalAvgRating: real("approval_avg_rating"),
+  approvalVotesCount: integer("approval_votes_count").default(0),
+  approvalPct: real("approval_pct"),
+}, (table) => ({
+  personTsIdx: index("approval_snapshots_person_ts_idx").on(table.personId, table.timestamp),
+}));
+
+export type ApprovalSnapshot = typeof approvalSnapshots.$inferSelect;

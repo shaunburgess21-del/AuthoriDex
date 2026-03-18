@@ -15,10 +15,11 @@ import { startAgentRunnerScheduler } from "./agents/agentRunner";
 import { startActionWorkerScheduler } from "./agents/actionWorker";
 import { startMarketGeneratorScheduler } from "./jobs/market-generator";
 import { startVoteWorkerScheduler } from "./agents/voteWorker";
-import { pool, startDbPoolMonitor } from "./db";
+import { pool, db, startDbPoolMonitor } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
 import { fetchBatchGdeltNews } from "./providers/gdelt";
 import { getCanaryNames } from "./scoring/canaryMonitor";
+import { celebrityMetrics, approvalSnapshots } from "@shared/schema";
 
 console.log(`[BOOT] started at ${new Date().toISOString()} (env=${process.env.NODE_ENV || "unknown"})`);
 
@@ -523,7 +524,56 @@ async function startServer() {
 
     // Start agent voting system (daily sweep, max 3 votes/agent/week)
     startScheduler("VoteWorker", startVoteWorkerScheduler);
+
+    // Start approval snapshot scheduler (captures approval metrics every 6 hours for pulse chart)
+    startScheduler("ApprovalSnapshots", startApprovalSnapshotScheduler);
   });
+}
+
+const APPROVAL_SNAPSHOT_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+async function captureApprovalSnapshots(): Promise<void> {
+  try {
+    const metrics = await db
+      .select({
+        celebrityId: celebrityMetrics.celebrityId,
+        approvalAvgRating: celebrityMetrics.approvalAvgRating,
+        approvalVotesCount: celebrityMetrics.approvalVotesCount,
+        approvalPct: celebrityMetrics.approvalPct,
+      })
+      .from(celebrityMetrics);
+
+    if (metrics.length === 0) {
+      log("[ApprovalSnapshots] No celebrity metrics found, skipping.");
+      return;
+    }
+
+    const now = new Date();
+    const rows = metrics.map((m) => ({
+      personId: m.celebrityId,
+      timestamp: now,
+      approvalAvgRating: m.approvalAvgRating,
+      approvalVotesCount: m.approvalVotesCount ?? 0,
+      approvalPct: m.approvalPct,
+    }));
+
+    await db.insert(approvalSnapshots).values(rows);
+    log(`[ApprovalSnapshots] Captured ${rows.length} snapshots at ${now.toISOString()}`);
+  } catch (err: any) {
+    log(`[ApprovalSnapshots] Error: ${err?.message ?? err}`);
+  }
+}
+
+function startApprovalSnapshotScheduler() {
+  if (SERVERLESS_MODE) {
+    log("[ApprovalSnapshots] Skipped - serverless mode.");
+    return;
+  }
+  log("[ApprovalSnapshots] Starting (every 6 hours)");
+  setTimeout(() => {
+    captureApprovalSnapshots();
+    setInterval(captureApprovalSnapshots, APPROVAL_SNAPSHOT_INTERVAL_MS);
+  }, 30_000);
 }
 
 startServer().catch((error) => {

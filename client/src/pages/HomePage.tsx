@@ -1,4 +1,5 @@
-import { HeroSection } from "@/components/HeroSection";
+import { VoxDexPulse } from "@/components/VoxDexPulse";
+import { WelcomeModal } from "@/components/WelcomeModal";
 import { SearchBar } from "@/components/SearchBar";
 import { LeaderboardRow, getExceptionalIndicator } from "@/components/LeaderboardRow";
 import type { PercentileThresholds } from "@/components/LeaderboardRow";
@@ -731,13 +732,6 @@ export default function HomePage() {
     setVotingModalOpen(true);
   };
 
-  const handleHeroCastVote = () => {
-    if (allPeople.length > 0) {
-      setVotingPersonId(allPeople[0].id);
-      setVotingModalOpen(true);
-    }
-  };
-
   const handlePullRefresh = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
     await queryClient.invalidateQueries({ queryKey: ['/api/trending/movers'] });
@@ -836,7 +830,8 @@ export default function HomePage() {
           </div>
         </div>
       </header>
-      <HeroSection onCastVoteClick={handleHeroCastVote} onPredictClick={() => setLocation("/predict")} />
+      <VoxDexPulse />
+      <WelcomeModal />
       {/* PRESERVED: Sticky toggle bar (Leaderboard/Vote/Predict) - commented out for future re-enable
       <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-blue-500/5 via-background/95 to-blue-500/5 backdrop-blur-xl" data-toggle-bar>
         <div className="container mx-auto px-4">
