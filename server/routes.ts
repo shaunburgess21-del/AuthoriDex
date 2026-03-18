@@ -13329,6 +13329,19 @@ Write a 2-5 sentence summary that helps users make an informed prediction. Focus
     }
   });
 
+  app.post("/api/admin/agents/clear-world-abstained", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { scheduledAgentActions } = await import("@shared/schema");
+      const result = await db.delete(scheduledAgentActions)
+        .where(eq(scheduledAgentActions.status, "world_abstained"))
+        .returning({ id: scheduledAgentActions.id });
+      res.json({ ok: true, deleted: result.length });
+    } catch (err: any) {
+      console.error("[AgentAdmin] Clear world-abstained failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
   app.get("/api/admin/agents/status", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { scheduledAgentActions, agentConfigs } = await import("@shared/schema");
