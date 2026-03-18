@@ -10066,7 +10066,7 @@ Resolution Date: ${resolutionDate}
 Resolution Criteria: ${resolutionCriteria}
 Outcomes: ${outcomesStr}${linkedPersonBlock}${headlinesBlock}
 
-Write a 2-5 sentence summary that helps users make an informed prediction. Include relevant background context, key factors that could influence the outcome, and any recent developments. Be factual and neutral — do not recommend a side.`;
+Write a 2-5 sentence summary that helps users make an informed prediction. Focus on enduring background context, the stakes involved, historical precedent, and the key factors that will ultimately decide the outcome. Avoid referencing specific recent results, upcoming fixtures, or time-sensitive developments — the summary should remain accurate and useful for weeks or months. Be factual and neutral — do not recommend a side.`;
 
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
