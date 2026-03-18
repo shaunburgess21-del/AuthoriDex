@@ -170,7 +170,6 @@ export async function computeWorldMarketPrediction(
         model: "gpt-5.4",
         tools: [{ type: "web_search" as any }],
         reasoning: { effort: "medium" } as any,
-        temperature: 0.3,
         max_output_tokens: 500,
         instructions: systemPrompt,
         input: userPrompt,
