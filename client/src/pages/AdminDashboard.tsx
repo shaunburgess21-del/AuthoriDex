@@ -2617,6 +2617,22 @@ export default function AdminDashboard() {
     return true;
   }), [markets, nativeVisFilter, nativeSearchQuery]);
 
+  /** Seed-approval baseline stats (must stay above conditional returns — Rules of Hooks) */
+  const baselineTotalVotes = useMemo(
+    () => seedApprovalCounts["1"] + seedApprovalCounts["2"] + seedApprovalCounts["3"] + seedApprovalCounts["4"] + seedApprovalCounts["5"],
+    [seedApprovalCounts],
+  );
+  const baselineImpliedAvg = useMemo(() => {
+    if (baselineTotalVotes <= 0) return 0;
+    const weighted =
+      seedApprovalCounts["1"] * 1 +
+      seedApprovalCounts["2"] * 2 +
+      seedApprovalCounts["3"] * 3 +
+      seedApprovalCounts["4"] * 4 +
+      seedApprovalCounts["5"] * 5;
+    return weighted / baselineTotalVotes;
+  }, [baselineTotalVotes, seedApprovalCounts]);
+
   // ============ CONDITIONAL RENDERING (after all hooks) ============
   
   // Show loading while auth is initializing
@@ -2778,21 +2794,6 @@ export default function AdminDashboard() {
       createCelebrityMutation.mutate(celebrityForm);
     }
   };
-
-  const baselineTotalVotes = useMemo(
-    () => seedApprovalCounts["1"] + seedApprovalCounts["2"] + seedApprovalCounts["3"] + seedApprovalCounts["4"] + seedApprovalCounts["5"],
-    [seedApprovalCounts],
-  );
-  const baselineImpliedAvg = useMemo(() => {
-    if (baselineTotalVotes <= 0) return 0;
-    const weighted =
-      seedApprovalCounts["1"] * 1 +
-      seedApprovalCounts["2"] * 2 +
-      seedApprovalCounts["3"] * 3 +
-      seedApprovalCounts["4"] * 4 +
-      seedApprovalCounts["5"] * 5;
-    return weighted / baselineTotalVotes;
-  }, [baselineTotalVotes, seedApprovalCounts]);
 
   const handleSaveMatchup = () => {
     const dataToSend: any = {
