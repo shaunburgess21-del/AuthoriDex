@@ -8045,10 +8045,6 @@ Only return the JSON object.`;
         if (person) linkedPerson = person;
       }
 
-      const newsContext = await fetchTrendingNewsContext(poll.headline || "");
-      const headlinesBlock = newsContext?.sources?.length
-        ? `\nRecent news headlines for context:\n${newsContext.sources.map(s => `- ${s.title}`).join("\n")}`
-        : "";
       const linkedPersonBlock = linkedPerson
         ? `\nLinked celebrity: ${linkedPerson.name} (trend score: ${linkedPerson.trendScore?.toLocaleString() ?? "N/A"}, category: ${linkedPerson.category ?? "N/A"})`
         : "";
@@ -8059,21 +8055,21 @@ Only return the JSON object.`;
         ? `\nCurrent content for reference (improve upon this):\n"${existingContent}"`
         : "";
 
-      const systemPrompt = `You are writing content for a sentiment poll on VoxDex, a trend-tracking and prediction platform. Sentiment polls let users vote Support, Neutral, or Oppose on current topics. Write plain text only — no markdown, no headers, no bullets, no bold.`;
+      const systemPrompt = `You are writing content for a sentiment poll on VoxDex, a trend-tracking and prediction platform. Sentiment polls let users vote Support, Neutral, or Oppose on current topics. Use web search to ensure all facts are current and accurate. Write plain text only — no markdown, no headers, no bullets, no bold.`;
 
       let userPrompt: string;
       let maxTokens: number;
 
       if (field === "subjectText") {
         userPrompt = `Poll headline: "${poll.headline}"
-Category: ${poll.category || "General"}${linkedPersonBlock}${headlinesBlock}${existingBlock}
+Category: ${poll.category || "General"}${linkedPersonBlock}${existingBlock}
 
 Write a compelling 1-3 sentence question or statement for this sentiment poll card. It should clearly frame the debate and invite users to weigh in with Support, Neutral, or Oppose. Be provocative but fair — present the tension without taking a side.`;
         maxTokens = 250;
       } else {
         userPrompt = `Poll headline: "${poll.headline}"
 Category: ${poll.category || "General"}
-Subject/Question: "${poll.subjectText || ""}"${linkedPersonBlock}${headlinesBlock}${existingBlock}
+Subject/Question: "${poll.subjectText || ""}"${linkedPersonBlock}${existingBlock}
 
 Write a detailed, multi-paragraph context section for this sentiment poll. This will be shown on the poll's detail page under a "Context" heading. Cover:
 - Background and history of the topic
@@ -8089,17 +8085,21 @@ Aim for 3-5 substantive paragraphs. Be factual, balanced, and informative. Help 
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
       });
 
-      const response = await openai.chat.completions.create({
+      const response = await openai.responses.create({
         model: "gpt-5.4",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        max_completion_tokens: maxTokens,
+        tools: [{ type: "web_search" as any }],
+        instructions: systemPrompt,
+        input: userPrompt,
+        max_output_tokens: maxTokens,
         temperature: 0.7,
-      });
+      } as any);
 
-      const content = response.choices[0]?.message?.content?.trim() || "";
+      const content = ((response as any).output_text
+        || ((response as any).output || [])
+             .filter((item: any) => item.type === "message")
+             .flatMap((item: any) => item.content || [])
+             .find((part: any) => part.type === "output_text" || part.type === "text")
+             ?.text)?.trim() || "";
       if (!content) return res.status(500).json({ error: "AI returned empty content" });
 
       console.log(`[Sentiment Polls] AI draft generated for poll ${id}, field=${field}`);
@@ -8980,10 +8980,6 @@ Aim for 3-5 substantive paragraphs. Be factual, balanced, and informative. Help 
         .orderBy(asc(opinionPollOptions.orderIndex));
 
       const optionNames = options.map(o => o.name).join(", ");
-      const newsContext = await fetchTrendingNewsContext(poll.title || "");
-      const headlinesBlock = newsContext?.sources?.length
-        ? `\nRecent news headlines for context:\n${newsContext.sources.map(s => `- ${s.title}`).join("\n")}`
-        : "";
       const requestContent = typeof currentContent === "string" ? currentContent.trim() : "";
       const dbContent = String(poll[field as keyof typeof poll] || "").trim();
       const existingContent = requestContent || dbContent;
@@ -8991,7 +8987,7 @@ Aim for 3-5 substantive paragraphs. Be factual, balanced, and informative. Help 
         ? `\nCurrent content for reference (improve upon this):\n"${existingContent}"`
         : "";
 
-      const systemPrompt = `You are writing content for an opinion poll on VoxDex, a trend-tracking and prediction platform. Opinion polls let users pick their favorite option from a list. Write plain text only — no markdown, no headers, no bullets, no bold.`;
+      const systemPrompt = `You are writing content for an opinion poll on VoxDex, a trend-tracking and prediction platform. Opinion polls let users pick their favorite option from a list. Use web search to ensure all facts are current and accurate. Write plain text only — no markdown, no headers, no bullets, no bold.`;
 
       let userPrompt: string;
       let maxTokens: number;
@@ -8999,7 +8995,7 @@ Aim for 3-5 substantive paragraphs. Be factual, balanced, and informative. Help 
       if (field === "description") {
         userPrompt = `Poll title: "${poll.title}"
 Category: ${poll.category || "General"}
-Options: ${optionNames}${headlinesBlock}${existingBlock}
+Options: ${optionNames}${existingBlock}
 
 Write a compelling 1-3 sentence question or framing statement for this opinion poll card. It should clearly present the choice and invite engagement. Make it conversational and intriguing.`;
         maxTokens = 250;
@@ -9007,7 +9003,7 @@ Write a compelling 1-3 sentence question or framing statement for this opinion p
         userPrompt = `Poll title: "${poll.title}"
 Category: ${poll.category || "General"}
 Options: ${optionNames}
-${poll.description ? `Subject/Question: "${poll.description}"` : ""}${headlinesBlock}${existingBlock}
+${poll.description ? `Subject/Question: "${poll.description}"` : ""}${existingBlock}
 
 Write a detailed, multi-paragraph context section for this opinion poll. This will be shown on the poll's detail page under a "Context" heading. Cover:
 - Background on the topic and why it's interesting
@@ -9023,17 +9019,21 @@ Aim for 3-5 substantive paragraphs. Be informative, engaging, and balanced. Help
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
       });
 
-      const response = await openai.chat.completions.create({
+      const response = await openai.responses.create({
         model: "gpt-5.4",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        max_completion_tokens: maxTokens,
+        tools: [{ type: "web_search" as any }],
+        instructions: systemPrompt,
+        input: userPrompt,
+        max_output_tokens: maxTokens,
         temperature: 0.7,
-      });
+      } as any);
 
-      const content = response.choices[0]?.message?.content?.trim() || "";
+      const content = ((response as any).output_text
+        || ((response as any).output || [])
+             .filter((item: any) => item.type === "message")
+             .flatMap((item: any) => item.content || [])
+             .find((part: any) => part.type === "output_text" || part.type === "text")
+             ?.text)?.trim() || "";
       if (!content) return res.status(500).json({ error: "AI returned empty content" });
 
       console.log(`[Opinion Polls] AI draft generated for poll ${id}, field=${field}`);
@@ -10272,7 +10272,7 @@ Aim for 3-5 substantive paragraphs. Be informative, engaging, and balanced. Help
         ? `\nLinked to: ${linkedPerson.name} (current trend score: ${linkedPerson.trendScore?.toLocaleString() ?? "N/A"}, category: ${linkedPerson.category ?? "N/A"})`
         : "";
 
-      const systemPrompt = `You are writing a brief market context summary for a prediction market on VoxDex, a trend-tracking and prediction platform. Write plain text only — no markdown, no headers, no bullets, no bold.`;
+      const systemPrompt = `You are writing a brief market context summary for a prediction market on VoxDex, a trend-tracking and prediction platform. Use web search to ensure all facts are current and accurate. Write plain text only — no markdown, no headers, no bullets, no bold.`;
 
       const userPrompt = `Market: "${market.title}"
 Category: ${market.category || "General"}
@@ -10287,17 +10287,21 @@ Write a 2-5 sentence summary that helps users make an informed prediction. Focus
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
       });
 
-      const response = await openai.chat.completions.create({
+      const response = await openai.responses.create({
         model: "gpt-5.4",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        max_completion_tokens: 350,
+        tools: [{ type: "web_search" as any }],
+        instructions: systemPrompt,
+        input: userPrompt,
+        max_output_tokens: 350,
         temperature: 0.7,
-      });
+      } as any);
 
-      const summary = response.choices[0]?.message?.content?.trim() || "";
+      const summary = ((response as any).output_text
+        || ((response as any).output || [])
+             .filter((item: any) => item.type === "message")
+             .flatMap((item: any) => item.content || [])
+             .find((part: any) => part.type === "output_text" || part.type === "text")
+             ?.text)?.trim() || "";
       if (!summary) return res.status(500).json({ error: "AI returned an empty summary" });
 
       console.log(`[World Markets] AI summary generated for market ${id} ("${market.title?.slice(0, 50)}")`);
