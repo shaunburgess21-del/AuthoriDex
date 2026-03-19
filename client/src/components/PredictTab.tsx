@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,9 +7,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
+import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAuth } from "@/contexts/AuthContext";
+import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import { 
   Crown, 
   Sparkles, 
@@ -54,6 +59,11 @@ interface PredictionMarket {
   totalPool: number;
   upPoolPercent: number;
   category: CategoryFilter;
+  upEntryId?: string;
+  downEntryId?: string;
+  startAt?: string;
+  endAt?: string;
+  tieRule?: string;
 }
 
 interface HeadToHeadMarket {
@@ -63,6 +73,8 @@ interface HeadToHeadMarket {
   person2: { name: string; avatar: string; currentScore: number };
   person1Id?: string;
   person2Id?: string;
+  person1EntryId: string;
+  person2EntryId: string;
   category: CategoryFilter;
   endTime: string;
   totalPool: number;
@@ -682,6 +694,11 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
       totalPool: upStake + downStake + Number(m.seedVolume || 0),
       upPoolPercent: upPercent || 50,
       category: normalizeMarketCategory(m.category || person.category || "misc") as CategoryFilter,
+      upEntryId: upEntry?.id,
+      downEntryId: downEntry?.id,
+      startAt: m.startAt,
+      endAt: m.endAt,
+      tieRule: m.metadata?.tieRule ?? "refund",
     };
   }, [nativeUpdownData, personId]);
 
@@ -704,6 +721,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         person2: { name: p2.name || e2.label || "?", avatar: p2.avatar || "", currentScore: Number(p2.trendScore || 0) },
         person1Id: e1.personId || "",
         person2Id: e2.personId || "",
+        person1EntryId: e1.id,
+        person2EntryId: e2.id,
         category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
         endTime: "Sun 23:59 UTC",
         totalPool,
@@ -774,6 +793,149 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
   }, [jackpotMarket]);
 
   const hasAnyMarkets = weeklyMarket || h2hBattles.length > 0 || gainerMarkets.length > 0 || communityPredictions.length > 0 || jackpotMarket;
+
+  const { user, profile, refreshProfile } = useAuth();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
+  const [stakeModalOpen, setStakeModalOpen] = useState(false);
+  const walletCredits = profile?.predictCredits ?? 0;
+
+  const updownBetMutation = useMutation({
+    mutationFn: async ({ marketId, entryId, stakeAmount }: { marketId: string; entryId: string; stakeAmount: number }) => {
+      const res = await apiRequest("POST", `/api/native-markets/updown/${marketId}/bet`, { entryId, stakeAmount });
+      return res.json();
+    },
+    onSuccess: async () => {
+      toast({ title: "Prediction placed!", description: "Your weekly up/down prediction has been recorded." });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile?.(),
+        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: () => {
+      toast({ title: "Failed to place prediction", variant: "destructive" });
+    },
+  });
+
+  const nativeMarketBetMutation = useMutation({
+    mutationFn: async ({ marketId, entryId, stakeAmount, marketType }: { marketId: string; entryId: string; stakeAmount: number; marketType: string }) => {
+      const res = await apiRequest("POST", `/api/native-markets/${marketId}/bet`, { entryId, stakeAmount });
+      return res.json();
+    },
+    onSuccess: async (_data, variables) => {
+      toast({
+        title: "Prediction placed!",
+        description: variables.marketType === "h2h" ? "Your head-to-head prediction has been recorded." : "Your prediction has been recorded.",
+      });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile?.(),
+        queryClient.invalidateQueries({ queryKey: [`/api/native-markets/${variables.marketType}`] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: () => {
+      toast({ title: "Failed to place prediction", variant: "destructive" });
+    },
+  });
+
+  const handleUpDownSelect = (market: PredictionMarket, choice: "up" | "down") => {
+    if (!user) {
+      toast({ title: "Sign in required", description: "Sign in to place predictions." });
+      setLocation("/login");
+      return;
+    }
+    const entryId = choice === "up" ? market.upEntryId : market.downEntryId;
+    if (!entryId) {
+      toast({ title: "Market unavailable", description: "This market is missing required entries. Please try another market.", variant: "destructive" });
+      return;
+    }
+    setPendingSelection({
+      type: "updown",
+      choice: choice === "up" ? "Trend Score UP" : "Trend Score DOWN",
+      marketName: market.personName,
+      marketId: market.id,
+      startScore: market.baselineScore,
+      currentScore: market.currentScore,
+      crowdSentiment: choice === "up" ? market.upPoolPercent : 100 - market.upPoolPercent,
+      estimatedPayout: choice === "up" ? market.upMultiplier : market.downMultiplier,
+      baselineScore: market.baselineScore,
+      baselineTimestamp: market.startAt,
+      tieRule: market.tieRule ?? "refund",
+      endAt: market.endAt,
+    });
+    setStakeModalOpen(true);
+  };
+
+  const handleH2HSelect = (market: HeadToHeadMarket, person: 1 | 2) => {
+    if (!user) {
+      toast({ title: "Sign in required", description: "Sign in to place predictions." });
+      setLocation("/login");
+      return;
+    }
+    const entryId = person === 1 ? market.person1EntryId : market.person2EntryId;
+    if (!entryId) {
+      toast({ title: "Market unavailable", description: "This market is missing required entries. Please try another market.", variant: "destructive" });
+      return;
+    }
+    const picked = person === 1 ? market.person1 : market.person2;
+    const opponent = person === 1 ? market.person2 : market.person1;
+    const sentiment = person === 1 ? market.person1Percent : 100 - market.person1Percent;
+    const stakePool = market.totalPool || 1;
+    const pickedPool = (sentiment / 100) * stakePool || 1;
+    const estimatedPayout = Math.round((stakePool / pickedPool) * 10) / 10;
+    setPendingSelection({
+      type: "h2h",
+      choice: picked.name,
+      marketName: market.title,
+      marketId: market.id,
+      entryId,
+      currentScore: picked.currentScore,
+      opponentScore: opponent.currentScore,
+      crowdSentiment: sentiment,
+      estimatedPayout,
+    });
+    setStakeModalOpen(true);
+  };
+
+  const handleConfirmStake = (amount: number) => {
+    if (!pendingSelection || !pendingSelection.marketId) {
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      return;
+    }
+    if (pendingSelection.type === "h2h" && pendingSelection.entryId) {
+      nativeMarketBetMutation.mutate({
+        marketId: pendingSelection.marketId,
+        entryId: pendingSelection.entryId,
+        stakeAmount: amount,
+        marketType: "h2h",
+      });
+      return;
+    }
+    if (pendingSelection.type === "updown") {
+      const entryId = pendingSelection.choice.toUpperCase().includes("UP") ? weeklyMarket?.upEntryId : weeklyMarket?.downEntryId;
+      if (!entryId) {
+        toast({ title: "Market unavailable", description: "Missing entry. Please try again.", variant: "destructive" });
+        setStakeModalOpen(false);
+        setPendingSelection(null);
+        return;
+      }
+      updownBetMutation.mutate({
+        marketId: pendingSelection.marketId,
+        entryId,
+        stakeAmount: amount,
+      });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -1005,7 +1167,11 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
           infoTooltip="Predict whether their trend score finishes the week above or below the starting value"
         />
         {weeklyMarket ? (
-          <WeeklyUpDownCard market={weeklyMarket} isMarketClosed={isMarketClosed} />
+          <WeeklyUpDownCard
+            market={weeklyMarket}
+            isMarketClosed={isMarketClosed}
+            onSelect={(choice) => handleUpDownSelect(weeklyMarket, choice)}
+          />
         ) : (
           <div className="text-center py-6 text-muted-foreground">
             No weekly Up/Down market for {personName} yet.
@@ -1025,7 +1191,12 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         {h2hBattles.length > 0 ? (
           <div className={`grid gap-4 ${h2hBattles.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
             {h2hBattles.map((battle) => (
-              <HeadToHeadCard key={battle.id} market={battle} isMarketClosed={isMarketClosed} />
+              <HeadToHeadCard
+                key={battle.id}
+                market={battle}
+                isMarketClosed={isMarketClosed}
+                onSelect={(person) => handleH2HSelect(battle, person)}
+              />
             ))}
           </div>
         ) : (
@@ -1084,6 +1255,14 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         personName={personName}
         markets={communityPredictions}
         isMarketClosed={isMarketClosed}
+      />
+
+      <StakeModal
+        open={stakeModalOpen}
+        onClose={() => { setStakeModalOpen(false); setPendingSelection(null); }}
+        selection={pendingSelection}
+        onConfirm={handleConfirmStake}
+        walletBalance={walletCredits}
       />
     </div>
   );
