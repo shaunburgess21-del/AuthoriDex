@@ -111,7 +111,7 @@ Return a JSON object with exactly these fields:
 Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;
 
         const response = await openai.chat.completions.create({
-          model: "gpt-4o",
+          model: "gpt-4.1",
           messages: [{ role: "user", content: prompt }],
           response_format: { type: "json_object" },
           max_tokens: 1000,

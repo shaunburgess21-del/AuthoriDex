@@ -3551,9 +3551,9 @@ Return a JSON object with exactly these fields:
 
 Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;
 
-      // Using gpt-4o for accurate and current knowledge with web grounding
+      // Using gpt-4.1 for accurate and current knowledge with web grounding
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4.1",
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
         max_tokens: 1000,
@@ -3708,7 +3708,7 @@ Return a JSON object with exactly these fields:
 Be factual, accurate, and emphasize their current status. Only return the JSON object, nothing else.`;
 
             const response = await openai.chat.completions.create({
-              model: "gpt-4o",
+              model: "gpt-4.1",
               messages: [{ role: "user", content: prompt }],
               response_format: { type: "json_object" },
               max_tokens: 1000,
@@ -4085,7 +4085,7 @@ Return a JSON object with:
 Only return the JSON object.`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4.1",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -4112,7 +4112,7 @@ Only return the JSON object.`;
         cacheStatus: "REGENERATED" as string,
         staleAgeMinutes: 0,
         provenance: {
-          model: "gpt-4o",
+          model: "gpt-4.1",
           promptVersion: WHY_TRENDING_PROMPT_VERSION,
           serperQuery: person.name,
           serperTbs: "qdr:w",
@@ -8090,7 +8090,7 @@ Aim for 3-5 substantive paragraphs. Be factual, balanced, and informative. Help 
       });
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-5.4",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -9024,7 +9024,7 @@ Aim for 3-5 substantive paragraphs. Be informative, engaging, and balanced. Help
       });
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-5.4",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -10288,7 +10288,7 @@ Write a 2-5 sentence summary that helps users make an informed prediction. Focus
       });
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-5.4",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },

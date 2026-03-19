@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,9 +8,11 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { JackpotEntryModal } from "@/components/JackpotEntryModal";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -30,10 +32,12 @@ import {
   X,
   Search,
   HelpCircle,
-  Loader2
+  Loader2,
+  Trophy,
+  Check
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { normalizeMarketCategory } from "@shared/constants";
+import { normalizeMarketCategory, getMarketCategoryLabel } from "@shared/constants";
 
 interface PredictTabProps {
   personId: string;
@@ -81,12 +85,25 @@ interface HeadToHeadMarket {
   person1Percent: number;
 }
 
+type GainerCandidate = {
+  name: string;
+  avatar: string;
+  currentGain: number;
+  percentGain: number;
+  rank?: number;
+  entryId?: string;
+  personId?: string;
+};
+
 interface TopGainerMarket {
   id: string;
   category: CategoryFilter;
-  leaders: { name: string; avatar: string; currentGain: number; percentGain: number; personId?: string }[];
+  leaders: GainerCandidate[];
+  allCandidates?: GainerCandidate[];
   totalPool: number;
   endTime: string;
+  totalEntries?: number;
+  candidateCount?: number;
 }
 
 interface CommunityMarket {
@@ -235,15 +252,14 @@ function HeadToHeadCard({
   onSelect?: (person: 1 | 2) => void;
 }) {
   return (
-    <PredictCard testId={`card-h2h-${market.id}`} className={`relative overflow-hidden ${isMarketClosed ? 'opacity-75' : ''}`}>
+    <PredictCard testId={`card-h2h-${market.id}`} className={`relative overflow-hidden max-w-sm mx-auto ${isMarketClosed ? 'opacity-75' : ''}`}>
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute left-0 top-0 w-1/2 h-full bg-gradient-to-r from-blue-600/20 to-transparent" />
         <div className="absolute right-0 top-0 w-1/2 h-full bg-gradient-to-l from-purple-600/20 to-transparent" />
       </div>
       
-      <div className="relative z-10">
+      <div className="relative z-10 flex flex-col h-full">
         <div className="flex items-center justify-between mb-3">
-          <CategoryPill category={market.category} />
           <Tooltip>
             <TooltipTrigger asChild>
               <Badge variant="outline" className="text-xs cursor-help">
@@ -255,10 +271,11 @@ function HeadToHeadCard({
               <p className="text-xs">Market closes {market.endTime}</p>
             </TooltipContent>
           </Tooltip>
+          <CategoryPill category={market.category} />
         </div>
         
         <div className="relative mb-4" style={{ padding: '0 5px' }}>
-          <div className="flex max-h-[180px]" style={{ gap: '7px' }}>
+          <div className="flex" style={{ gap: '7px' }}>
             <div
               className={`flex-1 relative ${!isMarketClosed ? 'cursor-pointer group/p1' : ''}`}
               onClick={() => !isMarketClosed && onSelect?.(1)}
@@ -302,10 +319,14 @@ function HeadToHeadCard({
           </div>
         </div>
         
-        <div className="h-2 rounded-full bg-muted overflow-hidden mb-3">
+        <div className="h-2 rounded-full overflow-hidden mb-3 flex">
           <div 
             className="h-full bg-gradient-to-r from-blue-500 to-blue-400"
             style={{ width: `${market.person1Percent}%` }}
+          />
+          <div 
+            className="h-full bg-gradient-to-l from-purple-500 to-purple-400"
+            style={{ width: `${100 - market.person1Percent}%` }}
           />
         </div>
         
@@ -315,37 +336,34 @@ function HeadToHeadCard({
           </span>
         </div>
         
-        {isMarketClosed ? (
-          <Button 
-            size="sm" 
-            className="w-full bg-muted text-muted-foreground cursor-not-allowed"
-            disabled
-          >
-            <Lock className="h-4 w-4 mr-2" />
-            Awaiting Results
-          </Button>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
+        <div className="mt-auto">
+          {isMarketClosed ? (
             <Button 
-              size="sm" 
-              variant="outline" 
-              className="border-blue-500/30 text-blue-500 hover:bg-blue-500/10"
-              onClick={() => onSelect?.(1)}
-              data-testid={`button-pick1-${market.id}`}
+              className="w-full bg-muted text-muted-foreground cursor-not-allowed"
+              disabled
             >
-              {market.person1.name.split(" ")[0]}
+              <Lock className="h-4 w-4 mr-2" />
+              Awaiting Results
             </Button>
-            <Button 
-              size="sm" 
-              variant="outline" 
-              className="border-purple-500/30 text-purple-500 hover:bg-purple-500/10"
-              onClick={() => onSelect?.(2)}
-              data-testid={`button-pick2-${market.id}`}
-            >
-              {market.person2.name.split(" ")[0]}
-            </Button>
-          </div>
-        )}
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <Button 
+                className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20"
+                onClick={() => onSelect?.(1)}
+                data-testid={`button-pick1-${market.id}`}
+              >
+                {market.person1.name.split(" ")[0]}
+              </Button>
+              <Button 
+                className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20"
+                onClick={() => onSelect?.(2)}
+                data-testid={`button-pick2-${market.id}`}
+              >
+                {market.person2.name.split(" ")[0]}
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
     </PredictCard>
   );
@@ -354,64 +372,79 @@ function HeadToHeadCard({
 function TopGainerCard({ 
   market, 
   isMarketClosed = false,
-  personName,
-  onSelect
+  onShowAllCandidates,
 }: { 
   market: TopGainerMarket; 
   isMarketClosed?: boolean;
-  personName: string;
-  onSelect?: (name: string) => void;
+  onShowAllCandidates?: (market: TopGainerMarket, initialCandidate?: GainerCandidate) => void;
 }) {
-  const personLeader = market.leaders.find(l => l.name === personName);
-  const personRank = market.leaders.findIndex(l => l.name === personName) + 1;
+  const visibleCandidateCount = market.candidateCount ?? market.allCandidates?.length ?? market.totalEntries ?? market.leaders.length;
+  const canPick = !isMarketClosed;
 
   return (
     <PredictCard testId={`card-gainer-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''}`}>
       <div className="flex items-center justify-between mb-3">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-xs text-muted-foreground flex items-center gap-1 cursor-help border-b border-dashed border-muted-foreground/40">
+              <TrendingUp className="h-3 w-3" />
+              Biggest Mover Wins
+              <HelpCircle className="h-3 w-3" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-[240px]">
+            <p className="text-xs">Pick who will have the highest % gain in their Trend Score this week. The biggest mover wins, not the highest ranked.</p>
+          </TooltipContent>
+        </Tooltip>
         <CategoryPill category={market.category} />
-        <span className="text-xs text-muted-foreground">7-day gain</span>
       </div>
       
-      <h3 className="font-semibold mb-3">Category Race: {market.category.charAt(0).toUpperCase() + market.category.slice(1)}</h3>
-      
-      {personLeader && (
-        <div className="flex items-center gap-2 p-2 rounded-lg bg-green-500/10 border border-green-500/20 mb-3">
-          <div className="h-6 w-6 rounded-full bg-green-500 text-white text-xs flex items-center justify-center font-bold">
-            #{personRank}
-          </div>
-          <PersonAvatar name={personName} avatar="" size="sm" />
-          <span className="text-sm flex-1 truncate font-medium">{personName}</span>
-          <div className="text-right">
-            <p className="text-xs font-mono font-bold text-green-500">+{personLeader.currentGain.toLocaleString('en-US')}</p>
-            <p className="text-[10px] font-mono text-muted-foreground">+{personLeader.percentGain}%</p>
-          </div>
-        </div>
-      )}
+      <h3 className="text-[16px] font-semibold mb-3 leading-[1.4]">Category Race: {getMarketCategoryLabel(market.category)}</h3>
       
       <div className="space-y-2 mb-3">
         {market.leaders.map((leader, i) => (
           <div 
             key={leader.name} 
-            className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${i === 0 ? 'border border-amber-500/30' : 'hover:bg-muted/50'} ${leader.name === personName ? 'opacity-50' : ''}`}
-            onClick={() => onSelect?.(leader.name)}
+            className={`flex items-center gap-2 p-2 rounded-lg transition-colors ${canPick ? 'cursor-pointer' : ''} ${i === 0 ? 'border border-amber-500/30' : canPick ? 'hover:bg-muted/50' : ''}`}
+            onClick={() => {
+              if (!canPick) return;
+              onShowAllCandidates?.(market, leader);
+            }}
           >
             <div className="relative">
               {i === 0 ? (
-                <div className="h-5 w-5 rounded-full bg-background/80 backdrop-blur-sm border border-amber-500/50 flex items-center justify-center">
-                  <Crown className="h-3 w-3 text-amber-500" />
-                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="h-5 w-5 rounded-full bg-background/80 backdrop-blur-sm border border-amber-500/50 flex items-center justify-center cursor-help">
+                      <Crown className="h-3 w-3 text-amber-500" />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">Current category leaderboard rank</p>
+                  </TooltipContent>
+                </Tooltip>
               ) : (
-                <span className="text-xs font-bold text-violet-500 w-5 text-center">#{i + 1}</span>
+                <span className="text-xs font-bold text-violet-500 w-5 text-center">#{leader.rank || (i + 1)}</span>
               )}
             </div>
-            <PersonAvatar name={leader.name} avatar={leader.avatar} size="xs" />
+            <PersonAvatar name={leader.name} avatar={leader.avatar} size="sm" />
             <span className="text-sm flex-1 truncate">{leader.name}</span>
             <div className="text-right">
-              <p className="text-xs font-mono font-bold text-green-500">+{leader.currentGain.toLocaleString('en-US')} pts</p>
-              <p className="text-[10px] font-mono text-muted-foreground">+{leader.percentGain}%</p>
+              <p className={`text-xs font-mono font-bold ${leader.percentGain >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatSignedPercent(leader.percentGain)}</p>
+              <p className={`text-[10px] font-mono ${leader.currentGain >= 0 ? 'text-muted-foreground' : 'text-red-400/80'}`}>
+                {formatSignedPoints(leader.currentGain)} pts added
+              </p>
             </div>
           </div>
         ))}
+        {visibleCandidateCount > 3 && (
+          <button
+            className="text-xs text-violet-400 hover:text-violet-300 text-center mt-1 w-full cursor-pointer transition-colors"
+            onClick={(e) => { e.stopPropagation(); onShowAllCandidates?.(market); }}
+          >
+            View all {visibleCandidateCount} candidates
+          </button>
+        )}
       </div>
       
       <div className="flex items-center justify-between mb-3">
@@ -420,27 +453,171 @@ function TopGainerCard({
         </span>
       </div>
       
-      {isMarketClosed ? (
-        <Button 
-          size="sm" 
-          className="w-full bg-muted text-muted-foreground cursor-not-allowed"
-          disabled
-        >
-          <Lock className="h-4 w-4 mr-2" />
-          Awaiting Results
-        </Button>
-      ) : (
-        <Button 
-          size="sm" 
-          className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-          data-testid={`button-place-prediction-${market.id}`}
-          onClick={() => market.leaders.length > 0 && onSelect?.(market.leaders[0].name)}
-        >
-          Place Prediction
-          <ChevronRight className="h-4 w-4 ml-1" />
-        </Button>
-      )}
+      <div className="mt-auto">
+        {isMarketClosed ? (
+          <Button 
+            className="w-full bg-muted text-muted-foreground cursor-not-allowed"
+            disabled
+          >
+            <Lock className="h-4 w-4 mr-2" />
+            Awaiting Results
+          </Button>
+        ) : (
+          <Button 
+            className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3 md:py-2 h-auto"
+            data-testid={`button-place-prediction-${market.id}`}
+            onClick={() => onShowAllCandidates?.(market)}
+          >
+            Choose Candidate
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        )}
+      </div>
     </PredictCard>
+  );
+}
+
+function GainerCandidatesDialog({
+  market,
+  open,
+  initialCandidate,
+  onClose,
+  onContinue,
+}: {
+  market: TopGainerMarket | null;
+  open: boolean;
+  initialCandidate?: GainerCandidate | null;
+  onClose: () => void;
+  onContinue: (candidate: GainerCandidate) => void;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCandidateKey, setSelectedCandidateKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !market) return;
+    setSearchQuery("");
+    setSelectedCandidateKey(
+      initialCandidate?.entryId || initialCandidate?.personId || initialCandidate?.name || null
+    );
+  }, [open, market, initialCandidate]);
+
+  if (!market) return null;
+  const candidates = market.allCandidates || market.leaders;
+  const categoryLabel = getMarketCategoryLabel(market.category);
+  const filteredCandidates = candidates.filter((c) =>
+    c.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  const selectedCandidate = candidates.find(
+    (c) => (c.entryId || c.personId || c.name) === selectedCandidateKey
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="shrink-0 px-4 pt-4 pb-2">
+          <DialogTitle className="flex items-center gap-2">
+            <Trophy className="h-5 w-5 text-amber-500" />
+            Category Race: {categoryLabel}
+          </DialogTitle>
+          <DialogDescription>
+            Who will be the biggest mover this week?
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="shrink-0 px-4 pb-3 space-y-2">
+          <div className="rounded-md bg-violet-500/5 border border-violet-500/15 px-3 py-2">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <strong className="text-foreground">How it works:</strong> The winner is whoever has the highest <strong className="text-green-500">% gain</strong> in their Trend Score by Sunday close &mdash; not the highest ranked person.
+            </p>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`Search ${categoryLabel} candidates...`}
+              className="pl-9"
+            />
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {candidates.length} candidates &middot; Tap to pick, then continue
+          </p>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
+          <div className="space-y-1.5">
+            {filteredCandidates.map((candidate, idx) => {
+              const candidateKey = candidate.entryId || candidate.personId || candidate.name;
+              const isSelected = candidateKey === selectedCandidateKey;
+              const isLeader = idx === 0 && !searchQuery;
+
+              return (
+                <button
+                  type="button"
+                  key={candidateKey}
+                  className={`w-full flex items-center gap-2 p-2 rounded-lg border text-left transition-colors cursor-pointer ${
+                    isSelected
+                      ? "border-violet-500/60 bg-violet-500/10"
+                      : isLeader
+                        ? "border-amber-500/30 hover:bg-amber-500/5"
+                        : "border-transparent hover:bg-muted/50"
+                  }`}
+                  onClick={() => setSelectedCandidateKey(candidateKey)}
+                >
+                  <div className="w-6 shrink-0 text-center">
+                    {isLeader ? (
+                      <div className="inline-flex h-5 w-5 rounded-full bg-background/80 border border-amber-500/50 items-center justify-center">
+                        <Crown className="h-3 w-3 text-amber-500" />
+                      </div>
+                    ) : (
+                      <span className="text-xs font-bold text-violet-500">#{candidate.rank || (idx + 1)}</span>
+                    )}
+                  </div>
+                  <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="sm" />
+                  <span className="text-sm flex-1 truncate">{candidate.name}</span>
+                  <div className="text-right shrink-0">
+                    <p className={`text-xs font-mono font-bold ${candidate.percentGain >= 0 ? "text-green-500" : "text-red-500"}`}>
+                      {formatSignedPercent(candidate.percentGain)}
+                    </p>
+                    <p className={`text-[10px] font-mono ${candidate.currentGain >= 0 ? "text-muted-foreground" : "text-red-400/80"}`}>
+                      {formatSignedPoints(candidate.currentGain)} pts
+                    </p>
+                  </div>
+                  {isSelected && (
+                    <div className="shrink-0 h-4 w-4 rounded-full bg-violet-500 flex items-center justify-center">
+                      <Check className="h-2.5 w-2.5 text-white" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+            {filteredCandidates.length === 0 && (
+              <div className="rounded-lg border border-dashed border-border/60 px-3 py-6 text-center text-sm text-muted-foreground">
+                No candidates match &ldquo;{searchQuery}&rdquo;
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="shrink-0 border-t px-4 py-3 flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+            disabled={!selectedCandidate}
+            onClick={() => {
+              if (!selectedCandidate) return;
+              onContinue(selectedCandidate);
+              onClose();
+            }}
+          >
+            {selectedCandidate ? `Pick ${selectedCandidate.name.split(" ")[0]}` : "Select a candidate"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -629,6 +806,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
   const isMarketClosed = marketCycle.status === "CLOSED";
   const [jackpotModalOpen, setJackpotModalOpen] = useState(false);
   const [showCommunityOverlay, setShowCommunityOverlay] = useState(false);
+  const [gainerPickerState, setGainerPickerState] = useState<{ market: TopGainerMarket; initialCandidate?: GainerCandidate | null } | null>(null);
 
   const { data: nativeUpdownData, isLoading: updownLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/updown'] });
   const { data: nativeH2hData, isLoading: h2hLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/h2h'] });
@@ -735,24 +913,30 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
     const all: TopGainerMarket[] = dbMarkets.map((m: any) => {
       const entries = m.entries || [];
       const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0) + Number(m.seedVolume || 0);
+      const allCandidates: GainerCandidate[] = entries.map((e: any) => {
+        const p = e.person || {};
+        return {
+          name: p.name || e.label || "?",
+          avatar: p.avatar || "",
+          currentGain: Number(p.change7d || 0) * Number(p.trendScore || 0) / 100,
+          percentGain: Number(p.change7d || 0),
+          rank: Number(p.rank || 0),
+          entryId: e.id,
+          personId: e.personId || "",
+        };
+      }).sort((a: GainerCandidate, b: GainerCandidate) => b.percentGain - a.percentGain);
       return {
         id: m.id,
         category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
-        leaders: entries.slice(0, 3).map((e: any) => {
-          const p = e.person || {};
-          return {
-            name: p.name || e.label || "?",
-            avatar: p.avatar || "",
-            currentGain: Number(p.change7d || 0) * Number(p.trendScore || 0) / 100,
-            percentGain: Number(p.change7d || 0),
-            personId: e.personId || "",
-          };
-        }),
+        leaders: allCandidates.slice(0, 3),
+        allCandidates,
         totalPool,
         endTime: "Sun 23:59 UTC",
+        totalEntries: entries.length,
+        candidateCount: allCandidates.length,
       };
     });
-    return all.filter(g => g.leaders.some(l => l.personId === personId));
+    return all.filter(g => (g.allCandidates || g.leaders).some(l => l.personId === personId));
   }, [nativeGainerData, personId]);
 
   const communityPredictions = useMemo((): CommunityMarket[] => {
@@ -904,10 +1088,44 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
     setStakeModalOpen(true);
   };
 
+  const handleGainerSelect = (market: TopGainerMarket, candidate: GainerCandidate) => {
+    if (!user) {
+      toast({ title: "Sign in required", description: "Sign in to place predictions." });
+      setLocation("/login");
+      return;
+    }
+    if (!candidate.entryId) {
+      toast({ title: "Market unavailable", description: "This market is missing required entries. Please try another market.", variant: "destructive" });
+      return;
+    }
+    const categoryLabel = getMarketCategoryLabel(market.category);
+    setPendingSelection({
+      type: "gainer",
+      choice: candidate.name,
+      marketName: `Category Race: ${categoryLabel}`,
+      marketId: market.id,
+      entryId: candidate.entryId,
+      currentScore: candidate.currentGain,
+      candidateRank: candidate.rank,
+      candidatePercentGain: candidate.percentGain,
+      candidatePointsAdded: candidate.currentGain,
+    });
+    setStakeModalOpen(true);
+  };
+
   const handleConfirmStake = (amount: number) => {
     if (!pendingSelection || !pendingSelection.marketId) {
       setStakeModalOpen(false);
       setPendingSelection(null);
+      return;
+    }
+    if (pendingSelection.type === "gainer" && pendingSelection.entryId) {
+      nativeMarketBetMutation.mutate({
+        marketId: pendingSelection.marketId,
+        entryId: pendingSelection.entryId,
+        stakeAmount: amount,
+        marketType: "gainer",
+      });
       return;
     }
     if (pendingSelection.type === "h2h" && pendingSelection.entryId) {
@@ -1157,9 +1375,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
               <TopGainerCard
                 key={gainer.id}
                 market={gainer}
-                personName={personName}
                 isMarketClosed={isMarketClosed}
-                onSelect={() => setLocation("/market?section=gainer")}
+                onShowAllCandidates={(pickedMarket, initialCandidate) => setGainerPickerState({ market: pickedMarket, initialCandidate })}
               />
             ))}
           </div>
@@ -1192,6 +1409,18 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         personName={personName}
         markets={communityPredictions}
         isMarketClosed={isMarketClosed}
+      />
+
+      <GainerCandidatesDialog
+        market={gainerPickerState?.market || null}
+        initialCandidate={gainerPickerState?.initialCandidate || null}
+        open={!!gainerPickerState}
+        onClose={() => setGainerPickerState(null)}
+        onContinue={(candidate) => {
+          if (gainerPickerState?.market) {
+            handleGainerSelect(gainerPickerState.market, candidate);
+          }
+        }}
       />
 
       <StakeModal
