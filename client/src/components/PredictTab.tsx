@@ -3,11 +3,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
+import { JackpotEntryModal } from "@/components/JackpotEntryModal";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -258,7 +258,7 @@ function HeadToHeadCard({
         </div>
         
         <div className="relative mb-4" style={{ padding: '0 5px' }}>
-          <div className="flex" style={{ gap: '7px' }}>
+          <div className="flex max-h-[180px]" style={{ gap: '7px' }}>
             <div
               className={`flex-1 relative ${!isMarketClosed ? 'cursor-pointer group/p1' : ''}`}
               onClick={() => !isMarketClosed && onSelect?.(1)}
@@ -627,9 +627,7 @@ function SectionHeader({
 export function PredictTab({ personId, personName, personAvatar, currentScore }: PredictTabProps) {
   const marketCycle = useMarketCycle();
   const isMarketClosed = marketCycle.status === "CLOSED";
-  const [showPredictionModal, setShowPredictionModal] = useState(false);
-  const [stakeAmount, setStakeAmount] = useState("");
-  const [exactPrediction, setExactPrediction] = useState("");
+  const [jackpotModalOpen, setJackpotModalOpen] = useState(false);
   const [showCommunityOverlay, setShowCommunityOverlay] = useState(false);
 
   const { data: nativeUpdownData, isLoading: updownLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/updown'] });
@@ -1070,7 +1068,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
           ) : (
             <Button 
               className="bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
-              onClick={() => setShowPredictionModal(true)}
+              onClick={() => setJackpotModalOpen(true)}
               data-testid="button-profile-predict-score"
             >
               <Sparkles className="h-4 w-4 mr-2" />
@@ -1085,77 +1083,15 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
           </div>
         )}
 
-      <Dialog open={showPredictionModal} onOpenChange={setShowPredictionModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Crown className="h-5 w-5 text-amber-500" />
-              Enter Weekly Jackpot
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
-              <PersonAvatar name={personName} avatar={personAvatar || ""} size="md" />
-              <div>
-                <p className="font-semibold">{personName}</p>
-                <p className="text-xs text-muted-foreground font-mono">
-                  Current: {currentScore.toLocaleString('en-US')} pts
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Your Exact Score Prediction</label>
-              <Input
-                type="number"
-                placeholder="Enter predicted score (e.g., 520000)"
-                value={exactPrediction}
-                onChange={(e) => setExactPrediction(e.target.value)}
-                className="font-mono"
-                data-testid="input-profile-exact-prediction"
-              />
-              <p className="text-xs text-muted-foreground">
-                Predict the exact score at week's end. Closest wins the jackpot!
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Stake Amount</label>
-              <Input
-                type="number"
-                placeholder="Enter credits to stake"
-                value={stakeAmount}
-                onChange={(e) => setStakeAmount(e.target.value)}
-                className="font-mono"
-                data-testid="input-profile-stake-amount"
-              />
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              {[100, 500, 1000].map((amount) => (
-                <Button
-                  key={amount}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setStakeAmount(amount.toString())}
-                  className="flex-1"
-                >
-                  {amount}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          <Button 
-            onClick={() => setShowPredictionModal(false)} 
-            className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white"
-            data-testid="button-profile-confirm-prediction"
-          >
-            Confirm Prediction
-          </Button>
-        </DialogContent>
-      </Dialog>
+      <JackpotEntryModal
+        open={jackpotModalOpen}
+        onClose={() => setJackpotModalOpen(false)}
+        person={{ id: personId, name: personName, avatar: personAvatar || "", trendScore: currentScore } as any}
+        marketId={jackpotMarket?.id || null}
+        userCredits={walletCredits}
+        bettingCutoff={jackpotMarket?.endAt ? new Date(new Date(jackpotMarket.endAt).getTime() - 48 * 60 * 60 * 1000).toISOString() : null}
+        isCutoffPassed={jackpotMarket?.endAt ? new Date() > new Date(new Date(jackpotMarket.endAt).getTime() - 48 * 60 * 60 * 1000) : false}
+      />
       </section>
 
       {/* Up/Down Predictions */}
@@ -1223,6 +1159,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
                 market={gainer}
                 personName={personName}
                 isMarketClosed={isMarketClosed}
+                onSelect={() => setLocation("/market?section=gainer")}
               />
             ))}
           </div>
