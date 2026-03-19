@@ -141,6 +141,24 @@ Total pool: ${totalPool} credits
 Evaluate this market and provide your prediction. Use the numbered outcomes exactly as listed.`;
 }
 
+function extractOutputText(response: any): string | null {
+  if (response.output_text) return response.output_text;
+
+  if (Array.isArray(response.output)) {
+    for (const item of response.output) {
+      if (item.type === "message" && Array.isArray(item.content)) {
+        for (const part of item.content) {
+          if (part.type === "output_text" && part.text) {
+            return part.text;
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 export async function computeWorldMarketPrediction(
   agent: AgentConfigData,
   market: MarketWithEntries,
@@ -201,9 +219,12 @@ export async function computeWorldMarketPrediction(
 
     clearTimeout(timeout);
 
-    const outputText = (response as any).output_text;
+    const outputText = extractOutputText(response);
     if (!outputText) {
-      log(`[WorldEngine] Empty response for agent=${agent.displayName} market=${market.id.slice(0, 8)}`);
+      const outputTypes = Array.isArray((response as any).output)
+        ? (response as any).output.map((item: any) => item.type).join(", ")
+        : "no output array";
+      log(`[WorldEngine] Empty response for agent=${agent.displayName} market=${market.id.slice(0, 8)} — output items: [${outputTypes}]`);
       return abstain("api_error");
     }
 
