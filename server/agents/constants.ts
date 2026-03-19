@@ -55,6 +55,7 @@ export const AGENT_RUNNER_STARTUP_DELAY_MS = 3 * 60 * 1000;
 
 // Stagger: only evaluate this many markets per sweep (rest deferred to next sweep)
 export const MARKETS_PER_SWEEP = 15;
+export const WORLD_MARKET_RESERVE_PER_SWEEP = 5;
 
 // Conviction re-bets: allow agents to bet again on markets with significant score movement
 export const CONVICTION_SCORE_THRESHOLD_PCT = 0.05; // 5% move from baseline

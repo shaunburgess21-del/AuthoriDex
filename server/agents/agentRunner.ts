@@ -38,6 +38,7 @@ import {
   AGENT_CREDIT_LOW_THRESHOLD,
   AGENT_CREDIT_TOPUP_TARGET,
   MARKETS_PER_SWEEP,
+  WORLD_MARKET_RESERVE_PER_SWEEP,
   CONVICTION_SCORE_THRESHOLD_PCT,
   CONVICTION_MAX_PER_MARKET,
   AGENT_STAKE_OVERRIDES,
@@ -206,14 +207,23 @@ async function runAgentBatchOnce(): Promise<{
 
   log(`[AgentRunner] Found ${markets.length} open markets total`);
 
-  // Fisher-Yates shuffle then slice to MARKETS_PER_SWEEP so agents encounter
-  // different markets on each 30-min sweep rather than blitzing everything at once
-  const shuffled = [...markets];
-  for (let i = shuffled.length - 1; i > 0; i--) {
+  // Split into two pools so World Markets are guaranteed representation.
+  // Without this, 29 World Markets in 800+ total markets are statistically buried.
+  const worldMarkets = markets.filter(m => m.marketType === "community");
+  const nativeMarkets = markets.filter(m => m.marketType !== "community");
+
+  for (let i = worldMarkets.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    [worldMarkets[i], worldMarkets[j]] = [worldMarkets[j], worldMarkets[i]];
   }
-  const sweepMarkets = shuffled.slice(0, MARKETS_PER_SWEEP);
+  for (let i = nativeMarkets.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [nativeMarkets[i], nativeMarkets[j]] = [nativeMarkets[j], nativeMarkets[i]];
+  }
+
+  const worldSlice = worldMarkets.slice(0, WORLD_MARKET_RESERVE_PER_SWEEP);
+  const nativeSlice = nativeMarkets.slice(0, MARKETS_PER_SWEEP - worldSlice.length);
+  const sweepMarkets = [...worldSlice, ...nativeSlice];
 
   const marketSummary = sweepMarkets.map(m => ({
     id: m.id.slice(0, 8),
