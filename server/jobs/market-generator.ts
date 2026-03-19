@@ -261,6 +261,7 @@ export async function generateWeeklyGainer(): Promise<number> {
     .where(and(
       eq(predictionMarkets.marketType, "gainer"),
       eq(predictionMarkets.weekNumber, weekNumber),
+      eq(predictionMarkets.status, "OPEN"),
       inArray(predictionMarkets.visibility, ["live", "inactive"])
     ));
   const existingCategories = new Set(existingGainers.map(e => normalizeMarketCategory(e.category)));
