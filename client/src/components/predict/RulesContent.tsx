@@ -46,11 +46,11 @@ export const RULES_CONTENT: Record<string, RulesEntry> = {
   },
   gainer: {
     title: "How Category Races Work",
-    description: "Predict which celebrity will post the highest percentage gain by market close.",
+    description: "Pick who will be the biggest mover in their category this week.",
     steps: [
-      { icon: <BarChart3 className="h-4 w-4 text-violet-500" />, title: "Percentage Gain Focus", description: "This market is decided by percentage gain from the opening score, not raw points added." },
-      { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Pick The Best Climber", description: "Choose who you think will post the biggest percentage increase by the time the market closes." },
-      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Winner Determined by Data", description: "The person with the highest percentage gain at close wins the market." },
+      { icon: <TrendingUp className="h-4 w-4 text-violet-500" />, title: "Biggest Mover Wins", description: "The winner is whoever has the highest % gain in their Trend Score by Sunday close — not the highest ranked person." },
+      { icon: <Target className="h-4 w-4 text-violet-500" />, title: "Spot the Climber", description: "Look for people with momentum — news cycles, viral moments, or rising buzz can push someone's score up fast." },
+      { icon: <Trophy className="h-4 w-4 text-violet-500" />, title: "Underdogs Can Win", description: "A lower-ranked person with a big % spike beats a top-ranked person who barely moves. Pick smart, not obvious." },
     ]
   },
   community: {
@@ -69,7 +69,7 @@ export const RULES_CONTENT: Record<string, RulesEntry> = {
       { icon: <Crown className="h-4 w-4 text-amber-500" />, title: "Weekly Jackpot", description: "Guess the exact closing Trend Score for any person. Closest guess wins the pool. Entries close Friday 23:59 UTC." },
       { icon: <TrendingUp className="h-4 w-4 text-violet-500" />, title: "Up or Down", description: "Predict whether someone's Trend Score will finish above or below their weekly baseline. The less popular your pick, the bigger the potential payout." },
       { icon: <Swords className="h-4 w-4 text-violet-500" />, title: "Head-to-Head", description: "Pick who will have the higher Trend Score at close. Back the underdog for bigger rewards." },
-      { icon: <BarChart3 className="h-4 w-4 text-violet-500" />, title: "Category Races", description: "Predict which person will post the highest percentage gain in their category by market close." },
+      { icon: <BarChart3 className="h-4 w-4 text-violet-500" />, title: "Category Races", description: "Pick the biggest mover in each category. Whoever has the highest % gain in their Trend Score by Sunday wins." },
       { icon: <Globe className="h-4 w-4 text-violet-500" />, title: "World Markets", description: "Predict the outcome of verifiable global events — elections, acquisitions, viral milestones, and more." },
     ]
   }

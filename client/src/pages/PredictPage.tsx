@@ -1168,7 +1168,18 @@ function TopGainerCard({
   return (
     <PredictCard testId={`card-gainer-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''} ${isShimmering ? 'shimmer-once' : ''}`}>
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm text-muted-foreground">7-day gain</span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-xs text-muted-foreground flex items-center gap-1 cursor-help border-b border-dashed border-muted-foreground/40">
+              <TrendingUp className="h-3 w-3" />
+              Biggest Mover Wins
+              <HelpCircle className="h-3 w-3" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-[240px]">
+            <p className="text-xs">Pick who will have the highest % gain in their Trend Score this week. The biggest mover wins, not the highest ranked.</p>
+          </TooltipContent>
+        </Tooltip>
         <CategoryPill category={market.category} />
       </div>
       
@@ -1302,11 +1313,16 @@ function GainerCandidatesDialog({
             Category Race: {categoryLabel}
           </DialogTitle>
           <DialogDescription>
-            Pick who you think will finish #1 by 7-day percentage gain
+            Who will be the biggest mover this week?
           </DialogDescription>
         </DialogHeader>
 
-        <div className="shrink-0 px-4 pb-3">
+        <div className="shrink-0 px-4 pb-3 space-y-2">
+          <div className="rounded-md bg-violet-500/5 border border-violet-500/15 px-3 py-2">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <strong className="text-foreground">How it works:</strong> The winner is whoever has the highest <strong className="text-green-500">% gain</strong> in their Trend Score by Sunday close &mdash; not the highest ranked person.
+            </p>
+          </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -1317,8 +1333,8 @@ function GainerCandidatesDialog({
               className="pl-9"
             />
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {candidates.length} candidates in {categoryLabel}. Tap to select, then continue.
+          <p className="text-[11px] text-muted-foreground">
+            {candidates.length} candidates &middot; Tap to pick, then continue
           </p>
         </div>
 
@@ -3286,7 +3302,7 @@ export default function PredictPage() {
               icon={<Trophy className="h-5 w-5 text-violet-400" />}
               onRulesClick={() => setRulesModalOpen("gainer")}
             >
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will post the biggest percentage gain</p>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Pick the biggest mover in each category this week</p>
             </SectionHeader>
             <SectionFilterBar
               categoryFilter={gainerCategory}

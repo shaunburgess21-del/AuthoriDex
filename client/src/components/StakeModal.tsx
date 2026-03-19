@@ -20,7 +20,7 @@ const MISSION_HEADERS: Record<string, string> = {
   updown: "Will their Trend Score be higher or lower by close?",
   h2h: "Back your champion to win this weekly matchup.",
   race: "Predict the #1 top performer to win.",
-  gainer: "Pick who you think will finish with the biggest percentage gain by close.",
+  gainer: "Pick the biggest mover — whoever gains the most % in their Trend Score wins.",
   community: "Cast your vote on this real-world prediction.",
 };
 
@@ -302,7 +302,7 @@ export function StakeModal({
                 </Card>
               </div>
               <p className="text-xs text-muted-foreground text-center">
-                Winner is whoever closes the week with the highest percentage gain. Points added are supporting context.
+                Winner = highest % gain in Trend Score by Sunday close. Not highest ranked — biggest mover.
               </p>
             </>
           )}
