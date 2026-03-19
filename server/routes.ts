@@ -912,7 +912,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/pulse/trend-history", async (req, res) => {
     try {
       const days = Math.min(Math.max(parseInt(req.query.days as string) || 7, 1), 3650);
-      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 20);
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 100);
       const category = (req.query.category as string || "").toLowerCase();
 
       const trendWhere = category && category !== "all"
@@ -984,6 +984,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      const allCats = await db
+        .selectDistinct({ category: trendingPeople.category })
+        .from(trendingPeople)
+        .where(isNotNull(trendingPeople.category));
+
       res.json({
         people: topPeople.map((p) => ({
           id: p.id,
@@ -995,6 +1000,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           sparkline: sparkMap[p.id] ?? [],
         })),
         series,
+        availableCategories: allCats.map((r) => r.category).filter(Boolean),
       });
     } catch (error: any) {
       res.status(500).json({ error: "Failed to fetch pulse trend history" });
@@ -1072,7 +1078,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/pulse/approval-current", async (req, res) => {
     try {
-      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 20);
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 100);
       const category = (req.query.category as string || "").toLowerCase();
 
       const conditions: SQL[] = [gt(celebrityMetrics.approvalAvgRating, 0)];
@@ -1101,6 +1107,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : [];
       const slugMap = Object.fromEntries(imageSlugs.map((r) => [r.id, r.imageSlug]));
 
+      // Aggregate vote counts per person via Drizzle to avoid Supabase's 1000-row default limit.
+      const realVoteCountMap: Record<string, number> = {};
+      if (personIds.length > 0) {
+        const voteCounts = await db
+          .select({
+            personId: userVotes.personId,
+            voteCount: sql<number>`cast(count(*) as int)`,
+          })
+          .from(userVotes)
+          .where(inArray(userVotes.personId, personIds))
+          .groupBy(userVotes.personId);
+
+        for (const r of voteCounts) {
+          realVoteCountMap[r.personId] = r.voteCount;
+        }
+      }
+
+      const allCats = await db
+        .selectDistinct({ category: trendingPeople.category })
+        .from(trendingPeople)
+        .innerJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId))
+        .where(gt(celebrityMetrics.approvalAvgRating, 0));
+
       res.json({
         people: rows.map((r) => ({
           id: r.id,
@@ -1108,11 +1137,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
           category: r.category,
           imageSlug: slugMap[r.id] || null,
           approvalAvgRating: r.approvalAvgRating,
-          approvalVotesCount: r.approvalVotesCount,
+          approvalVotesCount: realVoteCountMap[r.id] ?? r.approvalVotesCount ?? 0,
         })),
+        availableCategories: allCats.map((r) => r.category).filter(Boolean),
       });
     } catch (error: any) {
       res.status(500).json({ error: "Failed to fetch pulse approval current" });
+    }
+  });
+
+  app.get("/api/pulse/approval-breakdown/:personId", async (req, res) => {
+    try {
+      const personId = String(req.params.personId || "").trim();
+      if (!personId) {
+        return res.status(400).json({ error: "personId is required" });
+      }
+
+      const ratingRows = await db
+        .select({
+          rating: userVotes.rating,
+          cnt: sql<number>`cast(count(*) as int)`,
+        })
+        .from(userVotes)
+        .where(
+          and(
+            eq(userVotes.personId, personId),
+            gte(userVotes.rating, 1),
+            lte(userVotes.rating, 5),
+          ),
+        )
+        .groupBy(userVotes.rating);
+
+      const counts: Record<"1" | "2" | "3" | "4" | "5", number> = {
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 0,
+      };
+
+      for (const row of ratingRows) {
+        const r = Number(row.rating);
+        if (r >= 1 && r <= 5) {
+          counts[String(r) as keyof typeof counts] = Number(row.cnt);
+        }
+      }
+
+      const totalVotes = counts["1"] + counts["2"] + counts["3"] + counts["4"] + counts["5"];
+      const percentages: Record<"1" | "2" | "3" | "4" | "5", number> = {
+        "1": totalVotes > 0 ? Number(((counts["1"] / totalVotes) * 100).toFixed(1)) : 0,
+        "2": totalVotes > 0 ? Number(((counts["2"] / totalVotes) * 100).toFixed(1)) : 0,
+        "3": totalVotes > 0 ? Number(((counts["3"] / totalVotes) * 100).toFixed(1)) : 0,
+        "4": totalVotes > 0 ? Number(((counts["4"] / totalVotes) * 100).toFixed(1)) : 0,
+        "5": totalVotes > 0 ? Number(((counts["5"] / totalVotes) * 100).toFixed(1)) : 0,
+      };
+
+      res.json({
+        personId,
+        totalVotes,
+        counts,
+        percentages,
+      });
+    } catch (error: any) {
+      console.error("Error in approval-breakdown route:", error);
+      res.status(500).json({ error: "Failed to fetch approval breakdown" });
     }
   });
 
@@ -2300,19 +2388,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const seedOverratedCount = existingMetrics?.seedOverratedCount || 0;
       const seedFairlyRatedCount = existingMetrics?.seedFairlyRatedCount || 0;
 
-      // Get REAL approval votes from user_votes (Supabase)
-      const { data: approvalVotes, error: approvalError } = await supabaseServer
-        .from('user_votes')
-        .select('rating')
-        .eq('person_id', celebrityId);
+      // REAL approval votes: aggregate in DB (avoids Supabase 1000-row limit)
+      const [approvalAgg] = await db
+        .select({
+          cnt: sql<number>`cast(count(*) as int)`,
+          sumRating: sql<number>`coalesce(sum(${userVotes.rating}), 0)::double precision`,
+        })
+        .from(userVotes)
+        .where(eq(userVotes.personId, celebrityId));
 
-      let realApprovalCount = 0;
-      let realApprovalSum = 0;
-
-      if (!approvalError && approvalVotes && approvalVotes.length > 0) {
-        realApprovalCount = approvalVotes.length;
-        realApprovalSum = approvalVotes.reduce((acc, v) => acc + v.rating, 0);
-      }
+      const realApprovalCount = Number(approvalAgg?.cnt ?? 0);
+      const realApprovalSum = Number(approvalAgg?.sumRating ?? 0);
 
       // Calculate DISPLAY totals: seed + real
       const totalApprovalCount = seedApprovalCount + realApprovalCount;
@@ -2593,56 +2679,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const totalVotes = metrics.approvalVotesCount || 0;
       const avgRating = metrics.approvalAvgRating || 3.0;
 
-      const hashFromId = (id: string): number => {
-        let h = 0;
-        for (let i = 0; i < id.length; i++) {
-          h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+      const ratingRows = await db
+        .select({
+          rating: userVotes.rating,
+          cnt: sql<number>`cast(count(*) as int)`,
+        })
+        .from(userVotes)
+        .where(
+          and(
+            eq(userVotes.personId, celebrityId),
+            gte(userVotes.rating, 1),
+            lte(userVotes.rating, 5),
+          ),
+        )
+        .groupBy(userVotes.rating);
+
+      const counts = [0, 0, 0, 0, 0];
+      for (const row of ratingRows) {
+        const rating = Number(row.rating);
+        if (rating >= 1 && rating <= 5) {
+          counts[rating - 1] = Number(row.cnt);
         }
-        return Math.abs(h);
-      };
+      }
 
-      const seededRandom = (seed: number, index: number): number => {
-        let x = Math.sin(seed * 9301 + index * 49297 + 233280) * 10000;
-        return x - Math.floor(x);
-      };
-
-      const generateDistribution = (avg: number, personId: string) => {
-        const seed = hashFromId(personId);
-        const weights = [0, 0, 0, 0, 0];
-
-        for (let i = 0; i < 5; i++) {
-          const rating = i + 1;
-          const distance = Math.abs(rating - avg);
-          const base = Math.exp(-distance * 0.8);
-          const jitter = (seededRandom(seed, i) - 0.5) * 0.35 * base;
-          weights[i] = Math.max(base + jitter, 0.01);
-        }
-
-        const total = weights.reduce((a, b) => a + b, 0);
-        const normalized = weights.map(w => Math.round((w / total) * 100));
-
-        const sum = normalized.reduce((a, b) => a + b, 0);
-        if (sum !== 100) {
-          const maxIdx = normalized.indexOf(Math.max(...normalized));
-          normalized[maxIdx] += (100 - sum);
-        }
-
-        return {
-          Hate: normalized[0],
-          Dislike: normalized[1],
-          Neutral: normalized[2],
-          Like: normalized[3],
-          Love: normalized[4],
-        };
-      };
+      const totalVotes = counts.reduce((a, b) => a + b, 0);
+      const pct = totalVotes > 0
+        ? counts.map((c) => Math.round((c / totalVotes) * 100))
+        : [10, 15, 30, 25, 20];
+      const pctSum = pct.reduce((a, b) => a + b, 0);
+      if (pctSum !== 100) {
+        const maxIdx = pct.indexOf(Math.max(...pct));
+        pct[maxIdx] += (100 - pctSum);
+      }
 
       res.json({
         totalVotes,
         averageRating: parseFloat(avgRating.toFixed(1)),
-        distribution: generateDistribution(avgRating, celebrityId)
+        distribution: {
+          Hate: pct[0],
+          Dislike: pct[1],
+          Neutral: pct[2],
+          Like: pct[3],
+          Love: pct[4],
+        }
       });
     } catch (error: any) {
       console.error("[sentiment-stats GET] Error:", error);
@@ -6750,6 +6831,191 @@ Only return the JSON object.`;
     }
   });
 
+  // Get seed approval vote breakdown for a celebrity
+  app.get("/api/admin/celebrities/:id/seed-approval-breakdown", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const [existing] = await db
+        .select({ id: trackedPeople.id })
+        .from(trackedPeople)
+        .where(eq(trackedPeople.id, id))
+        .limit(1);
+      if (!existing) return res.status(404).json({ error: "Celebrity not found" });
+
+      const seedRatingRows = await db
+        .select({
+          rating: userVotes.rating,
+          cnt: sql<number>`cast(count(*) as int)`,
+        })
+        .from(userVotes)
+        .where(
+          and(
+            eq(userVotes.personId, id),
+            sql`${userVotes.userId} LIKE 'seed-system-approval%'`,
+          ),
+        )
+        .groupBy(userVotes.rating);
+
+      const counts: Record<"1" | "2" | "3" | "4" | "5", number> = {
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 0,
+      };
+      for (const row of seedRatingRows) {
+        const rating = Number(row.rating);
+        if (rating >= 1 && rating <= 5) counts[String(rating) as keyof typeof counts] = Number(row.cnt);
+      }
+
+      const totalSeedVotes = counts["1"] + counts["2"] + counts["3"] + counts["4"] + counts["5"];
+      res.json({ counts, totalSeedVotes });
+    } catch (error: any) {
+      console.error("Error in seed approval breakdown GET:", error);
+      res.status(500).json({ error: "Failed to fetch seed approval breakdown" });
+    }
+  });
+
+  // Replace seed approval vote breakdown for a celebrity
+  app.put("/api/admin/celebrities/:id/seed-approval-breakdown", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const adminId = req.userId!;
+      const incoming = req.body?.counts ?? {};
+
+      const parseCount = (value: any) => {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return 0;
+        return Math.max(0, Math.floor(n));
+      };
+
+      const counts: Record<"1" | "2" | "3" | "4" | "5", number> = {
+        "1": parseCount(incoming["1"]),
+        "2": parseCount(incoming["2"]),
+        "3": parseCount(incoming["3"]),
+        "4": parseCount(incoming["4"]),
+        "5": parseCount(incoming["5"]),
+      };
+
+      const [existing] = await db
+        .select({ id: trackedPeople.id, name: trackedPeople.name })
+        .from(trackedPeople)
+        .where(eq(trackedPeople.id, id))
+        .limit(1);
+      if (!existing) return res.status(404).json({ error: "Celebrity not found" });
+
+      // Remove all existing seed rows for this celebrity
+      const { error: deleteError } = await supabaseServer
+        .from("user_votes")
+        .delete()
+        .eq("person_id", id)
+        .like("user_id", "seed-system-approval%");
+      if (deleteError) {
+        console.error("Error deleting existing seed votes:", deleteError);
+        return res.status(500).json({ error: "Failed to replace seed votes" });
+      }
+
+      // Insert replacement seed rows with unique user_id values
+      const rows: Array<{ user_id: string; person_id: string; person_name: string; rating: number }> = [];
+      (["1", "2", "3", "4", "5"] as const).forEach((ratingKey) => {
+        const rating = Number(ratingKey);
+        for (let i = 0; i < counts[ratingKey]; i++) {
+          rows.push({
+            user_id: `seed-system-approval-manual-${id}-r${rating}-i${i + 1}`,
+            person_id: id,
+            person_name: existing.name,
+            rating,
+          });
+        }
+      });
+
+      const batchSize = 500;
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const chunk = rows.slice(i, i + batchSize);
+        const { error: insertError } = await supabaseServer
+          .from("user_votes")
+          .insert(chunk);
+        if (insertError) {
+          console.error("Error inserting replacement seed votes:", insertError);
+          return res.status(500).json({ error: "Failed to replace seed votes" });
+        }
+      }
+
+      // Recompute display metrics from all votes (seed + real) — aggregate in DB
+      const [allVotesAgg] = await db
+        .select({
+          cnt: sql<number>`cast(count(*) as int)`,
+          sumRating: sql<number>`coalesce(sum(${userVotes.rating}), 0)::double precision`,
+        })
+        .from(userVotes)
+        .where(eq(userVotes.personId, id));
+
+      const approvalVotesCount = Number(allVotesAgg?.cnt ?? 0);
+      const totalSum = Number(allVotesAgg?.sumRating ?? 0);
+      const approvalAvgRating = approvalVotesCount > 0 ? totalSum / approvalVotesCount : null;
+      const approvalPct = approvalAvgRating != null ? Math.round(((approvalAvgRating - 1) / 4) * 100) : null;
+
+      const seedApprovalCount = counts["1"] + counts["2"] + counts["3"] + counts["4"] + counts["5"];
+      const seedApprovalSum =
+        counts["1"] * 1 +
+        counts["2"] * 2 +
+        counts["3"] * 3 +
+        counts["4"] * 4 +
+        counts["5"] * 5;
+
+      await db
+        .insert(celebrityMetrics)
+        .values({
+          celebrityId: id,
+          seedApprovalCount,
+          seedApprovalSum,
+          approvalVotesCount,
+          approvalAvgRating,
+          approvalPct,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: celebrityMetrics.celebrityId,
+          set: {
+            seedApprovalCount,
+            seedApprovalSum,
+            approvalVotesCount,
+            approvalAvgRating,
+            approvalPct,
+            updatedAt: new Date(),
+          },
+        });
+
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: "update_seed_approval_breakdown",
+        targetTable: "user_votes",
+        targetId: id,
+        newData: {
+          counts,
+          seedApprovalCount,
+          seedApprovalSum,
+          approvalVotesCount,
+          approvalAvgRating,
+          approvalPct,
+        },
+      });
+
+      res.json({
+        success: true,
+        counts,
+        seedApprovalCount,
+        approvalVotesCount,
+        approvalAvgRating,
+        approvalPct,
+      });
+    } catch (error: any) {
+      console.error("Error in seed approval breakdown PUT:", error);
+      res.status(500).json({ error: "Failed to update seed approval breakdown" });
+    }
+  });
+
   // Delete celebrity
   app.delete("/api/admin/celebrities/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
@@ -9179,15 +9445,15 @@ Aim for 3-5 substantive paragraphs. Be informative, engaging, and balanced. Help
   // Get highest and lowest rated celebrities based on user votes
   app.get("/api/approval-leaders", async (req, res) => {
     try {
-      // Query Supabase for aggregate ratings per person (snake_case columns)
-      const { data: voteStats, error } = await supabaseServer
-        .from('user_votes')
-        .select('person_id, person_name, rating');
-
-      if (error) {
-        console.error("[Approval Leaders] Supabase error:", error);
-        return res.status(500).json({ error: "Failed to fetch vote data" });
-      }
+      const voteStats = await db
+        .select({
+          personId: userVotes.personId,
+          personName: sql<string>`max(${userVotes.personName})`,
+          voteCount: sql<number>`cast(count(*) as int)`,
+          totalRating: sql<number>`coalesce(sum(${userVotes.rating}), 0)::double precision`,
+        })
+        .from(userVotes)
+        .groupBy(userVotes.personId);
 
       if (!voteStats || voteStats.length === 0) {
         // Return fallback celebrities for design preview when no votes exist
@@ -9223,32 +9489,18 @@ Aim for 3-5 substantive paragraphs. Be informative, engaging, and balanced. Help
         return res.json({ highest: fallbackHighest, lowest: fallbackLowest, isFallback: true });
       }
 
-      // Aggregate ratings by personId
-      const personRatings: Record<string, { personId: string; personName: string; totalRating: number; voteCount: number }> = {};
-      
-      for (const vote of voteStats) {
-        const personId = vote.person_id;
-        const personName = vote.person_name;
-        if (!personRatings[personId]) {
-          personRatings[personId] = {
-            personId,
-            personName,
-            totalRating: 0,
-            voteCount: 0,
-          };
-        }
-        personRatings[personId].totalRating += vote.rating;
-        personRatings[personId].voteCount += 1;
-      }
-
-      // Calculate average rating and approval percentage for each person
-      const personStats = Object.values(personRatings).map(p => ({
-        personId: p.personId,
-        personName: p.personName,
-        avgRating: p.totalRating / p.voteCount,
-        voteCount: p.voteCount,
-        approvalPercent: Math.round(((p.totalRating / p.voteCount) - 1) / 4 * 100),
-      }));
+      const personStats = voteStats.map((p) => {
+        const vc = Number(p.voteCount);
+        const tr = Number(p.totalRating);
+        const avg = vc > 0 ? tr / vc : 0;
+        return {
+          personId: p.personId,
+          personName: p.personName,
+          avgRating: avg,
+          voteCount: vc,
+          approvalPercent: vc > 0 ? Math.round(((avg - 1) / 4) * 100) : 0,
+        };
+      });
 
       // Sort to find highest and lowest
       personStats.sort((a, b) => b.avgRating - a.avgRating);

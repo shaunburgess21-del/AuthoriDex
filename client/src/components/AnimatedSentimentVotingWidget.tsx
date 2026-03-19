@@ -260,12 +260,12 @@ export function AnimatedSentimentVotingWidget({
         const { error } = await supabase
           .from('user_votes')
           .upsert({
-            userId: user.id,
-            personId,
-            personName,
+            user_id: user.id,
+            person_id: personId,
+            person_name: personName,
             rating: currentValue,
           }, {
-            onConflict: 'userId,personId',
+            onConflict: 'user_id,person_id',
           });
 
         if (error) {

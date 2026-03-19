@@ -28,6 +28,30 @@ const getSentimentColor = (value: number): string => {
   return SEGMENT_COLORS_5[value - 1];
 };
 
+/** PostgREST returns snake_case columns; normalize to Drizzle-inferred shape */
+function normalizeUserVoteRow(row: Record<string, unknown>): UserVote {
+  return {
+    id: String(row.id ?? ""),
+    userId: String(row.user_id ?? row.userId ?? ""),
+    personId: String(row.person_id ?? row.personId ?? ""),
+    personName: String(row.person_name ?? row.personName ?? ""),
+    rating: Number(row.rating ?? 0),
+    votedAt: new Date(String(row.voted_at ?? row.votedAt ?? Date.now())),
+  };
+}
+
+function normalizeUserFavouriteRow(row: Record<string, unknown>): UserFavourite {
+  return {
+    id: String(row.id ?? ""),
+    userId: String(row.user_id ?? row.userId ?? ""),
+    personId: String(row.person_id ?? row.personId ?? ""),
+    personName: String(row.person_name ?? row.personName ?? ""),
+    personAvatar: (row.person_avatar ?? row.personAvatar) as string | null,
+    personCategory: (row.person_category ?? row.personCategory) as string | null,
+    favouritedAt: new Date(String(row.favourited_at ?? row.favouritedAt ?? Date.now())),
+  };
+}
+
 export default function UserProfilePage() {
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -52,17 +76,23 @@ export default function UserProfilePage() {
           supabase
             .from("user_votes")
             .select("*")
-            .eq("userId", user!.id)
-            .order("votedAt", { ascending: false }),
+            .eq("user_id", user!.id)
+            .order("voted_at", { ascending: false }),
           supabase
             .from("user_favourites")
             .select("*")
-            .eq("userId", user!.id)
-            .order("favouritedAt", { ascending: false }),
+            .eq("user_id", user!.id)
+            .order("favourited_at", { ascending: false }),
         ]);
 
-        if (votesResult.data) setVotes(votesResult.data as UserVote[]);
-        if (favouritesResult.data) setFavourites(favouritesResult.data as UserFavourite[]);
+        if (votesResult.data) {
+          setVotes(votesResult.data.map((r) => normalizeUserVoteRow(r as Record<string, unknown>)));
+        }
+        if (favouritesResult.data) {
+          setFavourites(
+            favouritesResult.data.map((r) => normalizeUserFavouriteRow(r as Record<string, unknown>)),
+          );
+        }
       } catch (error) {
         console.error("Error fetching user data:", error);
       } finally {

@@ -1,6 +1,6 @@
 import { supabaseServer } from "./supabase";
 import { db } from "./db";
-import { trackedPeople, celebrityMetrics, trendingPeople } from "@shared/schema";
+import { trackedPeople, celebrityMetrics, trendingPeople, userVotes } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 
 const SEED_USER_ID = "seed-system-approval";
@@ -283,14 +283,17 @@ export async function seedApprovalData(): Promise<{
         }
       }
 
-      const { data: allVotes, error: sumError } = await supabaseServer
-        .from('user_votes')
-        .select('rating')
-        .eq('person_id', personId);
+      const [voteAgg] = await db
+        .select({
+          cnt: sql<number>`cast(count(*) as int)`,
+          sumRating: sql<number>`coalesce(sum(${userVotes.rating}), 0)::double precision`,
+        })
+        .from(userVotes)
+        .where(eq(userVotes.personId, personId));
 
-      if (!sumError && allVotes && allVotes.length > 0) {
-        const votesCount = allVotes.length;
-        const sum = allVotes.reduce((acc, v) => acc + v.rating, 0);
+      const votesCount = Number(voteAgg?.cnt ?? 0);
+      if (votesCount > 0) {
+        const sum = Number(voteAgg?.sumRating ?? 0);
         const avgRating = sum / votesCount;
         const approvalPct = Math.round(((avgRating - 1) / 4) * 100);
 

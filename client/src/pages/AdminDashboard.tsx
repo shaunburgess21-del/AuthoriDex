@@ -205,6 +205,18 @@ interface Celebrity {
   displayOrder: number;
 }
 
+type SeedRatingKey = "1" | "2" | "3" | "4" | "5";
+
+type SeedApprovalCounts = Record<SeedRatingKey, number>;
+
+const DEFAULT_SEED_APPROVAL_COUNTS: SeedApprovalCounts = {
+  "1": 0,
+  "2": 0,
+  "3": 0,
+  "4": 0,
+  "5": 0,
+};
+
 interface Matchup {
   id: string;
   title: string;
@@ -1444,6 +1456,8 @@ export default function AdminDashboard() {
     xHandle: "",
     searchQueryOverride: "",
   });
+  const [seedApprovalCounts, setSeedApprovalCounts] = useState<SeedApprovalCounts>(DEFAULT_SEED_APPROVAL_COUNTS);
+  const [seedApprovalLoading, setSeedApprovalLoading] = useState(false);
   
   const [showMatchupModal, setShowMatchupModal] = useState(false);
   const [editingMatchup, setEditingMatchup] = useState<Matchup | null>(null);
@@ -2019,6 +2033,8 @@ export default function AdminDashboard() {
       setShowCelebrityModal(false);
       setEditingCelebrity(null);
       setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
+      setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
+      setSeedApprovalLoading(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
     },
     onError: (error: any) => {
@@ -2027,12 +2043,27 @@ export default function AdminDashboard() {
   });
 
   const updateCelebrityMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: typeof celebrityForm }) => {
-      const res = await fetchWithAuth(`/api/admin/celebrities/${id}`, { 
+    mutationFn: async ({ id, data, baselineCounts }: { id: string; data: typeof celebrityForm; baselineCounts?: SeedApprovalCounts }) => {
+      const res = await fetchWithAuth(`/api/admin/celebrities/${id}`, {
         method: "PATCH", 
         body: JSON.stringify(data) 
       });
-      if (!res.ok) throw new Error("Failed to update celebrity");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to update celebrity");
+      }
+
+      if (baselineCounts) {
+        const seedRes = await fetchWithAuth(`/api/admin/celebrities/${id}/seed-approval-breakdown`, {
+          method: "PUT",
+          body: JSON.stringify({ counts: baselineCounts }),
+        });
+        if (!seedRes.ok) {
+          const err = await seedRes.json().catch(() => ({}));
+          throw new Error(err.error || "Failed to update baseline votes");
+        }
+      }
+
       return res.json();
     },
     onSuccess: () => {
@@ -2040,6 +2071,8 @@ export default function AdminDashboard() {
       setShowCelebrityModal(false);
       setEditingCelebrity(null);
       setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
+      setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
+      setSeedApprovalLoading(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
     },
     onError: (error: any) => {
@@ -2672,6 +2705,8 @@ export default function AdminDashboard() {
   };
 
   const openEditCelebrity = (celebrity: Celebrity) => {
+    setSeedApprovalLoading(true);
+    setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
     setEditingCelebrity(celebrity);
     setCelebrityForm({
       name: celebrity.name,
@@ -2682,6 +2717,28 @@ export default function AdminDashboard() {
       searchQueryOverride: celebrity.searchQueryOverride || "",
     });
     setShowCelebrityModal(true);
+    fetchWithAuth(`/api/admin/celebrities/${celebrity.id}/seed-approval-breakdown`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Failed to fetch seed approval breakdown");
+        const data = await res.json();
+        const counts = data?.counts || {};
+        setSeedApprovalCounts({
+          "1": Math.max(0, Number(counts["1"]) || 0),
+          "2": Math.max(0, Number(counts["2"]) || 0),
+          "3": Math.max(0, Number(counts["3"]) || 0),
+          "4": Math.max(0, Number(counts["4"]) || 0),
+          "5": Math.max(0, Number(counts["5"]) || 0),
+        });
+      })
+      .catch((error) => {
+        console.error("Failed to load seed approval breakdown", error);
+        toast({
+          title: "Seed votes unavailable",
+          description: "Could not load baseline seed votes. You can still edit standard fields.",
+          variant: "destructive",
+        });
+      })
+      .finally(() => setSeedApprovalLoading(false));
   };
 
   const openEditMatchup = (matchup: Matchup) => {
@@ -2712,11 +2769,30 @@ export default function AdminDashboard() {
 
   const handleSaveCelebrity = () => {
     if (editingCelebrity) {
-      updateCelebrityMutation.mutate({ id: editingCelebrity.id, data: celebrityForm });
+      updateCelebrityMutation.mutate({
+        id: editingCelebrity.id,
+        data: celebrityForm,
+        baselineCounts: seedApprovalCounts,
+      });
     } else {
       createCelebrityMutation.mutate(celebrityForm);
     }
   };
+
+  const baselineTotalVotes = useMemo(
+    () => seedApprovalCounts["1"] + seedApprovalCounts["2"] + seedApprovalCounts["3"] + seedApprovalCounts["4"] + seedApprovalCounts["5"],
+    [seedApprovalCounts],
+  );
+  const baselineImpliedAvg = useMemo(() => {
+    if (baselineTotalVotes <= 0) return 0;
+    const weighted =
+      seedApprovalCounts["1"] * 1 +
+      seedApprovalCounts["2"] * 2 +
+      seedApprovalCounts["3"] * 3 +
+      seedApprovalCounts["4"] * 4 +
+      seedApprovalCounts["5"] * 5;
+    return weighted / baselineTotalVotes;
+  }, [baselineTotalVotes, seedApprovalCounts]);
 
   const handleSaveMatchup = () => {
     const dataToSend: any = {
@@ -3412,6 +3488,8 @@ export default function AdminDashboard() {
                 onClick={() => {
                   setEditingCelebrity(null);
                   setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
+                  setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
+                  setSeedApprovalLoading(false);
                   setShowCelebrityModal(true);
                 }}
                 data-testid="button-add-celebrity"
@@ -3528,6 +3606,8 @@ export default function AdminDashboard() {
                       onClick={() => {
                         setEditingCelebrity(null);
                         setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
+                        setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
+                        setSeedApprovalLoading(false);
                         setShowCelebrityModal(true);
                       }}
                       data-testid="button-create-first-celebrity"
@@ -5826,7 +5906,17 @@ export default function AdminDashboard() {
       </Dialog>
 
       {/* Celebrity Modal */}
-      <Dialog open={showCelebrityModal} onOpenChange={setShowCelebrityModal}>
+      <Dialog
+        open={showCelebrityModal}
+        onOpenChange={(open) => {
+          setShowCelebrityModal(open);
+          if (!open) {
+            setEditingCelebrity(null);
+            setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
+            setSeedApprovalLoading(false);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingCelebrity ? "Edit Celebrity" : "Add Celebrity"}</DialogTitle>
@@ -5917,6 +6007,59 @@ export default function AdminDashboard() {
                 Custom search query for Serper. Use this to disambiguate common names.
               </p>
             </div>
+            {editingCelebrity && (
+              <div className="space-y-3 border-t pt-4">
+                <div>
+                  <h4 className="font-medium">Baseline Votes (Seed)</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Set seed vote counts for ratings 1-5 used as the initial approval baseline.
+                  </p>
+                </div>
+
+                {seedApprovalLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading current seed votes...
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {([
+                      { key: "1", label: "1 - Hate" },
+                      { key: "2", label: "2 - Dislike" },
+                      { key: "3", label: "3 - Neutral" },
+                      { key: "4", label: "4 - Like" },
+                      { key: "5", label: "5 - Love" },
+                    ] as Array<{ key: SeedRatingKey; label: string }>).map((item) => (
+                      <div className="space-y-1" key={item.key}>
+                        <Label htmlFor={`seed-rating-${item.key}`}>{item.label}</Label>
+                        <Input
+                          id={`seed-rating-${item.key}`}
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={seedApprovalCounts[item.key]}
+                          onChange={(e) => {
+                            const parsed = Number.parseInt(e.target.value, 10);
+                            setSeedApprovalCounts((prev) => ({
+                              ...prev,
+                              [item.key]: Number.isFinite(parsed) ? Math.max(0, parsed) : 0,
+                            }));
+                          }}
+                          data-testid={`input-seed-rating-${item.key}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground" data-testid="seed-votes-summary">
+                  Total seed votes: <span className="font-medium text-foreground">{baselineTotalVotes}</span>
+                  {"  |  "}
+                  Implied avg rating:{" "}
+                  <span className="font-medium text-foreground">{baselineTotalVotes > 0 ? baselineImpliedAvg.toFixed(2) : "0.00"}</span>
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCelebrityModal(false)}>
@@ -5924,7 +6067,12 @@ export default function AdminDashboard() {
             </Button>
             <Button
               onClick={handleSaveCelebrity}
-              disabled={!celebrityForm.name || createCelebrityMutation.isPending || updateCelebrityMutation.isPending}
+              disabled={
+                !celebrityForm.name ||
+                createCelebrityMutation.isPending ||
+                updateCelebrityMutation.isPending ||
+                (editingCelebrity !== null && seedApprovalLoading)
+              }
               data-testid="button-save-celebrity"
             >
               {(createCelebrityMutation.isPending || updateCelebrityMutation.isPending) ? (

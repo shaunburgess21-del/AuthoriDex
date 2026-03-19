@@ -213,6 +213,10 @@ export const userVotes = pgTable("user_votes", {
   votedAt: timestamp("voted_at").notNull().defaultNow(),
 }, (table) => ({
   uniqueUserPerson: unique().on(table.userId, table.personId),
+  /** Speeds up approval breakdowns, sentiment stats, and GROUP BY person_id */
+  personIdIdx: index("user_votes_person_id_idx").on(table.personId),
+  /** Speeds up GROUP BY (person_id, rating) aggregates */
+  personRatingIdx: index("user_votes_person_rating_idx").on(table.personId, table.rating),
 }));
 
 export const insertUserVoteSchema = createInsertSchema(userVotes).omit({
