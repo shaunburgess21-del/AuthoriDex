@@ -6463,18 +6463,29 @@ Only return the JSON object.`;
       const filePath = `${moduleName}/${slugOrId}/${timestamp}${optimized.extension}`;
       const bucketName = "public-images";
 
+      const targetSizeLimit = 5 * 1024 * 1024;
       const { data: buckets } = await supabaseServer.storage.listBuckets();
-      const bucketExists = buckets?.some(b => b.name === bucketName);
-      if (!bucketExists) {
+      const existingBucket = buckets?.find(b => b.name === bucketName);
+      if (!existingBucket) {
         const { error: createError } = await supabaseServer.storage.createBucket(bucketName, {
           public: true,
           allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
-          fileSizeLimit: 5 * 1024 * 1024,
+          fileSizeLimit: targetSizeLimit,
         });
         if (createError) {
           console.error("Failed to create bucket:", createError);
           return res.status(500).json({ error: "Failed to create storage bucket" });
         }
+      } else if (
+        existingBucket.file_size_limit !== undefined &&
+        existingBucket.file_size_limit !== null &&
+        existingBucket.file_size_limit < targetSizeLimit
+      ) {
+        await supabaseServer.storage.updateBucket(bucketName, {
+          public: true,
+          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
+          fileSizeLimit: targetSizeLimit,
+        });
       }
 
       const { data, error } = await supabaseServer.storage
@@ -6486,7 +6497,7 @@ Only return the JSON object.`;
 
       if (error) {
         console.error("Supabase upload error:", error);
-        return res.status(500).json({ error: "Failed to upload image" });
+        return res.status(500).json({ error: `Failed to upload image: ${error.message}` });
       }
 
       const { data: urlData } = supabaseServer.storage
@@ -13075,18 +13086,29 @@ Write a 2-5 sentence summary that helps users make an informed prediction. Focus
       const filePath = `curate-profile/${id}/${timestamp}${optimized.extension}`;
       const bucketName = "public-images";
 
+      const targetSizeLimit = 5 * 1024 * 1024;
       const { data: buckets } = await supabaseServer.storage.listBuckets();
-      const bucketExists = buckets?.some(b => b.name === bucketName);
-      if (!bucketExists) {
+      const existingBucket = buckets?.find(b => b.name === bucketName);
+      if (!existingBucket) {
         const { error: createError } = await supabaseServer.storage.createBucket(bucketName, {
           public: true,
           allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
-          fileSizeLimit: 5 * 1024 * 1024,
+          fileSizeLimit: targetSizeLimit,
         });
         if (createError) {
           console.error("Failed to create bucket:", createError);
           return res.status(500).json({ error: "Failed to create storage bucket" });
         }
+      } else if (
+        existingBucket.file_size_limit !== undefined &&
+        existingBucket.file_size_limit !== null &&
+        existingBucket.file_size_limit < targetSizeLimit
+      ) {
+        await supabaseServer.storage.updateBucket(bucketName, {
+          public: true,
+          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
+          fileSizeLimit: targetSizeLimit,
+        });
       }
 
       const { error: uploadError } = await supabaseServer.storage
