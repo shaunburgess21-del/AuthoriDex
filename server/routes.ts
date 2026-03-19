@@ -11704,11 +11704,11 @@ Write a 2-5 sentence summary that helps users make an informed prediction. Focus
 
   app.post("/api/admin/native-markets/generate-gainer", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const created = await generateWeeklyGainer();
+      const { created, updated } = await generateWeeklyGainer();
       const jan1 = new Date(new Date().getUTCFullYear(), 0, 1);
       const weekNumber = Math.ceil(((Date.now() - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
-      await db.insert(adminAuditLog).values({ adminId: req.userId!, adminEmail: null, actionType: "create", targetTable: "prediction_markets", targetId: "bulk-gainer", metadata: { type: "gainer", created, weekNumber } });
-      res.json({ success: true, created, weekNumber });
+      await db.insert(adminAuditLog).values({ adminId: req.userId!, adminEmail: null, actionType: "create", targetTable: "prediction_markets", targetId: "bulk-gainer", metadata: { type: "gainer", created, updated, weekNumber } });
+      res.json({ success: true, created, updated, weekNumber });
     } catch (error: any) {
       console.error("Error generating gainer markets:", error.message);
       res.status(500).json({ error: "Failed to generate gainer markets" });

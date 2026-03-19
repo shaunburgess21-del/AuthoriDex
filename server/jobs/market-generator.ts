@@ -251,7 +251,7 @@ export async function generateWeeklyH2H(): Promise<number> {
   return created;
 }
 
-export async function generateWeeklyGainer(): Promise<number> {
+export async function generateWeeklyGainer(): Promise<{ created: number; updated: number }> {
   const { monday, sunday, weekNumber } = getWeekContext();
   log(`[MarketGenerator:Gainer] Starting for week ${weekNumber} (${monday.toISOString()} – ${sunday.toISOString()})`);
 
@@ -332,21 +332,59 @@ export async function generateWeeklyGainer(): Promise<number> {
   }
 
   let created = 0;
+  let updated = 0;
   let skippedTooFew = 0;
-  let skippedExists = 0;
   for (const [cat, catPeople] of Array.from(byCategory.entries())) {
     if (catPeople.length < 3) {
       log(`[MarketGenerator:Gainer] Skipping ${cat}: only ${catPeople.length} people (need ≥3)`);
       skippedTooFew++;
       continue;
     }
-    if (existingCategories.has(cat)) {
-      log(`[MarketGenerator:Gainer] Skipping ${cat}: already exists for week ${weekNumber}`);
-      skippedExists++;
-      continue;
-    }
 
     const ranked = [...catPeople].sort((a, b) => (scoreMap.get(b.id) ?? 0) - (scoreMap.get(a.id) ?? 0));
+
+    if (existingCategories.has(cat)) {
+      try {
+        const [existingMarket] = await db.select({ id: predictionMarkets.id })
+          .from(predictionMarkets)
+          .where(and(
+            eq(predictionMarkets.marketType, "gainer"),
+            eq(predictionMarkets.weekNumber, weekNumber),
+            eq(predictionMarkets.status, "OPEN"),
+            eq(predictionMarkets.category, cat),
+          ))
+          .limit(1);
+        if (!existingMarket) continue;
+
+        const currentEntries = await db.select({ personId: marketEntries.personId })
+          .from(marketEntries)
+          .where(eq(marketEntries.marketId, existingMarket.id));
+        const existingPersonIds = new Set(currentEntries.map(e => e.personId));
+        const missing = ranked.filter(p => !existingPersonIds.has(p.id));
+
+        if (missing.length > 0) {
+          const startOrder = currentEntries.length;
+          await db.insert(marketEntries).values(
+            missing.map((person, idx) => ({
+              marketId: existingMarket.id,
+              entryType: "person" as const,
+              personId: person.id,
+              label: person.name,
+              displayOrder: startOrder + idx,
+              seedCount: 0,
+              imageUrl: person.avatar,
+            }))
+          );
+          updated++;
+          log(`[MarketGenerator:Gainer] Backfilled ${missing.length} entries into ${cat} (market ${existingMarket.id})`);
+        } else {
+          log(`[MarketGenerator:Gainer] ${cat}: already up-to-date (${currentEntries.length} entries)`);
+        }
+      } catch (backfillErr: any) {
+        log(`[MarketGenerator:Gainer] Backfill failed for ${cat}: ${backfillErr.message}`);
+      }
+      continue;
+    }
     const openingScores = buildOpeningScores(ranked.map(p => p.id), snapMap);
     const gainerMeta = openingScores.length > 0 ? { openingScores } : undefined;
 
@@ -430,21 +468,21 @@ export async function generateWeeklyGainer(): Promise<number> {
       log(`[MarketGenerator:Gainer] Failed for ${cat}: ${txErr.message}`);
     }
   }
-  log(`[MarketGenerator:Gainer] Done: created=${created}, skippedTooFew=${skippedTooFew}, skippedExists=${skippedExists}, usedFallback=${usedFallback}`);
-  return created;
+  log(`[MarketGenerator:Gainer] Done: created=${created}, updated=${updated}, skippedTooFew=${skippedTooFew}, usedFallback=${usedFallback}`);
+  return { created, updated };
 }
 
-export async function generateAllWeeklyMarkets(): Promise<{ updown: number; jackpot: number; h2h: number; gainer: number; weekNumber: number }> {
+export async function generateAllWeeklyMarkets(): Promise<{ updown: number; jackpot: number; h2h: number; gainer: number; gainerUpdated: number; weekNumber: number }> {
   const { weekNumber } = getWeekContext();
   log(`[MarketGenerator] Generating weekly markets for week ${weekNumber}...`);
 
   const updown = await generateWeeklyUpDown();
   const jackpot = await generateWeeklyJackpot();
   const h2h = await generateWeeklyH2H();
-  const gainer = await generateWeeklyGainer();
+  const gainerResult = await generateWeeklyGainer();
 
-  log(`[MarketGenerator] Week ${weekNumber}: created ${updown} updown, ${jackpot} jackpot, ${h2h} h2h, ${gainer} gainer`);
-  return { updown, jackpot, h2h, gainer, weekNumber };
+  log(`[MarketGenerator] Week ${weekNumber}: created ${updown} updown, ${jackpot} jackpot, ${h2h} h2h, ${gainerResult.created} gainer (${gainerResult.updated} updated)`);
+  return { updown, jackpot, h2h, gainer: gainerResult.created, gainerUpdated: gainerResult.updated, weekNumber };
 }
 
 export function startMarketGeneratorScheduler() {

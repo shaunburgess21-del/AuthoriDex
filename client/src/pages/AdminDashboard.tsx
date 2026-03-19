@@ -2159,7 +2159,10 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      toast({ title: "Generated Category Races", description: `Created ${data.created} gainer markets for week ${data.weekNumber}` });
+      const parts = [];
+      if (data.created > 0) parts.push(`${data.created} created`);
+      if (data.updated > 0) parts.push(`${data.updated} updated`);
+      toast({ title: "Generated Category Races", description: parts.length > 0 ? `Week ${data.weekNumber}: ${parts.join(", ")}` : `Week ${data.weekNumber}: already up-to-date` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
     },
     onError: () => toast({ title: "Error", description: "Failed to generate Category Race markets", variant: "destructive" }),
