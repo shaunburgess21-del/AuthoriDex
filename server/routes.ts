@@ -777,9 +777,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const searchChange = Math.abs((curr.searchVolume ?? 0) - (prev?.searchVolume ?? 0));
               const newsChange = Math.abs((curr.newsCount ?? 0) - (prev?.newsCount ?? 0));
               const wikiChange = Math.abs((curr.wikiPageviews ?? 0) - (prev?.wikiPageviews ?? 0));
-              const searchContrib = searchChange * 0.40;
-              const newsContrib = newsChange * 0.35;
-              const wikiContrib = wikiChange * 0.25;
+              const searchContrib = searchChange * PLATFORM_WEIGHTS.velocity.search;
+              const newsContrib = newsChange * PLATFORM_WEIGHTS.velocity.news;
+              const wikiContrib = wikiChange * PLATFORM_WEIGHTS.velocity.wiki;
               const totalContrib = searchContrib + newsContrib + wikiContrib;
 
               if (totalContrib > 0) {
@@ -1675,9 +1675,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const newsChange = Math.abs(latest.newsCount - snap24hAgo.newsCount);
             const wikiChange = Math.abs((latest.wikiPageviews ?? 0) - (snap24hAgo.wikiPageviews ?? 0));
 
-            const searchContrib = searchChange * 0.40;
-            const newsContrib = newsChange * 0.35;
-            const wikiContrib = wikiChange * 0.25;
+            const searchContrib = searchChange * PLATFORM_WEIGHTS.velocity.search;
+            const newsContrib = newsChange * PLATFORM_WEIGHTS.velocity.news;
+            const wikiContrib = wikiChange * PLATFORM_WEIGHTS.velocity.wiki;
             const totalContrib = searchContrib + newsContrib + wikiContrib;
 
             const searchBase = Math.max(snap24hAgo.searchVolume, 1);
@@ -6234,7 +6234,7 @@ Only return the JSON object.`;
         weightConfig: {
           massAllocation: 0.40,
           velocityAllocation: 0.60,
-          velocityWeights: { wiki: 0.25, news: 0.35, search: 0.40, x: 0 },
+          velocityWeights: { wiki: PLATFORM_WEIGHTS.velocity.wiki, news: PLATFORM_WEIGHTS.velocity.news, search: PLATFORM_WEIGHTS.velocity.search, x: 0 },
           wikiVelocityBlend: "0.6*24h + 0.4*7d_avg",
           asymmetricCaps: "up=base, down=base*1.5",
           asymmetricEma: "down_alpha=base*1.5",

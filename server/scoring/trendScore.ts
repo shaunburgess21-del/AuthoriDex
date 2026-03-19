@@ -9,7 +9,6 @@ import {
   isRecalibrationModeActive,
   PlatformStatuses,
   ActivePlatforms,
-  WIKI_DOMINANCE_CAP,
   AllSourceStats,
   DEFAULT_SOURCE_STATS,
   normalizeSourceValue,

@@ -9,6 +9,9 @@ export const SCORE_VERSION = "v2";
 // X API keys preserved for future Platform Insights feature.
 // X weight redistributed to Wiki, News, and Search for velocity.
 // For mass, wiki becomes the primary signal when follower data unavailable.
+// Mar 2026: Rebalanced — Wiki raised from 0.25 to 0.30 to reflect its increased
+// importance as the sole public-curiosity-depth signal after X removal.
+// Search reduced from 0.40 to 0.35 to equal News. Both are leading indicators.
 export const PLATFORM_WEIGHTS = {
   mass: {
     wiki: 0.50,
@@ -16,9 +19,9 @@ export const PLATFORM_WEIGHTS = {
     youtube: 0.25,
   },
   velocity: {
-    wiki: 0.25,
+    wiki: 0.30,
     news: 0.35,
-    search: 0.40,
+    search: 0.35,
   },
 };
 
@@ -746,8 +749,6 @@ export const STANDARD_WEIGHTS: StandardWeights = {
     searchDelta: PLATFORM_WEIGHTS.velocity.search,
   },
 };
-
-export const WIKI_DOMINANCE_CAP = 0.4;
 
 export interface AdjustedMassWeights {
   wiki: number;
