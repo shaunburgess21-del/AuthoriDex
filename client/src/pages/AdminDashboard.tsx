@@ -88,7 +88,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { TrendingPoll } from "@shared/schema";
-import { MARKET_CATEGORY_OPTIONS, type CanonicalMarketCategory } from "@shared/constants";
+import { MARKET_CATEGORY_OPTIONS, normalizeMarketCategory, type CanonicalMarketCategory } from "@shared/constants";
 
 const MARKET_CATEGORIES = MARKET_CATEGORY_OPTIONS;
 
@@ -1658,6 +1658,11 @@ export default function AdminDashboard() {
     },
     enabled: isAdmin && (activeSection === "celebrities" || activeSection === "voting" || activeSection === "predictions"),
   });
+
+  const gainerCategoryCelebrities = useMemo(
+    () => (celebrities || []).filter((celebrity) => normalizeMarketCategory(celebrity.category) === gainerCategory),
+    [celebrities, gainerCategory]
+  );
 
   // Fetch score breakdown for a celebrity
   const { data: scoreBreakdown, isLoading: scoreBreakdownLoading } = useQuery<ScoreBreakdownData>({
@@ -4231,7 +4236,7 @@ export default function AdminDashboard() {
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>Create Category Race Market</DialogTitle>
-                  <DialogDescription>Select a category and link up to 20 celebrities</DialogDescription>
+                  <DialogDescription>Select a category and choose the full roster you want available in this race</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
@@ -4248,12 +4253,34 @@ export default function AdminDashboard() {
                     </Select>
                   </div>
                   <div>
-                    <Label>Linked Celebrities ({gainerPersonIds.length}/20)</Label>
+                    <div className="flex items-center justify-between gap-2">
+                      <Label>Linked Celebrities ({gainerPersonIds.length})</Label>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setGainerPersonIds(gainerCategoryCelebrities.map((celebrity) => celebrity.id))}
+                          disabled={gainerCategoryCelebrities.length === 0}
+                        >
+                          Use whole category ({gainerCategoryCelebrities.length})
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setGainerPersonIds([])}
+                          disabled={gainerPersonIds.length === 0}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    </div>
                     <Input placeholder="Search to add celebrities..." value={gainerPersonSearch} onChange={(e) => setGainerPersonSearch(e.target.value)} data-testid="input-gainer-person-search" />
                     {gainerPersonSearch && (
                       <div className="mt-1 max-h-32 overflow-y-auto border rounded-md">
-                        {(celebrities || []).filter((c: any) => c.name.toLowerCase().includes(gainerPersonSearch.toLowerCase()) && !gainerPersonIds.includes(c.id)).slice(0, 8).map((c: any) => (
-                          <button key={c.id} className="w-full text-left px-3 py-2 text-sm hover-elevate flex items-center gap-2" onClick={() => { if (gainerPersonIds.length < 20) { setGainerPersonIds([...gainerPersonIds, c.id]); setGainerPersonSearch(""); } }} data-testid={`gainer-person-option-${c.id}`}>
+                        {gainerCategoryCelebrities.filter((c: any) => c.name.toLowerCase().includes(gainerPersonSearch.toLowerCase()) && !gainerPersonIds.includes(c.id)).slice(0, 8).map((c: any) => (
+                          <button key={c.id} className="w-full text-left px-3 py-2 text-sm hover-elevate flex items-center gap-2" onClick={() => { setGainerPersonIds([...gainerPersonIds, c.id]); setGainerPersonSearch(""); }} data-testid={`gainer-person-option-${c.id}`}>
                             <Avatar className="h-6 w-6"><AvatarImage src={c.avatar} /><AvatarFallback>{c.name[0]}</AvatarFallback></Avatar>
                             <span>{c.name}</span>
                             <Badge variant="outline" className="text-xs ml-auto capitalize">{c.category}</Badge>
@@ -4261,6 +4288,9 @@ export default function AdminDashboard() {
                         ))}
                       </div>
                     )}
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Category Races resolve by percentage gain, but every linked celebrity appears as a selectable outcome in the market.
+                    </p>
                     {gainerPersonIds.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {gainerPersonIds.map(pid => {

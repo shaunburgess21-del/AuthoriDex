@@ -1040,9 +1040,9 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         <SectionHeader
           icon={<BarChart3 className="h-4 w-4 text-violet-400" />}
           title="Category Races"
-          subtitle="Who will add the most raw trend points"
+          subtitle="Who will post the biggest percentage gain"
           count={gainerMarkets.length || undefined}
-          infoTooltip="Tracks raw points gained over the week, not percentage changes"
+          infoTooltip="Tracks percentage gain over the week. Raw points added are supporting context."
         />
         {gainerMarkets.length > 0 ? (
           <div className={`grid gap-4 ${gainerMarkets.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>

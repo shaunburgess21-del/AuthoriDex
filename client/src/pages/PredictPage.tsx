@@ -419,7 +419,16 @@ const headToHeadMarkets: HeadToHeadMarket[] = [
   },
 ];
 
-type GainerCandidate = { name: string; avatar: string; currentGain: number; percentGain: number; rank?: number; entryId?: string; personId?: string };
+type GainerCandidate = {
+  name: string;
+  avatar: string;
+  currentGain: number;
+  percentGain: number;
+  rank?: number;
+  entryId?: string;
+  personId?: string;
+  isSelectable?: boolean;
+};
 
 interface TopGainerMarket {
   id: string;
@@ -429,6 +438,7 @@ interface TopGainerMarket {
   totalPool: number;
   endTime: string;
   totalEntries?: number;
+  candidateCount?: number;
   totalBets?: number;
   activeParticipantCount?: number;
   recentParticipants?: ParticipantPreview[];
@@ -1139,22 +1149,21 @@ function HeadToHeadCard({
 function TopGainerCard({ 
   market, 
   isMarketClosed = false,
-  onSelect,
   onShowAllCandidates,
   isPredicted = false,
   isShimmering = false
 }: { 
   market: TopGainerMarket; 
   isMarketClosed?: boolean;
-  onSelect?: (name: string, entryId?: string) => void;
-  onShowAllCandidates?: (market: TopGainerMarket) => void;
+  onShowAllCandidates?: (market: TopGainerMarket, initialCandidate?: GainerCandidate) => void;
   isPredicted?: boolean;
   isShimmering?: boolean;
 }) {
+  const visibleCandidateCount = market.candidateCount ?? market.allCandidates?.length ?? market.totalEntries ?? market.leaders.length;
+  const canPick = !isMarketClosed && !isPredicted;
+
   const handlePlacePrediction = () => {
-    if (market.leaders.length > 0) {
-      onSelect?.(market.leaders[0].name, market.leaders[0].entryId);
-    }
+    onShowAllCandidates?.(market);
   };
 
   return (
@@ -1170,8 +1179,11 @@ function TopGainerCard({
         {market.leaders.map((leader, i) => (
           <div 
             key={leader.name} 
-            className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${i === 0 ? 'border border-amber-500/30' : 'hover:bg-muted/50'}`}
-            onClick={() => onSelect?.(leader.name, leader.entryId)}
+            className={`flex items-center gap-2 p-2 rounded-lg transition-colors ${canPick ? 'cursor-pointer' : ''} ${i === 0 ? 'border border-amber-500/30' : canPick ? 'hover:bg-muted/50' : ''}`}
+            onClick={() => {
+              if (!canPick) return;
+              onShowAllCandidates?.(market, leader);
+            }}
           >
             <div className="relative">
               {i === 0 ? (
@@ -1199,12 +1211,12 @@ function TopGainerCard({
             </div>
           </div>
         ))}
-        {(market.totalEntries ?? 0) > 3 && (
+        {visibleCandidateCount > 3 && (
           <button
             className="text-xs text-violet-400 hover:text-violet-300 text-center mt-1 w-full cursor-pointer transition-colors"
             onClick={(e) => { e.stopPropagation(); onShowAllCandidates?.(market); }}
           >
-            +{(market.totalEntries ?? 0) - 3} more candidates
+            View all {visibleCandidateCount} candidates
           </button>
         )}
       </div>
@@ -1239,7 +1251,7 @@ function TopGainerCard({
             data-testid={`button-place-prediction-${market.id}`}
             onClick={handlePlacePrediction}
           >
-            Place Prediction
+            Choose Candidate
             <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         )}
@@ -1251,17 +1263,36 @@ function TopGainerCard({
 function GainerCandidatesDialog({
   market,
   open,
+  initialCandidate,
   onClose,
-  onSelect,
+  onContinue,
 }: {
   market: TopGainerMarket | null;
   open: boolean;
+  initialCandidate?: GainerCandidate | null;
   onClose: () => void;
-  onSelect: (name: string, entryId?: string) => void;
+  onContinue: (candidate: GainerCandidate) => void;
 }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCandidateKey, setSelectedCandidateKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !market) return;
+    setSearchQuery("");
+    setSelectedCandidateKey(initialCandidate?.entryId || initialCandidate?.personId || initialCandidate?.name || null);
+  }, [open, market, initialCandidate]);
+
   if (!market) return null;
   const candidates = market.allCandidates || market.leaders;
   const categoryLabel = getMarketCategoryLabel(market.category);
+  const topCandidateKey = candidates[0]?.entryId || candidates[0]?.personId || candidates[0]?.name;
+  const filteredCandidates = candidates.filter((candidate) =>
+    candidate.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  const selectedCandidate = candidates.find((candidate) => (
+    (candidate.entryId || candidate.personId || candidate.name) === selectedCandidateKey
+  ));
+  const canContinue = !!selectedCandidate?.entryId;
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -1272,28 +1303,61 @@ function GainerCandidatesDialog({
             Category Race: {categoryLabel}
           </DialogTitle>
           <DialogDescription>
-            Select a candidate to place your prediction
+            Pick who you think will finish #1 by 7-day percentage gain
           </DialogDescription>
         </DialogHeader>
+        <div className="px-4 pb-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`Search ${categoryLabel} candidates...`}
+              className="pl-9"
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Showing all {candidates.length} candidates in {categoryLabel}. Percentage gain decides the winner; points added are supporting context.
+          </p>
+        </div>
         <ScrollArea className="flex-1 px-4 pb-4">
           <div className="space-y-2">
-            {candidates.map((candidate, i) => (
-              <div
+            {filteredCandidates.map((candidate) => {
+              const candidateKey = candidate.entryId || candidate.personId || candidate.name;
+              const isSelected = candidateKey === selectedCandidateKey;
+              const isTopCandidate = candidateKey === topCandidateKey;
+
+              return (
+              <button
+                type="button"
                 key={candidate.entryId || candidate.name}
-                className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${i === 0 ? 'border border-amber-500/30' : 'hover:bg-muted/50'}`}
-                onClick={() => { onSelect(candidate.name, candidate.entryId); onClose(); }}
+                className={`w-full flex items-center gap-2 p-2 rounded-lg border text-left transition-colors ${
+                  isSelected
+                    ? "border-violet-500/60 bg-violet-500/10"
+                    : isTopCandidate
+                      ? "border-amber-500/30"
+                      : "border-transparent hover:bg-muted/50"
+                } ${candidate.entryId ? "cursor-pointer" : "cursor-not-allowed opacity-70"}`}
+                disabled={!candidate.entryId}
+                onClick={() => setSelectedCandidateKey(candidateKey)}
               >
                 <div className="relative">
-                  {i === 0 ? (
+                  {isTopCandidate ? (
                     <div className="h-5 w-5 rounded-full bg-background/80 backdrop-blur-sm border border-amber-500/50 flex items-center justify-center">
                       <Crown className="h-3 w-3 text-amber-500" />
                     </div>
                   ) : (
-                    <span className="text-xs font-bold text-violet-500 w-5 text-center">#{candidate.rank || (i + 1)}</span>
+                    <span className="text-xs font-bold text-violet-500 w-5 text-center">#{candidate.rank || "-"}</span>
                   )}
                 </div>
                 <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="sm" />
-                <span className="text-sm flex-1 truncate">{candidate.name}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm truncate">{candidate.name}</p>
+                  {!candidate.entryId && (
+                    <p className="text-[10px] text-muted-foreground">View only: not in this week&apos;s betting pool</p>
+                  )}
+                </div>
                 <div className="text-right">
                   <p className={`text-xs font-mono font-bold ${candidate.percentGain >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                     {formatSignedPercent(candidate.percentGain)}
@@ -1302,10 +1366,41 @@ function GainerCandidatesDialog({
                     {formatSignedPoints(candidate.currentGain)} pts added
                   </p>
                 </div>
+              </button>
+            )})}
+            {filteredCandidates.length === 0 && (
+              <div className="rounded-lg border border-dashed border-border/60 px-3 py-6 text-center text-sm text-muted-foreground">
+                No candidates match your search.
               </div>
-            ))}
+            )}
           </div>
         </ScrollArea>
+        <div className="border-t px-4 py-3 space-y-3">
+          {selectedCandidate ? (
+            <div className="rounded-lg bg-violet-500/5 border border-violet-500/20 px-3 py-2">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Selected Candidate</p>
+              <p className="text-sm font-semibold">{selectedCandidate.name}</p>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Choose a candidate to continue.</p>
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+              disabled={!canContinue || !selectedCandidate}
+              onClick={() => {
+                if (!selectedCandidate || !selectedCandidate.entryId) return;
+                onContinue(selectedCandidate);
+                onClose();
+              }}
+            >
+              Continue
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -2163,7 +2258,7 @@ export default function PredictPage() {
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [townSquareCollapsed, setTownSquareCollapsed] = useState(true);
-  const [allCandidatesMarket, setAllCandidatesMarket] = useState<TopGainerMarket | null>(null);
+  const [gainerPickerState, setGainerPickerState] = useState<{ market: TopGainerMarket; initialCandidate?: GainerCandidate | null } | null>(null);
   
   const marketCycle = useMarketCycle();
   const isMarketClosed = marketCycle.status === "CLOSED";
@@ -2336,37 +2431,66 @@ export default function PredictPage() {
       return dbMarkets.map((m: any) => {
         const entries = m.entries || [];
         const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0) + Number(m.seedVolume || 0);
+        const normalizedCategory = normalizeMarketCategory(m.category || "misc") as CategoryFilter;
+        const entryCandidates = entries.map((e: any) => {
+          const p = e.person || {};
+          return {
+            name: p.name || e.label || "?",
+            avatar: p.avatar || "",
+            currentGain: Number(p.change7d || 0) * Number(p.trendScore || 0) / 100,
+            percentGain: Number(p.change7d || 0),
+            rank: Number(p.rank || 0),
+            entryId: e.id,
+            personId: e.personId || "",
+            isSelectable: true,
+          } as GainerCandidate;
+        });
+        const categoryCandidates = trendingPeople
+          .filter((person) => normalizeMarketCategory(person.category || "misc") === normalizedCategory)
+          .map((person) => ({
+            name: person.name,
+            avatar: person.avatar || "",
+            currentGain: Number(person.change7d || 0) * Number(person.trendScore || 0) / 100,
+            percentGain: Number(person.change7d || 0),
+            rank: Number(person.rank || 0),
+            personId: person.id,
+            isSelectable: false,
+          } satisfies GainerCandidate));
+
+        const mergedCandidates = new Map<string, GainerCandidate>();
+        for (const candidate of categoryCandidates) {
+          const key = candidate.personId || candidate.name;
+          mergedCandidates.set(key, candidate);
+        }
+        for (const candidate of entryCandidates) {
+          const key = candidate.personId || candidate.name;
+          const existing = mergedCandidates.get(key);
+          mergedCandidates.set(key, {
+            ...existing,
+            ...candidate,
+            isSelectable: true,
+          });
+        }
+
+        const allCandidates = Array.from(mergedCandidates.values()).sort((a, b) =>
+          Number(b.isSelectable) - Number(a.isSelectable) ||
+          b.percentGain - a.percentGain ||
+          b.currentGain - a.currentGain ||
+          (a.rank || Number.MAX_SAFE_INTEGER) - (b.rank || Number.MAX_SAFE_INTEGER) ||
+          a.name.localeCompare(b.name)
+        );
+        const selectableCandidates = allCandidates.filter((candidate) => candidate.entryId);
+
         return {
           id: m.id,
-          category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
-          leaders: entries.slice(0, 3).map((e: any) => {
-            const p = e.person || {};
-            return {
-              name: p.name || e.label || "?",
-              avatar: p.avatar || "",
-              currentGain: Number(p.change7d || 0) * Number(p.trendScore || 0) / 100,
-              percentGain: Number(p.change7d || 0),
-              rank: Number(p.rank || 0),
-              entryId: e.id,
-              personId: e.personId || "",
-            };
-          }),
-          allCandidates: entries.map((e: any) => {
-            const p = e.person || {};
-            return {
-              name: p.name || e.label || "?",
-              avatar: p.avatar || "",
-              currentGain: Number(p.change7d || 0) * Number(p.trendScore || 0) / 100,
-              percentGain: Number(p.change7d || 0),
-              rank: Number(p.rank || 0),
-              entryId: e.id,
-              personId: e.personId || "",
-            };
-          }),
+          category: normalizedCategory,
+          leaders: selectableCandidates.slice(0, 3),
+          allCandidates,
           totalPool,
           endTime: "Sun 23:59 UTC",
           totalBets: (Number(m.activeParticipantCount || 0) || 0) + Number(m.seedConfig?.participants || 0),
           totalEntries: entries.length,
+          candidateCount: allCandidates.length,
           activeParticipantCount: Number(m.activeParticipantCount || 0),
           recentParticipants: m.recentParticipants || [],
         } as TopGainerMarket;
@@ -2374,7 +2498,7 @@ export default function PredictPage() {
     }
     if (import.meta.env.VITE_USE_MOCK_PREDICT_DATA === "true") return topGainerMarkets;
     return [];
-  }, [nativeGainerData]);
+  }, [nativeGainerData, trendingPeople]);
   
   const [selectedJackpotPerson, setSelectedJackpotPerson] = useState<TrendingPerson | null>(null);
   const [jackpotModalOpen, setJackpotModalOpen] = useState(false);
@@ -2578,14 +2702,14 @@ export default function PredictPage() {
     openStakeModal();
   };
 
-  const handleGainerSelect = (market: TopGainerMarket, name: string, entryId?: string) => {
+  const handleGainerSelect = (market: TopGainerMarket, candidate: GainerCandidate) => {
     if (!user) {
       toast({ title: "Sign in required", description: "Sign in to place predictions." });
       setLocation("/login");
       return;
     }
 
-    if (!entryId) {
+    if (!candidate.entryId) {
       toast({ title: "Market unavailable", description: "This market is missing required entries. Please try another market.", variant: "destructive" });
       return;
     }
@@ -2594,10 +2718,16 @@ export default function PredictPage() {
 
     setPendingSelection({
       type: "gainer",
-      choice: name,
+      choice: candidate.name,
       marketName: `Category Race: ${categoryLabel}`,
       marketId: market.id,
-      entryId,
+      entryId: candidate.entryId,
+      currentScore: candidate.currentGain,
+      confidence: undefined,
+      thesis: undefined,
+      candidateRank: candidate.rank,
+      candidatePercentGain: candidate.percentGain,
+      candidatePointsAdded: candidate.currentGain,
     });
     openStakeModal();
   };
@@ -2684,7 +2814,7 @@ export default function PredictPage() {
     (showMyPositions || gainerCategory === "all" || gainerCategory === "trending" ||
      (gainerCategory === "favorites" ? m.leaders.some(l => l.personId && favoriteIds.has(l.personId)) : matchesCategory(gainerCategory, m.category))) &&
     (!gainerSearch || getMarketCategoryLabel(m.category).toLowerCase().includes(gainerSearch.toLowerCase()) ||
-     m.leaders.some(l => l.name.toLowerCase().includes(gainerSearch.toLowerCase()))) &&
+     (m.allCandidates || m.leaders).some(l => l.name.toLowerCase().includes(gainerSearch.toLowerCase()))) &&
     (!showMyPositions || userBetsByMarket.has(m.id))
   ).sort((a: any, b: any) => gainerCategory === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
 
@@ -2697,7 +2827,7 @@ export default function PredictPage() {
          ? m.leaders.some(l => l.personId && favoriteIds.has(l.personId))
          : matchesCategory(overlayCategoryFilter, m.category))) &&
       (!overlaySearchQuery || getMarketCategoryLabel(m.category).toLowerCase().includes(overlaySearchQuery.toLowerCase()) ||
-       m.leaders.some(l => l.name.toLowerCase().includes(overlaySearchQuery.toLowerCase())))
+       (m.allCandidates || m.leaders).some(l => l.name.toLowerCase().includes(overlaySearchQuery.toLowerCase())))
     )
     .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0);
   const gainerEmptyMessage = showMyPositions
@@ -3201,7 +3331,7 @@ export default function PredictPage() {
               icon={<Trophy className="h-5 w-5 text-violet-400" />}
               onRulesClick={() => setRulesModalOpen("gainer")}
             >
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain the most points</p>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will post the biggest percentage gain</p>
             </SectionHeader>
             <SectionFilterBar
               categoryFilter={gainerCategory}
@@ -3231,8 +3361,7 @@ export default function PredictPage() {
                     key={market.id} 
                     market={market} 
                     isMarketClosed={isMarketClosed}
-                    onSelect={(name, entryId) => handleGainerSelect(market, name, entryId)}
-                    onShowAllCandidates={setAllCandidatesMarket}
+                    onShowAllCandidates={(pickedMarket, initialCandidate) => setGainerPickerState({ market: pickedMarket, initialCandidate })}
                     isPredicted={predictedMarkets.has(market.id)}
                     isShimmering={false}
                   />
@@ -3345,8 +3474,7 @@ export default function PredictPage() {
               key={market.id} 
               market={market} 
               isMarketClosed={isMarketClosed}
-              onSelect={(name, entryId) => handleGainerSelect(market, name, entryId)}
-              onShowAllCandidates={setAllCandidatesMarket}
+              onShowAllCandidates={(pickedMarket, initialCandidate) => setGainerPickerState({ market: pickedMarket, initialCandidate })}
               isPredicted={predictedMarkets.has(market.id)}
               isShimmering={false}
             />
@@ -3394,6 +3522,13 @@ export default function PredictPage() {
         selection={pendingSelection}
         onConfirm={handleConfirmStake}
         walletBalance={walletCredits}
+        onChangePick={pendingSelection?.type === "gainer" ? () => {
+          const market = hydratedGainers.find((item) => item.id === pendingSelection.marketId);
+          if (!market) return;
+          const currentCandidate = (market.allCandidates || market.leaders).find((candidate) => candidate.entryId === pendingSelection.entryId);
+          setStakeModalOpen(false);
+          setGainerPickerState({ market, initialCandidate: currentCandidate || null });
+        } : undefined}
         onDirectionChange={(dir) => {
           if (!pendingSelection || pendingSelection.type !== "updown") return;
           const marketId = pendingSelection.marketId;
@@ -3422,12 +3557,13 @@ export default function PredictPage() {
         />
       )}
       <GainerCandidatesDialog
-        market={allCandidatesMarket}
-        open={!!allCandidatesMarket}
-        onClose={() => setAllCandidatesMarket(null)}
-        onSelect={(name, entryId) => {
-          if (allCandidatesMarket) {
-            handleGainerSelect(allCandidatesMarket, name, entryId);
+        market={gainerPickerState?.market || null}
+        initialCandidate={gainerPickerState?.initialCandidate || null}
+        open={!!gainerPickerState}
+        onClose={() => setGainerPickerState(null)}
+        onContinue={(candidate) => {
+          if (gainerPickerState?.market) {
+            handleGainerSelect(gainerPickerState.market, candidate);
           }
         }}
       />

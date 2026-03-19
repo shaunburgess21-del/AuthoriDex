@@ -11560,10 +11560,6 @@ Write a 2-5 sentence summary that helps users make an informed prediction. Focus
       if (!personIds || !Array.isArray(personIds) || personIds.length === 0) {
         return res.status(400).json({ error: "At least one person ID required" });
       }
-      if (personIds.length > 20) {
-        return res.status(400).json({ error: "Maximum 20 celebrities per gainer market" });
-      }
-
       const now = new Date();
       const dayOfWeek = now.getUTCDay();
       const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -11590,6 +11586,9 @@ Write a 2-5 sentence summary that helps users make an informed prediction. Focus
       if (persons.length !== personIds.length) {
         return res.status(400).json({ error: "Some person IDs not found" });
       }
+      const orderedPersonIds = personIds as string[];
+      const personOrder = new Map<string, number>(orderedPersonIds.map((personId: string, index: number) => [personId, index]));
+      persons.sort((a, b) => (personOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (personOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER));
 
       const title = `Category Race: ${getMarketCategoryLabel(normalizedCategory)}`;
       let slug = `gainer-${normalizedCategory}-week-${weekNumber}`;
@@ -12780,8 +12779,8 @@ Write a 2-5 sentence summary that helps users make an informed prediction. Focus
       const { id } = req.params;
       const { personIds } = req.body;
 
-      if (!personIds?.length || personIds.length > 20) {
-        return res.status(400).json({ error: "1-20 person IDs required" });
+      if (!personIds?.length) {
+        return res.status(400).json({ error: "At least one person ID required" });
       }
 
       const [market] = await db.select().from(predictionMarkets).where(
@@ -12793,6 +12792,9 @@ Write a 2-5 sentence summary that helps users make an informed prediction. Focus
       if (persons.length !== personIds.length) {
         return res.status(400).json({ error: "Some person IDs not found" });
       }
+      const orderedPersonIds = personIds as string[];
+      const personOrder = new Map<string, number>(orderedPersonIds.map((personId: string, index: number) => [personId, index]));
+      persons.sort((a, b) => (personOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (personOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER));
 
       await db.delete(marketEntries).where(eq(marketEntries.marketId, id));
 

@@ -20,7 +20,7 @@ const MISSION_HEADERS: Record<string, string> = {
   updown: "Will their Trend Score be higher or lower by close?",
   h2h: "Back your champion to win this weekly matchup.",
   race: "Predict the #1 top performer to win.",
-  gainer: "Predict the #1 top performer to win.",
+  gainer: "Pick who you think will finish with the biggest percentage gain by close.",
   community: "Cast your vote on this real-world prediction.",
 };
 
@@ -42,6 +42,9 @@ export interface StakeSelection {
   endAt?: string;
   confidence?: number;
   thesis?: string;
+  candidateRank?: number;
+  candidatePercentGain?: number;
+  candidatePointsAdded?: number;
 }
 
 interface StakeModalProps {
@@ -52,6 +55,7 @@ interface StakeModalProps {
   onConfirmWithMeta?: (amount: number, meta: { confidence?: number; thesis?: string }) => void;
   walletBalance: number;
   onDirectionChange?: (direction: "up" | "down") => void;
+  onChangePick?: () => void;
 }
 
 function formatCountdown(days: number, hours: number, minutes: number, seconds: number): string {
@@ -73,6 +77,7 @@ export function StakeModal({
   onConfirmWithMeta,
   walletBalance,
   onDirectionChange,
+  onChangePick,
 }: StakeModalProps) {
   const [stakeAmount, setStakeAmount] = useState("");
   const parsedAmount = parseInt(stakeAmount) || 0;
@@ -91,6 +96,7 @@ export function StakeModal({
   const showJackpotWarning = selection.type === "jackpot";
   const isUpDown = selection.type === "updown";
   const isH2H = selection.type === "h2h";
+  const isGainer = selection.type === "gainer";
   const isUp = selection.choice.includes("UP");
   const isDown = selection.choice.includes("DOWN");
 
@@ -202,6 +208,16 @@ export function StakeModal({
               <p className="text-lg font-bold mt-1 text-[#00c853]">{selection.choice}</p>
             )}
 
+            {isGainer && onChangePick && (
+              <button
+                type="button"
+                onClick={onChangePick}
+                className="mt-2 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+              >
+                Change pick
+              </button>
+            )}
+
             {isUpDown && onDirectionChange && (
               <div className="flex gap-2 mt-2">
                 <button
@@ -263,6 +279,32 @@ export function StakeModal({
                 <p className="font-mono font-bold text-sm">{selection.opponentScore.toLocaleString("en-US")}</p>
               </Card>
             </div>
+          )}
+
+          {isGainer && (
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                <Card className="p-2.5 bg-muted/30">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Current Rank</p>
+                  <p className="font-mono font-bold text-sm">#{selection.candidateRank ?? "-"}</p>
+                </Card>
+                <Card className="p-2.5 bg-muted/30">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">7-Day Gain</p>
+                  <p className={`font-mono font-bold text-sm ${(selection.candidatePercentGain ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
+                    {selection.candidatePercentGain != null ? `${selection.candidatePercentGain >= 0 ? "+" : ""}${selection.candidatePercentGain.toFixed(1)}%` : "--"}
+                  </p>
+                </Card>
+                <Card className="p-2.5 bg-muted/30">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Points Added</p>
+                  <p className={`font-mono font-bold text-sm ${(selection.candidatePointsAdded ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
+                    {selection.candidatePointsAdded != null ? `${selection.candidatePointsAdded >= 0 ? "+" : ""}${selection.candidatePointsAdded.toLocaleString("en-US")}` : "--"}
+                  </p>
+                </Card>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Winner is whoever closes the week with the highest percentage gain. Points added are supporting context.
+              </p>
+            </>
           )}
 
           {isUpDown && selection.startScore != null && selection.currentScore != null && (() => {

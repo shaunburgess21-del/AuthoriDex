@@ -819,8 +819,8 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
             theme="predict"
             icon={TrendingUp}
             title="Category Races"
-            subtitle="Pick the biggest mover in 7 days."
-            help={{ title: "How Category Races Work", bullets: ["Predict which celebrity will have the biggest Trend Score increase.", "Choose from trending celebrities across all categories.", "The closest prediction to the actual top gainer wins."] }}
+            subtitle="Pick who will post the biggest percentage gain in 7 days."
+            help={{ title: "How Category Races Work", bullets: ["Predict which celebrity will post the biggest percentage gain by market close.", "Choose from the candidates in that category.", "The person with the highest percentage gain at close wins the market."] }}
             onViewAll={onExplore}
           />
           <CardDeckContainer

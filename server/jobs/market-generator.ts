@@ -346,7 +346,7 @@ export async function generateWeeklyGainer(): Promise<number> {
       continue;
     }
 
-    const ranked = [...catPeople].sort((a, b) => (scoreMap.get(b.id) ?? 0) - (scoreMap.get(a.id) ?? 0)).slice(0, 5);
+    const ranked = [...catPeople].sort((a, b) => (scoreMap.get(b.id) ?? 0) - (scoreMap.get(a.id) ?? 0));
     const openingScores = buildOpeningScores(ranked.map(p => p.id), snapMap);
     const gainerMeta = openingScores.length > 0 ? { openingScores } : undefined;
 
