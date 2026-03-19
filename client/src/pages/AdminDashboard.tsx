@@ -2147,6 +2147,19 @@ export default function AdminDashboard() {
     onError: () => toast({ title: "Error", description: "Failed to generate jackpot markets", variant: "destructive" }),
   });
 
+  const generateGainerMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetchWithAuth("/api/admin/native-markets/generate-gainer", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to generate");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Generated Category Races", description: `Created ${data.created} gainer markets for week ${data.weekNumber}` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to generate Category Race markets", variant: "destructive" }),
+  });
+
   const bulkVisibilityMutation = useMutation({
     mutationFn: async ({ marketIds, visibility }: { marketIds: string[]; visibility: string }) => {
       const res = await fetchWithAuth("/api/admin/native-markets/bulk-visibility", {
@@ -4078,9 +4091,15 @@ export default function AdminDashboard() {
                       <CardTitle>Category Races</CardTitle>
                       <CardDescription>One per category: Tech, Politics, Business, Sports, Creator, Music</CardDescription>
                     </div>
-                    <Button onClick={() => { setGainerPersonIds([]); setGainerPersonSearch(""); setGainerCategory("tech"); setGainerModalOpen(true); }} size="sm" data-testid="button-create-gainer">
-                      <Plus className="h-4 w-4 mr-1" />New Gainer
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button onClick={() => generateGainerMutation.mutate()} size="sm" variant="outline" disabled={generateGainerMutation.isPending} data-testid="button-generate-gainer">
+                        <RefreshCw className={`h-4 w-4 mr-1 ${generateGainerMutation.isPending ? "animate-spin" : ""}`} />
+                        {generateGainerMutation.isPending ? "Generating..." : "Generate All"}
+                      </Button>
+                      <Button onClick={() => { setGainerPersonIds([]); setGainerPersonSearch(""); setGainerCategory("tech"); setGainerModalOpen(true); }} size="sm" data-testid="button-create-gainer">
+                        <Plus className="h-4 w-4 mr-1" />New Gainer
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-2 mb-4 flex-wrap">

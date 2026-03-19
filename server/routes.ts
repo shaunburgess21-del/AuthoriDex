@@ -43,7 +43,7 @@ import { getLastRunMeta } from "./jobs/ingest";
 import { getMediastackBudgetSummary } from "./providers/mediastack";
 import pLimit from "p-limit";
 import { buildOpeningScores } from "./native-markets/openingScores";
-import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer } from "./jobs/market-generator";
+import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext } from "./jobs/market-generator";
 import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
@@ -11713,6 +11713,76 @@ Write a 2-5 sentence summary that helps users make an informed prediction. Focus
     } catch (error: any) {
       console.error("Error generating gainer markets:", error.message);
       res.status(500).json({ error: "Failed to generate gainer markets" });
+    }
+  });
+
+  app.get("/api/admin/native-markets/gainer/diagnostics", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const { monday, sunday, weekNumber } = getWeekContext();
+
+      const tracked = await db.select({
+        id: trackedPeople.id,
+        category: trackedPeople.category,
+        status: trackedPeople.status,
+      }).from(trackedPeople);
+      const mainLeaderboard = tracked.filter(t => t.status === "main_leaderboard");
+
+      const byCategory: Record<string, number> = {};
+      for (const p of mainLeaderboard) {
+        const cat = normalizeMarketCategory(p.category || "misc");
+        byCategory[cat] = (byCategory[cat] || 0) + 1;
+      }
+
+      const trendingCount = await db.select({ id: trendingPeople.id }).from(trendingPeople);
+
+      const existingGainers = await db.select({
+        id: predictionMarkets.id,
+        category: predictionMarkets.category,
+        status: predictionMarkets.status,
+        visibility: predictionMarkets.visibility,
+        startAt: predictionMarkets.startAt,
+        endAt: predictionMarkets.endAt,
+        title: predictionMarkets.title,
+      }).from(predictionMarkets).where(and(
+        eq(predictionMarkets.marketType, "gainer"),
+        eq(predictionMarkets.weekNumber, weekNumber),
+      ));
+
+      const eligibleCategories = Object.entries(byCategory)
+        .filter(([, count]) => count >= 3)
+        .map(([cat]) => cat);
+
+      const existingCategorySet = new Set(existingGainers.map(g => normalizeMarketCategory(g.category)));
+      const missingCategories = eligibleCategories.filter(cat => !existingCategorySet.has(cat));
+      const tooFewCategories = Object.entries(byCategory)
+        .filter(([, count]) => count < 3)
+        .map(([cat, count]) => ({ category: cat, count }));
+
+      res.json({
+        weekNumber,
+        monday: monday.toISOString(),
+        sunday: sunday.toISOString(),
+        trackedPeopleTotal: tracked.length,
+        trackedPeopleMainLeaderboard: mainLeaderboard.length,
+        trendingPeopleTotal: trendingCount.length,
+        categoryCounts: byCategory,
+        eligibleCategories,
+        tooFewCategories,
+        existingGainerMarkets: existingGainers.map(g => ({
+          id: g.id,
+          title: g.title,
+          category: g.category,
+          status: g.status,
+          visibility: g.visibility,
+          startAt: g.startAt,
+          endAt: g.endAt,
+        })),
+        missingCategories,
+        willUseFallback: mainLeaderboard.length === 0 && trendingCount.length > 0,
+      });
+    } catch (error: any) {
+      console.error("Error fetching gainer diagnostics:", error.message);
+      res.status(500).json({ error: "Failed to fetch gainer diagnostics" });
     }
   });
 

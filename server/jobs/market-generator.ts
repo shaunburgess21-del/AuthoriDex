@@ -6,7 +6,7 @@ import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { buildOpeningScores } from "../native-markets/openingScores";
 import { log } from "../log";
 
-function getWeekContext(now = new Date()) {
+export function getWeekContext(now = new Date()) {
   const dayOfWeek = now.getUTCDay();
   const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
   const monday = new Date(now);
@@ -253,6 +253,7 @@ export async function generateWeeklyH2H(): Promise<number> {
 
 export async function generateWeeklyGainer(): Promise<number> {
   const { monday, sunday, weekNumber } = getWeekContext();
+  log(`[MarketGenerator:Gainer] Starting for week ${weekNumber} (${monday.toISOString()} – ${sunday.toISOString()})`);
 
   const existingGainers = await db
     .select({ category: predictionMarkets.category })
@@ -263,8 +264,39 @@ export async function generateWeeklyGainer(): Promise<number> {
       inArray(predictionMarkets.visibility, ["live", "inactive"])
     ));
   const existingCategories = new Set(existingGainers.map(e => normalizeMarketCategory(e.category)));
+  if (existingCategories.size > 0) {
+    log(`[MarketGenerator:Gainer] Existing categories for week ${weekNumber}: ${[...existingCategories].join(", ")}`);
+  }
 
-  const people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
+  let people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
+  log(`[MarketGenerator:Gainer] trackedPeople with main_leaderboard status: ${people.length}`);
+
+  let usedFallback = false;
+  if (people.length === 0) {
+    log(`[MarketGenerator:Gainer] No trackedPeople found, falling back to trendingPeople`);
+    const trending = await db
+      .select({ id: trendingPeople.id, name: trendingPeople.name, category: trendingPeople.category, avatar: trendingPeople.avatar })
+      .from(trendingPeople)
+      .orderBy(desc(trendingPeople.fameIndex))
+      .limit(100);
+    people = trending.map(t => ({
+      ...t,
+      displayOrder: 0,
+      imageSlug: null,
+      bio: null,
+      youtubeId: null,
+      spotifyId: null,
+      wikiSlug: null,
+      xHandle: null,
+      instagramHandle: null,
+      tiktokHandle: null,
+      searchQueryOverride: null,
+      newsQueryWidened: null,
+      status: "main_leaderboard",
+    }));
+    usedFallback = true;
+    log(`[MarketGenerator:Gainer] Fallback: ${people.length} people from trendingPeople`);
+  }
 
   const byCategory = new Map<string, typeof people>();
   for (const person of people) {
@@ -272,6 +304,9 @@ export async function generateWeeklyGainer(): Promise<number> {
     if (!byCategory.has(cat)) byCategory.set(cat, []);
     byCategory.get(cat)!.push(person);
   }
+
+  const categoryBreakdown = Array.from(byCategory.entries()).map(([cat, p]) => `${cat}(${p.length})`).join(", ");
+  log(`[MarketGenerator:Gainer] Categories: ${categoryBreakdown || "(none)"}`);
 
   const allIds = people.map(p => p.id);
   const liveScores = allIds.length > 0
@@ -295,9 +330,19 @@ export async function generateWeeklyGainer(): Promise<number> {
   }
 
   let created = 0;
+  let skippedTooFew = 0;
+  let skippedExists = 0;
   for (const [cat, catPeople] of Array.from(byCategory.entries())) {
-    if (catPeople.length < 3) continue;
-    if (existingCategories.has(cat)) continue;
+    if (catPeople.length < 3) {
+      log(`[MarketGenerator:Gainer] Skipping ${cat}: only ${catPeople.length} people (need ≥3)`);
+      skippedTooFew++;
+      continue;
+    }
+    if (existingCategories.has(cat)) {
+      log(`[MarketGenerator:Gainer] Skipping ${cat}: already exists for week ${weekNumber}`);
+      skippedExists++;
+      continue;
+    }
 
     const ranked = [...catPeople].sort((a, b) => (scoreMap.get(b.id) ?? 0) - (scoreMap.get(a.id) ?? 0)).slice(0, 5);
     const openingScores = buildOpeningScores(ranked.map(p => p.id), snapMap);
@@ -372,9 +417,10 @@ export async function generateWeeklyGainer(): Promise<number> {
         }
       });
     } catch (txErr: any) {
-      log(`[MarketGenerator] gainer failed for ${cat}: ${txErr.message}`);
+      log(`[MarketGenerator:Gainer] Failed for ${cat}: ${txErr.message}`);
     }
   }
+  log(`[MarketGenerator:Gainer] Done: created=${created}, skippedTooFew=${skippedTooFew}, skippedExists=${skippedExists}, usedFallback=${usedFallback}`);
   return created;
 }
 
