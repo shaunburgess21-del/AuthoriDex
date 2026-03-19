@@ -3588,7 +3588,7 @@ Be factual, accurate, and emphasize their current status. Only return the JSON o
         profile = await storage.setCelebrityProfile(profileData);
       }
       
-      console.log(`[Profile] Generated profile for ${person.name} using gpt-4o with web grounding`);
+      console.log(`[Profile] Generated profile for ${person.name} using gpt-4.1 with web grounding`);
       res.json(profile);
     } catch (error: any) {
       console.error("Error generating celebrity profile:", error);
@@ -8095,7 +8095,7 @@ Aim for 3-5 substantive paragraphs. Be factual, balanced, and informative. Help 
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        max_tokens: maxTokens,
+        max_completion_tokens: maxTokens,
         temperature: 0.7,
       });
 
@@ -9029,7 +9029,7 @@ Aim for 3-5 substantive paragraphs. Be informative, engaging, and balanced. Help
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        max_tokens: maxTokens,
+        max_completion_tokens: maxTokens,
         temperature: 0.7,
       });
 
@@ -10293,7 +10293,7 @@ Write a 2-5 sentence summary that helps users make an informed prediction. Focus
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        max_tokens: 350,
+        max_completion_tokens: 350,
         temperature: 0.7,
       });
 
