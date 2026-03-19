@@ -18,7 +18,7 @@ const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
 });
 
-const API_TIMEOUT_MS = 30_000;
+const API_TIMEOUT_MS = 45_000;
 
 interface PredictionAssessment {
   decision: "bet" | "abstain";
@@ -190,7 +190,6 @@ export async function computeWorldMarketPrediction(
       {
         model: "gpt-5.4",
         tools: [{ type: "web_search" as any }],
-        reasoning: { effort: "medium" } as any,
         max_output_tokens: 1000,
         instructions: systemPrompt,
         input: userPrompt,
