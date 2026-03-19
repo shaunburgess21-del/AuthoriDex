@@ -10233,6 +10233,43 @@ Aim for 3-5 substantive paragraphs. Be informative, engaging, and balanced. Help
     }
   });
 
+  app.delete("/api/admin/open-markets/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const [market] = await db
+        .select()
+        .from(predictionMarkets)
+        .where(and(eq(predictionMarkets.id, id), eq(predictionMarkets.marketType, "community")))
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({ error: "World market not found" });
+      }
+
+      const { voidMarketBets } = await import("./jobs/market-resolver");
+      if (market.status !== "VOID" && market.status !== "RESOLVED") {
+        await voidMarketBets(id);
+      }
+
+      await syncRelatedPeople("world_market", id, []);
+      await db.delete(predictionMarkets).where(eq(predictionMarkets.id, id));
+
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId!,
+        adminEmail: null,
+        actionType: "delete",
+        targetTable: "prediction_markets",
+        targetId: id,
+        metadata: { marketType: "community", title: market.title, slug: market.slug },
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[Open Markets] Delete error:", error);
+      res.status(500).json({ error: error?.message || "Failed to delete market" });
+    }
+  });
+
   // ── Bulk import World Markets ──────────────────────────────────────
   app.post("/api/admin/open-markets/import", requireAuth, requireAdmin, async (req, res) => {
     try {

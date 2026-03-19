@@ -1530,6 +1530,7 @@ export default function AdminDashboard() {
   const [editMarketId, setEditMarketId] = useState<string | null>(null);
   const [settleMarketId, setSettleMarketId] = useState<string | null>(null);
   const [voidMarketId, setVoidMarketId] = useState<string | null>(null);
+  const [deleteWorldMarket, setDeleteWorldMarket] = useState<{ id: string; title: string } | null>(null);
 
   const [nativeVisFilter, setNativeVisFilter] = useState("all");
   const [nativeCatFilter, setNativeCatFilter] = useState("all");
@@ -1867,6 +1868,31 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
       setVoidMarketId(null);
       toast({ title: "Market Voided", description: "Market has been voided." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteOpenMarketMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetchWithAuth(`/api/admin/open-markets/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to delete market");
+      }
+      return res.json();
+    },
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] });
+      setDeleteWorldMarket(null);
+      setRwSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      toast({ title: "Market deleted", description: "This world market has been permanently removed." });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -3910,6 +3936,15 @@ export default function AdminDashboard() {
                                     </Button>
                                   </>
                                 )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setDeleteWorldMarket({ id: market.id, title: market.title })}
+                                  aria-label="Delete permanently"
+                                  data-testid={`button-delete-world-market-${market.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
                               </div>
                             </div>
                             );
@@ -7475,6 +7510,42 @@ export default function AdminDashboard() {
             >
               {voidMarketMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <XCircle className="h-4 w-4 mr-2" />}
               Void Market
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteWorldMarket} onOpenChange={(isOpen) => !isOpen && setDeleteWorldMarket(null)}>
+        <DialogContent className="max-w-md" data-testid="dialog-delete-world-market">
+          <DialogHeader>
+            <DialogTitle>Delete world market permanently?</DialogTitle>
+            <DialogDescription className="space-y-2">
+              <span className="block">
+                This removes <strong className="text-foreground">{deleteWorldMarket?.title}</strong> from the database and admin list.
+              </span>
+              <span className="block text-destructive/90">
+                If the market is still open, active stakes are refunded first (same as void). Resolved history for this market will be removed. This cannot be undone.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteWorldMarket(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteOpenMarketMutation.isPending}
+              onClick={() => {
+                if (deleteWorldMarket) deleteOpenMarketMutation.mutate(deleteWorldMarket.id);
+              }}
+              data-testid="button-confirm-delete-world-market"
+            >
+              {deleteOpenMarketMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Delete forever
             </Button>
           </DialogFooter>
         </DialogContent>
