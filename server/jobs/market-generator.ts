@@ -265,7 +265,7 @@ export async function generateWeeklyGainer(): Promise<number> {
     ));
   const existingCategories = new Set(existingGainers.map(e => normalizeMarketCategory(e.category)));
   if (existingCategories.size > 0) {
-    log(`[MarketGenerator:Gainer] Existing categories for week ${weekNumber}: ${[...existingCategories].join(", ")}`);
+    log(`[MarketGenerator:Gainer] Existing categories for week ${weekNumber}: ${Array.from(existingCategories).join(", ")}`);
   }
 
   let people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
@@ -281,17 +281,18 @@ export async function generateWeeklyGainer(): Promise<number> {
       .limit(100);
     people = trending.map(t => ({
       ...t,
+      category: t.category || "misc",
       displayOrder: 0,
-      imageSlug: null,
-      bio: null,
-      youtubeId: null,
-      spotifyId: null,
-      wikiSlug: null,
-      xHandle: null,
-      instagramHandle: null,
-      tiktokHandle: null,
-      searchQueryOverride: null,
-      newsQueryWidened: null,
+      imageSlug: null as string | null,
+      bio: null as string | null,
+      youtubeId: null as string | null,
+      spotifyId: null as string | null,
+      wikiSlug: null as string | null,
+      xHandle: null as string | null,
+      instagramHandle: null as string | null,
+      tiktokHandle: null as string | null,
+      searchQueryOverride: null as string | null,
+      newsQueryWidened: null as string | null,
       status: "main_leaderboard",
     }));
     usedFallback = true;
