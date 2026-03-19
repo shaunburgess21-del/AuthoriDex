@@ -32,46 +32,6 @@ function getOutcomeLabel(entry: MarketEntryData, index: number): string {
   return entry.label?.trim() || `Outcome ${index + 1}`;
 }
 
-function buildPredictionSchema(outcomeCount: number) {
-  return {
-    type: "object" as const,
-    properties: {
-      decision: { type: "string" as const, enum: ["bet", "abstain"] },
-      selectedOutcomeIndex: {
-        type: "integer" as const,
-        minimum: 1,
-        maximum: outcomeCount,
-      },
-      confidence: { type: "number" as const },
-      probabilities: {
-        type: "array" as const,
-        items: {
-          type: "object" as const,
-          properties: {
-            outcomeIndex: {
-              type: "integer" as const,
-              minimum: 1,
-              maximum: outcomeCount,
-            },
-            probability: { type: "number" as const },
-          },
-          required: ["outcomeIndex", "probability"] as const,
-          additionalProperties: false,
-        },
-      },
-      briefReasoning: { type: "string" as const },
-    },
-    required: [
-      "decision",
-      "selectedOutcomeIndex",
-      "confidence",
-      "probabilities",
-      "briefReasoning",
-    ] as const,
-    additionalProperties: false,
-  };
-}
-
 function buildSystemPrompt(agent: AgentConfigData): string {
   return `You are ${agent.displayName}, a prediction market analyst on VoxDex.
 
@@ -100,7 +60,15 @@ IMPORTANT:
 - Be honest about uncertainty. If you genuinely cannot assess this market, abstain.
 - The "briefReasoning" field is for internal logging only, keep it to 1 sentence.
 
-Respond ONLY with the JSON object, no other text.`;
+You MUST respond with a single JSON object and nothing else. No markdown, no explanation, no code fences. The JSON must match this exact schema:
+{
+  "decision": "bet" or "abstain",
+  "selectedOutcomeIndex": <1-based integer matching the outcome number>,
+  "confidence": <number between 0.4 and 0.95>,
+  "probabilities": [{"outcomeIndex": 1, "probability": 0.35}, ...],
+  "briefReasoning": "<one sentence>"
+}
+Include every outcome in the probabilities array. Probabilities should sum to approximately 1.0.`;
 }
 
 function buildUserPrompt(
@@ -142,15 +110,36 @@ Evaluate this market and provide your prediction. Use the numbered outcomes exac
 }
 
 function extractOutputText(response: any): string | null {
+  // 1. Convenience property (populated on some SDK/model combos)
   if (response.output_text) return response.output_text;
 
-  if (Array.isArray(response.output)) {
-    for (const item of response.output) {
-      if (item.type === "message" && Array.isArray(item.content)) {
-        for (const part of item.content) {
-          if (part.type === "output_text" && part.text) {
-            return part.text;
-          }
+  if (!Array.isArray(response.output)) return null;
+
+  // 2. Standard message item with nested content parts
+  for (const item of response.output) {
+    if (item.type === "message" && Array.isArray(item.content)) {
+      for (const part of item.content) {
+        if ((part.type === "output_text" || part.type === "text") && part.text) {
+          return part.text;
+        }
+      }
+    }
+  }
+
+  // 3. Top-level text item (some response shapes put text directly in output)
+  for (const item of response.output) {
+    if (item.type === "text" && item.text) return item.text;
+  }
+
+  // 4. Last resort: any item with a .text string that looks like JSON
+  for (const item of response.output) {
+    if (typeof item.text === "string" && item.text.trim().startsWith("{")) {
+      return item.text;
+    }
+    if (Array.isArray(item.content)) {
+      for (const part of item.content) {
+        if (typeof part.text === "string" && part.text.trim().startsWith("{")) {
+          return part.text;
         }
       }
     }
@@ -202,17 +191,9 @@ export async function computeWorldMarketPrediction(
         model: "gpt-5.4",
         tools: [{ type: "web_search" as any }],
         reasoning: { effort: "medium" } as any,
-        max_output_tokens: 500,
+        max_output_tokens: 1000,
         instructions: systemPrompt,
         input: userPrompt,
-        text: {
-          format: {
-            type: "json_schema",
-            name: "prediction_assessment",
-            strict: true,
-            schema: buildPredictionSchema(entries.length),
-          },
-        },
       } as any,
       { signal: controller.signal }
     );
@@ -228,7 +209,32 @@ export async function computeWorldMarketPrediction(
       return abstain("api_error");
     }
 
-    assessment = JSON.parse(outputText) as PredictionAssessment;
+    // Strip markdown code fences the model may wrap around the JSON
+    let jsonText = outputText.trim();
+    if (jsonText.startsWith("```")) {
+      jsonText = jsonText.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (parseErr) {
+      log(`[WorldEngine] JSON parse failed for agent=${agent.displayName} market=${market.id.slice(0, 8)} — raw: ${jsonText.slice(0, 200)}`);
+      return abstain("api_error");
+    }
+
+    if (
+      !parsed ||
+      typeof parsed.decision !== "string" ||
+      !["bet", "abstain"].includes(parsed.decision) ||
+      typeof parsed.confidence !== "number" ||
+      typeof parsed.briefReasoning !== "string"
+    ) {
+      log(`[WorldEngine] Invalid schema for agent=${agent.displayName} market=${market.id.slice(0, 8)} — keys: ${Object.keys(parsed).join(", ")}`);
+      return abstain("api_error");
+    }
+
+    assessment = parsed as PredictionAssessment;
   } catch (err: any) {
     const msg = err instanceof Error ? err.message : String(err);
     log(`[WorldEngine] API error for agent=${agent.displayName} market=${market.id.slice(0, 8)}: ${msg}`);
