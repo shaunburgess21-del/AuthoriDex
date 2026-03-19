@@ -8023,6 +8023,14 @@ Only return the JSON object.`;
     }
   });
 
+  function stripCitations(text: string): string {
+    return text
+      .replace(/\s*\(\[([^\]]*)\]\([^)]*\)\)/g, "")
+      .replace(/\s*\[([^\]]*)\]\([^)]*\)/g, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
   app.post("/api/admin/trending-polls/:id/generate-ai-draft", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
@@ -8094,12 +8102,12 @@ Aim for 3-5 substantive paragraphs. Be factual, balanced, and informative. Help 
         temperature: 0.7,
       } as any);
 
-      const content = ((response as any).output_text
+      const content = stripCitations(((response as any).output_text
         || ((response as any).output || [])
              .filter((item: any) => item.type === "message")
              .flatMap((item: any) => item.content || [])
              .find((part: any) => part.type === "output_text" || part.type === "text")
-             ?.text)?.trim() || "";
+             ?.text)?.trim() || "");
       if (!content) return res.status(500).json({ error: "AI returned empty content" });
 
       console.log(`[Sentiment Polls] AI draft generated for poll ${id}, field=${field}`);
@@ -9028,12 +9036,12 @@ Aim for 3-5 substantive paragraphs. Be informative, engaging, and balanced. Help
         temperature: 0.7,
       } as any);
 
-      const content = ((response as any).output_text
+      const content = stripCitations(((response as any).output_text
         || ((response as any).output || [])
              .filter((item: any) => item.type === "message")
              .flatMap((item: any) => item.content || [])
              .find((part: any) => part.type === "output_text" || part.type === "text")
-             ?.text)?.trim() || "";
+             ?.text)?.trim() || "");
       if (!content) return res.status(500).json({ error: "AI returned empty content" });
 
       console.log(`[Opinion Polls] AI draft generated for poll ${id}, field=${field}`);
@@ -10296,12 +10304,12 @@ Write a 2-5 sentence summary that helps users make an informed prediction. Focus
         temperature: 0.7,
       } as any);
 
-      const summary = ((response as any).output_text
+      const summary = stripCitations(((response as any).output_text
         || ((response as any).output || [])
              .filter((item: any) => item.type === "message")
              .flatMap((item: any) => item.content || [])
              .find((part: any) => part.type === "output_text" || part.type === "text")
-             ?.text)?.trim() || "";
+             ?.text)?.trim() || "");
       if (!summary) return res.status(500).json({ error: "AI returned an empty summary" });
 
       console.log(`[World Markets] AI summary generated for market ${id} ("${market.title?.slice(0, 50)}")`);
