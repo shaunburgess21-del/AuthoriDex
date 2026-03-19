@@ -829,7 +829,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
       unit: openMarketType === "updown" ? unit : undefined,
       visibility,
       inactiveMessage: visibility === "inactive" ? inactiveMessage : undefined,
-      personId: personId || undefined,
+      personId: personId && personId.trim() ? personId : null,
       coverImageUrl: imageUrl || undefined,
       relatedPersonIds: relatedPeople.map(p => p.id),
       entries: entries.map((e, i) => ({

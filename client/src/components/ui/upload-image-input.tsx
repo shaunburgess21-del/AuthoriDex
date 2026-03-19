@@ -3,6 +3,7 @@ import { Upload, X, Image as ImageIcon, Loader2, AlertCircle } from "lucide-reac
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getSupabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface UploadImageInputProps {
   value: string;
@@ -18,7 +19,10 @@ interface UploadImageInputProps {
 
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const MAX_SIZE = 2 * 1024 * 1024;
+const MAX_SIZE_SERVER = 5 * 1024 * 1024; // when using admin server upload
 const BUCKET_NAME = "public-images";
+// If uploads fail with "object exceeded maximum allowed size", in Supabase Dashboard go to
+// Storage → public-images → set file size limit to at least 2MB (or 5MB).
 
 export function UploadImageInput({
   value,
@@ -31,6 +35,7 @@ export function UploadImageInput({
   buttonAriaLabel = "Upload image",
   buttonTestId = "button-upload-image",
 }: UploadImageInputProps) {
+  const { isAdmin, session } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -44,8 +49,11 @@ export function UploadImageInput({
       setError("Only PNG, JPG, and WEBP files are allowed");
       return;
     }
-    if (file.size > MAX_SIZE) {
-      setError("File must be under 2MB");
+
+    const useServerUpload = isAdmin && session?.access_token;
+    const maxSize = useServerUpload ? MAX_SIZE_SERVER : MAX_SIZE;
+    if (file.size > maxSize) {
+      setError(useServerUpload ? "File must be under 5MB" : "File must be under 2MB");
       return;
     }
 
@@ -53,6 +61,28 @@ export function UploadImageInput({
     setProgress(10);
 
     try {
+      if (useServerUpload) {
+        setProgress(20);
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("moduleName", moduleName);
+        formData.append("slugOrId", slugOrId);
+        const res = await fetch("/api/admin/upload-image", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session!.access_token}` },
+          body: formData,
+        });
+        setProgress(80);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error((body as { error?: string }).error || "Upload failed");
+        }
+        const { url } = (await res.json()) as { url: string };
+        setProgress(100);
+        onChange(url);
+        return;
+      }
+
       const supabase = await getSupabase();
       setProgress(20);
 
@@ -90,6 +120,8 @@ export function UploadImageInput({
       const msg = err instanceof Error ? err.message : "Upload failed";
       if (msg.includes("Bucket not found") || msg.includes("not found")) {
         setError("Unable to upload image. Please try again later.");
+      } else if (msg.toLowerCase().includes("exceeded") || msg.toLowerCase().includes("maximum allowed size")) {
+        setError("File exceeds the storage limit for this project. Use a smaller image (under 2MB), paste an image URL, or ask an admin to raise the Supabase bucket file size limit (Dashboard → Storage → public-images).");
       } else {
         setError(msg);
       }
@@ -99,7 +131,7 @@ export function UploadImageInput({
         setProgress(0);
       }, 500);
     }
-  }, [moduleName, slugOrId, onChange]);
+  }, [moduleName, slugOrId, onChange, isAdmin, session?.access_token]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
