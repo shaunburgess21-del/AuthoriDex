@@ -353,6 +353,14 @@ export async function generateWeeklyGainer(): Promise<number> {
     const title = `Category Race: ${getMarketCategoryLabel(cat)}`;
     let slug = `gainer-${cat}-week-${weekNumber}`;
 
+    const slugExists = await db.select({ id: predictionMarkets.id })
+      .from(predictionMarkets)
+      .where(eq(predictionMarkets.slug, slug))
+      .limit(1);
+    if (slugExists.length > 0) {
+      slug = `${slug}-${randomUUID().slice(0, 6)}`;
+    }
+
     try {
       await db.transaction(async (tx) => {
         try {
