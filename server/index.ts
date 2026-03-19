@@ -72,6 +72,13 @@ const REQUIRED_DB_CONSTRAINTS = [
 
 const REQUIRE_DB_GUARDRAILS = process.env.REQUIRE_DB_GUARDRAILS === 'true';
 
+const CONSTRAINT_DDL: Record<string, string> = {
+  chk_snapshot_origin_values:
+    `ALTER TABLE trend_snapshots ADD CONSTRAINT chk_snapshot_origin_values CHECK (snapshot_origin IN ('ingest'))`,
+  chk_ingest_hour_truncated:
+    `ALTER TABLE trend_snapshots ADD CONSTRAINT chk_ingest_hour_truncated CHECK (timestamp = date_trunc('hour', timestamp))`,
+};
+
 async function verifyDbConstraints() {
   try {
     const result = await pool.query(
@@ -83,12 +90,40 @@ async function verifyDbConstraints() {
     );
     const found = result.rows.map((r: any) => r.conname);
     const missing = REQUIRED_DB_CONSTRAINTS.filter(c => !found.includes(c));
+
     if (missing.length > 0) {
-      log(`[DB_GUARDRAIL_MISSING] CRITICAL: Missing constraints on trend_snapshots: ${missing.join(', ')}. Data integrity is at risk! Re-apply via SQL.`);
-      if (REQUIRE_DB_GUARDRAILS) {
-        log(`[DB_GUARDRAIL_MISSING] REQUIRE_DB_GUARDRAILS=true — ingest writes are BLOCKED until constraints are restored.`);
+      log(`[DB Guardrails] Missing constraints: ${missing.join(', ')} — attempting auto-create`);
+      for (const name of missing) {
+        const ddl = CONSTRAINT_DDL[name];
+        if (!ddl) { log(`[DB Guardrails] No DDL for ${name}, skipping`); continue; }
+        try {
+          await pool.query(ddl);
+          log(`[DB Guardrails] Created ${name}`);
+        } catch (ddlErr: any) {
+          if (ddlErr?.code === '23514') {
+            log(`[DB Guardrails] Cannot add ${name} — existing rows violate it. Manual cleanup required.`);
+          } else {
+            log(`[DB Guardrails] Failed to create ${name}: ${ddlErr?.message ?? ddlErr}`);
+          }
+        }
       }
-      setDbGuardrailsVerified(false);
+
+      const recheck = await pool.query(
+        `SELECT conname FROM pg_constraint WHERE conrelid = 'trend_snapshots'::regclass AND contype = 'c' AND conname = ANY($1)`,
+        [REQUIRED_DB_CONSTRAINTS]
+      );
+      const nowFound = recheck.rows.map((r: any) => r.conname);
+      const stillMissing = REQUIRED_DB_CONSTRAINTS.filter(c => !nowFound.includes(c));
+      if (stillMissing.length > 0) {
+        log(`[DB_GUARDRAIL_MISSING] Still missing after auto-create: ${stillMissing.join(', ')}. Data integrity is at risk!`);
+        if (REQUIRE_DB_GUARDRAILS) {
+          log(`[DB_GUARDRAIL_MISSING] REQUIRE_DB_GUARDRAILS=true — ingest writes are BLOCKED until constraints are restored.`);
+        }
+        setDbGuardrailsVerified(false);
+      } else {
+        log(`[DB Guardrails] All ${REQUIRED_DB_CONSTRAINTS.length} constraints now verified on trend_snapshots`);
+        setDbGuardrailsVerified(true);
+      }
     } else {
       log(`[DB Guardrails] All ${REQUIRED_DB_CONSTRAINTS.length} constraints verified on trend_snapshots`);
       setDbGuardrailsVerified(true);
