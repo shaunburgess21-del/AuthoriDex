@@ -376,8 +376,10 @@ async function runAgentBatchOnce(): Promise<{
         abstained++;
         log(`[AgentRunner] ${agent.displayName} abstained on ${market.id.slice(0, 8)}: ${decision.abstainReason}`);
 
-        // Track World Market abstentions to prevent re-calling GPT every sweep
-        if (isCommunity) {
+        // Only record world_abstained when GPT-5.4 actually ran and abstained.
+        // Pre-filter rejections (domain, activity_gate) are silently skipped so
+        // agents retry on the next 30-minute sweep instead of being locked out for 7 days.
+        if (isCommunity && (decision.abstainReason === "world_abstain" || decision.abstainReason === "api_error")) {
           await db.insert(scheduledAgentActions).values({
             agentId: agent.id,
             marketId: market.id,
