@@ -10655,17 +10655,22 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
-        max_output_tokens: 80,
-        temperature: 1.0,
+        max_output_tokens: 120,
+        temperature: 0.95,
       } as any);
 
-      const teaser = stripCitations(((response as any).output_text
+      const rawText = (response as any).output_text
         || ((response as any).output || [])
              .filter((item: any) => item.type === "message")
              .flatMap((item: any) => item.content || [])
              .find((part: any) => part.type === "output_text" || part.type === "text")
-             ?.text)?.trim() || "");
-      if (!teaser) return res.status(500).json({ error: "AI returned an empty teaser" });
+             ?.text
+        || "";
+      const teaser = stripCitations(rawText.trim());
+      if (!teaser) {
+        console.error(`[World Markets] AI teaser empty for market ${id}. Raw response keys:`, Object.keys(response || {}), "output:", JSON.stringify((response as any)?.output?.slice?.(0, 3) ?? (response as any)?.output_text?.slice?.(0, 200) ?? "none"));
+        return res.status(500).json({ error: "AI returned an empty teaser" });
+      }
 
       console.log(`[World Markets] AI teaser generated for market ${id}: "${teaser}"`);
       res.json({ teaser });
