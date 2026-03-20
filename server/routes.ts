@@ -10650,29 +10650,49 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
       });
 
-      const response = await openai.responses.create({
-        model: "gpt-5.4",
-        tools: [{ type: "web_search" as any }],
-        instructions: systemPrompt,
-        input: userPrompt,
-        max_output_tokens: 120,
-        temperature: 0.95,
-      } as any);
+      function extractTeaser(response: any): string {
+        const raw = (response as any).output_text
+          || ((response as any).output || [])
+               .filter((item: any) => item.type === "message")
+               .flatMap((item: any) => item.content || [])
+               .filter((part: any) => part.type === "output_text" || part.type === "text")
+               .map((part: any) => part.text)
+               .join(" ")
+          || ((response as any).output || [])
+               .filter((item: any) => item.type === "text")
+               .map((item: any) => item.text)
+               .join(" ")
+          || "";
+        return stripCitations(raw.trim());
+      }
 
-      const rawText = (response as any).output_text
-        || ((response as any).output || [])
-             .filter((item: any) => item.type === "message")
-             .flatMap((item: any) => item.content || [])
-             .find((part: any) => part.type === "output_text" || part.type === "text")
-             ?.text
-        || "";
-      const teaser = stripCitations(rawText.trim());
+      const MAX_ATTEMPTS = 3;
+      let teaser = "";
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const useWebSearch = attempt <= 2;
+        const response = await openai.responses.create({
+          model: "gpt-5.4",
+          ...(useWebSearch ? { tools: [{ type: "web_search" as any }] } : {}),
+          instructions: systemPrompt,
+          input: userPrompt,
+          max_output_tokens: 300,
+          temperature: 0.85,
+        } as any);
+
+        teaser = extractTeaser(response);
+        if (teaser) {
+          console.log(`[World Markets] AI teaser generated for market ${id} (attempt ${attempt}): "${teaser}"`);
+          break;
+        }
+        console.warn(`[World Markets] AI teaser attempt ${attempt}/${MAX_ATTEMPTS} empty for market ${id}.`,
+          "keys:", Object.keys(response || {}),
+          "output:", JSON.stringify((response as any)?.output?.slice?.(0, 5) ?? (response as any)?.output_text?.slice?.(0, 300) ?? "none"));
+      }
+
       if (!teaser) {
-        console.error(`[World Markets] AI teaser empty for market ${id}. Raw response keys:`, Object.keys(response || {}), "output:", JSON.stringify((response as any)?.output?.slice?.(0, 3) ?? (response as any)?.output_text?.slice?.(0, 200) ?? "none"));
         return res.status(500).json({ error: "AI returned an empty teaser" });
       }
 
-      console.log(`[World Markets] AI teaser generated for market ${id}: "${teaser}"`);
       res.json({ teaser });
     } catch (error: any) {
       console.error("[World Markets] AI teaser generation error:", error?.message || error);
