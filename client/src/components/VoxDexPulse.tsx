@@ -62,7 +62,7 @@ interface ApprovalBreakdown {
 // --------------- Constants ---------------
 
 type PulseMode = "trend" | "approval";
-type TimeRange = "48h" | "7D" | "14D" | "30D" | "90D" | "6M" | "1Y" | "ALL";
+type TimeRange = "48h" | "7D" | "14D" | "30D" | "90D";
 
 const TIME_RANGES: { key: TimeRange; days: number }[] = [
   { key: "48h", days: 2 },
@@ -70,9 +70,6 @@ const TIME_RANGES: { key: TimeRange; days: number }[] = [
   { key: "14D", days: 14 },
   { key: "30D", days: 30 },
   { key: "90D", days: 90 },
-  { key: "6M", days: 180 },
-  { key: "1Y", days: 365 },
-  { key: "ALL", days: 9999 },
 ];
 
 const CATEGORIES = [
