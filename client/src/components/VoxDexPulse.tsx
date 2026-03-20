@@ -87,7 +87,8 @@ const APPROVAL_COLORS = ["#FF0000", "#FF6D00", "#FFC400", "#76FF03", "#00C853"];
 
 const MIN_SPEED = 1000;
 const MAX_SPEED = 3000;
-const DEFAULT_SPEED = 2000;
+/** Default ~10% from Slow (left); center was 50% = 2000ms */
+const DEFAULT_SPEED = Math.round(MAX_SPEED - 0.1 * (MAX_SPEED - MIN_SPEED));
 const MAX_FRAMES = 100;
 
 // --------------- Helpers ---------------
@@ -778,12 +779,9 @@ export function VoxDexPulse() {
           </div>
         )}
 
-        {/* Controls row */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-        {/* Toggle group: content-sized so it doesn't stretch on mobile */}
-        <div className="flex items-center gap-2 shrink-0 self-start">
-          {/* Mode toggle */}
-          <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5">
+        {/* Single wrapping row: Trend | Approval | i | 48h | … (Top N lives on category row) */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5 shrink-0">
             <button
               onClick={() => setMode("trend")}
               className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
@@ -817,64 +815,61 @@ export function VoxDexPulse() {
               data-testid="icon-pulse-info"
             />
           </TouchTooltip>
-          <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
-            <SelectTrigger className="h-7 w-[72px] text-xs bg-muted/50 border-border/40 rounded-lg gap-1 px-2">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[10, 20, 30, 40, 50, 60, 70, 80, 100].map((n) => (
-                <SelectItem key={n} value={String(n)}>
-                  Top {n}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
 
-        {/* Time range toggles (trend only) */}
-        {mode === "trend" && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {TIME_RANGES.map(r => {
-              const isActive = timeRange === r.key;
-              return (
+          {mode === "trend" && (
+            <>
+              {TIME_RANGES.map(r => {
+                const isActive = timeRange === r.key;
+                return (
+                  <button
+                    key={r.key}
+                    onClick={() => setTimeRange(r.key)}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all backdrop-blur shrink-0 ${
+                      isActive
+                        ? "bg-blue-500/20 text-blue-300 border border-blue-400/50 shadow-[0_0_8px_rgba(59,130,246,0.15)]"
+                        : "bg-muted/40 border border-border/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                    }`}
+                  >
+                    {r.key}
+                  </button>
+                );
+              })}
+              {hasFrames && (
                 <button
-                  key={r.key}
-                  onClick={() => setTimeRange(r.key)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all backdrop-blur ${
-                    isActive
-                      ? "bg-blue-500/20 text-blue-300 border border-blue-400/50 shadow-[0_0_8px_rgba(59,130,246,0.15)]"
-                      : "bg-muted/40 border border-border/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                  }`}
+                  onClick={togglePause}
+                  className="flex items-center justify-center h-7 w-7 rounded-lg bg-blue-500/20 border border-blue-400/50 text-blue-400 hover:bg-blue-500/30 transition-all shadow-[0_0_8px_rgba(59,130,246,0.15)] shrink-0"
+                  title={isPlaying ? "Pause" : "Play"}
                 >
-                  {r.key}
+                  {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ml-0.5" />}
                 </button>
-              );
-            })}
-
-            {/* Play/Pause */}
-            {hasFrames && (
-              <button
-                onClick={togglePause}
-                className="flex items-center justify-center h-7 w-7 rounded-lg bg-blue-500/20 border border-blue-400/50 text-blue-400 hover:bg-blue-500/30 transition-all shadow-[0_0_8px_rgba(59,130,246,0.15)]"
-                title={isPlaying ? "Pause" : "Play"}
-              >
-                {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ml-0.5" />}
-              </button>
-            )}
-
-            {/* Speed control -- desktop only (mobile version rendered below card) */}
-            {isTimelapse && (
-              <div className="hidden sm:flex">
-                <SpeedSlider speed={speed} onChange={setSpeed} accentColor={accentColor} />
-              </div>
-            )}
-          </div>
-        )}
+              )}
+              {isTimelapse && (
+                <div className="hidden sm:flex min-w-[140px] max-w-[200px] flex-1 basis-[180px]">
+                  <SpeedSlider speed={speed} onChange={setSpeed} accentColor={accentColor} />
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
-      {/* Category filter -- below controls on desktop, below card on mobile */}
+      {/* Category filter -- Top N first, then pills (below primary controls) */}
       <div className="order-5 sm:order-3 flex items-center gap-1.5 overflow-x-auto scrollbar-hide mt-2 sm:mt-0 mb-2">
+        <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
+          <SelectTrigger
+            className="h-7 w-[72px] text-xs bg-muted/50 border-border/40 rounded-lg gap-1 px-2 shrink-0"
+            data-testid="select-pulse-top-n"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {[10, 20, 30, 40, 50, 60, 70, 80, 100].map((n) => (
+              <SelectItem key={n} value={String(n)}>
+                Top {n}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {visibleCategories.map(cat => (
           <button
             key={cat}

@@ -199,39 +199,39 @@ export function UnderratedOverratedCard({
           </button>
         </div>
       ) : (
-        <div className="flex flex-col gap-3 mt-auto">
-          <div className="flex items-center gap-3">
-            <ArrowUp className="h-4 w-4 text-[#00C853] shrink-0" />
-            <span className="text-sm text-[#00C853] w-20 shrink-0">Underrated</span>
-            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+        <div className="flex flex-col gap-4 md:gap-3 mt-auto">
+          <div className="flex items-center gap-3 md:gap-2.5">
+            <ArrowUp className="h-5 w-5 md:h-4 md:w-4 text-[#00C853] shrink-0" />
+            <span className="text-base font-medium md:text-sm text-[#00C853] w-[5.25rem] md:w-20 shrink-0">Underrated</span>
+            <div className="flex-1 h-4 md:h-3 bg-white/5 rounded-full overflow-hidden self-center">
               <div 
                 className="h-full bg-[#00C853] rounded-full transition-all duration-500"
                 style={{ width: `${underratedPct}%` }}
               />
             </div>
-            <span className="text-sm text-muted-foreground w-10 text-right">{Math.round(underratedPct)}%</span>
+            <span className="text-base tabular-nums md:text-sm text-muted-foreground w-11 md:w-10 text-right font-medium">{Math.round(underratedPct)}%</span>
           </div>
-          <div className="flex items-center gap-3">
-            <Minus className="h-4 w-4 text-slate-400 shrink-0" />
-            <span className="text-sm text-slate-400 w-20 shrink-0">Fair</span>
-            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+          <div className="flex items-center gap-3 md:gap-2.5">
+            <Minus className="h-5 w-5 md:h-4 md:w-4 text-slate-400 shrink-0" />
+            <span className="text-base font-medium md:text-sm text-slate-400 w-[5.25rem] md:w-20 shrink-0">Fair</span>
+            <div className="flex-1 h-4 md:h-3 bg-white/5 rounded-full overflow-hidden self-center">
               <div 
                 className="h-full bg-slate-500 rounded-full transition-all duration-500"
                 style={{ width: `${fairlyRatedPct}%` }}
               />
             </div>
-            <span className="text-sm text-muted-foreground w-10 text-right">{Math.round(fairlyRatedPct)}%</span>
+            <span className="text-base tabular-nums md:text-sm text-muted-foreground w-11 md:w-10 text-right font-medium">{Math.round(fairlyRatedPct)}%</span>
           </div>
-          <div className="flex items-center gap-3">
-            <ArrowDown className="h-4 w-4 text-[#FF0000] shrink-0" />
-            <span className="text-sm text-[#FF0000] w-20 shrink-0">Overrated</span>
-            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+          <div className="flex items-center gap-3 md:gap-2.5">
+            <ArrowDown className="h-5 w-5 md:h-4 md:w-4 text-[#FF0000] shrink-0" />
+            <span className="text-base font-medium md:text-sm text-[#FF0000] w-[5.25rem] md:w-20 shrink-0">Overrated</span>
+            <div className="flex-1 h-4 md:h-3 bg-white/5 rounded-full overflow-hidden self-center">
               <div 
                 className="h-full bg-[#FF0000] rounded-full transition-all duration-500"
                 style={{ width: `${overratedPct}%` }}
               />
             </div>
-            <span className="text-sm text-muted-foreground w-10 text-right">{Math.round(overratedPct)}%</span>
+            <span className="text-base tabular-nums md:text-sm text-muted-foreground w-11 md:w-10 text-right font-medium">{Math.round(overratedPct)}%</span>
           </div>
           <div className="flex items-center justify-between pt-2 border-t border-white/10">
             <div className="flex items-center gap-2">

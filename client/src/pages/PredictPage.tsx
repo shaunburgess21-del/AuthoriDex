@@ -1541,12 +1541,13 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
       </div>
       {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
       
-      <div className="mt-auto pt-1">
-        <div className="mb-3">
+      {/* Mobile: mt-2 only — avoids a large empty band between teaser and split bar (md+ keeps mt-auto spacer) */}
+      <div className="mt-2 md:mt-auto md:pt-1">
+        <div className="mb-2 md:mb-3">
           <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
         </div>
         
-        <div className="mb-3">
+        <div className="mb-2 md:mb-3">
           <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
             <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
           </div>
@@ -1557,7 +1558,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
         </div>
       </div>
       
-      <div>
+      <div className="max-md:mt-1">
         <div className="flex items-center justify-center mb-1.5">
           <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString('en-US')}</span>
         </div>
@@ -1569,10 +1570,19 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
           </Button>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            <Button className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20" onClick={() => onNavigate(market.slug, 'yes')} data-testid={`button-yes-${market.slug}`}>
+            {/* Match UnderratedOverratedCard mobile tap targets: py-3.5; compact on md+ */}
+            <Button
+              className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+              onClick={() => onNavigate(market.slug, 'yes')}
+              data-testid={`button-yes-${market.slug}`}
+            >
               Yes {yesPercent}%
             </Button>
-            <Button className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20" onClick={() => onNavigate(market.slug, 'no')} data-testid={`button-no-${market.slug}`}>
+            <Button
+              className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+              onClick={() => onNavigate(market.slug, 'no')}
+              data-testid={`button-no-${market.slug}`}
+            >
               No {noPercent}%
             </Button>
           </div>

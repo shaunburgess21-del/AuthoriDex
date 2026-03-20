@@ -1,7 +1,6 @@
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Target } from "lucide-react";
-import { useState, useCallback, useMemo } from "react";
+import { Target, X } from "lucide-react";
+import { useState, useCallback, useMemo, type MouseEvent, type TouchEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { 
   AreaChart, 
@@ -47,6 +46,7 @@ interface CustomTooltipProps {
   label?: string;
   startScore: number;
   timeRange: TimeRange;
+  onDismiss?: () => void;
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -86,16 +86,38 @@ function formatTooltipDate(isoString: string, timeRange: TimeRange): string {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
-function CustomTooltip({ active, payload, startScore, timeRange }: CustomTooltipProps) {
+function CustomTooltip({ active, payload, startScore, timeRange, onDismiss }: CustomTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   
   const currentScore = payload[0].value;
   const dataPoint = payload[0].payload;
   const delta = startScore > 0 ? ((currentScore - startScore) / startScore) * 100 : 0;
   const isPositive = delta >= 0;
-  
+
+  const stopBubble = (e: MouseEvent | TouchEvent) => {
+    e.stopPropagation();
+  };
+
   return (
-    <div className="bg-card border border-border rounded-lg p-3 shadow-xl">
+    <div className="bg-card border border-border rounded-lg p-3 shadow-xl relative pr-9 max-w-[min(100vw-2rem,280px)]">
+      {onDismiss && (
+        <button
+          type="button"
+          aria-label="Hide tooltip"
+          className="absolute right-1.5 top-1.5 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground touch-manipulation"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            stopBubble(e);
+            onDismiss();
+          }}
+          onTouchEnd={(e) => {
+            stopBubble(e);
+            onDismiss();
+          }}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
       <p className="text-xs text-muted-foreground mb-1">
         {formatTooltipDate(dataPoint.timestamp, timeRange)}
       </p>
@@ -113,6 +135,8 @@ export function TrendChart({ personId, personName, activeMarkets }: TrendChartPr
   const [timeRange, setTimeRange] = useState<TimeRange>("7D");
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [showMarketOverlay, setShowMarketOverlay] = useState(false);
+  /** Mobile: Recharts keeps tooltip "active" after touch; user can dismiss until next tap on chart */
+  const [tooltipDismissed, setTooltipDismissed] = useState(false);
 
   const hasMarkets = activeMarkets && activeMarkets.length > 0;
 
@@ -155,6 +179,16 @@ export function TrendChart({ personId, personName, activeMarkets }: TrendChartPr
 
   const handleMouseLeave = useCallback(() => {
     setActiveIndex(null);
+    setTooltipDismissed(false);
+  }, []);
+
+  const dismissTooltip = useCallback(() => {
+    setTooltipDismissed(true);
+    setActiveIndex(null);
+  }, []);
+
+  const handleChartPointerDown = useCallback(() => {
+    setTooltipDismissed(false);
   }, []);
 
   const yDomain = useMemo(() => {
@@ -168,32 +202,33 @@ export function TrendChart({ personId, personName, activeMarkets }: TrendChartPr
 
   return (
     <div className="w-screen relative left-1/2 -ml-[50vw] md:w-auto md:relative md:left-0 md:ml-0">
-      <Card className="border-0 md:border rounded-none md:rounded-xl shadow-none md:shadow-sm overflow-hidden">
-        <CardHeader className="pb-3 px-4 md:px-6 flex flex-row items-center justify-between">
-          <CardTitle className="text-lg font-serif">Trend History</CardTitle>
+      {/* Frameless: chart sits on page background (no card chrome) — works on mobile and desktop */}
+      <section className="bg-transparent border-0 shadow-none overflow-visible">
+        <div className="pb-3 px-4 md:px-6 flex flex-row items-center justify-between gap-3">
+          <h2 className="text-lg font-serif text-foreground">Trend History</h2>
           {hasMarkets && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowMarketOverlay(prev => !prev)}
-              className={`text-xs gap-1.5 ${showMarketOverlay ? 'bg-primary/10 border-primary/40' : ''}`}
+              className={`text-xs gap-1.5 shrink-0 ${showMarketOverlay ? 'bg-primary/10 border-primary/40' : ''}`}
             >
               <Target className="h-3.5 w-3.5" />
               {showMarketOverlay ? 'Hide Markets' : 'Show Markets'}
             </Button>
           )}
-        </CardHeader>
+        </div>
         <div>
           {isLoading ? (
-            <div className="h-[400px] flex items-center justify-center">
+            <div className="h-[400px] flex items-center justify-center px-4">
               <div className="text-center">
                 <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
                 <p className="mt-4 text-sm text-muted-foreground">Loading trend data...</p>
               </div>
             </div>
           ) : !historyData || historyData.length === 0 ? (
-            <div className="h-[400px] flex items-center justify-center mx-4 border rounded-lg bg-muted/20">
-              <div className="text-center">
+            <div className="h-[400px] flex items-center justify-center px-4 md:px-6">
+              <div className="text-center max-w-sm">
                 <p className="text-muted-foreground">
                   No historical data available yet
                 </p>
@@ -203,7 +238,11 @@ export function TrendChart({ personId, personName, activeMarkets }: TrendChartPr
               </div>
             </div>
           ) : (
-            <div className="h-[400px]">
+            <div
+              className="h-[400px] touch-manipulation"
+              onPointerDown={handleChartPointerDown}
+              onTouchStart={handleChartPointerDown}
+            >
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart 
                   data={historyData} 
@@ -247,14 +286,25 @@ export function TrendChart({ personId, personName, activeMarkets }: TrendChartPr
                     tickMargin={0}
                   />
                   <Tooltip 
-                    content={<CustomTooltip startScore={startScore} timeRange={timeRange} />}
-                    cursor={{
-                      stroke: 'hsl(var(--primary))',
-                      strokeWidth: 1,
-                      strokeDasharray: '4 4',
-                    }}
+                    active={tooltipDismissed ? false : undefined}
+                    content={
+                      <CustomTooltip
+                        startScore={startScore}
+                        timeRange={timeRange}
+                        onDismiss={dismissTooltip}
+                      />
+                    }
+                    cursor={
+                      tooltipDismissed
+                        ? false
+                        : {
+                            stroke: 'hsl(var(--primary))',
+                            strokeWidth: 1,
+                            strokeDasharray: '4 4',
+                          }
+                    }
                   />
-                  {activeIndex !== null && historyData[activeIndex] && (
+                  {activeIndex !== null && !tooltipDismissed && historyData[activeIndex] && (
                     <ReferenceLine
                       x={historyData[activeIndex].timestamp}
                       stroke="hsl(var(--primary))"
@@ -304,7 +354,11 @@ export function TrendChart({ personId, personName, activeMarkets }: TrendChartPr
                 key={range}
                 variant={timeRange === range ? "default" : "outline"}
                 size="sm"
-                onClick={() => setTimeRange(range)}
+                onClick={() => {
+                  setTimeRange(range);
+                  setTooltipDismissed(false);
+                  setActiveIndex(null);
+                }}
                 className="text-xs px-3"
                 data-testid={`button-timerange-${range}`}
               >
@@ -313,7 +367,7 @@ export function TrendChart({ personId, personName, activeMarkets }: TrendChartPr
             ))}
           </div>
         </div>
-      </Card>
+      </section>
     </div>
   );
 }
