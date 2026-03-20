@@ -779,7 +779,7 @@ export function VoxDexPulse() {
           </div>
         )}
 
-        {/* Single wrapping row: Trend | Approval | i | 48h | … (Top N lives on category row) */}
+        {/* Single wrapping row: Trend | Approval | i | Top | 48h | 7D | … (Top beside 48h as requested) */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5 shrink-0">
             <button
@@ -818,6 +818,21 @@ export function VoxDexPulse() {
 
           {mode === "trend" && (
             <>
+              <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
+                <SelectTrigger
+                  className="h-7 w-[72px] text-xs bg-muted/50 border-border/40 rounded-lg gap-1 px-2 shrink-0"
+                  data-testid="select-pulse-top-n"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[10, 20, 30, 40, 50, 60, 70, 80, 100].map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      Top {n}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {TIME_RANGES.map(r => {
                 const isActive = timeRange === r.key;
                 return (
@@ -853,23 +868,8 @@ export function VoxDexPulse() {
         </div>
       </div>
 
-      {/* Category filter -- Top N first, then pills (below primary controls) */}
+      {/* Category filter only (Top N is in top row beside 48h) */}
       <div className="order-5 sm:order-3 flex items-center gap-1.5 overflow-x-auto scrollbar-hide mt-2 sm:mt-0 mb-2">
-        <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
-          <SelectTrigger
-            className="h-7 w-[72px] text-xs bg-muted/50 border-border/40 rounded-lg gap-1 px-2 shrink-0"
-            data-testid="select-pulse-top-n"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {[10, 20, 30, 40, 50, 60, 70, 80, 100].map((n) => (
-              <SelectItem key={n} value={String(n)}>
-                Top {n}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         {visibleCategories.map(cat => (
           <button
             key={cat}
