@@ -13,6 +13,7 @@ import type {
 } from "./types";
 import { productionRNG, type RNG } from "./prng";
 import { log } from "../log";
+import { WORLD_MARKET_BOOST_ENABLED, WORLD_MARKET_ACTIVITY_MULTIPLIER } from "./constants";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
@@ -164,18 +165,23 @@ export async function computeWorldMarketPrediction(
 
   if (!entries.length) return abstain("low_edge");
 
-  // Step 1: Domain filter (same logic as deterministic engine)
+  // Step 1: Domain filter (relaxed for world markets to increase coverage)
   const marketCategory = market.category?.toLowerCase() ?? "";
   const domainMatch =
     marketCategory !== "" &&
     agent.specialties.some(
       (s) => marketCategory.includes(s) || s.includes(marketCategory)
     );
-  const skipProbability = domainMatch ? 0.15 : marketCategory === "trending" ? 0.4 : 0.70;
+  const skipProbability = WORLD_MARKET_BOOST_ENABLED
+    ? (domainMatch ? 0.05 : 0.40)
+    : (domainMatch ? 0.15 : 0.70);
   if (rng.nextFloat() < skipProbability) return abstain("domain");
 
-  // Step 2: Activity gate
-  if (rng.nextFloat() > agent.activityRate) return abstain("activity_gate");
+  // Step 2: Activity gate (boosted for world markets to ensure GPT calls aren't wasted)
+  const effectiveActivityRate = WORLD_MARKET_BOOST_ENABLED
+    ? Math.min(1.0, agent.activityRate * WORLD_MARKET_ACTIVITY_MULTIPLIER)
+    : agent.activityRate;
+  if (rng.nextFloat() > effectiveActivityRate) return abstain("activity_gate");
 
   // Step 3: Call GPT-5.4 with web search
   const systemPrompt = buildSystemPrompt(agent);

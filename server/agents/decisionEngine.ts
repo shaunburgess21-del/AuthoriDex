@@ -15,6 +15,7 @@ import {
   POSITIVE_HINTS,
   NEGATIVE_HINTS,
   CONTRARIAN_TRIGGER_THRESHOLD,
+  WORLD_MARKET_BOOST_ENABLED,
 } from "./constants";
 import { productionRNG, type RNG } from "./prng";
 
@@ -49,10 +50,10 @@ export function computePrediction(
   // Step 2: Activity gate
   if (rng.nextFloat() > agent.activityRate) return abstain("activity_gate");
 
-  // Step 2b: Community cadence — spread agent participation across sweeps so
-  // pools build gradually over the pre-launch window rather than spiking on
-  // the first sweep after publish. 40% skip per sweep per agent.
-  if (market.marketType === "community" && rng.nextFloat() < 0.40) {
+  // Step 2b: Community cadence — spread agent participation across sweeps.
+  // Skipped when WORLD_MARKET_BOOST_ENABLED because WORLD_MARKET_DELAY_RANGES
+  // already stagger execution times across hours/days per archetype.
+  if (!WORLD_MARKET_BOOST_ENABLED && market.marketType === "community" && rng.nextFloat() < 0.40) {
     return abstain("domain");
   }
 
