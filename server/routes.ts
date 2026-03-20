@@ -10637,14 +10637,14 @@ Write a 3-6 sentence summary that helps users make an informed prediction. Focus
         ? new Date(market.endAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
         : "Not specified";
 
-      const systemPrompt = `You are writing a very short teaser tagline for a prediction market card on VoxDex. The teaser appears below the title on the card and should hook readers into wanting to make a prediction. Write plain text only — no markdown, no quotes, no period at the end unless it reads better with one. Maximum 12 words.`;
+      const systemPrompt = `You are a creative copywriter writing a very short teaser tagline for a prediction market card on VoxDex. The teaser appears below the title and should hook readers into wanting to make a prediction. Use web search to find a fresh, timely angle — a recent stat, cultural moment, or narrative hook. Write plain text only — no markdown, no quotes, no period at the end unless it reads better with one. Maximum 12 words. Be wildly creative and different each time.`;
 
       const userPrompt = `Market: "${market.title}"
 Category: ${market.category || "General"}
 Outcomes: ${outcomesStr}
-Resolution Date: ${resolutionDate}${linkedPerson ? `\nLinked to: ${linkedPerson}` : ""}${existingSummary ? `\nExisting Summary: "${existingSummary}"` : ""}
+Resolution Date: ${resolutionDate}${linkedPerson ? `\nLinked to: ${linkedPerson}` : ""}${existingSummary ? `\nContext (use as background, don't just paraphrase): "${existingSummary}"` : ""}
 
-Write a single short, punchy tagline (max 12 words) that captures the essence of this market and makes people want to weigh in. Think newspaper sub-headline energy. Do not repeat the title.`;
+Write a single short, punchy tagline (max 12 words). Think newspaper sub-headline, movie poster tagline, or provocative question. Do NOT repeat or paraphrase the title or summary. Find a completely fresh angle — a surprising stat, a cultural reference, an emotional hook, or a bold claim. Each generation should feel totally different from the last.`;
 
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
@@ -10652,13 +10652,14 @@ Write a single short, punchy tagline (max 12 words) that captures the essence of
 
       const response = await openai.responses.create({
         model: "gpt-5.4",
+        tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
         max_output_tokens: 80,
-        temperature: 0.9,
+        temperature: 1.0,
       } as any);
 
-      const teaser = (((response as any).output_text
+      const teaser = stripCitations(((response as any).output_text
         || ((response as any).output || [])
              .filter((item: any) => item.type === "message")
              .flatMap((item: any) => item.content || [])
