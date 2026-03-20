@@ -1743,12 +1743,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const wikiDelta = Math.abs(wikiWeighted - (prevVC.wiki * prevVC.weights.wiki));
             const totalDelta = searchDelta + newsDelta + wikiDelta;
 
-            if (searchDelta / Math.max(searchWeighted, 1) < 0.03) quietSources.push("Search");
-            if (newsDelta / Math.max(newsWeighted, 1) < 0.03) quietSources.push("News");
-            if (wikiDelta / Math.max(wikiWeighted, 1) < 0.015) quietSources.push("Wikipedia");
+            if (searchDelta / Math.max(searchWeighted, 1) < 0.05) quietSources.push("Search");
+            if (newsDelta / Math.max(newsWeighted, 1) < 0.05) quietSources.push("News");
+            if (wikiDelta / Math.max(wikiWeighted, 1) < 0.03) quietSources.push("Wikipedia");
             driverSourceCount = 3 - quietSources.length;
 
-            if (totalDelta > 0 && hasSignificantMovement) {
+            const MIN_DRIVER_DELTA = 0.5;
+            if (totalDelta > MIN_DRIVER_DELTA && hasSignificantMovement && driverSourceCount > 0) {
               driverBreakdown = {
                 search: Math.round((searchDelta / totalDelta) * 100),
                 news: Math.round((newsDelta / totalDelta) * 100),
@@ -1771,12 +1772,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const searchBase = Math.max(snap24hAgo.searchVolume, 1);
             const newsBase = Math.max(snap24hAgo.newsCount, 1);
             const wikiBase = Math.max(snap24hAgo.wikiPageviews ?? 1, 1);
-            if (searchChange / searchBase < 0.03) quietSources.push("Search");
-            if (newsChange / newsBase < 0.03) quietSources.push("News");
-            if (wikiChange / wikiBase < 0.015) quietSources.push("Wikipedia");
+            if (searchChange / searchBase < 0.05) quietSources.push("Search");
+            if (newsChange / newsBase < 0.05) quietSources.push("News");
+            if (wikiChange / wikiBase < 0.03) quietSources.push("Wikipedia");
             driverSourceCount = 3 - quietSources.length;
 
-            if (totalContrib > 0 && hasSignificantMovement) {
+            const MIN_DRIVER_CONTRIB = 0.5;
+            if (totalContrib > MIN_DRIVER_CONTRIB && hasSignificantMovement && driverSourceCount > 0) {
               driverBreakdown = {
                 search: Math.round((searchContrib / totalContrib) * 100),
                 news: Math.round((newsContrib / totalContrib) * 100),
@@ -10606,6 +10608,70 @@ Write a 3-6 sentence summary that helps users make an informed prediction. Focus
     } catch (error: any) {
       console.error("[World Markets] AI summary generation error:", error?.message || error);
       res.status(500).json({ error: "Failed to generate summary" });
+    }
+  });
+
+  app.post("/api/admin/open-markets/:id/generate-teaser", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { summary: existingSummary } = req.body || {};
+
+      const [market] = await db.select().from(predictionMarkets)
+        .where(and(eq(predictionMarkets.id, id), eq(predictionMarkets.marketType, "community")))
+        .limit(1);
+      if (!market) return res.status(404).json({ error: "Market not found" });
+
+      const entries = await db.select().from(marketEntries)
+        .where(eq(marketEntries.marketId, id))
+        .orderBy(asc(marketEntries.displayOrder));
+
+      let linkedPerson: string | null = null;
+      if (market.personId) {
+        const [person] = await db.select({ name: trendingPeople.name })
+          .from(trendingPeople).where(eq(trendingPeople.id, market.personId)).limit(1);
+        if (person) linkedPerson = person.name;
+      }
+
+      const outcomesStr = entries.map(e => e.label).join(", ");
+      const resolutionDate = market.endAt
+        ? new Date(market.endAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+        : "Not specified";
+
+      const systemPrompt = `You are writing a very short teaser tagline for a prediction market card on VoxDex. The teaser appears below the title on the card and should hook readers into wanting to make a prediction. Write plain text only — no markdown, no quotes, no period at the end unless it reads better with one. Maximum 12 words.`;
+
+      const userPrompt = `Market: "${market.title}"
+Category: ${market.category || "General"}
+Outcomes: ${outcomesStr}
+Resolution Date: ${resolutionDate}${linkedPerson ? `\nLinked to: ${linkedPerson}` : ""}${existingSummary ? `\nExisting Summary: "${existingSummary}"` : ""}
+
+Write a single short, punchy tagline (max 12 words) that captures the essence of this market and makes people want to weigh in. Think newspaper sub-headline energy. Do not repeat the title.`;
+
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+      });
+
+      const response = await openai.responses.create({
+        model: "gpt-5.4",
+        tools: [{ type: "web_search" as any }],
+        instructions: systemPrompt,
+        input: userPrompt,
+        max_output_tokens: 80,
+        temperature: 0.9,
+      } as any);
+
+      const teaser = stripCitations(((response as any).output_text
+        || ((response as any).output || [])
+             .filter((item: any) => item.type === "message")
+             .flatMap((item: any) => item.content || [])
+             .find((part: any) => part.type === "output_text" || part.type === "text")
+             ?.text)?.trim() || "");
+      if (!teaser) return res.status(500).json({ error: "AI returned an empty teaser" });
+
+      console.log(`[World Markets] AI teaser generated for market ${id}: "${teaser}"`);
+      res.json({ teaser });
+    } catch (error: any) {
+      console.error("[World Markets] AI teaser generation error:", error?.message || error);
+      res.status(500).json({ error: "Failed to generate teaser" });
     }
   });
 

@@ -1680,6 +1680,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
         <LinkedPersonChip market={market} />
         <FreshnessBadge market={market} />
       </div>
+      {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
       
       {market.underlying && (
         <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-violet-500/5 border border-violet-500/10">

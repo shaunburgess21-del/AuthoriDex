@@ -577,6 +577,29 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
       setIsGeneratingSummary(false);
     }
   };
+  const [isGeneratingTeaser, setIsGeneratingTeaser] = useState(false);
+  const handleGenerateTeaser = async () => {
+    if (!editMarket?.id) return;
+    setIsGeneratingTeaser(true);
+    try {
+      const res = await fetchWithAuth(`/api/admin/open-markets/${editMarket.id}/generate-teaser`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ summary }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to generate teaser" }));
+        throw new Error(err.error || "Failed to generate teaser");
+      }
+      const data = await res.json();
+      setTeaser(data.teaser);
+      toast({ title: "Teaser drafted", description: "Review and edit before saving." });
+    } catch (err: any) {
+      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsGeneratingTeaser(false);
+    }
+  };
 
   useEffect(() => {
     const generated = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
@@ -919,7 +942,26 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
           </div>
 
           <div className="space-y-2">
-            <Label>Teaser (short tagline for card)</Label>
+            <div className="flex items-center justify-between">
+              <Label>Teaser (short tagline for card)</Label>
+              {editMarket && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  disabled={isGeneratingTeaser}
+                  onClick={handleGenerateTeaser}
+                  data-testid="button-generate-teaser"
+                >
+                  {isGeneratingTeaser ? (
+                    <><Loader2 className="h-3 w-3 animate-spin" /> Generating...</>
+                  ) : (
+                    <><Sparkles className="h-3 w-3" /> Draft with AI</>
+                  )}
+                </Button>
+              )}
+            </div>
             <Input 
               value={teaser} 
               onChange={(e) => setTeaser(e.target.value)} 
