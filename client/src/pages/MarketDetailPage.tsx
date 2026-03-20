@@ -255,8 +255,8 @@ function MultiOutcomes({
           <div className="flex items-center justify-between mb-2 gap-2">
             <div className="flex items-center gap-2 min-w-0">
               {(entry as any).imageUrl && (
-                <Avatar className="h-6 w-6 shrink-0">
-                  <AvatarImage src={(entry as any).imageUrl} alt={entry.label} />
+                <Avatar className="h-6 w-6 shrink-0 rounded-md bg-white">
+                  <AvatarImage src={(entry as any).imageUrl} alt={entry.label} className="object-cover bg-white" />
                   <AvatarFallback className="text-[9px]">{entry.label[0]}</AvatarFallback>
                 </Avatar>
               )}

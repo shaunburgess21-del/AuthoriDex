@@ -1282,8 +1282,8 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
                       data-testid={`button-entry-image-${idx}`}
                     >
                       {entry.imageUrl ? (
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={entry.imageUrl} alt={entry.label} />
+                        <Avatar className="h-8 w-8 rounded-md bg-white">
+                          <AvatarImage src={entry.imageUrl} alt={entry.label} className="object-cover bg-white" />
                           <AvatarFallback className="text-[10px]">{(entry.label || "?")[0]}</AvatarFallback>
                         </Avatar>
                       ) : (
