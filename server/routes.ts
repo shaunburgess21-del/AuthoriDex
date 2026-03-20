@@ -10652,14 +10652,13 @@ Write a single short, punchy tagline (max 12 words) that captures the essence of
 
       const response = await openai.responses.create({
         model: "gpt-5.4",
-        tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
         max_output_tokens: 80,
         temperature: 0.9,
       } as any);
 
-      const teaser = stripCitations(((response as any).output_text
+      const teaser = (((response as any).output_text
         || ((response as any).output || [])
              .filter((item: any) => item.type === "message")
              .flatMap((item: any) => item.content || [])
