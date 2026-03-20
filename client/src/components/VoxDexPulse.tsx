@@ -817,7 +817,7 @@ export function VoxDexPulse() {
           </TouchTooltip>
 
           {mode === "trend" && (
-            <>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
                 <SelectTrigger
                   className="h-7 w-[72px] text-xs bg-muted/50 border-border/40 rounded-lg gap-1 px-2 shrink-0"
@@ -863,7 +863,7 @@ export function VoxDexPulse() {
                   <SpeedSlider speed={speed} onChange={setSpeed} accentColor={accentColor} />
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       </div>

@@ -295,14 +295,15 @@ export default function MatchupDetailPage() {
           </div>
         </div>
 
-        {/* Cast Your Vote */}
-        <Card className="p-5 mb-6 border-cyan-500/20" data-testid="section-vote-module">
-          <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
-            <Swords className="h-5 w-5 text-cyan-500" />
-            Cast Your Vote
-          </h2>
+        {/* Cast Your Vote — full-bleed on mobile so option images use full width like list card */}
+        <div className="-mx-4 sm:mx-0">
+          <Card className="p-5 mb-6 border-cyan-500/20 overflow-hidden" data-testid="section-vote-module">
+            <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
+              <Swords className="h-5 w-5 text-cyan-500" />
+              Cast Your Vote
+            </h2>
 
-          <div className="flex items-stretch gap-0 relative mb-4">
+            <div className="flex items-stretch gap-0 relative mb-4 -mx-5">
             <button
               onClick={() => {
                 if (!hasVoted || votedB) handleVote(matchup.id, 'option_a');
@@ -410,7 +411,8 @@ export default function MatchupDetailPage() {
               to cast your vote
             </p>
           )}
-        </Card>
+          </Card>
+        </div>
 
         {/* Results */}
         <Card className="p-5 mb-6" data-testid="section-results">
