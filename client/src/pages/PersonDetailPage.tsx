@@ -378,6 +378,7 @@ function OpinionPollCardProfile({
   const visibleOptions = options.slice(0, 4);
   const remainingCount = options.length - 4;
   const totalVotes = poll.totalVotes || 0;
+  const maxPercent = Math.max(...visibleOptions.map((o) => totalVotes > 0 ? Math.round((o.votes / totalVotes) * 100) : 0), 0);
 
   const handleVote = (optionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -398,23 +399,24 @@ function OpinionPollCardProfile({
     <div className="relative group h-full">
       <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
       <Card
-        className="relative pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[450px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/20 rounded-none md:rounded-xl"
+        className="relative pt-5 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[420px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/20 rounded-none md:rounded-xl"
         data-testid={`opinion-poll-card-${poll.id}`}
       >
-        <div className="absolute top-3 right-3">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Users className="h-3.5 w-3.5 text-cyan-400" />
+            <span>{totalVotes.toLocaleString("en-US")} votes</span>
+          </div>
           <CategoryPill category={poll.category || ""} data-testid={`badge-opinion-category-${poll.id}`} />
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-          <Users className="h-3.5 w-3.5 text-cyan-400" />
-          <span>{totalVotes.toLocaleString("en-US")} votes</span>
-        </div>
-        <div className="flex items-start gap-3 mb-3">
+
+        <div className="flex items-start gap-3 mb-2">
           {poll.options[0]?.imageUrl ? (
-            <div className="h-12 w-12 rounded-md overflow-hidden shrink-0 bg-slate-800">
+            <div className="h-12 w-12 rounded-lg overflow-hidden shrink-0 bg-slate-800">
               <img src={poll.options[0].imageUrl!} alt={poll.title} className="w-full h-full object-cover" />
             </div>
           ) : (
-            <div className="h-12 w-12 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
+            <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
               <ListChecks className="h-5 w-5 text-slate-400" />
             </div>
           )}
@@ -427,23 +429,23 @@ function OpinionPollCardProfile({
           </div>
         </div>
         {poll.description && (
-          <p className="text-sm text-muted-foreground mb-4 flex-grow line-clamp-1">{poll.description}</p>
+          <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{poll.description}</p>
         )}
         {!poll.description && <div className="flex-grow" />}
 
         {!hasVoted ? (
-          <div className="space-y-2">
+          <div className="space-y-1.5 mt-auto">
             {visibleOptions.map((option) => (
               <button
                 key={option.id}
                 onClick={(e) => handleVote(option.id, e)}
-                className="w-full flex items-center gap-2.5 p-[6px] rounded-md border border-border/50 bg-muted/30 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10"
+                className="w-full flex items-center gap-2.5 p-1.5 rounded-lg border border-border/50 bg-muted/30 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10"
                 data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
               >
                 {option.imageUrl ? (
-                  <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0" />
+                  <img src={option.imageUrl} alt={option.name} className="w-9 h-9 rounded-md object-cover shrink-0" />
                 ) : (
-                  <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-md bg-cyan-500/10 flex items-center justify-center shrink-0">
                     <ListChecks className="h-4 w-4 text-cyan-400" />
                   </div>
                 )}
@@ -452,75 +454,73 @@ function OpinionPollCardProfile({
             ))}
             {remainingCount > 0 && (
               <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                <p
-                  className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-1"
-                  data-testid={`link-more-options-${poll.id}`}
-                >
+                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-2.5" data-testid={`link-more-options-${poll.id}`}>
                   +{remainingCount} more options
                 </p>
               </Link>
             )}
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-1.5 mt-auto">
             {visibleOptions.map((option) => {
               const isSelected = voted === option.id;
               const percent = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
+              const isLeading = percent === maxPercent && percent > 0;
               return (
                 <div
                   key={option.id}
-                  className={`relative p-[6px] rounded-md border overflow-hidden ${
-                    isSelected ? "border-cyan-500/50 bg-cyan-500/10" : "border-border/30 bg-muted/20"
+                  className={`relative rounded-lg border overflow-hidden transition-all duration-300 ${
+                    isSelected
+                      ? 'border-cyan-500/60 bg-cyan-500/[0.08]'
+                      : 'border-border/30 bg-muted/20'
                   }`}
                   data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
                 >
                   <div
-                    className="absolute inset-0 bg-cyan-500/10 transition-all duration-500"
+                    className={`absolute inset-y-0 left-0 transition-all duration-700 ease-out ${
+                      isSelected ? 'bg-cyan-500/15' : 'bg-cyan-500/[0.07]'
+                    }`}
                     style={{ width: `${percent}%` }}
                   />
-                  <div className="relative flex items-center gap-2.5">
+                  <div className="relative flex items-center gap-2.5 p-1.5">
                     {option.imageUrl ? (
-                      <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0" />
+                      <img src={option.imageUrl} alt={option.name} className="w-9 h-9 rounded-md object-cover shrink-0" />
                     ) : (
-                      <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
+                      <div className="w-9 h-9 rounded-md bg-cyan-500/10 flex items-center justify-center shrink-0">
                         <ListChecks className="h-4 w-4 text-cyan-400" />
                       </div>
                     )}
-                    <span className="text-sm truncate flex-1">{option.name}</span>
-                    <span className="text-xs font-semibold text-muted-foreground shrink-0">{percent}%</span>
+                    <span className={`text-sm truncate flex-1 ${isSelected ? 'font-semibold' : ''}`}>{option.name}</span>
+                    <span className={`text-xs font-mono font-semibold shrink-0 ${
+                      isLeading ? 'text-cyan-400' : 'text-muted-foreground'
+                    }`}>{percent}%</span>
                   </div>
                 </div>
               );
             })}
             {remainingCount > 0 && (
               <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                <p
-                  className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-1"
-                  data-testid={`link-more-options-${poll.id}`}
-                >
+                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-2.5" data-testid={`link-more-options-${poll.id}`}>
                   +{remainingCount} more options
                 </p>
               </Link>
             )}
-            <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Zap className="h-3.5 w-3.5" />
+            <div className="flex items-center justify-between mt-2 pt-3 border-t border-border/30">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Zap className="h-3 w-3" />
                 <span>{totalVotes.toLocaleString("en-US")} total votes</span>
               </div>
-              <div
-                className="px-2 py-0.5 rounded-full text-xs font-medium border bg-cyan-500/10 border-cyan-500/40 text-cyan-400"
-                data-testid={`badge-voted-opinion-${poll.id}`}
+              <button
+                onClick={handleChangeVote}
+                className="flex items-center gap-1.5 text-xs"
+                data-testid={`button-change-vote-opinion-${poll.id}`}
               >
-                You voted
-              </div>
+                <span className="px-2 py-0.5 rounded-full font-medium border bg-cyan-500/10 border-cyan-500/40 text-cyan-400" data-testid={`badge-voted-opinion-${poll.id}`}>
+                  You voted
+                </span>
+                <span className="text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors">Change</span>
+              </button>
             </div>
-            <button
-              onClick={handleChangeVote}
-              className="text-xs text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline text-center w-full"
-              data-testid={`button-change-vote-opinion-${poll.id}`}
-            >
-              Change your vote
-            </button>
           </div>
         )}
       </Card>
@@ -945,6 +945,20 @@ export default function PersonDetailPage() {
       url.searchParams.set("tab", tab);
     }
     window.history.replaceState({}, "", url.toString());
+    // Scroll so the tab bar is at the top of the view (just below the sticky main header)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const tabsEl = document.getElementById("profile-tabs-section");
+        const header = document.querySelector("header");
+        if (tabsEl && header) {
+          const headerHeight = header.getBoundingClientRect().height;
+          const top = tabsEl.getBoundingClientRect().top + window.scrollY - headerHeight;
+          window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+        } else if (tabsEl) {
+          tabsEl.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+    });
   };
 
   const { data: person, isLoading, error } = useQuery<TrendingPerson & { wikiSlug?: string | null }>({
@@ -1389,9 +1403,9 @@ export default function PersonDetailPage() {
                     <Share2 className="h-4 w-4" />
                   </Button>
                   <Button
-                    variant={isFavorited ? "default" : "outline"}
+                    variant="outline"
                     size="icon"
-                    className="sm:hidden"
+                    className={`sm:hidden ${isFavorited ? "bg-blue-500/15 border-blue-400/50 text-blue-400" : ""}`}
                     onClick={handleToggleFavorite}
                     disabled={favoriteLoading}
                     aria-label={isFavorited ? "Remove from favorites" : "Add to favorites"}
@@ -1404,8 +1418,8 @@ export default function PersonDetailPage() {
                     Share
                   </Button>
                   <Button
-                    variant={isFavorited ? "default" : "outline"}
-                    className="hidden sm:inline-flex gap-2"
+                    variant="outline"
+                    className={`hidden sm:inline-flex gap-2 ${isFavorited ? "bg-blue-500/15 border-blue-400/50 text-blue-400" : ""}`}
                     onClick={handleToggleFavorite}
                     disabled={favoriteLoading}
                     data-testid="button-favorite"
@@ -1472,11 +1486,15 @@ export default function PersonDetailPage() {
           </Card>
         </div>
 
-        {/* Profile Tabs Section */}
-        <div id="profile-tabs-section">
-          <ProfileTabs activeTab={activeTab} onTabChange={handleTabChange} />
+        {/* Profile Tabs Section — sticky full-width bar; scroll to top when switching tabs */}
+        <div
+          id="profile-tabs-section"
+          className="sticky top-14 z-10 bg-background border-b border-border/50 shadow-sm -mx-4 px-4 py-2"
+        >
+          <ProfileTabs activeTab={activeTab} onTabChange={handleTabChange} noBottomMargin />
         </div>
 
+        <div className="mt-4">
         {/* OVERVIEW TAB */}
         {activeTab === "overview" && (
           <>
@@ -1787,6 +1805,7 @@ export default function PersonDetailPage() {
             currentScore={person.fameIndex ?? Math.round(person.trendScore / 100)}
           />
         )}
+        </div>
       </div>
     </div>
   );

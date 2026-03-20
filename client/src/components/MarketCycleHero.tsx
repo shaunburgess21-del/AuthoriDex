@@ -3,6 +3,8 @@ import { Badge } from "@/components/ui/badge";
 
 interface MarketCycleHeroProps {
   marketState: MarketCycleState;
+  /** When true, do not break out to full viewport width (e.g. match profile page container width) */
+  constrainedWidth?: boolean;
 }
 
 function padZero(num: number): string {
@@ -25,7 +27,7 @@ function TimerSegment({ value, label, testId }: { value: string; label: string; 
   );
 }
 
-export function MarketCycleHero({ marketState }: MarketCycleHeroProps) {
+export function MarketCycleHero({ marketState, constrainedWidth = false }: MarketCycleHeroProps) {
   const { status, timeRemaining, urgencyLevel } = marketState;
   
   const getStatusBadge = () => {
@@ -77,7 +79,7 @@ export function MarketCycleHero({ marketState }: MarketCycleHeroProps) {
   
   return (
     <div 
-      style={{ marginLeft: 'calc(-50vw + 50%)', marginRight: 'calc(-50vw + 50%)', paddingLeft: 'calc(50vw - 50%)', paddingRight: 'calc(50vw - 50%)' }}
+      style={constrainedWidth ? undefined : { marginLeft: 'calc(-50vw + 50%)', marginRight: 'calc(-50vw + 50%)', paddingLeft: 'calc(50vw - 50%)', paddingRight: 'calc(50vw - 50%)' }}
       className="sticky top-16 z-40 relative mb-6 border-y border-white/10 bg-card/95 backdrop-blur-sm"
       data-testid="market-cycle-hero"
     >

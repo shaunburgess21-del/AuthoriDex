@@ -62,7 +62,7 @@ interface ApprovalBreakdown {
 // --------------- Constants ---------------
 
 type PulseMode = "trend" | "approval";
-type TimeRange = "48h" | "7D" | "14D" | "30D" | "90D";
+type TimeRange = "48h" | "7D" | "14D" | "30D" | "90D" | "6M" | "1Y" | "ALL";
 
 const TIME_RANGES: { key: TimeRange; days: number }[] = [
   { key: "48h", days: 2 },
@@ -70,6 +70,9 @@ const TIME_RANGES: { key: TimeRange; days: number }[] = [
   { key: "14D", days: 14 },
   { key: "30D", days: 30 },
   { key: "90D", days: 90 },
+  { key: "6M", days: 180 },
+  { key: "1Y", days: 365 },
+  { key: "ALL", days: 9999 },
 ];
 
 const CATEGORIES = [
@@ -463,7 +466,7 @@ function PulseRow({
         className="text-[11px] sm:text-[13px] font-bold tabular-nums shrink-0 text-right pr-2 sm:pr-3"
         style={{ color: APPROVAL_COLORS[Math.min(4, Math.max(0, Math.round(person.approvalAvgRating ?? 3) - 1))] }}
       >
-        {(person.approvalAvgRating ?? 0).toFixed(1)}/5
+        {(person.approvalAvgRating ?? 0).toFixed(1)}<span style={{ color: "#A3A7B0" }}>/5</span>
       </span>
 
     </motion.div>
@@ -779,8 +782,8 @@ export function VoxDexPulse() {
           </div>
         )}
 
-        {/* Single wrapping row: Trend | Approval | i | Top | 48h | 7D | … (Top beside 48h as requested) */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        {/* Single row on desktop (Speed right of Pause); wraps on mobile so Top sits left of 48h */}
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3">
           <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5 shrink-0">
             <button
               onClick={() => setMode("trend")}
@@ -818,21 +821,6 @@ export function VoxDexPulse() {
 
           {mode === "trend" && (
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
-                <SelectTrigger
-                  className="h-7 w-[72px] text-xs bg-muted/50 border-border/40 rounded-lg gap-1 px-2 shrink-0"
-                  data-testid="select-pulse-top-n"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[10, 20, 30, 40, 50, 60, 70, 80, 100].map((n) => (
-                    <SelectItem key={n} value={String(n)}>
-                      Top {n}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               {TIME_RANGES.map(r => {
                 const isActive = timeRange === r.key;
                 return (
@@ -858,11 +846,11 @@ export function VoxDexPulse() {
                   {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ml-0.5" />}
                 </button>
               )}
-              {isTimelapse && (
-                <div className="hidden sm:flex min-w-[140px] max-w-[200px] flex-1 basis-[180px]">
-                  <SpeedSlider speed={speed} onChange={setSpeed} accentColor={accentColor} />
-                </div>
-              )}
+            </div>
+          )}
+          {mode === "trend" && isTimelapse && (
+            <div className="hidden sm:flex min-w-[140px] max-w-[200px] shrink-0 basis-[180px]">
+              <SpeedSlider speed={speed} onChange={setSpeed} accentColor={accentColor} />
             </div>
           )}
         </div>
@@ -941,12 +929,29 @@ export function VoxDexPulse() {
                   : `${mode === "trend" ? "Top Trending" : "Most Voted"} \u00B7 ${category === "All" ? "All" : category}`
                 }
               </span>
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium hidden sm:block">
-                {mode === "trend"
-                  ? "Score"
-                  : "Votes \u00B7 Rating"
-                }
-              </span>
+              <div className="flex items-center gap-2">
+                <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
+                  <SelectTrigger
+                    className="h-6 w-[66px] text-[10px] bg-muted/50 border-border/40 rounded-md gap-1 px-1.5 shrink-0"
+                    data-testid="select-pulse-top-n"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[10, 20, 30, 40, 50, 60, 70, 80, 100].map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        Top {n}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-medium hidden sm:block">
+                  {mode === "trend"
+                    ? "Score"
+                    : "Votes \u00B7 Rating"
+                  }
+                </span>
+              </div>
             </div>
 
             {/* Rows */}

@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
@@ -220,11 +219,9 @@ export function AnimatedSentimentVotingWidget({
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [currentValue, setCurrentValue] = useState<number | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showingResults, setShowingResults] = useState(false);
-  const { toast } = useToast();
 
   useEffect(() => {
     const savedVote = localStorage.getItem(`sentiment-vote-${personId}`);
@@ -275,8 +272,6 @@ export function AnimatedSentimentVotingWidget({
         console.error('Error connecting to Supabase:', error);
       }
     }
-    
-    
   };
 
   const handleVisitProfile = () => {
@@ -295,8 +290,7 @@ export function AnimatedSentimentVotingWidget({
     setShowingResults(false);
   };
 
-  const displayValue = currentValue || 3;
-  const activeZone = getZoneLabel(displayValue);
+  const activeZone = currentValue ? getZoneLabel(currentValue) : null;
 
   return (
     <div 
@@ -319,9 +313,9 @@ export function AnimatedSentimentVotingWidget({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <div className="text-center mb-3">
+            <div className="text-center mb-5">
               <h3 
-                className="text-2xl font-bold mb-2"
+                className="text-2xl font-bold mb-1"
                 style={{
                   background: 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.7) 100%)',
                   WebkitBackgroundClip: 'text',
@@ -331,185 +325,127 @@ export function AnimatedSentimentVotingWidget({
               >
                 Rate {personName}
               </h3>
-              <p className="text-muted-foreground w-full">
+              <p className="text-muted-foreground">
                 How do you feel about <span className="text-foreground font-semibold">{personName}</span>?
               </p>
             </div>
 
-            <div className="space-y-4">
-              <div className="relative mb-2 h-16 flex items-center pointer-events-none">
-                {ZONE_LABELS.map((label, index) => {
-                  const isActive = activeZone === label;
-                  const labelPosition = (index + 0.5) / 5;
-                  
-                  return (
-                    <motion.div
-                      key={label}
-                      className="relative"
-                      style={{ 
-                        position: 'absolute',
-                        left: `${labelPosition * 100}%`,
-                        transform: 'translateX(-50%)'
-                      }}
-                      animate={{
-                        filter: isActive
-                          ? "drop-shadow(0 0 12px rgba(255,255,255,0.6)) drop-shadow(0 0 24px rgba(255,255,255,0.3))"
-                          : "drop-shadow(0 0 0px rgba(255,255,255,0))",
-                      }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <div className={`
-                        px-3 sm:px-4 py-2 rounded-xl border transition-all duration-300 text-sm sm:text-base
-                        ${isActive 
-                          ? 'bg-card text-foreground border-border scale-110' 
-                          : 'bg-transparent text-muted-foreground border-border/50'
-                        }
-                      `}>
-                        {label}
-                      </div>
-                      {isActive && (
-                        <div 
-                          className="absolute left-1/2 -translate-x-1/2 -bottom-2 transition-all duration-300 bg-card"
-                          style={{
-                            width: '16px',
-                            height: '16px',
-                            clipPath: 'polygon(50% 100%, 0% 0%, 100% 0%)',
-                            filter: 'drop-shadow(0 4px 8px rgba(255, 255, 255, 0.15))'
-                          }}
-                        />
-                      )}
-                    </motion.div>
-                  );
-                })}
-              </div>
-
-              <div className="relative px-2">
-                <div className="flex justify-between gap-2 absolute inset-x-2 -top-16 -bottom-20 pointer-events-none">
-                  {[1, 2, 3, 4, 5].map((value) => {
-                    return (
-                      <div
-                        key={value}
-                        className="flex-1 cursor-pointer pointer-events-auto"
-                        onClick={() => handleSegmentClick(value)}
-                        data-testid={`segment-column-${value}`}
-                      />
-                    );
-                  })}
-                </div>
-                
-                <div className="flex justify-between gap-2">
-                  {[1, 2, 3, 4, 5].map((value) => {
-                    const isActive = value === displayValue;
-                    const isFilled = value <= displayValue;
-                    const color = SEGMENT_COLORS[value - 1];
-                    
-                    return (
-                      <div
-                        key={value}
-                        className="flex-1 flex flex-col items-center cursor-pointer"
-                        onClick={() => handleSegmentClick(value)}
-                        tabIndex={0}
-                        role="button"
-                        aria-label={`Select ${value} out of 5 - ${ZONE_LABELS[value - 1]}`}
-                        data-testid={`segment-${value}`}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            handleSegmentClick(value);
-                          }
-                        }}
-                      >
-                        <div className="h-4" />
-                        <motion.div
-                          className="w-full h-5 rounded-full cursor-pointer"
-                          style={{
-                            backgroundColor: color.bg,
-                            opacity: isFilled ? 1 : 0.4,
-                            boxShadow: isFilled 
-                              ? `0 0 10px ${color.glow}60, 0 2px 4px rgba(0,0,0,0.3)`
-                              : 'none',
-                          }}
-                          animate={{
-                            scale: isActive ? 1.08 : 1,
-                          }}
-                          transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {currentValue && (
-                  <motion.div
-                    className="absolute pointer-events-none z-10"
-                    data-testid="vote-needle"
-                    style={{
-                      top: '-18px',
-                    }}
-                    initial={{ opacity: 0, scale: 0, left: `calc(0.5rem + (100% - 1rem) * ${(displayValue - 0.5) / 5})` }}
-                    animate={{ 
-                      opacity: 1, 
-                      scale: 1,
-                      left: `calc(0.5rem + (100% - 1rem) * ${(displayValue - 0.5) / 5})`,
-                      x: '-50%'
-                    }}
-                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            <div className="grid grid-cols-5 gap-1.5 sm:gap-2 mb-3">
+              {ZONE_LABELS.map((label, index) => {
+                const isActive = activeZone === label;
+                const color = SEGMENT_COLORS[index];
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => handleSegmentClick(index + 1)}
+                    className={`
+                      relative py-1.5 sm:py-2 rounded-lg border text-xs sm:text-sm font-medium
+                      transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/50
+                      ${isActive 
+                        ? 'bg-card text-foreground scale-[1.05]' 
+                        : 'bg-transparent text-muted-foreground border-border/40 hover:border-border/70'
+                      }
+                    `}
+                    style={isActive ? {
+                      borderColor: `${color.bg}80`,
+                      boxShadow: `0 0 4px ${color.bg}15`,
+                    } : undefined}
                   >
-                    <div className="flex flex-col items-center pointer-events-none">
-                      <motion.div
-                        className="w-1 rounded-full pointer-events-none"
-                        data-testid="needle-line"
-                        style={{
-                          height: '55px',
-                          backgroundColor: SEGMENT_COLORS[displayValue - 1]?.bg,
-                          boxShadow: `0 0 12px ${SEGMENT_COLORS[displayValue - 1]?.glow}60`,
-                        }}
-                        animate={{
-                          scaleY: isDragging ? 1.1 : 1,
-                        }}
+                    {label}
+                    {isActive && (
+                      <span
+                        className="absolute left-1/2 -translate-x-1/2 -bottom-[5px] w-2.5 h-2.5 rotate-45 bg-card"
+                        style={{ borderRight: `1px solid ${color.bg}80`, borderBottom: `1px solid ${color.bg}80` }}
                       />
-                      <motion.div
-                        className="w-6 h-6 rounded-full pointer-events-none"
-                        data-testid="needle-circle"
-                        style={{
-                          backgroundColor: SEGMENT_COLORS[displayValue - 1]?.bg,
-                          borderWidth: '3px',
-                          borderStyle: 'solid',
-                          borderColor: '#ffffff',
-                          boxShadow: `0 0 16px ${SEGMENT_COLORS[displayValue - 1]?.glow}70, 0 4px 8px rgba(0,0,0,0.3)`,
-                        }}
-                        animate={{
-                          scale: isDragging ? 1.15 : 1,
-                        }}
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
 
-              <div className="flex justify-between gap-2 px-2 mt-[16px] mb-[8px]">
-                {[1, 2, 3, 4, 5].map((num) => (
+            <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+              {[1, 2, 3, 4, 5].map((value) => {
+                const color = SEGMENT_COLORS[value - 1];
+                const isActive = currentValue === value;
+                const isFilled = currentValue !== null && value <= currentValue;
+
+                return (
                   <div
-                    key={num}
-                    className={`flex-1 text-center text-muted-foreground mt-[4px] mb-[4px] ${
-                      num === displayValue ? 'font-bold text-[18px]' : 'font-medium text-[16px]'
-                    }`}
-                    data-testid={`number-label-${num}`}
+                    key={value}
+                    className="flex flex-col items-center cursor-pointer outline-none"
+                    onClick={() => handleSegmentClick(value)}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Select ${value} out of 5 - ${ZONE_LABELS[value - 1]}`}
+                    data-testid={`segment-${value}`}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleSegmentClick(value);
+                      }
+                    }}
                   >
-                    {num}
+                    <div className="relative w-full h-6 sm:h-5 flex items-center justify-center">
+                      <motion.div
+                        className="absolute inset-0 rounded-full"
+                        style={{
+                          backgroundColor: color.bg,
+                          opacity: currentValue === null ? 0.55 : (isFilled ? 1 : 0.3),
+                          boxShadow: isActive
+                            ? `0 0 8px ${color.glow}40`
+                            : isFilled
+                              ? `0 0 4px ${color.glow}25`
+                              : 'none',
+                        }}
+                        animate={{ scale: isActive ? 1.06 : 1 }}
+                        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                      />
+                      <AnimatePresence>
+                        {isActive && (
+                          <motion.div
+                            className="relative z-10 pointer-events-none"
+                            initial={{ opacity: 0, scale: 0 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 22 }}
+                            data-testid="vote-thumb"
+                          >
+                            <div
+                              className="w-4 h-4 rounded-full"
+                              style={{
+                                backgroundColor: color.bg,
+                                border: '2.5px solid #ffffff',
+                                boxShadow: `0 0 6px ${color.glow}40, 0 2px 4px rgba(0,0,0,0.2)`,
+                              }}
+                            />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                    <span
+                      className={`mt-2 text-base transition-all duration-200 ${
+                        isActive ? 'font-bold' : 'font-medium text-muted-foreground'
+                      }`}
+                      style={isActive ? { color: color.bg } : undefined}
+                      data-testid={`number-label-${value}`}
+                    >
+                      {value}
+                    </span>
                   </div>
-                ))}
-              </div>
+                );
+              })}
+            </div>
 
+            <div className="mt-5">
               <AnimatePresence mode="wait">
                 {!isSubmitted ? (
                   <motion.div
                     key="submit-button"
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.3 }}
-                    className="pt-2"
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.25 }}
                   >
                     <Button
                       onClick={handleVoteSubmit}
@@ -524,44 +460,46 @@ export function AnimatedSentimentVotingWidget({
                 ) : (
                   <motion.div
                     key="feedback-section"
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4 }}
-                    className="text-center space-y-3 pt-2"
+                    transition={{ duration: 0.3 }}
+                    className="text-center flex flex-col items-center gap-4"
                   >
                     <div className="space-y-1">
                       <p className="text-lg font-semibold text-foreground">
-                        Your Vote: {displayValue}/5 - {activeZone}
+                        Your Vote:{' '}
+                        <span style={{ color: currentValue ? SEGMENT_COLORS[currentValue - 1]?.bg : undefined }}>
+                          {currentValue}/5 - {activeZone}
+                        </span>
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {getApprovalMessage(displayValue, personName)}
+                        {currentValue ? getApprovalMessage(currentValue, personName) : ''}
                       </p>
                     </div>
 
-                    <Button
+                    <button
+                      type="button"
                       onClick={() => {
                         setIsSubmitted(false);
                         setHasInteracted(true);
                       }}
-                      variant="outline"
-                      size="sm"
-                      className="text-xs text-muted-foreground"
+                      className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors"
                       data-testid="button-change-vote"
                     >
                       Change Vote
-                    </Button>
+                    </button>
 
                     {isProfilePage ? (
                       <Button
                         onClick={handleViewResults}
-                        className="w-full"
+                        className="w-full bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400/30 text-white shadow-lg shadow-blue-500/20"
                         size="lg"
                         data-testid="button-view-results"
                       >
                         View Results
                       </Button>
                     ) : (
-                      <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex flex-col sm:flex-row gap-3 w-full">
                         <Button
                           onClick={onVoteNext}
                           className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400/30 text-white shadow-lg shadow-blue-500/20"

@@ -217,14 +217,14 @@ export default function OpinionPollDetailPage() {
           </div>
         </div>
 
-        <Card className="p-5 mb-6 border-cyan-500/20" data-testid="section-vote-module">
+        <Card className="p-5 sm:p-6 mb-6 border-cyan-500/20" data-testid="section-vote-module">
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-cyan-500" />
             Cast Your Vote
           </h2>
 
           {(!hasVoted || showVoteChange) ? (
-            <div className="flex flex-col gap-3 mb-4">
+            <div className="flex flex-col gap-2.5">
               {options.map((option: any) => (
                 <button
                   key={option.id}
@@ -237,72 +237,89 @@ export default function OpinionPollDetailPage() {
                     setShowVoteChange(false);
                   }}
                   disabled={voteMutation.isPending}
-                  className={`w-full flex items-center gap-2.5 p-[6px] rounded-md bg-cyan-500/10 border border-cyan-500/50 text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/20 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                  className={`w-full flex items-center gap-3 p-2 rounded-lg border border-border/50 bg-muted/30 text-sm font-medium transition-all duration-200 hover:border-cyan-500/60 hover:bg-cyan-500/10 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
                   data-testid={`button-vote-option-${option.id}`}
                 >
                   {option.imageUrl ? (
-                    <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0 bg-white" />
+                    <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-lg object-cover shrink-0" />
                   ) : (
-                    <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
-                      <span className="text-sm font-medium text-cyan-400">{option.orderIndex + 1}</span>
+                    <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                      <span className="text-sm font-semibold text-cyan-400">{option.orderIndex + 1}</span>
                     </div>
                   )}
-                  <span>{option.name}</span>
+                  <span className="text-left">{option.name}</span>
                   {option.personName && option.personName !== option.name && (
                     <span className="text-xs text-muted-foreground">({option.personName})</span>
                   )}
                 </button>
               ))}
+
+              {!user && (
+                <p className="text-xs text-center text-muted-foreground mt-1">
+                  <Button variant="ghost" className="p-0 h-auto text-cyan-400 underline" onClick={() => setLocation("/login")} data-testid="link-login-to-vote">
+                    Sign in
+                  </Button>{" "}
+                  to cast your vote
+                </p>
+              )}
             </div>
           ) : (
-            <div className="flex flex-col gap-3 mb-4">
+            <div className="flex flex-col gap-2.5">
               {options.map((option: any) => {
                 const isSelected = poll.userVote === option.id;
                 const percent = option.percent || 0;
+                const maxPercent = Math.max(...options.map((o: any) => o.percent || 0), 0);
+                const isLeading = percent === maxPercent && percent > 0;
                 return (
-                  <div key={option.id} className="flex items-center gap-2.5">
-                    {option.imageUrl ? (
-                      <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0 bg-white" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
-                        <span className="text-xs font-medium text-cyan-400">{option.orderIndex + 1}</span>
+                  <div
+                    key={option.id}
+                    className={`relative rounded-lg border overflow-hidden transition-all duration-300 ${
+                      isSelected
+                        ? 'border-cyan-500/60 bg-cyan-500/[0.08]'
+                        : 'border-border/30 bg-muted/20'
+                    }`}
+                  >
+                    <div
+                      className={`absolute inset-y-0 left-0 transition-all duration-700 ease-out ${
+                        isSelected ? 'bg-cyan-500/15' : 'bg-cyan-500/[0.07]'
+                      }`}
+                      style={{ width: `${percent}%` }}
+                    />
+                    <div className="relative flex items-center gap-3 p-2">
+                      {option.imageUrl ? (
+                        <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                          <span className="text-sm font-semibold text-cyan-400">{option.orderIndex + 1}</span>
+                        </div>
+                      )}
+                      <span className={`text-sm flex-1 min-w-0 truncate ${isSelected ? "font-semibold" : ""}`}>
+                        {option.name}
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-sm font-mono font-bold ${isLeading ? 'text-cyan-400' : 'text-muted-foreground'}`}>
+                          {percent}%
+                        </span>
+                        {isSelected && <CheckCircle2 className="h-4 w-4 text-cyan-400 shrink-0" />}
                       </div>
-                    )}
-                    <span className={`text-sm w-24 shrink-0 truncate ${isSelected ? "text-cyan-400 font-semibold" : "text-muted-foreground"}`}>
-                      {option.name}
-                    </span>
-                    <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-cyan-500 rounded-full transition-all duration-500"
-                        style={{ width: `${percent}%` }}
-                      />
                     </div>
-                    <span className="text-sm text-muted-foreground w-10 text-right">{percent}%</span>
-                    {isSelected && <CheckCircle2 className="h-4 w-4 text-cyan-400 shrink-0" />}
                   </div>
                 );
               })}
-              <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
+
+              <div className="flex items-center justify-between mt-1 pt-3 border-t border-border/30">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <span>You voted: <span className="font-semibold text-cyan-400">{votedOption?.name || "—"}</span></span>
                 </div>
                 <button
                   onClick={() => setShowVoteChange(true)}
-                  className="text-xs text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline"
+                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors"
                   data-testid="button-change-vote"
                 >
                   Change your vote
                 </button>
               </div>
             </div>
-          )}
-          {!user && (
-            <p className="text-xs text-center text-muted-foreground">
-              <Button variant="ghost" className="p-0 h-auto text-cyan-400 underline" onClick={() => setLocation("/login")} data-testid="link-login-to-vote">
-                Sign in
-              </Button>{" "}
-              to cast your vote
-            </p>
           )}
         </Card>
 
@@ -312,30 +329,46 @@ export default function OpinionPollDetailPage() {
             Results
           </h2>
 
-          <div className="flex flex-col gap-2 mb-4" data-testid="bar-results">
+          <div className="flex flex-col gap-2.5">
             {options.map((option: any) => {
               const percent = option.percent || 0;
+              const maxPercent = Math.max(...options.map((o: any) => o.percent || 0), 0);
+              const isLeading = percent === maxPercent && percent > 0;
+              const isUserVote = poll.userVote === option.id;
               return (
                 <div
                   key={option.id}
-                  className="h-9 rounded-md bg-cyan-500/10 border border-cyan-500/50 flex items-center justify-center transition-all duration-300 cursor-default"
-                  style={{ width: `${Math.max(percent, 15)}%` }}
+                  className={`relative rounded-lg border overflow-hidden ${
+                    isUserVote
+                      ? 'border-cyan-500/60 bg-cyan-500/[0.08]'
+                      : 'border-border/30 bg-muted/20'
+                  }`}
+                  data-testid={`opinion-poll-result-${option.id}`}
                 >
-                  <span className="text-xs font-semibold text-cyan-400 truncate px-2">{option.name} {percent}%</span>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="grid gap-2">
-            {options.map((option: any) => {
-              const percent = option.percent || 0;
-              return (
-                <div key={option.id} className="flex items-center gap-2">
-                  <div className="h-2.5 w-2.5 rounded-full bg-cyan-500 shrink-0" />
-                  <span className="text-xs font-medium flex-1 min-w-0 truncate">{option.name}</span>
-                  <span className="text-sm font-bold font-mono text-cyan-400" data-testid={`text-percent-${option.id}`}>{percent}%</span>
-                  <span className="text-xs text-muted-foreground w-16 text-right">{(option.votes || 0).toLocaleString("en-US")} votes</span>
+                  <div
+                    className={`absolute inset-y-0 left-0 transition-all duration-700 ease-out ${
+                      isUserVote ? 'bg-cyan-500/15' : 'bg-cyan-500/[0.07]'
+                    }`}
+                    style={{ width: `${percent}%` }}
+                  />
+                  <div className="relative flex items-center gap-3 p-2">
+                    {option.imageUrl ? (
+                      <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                        <span className="text-sm font-semibold text-cyan-400">{option.orderIndex + 1}</span>
+                      </div>
+                    )}
+                    <span className={`text-sm flex-1 min-w-0 truncate ${isUserVote ? "font-semibold" : ""}`}>
+                      {option.name}
+                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-sm font-mono font-bold ${isLeading ? 'text-cyan-400' : 'text-muted-foreground'}`} data-testid={`text-percent-${option.id}`}>
+                        {percent}%
+                      </span>
+                      <span className="text-xs text-muted-foreground w-16 text-right">{(option.votes || 0).toLocaleString("en-US")} votes</span>
+                    </div>
+                  </div>
                 </div>
               );
             })}

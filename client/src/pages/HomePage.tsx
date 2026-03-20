@@ -1053,7 +1053,13 @@ export default function HomePage() {
                           Cooling
                         </span>
                       </TouchTooltip>
-                      <span className="ml-auto lg:hidden text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Predict</span>
+                      <TouchTooltip
+                        content="Predict whether each celebrity's Trend Score will go Up or Down this week."
+                        side="bottom"
+                        className="text-xs max-w-[220px]"
+                      >
+                        <span className="ml-auto lg:hidden text-[11px] font-medium uppercase tracking-wider text-muted-foreground cursor-help">Predict</span>
+                      </TouchTooltip>
                     </div>
                   )}
                   {leaderboardTab === "approval" && (
@@ -1083,7 +1089,15 @@ export default function HomePage() {
                         </>
                       )}
                       <div className={`${leaderboardTab === "fame" ? "w-[88px]" : "w-[72px]"} shrink-0 text-right`}>
-                        {leaderboardTab === "fame" ? "Predict" : ""}
+                        {leaderboardTab === "fame" ? (
+                          <TouchTooltip
+                            content="Predict whether each celebrity's Trend Score will go Up or Down this week."
+                            side="bottom"
+                            className="text-xs max-w-[220px]"
+                          >
+                            <span className="cursor-help">Predict</span>
+                          </TouchTooltip>
+                        ) : ""}
                       </div>
                     </div>
                   )}

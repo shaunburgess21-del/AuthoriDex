@@ -3,6 +3,8 @@ import { Eye, Vote, TrendingUp } from "lucide-react";
 interface ProfileTabsProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  /** When true (e.g. sticky bar), no bottom margin so content flows flush below */
+  noBottomMargin?: boolean;
 }
 
 const tabs = [
@@ -11,9 +13,9 @@ const tabs = [
   { id: "predict", label: "Predict", icon: TrendingUp, accent: "#8B5CF6" },
 ];
 
-export function ProfileTabs({ activeTab, onTabChange }: ProfileTabsProps) {
+export function ProfileTabs({ activeTab, onTabChange, noBottomMargin }: ProfileTabsProps) {
   return (
-    <div className="mb-6" data-testid="profile-tabs">
+    <div className={noBottomMargin ? "" : "mb-6"} data-testid="profile-tabs">
       <div className="flex items-center rounded-lg bg-muted/50 p-0.5 w-full overflow-hidden">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;

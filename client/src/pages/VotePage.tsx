@@ -469,7 +469,6 @@ function InductionCandidateCard({
   const [showVoteAnimation, setShowVoteAnimation] = useState(false);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressPercent = rank === 1 ? 100 : (candidate.votes / maxVotes) * 100;
-  const gap = maxVotes - candidate.votes;
 
   useEffect(() => {
     return () => {
@@ -543,21 +542,7 @@ function InductionCandidateCard({
           />
         </div>
         <div className="mt-1.5 text-xs text-muted-foreground">
-          {rank === 1 ? (
-            <span className="flex items-center gap-1">
-              <Crown className="h-3 w-3 text-yellow-400" />
-              <span className="text-yellow-400/80">Leader</span>
-              <span className="mx-1">•</span>
-              <span className="text-slate-400">{candidate.votes.toLocaleString('en-US')} votes</span>
-            </span>
-          ) : (
-            <span>
-              <span className="text-slate-500">Gap: </span>
-              <span className="text-slate-400">-{gap.toLocaleString('en-US')}</span>
-              <span className="mx-1 text-slate-500">•</span>
-              <span className="text-slate-400">{candidate.votes.toLocaleString('en-US')} votes</span>
-            </span>
-          )}
+          <span className="text-slate-400">{candidate.votes.toLocaleString('en-US')} votes</span>
         </div>
       </div>
       
@@ -1063,32 +1048,30 @@ function OpinionPollCard({
 
   const hasVoted = !!voted;
   const totalVotes = poll.totalVotes || 0;
+  const maxPercent = Math.max(...visibleOptions.map((o: any) => totalVotes > 0 ? Math.round((o.votes / totalVotes) * 100) : 0), 0);
 
   return (
     <div className="relative group h-full">
       <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
       <Card
-        className="relative pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[450px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/20 rounded-none md:rounded-xl"
+        className="relative pt-5 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[420px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/20 rounded-none md:rounded-xl"
         data-testid={`opinion-poll-card-${poll.id}`}
       >
-        <div className="absolute top-3 right-3">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Users className="h-3.5 w-3.5 text-cyan-400" />
+            <span>{totalVotes.toLocaleString('en-US')} votes</span>
+          </div>
           <CategoryPill category={poll.category} data-testid={`badge-opinion-category-${poll.id}`} />
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-          <Users className="h-3.5 w-3.5 text-cyan-400" />
-          <span>{totalVotes.toLocaleString('en-US')} votes</span>
-        </div>
-        <div className="flex items-start gap-3 mb-3">
+
+        <div className="flex items-start gap-3 mb-2">
           {poll.imageUrl ? (
-            <div className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-slate-800">
-              <img
-                src={poll.imageUrl}
-                alt={poll.title}
-                className="w-full h-full object-cover"
-              />
+            <div className="h-14 w-14 rounded-lg overflow-hidden shrink-0 bg-slate-800">
+              <img src={poll.imageUrl} alt={poll.title} className="w-full h-full object-cover" />
             </div>
           ) : (
-            <div className="h-16 w-16 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
+            <div className="h-14 w-14 rounded-lg bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">
               <ListChecks className="h-5 w-5 text-slate-400" />
             </div>
           )}
@@ -1099,7 +1082,7 @@ function OpinionPollCard({
           </div>
         </div>
         {poll.description && (
-          <p className="text-[16px] leading-[1.4] text-muted-foreground mb-2 line-clamp-2">{poll.description}</p>
+          <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{poll.description}</p>
         )}
 
         {!hasVoted ? (
@@ -1108,14 +1091,14 @@ function OpinionPollCard({
               <button
                 key={option.id}
                 onClick={(e) => handleVote(option.id, e)}
-                className="w-full flex items-center gap-2.5 p-[6px] rounded-md border border-border/50 bg-muted/30 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10"
+                className="w-full flex items-center gap-2.5 p-1.5 rounded-lg border border-border/50 bg-muted/30 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10"
                 data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
               >
                 {option.imageUrl ? (
-                  <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0 bg-white" />
+                  <img src={option.imageUrl} alt={option.name} className="w-9 h-9 rounded-md object-cover shrink-0" />
                 ) : (
-                  <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
-                    <ListChecks className="h-4 w-4 text-cyan-400" />
+                  <div className="w-9 h-9 rounded-md bg-cyan-500/10 flex items-center justify-center shrink-0">
+                    <span className="text-xs font-semibold text-cyan-400">{option.orderIndex + 1}</span>
                   </div>
                 )}
                 <span className="text-sm truncate">{option.name}</span>
@@ -1123,7 +1106,7 @@ function OpinionPollCard({
             ))}
             {remainingCount > 0 && (
               <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-3" data-testid={`link-more-options-${poll.id}`}>
+                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-2.5" data-testid={`link-more-options-${poll.id}`}>
                   +{remainingCount} more options
                 </p>
               </Link>
@@ -1134,55 +1117,62 @@ function OpinionPollCard({
             {visibleOptions.map((option: any) => {
               const isSelected = voted === option.id;
               const percent = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
+              const isLeading = percent === maxPercent && percent > 0;
               return (
                 <div
                   key={option.id}
-                  className={`relative p-[6px] rounded-md border overflow-hidden ${
-                    isSelected ? 'border-cyan-500/50 bg-cyan-500/10' : 'border-border/30 bg-muted/20'
+                  className={`relative rounded-lg border overflow-hidden transition-all duration-300 ${
+                    isSelected
+                      ? 'border-cyan-500/60 bg-cyan-500/[0.08]'
+                      : 'border-border/30 bg-muted/20'
                   }`}
                   data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
                 >
                   <div
-                    className="absolute inset-0 bg-cyan-500/10 transition-all duration-500"
+                    className={`absolute inset-y-0 left-0 transition-all duration-700 ease-out ${
+                      isSelected ? 'bg-cyan-500/15' : 'bg-cyan-500/[0.07]'
+                    }`}
                     style={{ width: `${percent}%` }}
                   />
-                  <div className="relative flex items-center gap-2.5">
+                  <div className="relative flex items-center gap-2.5 p-1.5">
                     {option.imageUrl ? (
-                      <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-md object-cover shrink-0 bg-white" />
+                      <img src={option.imageUrl} alt={option.name} className="w-9 h-9 rounded-md object-cover shrink-0" />
                     ) : (
-                      <div className="w-10 h-10 rounded-md bg-cyan-500/20 flex items-center justify-center shrink-0">
-                        <ListChecks className="h-4 w-4 text-cyan-400" />
+                      <div className="w-9 h-9 rounded-md bg-cyan-500/10 flex items-center justify-center shrink-0">
+                        <span className="text-xs font-semibold text-cyan-400">{option.orderIndex + 1}</span>
                       </div>
                     )}
-                    <span className="text-sm truncate flex-1">{option.name}</span>
-                    <span className="text-xs font-semibold text-muted-foreground shrink-0">{percent}%</span>
+                    <span className={`text-sm truncate flex-1 ${isSelected ? 'font-semibold' : ''}`}>{option.name}</span>
+                    <span className={`text-xs font-mono font-semibold shrink-0 ${
+                      isLeading ? 'text-cyan-400' : 'text-muted-foreground'
+                    }`}>{percent}%</span>
                   </div>
                 </div>
               );
             })}
             {remainingCount > 0 && (
               <Link href={`/vote/opinion-polls/${poll.slug}`}>
-                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-3" data-testid={`link-more-options-${poll.id}`}>
+                <p className="text-xs text-cyan-400 text-center cursor-pointer hover:underline mt-2.5" data-testid={`link-more-options-${poll.id}`}>
                   +{remainingCount} more options
                 </p>
               </Link>
             )}
-            <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Zap className="h-3.5 w-3.5" />
+            <div className="flex items-center justify-between mt-2 pt-3 border-t border-border/30">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Zap className="h-3 w-3" />
                 <span>{totalVotes.toLocaleString('en-US')} total votes</span>
               </div>
-              <div className="px-2 py-0.5 rounded-full text-xs font-medium border bg-cyan-500/10 border-cyan-500/40 text-cyan-400" data-testid={`badge-voted-opinion-${poll.id}`}>
-                You voted
-              </div>
+              <button
+                onClick={handleChangeVote}
+                className="flex items-center gap-1.5 text-xs"
+                data-testid={`button-change-vote-opinion-${poll.id}`}
+              >
+                <span className="px-2 py-0.5 rounded-full font-medium border bg-cyan-500/10 border-cyan-500/40 text-cyan-400" data-testid={`badge-voted-opinion-${poll.id}`}>
+                  You voted
+                </span>
+                <span className="text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors">Change</span>
+              </button>
             </div>
-            <button
-              onClick={handleChangeVote}
-              className="text-xs text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline text-center w-full"
-              data-testid={`button-change-vote-opinion-${poll.id}`}
-            >
-              Change your vote
-            </button>
           </div>
         )}
       </Card>

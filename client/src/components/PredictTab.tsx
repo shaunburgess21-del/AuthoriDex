@@ -1164,17 +1164,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
 
   return (
     <div className="space-y-6">
-      <Card className="p-4 bg-primary/5 border-primary/20">
-        <div className="flex items-center gap-3">
-          <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
-            TEST MODE
-          </Badge>
-          <span className="text-sm text-muted-foreground">
-            Predictions use virtual credits only. No real money involved.
-          </span>
-        </div>
-      </Card>
-
       {/* World Markets (Open Markets) */}
       <section>
         <SectionHeader
@@ -1204,8 +1193,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         )}
       </section>
 
-      {/* Sticky weekly countdown timer */}
-      <MarketCycleHero marketState={marketCycle} />
+      {/* Sticky weekly countdown timer — constrained to same width as profile toggles / page container */}
+      <MarketCycleHero marketState={marketCycle} constrainedWidth />
 
       {/* Weekly Jackpot - person specific */}
       <section>
