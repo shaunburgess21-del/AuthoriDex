@@ -10650,7 +10650,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
       });
 
-      function extractTeaser(response: any): string {
+      const extractTeaser = (response: any): string => {
         const raw = (response as any).output_text
           || ((response as any).output || [])
                .filter((item: any) => item.type === "message")
