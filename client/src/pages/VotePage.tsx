@@ -849,6 +849,7 @@ function DiscourseCard({
   onVote: (choice: 'support' | 'neutral' | 'oppose') => void;
 }) {
   const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(null);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
   const imgSources = [topic.personAvatar, topic.imageUrl].filter(Boolean) as string[];
   const [imgIdx, setImgIdx] = useState(0);
@@ -894,7 +895,10 @@ function DiscourseCard({
       </div>
       <div className="flex items-start gap-3 mb-3">
         {currentImgSrc ? (
-          <div className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-slate-800">
+          <div
+            className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-slate-800 cursor-pointer"
+            onClick={(e) => { e.stopPropagation(); setExpandedImage(currentImgSrc); }}
+          >
             <img 
               src={currentImgSrc} 
               alt={topic.personName || topic.headline}
@@ -927,10 +931,22 @@ function DiscourseCard({
         </div>
       </div>
       {topic.subjectText && (
-        <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{topic.subjectText}</p>
+        topic.slug ? (
+          <Link href={`/polls/${topic.slug}`} className="block mb-4">
+            <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-400 transition-colors">{topic.subjectText}</p>
+          </Link>
+        ) : (
+          <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{topic.subjectText}</p>
+        )
       )}
       {!topic.subjectText && topic.description && (
-        <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{topic.description}</p>
+        topic.slug ? (
+          <Link href={`/polls/${topic.slug}`} className="block mb-4">
+            <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-400 transition-colors">{topic.description}</p>
+          </Link>
+        ) : (
+          <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground mb-4 line-clamp-2">{topic.description}</p>
+        )
       )}
       
       {!voted ? (
@@ -1027,6 +1043,25 @@ function DiscourseCard({
         </div>
       )}
     </Card>
+    {expandedImage && (
+      <div
+        className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+        onClick={() => setExpandedImage(null)}
+      >
+        <button
+          className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+          onClick={() => setExpandedImage(null)}
+        >
+          <X className="h-6 w-6 text-white" />
+        </button>
+        <img
+          src={expandedImage}
+          alt={topic.personName || topic.headline}
+          className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    )}
     </div>
   );
 }

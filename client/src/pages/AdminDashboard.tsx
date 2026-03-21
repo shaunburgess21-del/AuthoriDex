@@ -53,6 +53,9 @@ import {
   ChevronUp,
   Upload,
   Sparkles,
+  LayoutList,
+  Table2,
+  Save,
 } from "lucide-react";
 import { AdminUnderratedOverrated } from "@/components/admin/AdminUnderratedOverrated";
 import { AdminCurateProfile } from "@/components/admin/AdminCurateProfile";
@@ -1476,6 +1479,18 @@ export default function AdminDashboard() {
   const [votingSubTab, setVotingSubTabRaw] = useState(() => sessionStorage.getItem("admin_voting_tab") || "polls");
   const setVotingSubTab = (tab: string) => { sessionStorage.setItem("admin_voting_tab", tab); setVotingSubTabRaw(tab); };
 
+  const [pollsViewMode, setPollsViewModeRaw] = useState<"cards" | "table">(() => (sessionStorage.getItem("admin_polls_view") as "cards" | "table") || "cards");
+  const setPollsViewMode = (m: "cards" | "table") => { sessionStorage.setItem("admin_polls_view", m); setPollsViewModeRaw(m); };
+  const [opinionViewMode, setOpinionViewModeRaw] = useState<"cards" | "table">(() => (sessionStorage.getItem("admin_opinion_view") as "cards" | "table") || "cards");
+  const setOpinionViewMode = (m: "cards" | "table") => { sessionStorage.setItem("admin_opinion_view", m); setOpinionViewModeRaw(m); };
+  const [matchupsViewMode, setMatchupsViewModeRaw] = useState<"cards" | "table">(() => (sessionStorage.getItem("admin_matchups_view") as "cards" | "table") || "cards");
+  const setMatchupsViewMode = (m: "cards" | "table") => { sessionStorage.setItem("admin_matchups_view", m); setMatchupsViewModeRaw(m); };
+
+  const [pollSeedEdits, setPollSeedEdits] = useState<Record<string, { seedSupportCount: number; seedNeutralCount: number; seedOpposeCount: number }>>({});
+  const [matchupSeedEdits, setMatchupSeedEdits] = useState<Record<string, { seedVotesA: number; seedVotesB: number }>>({});
+  const [opinionSeedEdits, setOpinionSeedEdits] = useState<Record<string, { options: { name: string; imageUrl: string; personId: string; seedCount: number }[] }>>({});
+  const [savingRowIds, setSavingRowIds] = useState<Set<string>>(new Set());
+
   const [predictionSubTab, setPredictionSubTabRaw] = useState(() => sessionStorage.getItem("admin_prediction_tab") || "real-world");
   const setPredictionSubTab = (tab: string) => { sessionStorage.setItem("admin_prediction_tab", tab); setPredictionSubTabRaw(tab); };
 
@@ -2554,6 +2569,66 @@ export default function AdminDashboard() {
       toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
     },
   });
+
+  const saveInlinePollSeeds = async (pollId: string) => {
+    const edits = pollSeedEdits[pollId];
+    if (!edits) return;
+    setSavingRowIds(prev => new Set(prev).add(pollId));
+    try {
+      const res = await fetchWithAuth(`/api/admin/trending-polls/${pollId}`, {
+        method: "PATCH",
+        body: JSON.stringify(edits),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      toast({ title: "Saved", description: "Seed votes updated" });
+      setPollSeedEdits(prev => { const next = { ...prev }; delete next[pollId]; return next; });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/trending-polls"] });
+    } catch {
+      toast({ title: "Save Failed", variant: "destructive" });
+    } finally {
+      setSavingRowIds(prev => { const next = new Set(prev); next.delete(pollId); return next; });
+    }
+  };
+
+  const saveInlineMatchupSeeds = async (matchupId: string) => {
+    const edits = matchupSeedEdits[matchupId];
+    if (!edits) return;
+    setSavingRowIds(prev => new Set(prev).add(matchupId));
+    try {
+      const res = await fetchWithAuth(`/api/admin/matchups/${matchupId}`, {
+        method: "PATCH",
+        body: JSON.stringify(edits),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      toast({ title: "Saved", description: "Seed votes updated" });
+      setMatchupSeedEdits(prev => { const next = { ...prev }; delete next[matchupId]; return next; });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
+    } catch {
+      toast({ title: "Save Failed", variant: "destructive" });
+    } finally {
+      setSavingRowIds(prev => { const next = new Set(prev); next.delete(matchupId); return next; });
+    }
+  };
+
+  const saveInlineOpinionSeeds = async (pollId: string) => {
+    const edits = opinionSeedEdits[pollId];
+    if (!edits) return;
+    setSavingRowIds(prev => new Set(prev).add(pollId));
+    try {
+      const res = await fetchWithAuth(`/api/admin/opinion-polls/${pollId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ options: edits.options.filter(o => o.name.trim()) }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      toast({ title: "Saved", description: "Seed votes updated" });
+      setOpinionSeedEdits(prev => { const next = { ...prev }; delete next[pollId]; return next; });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/opinion-polls"] });
+    } catch {
+      toast({ title: "Save Failed", variant: "destructive" });
+    } finally {
+      setSavingRowIds(prev => { const next = new Set(prev); next.delete(pollId); return next; });
+    }
+  };
 
   // Moderation mutations
   const deleteInsightMutation = useMutation({
@@ -4596,12 +4671,151 @@ export default function AdminDashboard() {
                         className="w-[200px]"
                         data-testid="input-poll-search"
                       />
+                      <div className="flex items-center border rounded-md overflow-hidden ml-auto">
+                        <button
+                          className={`p-1.5 transition-colors ${pollsViewMode === "cards" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                          onClick={() => setPollsViewMode("cards")}
+                          title="Card view"
+                        >
+                          <LayoutList className="h-4 w-4" />
+                        </button>
+                        <button
+                          className={`p-1.5 transition-colors ${pollsViewMode === "table" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                          onClick={() => setPollsViewMode("table")}
+                          title="Table view"
+                        >
+                          <Table2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                     {pollsLoading ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                       </div>
                     ) : filteredPolls && filteredPolls.length > 0 ? (
+                      pollsViewMode === "table" ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-left text-muted-foreground">
+                              <th className="py-2 px-3 font-medium">Headline</th>
+                              <th className="py-2 px-3 font-medium">Category</th>
+                              <th className="py-2 px-3 font-medium">Visibility</th>
+                              <th className="py-2 px-3 font-medium text-right">Seed Support</th>
+                              <th className="py-2 px-3 font-medium text-right">Seed Neutral</th>
+                              <th className="py-2 px-3 font-medium text-right">Seed Oppose</th>
+                              <th className="py-2 px-3 font-medium text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredPolls.map((poll) => {
+                              const edits = pollSeedEdits[poll.id];
+                              const isDirty = !!edits;
+                              const isSaving = savingRowIds.has(poll.id);
+                              return (
+                                <tr key={poll.id} className="border-b hover:bg-muted/50">
+                                  <td className="py-2 px-3 max-w-[260px]">
+                                    <p className="font-medium truncate">{poll.headline}</p>
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <Badge variant="outline" className="text-xs">{poll.category}</Badge>
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <Badge
+                                      variant={(poll.visibility || poll.status) === "live" ? "default" : (poll.visibility || poll.status) === "draft" ? "secondary" : "outline"}
+                                      className="text-xs"
+                                    >
+                                      {poll.visibility || poll.status}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-2 px-3 text-right">
+                                    <Input
+                                      type="number"
+                                      className="w-20 h-7 text-xs text-right ml-auto"
+                                      value={edits?.seedSupportCount ?? poll.seedSupportCount ?? 0}
+                                      onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 0;
+                                        setPollSeedEdits(prev => ({
+                                          ...prev,
+                                          [poll.id]: {
+                                            seedSupportCount: val,
+                                            seedNeutralCount: prev[poll.id]?.seedNeutralCount ?? poll.seedNeutralCount ?? 0,
+                                            seedOpposeCount: prev[poll.id]?.seedOpposeCount ?? poll.seedOpposeCount ?? 0,
+                                          },
+                                        }));
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="py-2 px-3 text-right">
+                                    <Input
+                                      type="number"
+                                      className="w-20 h-7 text-xs text-right ml-auto"
+                                      value={edits?.seedNeutralCount ?? poll.seedNeutralCount ?? 0}
+                                      onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 0;
+                                        setPollSeedEdits(prev => ({
+                                          ...prev,
+                                          [poll.id]: {
+                                            seedSupportCount: prev[poll.id]?.seedSupportCount ?? poll.seedSupportCount ?? 0,
+                                            seedNeutralCount: val,
+                                            seedOpposeCount: prev[poll.id]?.seedOpposeCount ?? poll.seedOpposeCount ?? 0,
+                                          },
+                                        }));
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="py-2 px-3 text-right">
+                                    <Input
+                                      type="number"
+                                      className="w-20 h-7 text-xs text-right ml-auto"
+                                      value={edits?.seedOpposeCount ?? poll.seedOpposeCount ?? 0}
+                                      onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 0;
+                                        setPollSeedEdits(prev => ({
+                                          ...prev,
+                                          [poll.id]: {
+                                            seedSupportCount: prev[poll.id]?.seedSupportCount ?? poll.seedSupportCount ?? 0,
+                                            seedNeutralCount: prev[poll.id]?.seedNeutralCount ?? poll.seedNeutralCount ?? 0,
+                                            seedOpposeCount: val,
+                                          },
+                                        }));
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <div className="flex items-center gap-1 justify-end">
+                                      {isDirty && (
+                                        <Button
+                                          size="sm"
+                                          variant="default"
+                                          className="h-7 px-2 text-xs"
+                                          disabled={isSaving}
+                                          onClick={() => saveInlinePollSeeds(poll.id)}
+                                        >
+                                          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                                          Save
+                                        </Button>
+                                      )}
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditPoll(poll)} title="Edit in modal">
+                                        <Edit className="h-3.5 w-3.5" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-destructive hover:text-destructive"
+                                        onClick={() => { setDeleteTarget({ type: "poll", id: poll.id, name: poll.headline }); setShowDeleteConfirm(true); }}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      ) : (
                       <div className="space-y-3" data-testid="poll-list">
                         {filteredPolls.map((poll) => (
                           <div
@@ -4695,6 +4909,7 @@ export default function AdminDashboard() {
                           </div>
                         ))}
                       </div>
+                      )
                     ) : (
                       <div className="text-center py-8 text-muted-foreground">
                         <Vote className="h-12 w-12 mx-auto mb-3 opacity-50" />
@@ -4776,12 +4991,120 @@ export default function AdminDashboard() {
                         className="w-[200px]"
                         data-testid="input-opinion-poll-search"
                       />
+                      <div className="flex items-center border rounded-md overflow-hidden ml-auto">
+                        <button
+                          className={`p-1.5 transition-colors ${opinionViewMode === "cards" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                          onClick={() => setOpinionViewMode("cards")}
+                          title="Card view"
+                        >
+                          <LayoutList className="h-4 w-4" />
+                        </button>
+                        <button
+                          className={`p-1.5 transition-colors ${opinionViewMode === "table" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                          onClick={() => setOpinionViewMode("table")}
+                          title="Table view"
+                        >
+                          <Table2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                     {opinionPollsLoading ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                       </div>
                     ) : filteredOpinionPolls.length > 0 ? (
+                      opinionViewMode === "table" ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-left text-muted-foreground">
+                              <th className="py-2 px-3 font-medium">Title</th>
+                              <th className="py-2 px-3 font-medium">Category</th>
+                              <th className="py-2 px-3 font-medium">Visibility</th>
+                              <th className="py-2 px-3 font-medium">Options &amp; Seed Counts</th>
+                              <th className="py-2 px-3 font-medium text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredOpinionPolls.map((poll: any) => {
+                              const edits = opinionSeedEdits[poll.id];
+                              const isDirty = !!edits;
+                              const isSaving = savingRowIds.has(poll.id);
+                              const currentOptions: { name: string; imageUrl: string; personId: string; seedCount: number }[] =
+                                edits?.options ?? poll.options?.map((o: any) => ({ name: o.name, imageUrl: o.imageUrl || "", personId: o.personId || "", seedCount: o.seedCount ?? 0 })) ?? [];
+                              return (
+                                <tr key={poll.id} className="border-b hover:bg-muted/50 align-top">
+                                  <td className="py-2 px-3 max-w-[200px]">
+                                    <p className="font-medium truncate">{poll.title}</p>
+                                    <p className="text-xs text-muted-foreground">{poll.totalVotes || 0} votes</p>
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <Badge variant="outline" className="text-xs">{poll.category}</Badge>
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <Badge
+                                      variant={poll.visibility === "live" ? "default" : poll.visibility === "draft" ? "secondary" : "outline"}
+                                      className="text-xs"
+                                    >
+                                      {poll.visibility}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <div className="space-y-1">
+                                      {currentOptions.map((opt, idx) => (
+                                        <div key={idx} className="flex items-center gap-2">
+                                          <span className="text-xs truncate max-w-[140px]">{opt.name}</span>
+                                          <Input
+                                            type="number"
+                                            className="w-16 h-6 text-xs text-right"
+                                            value={opt.seedCount}
+                                            onChange={(e) => {
+                                              const val = parseInt(e.target.value) || 0;
+                                              const base = edits?.options ?? poll.options?.map((o: any) => ({
+                                                name: o.name, imageUrl: o.imageUrl || "", personId: o.personId || "", seedCount: o.seedCount ?? 0,
+                                              })) ?? [];
+                                              const updated = base.map((o: any, i: number) => i === idx ? { ...o, seedCount: val } : o);
+                                              setOpinionSeedEdits(prev => ({ ...prev, [poll.id]: { options: updated } }));
+                                            }}
+                                          />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <div className="flex items-center gap-1 justify-end">
+                                      {isDirty && (
+                                        <Button
+                                          size="sm"
+                                          variant="default"
+                                          className="h-7 px-2 text-xs"
+                                          disabled={isSaving}
+                                          onClick={() => saveInlineOpinionSeeds(poll.id)}
+                                        >
+                                          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                                          Save
+                                        </Button>
+                                      )}
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditOpinionPoll(poll)} title="Edit in modal">
+                                        <Edit className="h-3.5 w-3.5" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-destructive hover:text-destructive"
+                                        onClick={() => { setDeleteTarget({ type: "opinion-poll", id: poll.id, name: poll.title }); setShowDeleteConfirm(true); }}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      ) : (
                       <div className="space-y-3" data-testid="opinion-poll-list">
                         {filteredOpinionPolls.map((poll: any) => (
                           <div
@@ -4831,6 +5154,7 @@ export default function AdminDashboard() {
                           </div>
                         ))}
                       </div>
+                      )
                     ) : (
                       <div className="text-center py-8 text-muted-foreground">
                         <Vote className="h-12 w-12 mx-auto mb-3 opacity-50" />
@@ -4895,13 +5219,131 @@ export default function AdminDashboard() {
                         className="w-[200px]"
                         data-testid="input-matchup-search"
                       />
-                      <span className="text-xs text-muted-foreground ml-auto">{filteredMatchups.length} total</span>
+                      <span className="text-xs text-muted-foreground">{filteredMatchups.length} total</span>
+                      <div className="flex items-center border rounded-md overflow-hidden ml-auto">
+                        <button
+                          className={`p-1.5 transition-colors ${matchupsViewMode === "cards" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                          onClick={() => setMatchupsViewMode("cards")}
+                          title="Card view"
+                        >
+                          <LayoutList className="h-4 w-4" />
+                        </button>
+                        <button
+                          className={`p-1.5 transition-colors ${matchupsViewMode === "table" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                          onClick={() => setMatchupsViewMode("table")}
+                          title="Table view"
+                        >
+                          <Table2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                     {matchupsLoading ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                       </div>
                     ) : filteredMatchups.length > 0 ? (
+                      matchupsViewMode === "table" ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b text-left text-muted-foreground">
+                              <th className="py-2 px-3 font-medium">Title / Matchup</th>
+                              <th className="py-2 px-3 font-medium">Category</th>
+                              <th className="py-2 px-3 font-medium">Visibility</th>
+                              <th className="py-2 px-3 font-medium text-right">Seed A</th>
+                              <th className="py-2 px-3 font-medium text-right">Seed B</th>
+                              <th className="py-2 px-3 font-medium text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredMatchups.map((matchup) => {
+                              const edits = matchupSeedEdits[matchup.id];
+                              const isDirty = !!edits;
+                              const isSaving = savingRowIds.has(matchup.id);
+                              return (
+                                <tr key={matchup.id} className="border-b hover:bg-muted/50">
+                                  <td className="py-2 px-3 max-w-[260px]">
+                                    <p className="font-medium truncate">{matchup.title || `${matchup.optionAText} vs ${matchup.optionBText}`}</p>
+                                    {matchup.title && (
+                                      <p className="text-xs text-muted-foreground truncate">{matchup.optionAText} vs {matchup.optionBText}</p>
+                                    )}
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <Badge variant="outline" className="text-xs">{matchup.category}</Badge>
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <Badge variant={matchup.visibility === 'live' ? 'default' : matchup.visibility === 'draft' ? 'outline' : 'secondary'} className="text-xs">
+                                      {matchup.visibility || 'live'}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-2 px-3 text-right">
+                                    <Input
+                                      type="number"
+                                      className="w-20 h-7 text-xs text-right ml-auto"
+                                      value={edits?.seedVotesA ?? matchup.seedVotesA ?? 0}
+                                      onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 0;
+                                        setMatchupSeedEdits(prev => ({
+                                          ...prev,
+                                          [matchup.id]: {
+                                            seedVotesA: val,
+                                            seedVotesB: prev[matchup.id]?.seedVotesB ?? matchup.seedVotesB ?? 0,
+                                          },
+                                        }));
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="py-2 px-3 text-right">
+                                    <Input
+                                      type="number"
+                                      className="w-20 h-7 text-xs text-right ml-auto"
+                                      value={edits?.seedVotesB ?? matchup.seedVotesB ?? 0}
+                                      onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 0;
+                                        setMatchupSeedEdits(prev => ({
+                                          ...prev,
+                                          [matchup.id]: {
+                                            seedVotesA: prev[matchup.id]?.seedVotesA ?? matchup.seedVotesA ?? 0,
+                                            seedVotesB: val,
+                                          },
+                                        }));
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <div className="flex items-center gap-1 justify-end">
+                                      {isDirty && (
+                                        <Button
+                                          size="sm"
+                                          variant="default"
+                                          className="h-7 px-2 text-xs"
+                                          disabled={isSaving}
+                                          onClick={() => saveInlineMatchupSeeds(matchup.id)}
+                                        >
+                                          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                                          Save
+                                        </Button>
+                                      )}
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditMatchup(matchup)} title="Edit in modal">
+                                        <Edit className="h-3.5 w-3.5" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-destructive hover:text-destructive"
+                                        onClick={() => { setDeleteTarget({ type: "matchup", id: matchup.id, name: matchup.title || `${matchup.optionAText} vs ${matchup.optionBText}` }); setShowDeleteConfirm(true); }}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      ) : (
                       <div className="space-y-3" data-testid="matchup-list">
                         {filteredMatchups.map((matchup) => (
                           <div
@@ -4952,6 +5394,7 @@ export default function AdminDashboard() {
                           </div>
                         ))}
                       </div>
+                      )
                     ) : (
                       <div className="text-center py-8 text-muted-foreground">
                         <ArrowUpDown className="h-12 w-12 mx-auto mb-3 opacity-50" />

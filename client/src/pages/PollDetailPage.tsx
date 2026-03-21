@@ -30,6 +30,7 @@ import {
   MessageSquare,
   ArrowUpDown,
   Copy,
+  X,
 } from "lucide-react";
 
 interface PollData {
@@ -82,6 +83,8 @@ export default function PollDetailPage() {
   const [commentBody, setCommentBody] = useState("");
   const [commentSort, setCommentSort] = useState<"top" | "newest">("top");
   const [showVoteChange, setShowVoteChange] = useState(false);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [headerImgError, setHeaderImgError] = useState(false);
 
   const { data: poll, isLoading: pollLoading, error: pollError } = useQuery<PollData>({
     queryKey: ["/api/polls", slug],
@@ -235,13 +238,29 @@ export default function PollDetailPage() {
             )}
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-serif font-bold mb-3 leading-tight" data-testid="text-poll-title">
-            {poll.headline}
-          </h1>
-
-          <p className="text-base text-muted-foreground mb-4" data-testid="text-poll-question">
-            {poll.subjectText}
-          </p>
+          <div className="flex items-start gap-4 mb-4">
+            {!headerImgError && (poll.imageUrl || poll.personAvatar) && (
+              <div
+                className="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-slate-800 cursor-pointer"
+                onClick={() => setExpandedImage((poll.imageUrl || poll.personAvatar)!)}
+              >
+                <img
+                  src={(poll.imageUrl || poll.personAvatar)!}
+                  alt={poll.headline}
+                  className="w-full h-full object-cover"
+                  onError={() => setHeaderImgError(true)}
+                />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl sm:text-3xl font-serif font-bold mb-2 leading-tight" data-testid="text-poll-title">
+                {poll.headline}
+              </h1>
+              <p className="text-base text-muted-foreground" data-testid="text-poll-question">
+                {poll.subjectText}
+              </p>
+            </div>
+          </div>
 
           <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
             <span className="flex items-center gap-1.5">
@@ -625,6 +644,26 @@ export default function PollDetailPage() {
           </Button>
         </div>
       </div>
+
+      {expandedImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setExpandedImage(null)}
+        >
+          <button
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            onClick={() => setExpandedImage(null)}
+          >
+            <X className="h-6 w-6 text-white" />
+          </button>
+          <img
+            src={expandedImage}
+            alt={poll.headline}
+            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
