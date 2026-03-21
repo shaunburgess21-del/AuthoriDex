@@ -8331,7 +8331,7 @@ Only return the JSON object.`;
         ? `\nCurrent content for reference (improve upon this):\n"${existingContent}"`
         : "";
 
-      const systemPrompt = `You are writing content for a sentiment poll on VoxDex, a trend-tracking and prediction platform. Sentiment polls let users vote Support, Neutral, or Oppose on current topics. Use web search to ensure all facts are current and accurate. Write plain text only — no markdown, no headers, no bullets, no bold.`;
+      const systemPrompt = `You are writing content for a sentiment poll on VoxDex, a trend-tracking and prediction platform. Sentiment polls let users vote Support, Neutral, or Oppose on current topics. Use web search to ensure all facts are current and accurate. Write plain text only — no markdown, no headers, no bullets, no bold. Use blank lines between paragraphs for readability.`;
 
       let userPrompt: string;
       let maxTokens: number;
@@ -8353,7 +8353,7 @@ Write a detailed, multi-paragraph context section for this sentiment poll. This 
 - Recent developments and why this matters now
 - Important facts and figures where relevant
 
-Aim for 3-5 substantive paragraphs. Be factual, balanced, and informative. Help readers understand the full picture so they can form their own opinion. Use a journalistic, engaging tone.`;
+Aim for 3-5 substantive paragraphs separated by blank lines. Be factual, balanced, and informative. Help readers understand the full picture so they can form their own opinion. Use a journalistic, engaging tone.`;
         maxTokens = 1000;
       }
 
@@ -9263,7 +9263,7 @@ Aim for 3-5 substantive paragraphs. Be factual, balanced, and informative. Help 
         ? `\nCurrent content for reference (improve upon this):\n"${existingContent}"`
         : "";
 
-      const systemPrompt = `You are writing content for an opinion poll on VoxDex, a trend-tracking and prediction platform. Opinion polls let users pick their favorite option from a list. Use web search to ensure all facts are current and accurate. Write plain text only — no markdown, no headers, no bullets, no bold.`;
+      const systemPrompt = `You are writing content for an opinion poll on VoxDex, a trend-tracking and prediction platform. Opinion polls let users pick their favorite option from a list. Use web search to ensure all facts are current and accurate. Write plain text only — no markdown, no headers, no bullets, no bold. Use blank lines between paragraphs for readability.`;
 
       let userPrompt: string;
       let maxTokens: number;
@@ -9287,7 +9287,7 @@ Write a detailed, multi-paragraph context section for this opinion poll. This wi
 - Relevant context, history, or recent developments
 - Why this debate matters to people
 
-Aim for 3-5 substantive paragraphs. Be informative, engaging, and balanced. Help readers appreciate the nuances of each option so they can make a thoughtful choice.`;
+Aim for 3-5 substantive paragraphs separated by blank lines. Be informative, engaging, and balanced. Help readers appreciate the nuances of each option so they can make a thoughtful choice.`;
         maxTokens = 1000;
       }
 
@@ -10571,7 +10571,7 @@ Aim for 3-5 substantive paragraphs. Be informative, engaging, and balanced. Help
         ? `\nLinked to: ${linkedPerson.name} (current trend score: ${linkedPerson.trendScore?.toLocaleString() ?? "N/A"}, category: ${linkedPerson.category ?? "N/A"})`
         : "";
 
-      const systemPrompt = `You are writing a brief market context summary for a prediction market on VoxDex, a trend-tracking and prediction platform. Use web search to ensure all facts are current and accurate. Write plain text only — no markdown, no headers, no bullets, no bold.`;
+      const systemPrompt = `You are writing a brief market context summary for a prediction market on VoxDex, a trend-tracking and prediction platform. Use web search to ensure all facts are current and accurate. Write plain text only — no markdown, no headers, no bullets, no bold. Use blank lines between paragraphs for readability.`;
 
       const userPrompt = `Market: "${market.title}"
 Category: ${market.category || "General"}

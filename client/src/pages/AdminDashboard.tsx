@@ -994,6 +994,7 @@ function CreateMarketModal({ open, onClose, onSubmit, isPending, editMarket }: {
               value={summary} 
               onChange={(e) => setSummary(e.target.value)} 
               placeholder="Additional context about this market..."
+              rows={8}
               className="resize-none"
               data-testid="input-market-summary"
             />
@@ -7003,7 +7004,7 @@ export default function AdminDashboard() {
                 value={opinionPollForm.summary}
                 onChange={(e) => setOpinionPollForm(prev => ({ ...prev, summary: e.target.value }))}
                 placeholder="Additional context or details"
-                rows={3}
+                rows={8}
                 data-testid="input-opinion-poll-summary"
               />
             </div>
@@ -7323,6 +7324,7 @@ export default function AdminDashboard() {
                 value={pollForm.description}
                 onChange={(e) => setPollForm({ ...pollForm, description: e.target.value })}
                 placeholder="Additional context or details"
+                rows={8}
                 className="resize-none"
                 data-testid="input-poll-description"
               />
