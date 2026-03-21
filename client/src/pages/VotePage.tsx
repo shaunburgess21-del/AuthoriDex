@@ -55,6 +55,7 @@ import {
   Gamepad2,
   UtensilsCrossed,
   Heart,
+  CheckCircle2,
   type LucideIcon
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -1082,7 +1083,9 @@ function OpinionPollCard({
           </div>
         </div>
         {poll.description && (
-          <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{poll.description}</p>
+          <Link href={`/vote/opinion-polls/${poll.slug}`}>
+            <p className="text-sm text-muted-foreground mb-3 line-clamp-2 hover:text-cyan-400 transition-colors cursor-pointer">{poll.description}</p>
+          </Link>
         )}
 
         {!hasVoted ? (
@@ -1091,7 +1094,7 @@ function OpinionPollCard({
               <button
                 key={option.id}
                 onClick={(e) => handleVote(option.id, e)}
-                className="w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10"
+                className="w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10 active:scale-[0.99]"
                 data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
               >
                 {option.imageUrl ? (
@@ -1103,7 +1106,13 @@ function OpinionPollCard({
                     <span className="text-xs font-semibold text-cyan-400">{option.orderIndex + 1}</span>
                   </div>
                 )}
-                <span className="flex min-w-0 flex-1 items-center truncate py-2 pl-2.5 pr-2 text-sm">{option.name}</span>
+                <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
+                  <div className="flex items-center">
+                    <span className="min-w-0 flex-1 truncate text-sm">{option.name}</span>
+                  </div>
+                  <div className="mt-1 h-1.5 rounded-full bg-slate-700/50" />
+                  <div className="mt-0.5 h-3" />
+                </div>
               </button>
             ))}
             {remainingCount > 0 && (
@@ -1123,20 +1132,14 @@ function OpinionPollCard({
               return (
                 <div
                   key={option.id}
-                  className={`relative rounded-lg border overflow-hidden transition-all duration-300 ${
+                  className={`rounded-lg border overflow-hidden transition-all duration-300 ${
                     isSelected
                       ? 'border-cyan-500/60 bg-cyan-500/[0.08]'
                       : 'border-border/30 bg-muted/20'
                   }`}
                   data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
                 >
-                  <div
-                    className={`absolute inset-y-0 left-0 transition-all duration-700 ease-out ${
-                      isSelected ? 'bg-cyan-500/15' : 'bg-cyan-500/[0.07]'
-                    }`}
-                    style={{ width: `${percent}%` }}
-                  />
-                  <div className="relative z-10 flex items-stretch overflow-hidden p-0">
+                  <div className="flex items-stretch overflow-hidden p-0">
                     {option.imageUrl ? (
                       <div className="relative shrink-0 w-14 self-stretch min-h-[2.75rem]">
                         <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
@@ -1146,11 +1149,23 @@ function OpinionPollCard({
                         <span className="text-xs font-semibold text-cyan-400">{option.orderIndex + 1}</span>
                       </div>
                     )}
-                    <div className="flex min-w-0 flex-1 items-center gap-2 py-2 pl-2.5 pr-1.5">
-                      <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? 'font-semibold' : ''}`}>{option.name}</span>
-                      <span className={`shrink-0 text-xs font-mono font-semibold ${
-                        isLeading ? 'text-cyan-400' : 'text-muted-foreground'
-                      }`}>{percent}%</span>
+                    <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? 'font-semibold' : ''}`}>{option.name}</span>
+                        {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
+                        <span className={`shrink-0 text-xs font-mono font-bold ${
+                          isLeading ? 'text-cyan-400' : 'text-muted-foreground'
+                        }`}>{percent}%</span>
+                      </div>
+                      <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ease-out ${
+                            isLeading ? 'bg-cyan-500' : isSelected ? 'bg-cyan-400/60' : 'bg-slate-600/50'
+                          }`}
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{(option.votes || 0).toLocaleString('en-US')} votes</p>
                     </div>
                   </div>
                 </div>

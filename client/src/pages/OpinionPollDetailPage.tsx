@@ -237,20 +237,28 @@ export default function OpinionPollDetailPage() {
                     setShowVoteChange(false);
                   }}
                   disabled={voteMutation.isPending}
-                  className={`w-full flex items-center gap-3 p-2 rounded-lg border border-border/50 bg-muted/30 text-sm font-medium transition-all duration-200 hover:border-cyan-500/60 hover:bg-cyan-500/10 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                  className={`w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-sm font-medium transition-all duration-200 hover:border-cyan-500/60 hover:bg-cyan-500/10 hover:ring-1 hover:ring-cyan-500/40 active:scale-[0.99] ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
                   data-testid={`button-vote-option-${option.id}`}
                 >
                   {option.imageUrl ? (
-                    <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                    <div className="relative shrink-0 w-14 self-stretch min-h-[2.75rem]">
+                      <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
+                    </div>
                   ) : (
-                    <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                    <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
                       <span className="text-sm font-semibold text-cyan-400">{option.orderIndex + 1}</span>
                     </div>
                   )}
-                  <span className="text-left">{option.name}</span>
-                  {option.personName && option.personName !== option.name && (
-                    <span className="text-xs text-muted-foreground">({option.personName})</span>
-                  )}
+                  <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
+                    <div className="flex items-center gap-1">
+                      <span className="min-w-0 flex-1 truncate text-left">{option.name}</span>
+                      {option.personName && option.personName !== option.name && (
+                        <span className="text-xs text-muted-foreground shrink-0">({option.personName})</span>
+                      )}
+                    </div>
+                    <div className="mt-1 h-1.5 rounded-full bg-slate-700/50" />
+                    <div className="mt-0.5 h-3" />
+                  </div>
                 </button>
               ))}
 
@@ -273,34 +281,41 @@ export default function OpinionPollDetailPage() {
                 return (
                   <div
                     key={option.id}
-                    className={`relative rounded-lg border overflow-hidden transition-all duration-300 ${
+                    className={`rounded-lg border overflow-hidden transition-all duration-300 ${
                       isSelected
                         ? 'border-cyan-500/60 bg-cyan-500/[0.08]'
                         : 'border-border/30 bg-muted/20'
                     }`}
                   >
-                    <div
-                      className={`absolute inset-y-0 left-0 transition-all duration-700 ease-out ${
-                        isSelected ? 'bg-cyan-500/15' : 'bg-cyan-500/[0.07]'
-                      }`}
-                      style={{ width: `${percent}%` }}
-                    />
-                    <div className="relative flex items-center gap-3 p-2">
+                    <div className="flex items-stretch overflow-hidden p-0">
                       {option.imageUrl ? (
-                        <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                        <div className="relative shrink-0 w-14 self-stretch min-h-[2.75rem]">
+                          <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
+                        </div>
                       ) : (
-                        <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
+                        <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
                           <span className="text-sm font-semibold text-cyan-400">{option.orderIndex + 1}</span>
                         </div>
                       )}
-                      <span className={`text-sm flex-1 min-w-0 truncate ${isSelected ? "font-semibold" : ""}`}>
-                        {option.name}
-                      </span>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className={`text-sm font-mono font-bold ${isLeading ? 'text-cyan-400' : 'text-muted-foreground'}`}>
-                          {percent}%
-                        </span>
-                        {isSelected && <CheckCircle2 className="h-4 w-4 text-cyan-400 shrink-0" />}
+                      <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? "font-semibold" : ""}`}>
+                            {option.name}
+                          </span>
+                          {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
+                          <span className={`shrink-0 text-xs font-mono font-bold ${isLeading ? 'text-cyan-400' : 'text-muted-foreground'}`}>
+                            {percent}%
+                          </span>
+                        </div>
+                        <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-700 ease-out ${
+                              isLeading ? 'bg-cyan-500' : isSelected ? 'bg-cyan-400/60' : 'bg-slate-600/50'
+                            }`}
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{(option.votes || 0).toLocaleString("en-US")} votes</p>
                       </div>
                     </div>
                   </div>
@@ -324,54 +339,43 @@ export default function OpinionPollDetailPage() {
         </Card>
 
         <Card className="p-5 mb-6" data-testid="section-results">
-          <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
+          <h2 className="text-lg font-serif font-bold mb-5 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-cyan-500" />
             Results
           </h2>
 
-          <div className="flex flex-col gap-2.5">
-            {options.map((option: any) => {
-              const percent = option.percent || 0;
-              const maxPercent = Math.max(...options.map((o: any) => o.percent || 0), 0);
-              const isLeading = percent === maxPercent && percent > 0;
-              const isUserVote = poll.userVote === option.id;
-              return (
-                <div
-                  key={option.id}
-                  className={`relative rounded-lg border overflow-hidden ${
-                    isUserVote
-                      ? 'border-cyan-500/60 bg-cyan-500/[0.08]'
-                      : 'border-border/30 bg-muted/20'
-                  }`}
-                  data-testid={`opinion-poll-result-${option.id}`}
-                >
-                  <div
-                    className={`absolute inset-y-0 left-0 transition-all duration-700 ease-out ${
-                      isUserVote ? 'bg-cyan-500/15' : 'bg-cyan-500/[0.07]'
-                    }`}
-                    style={{ width: `${percent}%` }}
-                  />
-                  <div className="relative flex items-center gap-3 p-2">
-                    {option.imageUrl ? (
-                      <img src={option.imageUrl} alt={option.name} className="w-10 h-10 rounded-lg object-cover shrink-0" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-                        <span className="text-sm font-semibold text-cyan-400">{option.orderIndex + 1}</span>
-                      </div>
-                    )}
-                    <span className={`text-sm flex-1 min-w-0 truncate ${isUserVote ? "font-semibold" : ""}`}>
+          <div className="flex flex-col gap-3">
+            {[...options]
+              .sort((a: any, b: any) => (b.percent || 0) - (a.percent || 0))
+              .map((option: any) => {
+                const percent = option.percent || 0;
+                const maxPercent = Math.max(...options.map((o: any) => o.percent || 0), 0);
+                const isLeading = percent === maxPercent && percent > 0;
+                const isUserVote = poll.userVote === option.id;
+                return (
+                  <div key={option.id} className="flex items-center gap-3" data-testid={`opinion-poll-result-${option.id}`}>
+                    <span className={`w-[38%] sm:w-[30%] text-sm truncate shrink-0 ${isUserVote ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
                       {option.name}
                     </span>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex-1 h-6 rounded bg-slate-800/60 overflow-hidden">
+                      <div
+                        className={`h-full rounded transition-all duration-700 ease-out ${
+                          isLeading ? 'bg-cyan-500' : isUserVote ? 'bg-cyan-400/60' : 'bg-slate-600/50'
+                        }`}
+                        style={{ width: `${Math.max(percent, 1)}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 w-[72px] justify-end">
                       <span className={`text-sm font-mono font-bold ${isLeading ? 'text-cyan-400' : 'text-muted-foreground'}`} data-testid={`text-percent-${option.id}`}>
                         {percent}%
                       </span>
-                      <span className="text-xs text-muted-foreground w-16 text-right">{(option.votes || 0).toLocaleString("en-US")} votes</span>
                     </div>
+                    <span className="text-xs text-muted-foreground shrink-0 w-[56px] text-right hidden sm:block">
+                      {(option.votes || 0).toLocaleString("en-US")}
+                    </span>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
 
           <div className="mt-4 pt-3 border-t border-border/30 text-center">
