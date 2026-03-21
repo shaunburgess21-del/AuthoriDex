@@ -96,6 +96,156 @@ export async function generateWeeklyUpDown(): Promise<number> {
   return created;
 }
 
+/**
+ * Ensure the current week's Up/Down market exists for a single inductee (idempotent).
+ */
+export async function ensureUpDownMarketForInductee(person: {
+  id: string;
+  name: string;
+  category: string;
+}): Promise<"created" | "skipped" | "failed"> {
+  const { monday, sunday, weekNumber } = getWeekContext();
+  const [already] = await db
+    .select({ id: predictionMarkets.id })
+    .from(predictionMarkets)
+    .where(
+      and(
+        eq(predictionMarkets.marketType, "updown"),
+        eq(predictionMarkets.weekNumber, weekNumber),
+        eq(predictionMarkets.personId, person.id),
+      ),
+    )
+    .limit(1);
+  if (already) return "skipped";
+
+  const snapRows = await db.execute(sql`
+    SELECT fame_index, timestamp
+    FROM trend_snapshots
+    WHERE person_id = ${person.id}
+    ORDER BY timestamp DESC
+    LIMIT 1
+  `);
+  let openScore: { score: number; snapshotAt: string } | undefined;
+  const row = (snapRows.rows || [])[0] as
+    | { fame_index: unknown; timestamp: unknown }
+    | undefined;
+  if (row?.fame_index != null) {
+    openScore = {
+      score: Number(row.fame_index),
+      snapshotAt: new Date(String(row.timestamp)).toISOString(),
+    };
+  }
+
+  const slug = `updown-${person.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-week-${weekNumber}`;
+  const values = {
+    marketType: "updown" as const,
+    title: `${person.name}: Up or Down?`,
+    slug,
+    personId: person.id,
+    category: normalizeMarketCategory(person.category),
+    visibility: "live" as const,
+    status: "OPEN" as const,
+    startAt: monday,
+    endAt: sunday,
+    weekNumber,
+    seedParticipants: 0,
+    seedVolume: "0",
+    metadata: openScore
+      ? {
+          openingScore: {
+            personId: person.id,
+            score: openScore.score,
+            snapshotAt: openScore.snapshotAt,
+          },
+        }
+      : undefined,
+    seedConfig: {
+      enabled: true,
+      targetParticipantsMin: 30,
+      targetParticipantsMax: 80,
+      targetPoolMin: 5000,
+      targetPoolMax: 15000,
+      distributionBias: { up: 55, down: 45 },
+    },
+    featured: false,
+  };
+
+  try {
+    const [market] = await db.insert(predictionMarkets).values(values).returning();
+    await db.insert(marketEntries).values([
+      { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0, seedCount: 0 },
+      { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1, seedCount: 0 },
+    ]);
+    return "created";
+  } catch (slugErr: any) {
+    if (slugErr.code === "23505") {
+      try {
+        const slugRetry = `${slug}-${randomUUID().slice(0, 6)}`;
+        const [market] = await db
+          .insert(predictionMarkets)
+          .values({ ...values, slug: slugRetry })
+          .returning();
+        await db.insert(marketEntries).values([
+          { marketId: market.id, entryType: "custom", label: "Up", displayOrder: 0, seedCount: 0 },
+          { marketId: market.id, entryType: "custom", label: "Down", displayOrder: 1, seedCount: 0 },
+        ]);
+        return "created";
+      } catch {
+        log(`[MarketGenerator] ensureUpDown retry failed for ${person.name}`);
+        return "failed";
+      }
+    }
+    log(`[MarketGenerator] ensureUpDown error for ${person.name}: ${slugErr.message}`);
+    return "failed";
+  }
+}
+
+/**
+ * If an OPEN gainer market exists for this week + category, add the inductee if missing.
+ */
+export async function backfillGainerMarketForInductee(person: {
+  id: string;
+  name: string;
+  category: string;
+  avatar?: string | null;
+}): Promise<"added" | "skipped" | "no_market"> {
+  const { weekNumber } = getWeekContext();
+  const cat = normalizeMarketCategory(person.category || "misc");
+
+  const [existingMarket] = await db
+    .select({ id: predictionMarkets.id })
+    .from(predictionMarkets)
+    .where(
+      and(
+        eq(predictionMarkets.marketType, "gainer"),
+        eq(predictionMarkets.weekNumber, weekNumber),
+        eq(predictionMarkets.status, "OPEN"),
+        eq(predictionMarkets.category, cat),
+      ),
+    )
+    .limit(1);
+
+  if (!existingMarket) return "no_market";
+
+  const currentEntries = await db
+    .select({ personId: marketEntries.personId })
+    .from(marketEntries)
+    .where(eq(marketEntries.marketId, existingMarket.id));
+  if (currentEntries.some((e) => e.personId === person.id)) return "skipped";
+
+  const startOrder = currentEntries.length;
+  await db.insert(marketEntries).values({
+    marketId: existingMarket.id,
+    entryType: "person",
+    personId: person.id,
+    label: person.name,
+    displayOrder: startOrder,
+    seedCount: 0,
+    imageUrl: person.avatar ?? null,
+  });
+  return "added";
+}
+
 export async function generateWeeklyJackpot(): Promise<number> {
   const { monday, sunday, weekNumber } = getWeekContext();
   const people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));

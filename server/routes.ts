@@ -44,6 +44,8 @@ import { getMediastackBudgetSummary } from "./providers/mediastack";
 import pLimit from "p-limit";
 import { buildOpeningScores } from "./native-markets/openingScores";
 import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext } from "./jobs/market-generator";
+import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
+import { runPostInductionOnboarding } from "./services/induction-onboarding";
 import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
@@ -2367,166 +2369,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ============ VALUE VOTING (UNDERRATED/OVERRATED) ============
   // New unified value voting system for the Value leaderboard tab
-
-  // Helper function to recompute celebrity metrics after a vote
-  async function recomputeCelebrityMetrics(celebrityId: string) {
-    try {
-      // First, get current seed values from celebrity_metrics (pre-launch baseline)
-      const [existingMetrics] = await db
-        .select({
-          seedApprovalCount: celebrityMetrics.seedApprovalCount,
-          seedApprovalSum: celebrityMetrics.seedApprovalSum,
-          seedUnderratedCount: celebrityMetrics.seedUnderratedCount,
-          seedOverratedCount: celebrityMetrics.seedOverratedCount,
-          seedFairlyRatedCount: celebrityMetrics.seedFairlyRatedCount,
-        })
-        .from(celebrityMetrics)
-        .where(eq(celebrityMetrics.celebrityId, celebrityId))
-        .limit(1);
-
-      const seedApprovalCount = existingMetrics?.seedApprovalCount || 0;
-      const seedApprovalSum = existingMetrics?.seedApprovalSum || 0;
-      const seedUnderratedCount = existingMetrics?.seedUnderratedCount || 0;
-      const seedOverratedCount = existingMetrics?.seedOverratedCount || 0;
-      const seedFairlyRatedCount = existingMetrics?.seedFairlyRatedCount || 0;
-
-      // REAL approval votes: aggregate in DB (avoids Supabase 1000-row limit)
-      const [approvalAgg] = await db
-        .select({
-          cnt: sql<number>`cast(count(*) as int)`,
-          sumRating: sql<number>`coalesce(sum(${userVotes.rating}), 0)::double precision`,
-        })
-        .from(userVotes)
-        .where(eq(userVotes.personId, celebrityId));
-
-      const realApprovalCount = Number(approvalAgg?.cnt ?? 0);
-      const realApprovalSum = Number(approvalAgg?.sumRating ?? 0);
-
-      // Calculate DISPLAY totals: seed + real
-      const totalApprovalCount = seedApprovalCount + realApprovalCount;
-      const totalApprovalSum = seedApprovalSum + realApprovalSum;
-
-      let approvalVotesCount = totalApprovalCount;
-      let approvalAvgRating: number | null = null;
-      let approvalPct: number | null = null;
-
-      if (totalApprovalCount > 0) {
-        approvalAvgRating = totalApprovalSum / totalApprovalCount;
-        // Convert 1-5 scale to 0-100%: ((avg_rating - 1) / 4) * 100
-        // This maps 1 star -> 0%, 5 stars -> 100%
-        approvalPct = Math.round(((approvalAvgRating - 1) / 4) * 100);
-      }
-
-      // Get REAL value votes from celebrity_value_votes (local DB)
-      const underratedResult = await db
-        .select({ count: count() })
-        .from(celebrityValueVotes)
-        .where(and(
-          eq(celebrityValueVotes.celebrityId, celebrityId),
-          eq(celebrityValueVotes.vote, 'underrated')
-        ));
-
-      const overratedResult = await db
-        .select({ count: count() })
-        .from(celebrityValueVotes)
-        .where(and(
-          eq(celebrityValueVotes.celebrityId, celebrityId),
-          eq(celebrityValueVotes.vote, 'overrated')
-        ));
-
-      const fairlyRatedResult = await db
-        .select({ count: count() })
-        .from(celebrityValueVotes)
-        .where(and(
-          eq(celebrityValueVotes.celebrityId, celebrityId),
-          eq(celebrityValueVotes.vote, 'fairly_rated')
-        ));
-
-      const realUnderratedCount = Number(underratedResult[0]?.count || 0);
-      const realOverratedCount = Number(overratedResult[0]?.count || 0);
-      const realFairlyRatedCount = Number(fairlyRatedResult[0]?.count || 0);
-
-      // Calculate DISPLAY totals: seed + real
-      const underratedVotesCount = seedUnderratedCount + realUnderratedCount;
-      const overratedVotesCount = seedOverratedCount + realOverratedCount;
-      const fairlyRatedVotesCount = seedFairlyRatedCount + realFairlyRatedCount;
-      const totalValueVotes = underratedVotesCount + overratedVotesCount + fairlyRatedVotesCount;
-
-      let underratedPct: number | null = null;
-      let overratedPct: number | null = null;
-      let fairlyRatedPct: number | null = null;
-      let valueScore: number | null = null;
-
-      if (totalValueVotes > 0) {
-        underratedPct = Math.round((underratedVotesCount / totalValueVotes) * 100);
-        overratedPct = Math.round((overratedVotesCount / totalValueVotes) * 100);
-        fairlyRatedPct = Math.round((fairlyRatedVotesCount / totalValueVotes) * 100);
-        valueScore = underratedPct - overratedPct; // -100 to +100
-      }
-
-      // Get current trend score from trending_people
-      const [trendData] = await db
-        .select({ trendScore: trendingPeople.trendScore, fameIndex: trendingPeople.fameIndex })
-        .from(trendingPeople)
-        .where(eq(trendingPeople.id, celebrityId))
-        .limit(1);
-
-      // Upsert celebrity_metrics (preserve seed values, update display values)
-      await db
-        .insert(celebrityMetrics)
-        .values({
-          celebrityId,
-          trendScore: trendData?.trendScore || 0,
-          fameIndex: trendData?.fameIndex || 0,
-          seedApprovalCount,
-          seedApprovalSum,
-          approvalVotesCount,
-          approvalAvgRating,
-          approvalPct,
-          seedUnderratedCount,
-          seedOverratedCount,
-          seedFairlyRatedCount,
-          underratedVotesCount,
-          overratedVotesCount,
-          fairlyRatedVotesCount,
-          underratedPct,
-          overratedPct,
-          fairlyRatedPct,
-          valueScore,
-          updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: celebrityMetrics.celebrityId,
-          set: {
-            trendScore: trendData?.trendScore || 0,
-            fameIndex: trendData?.fameIndex || 0,
-            // Don't overwrite seed values - they stay fixed
-            approvalVotesCount,
-            approvalAvgRating,
-            approvalPct,
-            underratedVotesCount,
-            overratedVotesCount,
-            fairlyRatedVotesCount,
-            underratedPct,
-            overratedPct,
-            fairlyRatedPct,
-            valueScore,
-            updatedAt: new Date(),
-          },
-        });
-
-      return {
-        approvalPct,
-        underratedPct,
-        overratedPct,
-        fairlyRatedPct,
-        valueScore,
-      };
-    } catch (error) {
-      console.error("[recomputeCelebrityMetrics] Error:", error);
-      throw error;
-    }
-  }
 
   // POST /api/celebrity/:id/value-vote - Cast underrated/overrated vote
   app.post("/api/celebrity/:id/value-vote", requireAuth, async (req: AuthRequest, res) => {
@@ -8887,13 +8729,34 @@ Aim for 3-5 substantive paragraphs separated by blank lines. Be factual, balance
       }
 
       const [existing] = await db
-        .select({ id: opinionPollVotes.id })
+        .select({
+          id: opinionPollVotes.id,
+          optionId: opinionPollVotes.optionId,
+          createdAt: opinionPollVotes.createdAt,
+          updatedAt: opinionPollVotes.updatedAt,
+        })
         .from(opinionPollVotes)
         .where(and(eq(opinionPollVotes.pollId, poll.id), eq(opinionPollVotes.userId, userId)))
         .limit(1);
 
+      const sameUtcDay = (a: Date, b: Date) =>
+        a.getUTCFullYear() === b.getUTCFullYear() &&
+        a.getUTCMonth() === b.getUTCMonth() &&
+        a.getUTCDate() === b.getUTCDate();
+
       let xpResult;
       if (existing) {
+        if (existing.optionId !== optionId) {
+          const created = new Date(existing.createdAt);
+          const updated = new Date(existing.updatedAt);
+          const now = new Date();
+          const alreadyChangedBefore = updated.getTime() > created.getTime() + 2000;
+          if (alreadyChangedBefore && sameUtcDay(updated, now)) {
+            return res.status(403).json({
+              error: "You can only change your vote once per day for this poll.",
+            });
+          }
+        }
         await db.update(opinionPollVotes)
           .set({ optionId, updatedAt: new Date() })
           .where(eq(opinionPollVotes.id, existing.id));
@@ -13745,6 +13608,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }).onConflictDoNothing();
 
       await db.update(inductionCandidates).set({ isActive: false }).where(eq(inductionCandidates.id, id));
+
+      void runPostInductionOnboarding({
+        personId,
+        displayName: candidate.displayName,
+        category: candidate.category,
+        imageSlug: candidate.imageSlug,
+      });
 
       res.json({ success: true, personId, message: "Candidate approved and added to leaderboard" });
     } catch (error: any) {

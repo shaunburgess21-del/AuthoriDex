@@ -46,6 +46,15 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRoute, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -367,31 +376,79 @@ function ProfileMatchupCard({
   );
 }
 
+function parseOpinionPollVoteError(err: unknown): string {
+  if (err instanceof Error && err.message) {
+    const jsonMatch = err.message.match(/^\d+:\s*(\{[\s\S]*\})\s*$/);
+    if (jsonMatch) {
+      try {
+        const j = JSON.parse(jsonMatch[1]) as { error?: string };
+        if (j.error) return j.error;
+      } catch {
+        /* ignore */
+      }
+    }
+    return err.message;
+  }
+  return "Something went wrong. Please try again.";
+}
+
 function OpinionPollCardProfile({
   poll,
   onVote,
 }: {
   poll: OpinionPoll;
-  onVote: (pollSlug: string, optionId: string) => void;
+  onVote: (pollSlug: string, optionId: string) => Promise<void>;
 }) {
+  const { toast } = useToast();
   const [voted, setVoted] = useState<string | null>(poll.userVote || null);
+  const [changeDialogOpen, setChangeDialogOpen] = useState(false);
+  const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
   const options = poll.options || [];
   const visibleOptions = options.slice(0, 4);
   const remainingCount = options.length - 4;
   const totalVotes = poll.totalVotes || 0;
   const maxPercent = Math.max(...visibleOptions.map((o) => totalVotes > 0 ? Math.round((o.votes / totalVotes) * 100) : 0), 0);
 
-  const handleVote = (optionId: string, e: React.MouseEvent) => {
+  useEffect(() => {
+    setVoted(poll.userVote ?? null);
+  }, [poll.userVote]);
+
+  const handleVote = async (optionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!voted) {
-      setVoted(optionId);
-      onVote(poll.slug, optionId);
+      try {
+        await onVote(poll.slug, optionId);
+        setVoted(optionId);
+      } catch (err) {
+        toast({
+          title: "Could not record vote",
+          description: parseOpinionPollVoteError(err),
+          variant: "destructive",
+        });
+      }
     }
   };
 
-  const handleChangeVote = (e: React.MouseEvent) => {
+  const openChangeDialog = (option: (typeof options)[0], e: React.MouseEvent) => {
     e.stopPropagation();
-    setVoted(null);
+    setPendingOption({ id: option.id, name: option.name });
+    setChangeDialogOpen(true);
+  };
+
+  const confirmChangeVote = async () => {
+    if (!pendingOption) return;
+    try {
+      await onVote(poll.slug, pendingOption.id);
+      setVoted(pendingOption.id);
+      setChangeDialogOpen(false);
+      setPendingOption(null);
+    } catch (err) {
+      toast({
+        title: "Could not change vote",
+        description: parseOpinionPollVoteError(err),
+        variant: "destructive",
+      });
+    }
   };
 
   const hasVoted = !!voted;
@@ -406,7 +463,9 @@ function OpinionPollCardProfile({
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5 text-cyan-400" />
-            <span>{totalVotes.toLocaleString("en-US")} votes</span>
+            <span className={hasVoted ? "" : "text-slate-600"}>
+              {hasVoted ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
+            </span>
           </div>
           <CategoryPill category={poll.category || ""} data-testid={`badge-opinion-category-${poll.id}`} />
         </div>
@@ -455,11 +514,12 @@ function OpinionPollCardProfile({
                   </div>
                 )}
                 <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
-                  <div className="flex items-center">
+                  <div className="flex items-center gap-1.5">
                     <span className="min-w-0 flex-1 truncate text-sm">{option.name}</span>
+                    <span className="shrink-0 text-xs font-mono font-bold text-slate-600">%</span>
                   </div>
                   <div className="mt-1 h-1.5 rounded-full bg-slate-700/50" />
-                  <div className="mt-0.5 h-3" />
+                  <p className="text-[10px] text-slate-600 mt-0.5">Votes</p>
                 </div>
               </button>
             ))}
@@ -477,46 +537,60 @@ function OpinionPollCardProfile({
               const isSelected = voted === option.id;
               const percent = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
               const isLeading = percent === maxPercent && percent > 0;
-              return (
-                <div
-                  key={option.id}
-                  className={`rounded-lg border overflow-hidden transition-all duration-300 ${
-                    isSelected
-                      ? 'border-cyan-500/60 bg-cyan-500/[0.08]'
-                      : 'border-border/30 bg-muted/20'
-                  }`}
-                  data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
-                >
-                  <div className="flex items-stretch overflow-hidden p-0">
-                    {option.imageUrl ? (
-                      <div className="relative shrink-0 w-14 self-stretch min-h-[2.75rem]">
-                        <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
-                      </div>
-                    ) : (
-                      <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
-                        <ListChecks className="h-4 w-4 text-cyan-400" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? 'font-semibold' : ''}`}>{option.name}</span>
-                        {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
-                        <span className={`shrink-0 text-xs font-mono font-bold ${
-                          isLeading ? 'text-cyan-400' : 'text-muted-foreground'
-                        }`}>{percent}%</span>
-                      </div>
-                      <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-700 ease-out ${
-                            isLeading ? 'bg-cyan-500' : isSelected ? 'bg-cyan-400/60' : 'bg-slate-600/50'
-                          }`}
-                          style={{ width: `${percent}%` }}
-                        />
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{(option.votes || 0).toLocaleString("en-US")} votes</p>
+              const rowClass = `rounded-lg border overflow-hidden transition-all duration-300 ${
+                isSelected
+                  ? 'border-cyan-500/60 bg-cyan-500/[0.08]'
+                  : 'border-border/30 bg-muted/20'
+              }`;
+              const rowInner = (
+                <div className="flex items-stretch overflow-hidden p-0">
+                  {option.imageUrl ? (
+                    <div className="relative shrink-0 w-14 self-stretch min-h-[2.75rem]">
+                      <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
                     </div>
+                  ) : (
+                    <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
+                      <ListChecks className="h-4 w-4 text-cyan-400" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? 'font-semibold' : ''}`}>{option.name}</span>
+                      {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
+                      <span className={`shrink-0 text-xs font-mono font-bold ${
+                        isLeading ? 'text-cyan-400' : 'text-muted-foreground'
+                      }`}>{percent}%</span>
+                    </div>
+                    <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ease-out ${
+                          isLeading ? 'bg-cyan-500' : isSelected ? 'bg-cyan-400/60' : 'bg-slate-600/50'
+                        }`}
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{(option.votes || 0).toLocaleString("en-US")} votes</p>
                   </div>
                 </div>
+              );
+              return isSelected ? (
+                <div
+                  key={option.id}
+                  className={rowClass}
+                  data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
+                >
+                  {rowInner}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  key={option.id}
+                  className={`${rowClass} w-full text-left cursor-pointer hover:border-cyan-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30`}
+                  onClick={(e) => openChangeDialog(option, e)}
+                  data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
+                >
+                  {rowInner}
+                </button>
               );
             })}
             {remainingCount > 0 && (
@@ -531,20 +605,38 @@ function OpinionPollCardProfile({
                 <Zap className="h-3 w-3" />
                 <span>{totalVotes.toLocaleString("en-US")} total votes</span>
               </div>
-              <button
-                onClick={handleChangeVote}
-                className="flex items-center gap-1.5 text-xs"
-                data-testid={`button-change-vote-opinion-${poll.id}`}
-              >
-                <span className="px-2 py-0.5 rounded-full font-medium border bg-cyan-500/10 border-cyan-500/40 text-cyan-400" data-testid={`badge-voted-opinion-${poll.id}`}>
-                  You voted
-                </span>
-                <span className="text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors">Change</span>
-              </button>
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium border bg-cyan-500/10 border-cyan-500/40 text-cyan-400" data-testid={`badge-voted-opinion-${poll.id}`}>
+                You voted
+              </span>
             </div>
           </div>
         )}
       </Card>
+
+      <AlertDialog
+        open={changeDialogOpen}
+        onOpenChange={(open) => {
+          setChangeDialogOpen(open);
+          if (!open) setPendingOption(null);
+        }}
+      >
+        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change your vote?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You&apos;re switching to{" "}
+              <span className="font-medium text-foreground">{pendingOption?.name ?? "this option"}</span>. You can
+              change your vote once per day on this poll.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+            <Button type="button" className="bg-cyan-600 hover:bg-cyan-700" onClick={() => void confirmChangeVote()}>
+              Change vote
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -1708,12 +1800,8 @@ export default function PersonDetailPage() {
                       key={poll.id}
                       poll={poll}
                       onVote={async (pollSlug, optionId) => {
-                        try {
-                          await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
-                          queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
-                        } catch (err: any) {
-                          console.error("Opinion poll vote error:", err);
-                        }
+                        await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                        queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
                       }}
                     />
                   ))}

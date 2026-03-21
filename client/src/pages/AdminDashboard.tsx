@@ -472,7 +472,7 @@ function RelatedCelebritiesField({
   };
 
   return (
-    <div className="space-y-2 relative">
+    <div className="space-y-2 relative min-w-0 max-w-full">
       <Label className="text-xs text-muted-foreground">Display on Profiles (optional)</Label>
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -6884,22 +6884,22 @@ export default function AdminDashboard() {
 
       {/* Opinion Poll Create/Edit Dialog */}
       <Dialog open={showOpinionPollModal} onOpenChange={setShowOpinionPollModal}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto overflow-x-auto">
+        <DialogContent className="max-w-xl w-[min(36rem,calc(100vw-2rem))] max-h-[90vh] overflow-y-auto overflow-x-hidden min-w-0 p-6">
           <DialogHeader>
             <DialogTitle>{editingOpinionPoll ? "Edit Opinion Poll" : "Create Opinion Poll"}</DialogTitle>
             <DialogDescription>
               {editingOpinionPoll ? "Update opinion poll details and options" : "Create a multi-option poll for community voting"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
+          <div className="space-y-4 py-4 min-w-0 max-w-full">
+            <div className="grid grid-cols-2 gap-4 min-w-0">
+              <div className="space-y-2 min-w-0">
                 <Label>Visibility</Label>
                 <Select
                   value={opinionPollForm.visibility}
                   onValueChange={(value) => setOpinionPollForm(prev => ({ ...prev, visibility: value as any }))}
                 >
-                  <SelectTrigger data-testid="select-opinion-poll-visibility">
+                  <SelectTrigger className="min-w-0 w-full" data-testid="select-opinion-poll-visibility">
                     <SelectValue placeholder="Select visibility" />
                   </SelectTrigger>
                   <SelectContent>
@@ -6909,13 +6909,13 @@ export default function AdminDashboard() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0">
                 <Label>Category</Label>
                 <Select
                   value={opinionPollForm.category}
                   onValueChange={(value) => setOpinionPollForm(prev => ({ ...prev, category: value }))}
                 >
-                  <SelectTrigger data-testid="select-opinion-poll-modal-category">
+                  <SelectTrigger className="min-w-0 w-full" data-testid="select-opinion-poll-modal-category">
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
@@ -6934,7 +6934,7 @@ export default function AdminDashboard() {
                 </Select>
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0">
               <Label>Title</Label>
               <Input
                 value={opinionPollForm.title}
@@ -6943,7 +6943,7 @@ export default function AdminDashboard() {
                 data-testid="input-opinion-poll-title"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0">
               <Label>Slug</Label>
               <Input
                 value={opinionPollForm.slug}
@@ -6952,8 +6952,8 @@ export default function AdminDashboard() {
                 data-testid="input-opinion-poll-slug"
               />
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
+            <div className="space-y-2 min-w-0">
+              <div className="flex items-center justify-between gap-2 min-w-0">
                 <Label>Subject / Question</Label>
                 {editingOpinionPoll && (
                   <Button
@@ -6976,12 +6976,12 @@ export default function AdminDashboard() {
                 value={opinionPollForm.description}
                 onChange={(e) => setOpinionPollForm(prev => ({ ...prev, description: e.target.value }))}
                 placeholder="The main question shown on the poll card"
-                className="resize-none"
+                className="resize-none min-w-0 max-w-full"
                 data-testid="input-opinion-poll-description"
               />
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
+            <div className="space-y-2 min-w-0">
+              <div className="flex items-center justify-between gap-2 min-w-0">
                 <Label>Description (optional)</Label>
                 {editingOpinionPoll && (
                   <Button
@@ -7005,10 +7005,11 @@ export default function AdminDashboard() {
                 onChange={(e) => setOpinionPollForm(prev => ({ ...prev, summary: e.target.value }))}
                 placeholder="Additional context or details"
                 rows={8}
+                className="min-w-0 max-w-full"
                 data-testid="input-opinion-poll-summary"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0">
               <Label>Image</Label>
               <UploadImageInput
                 value={opinionPollForm.imageUrl}
@@ -7050,8 +7051,8 @@ export default function AdminDashboard() {
                 </Button>
               </div>
               {opinionPollForm.options.map((opt, idx) => (
-                <div key={idx} className="flex items-start gap-2 p-3 rounded-lg border overflow-hidden">
-                  <div className="flex-1 min-w-0 space-y-2">
+                <div key={idx} className="flex items-start gap-2 p-3 rounded-lg border overflow-hidden min-w-0 max-w-full">
+                  <div className="flex-1 min-w-0 space-y-2 overflow-hidden">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium text-muted-foreground w-4 shrink-0">{idx + 1}</span>
                       <Input

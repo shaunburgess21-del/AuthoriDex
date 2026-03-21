@@ -7,6 +7,15 @@ import { sharePage } from "@/lib/share";
 import { UserMenu } from "@/components/UserMenu";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,6 +40,22 @@ import {
   Info,
 } from "lucide-react";
 
+function parseOpinionPollVoteError(err: unknown): string {
+  if (err instanceof Error && err.message) {
+    const jsonMatch = err.message.match(/^\d+:\s*(\{[\s\S]*\})\s*$/);
+    if (jsonMatch) {
+      try {
+        const j = JSON.parse(jsonMatch[1]) as { error?: string };
+        if (j.error) return j.error;
+      } catch {
+        /* ignore */
+      }
+    }
+    return err.message;
+  }
+  return "Something went wrong. Please try again.";
+}
+
 export default function OpinionPollDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const [, setLocation] = useLocation();
@@ -39,7 +64,8 @@ export default function OpinionPollDetailPage() {
   const queryClient = useQueryClient();
   const [commentText, setCommentText] = useState("");
   const [commentSort, setCommentSort] = useState<"top" | "newest">("top");
-  const [showVoteChange, setShowVoteChange] = useState(false);
+  const [changeDialogOpen, setChangeDialogOpen] = useState(false);
+  const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
 
   const { data: poll, isLoading } = useQuery<any>({
     queryKey: ["/api/opinion-polls", slug],
@@ -76,10 +102,25 @@ export default function OpinionPollDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] });
       toast({ title: "Vote recorded" });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to vote. Please sign in.", variant: "destructive" });
+    onError: (error) => {
+      toast({
+        title: "Could not vote",
+        description: parseOpinionPollVoteError(error),
+        variant: "destructive",
+      });
     },
   });
+
+  const confirmChangeVote = async () => {
+    if (!pendingOption) return;
+    try {
+      await voteMutation.mutateAsync(pendingOption.id);
+      setChangeDialogOpen(false);
+      setPendingOption(null);
+    } catch {
+      /* voteMutation.onError shows toast */
+    }
+  };
 
   const commentMutation = useMutation({
     mutationFn: async (body: string) => {
@@ -202,7 +243,11 @@ export default function OpinionPollDetailPage() {
             </span>
             <span className="flex items-center gap-1.5">
               <Users className="h-4 w-4" />
-              {(poll.totalVotes || 0).toLocaleString("en-US")} votes
+              <span className={hasVoted ? "" : "text-slate-600"}>
+                {hasVoted
+                  ? `${(poll.totalVotes || 0).toLocaleString("en-US")} votes`
+                  : "Votes"}
+              </span>
             </span>
             <Button
               variant="ghost"
@@ -223,7 +268,7 @@ export default function OpinionPollDetailPage() {
             Cast Your Vote
           </h2>
 
-          {(!hasVoted || showVoteChange) ? (
+          {!hasVoted ? (
             <div className="flex flex-col gap-2.5">
               {options.map((option: any) => (
                 <button
@@ -234,7 +279,6 @@ export default function OpinionPollDetailPage() {
                       return;
                     }
                     voteMutation.mutate(option.id);
-                    setShowVoteChange(false);
                   }}
                   disabled={voteMutation.isPending}
                   className={`w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-sm font-medium transition-all duration-200 hover:border-cyan-500/60 hover:bg-cyan-500/10 hover:ring-1 hover:ring-cyan-500/40 active:scale-[0.99] ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
@@ -250,14 +294,15 @@ export default function OpinionPollDetailPage() {
                     </div>
                   )}
                   <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <span className="min-w-0 flex-1 truncate text-left">{option.name}</span>
                       {option.personName && option.personName !== option.name && (
                         <span className="text-xs text-muted-foreground shrink-0">({option.personName})</span>
                       )}
+                      <span className="shrink-0 text-xs font-mono font-bold text-slate-600">%</span>
                     </div>
                     <div className="mt-1 h-1.5 rounded-full bg-slate-700/50" />
-                    <div className="mt-0.5 h-3" />
+                    <p className="text-[10px] text-slate-600 mt-0.5">Votes</p>
                   </div>
                 </button>
               ))}
@@ -278,65 +323,112 @@ export default function OpinionPollDetailPage() {
                 const percent = option.percent || 0;
                 const maxPercent = Math.max(...options.map((o: any) => o.percent || 0), 0);
                 const isLeading = percent === maxPercent && percent > 0;
-                return (
-                  <div
-                    key={option.id}
-                    className={`rounded-lg border overflow-hidden transition-all duration-300 ${
-                      isSelected
-                        ? 'border-cyan-500/60 bg-cyan-500/[0.08]'
-                        : 'border-border/30 bg-muted/20'
-                    }`}
-                  >
-                    <div className="flex items-stretch overflow-hidden p-0">
-                      {option.imageUrl ? (
-                        <div className="relative shrink-0 w-14 self-stretch min-h-[2.75rem]">
-                          <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
-                        </div>
-                      ) : (
-                        <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
-                          <span className="text-sm font-semibold text-cyan-400">{option.orderIndex + 1}</span>
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? "font-semibold" : ""}`}>
-                            {option.name}
-                          </span>
-                          {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
-                          <span className={`shrink-0 text-xs font-mono font-bold ${isLeading ? 'text-cyan-400' : 'text-muted-foreground'}`}>
-                            {percent}%
-                          </span>
-                        </div>
-                        <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-700 ease-out ${
-                              isLeading ? 'bg-cyan-500' : isSelected ? 'bg-cyan-400/60' : 'bg-slate-600/50'
-                            }`}
-                            style={{ width: `${percent}%` }}
-                          />
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">{(option.votes || 0).toLocaleString("en-US")} votes</p>
+                const rowClass = `rounded-lg border overflow-hidden transition-all duration-300 ${
+                  isSelected
+                    ? "border-cyan-500/60 bg-cyan-500/[0.08]"
+                    : "border-border/30 bg-muted/20"
+                }`;
+                const rowInner = (
+                  <div className="flex items-stretch overflow-hidden p-0">
+                    {option.imageUrl ? (
+                      <div className="relative shrink-0 w-14 self-stretch min-h-[2.75rem]">
+                        <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
                       </div>
+                    ) : (
+                      <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
+                        <span className="text-sm font-semibold text-cyan-400">{option.orderIndex + 1}</span>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? "font-semibold" : ""}`}>
+                          {option.name}
+                        </span>
+                        {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
+                        <span className={`shrink-0 text-xs font-mono font-bold ${isLeading ? "text-cyan-400" : "text-muted-foreground"}`}>
+                          {percent}%
+                        </span>
+                      </div>
+                      <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ease-out ${
+                            isLeading ? "bg-cyan-500" : isSelected ? "bg-cyan-400/60" : "bg-slate-600/50"
+                          }`}
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{(option.votes || 0).toLocaleString("en-US")} votes</p>
                     </div>
                   </div>
+                );
+                return isSelected ? (
+                  <div key={option.id} className={rowClass} data-testid={`opinion-poll-cast-result-${option.id}`}>
+                    {rowInner}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    key={option.id}
+                    disabled={voteMutation.isPending}
+                    className={`${rowClass} w-full text-left cursor-pointer hover:border-cyan-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : ""}`}
+                    onClick={() => {
+                      if (!user) {
+                        toast({ title: "Sign in required", description: "Please sign in to vote", variant: "destructive" });
+                        return;
+                      }
+                      setPendingOption({ id: option.id, name: option.name });
+                      setChangeDialogOpen(true);
+                    }}
+                    data-testid={`opinion-poll-cast-result-${option.id}`}
+                  >
+                    {rowInner}
+                  </button>
                 );
               })}
 
               <div className="flex items-center justify-between mt-1 pt-3 border-t border-border/30">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>You voted: <span className="font-semibold text-cyan-400">{votedOption?.name || "—"}</span></span>
+                  <span>
+                    You voted: <span className="font-semibold text-cyan-400">{votedOption?.name || "—"}</span>
+                  </span>
                 </div>
-                <button
-                  onClick={() => setShowVoteChange(true)}
-                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors"
-                  data-testid="button-change-vote"
-                >
-                  Change your vote
-                </button>
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium border bg-cyan-500/10 border-cyan-500/40 text-cyan-400">
+                  You voted
+                </span>
               </div>
             </div>
           )}
         </Card>
+
+        <AlertDialog
+          open={changeDialogOpen}
+          onOpenChange={(open) => {
+            setChangeDialogOpen(open);
+            if (!open) setPendingOption(null);
+          }}
+        >
+          <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Change your vote?</AlertDialogTitle>
+              <AlertDialogDescription>
+                You&apos;re switching to{" "}
+                <span className="font-medium text-foreground">{pendingOption?.name ?? "this option"}</span>. You can
+                change your vote once per day on this poll.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+              <Button
+                type="button"
+                className="bg-cyan-600 hover:bg-cyan-700"
+                onClick={() => void confirmChangeVote()}
+                disabled={voteMutation.isPending}
+              >
+                Change vote
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <Card className="p-5 mb-6" data-testid="section-results">
           <h2 className="text-lg font-serif font-bold mb-5 flex items-center gap-2">

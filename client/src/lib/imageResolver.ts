@@ -8,8 +8,8 @@ export type ImageContext = "tile" | "expanded" | "induction";
 
 /**
  * Returns candidate image URLs for a given slug and context.
- * All images now use a single bucket per source (celebrity-large for leaderboard/profile,
- * leaders-large for induction queue). No subfolders — files sit at [bucket]/[slug]/[filename].webp
+ * Leaderboard/profile use celebrity-large. Induction tries celebrity-large first (same bucket after consolidation),
+ * then leaders-large for legacy objects still in that bucket.
  */
 export function getImageCandidates(
   supabaseUrl: string,
@@ -21,6 +21,8 @@ export function getImageCandidates(
   const candidates: string[] = [];
 
   if (context === "induction") {
+    candidates.push(`${base}/${CELEBRITY_BUCKET}/${slug}/1.webp`);
+    candidates.push(`${base}/${CELEBRITY_BUCKET}/${slug}/2.webp`);
     candidates.push(`${base}/${LEADERS_BUCKET}/${slug}/1.webp`);
     candidates.push(`${base}/${LEADERS_BUCKET}/${slug}/2.webp`);
     candidates.push(`${base}/celebrity_images/${slug}/1.png`);

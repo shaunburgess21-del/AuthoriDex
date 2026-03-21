@@ -152,9 +152,9 @@ export function UploadImageInput({
   }, [onChange]);
 
   return (
-    <div className="space-y-2" data-testid="upload-image-input">
+    <div className="space-y-2 min-w-0 max-w-full" data-testid="upload-image-input">
       <div
-        className={`flex items-center gap-2 ${dragOver ? "ring-2 ring-cyan-500/50 rounded-md" : ""}`}
+        className={`flex min-w-0 max-w-full items-center gap-2 ${dragOver ? "ring-2 ring-cyan-500/50 rounded-md" : ""}`}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
@@ -164,7 +164,7 @@ export function UploadImageInput({
           onChange={(e) => { onChange(e.target.value); setError(null); }}
           placeholder={placeholder}
           disabled={disabled || uploading}
-          className="flex-1"
+          className="min-w-0 flex-1"
           data-testid="input-image-url"
         />
         <Button
@@ -219,7 +219,7 @@ export function UploadImageInput({
       )}
 
       {value && !uploading && !hidePreview && (
-        <div className="flex items-center gap-3 p-2 rounded-md bg-white/5 border border-white/10" data-testid="image-preview">
+        <div className="flex min-w-0 max-w-full items-center gap-3 p-2 rounded-md bg-white/5 border border-white/10" data-testid="image-preview">
           <div className="h-12 w-12 rounded overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
             <img
               src={value}
