@@ -3,10 +3,11 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
-import { ArrowUp, ArrowDown, Minus, Users, Loader2 } from "lucide-react";
+import { ArrowUp, ArrowDown, Minus, Users, Loader2, BarChart2, ChevronRight } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 type VoteType = 'underrated' | 'overrated' | 'fairly_rated';
 
@@ -105,9 +106,9 @@ export function UnderratedOverratedCard({
 
   return (
     <div className="relative group h-full">
-      <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
+      <div className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
     <Card 
-      className="relative pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/20 rounded-none md:rounded-xl"
+      className="relative pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-none md:rounded-xl"
       data-testid={`card-value-vote-${person.id}`}
     >
       {person.category && (
@@ -200,6 +201,18 @@ export function UnderratedOverratedCard({
         </div>
       ) : (
         <div className="flex flex-col gap-4 md:gap-3 mt-auto">
+          {/* CTA: link to full value-ratings page */}
+          <Link href={`/vote/value-ratings?focus=${person.id}`}>
+            <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-cyan-500/5 border border-cyan-500/20 hover:bg-cyan-500/10 hover:border-cyan-500/40 transition-all cursor-pointer group/cta">
+              <div className="flex items-center gap-2 min-w-0">
+                <BarChart2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                <span className="text-xs text-cyan-300 truncate">
+                  See how <span className="font-semibold">{person.name.split(" ")[0]}</span> ranks against everyone
+                </span>
+              </div>
+              <ChevronRight className="h-3.5 w-3.5 text-cyan-400 shrink-0 opacity-70 group-hover/cta:opacity-100 transition-opacity" />
+            </div>
+          </Link>
           <div className="flex items-center gap-3 md:gap-2.5">
             <ArrowUp className="h-5 w-5 md:h-4 md:w-4 text-[#00C853] shrink-0" />
             <span className="text-base font-medium md:text-sm text-[#00C853] w-[5.25rem] md:w-20 shrink-0">Underrated</span>

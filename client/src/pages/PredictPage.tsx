@@ -849,21 +849,15 @@ function PredictCard({
 }) {
   const cardContent = (
     <div 
-      className={`relative group h-full ${onClick && !inactive ? 'cursor-pointer' : ''} ${inactive ? 'cursor-default' : ''}`}
+      className={`relative group h-full overflow-visible ${onClick && !inactive ? 'cursor-pointer' : ''} ${inactive ? 'cursor-default' : ''}`}
       onClick={inactive ? undefined : onClick}
       data-testid={testId}
     >
-      <div 
-        className={`absolute -inset-[1px] rounded-xl border border-violet-500/60 transition-opacity pointer-events-none hidden md:block ${
-          inactive 
-            ? 'opacity-0' 
-            : `opacity-0 group-hover:opacity-100 ${selected ? 'opacity-100 border-violet-500' : ''}`
-        }`}
-      />
+      {/* Inset ring lives on Card so it is never clipped by grid neighbors (absolute -inset was cut off on the right of left-column cards). */}
       <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all h-full flex flex-col rounded-none md:rounded-xl min-h-[390px] md:min-h-0 border-0 md:border md:border-transparent shadow-none md:shadow-sm ${
         inactive 
           ? 'opacity-50 grayscale-[40%]' 
-          : `md:group-hover:shadow-lg md:group-hover:shadow-violet-500/20 ${selected ? 'shadow-lg shadow-violet-500/30' : ''}`
+          : `md:ring-inset md:ring-1 md:ring-transparent md:transition-[box-shadow,ring-color] md:group-hover:ring-[#EFEFEF]/50 md:group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] ${selected ? 'md:ring-[#EFEFEF]/50 shadow-lg shadow-[0_8px_32px_rgba(239,239,239,0.14)]' : ''}`
       } ${className}`}>
         {inactive && (
           <div className="absolute top-3 right-3 z-10">
@@ -1488,7 +1482,7 @@ function UserBetResult({ betResult, isMarketClosed = false }: { betResult?: { re
   );
 }
 
-function OpenMarketCard({ market, onNavigate, isMarketClosed = false, userBetResult }: { market: any; onNavigate: (slug: string, pick?: string) => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number } }) {
+function OpenMarketCard({ market, onNavigate, isMarketClosed = false, userBetResult }: { market: any; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number } }) {
   const entries = market.entries || [];
   const isCommunity = market.marketType === "community";
   const totalStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0), 0);
@@ -1510,7 +1504,7 @@ function OpenMarketCard({ market, onNavigate, isMarketClosed = false, userBetRes
   return <BinaryMarketCard market={market} entries={entries} totalPool={totalPool} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} />;
 }
 
-function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number } }) {
+function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number } }) {
   const yesEntry = entries.find((e: any) => e.label === "Yes") || entries[0];
   const noEntry = entries.find((e: any) => e.label === "No") || entries[1];
   const yesStake = yesEntry?.totalStake || 0;
@@ -1560,7 +1554,7 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
       
       <div className="max-md:mt-1">
         <div className="flex items-center justify-center mb-1.5">
-          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString('en-US')}</span>
+          <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')}</span>
         </div>
         
         {isMarketClosed ? (
@@ -1593,10 +1587,12 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
   );
 }
 
-function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number } }) {
-  const sortedEntries = [...entries].sort((a: any, b: any) => (a.displayOrder || 0) - (b.displayOrder || 0));
+function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number } }) {
   const totalEntryStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0), 0) || 1;
-  
+  const rankedEntries = [...entries]
+    .map((e: any) => ({ ...e, pct: Math.round(((e.totalStake || 0) / totalEntryStake) * 100) }))
+    .sort((a: any, b: any) => b.pct - a.pct);
+
   return (
     <PredictCard testId={`card-market-${market.slug}`} className={`${isMarketClosed && !isInactive ? 'opacity-75' : ''}`} inactive={isInactive} inactiveMessage={inactiveMessage}>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
@@ -1606,7 +1602,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
         </Badge>
         {market.category && <CategoryPill category={market.category} />}
       </div>
-      
+
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
         <div className="flex items-center gap-3 mb-2">
           <MarketAvatar market={market} />
@@ -1617,51 +1613,71 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
         <LinkedPersonChip market={market} />
         <FreshnessBadge market={market} />
       </div>
-      {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
-      
+      {market.teaser && (
+        <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
+          <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? 'hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
+        </a>
+      )}
+
       <div className="mb-3 flex items-center gap-2">
         <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
         <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
       </div>
-      
-      <div className="space-y-2 mb-2">
-        {sortedEntries.slice(0, 2).map((entry: any) => {
-          const entryStake = entry.totalStake || 0;
-          const pct = Math.round((entryStake / totalEntryStake) * 100);
+
+      <div className="space-y-1.5 mb-2">
+        {rankedEntries.slice(0, 4).map((entry: any) => {
+          const noPct = 100 - entry.pct;
           return (
-            <div key={entry.id} className="flex items-center gap-3">
-              {entry.imageUrl && (
-                <Avatar className="h-8 w-8 shrink-0 rounded-md bg-white">
+            <div key={entry.id} className="flex items-center gap-2">
+              {entry.imageUrl ? (
+                <Avatar className="h-7 w-7 shrink-0 rounded-md bg-white">
                   <AvatarImage src={entry.imageUrl} alt={entry.label} className="object-cover bg-white" />
-                  <AvatarFallback className="text-[10px] rounded-md">{entry.label?.[0]}</AvatarFallback>
+                  <AvatarFallback className="text-[9px] rounded-md">{entry.label?.[0]}</AvatarFallback>
                 </Avatar>
+              ) : (
+                <div className="h-7 w-7 shrink-0 rounded-md bg-muted/40 flex items-center justify-center">
+                  <span className="text-[10px] font-semibold text-muted-foreground">{entry.label?.[0]}</span>
+                </div>
               )}
-              <span className="text-sm font-medium truncate flex-1 min-w-0">{entry.label}</span>
-              <div className="w-24 h-2.5 rounded-full bg-muted overflow-hidden">
-                <div className="h-full bg-violet-500 transition-all" style={{ width: `${pct}%` }} />
-              </div>
-              <span className="text-sm font-semibold text-muted-foreground w-10 text-right">{pct}%</span>
+              <span className="text-[13px] font-medium truncate flex-1 min-w-0">{entry.label}</span>
+              <span className="text-[13px] font-mono font-semibold text-muted-foreground w-9 text-right shrink-0">{entry.pct}%</span>
+              {!isMarketClosed ? (
+                <div className="flex gap-1 shrink-0">
+                  <button
+                    className="px-2 py-1 text-[11px] font-semibold rounded bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 transition-colors"
+                    onClick={(e) => { e.stopPropagation(); onNavigate(market.slug, entry.id, 'yes'); }}
+                    data-testid={`button-yes-${entry.id}`}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    className="px-2 py-1 text-[11px] font-semibold rounded bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 transition-colors"
+                    onClick={(e) => { e.stopPropagation(); onNavigate(market.slug, entry.id, 'no'); }}
+                    data-testid={`button-no-${entry.id}`}
+                  >
+                    No
+                  </button>
+                </div>
+              ) : (
+                <span className="text-[11px] text-muted-foreground shrink-0 w-14 text-right">{noPct}% No</span>
+              )}
             </div>
           );
         })}
-        {entries.length > 2 && <button className="text-xs text-violet-400 hover:text-violet-300 text-center mt-1 w-full cursor-pointer transition-colors font-medium" onClick={(e) => { e.stopPropagation(); onNavigate(market.slug); }}>+{entries.length - 2} more</button>}
+        {entries.length > 4 && <button className="text-xs text-violet-400 hover:text-violet-300 text-center mt-1 w-full cursor-pointer transition-colors font-medium" onClick={(e) => { e.stopPropagation(); onNavigate(market.slug); }}>+{entries.length - 4} more</button>}
       </div>
-      
+
       <div className="mt-auto">
-        <div className="flex items-center justify-center mb-1.5">
-          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString('en-US')}</span>
+        <div className="flex items-center justify-center mb-1">
+          <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')}</span>
         </div>
-        
-        <Button className="w-full bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20" onClick={() => onNavigate(market.slug)} disabled={isMarketClosed} data-testid={`button-predict-${market.slug}`}>
-          {isMarketClosed ? "Closed" : "Make Prediction"}
-        </Button>
         <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
       </div>
     </PredictCard>
   );
 }
 
-function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number } }) {
+function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number } }) {
   const aboveEntry = entries.find((e: any) => e.label === "Above") || entries[0];
   const belowEntry = entries.find((e: any) => e.label === "Below") || entries[1];
   const aboveStake = aboveEntry?.totalStake || 0;
@@ -1720,7 +1736,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
       
       <div>
         <div className="flex items-center justify-center mb-1.5">
-          <span className="text-sm font-semibold text-violet-500">Pool: {totalPool.toLocaleString('en-US')}</span>
+          <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')}</span>
         </div>
         
         {isMarketClosed ? (
@@ -1748,7 +1764,7 @@ function SuggestMarketCard({ onClick }: { onClick: () => void }) {
   return (
     <div 
       onClick={onClick}
-      className="border-2 border-dashed border-violet-500/30 rounded-xl p-6 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-violet-500/50 hover:bg-violet-500/5 transition-all min-h-[200px]"
+      className="border-2 border-dashed border-violet-500/30 rounded-xl p-6 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-[#EFEFEF] hover:bg-[#EFEFEF]/5 transition-all min-h-[200px]"
       data-testid="card-suggest-market"
     >
       <div className="h-12 w-12 rounded-full bg-violet-500/10 flex items-center justify-center">
@@ -3026,7 +3042,7 @@ export default function PredictPage() {
                   <OpenMarketCard 
                     key={market.id} 
                     market={market} 
-                    onNavigate={(slug, pick) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}` : ''}`)}
+                    onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
                     isMarketClosed={market.status !== 'OPEN'}
                     userBetResult={userBetsByMarket.get(market.id)}
                   />
@@ -3489,7 +3505,7 @@ export default function PredictPage() {
             <OpenMarketCard 
               key={market.id} 
               market={market} 
-              onNavigate={(slug, pick) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}` : ''}`)}
+              onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
               isMarketClosed={market.status !== 'OPEN'}
               userBetResult={userBetsByMarket.get(market.id)}
             />

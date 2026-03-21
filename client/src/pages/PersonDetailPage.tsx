@@ -1,19 +1,13 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, lazy, Suspense } from "react";
 import { handleImageError } from "@/lib/imageResolver";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { TrendBadge } from "@/components/TrendBadge";
-import { TrendChart } from "@/components/TrendChart";
 import { StatCard } from "@/components/StatCard";
 import { UserMenu } from "@/components/UserMenu";
-import { AnimatedSentimentVotingWidget } from "@/components/AnimatedSentimentVotingWidget";
-import { CommunityInsights } from "@/components/CommunityInsights";
 import { ProfileTabs } from "@/components/ProfileTabs";
-import { PredictTab } from "@/components/PredictTab";
-import { MomentumSignals } from "@/components/MomentumSignals";
-import { InlineCelebrityBio } from "@/components/InlineCelebrityBio";
 import { CategoryPill, getCategoryStyle } from "@/components/CategoryPill";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { TrendScoreInfoIcon } from "@/components/TrendScoreInfo";
@@ -65,9 +59,41 @@ import { sharePage } from "@/lib/share";
 import { useFavorites } from "@/hooks/useFavorites";
 import { formatNumber, getApprovalColor } from "@/lib/formatNumber";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
-import { getExceptionalIndicator } from "@/components/LeaderboardRow";
+import { getExceptionalIndicator } from "@/lib/leaderboard-exceptional";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+
+const LazyPredictTab = lazy(() =>
+  import("@/components/PredictTab").then((m) => ({ default: m.PredictTab }))
+);
+const LazyTrendChart = lazy(() =>
+  import("@/components/TrendChart").then((m) => ({ default: m.TrendChart }))
+);
+const LazyInlineCelebrityBio = lazy(() =>
+  import("@/components/InlineCelebrityBio").then((m) => ({ default: m.InlineCelebrityBio }))
+);
+const LazyCommunityInsights = lazy(() =>
+  import("@/components/CommunityInsights").then((m) => ({ default: m.CommunityInsights }))
+);
+const LazyMomentumSignals = lazy(() =>
+  import("@/components/MomentumSignals").then((m) => ({ default: m.MomentumSignals }))
+);
+const LazyAnimatedSentimentVotingWidget = lazy(() =>
+  import("@/components/AnimatedSentimentVotingWidget").then((m) => ({
+    default: m.AnimatedSentimentVotingWidget,
+  }))
+);
+
+function ProfileLazyFallback({ minHeight }: { minHeight?: string }) {
+  return (
+    <div
+      className="flex items-center justify-center py-12"
+      style={minHeight ? { minHeight } : undefined}
+    >
+      <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 interface ValueVoteMetrics {
   userVote: "underrated" | "overrated" | "fairly_rated" | null;
@@ -1611,7 +1637,9 @@ export default function PersonDetailPage() {
         {/* OVERVIEW TAB */}
         {activeTab === "overview" && (
           <>
-            <InlineCelebrityBio personId={person.id} personName={person.name} />
+            <Suspense fallback={<ProfileLazyFallback />}>
+              <LazyInlineCelebrityBio personId={person.id} personName={person.name} />
+            </Suspense>
 
             <div className="flex justify-end mb-2">
               <a
@@ -1631,10 +1659,14 @@ export default function PersonDetailPage() {
             )}
 
             {/* 5. Trend History Chart */}
-            <TrendChart personId={person.id} personName={person.name} />
-            
+            <Suspense fallback={<ProfileLazyFallback minHeight="280px" />}>
+              <LazyTrendChart personId={person.id} personName={person.name} />
+            </Suspense>
+
             {/* 6. Momentum Signals + Official Profiles */}
-            <MomentumSignals personId={person.id} wikiSlug={person.wikiSlug} />
+            <Suspense fallback={<ProfileLazyFallback />}>
+              <LazyMomentumSignals personId={person.id} wikiSlug={person.wikiSlug} />
+            </Suspense>
           </>
         )}
 
@@ -1657,11 +1689,13 @@ export default function PersonDetailPage() {
                 </div>
               </div>
 
-              <AnimatedSentimentVotingWidget
-                personId={person.id}
-                personName={person.name}
-                isProfilePage={true}
-              />
+              <Suspense fallback={<ProfileLazyFallback minHeight="200px" />}>
+                <LazyAnimatedSentimentVotingWidget
+                  personId={person.id}
+                  personName={person.name}
+                  isProfilePage={true}
+                />
+              </Suspense>
             </section>
 
             {/* Matchups Section */}
@@ -1900,19 +1934,23 @@ export default function PersonDetailPage() {
 
             {/* Community Insights */}
             <div className="mb-8">
-              <CommunityInsights personId={person.id} personName={person.name} />
+              <Suspense fallback={<ProfileLazyFallback />}>
+                <LazyCommunityInsights personId={person.id} personName={person.name} />
+              </Suspense>
             </div>
           </>
         )}
 
         {/* PREDICT TAB */}
         {activeTab === "predict" && (
-          <PredictTab 
-            personId={person.id} 
-            personName={person.name}
-            personAvatar={person.avatar || ""}
-            currentScore={person.fameIndex ?? Math.round(person.trendScore / 100)}
-          />
+          <Suspense fallback={<ProfileLazyFallback minHeight="320px" />}>
+            <LazyPredictTab
+              personId={person.id}
+              personName={person.name}
+              personAvatar={person.avatar || ""}
+              currentScore={person.fameIndex ?? Math.round(person.trendScore / 100)}
+            />
+          </Suspense>
         )}
         </div>
       </div>

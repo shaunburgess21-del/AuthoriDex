@@ -235,53 +235,66 @@ function MultiOutcomes({
   onSelect: (id: string) => void;
   disabled: boolean;
 }) {
-  const sorted = [...entries].sort((a, b) => a.displayOrder - b.displayOrder);
-  const maxPercentage = Math.max(...sorted.map((e) => e.percentage));
+  const sorted = [...entries].sort((a, b) => b.percentage - a.percentage);
+  const maxPercentage = Math.max(...sorted.map((e) => e.percentage), 0);
 
   return (
-    <div className="space-y-2">
-      {sorted.map((entry) => (
-        <button
-          key={entry.id}
-          onClick={() => !disabled && onSelect(entry.id)}
-          disabled={disabled}
-          className={`w-full relative p-3 rounded-lg border transition-all text-left ${
-            selectedEntry === entry.id
-              ? "border-violet-500 bg-violet-500/10 shadow-md shadow-violet-500/20"
-              : "border-border/40 hover:border-violet-500/30"
-          } ${disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
-          data-testid={`button-outcome-${entry.id}`}
-        >
-          <div className="flex items-center justify-between mb-2 gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              {(entry as any).imageUrl && (
-                <Avatar className="h-6 w-6 shrink-0 rounded-md bg-white">
-                  <AvatarImage src={(entry as any).imageUrl} alt={entry.label} className="object-cover bg-white" />
-                  <AvatarFallback className="text-[9px]">{entry.label[0]}</AvatarFallback>
-                </Avatar>
-              )}
-              <span className={`font-medium text-sm truncate ${entry.percentage === maxPercentage ? "text-violet-400" : ""}`}>
-                {entry.label}
-              </span>
-            </div>
-            <span className="font-mono font-bold text-sm shrink-0">{entry.percentage}%</span>
-          </div>
-          <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${
-                entry.percentage === maxPercentage
-                  ? "bg-gradient-to-r from-violet-500 to-fuchsia-500"
-                  : "bg-violet-500/40"
+    <div className="flex flex-col gap-3">
+      {sorted.map((entry) => {
+        const isLeading = entry.percentage === maxPercentage && entry.percentage > 0;
+        const isUserPick = selectedEntry === entry.id;
+        return (
+          <button
+            type="button"
+            key={entry.id}
+            disabled={disabled}
+            onClick={() => !disabled && onSelect(entry.id)}
+            className={`flex items-center gap-3 w-full text-left rounded-lg py-0.5 -mx-1 px-1 transition-colors ${
+              isUserPick ? "bg-violet-500/5 ring-1 ring-violet-500/20" : ""
+            } ${disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-muted/20"}`}
+            data-testid={`button-outcome-${entry.id}`}
+          >
+            {(entry as any).imageUrl ? (
+              <Avatar className="h-8 w-8 shrink-0 rounded-md bg-white">
+                <AvatarImage src={(entry as any).imageUrl} alt={entry.label} className="object-cover bg-white" />
+                <AvatarFallback className="text-[9px] rounded-md">{entry.label[0]}</AvatarFallback>
+              </Avatar>
+            ) : (
+              <div className="h-8 w-8 shrink-0 rounded-md bg-muted/40 flex items-center justify-center">
+                <span className="text-xs font-semibold text-muted-foreground">{entry.label[0]}</span>
+              </div>
+            )}
+            <span
+              className={`w-[30%] sm:w-[25%] text-sm truncate shrink-0 ${
+                isUserPick ? "font-semibold text-foreground" : isLeading ? "font-medium text-violet-400" : "text-muted-foreground"
               }`}
-              style={{ width: `${entry.percentage}%` }}
-            />
-          </div>
-          <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
-            <span>{formatNumber(entry.displayStake)} staked</span>
-            <span>{entry.betCount} bets</span>
-          </div>
-        </button>
-      ))}
+            >
+              {entry.label}
+            </span>
+            {/* Track: home-style dark blue glass (pulse-card-blue adjacent) */}
+            <div className="flex-1 h-6 rounded-md overflow-hidden border border-blue-500/25 bg-gradient-to-b from-slate-900/90 to-slate-950/95 backdrop-blur-sm shadow-[inset_0_1px_2px_rgba(59,130,246,0.1)]">
+              <div
+                className={`h-full rounded-sm transition-all duration-700 ease-out ${
+                  isLeading
+                    ? "bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 shadow-[0_0_12px_rgba(59,130,246,0.35)]"
+                    : "bg-gradient-to-r from-blue-600/95 to-blue-500/75"
+                }`}
+                style={{ width: `${Math.max(entry.percentage, 1)}%` }}
+              />
+            </div>
+            <span
+              className={`text-sm font-mono font-bold shrink-0 w-[48px] text-right ${
+                isLeading ? "text-violet-300" : "text-blue-300"
+              }`}
+            >
+              {entry.percentage}%
+            </span>
+            <span className="text-xs text-muted-foreground shrink-0 w-[56px] text-right hidden sm:block">
+              {formatNumber(entry.displayStake)}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -309,7 +322,7 @@ function UpDownOutcomes({
 
   return (
     <div className="space-y-4">
-      <Card className="p-4 bg-violet-500/5 border-violet-500/20">
+      <Card className="p-4 bg-muted/10 border-border/40">
         <div className="text-center">
           <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{underlying} {metric}</p>
           <p className="text-3xl font-bold font-mono text-violet-400">
@@ -369,9 +382,12 @@ export default function MarketDetailPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const pickParam = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("pick") : null;
+  const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const pickParam = urlParams?.get("pick") || null;
+  const directionParam = urlParams?.get("direction") || null;
 
   const [selectedEntry, setSelectedEntry] = useState<string | null>(null);
+  const [selectedDirection, setSelectedDirection] = useState<"yes" | "no">("yes");
   const [stakeAmount, setStakeAmount] = useState("");
   const [commentBody, setCommentBody] = useState("");
   const [pickApplied, setPickApplied] = useState(false);
@@ -387,8 +403,8 @@ export default function MarketDetailPage() {
   });
 
   const betMutation = useMutation({
-    mutationFn: async ({ entryId, stakeAmount: amount }: { entryId: string; stakeAmount: number }) => {
-      const res = await apiRequest("POST", `/api/open-markets/${params.slug}/bet`, { entryId, stakeAmount: amount });
+    mutationFn: async ({ entryId, stakeAmount: amount, direction }: { entryId: string; stakeAmount: number; direction: "yes" | "no" }) => {
+      const res = await apiRequest("POST", `/api/open-markets/${params.slug}/bet`, { entryId, stakeAmount: amount, direction });
       return res.json();
     },
     onSuccess: async () => {
@@ -401,6 +417,7 @@ export default function MarketDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
       ]);
       setSelectedEntry(null);
+      setSelectedDirection("yes");
       setStakeAmount("");
     },
     onError: (err: Error) => {
@@ -426,16 +443,21 @@ export default function MarketDetailPage() {
   useEffect(() => {
     if (pickParam && market?.entries && !pickApplied) {
       const pickLower = pickParam.toLowerCase();
-      const matched = market.entries.find((e) =>
+      const matchedById = market.entries.find((e) => e.id === pickParam);
+      const matchedByLabel = market.entries.find((e) =>
         e.label.toLowerCase() === pickLower ||
         e.label.toLowerCase().includes(pickLower)
       );
+      const matched = matchedById || matchedByLabel;
       if (matched) {
         setSelectedEntry(matched.id);
       }
+      if (directionParam === "yes" || directionParam === "no") {
+        setSelectedDirection(directionParam);
+      }
       setPickApplied(true);
     }
-  }, [pickParam, market?.entries, pickApplied]);
+  }, [pickParam, directionParam, market?.entries, pickApplied]);
 
   const timeLeft = useCountdown(market?.closeAt || market?.endAt || null);
 
@@ -462,9 +484,12 @@ export default function MarketDetailPage() {
     if (isNaN(amount) || amount <= 0) return null;
     const entry = entriesWithPercentages.find((e) => e.id === selectedEntry);
     if (!entry || entry.percentage === 0) return null;
-    const payout = (amount / (entry.percentage / 100)) * 0.95;
+    const pctFraction = selectedDirection === "no"
+      ? (100 - entry.percentage) / 100
+      : entry.percentage / 100;
+    const payout = (amount / Math.max(pctFraction, 0.01)) * 0.95;
     return Math.round(payout);
-  }, [selectedEntry, stakeAmount, entriesWithPercentages, market]);
+  }, [selectedEntry, stakeAmount, selectedDirection, entriesWithPercentages, market]);
 
   const handlePlaceBet = () => {
     if (!isLoggedIn) {
@@ -477,7 +502,7 @@ export default function MarketDetailPage() {
       toast({ title: "Invalid amount", description: "Enter a valid stake amount.", variant: "destructive" });
       return;
     }
-    betMutation.mutate({ entryId: selectedEntry, stakeAmount: amount });
+    betMutation.mutate({ entryId: selectedEntry, stakeAmount: amount, direction: selectedDirection });
   };
 
   const handlePostComment = () => {
@@ -492,7 +517,7 @@ export default function MarketDetailPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-violet-500" data-testid="loading-spinner" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" data-testid="loading-spinner" />
       </div>
     );
   }
@@ -582,7 +607,7 @@ export default function MarketDetailPage() {
           {(market.linkedPersonName || market.endAt) && (
             <div className="flex items-center gap-3 mb-3 flex-wrap">
               {market.linkedPersonName && (
-                <span className="inline-flex items-center gap-1 text-xs text-purple-400/90 bg-purple-500/10 rounded-full px-2.5 py-1">
+                <span className="inline-flex items-center gap-1 text-xs text-violet-400/90 bg-violet-500/10 rounded-full px-2.5 py-1">
                   <span className="opacity-60">Linked to</span> {market.linkedPersonName}
                 </span>
               )}
@@ -642,7 +667,7 @@ export default function MarketDetailPage() {
         </div>
 
         {isOpen && !isInactive && (
-          <Card className="p-5 mb-6 border-violet-500/20 bg-violet-500/5" data-testid="section-place-prediction">
+          <Card className="p-5 mb-6 border-border/40 bg-muted/5" data-testid="section-place-prediction">
             <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
               <Trophy className="h-5 w-5 text-violet-500" />
               Place Your Prediction
@@ -655,26 +680,125 @@ export default function MarketDetailPage() {
                   Sign In
                 </Button>
               </div>
+            ) : market.openMarketType === "multi" ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Your Pick</label>
+                  <div className="space-y-1.5">
+                    {entriesWithPercentages.sort((a, b) => a.displayOrder - b.displayOrder).map((entry) => {
+                      const isEntrySelected = selectedEntry === entry.id;
+                      const isYesActive = isEntrySelected && selectedDirection === "yes";
+                      const isNoActive = isEntrySelected && selectedDirection === "no";
+                      return (
+                        <div
+                          key={entry.id}
+                          className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-all ${
+                            isEntrySelected ? "border-border bg-muted/30" : "border-transparent hover:bg-muted/15"
+                          }`}
+                          data-testid={`pick-row-${entry.id}`}
+                        >
+                          {(entry as any).imageUrl ? (
+                            <Avatar className="h-8 w-8 shrink-0 rounded-md bg-white">
+                              <AvatarImage src={(entry as any).imageUrl} alt={entry.label} className="object-cover bg-white" />
+                              <AvatarFallback className="text-[10px] rounded-md">{entry.label[0]}</AvatarFallback>
+                            </Avatar>
+                          ) : (
+                            <div className="h-8 w-8 shrink-0 rounded-md bg-muted/40 flex items-center justify-center">
+                              <span className="text-xs font-semibold text-muted-foreground">{entry.label[0]}</span>
+                            </div>
+                          )}
+                          <span className="text-sm font-medium truncate flex-1 min-w-0">{entry.label}</span>
+                          <span className="text-sm font-mono font-semibold text-muted-foreground w-10 text-right shrink-0">{entry.percentage}%</span>
+                          <div className="flex gap-1.5 shrink-0">
+                            <button
+                              className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
+                                isYesActive
+                                  ? "bg-[#00C853]/20 border border-[#00C853] text-[#00C853] shadow-[0_0_8px_rgba(0,200,83,0.25)]"
+                                  : "bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+                              }`}
+                              onClick={() => { setSelectedEntry(entry.id); setSelectedDirection("yes"); }}
+                              data-testid={`button-yes-${entry.id}`}
+                            >
+                              Yes
+                            </button>
+                            <button
+                              className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
+                                isNoActive
+                                  ? "bg-[#FF0000]/20 border border-[#FF0000] text-[#FF0000] shadow-[0_0_8px_rgba(255,0,0,0.25)]"
+                                  : "bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+                              }`}
+                              onClick={() => { setSelectedEntry(entry.id); setSelectedDirection("no"); }}
+                              data-testid={`button-no-${entry.id}`}
+                            >
+                              No
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">Stake Amount</label>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Enter stake amount..."
+                    value={stakeAmount}
+                    onChange={(e) => setStakeAmount(e.target.value)}
+                    className="bg-background/50"
+                    data-testid="input-stake-amount"
+                  />
+                </div>
+
+                {potentialPayout !== null && (
+                  <div className="p-3 rounded-lg bg-green-500/5 border border-green-500/20" data-testid="text-potential-payout">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Est. payout if correct</span>
+                      <span className="font-bold font-mono text-green-400">{formatNumber(potentialPayout)} credits</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/60 mt-1">Estimate -- updates as more people predict.</p>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-muted-foreground/50 text-center">Final payout may differ as the pool changes.</p>
+
+                <Button
+                  className="w-full bg-gradient-to-r from-slate-700 to-slate-600 hover:from-slate-600 hover:to-slate-500 text-white"
+                  disabled={!selectedEntry || !stakeAmount || Number(stakeAmount) <= 0 || betMutation.isPending}
+                  onClick={handlePlaceBet}
+                  data-testid="button-submit-prediction"
+                >
+                  {betMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Zap className="h-4 w-4 mr-2" />
+                  )}
+                  {betMutation.isPending
+                    ? "Placing..."
+                    : !selectedEntry
+                      ? "Select an outcome"
+                      : !stakeAmount || Number(stakeAmount) <= 0
+                        ? "Enter stake amount"
+                        : `Place ${selectedDirection === "no" ? "No" : "Yes"} on ${entriesWithPercentages.find(e => e.id === selectedEntry)?.label || "..."}`}
+                </Button>
+              </div>
             ) : (
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium mb-2 block">Your Pick</label>
-                  <div className={market.openMarketType === "multi" ? "flex flex-col gap-2" : "grid grid-cols-2 gap-2"}>
+                  <div className="grid grid-cols-2 gap-2">
                     {entriesWithPercentages.sort((a, b) => a.displayOrder - b.displayOrder).map((entry) => {
                       const isSelected = selectedEntry === entry.id;
-                      const isMulti = market.openMarketType === "multi";
-                      const isYesLike = !isMulti && (entry.label.toLowerCase() === "yes" || entry.label.toLowerCase() === "above" || entry.displayOrder === 0);
-                      const colorClass = isMulti
-                        ? isSelected
-                          ? "bg-violet-600 text-white border-violet-600"
-                          : "border-violet-500/30 text-violet-400"
-                        : isSelected
-                          ? isYesLike
-                            ? "bg-green-600 text-white border-green-600"
-                            : "bg-red-600 text-white border-red-600"
-                          : isYesLike
-                            ? "border-green-500/30 text-green-500"
-                            : "border-red-500/30 text-red-500";
+                      const isYesLike = entry.label.toLowerCase() === "yes" || entry.label.toLowerCase() === "above" || entry.displayOrder === 0;
+                      const colorClass = isSelected
+                        ? isYesLike
+                          ? "bg-green-600 text-white border-green-600"
+                          : "bg-red-600 text-white border-red-600"
+                        : isYesLike
+                          ? "border-green-500/30 text-green-500"
+                          : "border-red-500/30 text-red-500";
                       return (
                         <Button
                           key={entry.id}
@@ -710,14 +834,14 @@ export default function MarketDetailPage() {
                       <span className="text-sm text-muted-foreground">Est. payout if correct</span>
                       <span className="font-bold font-mono text-green-400">{formatNumber(potentialPayout)} credits</span>
                     </div>
-                    <p className="text-[10px] text-muted-foreground/60 mt-1">Estimate — updates as more people bet.</p>
+                    <p className="text-[10px] text-muted-foreground/60 mt-1">Estimate -- updates as more people predict.</p>
                   </div>
                 )}
 
                 <p className="text-[10px] text-muted-foreground/50 text-center">Final payout may differ as the pool changes.</p>
 
                 <Button
-                  className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                  className="w-full bg-gradient-to-r from-slate-700 to-slate-600 hover:from-slate-600 hover:to-slate-500 text-white"
                   disabled={!selectedEntry || !stakeAmount || Number(stakeAmount) <= 0 || betMutation.isPending}
                   onClick={handlePlaceBet}
                   data-testid="button-submit-prediction"

@@ -285,8 +285,8 @@ function VersusCard({
   
   return (
     <div className="relative group h-full">
-      <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
-    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/20 transition-all h-full flex flex-col rounded-none md:rounded-xl min-h-[390px] md:min-h-0">
+      <div className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
+    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] transition-all h-full flex flex-col rounded-none md:rounded-xl min-h-[390px] md:min-h-0">
       <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
       
       <div className="relative pt-4 pb-4 flex flex-col flex-1">
@@ -499,9 +499,9 @@ function InductionCandidateCard({
 
   return (
     <div className="relative group h-full">
-      <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
+      <div className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
     <Card 
-      className="relative p-5 transition-all duration-200 h-full min-h-[390px] md:min-h-[300px] flex flex-col overflow-hidden border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/20 rounded-none md:rounded-xl"
+      className="relative p-5 transition-all duration-200 h-full min-h-[390px] md:min-h-[300px] flex flex-col overflow-hidden border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-none md:rounded-xl"
       data-testid={`card-induction-${candidate.id}`}
     >
       <AnimatePresence>
@@ -679,9 +679,9 @@ function CurateProfileCard({
       transition={{ duration: 0.3 }}
     >
       <div className="relative group">
-        <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100" />
+        <div className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100" />
       <Card 
-        className="relative p-4 transition-all duration-200 overflow-hidden border-slate-700/50 group-hover:shadow-lg group-hover:shadow-cyan-500/20"
+        className="relative p-4 transition-all duration-200 overflow-hidden border-slate-700/50 group-hover:shadow-lg group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)]"
         data-testid={`card-curate-${poll.id}`}
       >
         <AnimatePresence>
@@ -881,9 +881,9 @@ function DiscourseCard({
 
   return (
     <div className="relative group h-full">
-      <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
+      <div className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
     <Card 
-      className="relative pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[300px] flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/20 rounded-none md:rounded-xl"
+      className="relative pt-6 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[300px] flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-none md:rounded-xl"
       data-testid={`card-discourse-${topic.id}`}
     >
       <div className="absolute top-3 right-3">
@@ -1144,10 +1144,10 @@ function OpinionPollCard({
   const maxPercent = Math.max(...visibleOptions.map((o: any) => totalVotes > 0 ? Math.round((o.votes / totalVotes) * 100) : 0), 0);
 
   return (
-    <div className="relative group h-full">
-      <div className="absolute -inset-[1px] rounded-xl border border-cyan-500/60 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
+    <div className="relative group h-full overflow-visible">
+      {/* Inset ring on Card avoids bottom/side clipping on grid rows (absolute -inset ring extended past the cell). */}
       <Card
-        className="relative pt-5 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[420px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-cyan-500/20 rounded-none md:rounded-xl"
+        className="relative pt-5 px-5 pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[420px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:ring-inset md:ring-1 md:ring-transparent md:transition-[box-shadow,ring-color] md:group-hover:ring-[#EFEFEF]/50 md:group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-none md:rounded-xl"
         data-testid={`opinion-poll-card-${poll.id}`}
       >
         <div className="flex items-center justify-between gap-2 mb-3">
@@ -2996,11 +2996,11 @@ export default function VotePage() {
           <div className="text-center mt-2 md:mt-6">
             <Button
               variant="ghost"
-              onClick={() => openOverlay("value-perception")}
+              onClick={() => setLocation("/vote/value-ratings")}
               className="text-cyan-400"
               data-testid="button-view-all-value"
             >
-              View all celebrities
+              View all rankings
               <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </div>

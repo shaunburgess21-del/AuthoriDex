@@ -77,18 +77,31 @@ export function getCategoryTextColor(category: string) {
   return style.text;
 }
 
+const SIZE_CLASSES = {
+  default: "px-3 py-1 text-xs",
+  sm: "px-1.5 py-px text-[10px] leading-tight font-medium",
+} as const;
+
 interface CategoryPillProps {
   category: string;
+  /** Compact pill for dense layouts (e.g. rankings). */
+  size?: keyof typeof SIZE_CLASSES;
   className?: string;
   "data-testid"?: string;
 }
 
-export function CategoryPill({ category, className = "", "data-testid": testId }: CategoryPillProps) {
+export function CategoryPill({
+  category,
+  size = "default",
+  className = "",
+  "data-testid": testId,
+}: CategoryPillProps) {
   const style = getCategoryStyle(category);
-  
+  const sizeClass = SIZE_CLASSES[size];
+
   return (
-    <span 
-      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border w-fit whitespace-nowrap transition-all duration-200 hover:opacity-80 ${style.bg} ${style.border} ${style.text} ${className}`}
+    <span
+      className={`inline-flex items-center rounded-full border w-fit whitespace-nowrap transition-all duration-200 hover:opacity-80 ${sizeClass} ${style.bg} ${style.border} ${style.text} ${className}`}
       data-testid={testId}
     >
       {getMarketCategoryLabel(category)}

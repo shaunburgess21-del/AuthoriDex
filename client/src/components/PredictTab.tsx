@@ -135,14 +135,11 @@ function PredictCard({
 }) {
   return (
     <div 
-      className={`relative group ${onClick ? 'cursor-pointer' : ''}`}
+      className={`relative group overflow-visible ${onClick ? 'cursor-pointer' : ''}`}
       onClick={onClick}
       data-testid={testId}
     >
-      <div 
-        className={`absolute -inset-[1px] rounded-xl bg-gradient-to-br from-violet-500/80 via-purple-500/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity ${selected ? 'opacity-100 from-violet-500 via-violet-400/50' : ''}`}
-      />
-      <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all group-hover:shadow-lg group-hover:shadow-violet-500/20 ${selected ? 'shadow-lg shadow-violet-500/30' : ''} ${className}`}>
+      <Card className={`relative p-4 bg-card/95 backdrop-blur-sm transition-all ring-inset ring-1 ring-transparent group-hover:ring-[#EFEFEF]/50 group-hover:shadow-lg group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] ${selected ? 'ring-[#EFEFEF]/50 shadow-lg shadow-[0_8px_32px_rgba(239,239,239,0.14)]' : ''} ${className}`}>
         {children}
       </Card>
     </div>

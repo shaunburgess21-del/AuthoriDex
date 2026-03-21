@@ -895,6 +895,7 @@ export const marketEntries = pgTable("market_entries", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   seedCount: integer("seed_count").default(0), // Display seed for social proof on this entry
   imageUrl: text("image_url"), // Avatar/image for this entry (manual URL or resolved from linked person)
+  noStake: integer("no_stake").notNull().default(0), // Total credits staked "No" on this entry
 }, (table) => ({
   marketIdx: index("market_entries_market_idx").on(table.marketId),
 }));
@@ -903,6 +904,7 @@ export const insertMarketEntrySchema = createInsertSchema(marketEntries).omit({
   id: true,
   createdAt: true,
   totalStake: true,
+  noStake: true,
 });
 
 export type MarketEntry = typeof marketEntries.$inferSelect;
@@ -923,6 +925,7 @@ export const marketBets = pgTable("market_bets", {
   confidence: numeric("confidence", { precision: 3, scale: 2 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   betMetadata: jsonb("bet_metadata"), // { confidence?: 1-5, thesis?: string, scoreAtEntry?: number }
+  direction: text("direction").notNull().default("yes"), // "yes" | "no"
 }, (table) => ({
   marketStatusIdx: index("market_bets_market_status_idx").on(table.marketId, table.status),
   userStatusIdx: index("market_bets_user_status_idx").on(table.userId, table.status),

@@ -9605,7 +9605,7 @@ Aim for 3-5 substantive paragraphs separated by blank lines. Be informative, eng
       }));
 
       res.json(result);
-    } catch (error) {
+    } catch (error: any) {
       console.error("[Open Markets] List error:", error);
       res.status(500).json({ error: "Failed to fetch open markets" });
     }
@@ -10653,8 +10653,9 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     marketId: string;
     entryId: string;
     stakeAmount: number;
+    direction?: "yes" | "no";
   }) {
-    const { userId, marketId, entryId, stakeAmount } = params;
+    const { userId, marketId, entryId, stakeAmount, direction = "yes" } = params;
 
     if (!Number.isInteger(stakeAmount) || stakeAmount < MIN_BET_STAKE) {
       return { error: `Stake must be a whole number of at least ${MIN_BET_STAKE} credits`, status: 400 as const };
@@ -10693,15 +10694,24 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
 
       const allEntries = await tx
-        .select({ totalStake: marketEntries.totalStake, id: marketEntries.id })
+        .select({ totalStake: marketEntries.totalStake, noStake: marketEntries.noStake, id: marketEntries.id })
         .from(marketEntries)
         .where(eq(marketEntries.marketId, marketId));
 
-      const totalPool = allEntries.reduce((sum, e) => sum + e.totalStake, 0) + stakeAmount;
+      const totalYesPool = allEntries.reduce((sum, e) => sum + e.totalStake, 0);
       const currentEntry = allEntries.find(e => e.id === entryId);
-      const entryPool = (currentEntry?.totalStake ?? 0) + stakeAmount;
-      const entryShare = entryPool / totalPool;
-      const potentialPayout = Math.round(stakeAmount / Math.max(entryShare, 0.01));
+
+      let potentialPayout: number;
+      if (direction === "no") {
+        const entryYes = currentEntry?.totalStake ?? 0;
+        const entryShare = totalYesPool > 0 ? entryYes / totalYesPool : 1 / allEntries.length;
+        potentialPayout = Math.round(stakeAmount / Math.max(1 - entryShare, 0.01));
+      } else {
+        const totalPool = totalYesPool + stakeAmount;
+        const entryPool = (currentEntry?.totalStake ?? 0) + stakeAmount;
+        const entryShare = entryPool / totalPool;
+        potentialPayout = Math.round(stakeAmount / Math.max(entryShare, 0.01));
+      }
 
       const [insertedBet] = await tx
         .insert(marketBets)
@@ -10712,6 +10722,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           stakeAmount,
           potentialPayout,
           status: "active",
+          direction,
         })
         .returning();
 
@@ -10723,13 +10734,20 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         balanceAfter: updatedProfile.predictCredits,
         source: 'user_action',
         idempotencyKey: `stake_${marketId}_${insertedBet.id}`,
-        metadata: { marketId, entryId, betId: insertedBet.id },
+        metadata: { marketId, entryId, betId: insertedBet.id, direction },
       });
 
-      await tx
-        .update(marketEntries)
-        .set({ totalStake: sql`${marketEntries.totalStake} + ${stakeAmount}` })
-        .where(eq(marketEntries.id, entryId));
+      if (direction === "no") {
+        await tx
+          .update(marketEntries)
+          .set({ noStake: sql`${marketEntries.noStake} + ${stakeAmount}` })
+          .where(eq(marketEntries.id, entryId));
+      } else {
+        await tx
+          .update(marketEntries)
+          .set({ totalStake: sql`${marketEntries.totalStake} + ${stakeAmount}` })
+          .where(eq(marketEntries.id, entryId));
+      }
 
       return { bet: { ...insertedBet, remainingCredits: updatedProfile.predictCredits }, potentialPayout };
     });
@@ -10758,7 +10776,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     try {
       const authReq = req as AuthRequest;
       const { slug } = req.params;
-      const { entryId, stakeAmount } = req.body;
+      const { entryId, stakeAmount, direction } = req.body;
 
       if (!entryId || !stakeAmount || typeof stakeAmount !== "number" || stakeAmount <= 0) {
         return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
@@ -10767,6 +10785,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       if (stakeAmount > MAX_BET_STAKE) {
         return res.status(400).json({ error: `Maximum stake is ${MAX_BET_STAKE} credits` });
       }
+
+      const validDirection = direction === "no" ? "no" as const : "yes" as const;
 
       if (!checkBetRateLimit(authReq.userId!)) {
         return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
@@ -10797,6 +10817,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         marketId: market.id,
         entryId,
         stakeAmount,
+        direction: validDirection,
       });
 
       if ("error" in result) {

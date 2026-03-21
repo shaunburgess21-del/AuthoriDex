@@ -2,11 +2,18 @@ export interface SettlementPreviewBet {
   id: string;
   entryId: string;
   stakeAmount: number;
+  direction?: "yes" | "no";
 }
 
 export function calculateSettlementPayouts(bets: SettlementPreviewBet[], winnerEntryId: string) {
   const totalPool = bets.reduce((sum, bet) => sum + bet.stakeAmount, 0);
-  const winnerBets = bets.filter((bet) => bet.entryId === winnerEntryId);
+
+  const winnerBets = bets.filter((bet) => {
+    const dir = bet.direction || "yes";
+    if (dir === "yes") return bet.entryId === winnerEntryId;
+    return bet.entryId !== winnerEntryId;
+  });
+
   const winnerPool = winnerBets.reduce((sum, bet) => sum + bet.stakeAmount, 0);
 
   const payouts = winnerBets.map((bet) => ({
@@ -14,7 +21,6 @@ export function calculateSettlementPayouts(bets: SettlementPreviewBet[], winnerE
     payout: winnerPool > 0 ? Math.floor((bet.stakeAmount / winnerPool) * totalPool) : bet.stakeAmount,
   }));
 
-  // Distribute remaining dust (caused by floor rounding) to the largest winner
   let payoutsDistributed = payouts.reduce((sum, bet) => sum + bet.payout, 0);
   const dust = totalPool - payoutsDistributed;
   if (dust > 0 && payouts.length > 0) {

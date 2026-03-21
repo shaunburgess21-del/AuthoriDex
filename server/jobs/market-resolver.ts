@@ -105,6 +105,7 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string, 
         entryId: marketBets.entryId,
         userId: marketBets.userId,
         stakeAmount: marketBets.stakeAmount,
+        direction: marketBets.direction,
       })
       .from(marketBets)
       .where(and(eq(marketBets.marketId, marketId), eq(marketBets.status, "active")));
@@ -127,11 +128,20 @@ export async function settleMarketBets(marketId: string, winnerEntryId: string, 
       };
     }
 
-    const preview = calculateSettlementPayouts(allBets, winnerEntryId);
+    const preview = calculateSettlementPayouts(
+      allBets.map(b => ({ ...b, direction: b.direction as "yes" | "no" })),
+      winnerEntryId,
+    );
     const payoutByBetId = new Map(preview.payouts.map((entry) => [entry.betId, entry.payout]));
 
+    const isWinningBet = (bet: typeof allBets[0]) => {
+      const dir = bet.direction || "yes";
+      return (dir === "yes" && bet.entryId === winnerEntryId) ||
+             (dir === "no" && bet.entryId !== winnerEntryId);
+    };
+
     for (const bet of allBets) {
-      if (bet.entryId === winnerEntryId) {
+      if (isWinningBet(bet)) {
         const payout = payoutByBetId.get(bet.id) ?? bet.stakeAmount;
         await tx.update(marketBets)
           .set({ status: "won", settledAt: now, payoutAmount: payout })
