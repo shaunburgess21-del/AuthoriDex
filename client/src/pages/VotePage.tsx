@@ -1292,7 +1292,7 @@ function OpinionPollCard({
                 <Zap className="h-3 w-3" />
                 <span>{totalVotes.toLocaleString('en-US')} total votes</span>
               </div>
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium border bg-cyan-500/10 border-cyan-500/40 text-cyan-400" data-testid={`badge-voted-opinion-${poll.id}`}>
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium border bg-white/[0.06] border-[#EFEFEF]/35 text-foreground/90" data-testid={`badge-voted-opinion-${poll.id}`}>
                 You voted
               </span>
             </div>

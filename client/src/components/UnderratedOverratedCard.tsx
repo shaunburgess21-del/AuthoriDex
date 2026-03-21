@@ -201,17 +201,14 @@ export function UnderratedOverratedCard({
         </div>
       ) : (
         <div className="flex flex-col gap-4 md:gap-3 mt-auto">
-          {/* CTA: link to full value-ratings page */}
-          <Link href={`/vote/value-ratings?focus=${person.id}`}>
-            <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-cyan-500/5 border border-cyan-500/20 hover:bg-cyan-500/10 hover:border-cyan-500/40 transition-all cursor-pointer group/cta">
-              <div className="flex items-center gap-2 min-w-0">
-                <BarChart2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
-                <span className="text-xs text-cyan-300 truncate">
-                  See how <span className="font-semibold">{person.name.split(" ")[0]}</span> ranks against everyone
-                </span>
-              </div>
-              <ChevronRight className="h-3.5 w-3.5 text-cyan-400 shrink-0 opacity-70 group-hover/cta:opacity-100 transition-opacity" />
-            </div>
+          <Link
+            href={`/vote/value-rankings?focus=${encodeURIComponent(person.id)}`}
+            className="inline-flex items-center gap-1 self-start text-sm font-medium text-cyan-400/80 hover:text-cyan-300 transition-colors"
+            data-testid={`link-value-compare-${person.id}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            See how {person.name.split(" ")[0]} compares
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
           </Link>
           <div className="flex items-center gap-3 md:gap-2.5">
             <ArrowUp className="h-5 w-5 md:h-4 md:w-4 text-[#00C853] shrink-0" />

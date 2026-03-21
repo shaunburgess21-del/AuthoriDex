@@ -79,7 +79,8 @@ export function getCategoryTextColor(category: string) {
 
 const SIZE_CLASSES = {
   default: "px-3 py-1 text-xs",
-  sm: "px-1.5 py-px text-[10px] leading-tight font-medium",
+  /** Dense UI: rankings, spotlight cards on value page */
+  sm: "px-1 py-0.5 text-[9px] leading-none font-medium",
 } as const;
 
 interface CategoryPillProps {

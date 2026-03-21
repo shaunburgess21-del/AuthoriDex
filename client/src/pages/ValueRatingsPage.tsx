@@ -237,7 +237,7 @@ export default function ValueRatingsPage() {
             <Button variant="ghost" size="icon" onClick={() => setLocation("/vote")} className="shrink-0" data-testid="button-back-vote">
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <Link href="/"><VoxDexLogo size="24" /></Link>
+            <Link href="/"><VoxDexLogo size={24} /></Link>
           </div>
           <div className="flex items-center gap-2"><UserMenu /></div>
         </div>

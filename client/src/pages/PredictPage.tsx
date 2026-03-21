@@ -1059,8 +1059,8 @@ function HeadToHeadCard({
               className={`flex-1 relative ${!isMarketClosed ? 'cursor-pointer group/p2' : ''}`}
               onClick={() => !isMarketClosed && onSelect?.(2)}
             >
-              <div className="absolute -inset-4 rounded-md bg-purple-500/20 blur-lg pointer-events-none transition-opacity group-hover/p2:bg-purple-500/40" />
-              <div className="rounded-lg overflow-hidden ring-2 ring-transparent transition-all group-hover/p2:ring-purple-500/60">
+              <div className="absolute -inset-4 rounded-md bg-white/10 blur-lg pointer-events-none transition-opacity group-hover/p2:bg-white/20" />
+              <div className="rounded-lg overflow-hidden ring-2 ring-transparent transition-all group-hover/p2:ring-[#EFEFEF]/55">
                 <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-auto w-full aspect-square" />
               </div>
             </div>
