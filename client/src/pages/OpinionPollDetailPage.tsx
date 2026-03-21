@@ -190,7 +190,7 @@ export default function OpinionPollDetailPage() {
           </h1>
 
           {poll.description && (
-            <p className="text-base text-muted-foreground mb-4" data-testid="text-poll-description">
+            <p className="text-base text-muted-foreground mb-4 whitespace-pre-wrap" data-testid="text-poll-description">
               {poll.description}
             </p>
           )}

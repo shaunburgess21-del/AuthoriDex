@@ -808,9 +808,9 @@ export default function MarketDetailPage() {
               <Info className="h-5 w-5 text-violet-500" />
               About
             </h2>
-            <p className="text-sm text-muted-foreground leading-relaxed">{market.summary}</p>
+            <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{market.summary}</p>
             {market.description && market.description !== market.summary && (
-              <p className="text-sm text-muted-foreground leading-relaxed mt-3">{market.description}</p>
+              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap mt-3">{market.description}</p>
             )}
           </Card>
         )}

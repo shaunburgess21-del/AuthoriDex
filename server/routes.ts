@@ -10580,7 +10580,7 @@ Resolution Date: ${resolutionDate}
 Resolution Criteria: ${resolutionCriteria}
 Outcomes: ${outcomesStr}${linkedPersonBlock}
 
-Write a 3-6 sentence summary that helps users make an informed prediction. Focus on enduring background context, the stakes involved, historical precedent, and the key factors that will ultimately decide the outcome. Be factual and neutral — do not recommend a side.`;
+Write 2-3 short paragraphs (separated by blank lines) that help users make an informed prediction. Focus on enduring background context, the stakes involved, historical precedent, and the key factors that will ultimately decide the outcome. Be factual and neutral — do not recommend a side.`;
 
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
@@ -10591,7 +10591,7 @@ Write a 3-6 sentence summary that helps users make an informed prediction. Focus
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
-        max_output_tokens: 700,
+        max_output_tokens: 1000,
         temperature: 0.7,
       } as any);
 
