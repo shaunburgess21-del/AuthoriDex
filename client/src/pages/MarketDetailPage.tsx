@@ -239,7 +239,6 @@ function MultiOutcomes({
   const maxPercentage = Math.max(...sorted.map((e) => e.percentage), 0);
 
   return (
-<<<<<<< Updated upstream
     <div className="flex flex-col gap-3">
       {sorted.map((entry) => {
         const isLeading = entry.percentage === maxPercentage && entry.percentage > 0;
@@ -256,8 +255,8 @@ function MultiOutcomes({
             data-testid={`button-outcome-${entry.id}`}
           >
             {(entry as any).imageUrl ? (
-              <Avatar className="h-8 w-8 shrink-0 rounded-md bg-white">
-                <AvatarImage src={(entry as any).imageUrl} alt={entry.label} className="object-cover bg-white" />
+              <Avatar className="h-8 w-8 shrink-0 rounded-md">
+                <AvatarImage src={(entry as any).imageUrl} alt={entry.label} className="object-cover" />
                 <AvatarFallback className="text-[9px] rounded-md">{entry.label[0]}</AvatarFallback>
               </Avatar>
             ) : (
@@ -268,41 +267,6 @@ function MultiOutcomes({
             <span
               className={`w-[30%] sm:w-[25%] text-sm truncate shrink-0 ${
                 isUserPick ? "font-semibold text-foreground" : isLeading ? "font-medium text-violet-400" : "text-muted-foreground"
-=======
-    <div className="space-y-2">
-      {sorted.map((entry) => (
-        <button
-          key={entry.id}
-          onClick={() => !disabled && onSelect(entry.id)}
-          disabled={disabled}
-          className={`w-full relative p-3 rounded-lg border transition-all text-left ${
-            selectedEntry === entry.id
-              ? "border-violet-500 bg-violet-500/10 shadow-md shadow-violet-500/20"
-              : "border-border/40 hover:border-violet-500/30"
-          } ${disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
-          data-testid={`button-outcome-${entry.id}`}
-        >
-          <div className="flex items-center justify-between mb-2 gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              {(entry as any).imageUrl && (
-                <Avatar className="h-6 w-6 shrink-0 rounded-md">
-                  <AvatarImage src={(entry as any).imageUrl} alt={entry.label} className="object-cover" />
-                  <AvatarFallback className="text-[9px]">{entry.label[0]}</AvatarFallback>
-                </Avatar>
-              )}
-              <span className={`font-medium text-sm truncate ${entry.percentage === maxPercentage ? "text-violet-400" : ""}`}>
-                {entry.label}
-              </span>
-            </div>
-            <span className="font-mono font-bold text-sm shrink-0">{entry.percentage}%</span>
-          </div>
-          <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${
-                entry.percentage === maxPercentage
-                  ? "bg-gradient-to-r from-violet-500 to-fuchsia-500"
-                  : "bg-violet-500/40"
->>>>>>> Stashed changes
               }`}
             >
               {entry.label}

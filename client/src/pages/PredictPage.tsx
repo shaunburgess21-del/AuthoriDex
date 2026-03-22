@@ -1628,19 +1628,11 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
         {rankedEntries.slice(0, 4).map((entry: any) => {
           const noPct = 100 - entry.pct;
           return (
-<<<<<<< Updated upstream
             <div key={entry.id} className="flex items-center gap-2">
               {entry.imageUrl ? (
-                <Avatar className="h-7 w-7 shrink-0 rounded-md bg-white">
-                  <AvatarImage src={entry.imageUrl} alt={entry.label} className="object-cover bg-white" />
-                  <AvatarFallback className="text-[9px] rounded-md">{entry.label?.[0]}</AvatarFallback>
-=======
-            <div key={entry.id} className="flex items-center gap-3">
-              {entry.imageUrl && (
-                <Avatar className="h-8 w-8 shrink-0 rounded-md">
+                <Avatar className="h-7 w-7 shrink-0 rounded-md">
                   <AvatarImage src={entry.imageUrl} alt={entry.label} className="object-cover" />
-                  <AvatarFallback className="text-[10px] rounded-md">{entry.label?.[0]}</AvatarFallback>
->>>>>>> Stashed changes
+                  <AvatarFallback className="text-[9px] rounded-md">{entry.label?.[0]}</AvatarFallback>
                 </Avatar>
               ) : (
                 <div className="h-7 w-7 shrink-0 rounded-md bg-muted/40 flex items-center justify-center">
