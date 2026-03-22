@@ -698,8 +698,8 @@ export default function MarketDetailPage() {
                           data-testid={`pick-row-${entry.id}`}
                         >
                           {(entry as any).imageUrl ? (
-                            <Avatar className="h-8 w-8 shrink-0 rounded-md bg-white">
-                              <AvatarImage src={(entry as any).imageUrl} alt={entry.label} className="object-cover bg-white" />
+                            <Avatar className="h-8 w-8 shrink-0 rounded-md">
+                              <AvatarImage src={(entry as any).imageUrl} alt={entry.label} className="object-cover" />
                               <AvatarFallback className="text-[10px] rounded-md">{entry.label[0]}</AvatarFallback>
                             </Avatar>
                           ) : (
