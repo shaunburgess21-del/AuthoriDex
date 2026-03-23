@@ -88,6 +88,31 @@ import { CardSection } from "@/components/CardSection";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
+import { OnboardingDrawer, type OnboardingStep } from "@/components/OnboardingDrawer";
+
+const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
+  {
+    icon: Swords,
+    heading: "Pick Your Side",
+    description: "Head-to-head matchups, trending topics, and opinion polls \u2014 your vote decides who rises.",
+    gradient: "from-cyan-500 to-teal-600",
+    glow: "shadow-cyan-500/25",
+  },
+  {
+    icon: BarChart3,
+    heading: "Shape the Rankings",
+    description: "Every vote feeds real data into the index. Your opinion directly moves the needle.",
+    gradient: "from-emerald-500 to-green-600",
+    glow: "shadow-emerald-500/25",
+  },
+  {
+    icon: Trophy,
+    heading: "Earn as You Vote",
+    description: "Rack up XP with every vote, climb the ranks, and build your reputation on VoxDex.",
+    gradient: "from-amber-500 to-orange-600",
+    glow: "shadow-amber-500/25",
+  },
+] as const;
 
 const VOTE_CATEGORIES = [
   { value: "All", label: "All Categories" },
@@ -1927,8 +1952,6 @@ function FilterChip({
   );
 }
 
-const VOTE_WELCOME_SEEN_KEY = "authoridex_vote_welcome_seen";
-
 const OVERLAY_SCROLL_PREFIX = "overlay_scroll_";
 function saveOverlayScroll(name: string, scrollTop: number) {
   sessionStorage.setItem(OVERLAY_SCROLL_PREFIX + name, String(Math.round(scrollTop)));
@@ -1942,77 +1965,6 @@ function restoreOverlayScroll(name: string, el: HTMLElement | null) {
 }
 function clearOverlayScroll(name: string) {
   sessionStorage.removeItem(OVERLAY_SCROLL_PREFIX + name);
-}
-
-function VoteWelcomeModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <Sparkles className="h-6 w-6 text-cyan-400" />
-            The Voice of the People
-          </DialogTitle>
-          <DialogDescription>
-            Your votes capture what the world thinks
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          <div className="flex items-start gap-3">
-            <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-              <Swords className="h-4 w-4 text-cyan-400" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-sm">Pick Your Side</h4>
-              <p className="text-xs text-muted-foreground">
-                Vote in head-to-head matchups, back hot topics, and rate who's overrated or underrated.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-              <BarChart3 className="h-4 w-4 text-cyan-400" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-sm">Shape the Index</h4>
-              <p className="text-xs text-muted-foreground">
-                Every vote feeds real data. Your opinion directly influences the rankings.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-              <Trophy className="h-4 w-4 text-cyan-400" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-sm">Earn as You Vote</h4>
-              <p className="text-xs text-muted-foreground">
-                Rack up XP for every vote you cast, unlock ranks, and build your reputation.
-              </p>
-            </div>
-          </div>
-
-          <div className="p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/20 flex items-center gap-3">
-            <Sparkles className="h-4 w-4 text-cyan-400 shrink-0" />
-            <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-cyan-400">Vox Populi, Vox Dei</span> — the voice of the people is the voice of the world.
-            </p>
-          </div>
-        </div>
-
-        <Button
-          onClick={onClose}
-          className="w-full bg-gradient-to-r from-cyan-500 to-cyan-300 hover:from-cyan-400 hover:to-cyan-200 text-white font-medium"
-          data-testid="button-cast-first-vote"
-        >
-          Cast Your First Vote
-        </Button>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 export default function VotePage() {
@@ -2131,7 +2083,6 @@ export default function VotePage() {
   const [activeSection, setActiveSection] = useState<SectionToggle>("All");
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   const [infoModalOpen, setInfoModalOpen] = useState<"governance" | null>(null);
-  const [showVoteWelcomeModal, setShowVoteWelcomeModal] = useState(false);
   const [curateCategoryFilter, setCurateCategoryFilter] = useState<FilterCategory>("All");
   const [globalVoteSearchQuery, setGlobalVoteSearchQuery] = useState("");
   const [globalCategoryFilter, setGlobalCategoryFilter] = useState<FilterCategory>("All");
@@ -2422,18 +2373,6 @@ export default function VotePage() {
     }, 60000);
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    const hasSeen = localStorage.getItem(VOTE_WELCOME_SEEN_KEY);
-    if (!hasSeen) {
-      setShowVoteWelcomeModal(true);
-    }
-  }, []);
-
-  const handleCloseVoteWelcomeModal = () => {
-    localStorage.setItem(VOTE_WELCOME_SEEN_KEY, "true");
-    setShowVoteWelcomeModal(false);
-  };
 
   // Sync global category filter to all section filters
   useEffect(() => {
@@ -3970,9 +3909,11 @@ export default function VotePage() {
           </div>
         </DialogContent>
       </Dialog>
-      <VoteWelcomeModal
-        open={showVoteWelcomeModal}
-        onClose={handleCloseVoteWelcomeModal}
+      <OnboardingDrawer
+        storageKey="authoridex_vote_welcome_seen"
+        steps={VOTE_ONBOARDING_STEPS}
+        toastLabel="New to voting?"
+        lastStepCta="Cast Your First Vote"
       />
       {/* Community Governance Info Modal */}
       <Dialog open={infoModalOpen === "governance"} onOpenChange={() => setInfoModalOpen(null)}>

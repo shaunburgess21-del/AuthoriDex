@@ -83,6 +83,31 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { formatActivityAge } from "@/lib/formatDate";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
+import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
+
+const PREDICT_ONBOARDING_STEPS: readonly OnboardingStep[] = [
+  {
+    icon: Scale,
+    heading: "Predict World Events",
+    description: "Elections, viral moments, tech launches \u2014 call it before the crowd does.",
+    gradient: "from-violet-500 to-purple-600",
+    glow: "shadow-violet-500/25",
+  },
+  {
+    icon: Target,
+    heading: "Stake Your Conviction",
+    description: "Back predictions with virtual credits. The bigger the pool, the bigger the potential return.",
+    gradient: "from-fuchsia-500 to-pink-600",
+    glow: "shadow-fuchsia-500/25",
+  },
+  {
+    icon: Trophy,
+    heading: "Claim Your Winnings",
+    description: "When events resolve, winners split the pool. Be right, get rewarded.",
+    gradient: "from-amber-500 to-orange-600",
+    glow: "shadow-amber-500/25",
+  },
+] as const;
 
 function MarketAvatar({ market }: { market: any }) {
   const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
@@ -511,8 +536,6 @@ const topGainerMarkets: TopGainerMarket[] = [
 
 type MarketType = "JACKPOT_EXACT" | "BINARY_TREND" | "VERSUS" | "COMMUNITY" | "GAINER";
 
-const FIRST_VISIT_KEY = "authoridex_predict_first_visit";
-
 const PREDICTION_TYPES: { id: PredictionType; label: string; mobileLabel: string; icon: React.ReactNode }[] = [
   { id: "all", label: "All Markets", mobileLabel: "All", icon: <Sparkles className="h-4 w-4" /> },
   { id: "community", label: "World", mobileLabel: "Markets", icon: <Scale className="h-4 w-4" /> },
@@ -762,73 +785,6 @@ const getPredictCategoryFilters = (includeCustomTopic: boolean) =>
   includeCustomTopic ? CATEGORY_FILTERS_WITH_CUSTOM : BASE_CATEGORY_FILTERS;
 
 const CATEGORY_FILTERS = BASE_CATEGORY_FILTERS;
-
-function FirstTimeModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <Sparkles className="h-6 w-6 text-violet-500" />
-            Open Markets
-          </DialogTitle>
-          <DialogDescription>
-            Predict the outcome of any topic
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          <div className="flex items-start gap-3">
-            <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-              <Scale className="h-4 w-4 text-violet-500" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-sm">World Events</h4>
-              <p className="text-xs text-muted-foreground">
-                Predict elections, acquisitions, viral moments, and more.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-              <Target className="h-4 w-4 text-violet-500" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-sm">Stake Your Conviction</h4>
-              <p className="text-xs text-muted-foreground">
-                Back your prediction with virtual credits. The bigger the pool, the bigger the return.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-              <Trophy className="h-4 w-4 text-violet-500" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-sm">Claim Your Winnings</h4>
-              <p className="text-xs text-muted-foreground">
-                When events resolve, winners split the pool. Be right, get paid.
-              </p>
-            </div>
-          </div>
-
-          <div className="p-3 rounded-lg bg-violet-500/5 border border-violet-500/20 flex items-center gap-3">
-            <Sparkles className="h-4 w-4 text-violet-500 shrink-0" />
-            <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-violet-500">Parimutuel System</span> — you're betting against other users, not the house. The bigger the pool, the bigger the potential returns!
-            </p>
-          </div>
-        </div>
-
-        <Button onClick={onClose} className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white" data-testid="button-get-started">
-          Make Your First Prediction
-        </Button>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function PredictCard({ 
   children, 
@@ -2269,7 +2225,7 @@ export default function PredictPage() {
   const queryClient = useQueryClient();
   const { user, profile, refreshProfile } = useAuth();
   const { favoriteIds } = useFavorites();
-  const [showFirstTimeModal, setShowFirstTimeModal] = useState(false);
+  const onboardingRef = useRef<OnboardingDrawerHandle>(null);
   const [selectedType, setSelectedType] = useState<PredictionType>("all");
   const [showMyPositions, setShowMyPositions] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
@@ -2519,13 +2475,6 @@ export default function PredictPage() {
     ) || null;
   }, [selectedJackpotPerson, nativeJackpotData]);
 
-  useEffect(() => {
-    const hasVisited = localStorage.getItem(FIRST_VISIT_KEY);
-    if (!hasVisited) {
-      setShowFirstTimeModal(true);
-    }
-  }, []);
-
   // Sync global category filter to all section filters
   useEffect(() => {
     setUpdownCategory(categoryFilter);
@@ -2533,11 +2482,6 @@ export default function PredictPage() {
     setGainerCategory(categoryFilter);
     setCommunityCategory(categoryFilter);
   }, [categoryFilter]);
-
-  const handleCloseFirstTimeModal = () => {
-    localStorage.setItem(FIRST_VISIT_KEY, "true");
-    setShowFirstTimeModal(false);
-  };
 
   const openPredictOverlay = useCallback((category: string) => {
     window.history.pushState({ overlay: category }, "");
@@ -3388,7 +3332,7 @@ export default function PredictPage() {
 
         <div className="text-center pb-8">
           <button 
-            onClick={() => setShowFirstTimeModal(true)}
+            onClick={() => onboardingRef.current?.open()}
             className="text-sm text-muted-foreground hover:text-violet-500 transition-colors"
           >
             <HelpCircle className="h-4 w-4 inline mr-1" />
@@ -3396,9 +3340,12 @@ export default function PredictPage() {
           </button>
         </div>
       </div>
-      <FirstTimeModal 
-        open={showFirstTimeModal} 
-        onClose={handleCloseFirstTimeModal} 
+      <OnboardingDrawer
+        ref={onboardingRef}
+        storageKey="authoridex_predict_first_visit"
+        steps={PREDICT_ONBOARDING_STEPS}
+        toastLabel="New to predictions?"
+        lastStepCta="Make Your First Prediction"
       />
       <FullScreenOverlay
         open={viewAllCategory === "weekly"}
