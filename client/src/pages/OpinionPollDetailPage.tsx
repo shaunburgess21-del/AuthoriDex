@@ -38,6 +38,7 @@ import {
   Share2,
   BarChart3,
   Info,
+  X,
 } from "lucide-react";
 
 function parseOpinionPollVoteError(err: unknown): string {
@@ -66,6 +67,8 @@ export default function OpinionPollDetailPage() {
   const [commentSort, setCommentSort] = useState<"top" | "newest">("top");
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
+  const [headerImgError, setHeaderImgError] = useState(false);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
   const { data: poll, isLoading } = useQuery<any>({
     queryKey: ["/api/opinion-polls", slug],
@@ -226,15 +229,35 @@ export default function OpinionPollDetailPage() {
             )}
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-serif font-bold mb-3 leading-tight" data-testid="text-poll-title">
-            {poll.title}
-          </h1>
+          <div className="flex items-start gap-4 mb-4">
+            {!headerImgError && poll.imageUrl && (
+              <div
+                className="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-slate-800 cursor-pointer"
+                onClick={() => setExpandedImage(poll.imageUrl)}
+              >
+                <img
+                  src={poll.imageUrl}
+                  alt={poll.title}
+                  className="w-full h-full object-cover"
+                  onError={() => setHeaderImgError(true)}
+                />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <h1
+                className={`text-2xl sm:text-3xl font-serif font-bold leading-tight ${poll.description ? "mb-3" : ""}`}
+                data-testid="text-poll-title"
+              >
+                {poll.title}
+              </h1>
 
-          {poll.description && (
-            <p className="text-base text-muted-foreground mb-4 whitespace-pre-wrap" data-testid="text-poll-description">
-              {poll.description}
-            </p>
-          )}
+              {poll.description && (
+                <p className="text-base text-muted-foreground mb-4 whitespace-pre-wrap" data-testid="text-poll-description">
+                  {poll.description}
+                </p>
+              )}
+            </div>
+          </div>
 
           <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
             <span className="flex items-center gap-1.5">
@@ -652,6 +675,27 @@ export default function OpinionPollDetailPage() {
           </Button>
         </div>
       </div>
+
+      {expandedImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setExpandedImage(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            onClick={() => setExpandedImage(null)}
+          >
+            <X className="h-6 w-6 text-white" />
+          </button>
+          <img
+            src={expandedImage}
+            alt={poll.title}
+            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

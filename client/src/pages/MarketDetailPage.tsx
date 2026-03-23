@@ -39,6 +39,7 @@ import {
   Info,
   Gavel,
   Share2,
+  X,
 } from "lucide-react";
 
 interface MarketEntry {
@@ -79,6 +80,7 @@ interface MarketData {
   description?: string | null;
   category?: string | null;
   tags?: string[] | null;
+  coverImageUrl?: string | null;
   sourceUrl?: string | null;
   featured?: boolean;
   timezone?: string | null;
@@ -391,6 +393,8 @@ export default function MarketDetailPage() {
   const [stakeAmount, setStakeAmount] = useState("");
   const [commentBody, setCommentBody] = useState("");
   const [pickApplied, setPickApplied] = useState(false);
+  const [headerImgError, setHeaderImgError] = useState(false);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
   const { data: market, isLoading, error } = useQuery<MarketData>({
     queryKey: ["/api/open-markets", params.slug],
@@ -594,15 +598,34 @@ export default function MarketDetailPage() {
             )}
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-serif font-bold mb-2" data-testid="text-market-title">
-            {market.title}
-          </h1>
+          <div className="flex items-start gap-4 mb-4">
+            {!headerImgError && (market.coverImageUrl || market.linkedPersonAvatar) && (
+              <div
+                className="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-slate-800 cursor-pointer"
+                onClick={() =>
+                  setExpandedImage((market.coverImageUrl || market.linkedPersonAvatar)!)
+                }
+              >
+                <img
+                  src={(market.coverImageUrl || market.linkedPersonAvatar)!}
+                  alt={market.title}
+                  className="w-full h-full object-cover"
+                  onError={() => setHeaderImgError(true)}
+                />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl sm:text-3xl font-serif font-bold mb-2" data-testid="text-market-title">
+                {market.title}
+              </h1>
 
-          {market.teaser && (
-            <p className="text-muted-foreground text-sm sm:text-base mb-3" data-testid="text-market-teaser">
-              {market.teaser}
-            </p>
-          )}
+              {market.teaser && (
+                <p className="text-muted-foreground text-sm sm:text-base mb-3" data-testid="text-market-teaser">
+                  {market.teaser}
+                </p>
+              )}
+            </div>
+          </div>
 
           {(market.linkedPersonName || market.endAt) && (
             <div className="flex items-center gap-3 mb-3 flex-wrap">
@@ -1077,6 +1100,27 @@ export default function MarketDetailPage() {
 
         {/* Related Markets - placeholder for future implementation */}
       </div>
+
+      {expandedImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setExpandedImage(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            onClick={() => setExpandedImage(null)}
+          >
+            <X className="h-6 w-6 text-white" />
+          </button>
+          <img
+            src={expandedImage}
+            alt={market.title}
+            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
