@@ -1118,6 +1118,7 @@ function OpinionPollCard({
   const [voted, setVoted] = useState<string | null>(poll.userVote || null);
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
+  const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
   const options = poll.options || [];
   const visibleOptions = options.slice(0, 4);
   const remainingCount = options.length - 4;
@@ -1210,30 +1211,38 @@ function OpinionPollCard({
         {!hasVoted ? (
           <div className="space-y-1.5 mt-auto">
             {visibleOptions.map((option: any) => (
-              <button
+              <div
                 key={option.id}
-                onClick={(e) => handleVote(option.id, e)}
-                className="w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10 active:scale-[0.99]"
+                className="w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200 hover:border-cyan-500/50 hover:bg-cyan-500/10"
                 data-testid={`opinion-poll-option-${poll.id}-${option.id}`}
               >
                 {option.imageUrl ? (
-                  <div className="relative shrink-0 w-14 self-stretch min-h-[2.75rem]">
+                  <button
+                    type="button"
+                    aria-label="View larger image"
+                    onClick={() => setExpandedImage({ url: option.imageUrl, alt: option.name })}
+                    className="relative shrink-0 w-14 self-stretch min-h-[2.75rem] cursor-zoom-in border-0 p-0"
+                  >
                     <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
-                  </div>
+                  </button>
                 ) : (
                   <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
                     <span className="text-xs font-semibold text-cyan-400">{option.orderIndex + 1}</span>
                   </div>
                 )}
-                <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
+                <button
+                  type="button"
+                  onClick={(e) => handleVote(option.id, e)}
+                  className="flex min-w-0 flex-1 flex-col items-stretch py-1.5 pl-2.5 pr-2 text-left transition-transform active:scale-[0.99]"
+                >
                   <div className="flex items-center gap-1.5">
                     <span className="min-w-0 flex-1 truncate text-sm">{option.name}</span>
                     <span className="shrink-0 text-xs font-mono font-bold text-slate-600">%</span>
                   </div>
                   <div className="mt-1 h-1.5 rounded-full bg-slate-700/50" />
                   <p className="text-[10px] text-slate-600 mt-0.5">Votes</p>
-                </div>
-              </button>
+                </button>
+              </div>
             ))}
             {remainingCount > 0 && (
               <Link href={`/vote/opinion-polls/${poll.slug}`}>
@@ -1249,40 +1258,43 @@ function OpinionPollCard({
               const isSelected = voted === option.id;
               const percent = totalVotes > 0 ? Math.round((option.votes / totalVotes) * 100) : 0;
               const isLeading = percent === maxPercent && percent > 0;
-              const rowClass = `rounded-lg border overflow-hidden transition-all duration-300 ${
+              const rowClass = `flex items-stretch overflow-hidden rounded-lg border transition-all duration-300 ${
                 isSelected
                   ? 'border-cyan-500/60 bg-cyan-500/[0.08]'
                   : 'border-border/30 bg-muted/20'
               }`;
-              const rowInner = (
-                <div className="flex items-stretch overflow-hidden p-0">
-                  {option.imageUrl ? (
-                    <div className="relative shrink-0 w-14 self-stretch min-h-[2.75rem]">
-                      <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
-                    </div>
-                  ) : (
-                    <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
-                      <span className="text-xs font-semibold text-cyan-400">{option.orderIndex + 1}</span>
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? 'font-semibold' : ''}`}>{option.name}</span>
-                      {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
-                      <span className={`shrink-0 text-xs font-mono font-bold ${
-                        isLeading ? 'text-cyan-400' : 'text-muted-foreground'
-                      }`}>{percent}%</span>
-                    </div>
-                    <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-700 ease-out ${
-                          isLeading ? 'bg-cyan-500' : isSelected ? 'bg-cyan-400/60' : 'bg-slate-600/50'
-                        }`}
-                        style={{ width: `${percent}%` }}
-                      />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{(option.votes || 0).toLocaleString('en-US')} votes</p>
+              const imageColumn = option.imageUrl ? (
+                <button
+                  type="button"
+                  aria-label="View larger image"
+                  onClick={() => setExpandedImage({ url: option.imageUrl, alt: option.name })}
+                  className="relative shrink-0 w-14 self-stretch min-h-[2.75rem] cursor-zoom-in border-0 p-0"
+                >
+                  <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
+                </button>
+              ) : (
+                <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
+                  <span className="text-xs font-semibold text-cyan-400">{option.orderIndex + 1}</span>
+                </div>
+              );
+              const contentColumn = (
+                <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? 'font-semibold' : ''}`}>{option.name}</span>
+                    {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
+                    <span className={`shrink-0 text-xs font-mono font-bold ${
+                      isLeading ? 'text-cyan-400' : 'text-muted-foreground'
+                    }`}>{percent}%</span>
                   </div>
+                  <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ease-out ${
+                        isLeading ? 'bg-cyan-500' : isSelected ? 'bg-cyan-400/60' : 'bg-slate-600/50'
+                      }`}
+                      style={{ width: `${percent}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{(option.votes || 0).toLocaleString('en-US')} votes</p>
                 </div>
               );
               return isSelected ? (
@@ -1291,18 +1303,24 @@ function OpinionPollCard({
                   className={rowClass}
                   data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
                 >
-                  {rowInner}
+                  {imageColumn}
+                  {contentColumn}
                 </div>
               ) : (
-                <button
-                  type="button"
+                <div
                   key={option.id}
-                  className={`${rowClass} w-full text-left cursor-pointer hover:border-cyan-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30`}
-                  onClick={(e) => openChangeDialog(option, e)}
+                  className={`${rowClass} w-full`}
                   data-testid={`opinion-poll-result-${poll.id}-${option.id}`}
                 >
-                  {rowInner}
-                </button>
+                  {imageColumn}
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left cursor-pointer hover:border-cyan-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 border-0 bg-transparent p-0"
+                    onClick={(e) => openChangeDialog(option, e)}
+                  >
+                    {contentColumn}
+                  </button>
+                </div>
               );
             })}
             {remainingCount > 0 && (
@@ -1349,6 +1367,28 @@ function OpinionPollCard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {expandedImage && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setExpandedImage(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            onClick={() => setExpandedImage(null)}
+            aria-label="Close"
+          >
+            <X className="h-6 w-6 text-white" />
+          </button>
+          <img
+            src={expandedImage.url}
+            alt={expandedImage.alt}
+            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

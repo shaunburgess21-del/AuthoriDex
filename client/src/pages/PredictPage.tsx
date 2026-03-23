@@ -2915,7 +2915,7 @@ export default function PredictPage() {
                   </div>
                   <div>
                     <h2 className="text-xl font-serif font-bold">World Markets</h2>
-                    <p className="text-sm text-muted-foreground">Predict the outcome of verifiable global events</p>
+                    <p className="text-sm text-muted-foreground">Predict the outcome of global events</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -3283,7 +3283,7 @@ export default function PredictPage() {
               icon={<Trophy className="h-5 w-5 text-violet-400" />}
               onRulesClick={() => setRulesModalOpen("gainer")}
             >
-              <p className="text-sm text-muted-foreground">Pick the biggest mover in each category this week</p>
+              <p className="text-sm text-muted-foreground">Pick the biggest mover in each category</p>
             </SectionHeader>
             <SectionFilterBar
               categoryFilter={gainerCategory}

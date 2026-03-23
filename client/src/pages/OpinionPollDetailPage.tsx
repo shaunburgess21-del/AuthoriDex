@@ -68,7 +68,7 @@ export default function OpinionPollDetailPage() {
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
   const [headerImgError, setHeaderImgError] = useState(false);
-  const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
 
   const { data: poll, isLoading } = useQuery<any>({
     queryKey: ["/api/opinion-polls", slug],
@@ -233,7 +233,7 @@ export default function OpinionPollDetailPage() {
             {!headerImgError && poll.imageUrl && (
               <div
                 className="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-slate-800 cursor-pointer"
-                onClick={() => setExpandedImage(poll.imageUrl)}
+                onClick={() => setExpandedImage({ url: poll.imageUrl, alt: poll.title })}
               >
                 <img
                   src={poll.imageUrl}
@@ -294,31 +294,40 @@ export default function OpinionPollDetailPage() {
           {!hasVoted ? (
             <div className="flex flex-col gap-2.5">
               {options.map((option: any) => (
-                <button
+                <div
                   key={option.id}
-                  onClick={() => {
-                    if (!user) {
-                      toast({ title: "Sign in required", description: "Please sign in to vote", variant: "destructive" });
-                      return;
-                    }
-                    voteMutation.mutate(option.id);
-                  }}
-                  disabled={voteMutation.isPending}
-                  className={`w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-sm font-medium transition-all duration-200 hover:border-cyan-500/60 hover:bg-cyan-500/10 hover:ring-1 hover:ring-cyan-500/40 active:scale-[0.99] ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
-                  data-testid={`button-vote-option-${option.id}`}
+                  className={`w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-sm font-medium transition-all duration-200 hover:border-cyan-500/60 hover:bg-cyan-500/10 hover:ring-1 hover:ring-cyan-500/40 ${voteMutation.isPending ? "opacity-60" : ""}`}
                 >
                   {option.imageUrl ? (
-                    <div className="relative shrink-0 w-14 self-stretch min-h-[2.75rem]">
+                    <button
+                      type="button"
+                      aria-label="View larger image"
+                      disabled={voteMutation.isPending}
+                      onClick={() => setExpandedImage({ url: option.imageUrl, alt: option.name })}
+                      className="relative shrink-0 w-14 self-stretch min-h-[2.75rem] cursor-zoom-in border-0 p-0 disabled:cursor-not-allowed"
+                    >
                       <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
-                    </div>
+                    </button>
                   ) : (
                     <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
                       <span className="text-sm font-semibold text-cyan-400">{option.orderIndex + 1}</span>
                     </div>
                   )}
-                  <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!user) {
+                        toast({ title: "Sign in required", description: "Please sign in to vote", variant: "destructive" });
+                        return;
+                      }
+                      voteMutation.mutate(option.id);
+                    }}
+                    disabled={voteMutation.isPending}
+                    className={`flex min-w-0 flex-1 flex-col items-stretch py-1.5 pl-2.5 pr-2 text-left transition-transform active:scale-[0.99] ${voteMutation.isPending ? "cursor-not-allowed" : "cursor-pointer"}`}
+                    data-testid={`button-vote-option-${option.id}`}
+                  >
                     <div className="flex items-center gap-1.5">
-                      <span className="min-w-0 flex-1 truncate text-left">{option.name}</span>
+                      <span className="min-w-0 flex-1 truncate">{option.name}</span>
                       {option.personName && option.personName !== option.name && (
                         <span className="text-xs text-muted-foreground shrink-0">({option.personName})</span>
                       )}
@@ -326,8 +335,8 @@ export default function OpinionPollDetailPage() {
                     </div>
                     <div className="mt-1 h-1.5 rounded-full bg-slate-700/50" />
                     <p className="text-[10px] text-slate-600 mt-0.5">Votes</p>
-                  </div>
-                </button>
+                  </button>
+                </div>
               ))}
 
               {!user && (
@@ -346,66 +355,72 @@ export default function OpinionPollDetailPage() {
                 const percent = option.percent || 0;
                 const maxPercent = Math.max(...options.map((o: any) => o.percent || 0), 0);
                 const isLeading = percent === maxPercent && percent > 0;
-                const rowClass = `rounded-lg border overflow-hidden transition-all duration-300 ${
+                const rowClass = `flex items-stretch overflow-hidden rounded-lg border transition-all duration-300 ${
                   isSelected
                     ? "border-cyan-500/60 bg-cyan-500/[0.08]"
                     : "border-border/30 bg-muted/20"
                 }`;
-                const rowInner = (
-                  <div className="flex items-stretch overflow-hidden p-0">
-                    {option.imageUrl ? (
-                      <div className="relative shrink-0 w-14 self-stretch min-h-[2.75rem]">
-                        <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
-                      </div>
-                    ) : (
-                      <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
-                        <span className="text-sm font-semibold text-cyan-400">{option.orderIndex + 1}</span>
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? "font-semibold" : ""}`}>
-                          {option.name}
-                        </span>
-                        {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
-                        <span className={`shrink-0 text-xs font-mono font-bold ${isLeading ? "text-cyan-400" : "text-muted-foreground"}`}>
-                          {percent}%
-                        </span>
-                      </div>
-                      <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-700 ease-out ${
-                            isLeading ? "bg-cyan-500" : isSelected ? "bg-cyan-400/60" : "bg-slate-600/50"
-                          }`}
-                          style={{ width: `${percent}%` }}
-                        />
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{(option.votes || 0).toLocaleString("en-US")} votes</p>
+                const imageColumn = option.imageUrl ? (
+                  <button
+                    type="button"
+                    aria-label="View larger image"
+                    disabled={voteMutation.isPending}
+                    onClick={() => setExpandedImage({ url: option.imageUrl, alt: option.name })}
+                    className="relative shrink-0 w-14 self-stretch min-h-[2.75rem] cursor-zoom-in border-0 p-0 disabled:cursor-not-allowed"
+                  >
+                    <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
+                  </button>
+                ) : (
+                  <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/10">
+                    <span className="text-sm font-semibold text-cyan-400">{option.orderIndex + 1}</span>
+                  </div>
+                );
+                const contentColumn = (
+                  <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? "font-semibold" : ""}`}>
+                        {option.name}
+                      </span>
+                      {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
+                      <span className={`shrink-0 text-xs font-mono font-bold ${isLeading ? "text-cyan-400" : "text-muted-foreground"}`}>
+                        {percent}%
+                      </span>
                     </div>
+                    <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ease-out ${
+                          isLeading ? "bg-cyan-500" : isSelected ? "bg-cyan-400/60" : "bg-slate-600/50"
+                        }`}
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{(option.votes || 0).toLocaleString("en-US")} votes</p>
                   </div>
                 );
                 return isSelected ? (
                   <div key={option.id} className={rowClass} data-testid={`opinion-poll-cast-result-${option.id}`}>
-                    {rowInner}
+                    {imageColumn}
+                    {contentColumn}
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    key={option.id}
-                    disabled={voteMutation.isPending}
-                    className={`${rowClass} w-full text-left cursor-pointer hover:border-cyan-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : ""}`}
-                    onClick={() => {
-                      if (!user) {
-                        toast({ title: "Sign in required", description: "Please sign in to vote", variant: "destructive" });
-                        return;
-                      }
-                      setPendingOption({ id: option.id, name: option.name });
-                      setChangeDialogOpen(true);
-                    }}
-                    data-testid={`opinion-poll-cast-result-${option.id}`}
-                  >
-                    {rowInner}
-                  </button>
+                  <div key={option.id} className={`${rowClass} w-full`} data-testid={`opinion-poll-cast-result-${option.id}`}>
+                    {imageColumn}
+                    <button
+                      type="button"
+                      disabled={voteMutation.isPending}
+                      className={`min-w-0 flex-1 text-left cursor-pointer hover:border-cyan-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 border-0 bg-transparent p-0 ${voteMutation.isPending ? "opacity-60 cursor-not-allowed" : ""}`}
+                      onClick={() => {
+                        if (!user) {
+                          toast({ title: "Sign in required", description: "Please sign in to vote", variant: "destructive" });
+                          return;
+                        }
+                        setPendingOption({ id: option.id, name: option.name });
+                        setChangeDialogOpen(true);
+                      }}
+                    >
+                      {contentColumn}
+                    </button>
+                  </div>
                 );
               })}
 
@@ -689,8 +704,8 @@ export default function OpinionPollDetailPage() {
             <X className="h-6 w-6 text-white" />
           </button>
           <img
-            src={expandedImage}
-            alt={poll.title}
+            src={expandedImage.url}
+            alt={expandedImage.alt}
             className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           />
