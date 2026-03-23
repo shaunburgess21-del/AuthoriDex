@@ -605,47 +605,49 @@ function SectionHeader({
   rulesTitle?: string;
 }) {
   return (
-    <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mt-[15px] mb-[15px]">
-      <div className="flex items-center gap-3 flex-1 min-w-0">
-        {icon && (
-          <div className="h-10 w-10 rounded-lg bg-violet-500/10 hidden sm:flex items-center justify-center shrink-0">
-            {icon}
+    <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {icon && (
+            <div className="h-10 w-10 rounded-lg bg-violet-500/10 hidden sm:flex items-center justify-center shrink-0">
+              {icon}
+            </div>
+          )}
+          <div>
+            <h2 className="text-xl font-serif font-bold">{title}</h2>
+            {children}
           </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <h2 className="text-lg sm:text-xl font-serif font-bold truncate">{title}</h2>
-          {children}
         </div>
-      </div>
-      <div className="flex items-center gap-2 shrink-0 ml-3">
-        {onRulesClick && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-7 w-7"
-                onClick={onRulesClick}
-                aria-label="How it works"
-                data-testid={`button-rules-${title.toLowerCase().replace(/\s+/g, '-')}`}
-              >
-                <HelpCircle className="h-4 w-4 text-violet-500" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>How it works</TooltipContent>
-          </Tooltip>
-        )}
-        {onViewAll && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="text-violet-500 hover:text-violet-400"
-            onClick={onViewAll}
-          >
-            View All
-            <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {onRulesClick && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={onRulesClick}
+                  className="text-violet-400 hover:text-violet-300"
+                  aria-label="How it works"
+                  data-testid={`button-rules-${title.toLowerCase().replace(/\s+/g, '-')}`}
+                >
+                  <HelpCircle className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">How it works</TooltipContent>
+            </Tooltip>
+          )}
+          {onViewAll && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-violet-500 hover:text-violet-400"
+              onClick={onViewAll}
+            >
+              View All
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -2901,46 +2903,54 @@ export default function PredictPage() {
           )}
         </div>
       </div>
-      <div className="container mx-auto px-4 max-w-7xl">
+      <div className="container mx-auto px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
         {/* World Markets Section - First */}
         {showSection("community") && (
           <section className="mb-12 mt-[5px]">
-            <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20 backdrop-blur-sm mt-[15px] mb-[15px]">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="h-10 w-10 rounded-lg bg-violet-500/10 hidden sm:flex items-center justify-center shrink-0">
-                  <Scale className="h-5 w-5 text-violet-400" />
+            <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-violet-500/10 hidden sm:flex items-center justify-center shrink-0">
+                    <Scale className="h-5 w-5 text-violet-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-serif font-bold">World Markets</h2>
+                    <p className="text-sm text-muted-foreground">Predict the outcome of verifiable global events</p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-lg sm:text-xl font-serif font-bold truncate">World Markets</h2>
-                  <p className="text-xs sm:text-sm text-muted-foreground truncate">Predict the outcome of verifiable global events</p>
+                <div className="flex items-center gap-2">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => setRulesModalOpen("community")}
+                        className="text-violet-400 hover:text-violet-300"
+                        aria-label="How it works"
+                        data-testid="button-rules-real-world-markets"
+                      >
+                        <HelpCircle className="h-5 w-5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">How it works</TooltipContent>
+                  </Tooltip>
+                  <Button 
+                    onClick={() => setCreateModalOpen(true)}
+                    className="rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-400 hover:bg-violet-500/20 hidden md:flex"
+                    data-testid="button-start-prediction"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Suggest
+                  </Button>
+                  <Button 
+                    size="icon"
+                    onClick={() => setCreateModalOpen(true)}
+                    className="rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-400 hover:bg-violet-500/20 md:hidden"
+                    data-testid="button-start-prediction-mobile"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
                 </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 ml-3">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-7 w-7"
-                      onClick={() => setRulesModalOpen("community")}
-                      aria-label="How it works"
-                      data-testid="button-rules-real-world-markets"
-                    >
-                      <HelpCircle className="h-4 w-4 text-violet-500" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>How it works</TooltipContent>
-                </Tooltip>
-                <Button 
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCreateModalOpen(true)}
-                  className="border-violet-500/30 text-violet-500"
-                  data-testid="button-start-prediction"
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  <span className="hidden sm:inline">Suggest</span>
-                </Button>
               </div>
             </div>
             <SectionFilterBar
@@ -3151,7 +3161,7 @@ export default function PredictPage() {
               icon={<TrendingUp className="h-5 w-5 text-violet-400" />}
               onRulesClick={() => setRulesModalOpen("updown")}
             >
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">Will their trend score be higher / lower</p>
+              <p className="text-sm text-muted-foreground">Will their trend score be higher / lower</p>
             </SectionHeader>
             <SectionFilterBar
               categoryFilter={updownCategory}
@@ -3212,7 +3222,7 @@ export default function PredictPage() {
               icon={<Swords className="h-5 w-5 text-violet-400" />}
               onRulesClick={() => setRulesModalOpen("h2h")}
             >
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">Who will gain more points</p>
+              <p className="text-sm text-muted-foreground">Who will gain more points</p>
             </SectionHeader>
             <SectionFilterBar
               categoryFilter={h2hCategory}
@@ -3273,7 +3283,7 @@ export default function PredictPage() {
               icon={<Trophy className="h-5 w-5 text-violet-400" />}
               onRulesClick={() => setRulesModalOpen("gainer")}
             >
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">Pick the biggest mover in each category this week</p>
+              <p className="text-sm text-muted-foreground">Pick the biggest mover in each category this week</p>
             </SectionHeader>
             <SectionFilterBar
               categoryFilter={gainerCategory}
@@ -3346,6 +3356,7 @@ export default function PredictPage() {
         steps={PREDICT_ONBOARDING_STEPS}
         toastLabel="New to predictions?"
         lastStepCta="Make Your First Prediction"
+        disableAutoToast={!!user}
       />
       <FullScreenOverlay
         open={viewAllCategory === "weekly"}

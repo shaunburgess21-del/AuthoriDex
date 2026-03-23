@@ -88,7 +88,7 @@ import { CardSection } from "@/components/CardSection";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
-import { OnboardingDrawer, type OnboardingStep } from "@/components/OnboardingDrawer";
+import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 
 const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
@@ -342,12 +342,12 @@ function VersusCard({
             onClick={(e) => {
               if (!hasVoted || votedB) onVote(matchup.id, 'option_a', e);
             }}
-            className={`flex-1 flex flex-col rounded-t-none rounded-b-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
+            className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
               hasVoted
                 ? votedA
-                  ? 'border-blue-500/50 ring-2 ring-blue-500/30'
-                  : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-blue-500/30'
-                : 'border-slate-700/50 hover:border-blue-500/50'
+                  ? 'border-slate-300/60 ring-2 ring-white/15'
+                  : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-400/40'
+                : 'border-slate-700/50 hover:border-slate-400/50'
             }`}
             data-testid={`button-vote-a-${matchup.id}`}
           >
@@ -366,7 +366,7 @@ function VersusCard({
               )}
             </div>
             <div className="px-2 py-2 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
-              <span className="font-semibold text-sm truncate block">{matchup.optionAText}</span>
+              <span className={`font-semibold text-sm truncate block ${votedA ? 'text-blue-400' : ''}`}>{matchup.optionAText}</span>
             </div>
           </button>
           
@@ -380,12 +380,12 @@ function VersusCard({
             onClick={(e) => {
               if (!hasVoted || votedA) onVote(matchup.id, 'option_b', e);
             }}
-            className={`flex-1 flex flex-col rounded-t-none rounded-b-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
+            className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
               hasVoted
                 ? votedB
-                  ? 'border-amber-500/50 ring-2 ring-amber-500/30'
-                  : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-amber-500/30'
-                : 'border-slate-700/50 hover:border-amber-500/50'
+                  ? 'border-slate-300/60 ring-2 ring-white/15'
+                  : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-400/40'
+                : 'border-slate-700/50 hover:border-slate-400/50'
             }`}
             data-testid={`button-vote-b-${matchup.id}`}
           >
@@ -404,7 +404,7 @@ function VersusCard({
               )}
             </div>
             <div className="px-2 py-2 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
-              <span className="font-semibold text-sm truncate block">{matchup.optionBText}</span>
+              <span className={`font-semibold text-sm truncate block ${votedB ? 'text-amber-400' : ''}`}>{matchup.optionBText}</span>
             </div>
           </button>
         </div>
@@ -450,8 +450,8 @@ function VersusCard({
               )}
             </div>
             <div className="flex items-center justify-between mt-1.5">
-              <span className={`text-[11px] font-medium ${hasVoted ? 'text-slate-500' : 'text-slate-600'}`}>{matchup.optionAText}</span>
-              <span className={`text-[11px] font-medium ${hasVoted ? 'text-slate-500' : 'text-slate-600'}`}>{matchup.optionBText}</span>
+              <span className={`text-[11px] font-medium ${votedA ? 'text-blue-400' : hasVoted ? 'text-slate-500' : 'text-slate-600'}`}>{matchup.optionAText}</span>
+              <span className={`text-[11px] font-medium ${votedB ? 'text-amber-400' : hasVoted ? 'text-slate-500' : 'text-slate-600'}`}>{matchup.optionBText}</span>
             </div>
           </div>
           {hasVoted ? (
@@ -1971,6 +1971,7 @@ export default function VotePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
+  const voteOnboardingRef = useRef<OnboardingDrawerHandle>(null);
   const { favorites, favoriteIds, isAuthenticated } = useFavorites();
   
   const handleAuthRequired = () => {
@@ -3157,6 +3158,18 @@ export default function VotePage() {
           <CurateSection categoryFilter={curateCategoryFilter} />
         </section>
         )}
+
+        <div className="text-center pb-8">
+          <button
+            type="button"
+            onClick={() => voteOnboardingRef.current?.open()}
+            className="text-sm text-muted-foreground hover:text-cyan-400 transition-colors"
+            data-testid="button-footer-how-it-works-vote"
+          >
+            <HelpCircle className="h-4 w-4 inline mr-1 align-text-bottom" />
+            How it works
+          </button>
+        </div>
       </div>
       <Dialog open={startPollModalOpen} onOpenChange={setStartPollModalOpen}>
         <DialogContent>
@@ -3910,10 +3923,12 @@ export default function VotePage() {
         </DialogContent>
       </Dialog>
       <OnboardingDrawer
+        ref={voteOnboardingRef}
         storageKey="authoridex_vote_welcome_seen"
         steps={VOTE_ONBOARDING_STEPS}
         toastLabel="New to voting?"
         lastStepCta="Cast Your First Vote"
+        disableAutoToast={!!user}
       />
       {/* Community Governance Info Modal */}
       <Dialog open={infoModalOpen === "governance"} onOpenChange={() => setInfoModalOpen(null)}>

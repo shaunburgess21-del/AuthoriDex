@@ -1,5 +1,6 @@
 import { VoxDexPulse } from "@/components/VoxDexPulse";
 import { WelcomeModal } from "@/components/WelcomeModal";
+import type { OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { SearchBar } from "@/components/SearchBar";
 import { LeaderboardRow, getExceptionalIndicator } from "@/components/LeaderboardRow";
 import type { PercentileThresholds } from "@/components/LeaderboardRow";
@@ -19,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
-import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Check, ThumbsDown, Minus, Rocket, Flame, Star, Info, Crown } from "lucide-react";
+import { X, RefreshCw, TrendingUp, TrendingDown, Activity, ChevronRight, ChevronDown, LineChart, Vote, Trophy, Zap, Users, Sparkles, Target, Check, ThumbsDown, Minus, Rocket, Flame, Star, Info, Crown, HelpCircle } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
@@ -501,6 +502,7 @@ export default function HomePage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [approvalShowResults, setApprovalShowResults] = useState(false);
   const [moversCollapsed, setMoversCollapsed] = useState(true);
+  const welcomeOnboardingRef = useRef<OnboardingDrawerHandle>(null);
 
   const { toast } = useToast();
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
@@ -831,7 +833,7 @@ export default function HomePage() {
         </div>
       </header>
       <VoxDexPulse />
-      <WelcomeModal />
+      <WelcomeModal ref={welcomeOnboardingRef} />
       {/* PRESERVED: Sticky toggle bar (Leaderboard/Vote/Predict) - commented out for future re-enable
       <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-blue-500/5 via-background/95 to-blue-500/5 backdrop-blur-xl" data-toggle-bar>
         <div className="container mx-auto px-4">
@@ -1196,10 +1198,19 @@ export default function HomePage() {
           */}
       </div>
       <footer className="border-t mt-24 py-12">
-        <div className="container mx-auto px-4 text-center">
+        <div className="container mx-auto px-4 text-center space-y-3">
           <p className="text-sm text-muted-foreground">
             VoxDex - Real-time celebrity trending tracker powered by live data APIs
           </p>
+          <button
+            type="button"
+            onClick={() => welcomeOnboardingRef.current?.open()}
+            className="text-sm text-muted-foreground hover:text-primary transition-colors"
+            data-testid="button-footer-how-it-works-home"
+          >
+            <HelpCircle className="h-4 w-4 inline mr-1 align-text-bottom" />
+            How it works
+          </button>
         </div>
       </footer>
       <AnimatePresence>

@@ -38,7 +38,7 @@ export function CardSection({
         {desktopItems}
       </div>
 
-      <div className="md:hidden voxdex-swiper w-screen relative left-1/2 -ml-[50vw]" data-dot-active={dotActive}>
+      <div className="md:hidden voxdex-swiper relative -mx-4 w-[calc(100%+2rem)]" data-dot-active={dotActive}>
         <Swiper
           modules={[Pagination, A11y, Virtual]}
           spaceBetween={0}
