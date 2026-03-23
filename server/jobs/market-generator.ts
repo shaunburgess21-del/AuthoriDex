@@ -22,7 +22,33 @@ export function getWeekContext(now = new Date()) {
 
 export async function generateWeeklyUpDown(): Promise<number> {
   const { monday, sunday, weekNumber } = getWeekContext();
-  const people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
+  let people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
+
+  if (people.length === 0) {
+    log(`[MarketGenerator:UpDown] No trackedPeople found, falling back to trendingPeople`);
+    const trending = await db
+      .select({ id: trendingPeople.id, name: trendingPeople.name, category: trendingPeople.category, avatar: trendingPeople.avatar })
+      .from(trendingPeople)
+      .orderBy(desc(trendingPeople.fameIndex))
+      .limit(100);
+    people = trending.map(t => ({
+      ...t,
+      category: t.category || "misc",
+      displayOrder: 0,
+      imageSlug: null as string | null,
+      bio: null as string | null,
+      youtubeId: null as string | null,
+      spotifyId: null as string | null,
+      wikiSlug: null as string | null,
+      xHandle: null as string | null,
+      instagramHandle: null as string | null,
+      tiktokHandle: null as string | null,
+      searchQueryOverride: null as string | null,
+      newsQueryWidened: null as string | null,
+      status: "main_leaderboard",
+    }));
+    log(`[MarketGenerator:UpDown] Fallback: ${people.length} people from trendingPeople`);
+  }
 
   const existing = await db.select({ personId: predictionMarkets.personId })
     .from(predictionMarkets)
@@ -248,7 +274,33 @@ export async function backfillGainerMarketForInductee(person: {
 
 export async function generateWeeklyJackpot(): Promise<number> {
   const { monday, sunday, weekNumber } = getWeekContext();
-  const people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
+  let people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
+
+  if (people.length === 0) {
+    log(`[MarketGenerator:Jackpot] No trackedPeople found, falling back to trendingPeople`);
+    const trending = await db
+      .select({ id: trendingPeople.id, name: trendingPeople.name, category: trendingPeople.category, avatar: trendingPeople.avatar })
+      .from(trendingPeople)
+      .orderBy(desc(trendingPeople.fameIndex))
+      .limit(100);
+    people = trending.map(t => ({
+      ...t,
+      category: t.category || "misc",
+      displayOrder: 0,
+      imageSlug: null as string | null,
+      bio: null as string | null,
+      youtubeId: null as string | null,
+      spotifyId: null as string | null,
+      wikiSlug: null as string | null,
+      xHandle: null as string | null,
+      instagramHandle: null as string | null,
+      tiktokHandle: null as string | null,
+      searchQueryOverride: null as string | null,
+      newsQueryWidened: null as string | null,
+      status: "main_leaderboard",
+    }));
+    log(`[MarketGenerator:Jackpot] Fallback: ${people.length} people from trendingPeople`);
+  }
 
   const existing = await db.select({ personId: predictionMarkets.personId })
     .from(predictionMarkets)
