@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { db } from "../db";
 import { predictionMarkets, marketEntries, trackedPeople, trendingPeople } from "@shared/schema";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
-import { eq, and, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, desc, inArray, sql, gte } from "drizzle-orm";
 import { buildOpeningScores } from "../native-markets/openingScores";
 import { log } from "../log";
 
@@ -16,7 +16,7 @@ export function getWeekContext(now = new Date()) {
   sunday.setUTCDate(monday.getUTCDate() + 6);
   sunday.setUTCHours(23, 59, 59, 999);
   const jan1 = new Date(now.getUTCFullYear(), 0, 1);
-  const weekNumber = Math.ceil(((now.getTime() - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
+  const weekNumber = Math.ceil(((monday.getTime() - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
   return { monday, sunday, weekNumber };
 }
 
@@ -52,7 +52,11 @@ export async function generateWeeklyUpDown(): Promise<number> {
 
   const existing = await db.select({ personId: predictionMarkets.personId })
     .from(predictionMarkets)
-    .where(and(eq(predictionMarkets.marketType, "updown"), eq(predictionMarkets.weekNumber, weekNumber)));
+    .where(and(
+      eq(predictionMarkets.marketType, "updown"),
+      eq(predictionMarkets.weekNumber, weekNumber),
+      gte(predictionMarkets.endAt, monday),
+    ));
   const existingPersonIds = new Set(existing.map(e => e.personId));
 
   const personIdList = people.map(p => p.id);
@@ -304,7 +308,11 @@ export async function generateWeeklyJackpot(): Promise<number> {
 
   const existing = await db.select({ personId: predictionMarkets.personId })
     .from(predictionMarkets)
-    .where(and(eq(predictionMarkets.marketType, "jackpot"), eq(predictionMarkets.weekNumber, weekNumber)));
+    .where(and(
+      eq(predictionMarkets.marketType, "jackpot"),
+      eq(predictionMarkets.weekNumber, weekNumber),
+      gte(predictionMarkets.endAt, monday),
+    ));
   const existingPersonIds = new Set(existing.map(e => e.personId));
 
   let created = 0;
