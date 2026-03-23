@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useImperativeHandle, forwardRef, type LucideIcon } from "react";
+import { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, X, ArrowRight } from "lucide-react";
+import { Sparkles, X, ArrowRight, type LucideIcon } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 
 const RE_SHOW_DAYS = 7;
