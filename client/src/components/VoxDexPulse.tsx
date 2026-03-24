@@ -756,7 +756,7 @@ export function VoxDexPulse() {
   return (
     <section className="container mx-auto px-4 max-w-7xl pt-4 pb-2 flex flex-col">
       {/* Section label */}
-      <div className="order-1 flex items-center justify-between mb-2">
+      <div className="order-1 flex items-center gap-[7px] mb-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
           VoxDex Pulse
         </p>
