@@ -879,7 +879,7 @@ function WeeklyUpDownCard({
               <Star className="h-3 w-3 mr-0.5" />Featured
             </Badge>
           )}
-          {(market.totalPool > 500 || (market.totalBets ?? 0) > 10) && (
+          {(market.totalPool > 5000 || (market.totalBets ?? 0) > 50) && (
             <Badge variant="outline" className="text-orange-400 border-orange-500/30 text-[10px]">
               <Flame className="h-3 w-3 mr-0.5" />Hot
             </Badge>
