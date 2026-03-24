@@ -1,5 +1,21 @@
-export function getRecentActivityMarketPath(marketSlug?: string | null): string {
-  return marketSlug ? `/markets/${marketSlug}` : "/predict";
+export function getRecentActivityMarketPath(
+  marketSlug?: string | null,
+  marketType?: string | null
+): string {
+  if (!marketSlug) return "/predict";
+
+  // Route supported market activity to detail pages.
+  if (
+    marketType === "community" ||
+    marketType === "updown" ||
+    marketType === "h2h" ||
+    marketType === "gainer" ||
+    marketType === "jackpot"
+  ) {
+    return `/markets/${marketSlug}`;
+  }
+
+  return "/predict";
 }
 
 export function formatSignedPercent(value: number, fractionDigits = 1): string {

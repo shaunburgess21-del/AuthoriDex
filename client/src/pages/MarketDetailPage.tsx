@@ -406,9 +406,33 @@ export default function MarketDetailPage() {
     enabled: !!params.slug,
   });
 
+  const isCommunityMarket = market?.marketType === "community";
+  const isJackpotMarket = market?.marketType === "jackpot";
+  const effectiveOpenMarketType: "binary" | "multi" | "updown" = market?.openMarketType
+    ? market.openMarketType
+    : market?.marketType === "updown"
+      ? "updown"
+      : "multi";
+
   const betMutation = useMutation({
     mutationFn: async ({ entryId, stakeAmount: amount, direction }: { entryId: string; stakeAmount: number; direction: "yes" | "no" }) => {
-      const res = await apiRequest("POST", `/api/open-markets/${params.slug}/bet`, { entryId, stakeAmount: amount, direction });
+      if (!market) {
+        throw new Error("Market not loaded");
+      }
+
+      if (market.marketType === "community") {
+        const res = await apiRequest("POST", `/api/open-markets/${params.slug}/bet`, { entryId, stakeAmount: amount, direction });
+        return res.json();
+      }
+
+      if (market.marketType === "jackpot") {
+        throw new Error("Jackpot entries are submitted from the Predict page.");
+      }
+
+      const res = await apiRequest("POST", `/api/native-markets/${market.id}/bet`, {
+        entryId,
+        stakeAmount: amount,
+      });
       return res.json();
     },
     onSuccess: async () => {
@@ -417,6 +441,9 @@ export default function MarketDetailPage() {
         refreshProfile(),
         queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/open-markets", params.slug] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/h2h"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/gainer"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
       ]);
@@ -689,7 +716,7 @@ export default function MarketDetailPage() {
           )}
         </div>
 
-        {isOpen && !isInactive && (
+        {isOpen && !isInactive && !isJackpotMarket && (
           <Card className="p-5 mb-6 border-border/40 bg-muted/5" data-testid="section-place-prediction">
             <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
               <Trophy className="h-5 w-5 text-violet-500" />
@@ -703,7 +730,7 @@ export default function MarketDetailPage() {
                   Sign In
                 </Button>
               </div>
-            ) : market.openMarketType === "multi" ? (
+            ) : effectiveOpenMarketType === "multi" ? (
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium mb-2 block">Your Pick</label>
@@ -892,7 +919,7 @@ export default function MarketDetailPage() {
             <Target className="h-5 w-5 text-violet-500" />
             Outcomes
           </h2>
-          {market.openMarketType === "binary" && (
+          {effectiveOpenMarketType === "binary" && (
             <BinaryOutcomes
               entries={entriesWithPercentages}
               selectedEntry={selectedEntry}
@@ -900,7 +927,7 @@ export default function MarketDetailPage() {
               disabled={!isOpen}
             />
           )}
-          {market.openMarketType === "multi" && (
+          {effectiveOpenMarketType === "multi" && (
             <MultiOutcomes
               entries={entriesWithPercentages}
               selectedEntry={selectedEntry}
@@ -908,7 +935,7 @@ export default function MarketDetailPage() {
               disabled={!isOpen}
             />
           )}
-          {market.openMarketType === "updown" && (
+          {effectiveOpenMarketType === "updown" && (
             <UpDownOutcomes
               entries={entriesWithPercentages}
               selectedEntry={selectedEntry}
@@ -1017,6 +1044,7 @@ export default function MarketDetailPage() {
           </Card>
         )}
 
+        {isCommunityMarket && (
         <Card className="p-5 mb-6" data-testid="section-comments">
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
             <Users className="h-5 w-5 text-violet-500" />
@@ -1097,6 +1125,7 @@ export default function MarketDetailPage() {
             <p className="text-sm text-muted-foreground text-center py-4">No comments yet. Be the first to share your thoughts!</p>
           )}
         </Card>
+        )}
 
         {/* Related Markets - placeholder for future implementation */}
       </div>

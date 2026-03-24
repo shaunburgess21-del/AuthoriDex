@@ -3150,12 +3150,12 @@ export default function PredictPage() {
                               role="button"
                               tabIndex={0}
                               onClick={() => {
-                                setLocation(getRecentActivityMarketPath(item.marketSlug));
+                                setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType));
                               }}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter" || e.key === " ") {
                                   e.preventDefault();
-                                  setLocation(getRecentActivityMarketPath(item.marketSlug));
+                                  setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType));
                                 }
                               }}
                             >

@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { ArrowLeft, MessageSquare } from "lucide-react";
 import { formatActivityAge } from "@/lib/formatDate";
+import { getRecentActivityMarketPath } from "@/lib/predict-display";
 
 interface ActivityItem {
   id: string;
@@ -135,40 +136,43 @@ export default function TownSquarePage() {
               {activity.map((item) => (
                 <div
                   key={item.id}
-                  className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30"
+                  className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 cursor-pointer focus-within:bg-muted/30"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType));
+                    }
+                  }}
                 >
-                  <UserSocialAvatar
-                    displayName={item.displayName}
-                    avatarUrl={item.avatarUrl}
-                    isAgent={item.isAgent}
-                    className="h-9 w-9"
-                    onClick={item.username && item.isPublic ? () => setLocation(`/u/${item.username}`) : undefined}
-                  />
+                  <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                    <UserSocialAvatar
+                      displayName={item.displayName}
+                      avatarUrl={item.avatarUrl}
+                      isAgent={item.isAgent}
+                      className="h-9 w-9"
+                      onClick={item.username && item.isPublic ? () => setLocation(`/u/${item.username}`) : undefined}
+                    />
+                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex items-center gap-2 flex-wrap">
                       <button
                         className={`text-sm font-medium ${item.username && item.isPublic ? "hover:underline cursor-pointer" : "cursor-default"}`}
-                        onClick={() => item.username && item.isPublic && setLocation(`/u/${item.username}`)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          item.username && item.isPublic && setLocation(`/u/${item.username}`);
+                        }}
                         aria-disabled={!(item.username && item.isPublic)}
                       >
                         {item.displayName}
                       </button>
                       <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
                     </div>
-                    <button
-                      className="text-left"
-                      onClick={() => {
-                        if (item.marketType === "community") {
-                          setLocation(`/markets/${item.marketSlug}`);
-                        } else {
-                          setLocation("/predict");
-                        }
-                      }}
-                    >
-                      <p className="text-sm text-foreground line-clamp-1 hover:underline">
-                        backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
-                      </p>
-                    </button>
+                    <p className="text-sm text-foreground line-clamp-1 hover:underline">
+                      backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
+                    </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {item.stakeAmount.toLocaleString("en-US")} credits{item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
                     </p>

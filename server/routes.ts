@@ -11658,6 +11658,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             title: predictionMarkets.title,
             slug: predictionMarkets.slug,
             marketType: predictionMarkets.marketType,
+            status: predictionMarkets.status,
+            visibility: predictionMarkets.visibility,
           })
           .from(predictionMarkets)
           .where(inArray(predictionMarkets.id, marketIds)),
@@ -11681,6 +11683,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           const entry = entryMap.get(bet.entryId);
 
           if (!market || !entry) return null;
+          if (market.status !== "OPEN") return null;
+          if (!["live", "inactive"].includes(market.visibility || "")) return null;
 
           const rationale =
             bet.betMetadata &&
