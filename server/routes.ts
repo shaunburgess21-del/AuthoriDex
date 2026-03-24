@@ -2807,11 +2807,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const offset = parseInt(req.query.offset as string) || 0;
       const userId = req.userId;
 
-      // Build conditions array
+      // Build conditions arrays:
+      // - conditions: all filters (including search) for paged results
+      // - nonSearchConditions: filters except search for global rank maps
       const conditions: SQL<unknown>[] = [];
+      const nonSearchConditions: SQL<unknown>[] = [];
       
       if (category && category !== 'all') {
-        conditions.push(eq(trendingPeople.category, category));
+        const categoryCondition = eq(trendingPeople.category, category);
+        conditions.push(categoryCondition);
+        nonSearchConditions.push(categoryCondition);
       }
       
       if (search && search.trim()) {
@@ -2946,11 +2951,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         negDeltaP10: negativeDeltas.length > 0 ? negativeDeltas[p10Idx(negativeDeltas)] : -999,
       };
 
+      let approvalRankById = new Map<string, number>();
+      if (tab === 'approval') {
+        let approvalRankQuery = db
+          .select({ id: trendingPeople.id })
+          .from(trendingPeople)
+          .leftJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId));
+
+        if (nonSearchConditions.length > 0) {
+          approvalRankQuery = approvalRankQuery.where(and(...nonSearchConditions)) as typeof approvalRankQuery;
+        }
+
+        if (sortDir === 'asc') {
+          approvalRankQuery = approvalRankQuery.orderBy(
+            sql`${celebrityMetrics.approvalAvgRating} ASC NULLS LAST, ${celebrityMetrics.approvalVotesCount} ASC NULLS LAST, ${trendingPeople.name} ASC`
+          ) as typeof approvalRankQuery;
+        } else {
+          approvalRankQuery = approvalRankQuery.orderBy(
+            sql`${celebrityMetrics.approvalAvgRating} DESC NULLS LAST, ${celebrityMetrics.approvalVotesCount} DESC NULLS LAST, ${trendingPeople.name} ASC`
+          ) as typeof approvalRankQuery;
+        }
+
+        const approvalRankRows = await approvalRankQuery;
+        approvalRankById = new Map(
+          approvalRankRows.map((row, idx) => [row.id, idx + 1])
+        );
+      }
+
       const leaderboard = results.map((person, index) => {
         const prevRank = prevRankLookup.get(person.id) ?? person.rank;
+        let leaderboardRank: number | null = null;
+
+        if (tab === 'fame') {
+          leaderboardRank = person.liveRank ?? person.rank;
+        } else if (tab === 'approval') {
+          leaderboardRank = approvalRankById.get(person.id) ?? null;
+        } else {
+          leaderboardRank = sortDir === 'asc' ? totalCount - offset - index : offset + index + 1;
+        }
+
         return {
           ...person,
-          leaderboardRank: sortDir === 'asc' ? totalCount - offset - index : offset + index + 1,
+          leaderboardRank,
           userValueVote: userValueVotes[person.id] || null,
           rankChange: prevRank - person.rank,
         };
