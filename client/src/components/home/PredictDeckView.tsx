@@ -50,6 +50,13 @@ import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 
 type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "creator";
 
+function smartName(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length <= 1) return fullName;
+  if (fullName.length <= 14) return fullName;
+  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+}
+
 const PREDICT_CATEGORY_FILTERS = getFilterCategories(false).map(cat => ({
   id: cat.toLowerCase() as CategoryFilter,
   label: cat
@@ -193,7 +200,7 @@ function H2HCard({
                 <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} size="xl" />
               </div>
             </div>
-            <p className="text-sm font-semibold mt-2 text-center">{market.person1.name.split(" ")[0]}</p>
+            <p className="text-sm font-semibold mt-2 text-center">{smartName(market.person1.name)}</p>
             <span className="text-xs text-blue-400">{market.person1Percent}%</span>
           </div>
           
@@ -213,7 +220,7 @@ function H2HCard({
                 <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} size="xl" />
               </div>
             </div>
-            <p className="text-sm font-semibold mt-2 text-center">{market.person2.name.split(" ")[0]}</p>
+            <p className="text-sm font-semibold mt-2 text-center">{smartName(market.person2.name)}</p>
             <span className="text-xs text-purple-400">{100 - market.person1Percent}%</span>
           </div>
         </div>
@@ -234,21 +241,19 @@ function H2HCard({
         <div className="grid grid-cols-2 gap-2">
           <Button 
             size="sm" 
-            variant="outline" 
-            className="border-blue-500/30 text-blue-500 hover:bg-blue-500/10"
+            className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 md:py-2 h-auto"
             onClick={() => onPredict(market.id, 'person1', market.person1.name)}
             data-testid={`button-h2h-p1-${market.id}`}
           >
-            {market.person1.name.split(" ")[0]}
+            {smartName(market.person1.name)}
           </Button>
           <Button 
             size="sm" 
-            variant="outline" 
-            className="border-purple-500/30 text-purple-500 hover:bg-purple-500/10"
+            className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 md:py-2 h-auto"
             onClick={() => onPredict(market.id, 'person2', market.person2.name)}
             data-testid={`button-h2h-p2-${market.id}`}
           >
-            {market.person2.name.split(" ")[0]}
+            {smartName(market.person2.name)}
           </Button>
         </div>
       </div>
@@ -361,42 +366,45 @@ function GainerCard({
       
       <div className="relative p-4">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs text-muted-foreground">7-day gain</span>
+          <span className="text-xs text-muted-foreground">This week's gain</span>
           <CategoryPill category={market.category} />
         </div>
         
         <h3 className="text-sm font-semibold mb-3">Category Race: {categoryLabel}</h3>
         
-        <div className="space-y-2 mb-4">
-          {market.leaders.map((leader, idx) => (
-            <div 
-              key={leader.name}
-              className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50 border border-slate-700/30"
-            >
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                {idx === 0 && (
-                  <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center">
-                    <Trophy className="h-3.5 w-3.5 text-amber-400" />
+        <div className="space-y-1.5 mb-4">
+          {(() => {
+            const maxGain = Math.max(...market.leaders.map(l => Math.abs(l.percentGain)), 1);
+            return market.leaders.map((leader, idx) => (
+              <div 
+                key={leader.name}
+                className={`flex items-center gap-3 p-2.5 rounded-lg relative overflow-hidden ${idx === 0 ? 'bg-gradient-to-r from-amber-500/10 to-slate-800/50 border border-amber-500/30' : 'bg-slate-800/50 border border-slate-700/30'}`}
+              >
+                <div className="absolute inset-y-0 left-0 bg-green-500/8 transition-all" style={{ width: `${Math.max((Math.abs(leader.percentGain) / maxGain) * 100, 5)}%` }} />
+                <div className="relative flex items-center gap-2 flex-1 min-w-0">
+                  {idx === 0 ? (
+                    <div className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center">
+                      <Trophy className="h-3.5 w-3.5 text-amber-400" />
+                    </div>
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-muted/50 flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-muted-foreground">#{idx + 1}</span>
+                    </div>
+                  )}
+                  <PersonAvatar name={leader.name} avatar={leader.avatar} className="h-12 w-12" />
+                  <span className="text-sm font-medium truncate">{leader.name}</span>
+                </div>
+                <div className="relative text-right">
+                  <div className="text-sm font-semibold text-green-400">
+                    +{leader.currentGain.toLocaleString('en-US')} pts
                   </div>
-                )}
-                {idx !== 0 && (
-                  <span className="w-6 h-6 flex items-center justify-center text-xs text-muted-foreground">
-                    #{idx + 1}
-                  </span>
-                )}
-                <PersonAvatar name={leader.name} avatar={leader.avatar} size="lg" />
-                <span className="text-sm font-medium truncate">{leader.name}</span>
-              </div>
-              <div className="text-right">
-                <div className="text-sm font-semibold text-green-400">
-                  +{leader.currentGain.toLocaleString('en-US')} pts
-                </div>
-                <div className="text-xs text-green-500/70">
-                  +{leader.percentGain}%
+                  <div className="text-xs text-green-500/70 font-mono">
+                    +{leader.percentGain}%
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ));
+          })()}
         </div>
         
         <div className="flex items-center justify-center mb-3">

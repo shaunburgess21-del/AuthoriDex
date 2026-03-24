@@ -60,6 +60,9 @@ const MatchupDetailPage = lazyWithRetry(() => import("@/pages/MatchupDetailPage"
 const UserLeaderboardPage = lazyWithRetry(() => import("@/pages/UserLeaderboardPage"));
 const TownSquarePage = lazyWithRetry(() => import("@/pages/TownSquarePage"));
 const ValueRatingsPage = lazyWithRetry(() => import("@/pages/ValueRatingsPage"));
+const CategoryRaceDetailPage = lazyWithRetry(() => import("@/pages/CategoryRaceDetailPage"));
+const UpDownDetailPage = lazyWithRetry(() => import("@/pages/UpDownDetailPage"));
+const H2HDetailPage = lazyWithRetry(() => import("@/pages/H2HDetailPage"));
 const NotFound = lazyWithRetry(() => import("@/pages/not-found"));
 
 function PageFallback() {
@@ -95,6 +98,9 @@ function Router() {
         <Route path="/vote/opinion-polls/:slug" component={OpinionPollDetailPage} />
         <Route path="/vote/matchups/:slug" component={MatchupDetailPage} />
         <Route path="/predictions/leaderboard" component={UserLeaderboardPage} />
+        <Route path="/predict/race/:marketId" component={CategoryRaceDetailPage} />
+        <Route path="/predict/updown/:marketId" component={UpDownDetailPage} />
+        <Route path="/predict/h2h/:marketId" component={H2HDetailPage} />
         <Route path="/predict/activity" component={TownSquarePage} />
         <Route path="/vote/value-ratings" component={ValueRatingsPage} />
         <Route path="/admin" component={AdminDashboard} />

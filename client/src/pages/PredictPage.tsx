@@ -468,6 +468,13 @@ interface TopGainerMarket {
   recentParticipants?: ParticipantPreview[];
 }
 
+function smartName(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length <= 1) return fullName;
+  if (fullName.length <= 14) return fullName;
+  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+}
+
 interface RecentPredictionActivity {
   id: string;
   createdAt: string;
@@ -894,10 +901,10 @@ function WeeklyUpDownCard({
       </div>
       
       <div className="flex items-center gap-3 mb-2">
-        <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-[64px] w-[64px]" />
-        <div>
-          <p className="font-semibold text-[15px] leading-[1.3]">{market.personName}</p>
-          <p className="text-xs text-muted-foreground font-mono">
+        <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-20 w-20 md:h-16 md:w-16" />
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-[15px] leading-tight">{market.personName}</p>
+          <p className="text-xs text-muted-foreground font-mono mt-0.5">
             Now: {market.currentScore.toLocaleString('en-US')}
           </p>
         </div>
@@ -907,10 +914,11 @@ function WeeklyUpDownCard({
         Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
       </p>
 
-      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mb-2 px-0.5">
+      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-2 flex-wrap">
         <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
-        <span>Now: <span className="font-mono text-foreground">{market.currentScore.toLocaleString('en-US')}</span></span>
+        <span className="text-muted-foreground/40">&middot;</span>
         <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
+        <span className="text-muted-foreground/40">&middot;</span>
         <span>Pool: <span className="font-mono text-violet-400">{market.totalPool.toLocaleString('en-US')}</span></span>
       </div>
       
@@ -947,7 +955,7 @@ function WeeklyUpDownCard({
         ) : (
           <div className="grid grid-cols-2 gap-2">
             <Button 
-              className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+              className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 py-3 md:py-2 h-auto"
               onClick={() => onSelect?.("up")}
               data-testid={`button-up-${market.id}`}
             >
@@ -955,7 +963,7 @@ function WeeklyUpDownCard({
               Up
             </Button>
             <Button 
-              className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+              className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 py-3 md:py-2 h-auto"
               onClick={() => onSelect?.("down")}
               data-testid={`button-down-${market.id}`}
             >
@@ -965,6 +973,13 @@ function WeeklyUpDownCard({
           </div>
         )}
       </div>
+      <Link
+        href={`/predict/updown/${market.id}`}
+        className="flex items-center justify-center gap-1 text-[11px] text-violet-400 hover:text-violet-300 transition-colors mt-2 pt-2 border-t border-border/30"
+      >
+        View Details
+        <ChevronRight className="h-3 w-3" />
+      </Link>
       </div>
     </PredictCard>
   );
@@ -973,14 +988,24 @@ function WeeklyUpDownCard({
 function HeadToHeadCard({ 
   market, 
   isMarketClosed = false,
-  onSelect
+  onSelect,
+  userPick,
 }: { 
   market: HeadToHeadMarket; 
   isMarketClosed?: boolean;
   onSelect?: (person: 1 | 2) => void;
+  userPick?: 1 | 2 | null;
 }) {
+  const hasPicked = userPick === 1 || userPick === 2;
+  const pickedName = userPick === 1 ? market.person1.name : userPick === 2 ? market.person2.name : "";
+  const scoreDiff = (market.person1.currentScore || 0) - (market.person2.currentScore || 0);
+  const pickWinning = hasPicked && (
+    (userPick === 1 && scoreDiff > 0) || (userPick === 2 && scoreDiff < 0)
+  );
+  const pickTied = hasPicked && scoreDiff === 0;
+
   return (
-    <PredictCard testId={`card-h2h-${market.id}`} className={`relative overflow-hidden ${isMarketClosed ? 'opacity-75' : ''}`}>
+    <PredictCard testId={`card-h2h-${market.id}`} className={`relative overflow-hidden max-w-sm mx-auto ${isMarketClosed && !hasPicked ? 'opacity-75' : ''}`}>
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute left-0 top-0 w-1/2 h-full bg-gradient-to-r from-blue-600/20 to-transparent" />
         <div className="absolute right-0 top-0 w-1/2 h-full bg-gradient-to-l from-purple-600/20 to-transparent" />
@@ -1002,52 +1027,70 @@ function HeadToHeadCard({
           <CategoryPill category={market.category} />
         </div>
         
-        <div className="relative mb-4" style={{ padding: '0 5px' }}>
+        <div className="relative mb-3" style={{ padding: '0 5px' }}>
           <div className="flex" style={{ gap: '7px' }}>
             <div
-              className={`flex-1 relative ${!isMarketClosed ? 'cursor-pointer group/p1' : ''}`}
-              onClick={() => !isMarketClosed && onSelect?.(1)}
+              className={`flex-1 relative ${!isMarketClosed && !hasPicked ? 'cursor-pointer group/p1' : ''} ${hasPicked && userPick !== 1 ? 'opacity-50' : ''}`}
+              onClick={() => !isMarketClosed && !hasPicked && onSelect?.(1)}
             >
-              <div className="absolute -inset-4 rounded-md bg-blue-500/20 blur-lg pointer-events-none transition-opacity group-hover/p1:bg-blue-500/40" />
-              <div className="rounded-lg overflow-hidden ring-2 ring-transparent transition-all group-hover/p1:ring-blue-500/60">
-                <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="h-auto w-full aspect-square" />
+              <div className={`absolute -inset-4 rounded-md blur-lg pointer-events-none transition-opacity ${hasPicked && userPick === 1 ? 'bg-green-500/20' : 'bg-blue-500/20 group-hover/p1:bg-blue-500/40'}`} />
+              <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 1 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent group-hover/p1:ring-blue-500/60'}`}>
+                <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="h-auto w-full aspect-[4/5]" />
               </div>
+              {hasPicked && userPick === 1 && (
+                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-10">
+                  <span className="bg-green-600/90 text-white text-[8px] px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wider whitespace-nowrap flex items-center gap-0.5">
+                    <Check className="h-2.5 w-2.5" />
+                    Your Pick
+                  </span>
+                </div>
+              )}
             </div>
             <div
-              className={`flex-1 relative ${!isMarketClosed ? 'cursor-pointer group/p2' : ''}`}
-              onClick={() => !isMarketClosed && onSelect?.(2)}
+              className={`flex-1 relative ${!isMarketClosed && !hasPicked ? 'cursor-pointer group/p2' : ''} ${hasPicked && userPick !== 2 ? 'opacity-50' : ''}`}
+              onClick={() => !isMarketClosed && !hasPicked && onSelect?.(2)}
             >
-              <div className="absolute -inset-4 rounded-md bg-white/10 blur-lg pointer-events-none transition-opacity group-hover/p2:bg-white/20" />
-              <div className="rounded-lg overflow-hidden ring-2 ring-transparent transition-all group-hover/p2:ring-[#EFEFEF]/55">
-                <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-auto w-full aspect-square" />
+              <div className={`absolute -inset-4 rounded-md blur-lg pointer-events-none transition-opacity ${hasPicked && userPick === 2 ? 'bg-green-500/20' : 'bg-purple-500/20 group-hover/p2:bg-purple-500/40'}`} />
+              <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 2 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent group-hover/p2:ring-purple-500/60'}`}>
+                <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-auto w-full aspect-[4/5]" />
               </div>
+              {hasPicked && userPick === 2 && (
+                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 z-10">
+                  <span className="bg-green-600/90 text-white text-[8px] px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wider whitespace-nowrap flex items-center gap-0.5">
+                    <Check className="h-2.5 w-2.5" />
+                    Your Pick
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
-            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
-              <span className="text-xs font-bold text-slate-200">VS</span>
+            <div className="h-14 w-14 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
+              <span className="text-sm font-bold text-slate-200">VS</span>
             </div>
           </div>
         </div>
         
         <div className="flex items-center justify-between px-2 mb-2">
           <div
-            className={`flex flex-col items-center flex-1 ${!isMarketClosed ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
-            onClick={() => !isMarketClosed && onSelect?.(1)}
+            className={`flex flex-col items-center flex-1 ${!isMarketClosed && !hasPicked ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
+            onClick={() => !isMarketClosed && !hasPicked && onSelect?.(1)}
           >
-            <p className="text-sm font-semibold text-center">{market.person1.name.split(" ")[0]}</p>
-            <span className="text-xs text-blue-400">{market.person1Percent}%</span>
+            <p className="text-sm font-semibold text-center">{smartName(market.person1.name)}</p>
+            <span className="text-[10px] font-mono text-muted-foreground">{market.person1.currentScore?.toLocaleString('en-US') || ''}</span>
+            <span className="text-xs text-blue-400 font-semibold">{market.person1Percent}%</span>
           </div>
           <div
-            className={`flex flex-col items-center flex-1 ${!isMarketClosed ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
-            onClick={() => !isMarketClosed && onSelect?.(2)}
+            className={`flex flex-col items-center flex-1 ${!isMarketClosed && !hasPicked ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
+            onClick={() => !isMarketClosed && !hasPicked && onSelect?.(2)}
           >
-            <p className="text-sm font-semibold text-center">{market.person2.name.split(" ")[0]}</p>
-            <span className="text-xs text-purple-400">{100 - market.person1Percent}%</span>
+            <p className="text-sm font-semibold text-center">{smartName(market.person2.name)}</p>
+            <span className="text-[10px] font-mono text-muted-foreground">{market.person2.currentScore?.toLocaleString('en-US') || ''}</span>
+            <span className="text-xs text-purple-400 font-semibold">{100 - market.person1Percent}%</span>
           </div>
         </div>
         
-        <div className="h-2 rounded-full overflow-hidden mb-3 flex">
+        <div className="h-2 rounded-full overflow-hidden mb-2 flex">
           <div 
             className="h-full bg-gradient-to-r from-blue-500 to-blue-400"
             style={{ width: `${market.person1Percent}%` }}
@@ -1058,14 +1101,33 @@ function HeadToHeadCard({
           />
         </div>
         
-        <div className="flex items-center justify-center mb-3">
+        <div className="flex items-center justify-center mb-2">
           <span className="text-sm font-semibold text-violet-500">
             Pool: {market.totalPool.toLocaleString('en-US')}
           </span>
         </div>
         
         <div className="mt-auto">
-          {isMarketClosed ? (
+          {hasPicked ? (
+            <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/5 px-3 py-2">
+              <Check className="h-4 w-4 text-green-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] text-muted-foreground">Your pick</p>
+                <p className="text-sm font-semibold truncate">{smartName(pickedName)}</p>
+              </div>
+              <Badge
+                className={
+                  pickWinning
+                    ? "bg-green-600/20 text-green-500 border-green-500/30"
+                    : pickTied
+                    ? "bg-amber-600/20 text-amber-500 border-amber-500/30"
+                    : "bg-red-600/20 text-red-500 border-red-500/30"
+                }
+              >
+                {pickWinning ? "Winning" : pickTied ? "Tied" : "Behind"}
+              </Badge>
+            </div>
+          ) : isMarketClosed ? (
             <Button 
               className="w-full bg-muted text-muted-foreground cursor-not-allowed"
               disabled
@@ -1076,22 +1138,29 @@ function HeadToHeadCard({
           ) : (
             <div className="grid grid-cols-2 gap-2">
               <Button 
-                className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20"
+                className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 md:py-2 h-auto"
                 onClick={() => onSelect?.(1)}
                 data-testid={`button-pick1-${market.id}`}
               >
-                {market.person1.name.split(" ")[0]}
+                {smartName(market.person1.name)}
               </Button>
               <Button 
-                className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20"
+                className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 md:py-2 h-auto"
                 onClick={() => onSelect?.(2)}
                 data-testid={`button-pick2-${market.id}`}
               >
-                {market.person2.name.split(" ")[0]}
+                {smartName(market.person2.name)}
               </Button>
             </div>
           )}
         </div>
+        <Link
+          href={`/predict/h2h/${market.id}`}
+          className="flex items-center justify-center gap-1 text-[11px] text-violet-400 hover:text-violet-300 transition-colors mt-2 pt-2 border-t border-border/30"
+        >
+          View Battle Details
+          <ChevronRight className="h-3 w-3" />
+        </Link>
       </div>
     </PredictCard>
   );
@@ -1119,7 +1188,7 @@ function TopGainerCard({
 
   return (
     <PredictCard testId={`card-gainer-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''} ${isShimmering ? 'shimmer-once' : ''}`}>
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-2">
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="text-xs text-muted-foreground flex items-center gap-1 cursor-help border-b border-dashed border-muted-foreground/40">
@@ -1135,44 +1204,43 @@ function TopGainerCard({
         <CategoryPill category={market.category} />
       </div>
       
-      <h3 className="text-[16px] font-semibold mb-3 leading-[1.4]">Category Race: {getMarketCategoryLabel(market.category)}</h3>
+      <h3 className="text-[16px] font-semibold mb-2 leading-[1.4]">Category Race: {getMarketCategoryLabel(market.category)}</h3>
       
-      <div className="space-y-2 mb-3">
-        {market.leaders.map((leader, i) => (
-          <div 
-            key={leader.name} 
-            className={`flex items-center gap-2 p-2 rounded-lg transition-colors ${canPick ? 'cursor-pointer' : ''} ${i === 0 ? 'border border-amber-500/30' : canPick ? 'hover:bg-muted/50' : ''}`}
-            onClick={() => {
-              if (!canPick) return;
-              onShowAllCandidates?.(market, leader);
-            }}
-          >
-            <div className="relative">
-              {i === 0 ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="h-5 w-5 rounded-full bg-background/80 backdrop-blur-sm border border-amber-500/50 flex items-center justify-center cursor-help">
-                      <Crown className="h-3 w-3 text-amber-500" />
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="text-xs">Current category leaderboard rank</p>
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <span className="text-xs font-bold text-violet-500 w-5 text-center">#{leader.rank || (i + 1)}</span>
-              )}
+      <div className="space-y-1.5 mb-3">
+        {(() => {
+          const maxGain = Math.max(...market.leaders.map(l => Math.abs(l.percentGain)), 1);
+          return market.leaders.map((leader, i) => (
+            <div 
+              key={leader.name} 
+              className={`flex items-center gap-2.5 p-2 rounded-lg transition-colors relative overflow-hidden ${canPick ? 'cursor-pointer' : ''} ${i === 0 ? 'bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30' : canPick ? 'hover:bg-muted/50' : ''}`}
+              onClick={() => {
+                if (!canPick) return;
+                onShowAllCandidates?.(market, leader);
+              }}
+            >
+              <div className="absolute inset-y-0 left-0 bg-green-500/8 transition-all" style={{ width: `${Math.max((Math.abs(leader.percentGain) / maxGain) * 100, 5)}%` }} />
+              <div className="relative flex items-center gap-2.5 flex-1 min-w-0">
+                {i === 0 ? (
+                  <div className="h-6 w-6 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center shrink-0">
+                    <Crown className="h-3.5 w-3.5 text-amber-400" />
+                  </div>
+                ) : (
+                  <div className="h-6 w-6 rounded-full bg-muted/50 flex items-center justify-center shrink-0">
+                    <span className="text-[10px] font-bold text-violet-400">#{leader.rank || (i + 1)}</span>
+                  </div>
+                )}
+                <PersonAvatar name={leader.name} avatar={leader.avatar} className="h-12 w-12" />
+                <span className="text-sm font-medium flex-1 truncate">{leader.name}</span>
+              </div>
+              <div className="relative text-right shrink-0">
+                <p className={`text-sm font-mono font-bold ${leader.percentGain >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatSignedPercent(leader.percentGain)}</p>
+                <p className={`text-[10px] font-mono ${leader.currentGain >= 0 ? 'text-muted-foreground' : 'text-red-400/80'}`}>
+                  {formatSignedPoints(leader.currentGain)} pts added
+                </p>
+              </div>
             </div>
-            <PersonAvatar name={leader.name} avatar={leader.avatar} size="sm" />
-            <span className="text-sm flex-1 truncate">{leader.name}</span>
-            <div className="text-right">
-              <p className={`text-xs font-mono font-bold ${leader.percentGain >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatSignedPercent(leader.percentGain)}</p>
-              <p className={`text-[10px] font-mono ${leader.currentGain >= 0 ? 'text-muted-foreground' : 'text-red-400/80'}`}>
-                {formatSignedPoints(leader.currentGain)} pts added
-              </p>
-            </div>
-          </div>
-        ))}
+          ));
+        })()}
         {visibleCandidateCount > 3 && (
           <button
             className="text-xs text-violet-400 hover:text-violet-300 text-center mt-1 w-full cursor-pointer transition-colors"
@@ -1183,24 +1251,22 @@ function TopGainerCard({
         )}
       </div>
       
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-semibold text-violet-500">
           Pool: {market.totalPool.toLocaleString('en-US')}
         </span>
       </div>
       
-      <div className="mt-auto">
+      <div className="mt-auto space-y-2">
         {isPredicted ? (
           <Button 
-            size="sm" 
-            className="w-full bg-green-600/20 text-green-500 border border-green-500/30"
+            className="w-full bg-green-600/20 text-green-500 border border-green-500/30 py-3 md:py-2 h-auto"
             disabled
           >
             Predicted
           </Button>
         ) : isMarketClosed ? (
           <Button 
-            size="sm" 
             className="w-full bg-muted text-muted-foreground cursor-not-allowed"
             disabled
           >
@@ -1217,6 +1283,12 @@ function TopGainerCard({
             <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         )}
+        <Link
+          href={`/predict/race/${market.id}`}
+          className="block text-center text-xs text-violet-400 hover:text-violet-300 transition-colors"
+        >
+          View Race Details &rarr;
+        </Link>
       </div>
     </PredictCard>
   );
@@ -2424,13 +2496,29 @@ export default function PredictPage() {
       return dbMarkets.map((m: any) => {
         const entries = m.entries || [];
         const totalPool = entries.reduce((sum: number, entry: any) => sum + Number(entry.totalStake || 0), 0) + Number(m.seedVolume || 0);
+        const openingScoresMap = new Map<string, number>();
+        const rawOpeningScores = (m.metadata as any)?.openingScores;
+        if (Array.isArray(rawOpeningScores)) {
+          for (const os of rawOpeningScores) {
+            if (os.personId && os.score > 0) openingScoresMap.set(os.personId, os.score);
+          }
+        }
+
         const allCandidates: GainerCandidate[] = entries.map((e: any) => {
           const p = e.person || {};
+          const currentScore = Number(p.trendScore || 0);
+          const openScore = openingScoresMap.get(e.personId || "");
+          const pctGain = openScore && openScore > 0
+            ? ((currentScore - openScore) / openScore) * 100
+            : Number(p.change7d || 0);
+          const ptsAdded = openScore && openScore > 0
+            ? currentScore - openScore
+            : pctGain * currentScore / 100;
           return {
             name: p.name || e.label || "?",
             avatar: p.avatar || "",
-            currentGain: Number(p.change7d || 0) * Number(p.trendScore || 0) / 100,
-            percentGain: Number(p.change7d || 0),
+            currentGain: ptsAdded,
+            percentGain: Math.round(pctGain * 10) / 10,
             rank: Number(p.rank || 0),
             entryId: e.id,
             personId: e.personId || "",
@@ -3247,14 +3335,23 @@ export default function PredictPage() {
               </div>
             ) : filteredH2H.length > 0 ? (
               <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-violet-500">
-                {filteredH2H.map((market) => (
-                  <HeadToHeadCard 
-                    key={market.id} 
-                    market={market} 
-                    isMarketClosed={isMarketClosed}
-                    onSelect={(person) => handleH2HSelect(market, person)}
-                  />
-                ))}
+                {filteredH2H.map((market) => {
+                  const bet = userBetsByMarket.get(market.id);
+                  const h2hUserPick = bet
+                    ? bet.entryLabel === market.person1.name ? 1 as const
+                    : bet.entryLabel === market.person2.name ? 2 as const
+                    : null
+                    : null;
+                  return (
+                    <HeadToHeadCard 
+                      key={market.id} 
+                      market={market} 
+                      isMarketClosed={isMarketClosed}
+                      onSelect={(person) => handleH2HSelect(market, person)}
+                      userPick={h2hUserPick}
+                    />
+                  );
+                })}
               </CardSection>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
@@ -3403,14 +3500,23 @@ export default function PredictPage() {
             (!overlaySearchQuery || m.title.toLowerCase().includes(overlaySearchQuery.toLowerCase()))
           )
           .sort((a: any, b: any) => overlayCategoryFilter === "trending" ? ((b.totalBets ?? 0) - (a.totalBets ?? 0)) : 0)
-          .map((market) => (
-            <HeadToHeadCard 
-              key={market.id} 
-              market={market} 
-              isMarketClosed={isMarketClosed}
-              onSelect={(person) => handleH2HSelect(market, person)}
-            />
-          ))}
+          .map((market) => {
+            const bet = userBetsByMarket.get(market.id);
+            const h2hUserPick = bet
+              ? bet.entryLabel === market.person1.name ? 1 as const
+              : bet.entryLabel === market.person2.name ? 2 as const
+              : null
+              : null;
+            return (
+              <HeadToHeadCard 
+                key={market.id} 
+                market={market} 
+                isMarketClosed={isMarketClosed}
+                onSelect={(person) => handleH2HSelect(market, person)}
+                userPick={h2hUserPick}
+              />
+            );
+          })}
       </FullScreenOverlay>
       <FullScreenOverlay
         open={viewAllCategory === "gainers"}

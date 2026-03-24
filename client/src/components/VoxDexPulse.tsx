@@ -756,9 +756,16 @@ export function VoxDexPulse() {
   return (
     <section className="container mx-auto px-4 max-w-7xl pt-4 pb-2 flex flex-col">
       {/* Section label */}
-      <p className="order-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-2">
-        VoxDex Pulse
-      </p>
+      <div className="order-1 flex items-center justify-between mb-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+          VoxDex Pulse
+        </p>
+        {isTimelapse && (
+          <div className="sm:hidden">
+            <SpeedSlider speed={speed} onChange={setSpeed} accentColor={accentColor} />
+          </div>
+        )}
+      </div>
 
       <div className="order-2 flex flex-col gap-2 mb-2">
         {pulseIsError && (
@@ -971,12 +978,6 @@ export function VoxDexPulse() {
         )}
       </div>
 
-      {/* Speed slider -- mobile only, below card + categories */}
-      {isTimelapse && (
-        <div className="order-6 sm:hidden flex justify-center mt-2">
-          <SpeedSlider speed={speed} onChange={setSpeed} accentColor={accentColor} />
-        </div>
-      )}
 
       {isMobile ? (
         <Drawer open={insightOpen} onOpenChange={(open) => { if (!open) setSelectedSegmentInsight(null); }}>
