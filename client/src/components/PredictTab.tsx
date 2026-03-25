@@ -166,33 +166,39 @@ function WeeklyUpDownCard({
 
   return (
     <PredictCard testId={`card-weekly-${market.id}`} className={isMarketClosed ? 'opacity-75' : ''}>
-      <div className="flex items-center gap-3 mb-2">
-        <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-20 w-20 md:h-16 md:w-16" />
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-[15px] leading-tight">{market.personName}</p>
-          <p className="text-xs text-muted-foreground font-mono mt-0.5">
-            Now: {market.currentScore.toLocaleString('en-US')}
-          </p>
+      <Link
+        href={`/predict/updown/${market.id}`}
+        className="block rounded-lg -mx-1 px-1 py-0.5 mb-2 hover:bg-muted/25 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        aria-label={`View details for ${market.personName} up or down market`}
+      >
+        <div className="flex items-center gap-3 mb-2">
+          <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-20 w-20 md:h-16 md:w-16" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-[18px] leading-tight">{market.personName}</p>
+            <p className="text-xs text-muted-foreground font-mono mt-0.5">
+              Now: {market.currentScore.toLocaleString('en-US')}
+            </p>
+          </div>
+          <Badge 
+            variant="outline" 
+            className={delta >= 0 ? "text-green-500 border-green-500/30 shrink-0" : "text-red-500 border-red-500/30 shrink-0"}
+          >
+            {delta >= 0 ? "+" : ""}{pctDelta}%
+          </Badge>
         </div>
-        <Badge 
-          variant="outline" 
-          className={delta >= 0 ? "text-green-500 border-green-500/30" : "text-red-500 border-red-500/30"}
-        >
-          {delta >= 0 ? "+" : ""}{pctDelta}%
-        </Badge>
-      </div>
 
-      <p className="text-xs text-muted-foreground mb-2 leading-[1.4]">
-        Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
-      </p>
+        <p className="text-xs text-muted-foreground mb-2 leading-[1.4]">
+          Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
+        </p>
 
-      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-2 flex-wrap">
-        <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
-        <span className="text-muted-foreground/40">&middot;</span>
-        <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
-        <span className="text-muted-foreground/40">&middot;</span>
-        <span>Pool: <span className="font-mono text-violet-400">{market.totalPool.toLocaleString('en-US')}</span></span>
-      </div>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0 flex-wrap">
+          <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
+          <span className="text-muted-foreground/40">&middot;</span>
+          <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
+          <span className="text-muted-foreground/40">&middot;</span>
+          <span>Pool: <span className="font-mono text-violet-400">{market.totalPool.toLocaleString('en-US')}</span></span>
+        </div>
+      </Link>
 
       <div className="h-2.5 rounded-full bg-red-500/20 overflow-hidden mb-1.5">
         <div 
@@ -233,13 +239,6 @@ function WeeklyUpDownCard({
           </Button>
         </div>
       )}
-      <Link
-        href={`/predict/updown/${market.id}`}
-        className="flex items-center justify-center gap-1 text-[11px] text-violet-400 hover:text-violet-300 transition-colors mt-2 pt-2 border-t border-border/30"
-      >
-        View Details
-        <ChevronRight className="h-3 w-3" />
-      </Link>
     </PredictCard>
   );
 }
@@ -286,14 +285,18 @@ function HeadToHeadCard({
           <CategoryPill category={market.category} />
         </div>
         
-        <div className="relative mb-3" style={{ padding: '0 5px' }}>
+        <Link
+          href={`/predict/h2h/${market.id}`}
+          className="relative mb-3 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary hover:opacity-95 transition-opacity"
+          style={{ padding: '0 5px' }}
+          aria-label={`View battle details: ${market.person1.name} vs ${market.person2.name}`}
+        >
           <div className="flex" style={{ gap: '7px' }}>
             <div
-              className={`flex-1 relative ${!isMarketClosed && !hasPicked ? 'cursor-pointer group/p1' : ''} ${hasPicked && userPick !== 1 ? 'opacity-50' : ''}`}
-              onClick={() => !isMarketClosed && !hasPicked && onSelect?.(1)}
+              className={`flex-1 relative ${hasPicked && userPick !== 1 ? 'opacity-50' : ''}`}
             >
-              <div className={`absolute -inset-4 rounded-md blur-lg pointer-events-none transition-opacity ${hasPicked && userPick === 1 ? 'bg-green-500/20' : 'bg-blue-500/20 group-hover/p1:bg-blue-500/40'}`} />
-              <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 1 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent group-hover/p1:ring-blue-500/60'}`}>
+              <div className={`absolute -inset-4 rounded-md blur-lg pointer-events-none transition-opacity ${hasPicked && userPick === 1 ? 'bg-green-500/20' : 'bg-blue-500/20'}`} />
+              <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 1 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent'}`}>
                 <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="h-auto w-full aspect-[4/5]" />
               </div>
               {hasPicked && userPick === 1 && (
@@ -306,11 +309,10 @@ function HeadToHeadCard({
               )}
             </div>
             <div
-              className={`flex-1 relative ${!isMarketClosed && !hasPicked ? 'cursor-pointer group/p2' : ''} ${hasPicked && userPick !== 2 ? 'opacity-50' : ''}`}
-              onClick={() => !isMarketClosed && !hasPicked && onSelect?.(2)}
+              className={`flex-1 relative ${hasPicked && userPick !== 2 ? 'opacity-50' : ''}`}
             >
-              <div className={`absolute -inset-4 rounded-md blur-lg pointer-events-none transition-opacity ${hasPicked && userPick === 2 ? 'bg-green-500/20' : 'bg-purple-500/20 group-hover/p2:bg-purple-500/40'}`} />
-              <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 2 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent group-hover/p2:ring-purple-500/60'}`}>
+              <div className={`absolute -inset-4 rounded-md blur-lg pointer-events-none transition-opacity ${hasPicked && userPick === 2 ? 'bg-green-500/20' : 'bg-purple-500/20'}`} />
+              <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 2 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent'}`}>
                 <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-auto w-full aspect-[4/5]" />
               </div>
               {hasPicked && userPick === 2 && (
@@ -323,12 +325,12 @@ function HeadToHeadCard({
               )}
             </div>
           </div>
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
             <div className="h-14 w-14 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
               <span className="text-sm font-bold text-slate-200">VS</span>
             </div>
           </div>
-        </div>
+        </Link>
         
         <div className="flex items-center justify-between px-2 mb-2">
           <div
@@ -413,13 +415,6 @@ function HeadToHeadCard({
             </div>
           )}
         </div>
-        <Link
-          href={`/predict/h2h/${market.id}`}
-          className="flex items-center justify-center gap-1 text-[11px] text-violet-400 hover:text-violet-300 transition-colors mt-2 pt-2 border-t border-border/30"
-        >
-          View Battle Details
-          <ChevronRight className="h-3 w-3" />
-        </Link>
       </div>
     </PredictCard>
   );
@@ -455,7 +450,15 @@ function TopGainerCard({
         <CategoryPill category={market.category} />
       </div>
       
-      <h3 className="text-[16px] font-semibold mb-2 leading-[1.4]">Category Race: {getMarketCategoryLabel(market.category)}</h3>
+      <Link
+        href={`/predict/race/${market.id}`}
+        className="text-[16px] font-semibold mb-2 leading-[1.4] inline-flex items-center gap-1 text-foreground hover:text-violet-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+      >
+        Category Race: {getMarketCategoryLabel(market.category)}
+        <span className="text-violet-400 font-normal" aria-hidden>
+          ›
+        </span>
+      </Link>
       
       <div className="space-y-1.5 mb-3">
         {(() => {
@@ -527,12 +530,6 @@ function TopGainerCard({
             <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         )}
-        <Link
-          href={`/predict/race/${market.id}`}
-          className="block text-center text-xs text-violet-400 hover:text-violet-300 transition-colors"
-        >
-          View Race Details &rarr;
-        </Link>
       </div>
     </PredictCard>
   );

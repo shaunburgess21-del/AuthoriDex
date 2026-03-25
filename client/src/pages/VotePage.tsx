@@ -3,7 +3,8 @@ import { handleImageError } from "@/lib/imageResolver";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CategoryPill } from "@/components/CategoryPill";
+import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
+import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { UserMenu } from "@/components/UserMenu";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -80,7 +81,7 @@ import { Pagination, A11y } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/pagination";
 import { motion, AnimatePresence } from "framer-motion";
-import { getFilterCategories, type FilterCategory } from "@shared/constants";
+import { getFilterCategories, getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory } from "@shared/constants";
 import type { TrendingPerson } from "@shared/schema";
 import { CurateSection } from "@/components/curate";
 import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
@@ -296,12 +297,16 @@ function VersusCard({
   matchup, 
   userVote, 
   onVote,
-  onRemoveVote 
+  onRemoveVote,
+  onFilterCategory,
+  categoryRaceMap,
 }: { 
   matchup: MatchupData; 
   userVote: string | null;
   onVote: (matchupId: string, option: 'option_a' | 'option_b', event?: React.MouseEvent) => void;
   onRemoveVote: (matchupId: string) => void;
+  onFilterCategory: (category: string) => void;
+  categoryRaceMap: Map<string, string>;
 }) {
   const hasVoted = userVote !== null;
   const votedA = userVote === 'option_a';
@@ -316,7 +321,12 @@ function VersusCard({
       
       <div className="relative pt-4 pb-4 flex flex-col flex-1">
         <div className="absolute top-3 right-3 z-10">
-          <CategoryPill category={matchup.category} data-testid={`badge-matchup-${matchup.id}`} />
+          <InteractiveCategoryPill
+            category={matchup.category}
+            onFilter={() => onFilterCategory(matchup.category)}
+            raceMarketId={categoryRaceMap.get(normalizeMarketCategory(matchup.category))}
+            data-testid={`badge-matchup-${matchup.id}`}
+          />
         </div>
         <div className="flex items-center mb-3 gap-2 px-4">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -492,7 +502,9 @@ function InductionCandidateCard({
   maxVotes,
   isVoted,
   onToggleVote,
-  onXPGain
+  onXPGain,
+  onFilterCategory,
+  categoryRaceMap,
 }: { 
   candidate: InductionCandidate;
   rank: number;
@@ -500,6 +512,8 @@ function InductionCandidateCard({
   isVoted: boolean;
   onToggleVote: (id: string) => void;
   onXPGain: (event: React.MouseEvent) => void;
+  onFilterCategory: (category: string) => void;
+  categoryRaceMap: Map<string, string>;
 }) {
   const [showVoteAnimation, setShowVoteAnimation] = useState(false);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -547,7 +561,12 @@ function InductionCandidateCard({
         )}
       </AnimatePresence>
       <div className="absolute top-3 right-3">
-        <CategoryPill category={candidate.category} data-testid={`badge-category-${candidate.id}`} />
+        <InteractiveCategoryPill
+          category={candidate.category}
+          onFilter={() => onFilterCategory(candidate.category)}
+          raceMarketId={categoryRaceMap.get(normalizeMarketCategory(candidate.category))}
+          data-testid={`badge-category-${candidate.id}`}
+        />
       </div>
       
       <div className="flex items-center mb-4">
@@ -609,12 +628,16 @@ function CurateProfileCard({
   poll, 
   onVote,
   onComplete,
-  onViewResults
+  onViewResults,
+  onFilterCategory,
+  categoryRaceMap,
 }: { 
   poll: CurateProfilePoll; 
   onVote: () => void;
   onComplete: () => void;
   onViewResults: (poll: CurateProfilePoll) => void;
+  onFilterCategory: (category: string) => void;
+  categoryRaceMap: Map<string, string>;
 }) {
   const [selectedChoice, setSelectedChoice] = useState<'a' | 'b' | null>(null);
   const [isExiting, setIsExiting] = useState(false);
@@ -727,7 +750,12 @@ function CurateProfileCard({
           )}
         </AnimatePresence>
         <div className="absolute top-3 right-3">
-          <CategoryPill category={poll.category} data-testid={`badge-curate-${poll.id}`} />
+          <InteractiveCategoryPill
+            category={poll.category}
+            onFilter={() => onFilterCategory(poll.category)}
+            raceMarketId={categoryRaceMap.get(normalizeMarketCategory(poll.category))}
+            data-testid={`badge-curate-${poll.id}`}
+          />
         </div>
         <div className="mb-3">
           <h3 className="font-semibold text-sm">{poll.personName}</h3>
@@ -868,10 +896,14 @@ function CurateProfileCard({
 
 function DiscourseCard({ 
   topic, 
-  onVote 
+  onVote,
+  onFilterCategory,
+  categoryRaceMap,
 }: { 
   topic: any; 
   onVote: (choice: 'support' | 'neutral' | 'oppose') => void;
+  onFilterCategory: (category: string) => void;
+  categoryRaceMap: Map<string, string>;
 }) {
   const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
@@ -912,7 +944,12 @@ function DiscourseCard({
       data-testid={`card-discourse-${topic.id}`}
     >
       <div className="absolute top-3 right-3">
-        <CategoryPill category={topic.category} data-testid={`badge-category-${topic.id}`} />
+        <InteractiveCategoryPill
+          category={topic.category}
+          onFilter={() => onFilterCategory(topic.category)}
+          raceMarketId={categoryRaceMap.get(normalizeMarketCategory(topic.category))}
+          data-testid={`badge-category-${topic.id}`}
+        />
       </div>
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
         <Users className="h-3.5 w-3.5 text-cyan-400" />
@@ -1110,9 +1147,13 @@ function parseOpinionPollVoteError(err: unknown): string {
 function OpinionPollCard({
   poll,
   onVote,
+  onFilterCategory,
+  categoryRaceMap,
 }: {
   poll: any;
   onVote: (pollSlug: string, optionId: string) => Promise<void>;
+  onFilterCategory: (category: string) => void;
+  categoryRaceMap: Map<string, string>;
 }) {
   const { toast } = useToast();
   const [voted, setVoted] = useState<string | null>(poll.userVote || null);
@@ -1183,7 +1224,12 @@ function OpinionPollCard({
               {hasVoted ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
             </span>
           </div>
-          <CategoryPill category={poll.category} data-testid={`badge-opinion-category-${poll.id}`} />
+          <InteractiveCategoryPill
+            category={poll.category}
+            onFilter={() => onFilterCategory(poll.category)}
+            raceMarketId={categoryRaceMap.get(normalizeMarketCategory(poll.category))}
+            data-testid={`badge-opinion-category-${poll.id}`}
+          />
         </div>
 
         <div className="flex items-start gap-3 mb-2">
@@ -2013,6 +2059,7 @@ export default function VotePage() {
   const { user } = useAuth();
   const voteOnboardingRef = useRef<OnboardingDrawerHandle>(null);
   const { favorites, favoriteIds, isAuthenticated } = useFavorites();
+  const raceMap = useCategoryRaceMap();
   
   const handleAuthRequired = () => {
     setLocation("/login");
@@ -2127,6 +2174,10 @@ export default function VotePage() {
   const [curateCategoryFilter, setCurateCategoryFilter] = useState<FilterCategory>("All");
   const [globalVoteSearchQuery, setGlobalVoteSearchQuery] = useState("");
   const [globalCategoryFilter, setGlobalCategoryFilter] = useState<FilterCategory>("All");
+
+  const handleCategoryPillFilter = useCallback((category: string) => {
+    setGlobalCategoryFilter(getMarketCategoryLabel(category) as FilterCategory);
+  }, []);
   
   const [valuePerceptionOverlayOpen, setValuePerceptionOverlayOpen] = useState(() => window.history.state?.overlay === "value-perception");
   const [valuePerceptionCategoryFilter, setValuePerceptionCategoryFilter] = useState<FilterCategory>("All");
@@ -2421,7 +2472,16 @@ export default function VotePage() {
     setTopicsCategoryFilter(globalCategoryFilter);
     setInductionCategoryFilter(globalCategoryFilter);
     setCurateCategoryFilter(globalCategoryFilter);
+    setOpinionPollsCategoryFilter(globalCategoryFilter);
+    setValuePerceptionCategoryFilter(globalCategoryFilter);
   }, [globalCategoryFilter]);
+
+  // Deep-link support: read ?category= from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const cat = params.get("category");
+    if (cat) setGlobalCategoryFilter(cat as FilterCategory);
+  }, []);
 
   const handleToggleVote = (candidateId: string) => {
     if (votedIds.has(candidateId)) return;
@@ -2671,6 +2731,8 @@ export default function VotePage() {
                   userVote={matchupUserVotes[matchup.id] || null}
                   onVote={handleMatchupVote}
                   onRemoveVote={handleMatchupRemoveVote}
+                  onFilterCategory={handleCategoryPillFilter}
+                  categoryRaceMap={raceMap}
                 />
               ))}
             </CardSection>
@@ -2773,7 +2835,9 @@ export default function VotePage() {
                 <DiscourseCard 
                   key={topic.id} 
                   topic={topic} 
-                  onVote={(choice) => handleDiscourseVote(topic.id, choice)} 
+                  onVote={(choice) => handleDiscourseVote(topic.id, choice)}
+                  onFilterCategory={handleCategoryPillFilter}
+                  categoryRaceMap={raceMap}
                 />
               ))}
             </CardSection>
@@ -2878,6 +2942,8 @@ export default function VotePage() {
                     await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
                     queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
                   }}
+                  onFilterCategory={handleCategoryPillFilter}
+                  categoryRaceMap={raceMap}
                 />
               ))}
             </CardSection>
@@ -3105,6 +3171,8 @@ export default function VotePage() {
                   isVoted={votedIds.has(candidate.id)}
                   onToggleVote={handleToggleVote}
                   onXPGain={handleInductionXP}
+                  onFilterCategory={handleCategoryPillFilter}
+                  categoryRaceMap={raceMap}
                 />
               ))}
             </CardSection>
@@ -4057,6 +4125,8 @@ export default function VotePage() {
                     isVoted={votedIds.has(candidate.id)}
                     onToggleVote={handleToggleVote}
                     onXPGain={handleInductionXP}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
                   />
                 ))}
               </div>
@@ -4109,7 +4179,9 @@ export default function VotePage() {
                   <DiscourseCard 
                     key={topic.id} 
                     topic={topic} 
-                    onVote={(choice) => handleDiscourseVote(topic.id, choice)} 
+                    onVote={(choice) => handleDiscourseVote(topic.id, choice)}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
                   />
                 ))}
               </div>
@@ -4170,6 +4242,8 @@ export default function VotePage() {
                     userVote={matchupUserVotes[matchup.id] || null}
                     onVote={handleMatchupVote}
                     onRemoveVote={handleMatchupRemoveVote}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
                   />
                 ))}
               </div>
@@ -4231,6 +4305,8 @@ export default function VotePage() {
                       await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
                       queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
                     }}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
                   />
                 ))}
               </div>

@@ -1074,6 +1074,7 @@ export default function PersonDetailPage() {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [showAllPollsOverlay, setShowAllPollsOverlay] = useState(false);
   const [curateCompleted, setCurateCompleted] = useState(false);
+  const [expandedProfileImage, setExpandedProfileImage] = useState<string | null>(null);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -1495,7 +1496,14 @@ export default function PersonDetailPage() {
         {/* 1. Header: Name + Category */}
         <div className="mb-8">
           <div className="flex gap-6">
-            <PersonAvatar name={person.name} avatar={person.avatar} imageSlug={(person as any).imageSlug} imageContext="expanded" size="xl" />
+            <PersonAvatar
+              name={person.name}
+              avatar={person.avatar}
+              imageSlug={(person as any).imageSlug}
+              imageContext="expanded"
+              size="xl"
+              onExpand={(url) => setExpandedProfileImage(url)}
+            />
             <div className="flex-1 flex flex-col justify-between min-h-[5rem]">
               <div>
                 <h1 className="text-3xl md:text-4xl font-serif font-bold mb-2" data-testid="text-person-name">
@@ -1954,6 +1962,28 @@ export default function PersonDetailPage() {
         )}
         </div>
       </div>
+
+      {expandedProfileImage && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setExpandedProfileImage(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            onClick={() => setExpandedProfileImage(null)}
+            aria-label="Close"
+          >
+            <X className="h-6 w-6 text-white" />
+          </button>
+          <img
+            src={expandedProfileImage}
+            alt={person.name}
+            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -361,6 +361,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       anonKey: process.env.SUPABASE_ANON_KEY,
     });
   });
+
+  /** Process liveness only (no DB). Use for uptime monitors; use /api/system/health for DB connectivity. */
+  app.get("/api/health", (_req, res) => {
+    res.status(200).json({
+      status: "ok",
+      uptimeSeconds: Math.floor(process.uptime()),
+    });
+  });
   
   // Manual seeding endpoint for testing
   app.post("/api/admin/seed-supabase", requireAuth, requireAdmin, async (req, res) => {

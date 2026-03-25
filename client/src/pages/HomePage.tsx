@@ -492,8 +492,19 @@ type SortDirection = "desc" | "asc";
 
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [category, setCategory] = useState("all");
+  const [category, setCategory] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("category") || "all";
+  });
   const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (window.location.hash === "#leaderboard") {
+      requestAnimationFrame(() => {
+        document.getElementById("leaderboard")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, []);
   const [votingModalOpen, setVotingModalOpen] = useState(false);
   const [votingPersonId, setVotingPersonId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");

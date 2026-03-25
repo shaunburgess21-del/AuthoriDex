@@ -9,9 +9,11 @@ interface PersonAvatarProps {
   imageIndex?: number;
   size?: "xs" | "sm" | "md" | "lg" | "xl";
   className?: string;
+  /** When set and a photo URL is available, the avatar is clickable to open an expanded view (e.g. lightbox). */
+  onExpand?: (imageUrl: string) => void;
 }
 
-export function PersonAvatar({ name, avatar, imageSlug, imageContext = "tile", imageIndex = 1, size = "md", className }: PersonAvatarProps) {
+export function PersonAvatar({ name, avatar, imageSlug, imageContext = "tile", imageIndex = 1, size = "md", className, onExpand }: PersonAvatarProps) {
   const sizeClass = className ? className :
     size === "xs" ? "h-6 w-6" :
     size === "sm" ? "h-10 w-10" : 
@@ -34,7 +36,7 @@ export function PersonAvatar({ name, avatar, imageSlug, imageContext = "tile", i
   const displaySrc = hasServerAvatar ? avatar! : (resolvedSrc || avatar || null);
   const onError = hasServerAvatar ? undefined : onResolvedError;
 
-  return (
+  const avatarNode = (
     <Avatar className={`${sizeClass} rounded-md`} data-testid={`avatar-${name.toLowerCase().replace(/\s/g, '-')}`}>
       {displaySrc && <AvatarImage key={displaySrc} src={displaySrc} alt={name} className="object-cover" onError={onError} />}
       <AvatarFallback className="bg-primary/10 text-primary font-semibold rounded-md">
@@ -42,4 +44,19 @@ export function PersonAvatar({ name, avatar, imageSlug, imageContext = "tile", i
       </AvatarFallback>
     </Avatar>
   );
+
+  if (onExpand && displaySrc) {
+    return (
+      <button
+        type="button"
+        className="shrink-0 rounded-md p-0 border-0 bg-transparent cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        onClick={() => onExpand(displaySrc)}
+        aria-label={`View ${name} photo larger`}
+      >
+        {avatarNode}
+      </button>
+    );
+  }
+
+  return avatarNode;
 }

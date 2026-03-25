@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CategoryPill } from "@/components/CategoryPill";
+import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
+import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { UserMenu } from "@/components/UserMenu";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -63,6 +65,7 @@ import {
   LayoutGrid,
   Flame,
   RotateCcw,
+  AlertTriangle,
   XCircle,
   Clapperboard,
   Gamepad2,
@@ -858,11 +861,15 @@ function PredictCard({
 function WeeklyUpDownCard({ 
   market, 
   isMarketClosed = false,
-  onSelect
+  onSelect,
+  onFilterCategory,
+  categoryRaceMap,
 }: { 
   market: PredictionMarket; 
   isMarketClosed?: boolean;
   onSelect?: (choice: "up" | "down") => void;
+  onFilterCategory?: (category: string) => void;
+  categoryRaceMap?: Map<string, string>;
 }) {
   const delta = market.currentScore - market.baselineScore;
   const pctDelta = market.baselineScore > 0 ? ((delta / market.baselineScore) * 100).toFixed(1) : "0";
@@ -897,30 +904,40 @@ function WeeklyUpDownCard({
             </Badge>
           )}
         </div>
-        <CategoryPill category={market.category} />
+        <InteractiveCategoryPill
+          category={market.category}
+          onFilter={() => onFilterCategory?.(market.category)}
+          raceMarketId={categoryRaceMap?.get(normalizeMarketCategory(market.category))}
+        />
       </div>
       
-      <div className="flex items-center gap-3 mb-2">
-        <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-20 w-20 md:h-16 md:w-16" />
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-[15px] leading-tight">{market.personName}</p>
-          <p className="text-xs text-muted-foreground font-mono mt-0.5">
-            Now: {market.currentScore.toLocaleString('en-US')}
-          </p>
+      <Link
+        href={`/predict/updown/${market.id}`}
+        className="block rounded-lg -mx-1 px-1 py-0.5 mb-2 hover:bg-muted/25 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        aria-label={`View details for ${market.personName} up or down market`}
+      >
+        <div className="flex items-center gap-3 mb-2">
+          <PersonAvatar name={market.personName} avatar={market.personAvatar} className="h-20 w-20 md:h-16 md:w-16" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-[18px] leading-tight">{market.personName}</p>
+            <p className="text-xs text-muted-foreground font-mono mt-0.5">
+              Now: {market.currentScore.toLocaleString('en-US')}
+            </p>
+          </div>
         </div>
-      </div>
-      
-      <p className="text-xs text-muted-foreground mb-2 leading-[1.4]">
-        Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
-      </p>
 
-      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-2 flex-wrap">
-        <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
-        <span className="text-muted-foreground/40">&middot;</span>
-        <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
-        <span className="text-muted-foreground/40">&middot;</span>
-        <span>Pool: <span className="font-mono text-violet-400">{market.totalPool.toLocaleString('en-US')}</span></span>
-      </div>
+        <p className="text-xs text-muted-foreground mb-2 leading-[1.4]">
+          Will <span className="font-semibold text-foreground">{market.personName.split(" ")[0]}</span> close above or below the weekly baseline?
+        </p>
+
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0 flex-wrap">
+          <span>Baseline: <span className="font-mono text-foreground">{market.baselineScore.toLocaleString('en-US')}</span></span>
+          <span className="text-muted-foreground/40">&middot;</span>
+          <span>Delta: <span className={`font-mono ${delta >= 0 ? "text-green-500" : "text-red-500"}`}>{delta >= 0 ? "+" : ""}{delta.toLocaleString('en-US')}</span></span>
+          <span className="text-muted-foreground/40">&middot;</span>
+          <span>Pool: <span className="font-mono text-violet-400">{market.totalPool.toLocaleString('en-US')}</span></span>
+        </div>
+      </Link>
       
       <div className="mt-auto">
       <div className="mb-2">
@@ -973,13 +990,6 @@ function WeeklyUpDownCard({
           </div>
         )}
       </div>
-      <Link
-        href={`/predict/updown/${market.id}`}
-        className="flex items-center justify-center gap-1 text-[11px] text-violet-400 hover:text-violet-300 transition-colors mt-2 pt-2 border-t border-border/30"
-      >
-        View Details
-        <ChevronRight className="h-3 w-3" />
-      </Link>
       </div>
     </PredictCard>
   );
@@ -990,11 +1000,15 @@ function HeadToHeadCard({
   isMarketClosed = false,
   onSelect,
   userPick,
+  onFilterCategory,
+  categoryRaceMap,
 }: { 
   market: HeadToHeadMarket; 
   isMarketClosed?: boolean;
   onSelect?: (person: 1 | 2) => void;
   userPick?: 1 | 2 | null;
+  onFilterCategory?: (category: string) => void;
+  categoryRaceMap?: Map<string, string>;
 }) {
   const hasPicked = userPick === 1 || userPick === 2;
   const pickedName = userPick === 1 ? market.person1.name : userPick === 2 ? market.person2.name : "";
@@ -1024,17 +1038,25 @@ function HeadToHeadCard({
               <p className="text-xs">Market closes {market.endTime}</p>
             </TooltipContent>
           </Tooltip>
-          <CategoryPill category={market.category} />
+          <InteractiveCategoryPill
+            category={market.category}
+            onFilter={() => onFilterCategory?.(market.category)}
+            raceMarketId={categoryRaceMap?.get(normalizeMarketCategory(market.category))}
+          />
         </div>
         
-        <div className="relative mb-3" style={{ padding: '0 5px' }}>
+        <Link
+          href={`/predict/h2h/${market.id}`}
+          className="relative mb-3 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary hover:opacity-95 transition-opacity"
+          style={{ padding: '0 5px' }}
+          aria-label={`View battle details: ${market.person1.name} vs ${market.person2.name}`}
+        >
           <div className="flex" style={{ gap: '7px' }}>
             <div
-              className={`flex-1 relative ${!isMarketClosed && !hasPicked ? 'cursor-pointer group/p1' : ''} ${hasPicked && userPick !== 1 ? 'opacity-50' : ''}`}
-              onClick={() => !isMarketClosed && !hasPicked && onSelect?.(1)}
+              className={`flex-1 relative ${hasPicked && userPick !== 1 ? 'opacity-50' : ''}`}
             >
-              <div className={`absolute -inset-4 rounded-md blur-lg pointer-events-none transition-opacity ${hasPicked && userPick === 1 ? 'bg-green-500/20' : 'bg-blue-500/20 group-hover/p1:bg-blue-500/40'}`} />
-              <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 1 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent group-hover/p1:ring-blue-500/60'}`}>
+              <div className={`absolute -inset-4 rounded-md blur-lg pointer-events-none transition-opacity ${hasPicked && userPick === 1 ? 'bg-green-500/20' : 'bg-blue-500/20'}`} />
+              <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 1 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent'}`}>
                 <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} className="h-auto w-full aspect-[4/5]" />
               </div>
               {hasPicked && userPick === 1 && (
@@ -1047,11 +1069,10 @@ function HeadToHeadCard({
               )}
             </div>
             <div
-              className={`flex-1 relative ${!isMarketClosed && !hasPicked ? 'cursor-pointer group/p2' : ''} ${hasPicked && userPick !== 2 ? 'opacity-50' : ''}`}
-              onClick={() => !isMarketClosed && !hasPicked && onSelect?.(2)}
+              className={`flex-1 relative ${hasPicked && userPick !== 2 ? 'opacity-50' : ''}`}
             >
-              <div className={`absolute -inset-4 rounded-md blur-lg pointer-events-none transition-opacity ${hasPicked && userPick === 2 ? 'bg-green-500/20' : 'bg-purple-500/20 group-hover/p2:bg-purple-500/40'}`} />
-              <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 2 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent group-hover/p2:ring-purple-500/60'}`}>
+              <div className={`absolute -inset-4 rounded-md blur-lg pointer-events-none transition-opacity ${hasPicked && userPick === 2 ? 'bg-green-500/20' : 'bg-purple-500/20'}`} />
+              <div className={`rounded-lg overflow-hidden transition-all ${hasPicked && userPick === 2 ? 'ring-2 ring-green-500/70' : 'ring-2 ring-transparent'}`}>
                 <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} className="h-auto w-full aspect-[4/5]" />
               </div>
               {hasPicked && userPick === 2 && (
@@ -1064,12 +1085,12 @@ function HeadToHeadCard({
               )}
             </div>
           </div>
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
             <div className="h-14 w-14 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
               <span className="text-sm font-bold text-slate-200">VS</span>
             </div>
           </div>
-        </div>
+        </Link>
         
         <div className="flex items-center justify-between px-2 mb-2">
           <div
@@ -1154,13 +1175,6 @@ function HeadToHeadCard({
             </div>
           )}
         </div>
-        <Link
-          href={`/predict/h2h/${market.id}`}
-          className="flex items-center justify-center gap-1 text-[11px] text-violet-400 hover:text-violet-300 transition-colors mt-2 pt-2 border-t border-border/30"
-        >
-          View Battle Details
-          <ChevronRight className="h-3 w-3" />
-        </Link>
       </div>
     </PredictCard>
   );
@@ -1171,13 +1185,17 @@ function TopGainerCard({
   isMarketClosed = false,
   onShowAllCandidates,
   isPredicted = false,
-  isShimmering = false
+  isShimmering = false,
+  onFilterCategory,
+  categoryRaceMap,
 }: { 
   market: TopGainerMarket; 
   isMarketClosed?: boolean;
   onShowAllCandidates?: (market: TopGainerMarket, initialCandidate?: GainerCandidate) => void;
   isPredicted?: boolean;
   isShimmering?: boolean;
+  onFilterCategory?: (category: string) => void;
+  categoryRaceMap?: Map<string, string>;
 }) {
   const visibleCandidateCount = market.candidateCount ?? market.allCandidates?.length ?? market.totalEntries ?? market.leaders.length;
   const canPick = !isMarketClosed && !isPredicted;
@@ -1201,10 +1219,22 @@ function TopGainerCard({
             <p className="text-xs">Pick who will have the highest % gain in their Trend Score this week. The biggest mover wins, not the highest ranked.</p>
           </TooltipContent>
         </Tooltip>
-        <CategoryPill category={market.category} />
+        <InteractiveCategoryPill
+          category={market.category}
+          onFilter={() => onFilterCategory?.(market.category)}
+          raceMarketId={categoryRaceMap?.get(normalizeMarketCategory(market.category))}
+        />
       </div>
       
-      <h3 className="text-[16px] font-semibold mb-2 leading-[1.4]">Category Race: {getMarketCategoryLabel(market.category)}</h3>
+      <Link
+        href={`/predict/race/${market.id}`}
+        className="text-[16px] font-semibold mb-2 leading-[1.4] inline-flex items-center gap-1 text-foreground hover:text-violet-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+      >
+        Category Race: {getMarketCategoryLabel(market.category)}
+        <span className="text-violet-400 font-normal" aria-hidden>
+          ›
+        </span>
+      </Link>
       
       <div className="space-y-1.5 mb-3">
         {(() => {
@@ -1283,12 +1313,6 @@ function TopGainerCard({
             <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         )}
-        <Link
-          href={`/predict/race/${market.id}`}
-          className="block text-center text-xs text-violet-400 hover:text-violet-300 transition-colors"
-        >
-          View Race Details &rarr;
-        </Link>
       </div>
     </PredictCard>
   );
@@ -2299,10 +2323,16 @@ export default function PredictPage() {
   const queryClient = useQueryClient();
   const { user, profile, refreshProfile } = useAuth();
   const { favoriteIds } = useFavorites();
+  const raceMap = useCategoryRaceMap();
   const onboardingRef = useRef<OnboardingDrawerHandle>(null);
   const [selectedType, setSelectedType] = useState<PredictionType>("all");
   const [showMyPositions, setShowMyPositions] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+
+  const handleCategoryPillFilter = useCallback((category: string) => {
+    setCategoryFilter(normalizeMarketCategory(category) as CategoryFilter);
+  }, []);
+
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [overlaySearchQuery, setOverlaySearchQuery] = useState("");
   const [overlayCategoryFilter, setOverlayCategoryFilter] = useState<CategoryFilter>("all");
@@ -2356,6 +2386,7 @@ export default function PredictPage() {
     staleTime: 60_000,
     refetchInterval: 90_000,
   });
+
   const userBetsByMarket = useMemo(() => {
     const map = new Map<string, { result: string; payout: number; entryLabel: string; stakeAmount: number; marketId: string }>();
     const grouped = new Map<string, any[]>();
@@ -2554,9 +2585,58 @@ export default function PredictPage() {
     }
   }, [trendingPeople, selectedJackpotPerson]);
 
-  const { data: nativeJackpotData } = useQuery<any[]>({
+  const { data: nativeJackpotData, error: jackpotError, refetch: refetchJackpot } = useQuery<any[]>({
     queryKey: ['/api/native-markets/jackpot'],
   });
+
+  const predictLoadErrors = useMemo(
+    () =>
+      [
+        trendingError,
+        openMarketsError,
+        updownError,
+        h2hError,
+        gainerError,
+        jackpotError,
+        recentActivityError,
+      ].filter(Boolean),
+    [
+      trendingError,
+      openMarketsError,
+      updownError,
+      h2hError,
+      gainerError,
+      jackpotError,
+      recentActivityError,
+    ],
+  );
+
+  const showPredictMultiFailureBanner = predictLoadErrors.length >= 2;
+  const firstPredictErrorMessage =
+    predictLoadErrors[0] instanceof Error ? predictLoadErrors[0].message : "";
+
+  const refetchAllPredictData = useCallback(() => {
+    return Promise.all([
+      refetchTrending(),
+      refetchOpenMarkets(),
+      refetchUpdown(),
+      refetchH2h(),
+      refetchGainers(),
+      refetchJackpot(),
+      refetchRecentActivity(),
+      ...(user ? [refetchUserBets()] : []),
+    ]);
+  }, [
+    user,
+    refetchTrending,
+    refetchOpenMarkets,
+    refetchUpdown,
+    refetchH2h,
+    refetchGainers,
+    refetchJackpot,
+    refetchRecentActivity,
+    refetchUserBets,
+  ]);
 
   const jackpotMarketForPerson = useMemo(() => {
     if (!selectedJackpotPerson || !nativeJackpotData) return null;
@@ -2992,6 +3072,40 @@ export default function PredictPage() {
         </div>
       </div>
       <div className="container mx-auto px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
+        {showPredictMultiFailureBanner && (
+          <div
+            className="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+            role="alert"
+            data-testid="predict-connection-banner"
+          >
+            <div className="flex items-start gap-2 min-w-0">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" aria-hidden />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">
+                  Can&apos;t load prediction data right now
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Several requests failed at once—usually the app is restarting or there was a brief network issue.
+                </p>
+                {firstPredictErrorMessage ? (
+                  <p className="text-xs font-mono text-muted-foreground/90 mt-2 break-all">
+                    {firstPredictErrorMessage}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 border-destructive/50"
+              onClick={() => void refetchAllPredictData()}
+              data-testid="button-retry-all-predict-data"
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Retry all
+            </Button>
+          </div>
+        )}
         {/* World Markets Section - First */}
         {showSection("community") && (
           <section className="mb-12 mt-[5px]">
@@ -3280,6 +3394,8 @@ export default function PredictPage() {
                     market={market} 
                     isMarketClosed={isMarketClosed}
                     onSelect={(choice) => handleUpDownSelect(market, choice)}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
                   />
                 ))}
               </CardSection>
@@ -3349,6 +3465,8 @@ export default function PredictPage() {
                       isMarketClosed={isMarketClosed}
                       onSelect={(person) => handleH2HSelect(market, person)}
                       userPick={h2hUserPick}
+                      onFilterCategory={handleCategoryPillFilter}
+                      categoryRaceMap={raceMap}
                     />
                   );
                 })}
@@ -3413,6 +3531,8 @@ export default function PredictPage() {
                     onShowAllCandidates={(pickedMarket, initialCandidate) => setGainerPickerState({ market: pickedMarket, initialCandidate })}
                     isPredicted={predictedMarkets.has(market.id)}
                     isShimmering={false}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
                   />
                 ))}
               </CardSection>
@@ -3479,6 +3599,8 @@ export default function PredictPage() {
               market={market} 
               isMarketClosed={isMarketClosed}
               onSelect={(choice) => handleUpDownSelect(market, choice)}
+              onFilterCategory={(cat) => setOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
+              categoryRaceMap={raceMap}
             />
           ))}
       </FullScreenOverlay>
@@ -3514,6 +3636,8 @@ export default function PredictPage() {
                 isMarketClosed={isMarketClosed}
                 onSelect={(person) => handleH2HSelect(market, person)}
                 userPick={h2hUserPick}
+                onFilterCategory={(cat) => setOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
+                categoryRaceMap={raceMap}
               />
             );
           })}
@@ -3539,6 +3663,8 @@ export default function PredictPage() {
               onShowAllCandidates={(pickedMarket, initialCandidate) => setGainerPickerState({ market: pickedMarket, initialCandidate })}
               isPredicted={predictedMarkets.has(market.id)}
               isShimmering={false}
+              onFilterCategory={(cat) => setOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
+              categoryRaceMap={raceMap}
             />
           ))
         ) : (
