@@ -2805,6 +2805,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // GET /api/leaderboard - Enhanced leaderboard with tab support
+  app.get("/api/leaderboard/categories", async (_req, res) => {
+    try {
+      const rows = await db
+        .selectDistinct({ category: trendingPeople.category })
+        .from(trendingPeople)
+        .where(isNotNull(trendingPeople.category));
+      res.json(rows.map(r => r.category).filter(Boolean));
+    } catch (error) {
+      console.error("Error fetching leaderboard categories:", error);
+      res.status(500).json({ error: "Failed to fetch categories" });
+    }
+  });
+
   app.get("/api/leaderboard", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const tab = (req.query.tab as string) || 'fame'; // 'fame' | 'approval' | 'value'
@@ -13526,6 +13539,19 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     } catch (error: any) {
       console.error("Error fetching induction candidates:", error);
       res.status(500).json({ error: "Failed to fetch induction candidates" });
+    }
+  });
+
+  app.get("/api/me/induction-votes", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const rows = await db
+        .select({ candidateId: inductionVotes.candidateId })
+        .from(inductionVotes)
+        .where(eq(inductionVotes.userId, req.userId!));
+      res.json(rows.map(r => r.candidateId));
+    } catch (error: any) {
+      console.error("Error fetching user induction votes:", error);
+      res.status(500).json({ error: "Failed to fetch induction votes" });
     }
   });
 

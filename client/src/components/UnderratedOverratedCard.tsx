@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { CategoryPill } from "@/components/CategoryPill";
+import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
+import { normalizeMarketCategory } from "@shared/constants";
 import { ArrowUp, ArrowDown, Minus, Users, Loader2, BarChart2, ChevronRight } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -33,12 +34,18 @@ export interface UnderratedOverratedCardProps {
   person: ValueVotePerson;
   onVisitProfile?: () => void;
   compact?: boolean;
+  onFilterCategory?: (category: string) => void;
+  categoryRaceMap?: Map<string, string>;
+  leaderboardCategories?: Set<string>;
 }
 
 export function UnderratedOverratedCard({ 
   person, 
   onVisitProfile,
-  compact = false 
+  compact = false,
+  onFilterCategory,
+  categoryRaceMap,
+  leaderboardCategories,
 }: UnderratedOverratedCardProps) {
   const [localVote, setLocalVote] = useState<VoteType | null>(
     person.userValueVote ?? null
@@ -113,7 +120,14 @@ export function UnderratedOverratedCard({
     >
       {person.category && (
         <div className="absolute top-3 right-3">
-          <CategoryPill category={person.category} data-testid={`badge-category-${person.id}`} />
+          <InteractiveCategoryPill
+            category={person.category}
+            onFilter={() => onFilterCategory?.(person.category!)}
+            leaderboardCategories={leaderboardCategories}
+            detailHref={`/vote/value-rankings?focus=${encodeURIComponent(person.id)}`}
+            detailLabel="See How They Compare"
+            data-testid={`badge-category-${person.id}`}
+          />
         </div>
       )}
       

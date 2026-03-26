@@ -60,6 +60,7 @@ const MatchupDetailPage = lazyWithRetry(() => import("@/pages/MatchupDetailPage"
 const UserLeaderboardPage = lazyWithRetry(() => import("@/pages/UserLeaderboardPage"));
 const TownSquarePage = lazyWithRetry(() => import("@/pages/TownSquarePage"));
 const ValueRatingsPage = lazyWithRetry(() => import("@/pages/ValueRatingsPage"));
+const InductionQueuePage = lazyWithRetry(() => import("@/pages/InductionQueuePage"));
 const CategoryRaceDetailPage = lazyWithRetry(() => import("@/pages/CategoryRaceDetailPage"));
 const UpDownDetailPage = lazyWithRetry(() => import("@/pages/UpDownDetailPage"));
 const H2HDetailPage = lazyWithRetry(() => import("@/pages/H2HDetailPage"));
@@ -86,6 +87,7 @@ function Router() {
         <Route path="/profile" component={UserProfilePage} />
         <Route path="/predict" component={PredictPage} />
         <Route path="/vote/value-rankings" component={ValueRankingsPage} />
+        <Route path="/vote/induction" component={InductionQueuePage} />
         <Route path="/vote" component={VotePage} />
         <Route path="/me" component={MePage} />
         <Route path="/me/votes" component={VotesPage} />

@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { CategoryPill } from "@/components/CategoryPill";
+import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
+import { normalizeMarketCategory } from "@shared/constants";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -24,12 +25,18 @@ interface CurateViewResultsOverlayProps {
   person: CuratePerson;
   onClose: () => void;
   onBack?: () => void;
+  onFilterCategory?: (category: string) => void;
+  categoryRaceMap?: Map<string, string>;
+  leaderboardCategories?: Set<string>;
 }
 
 export function CurateViewResultsOverlay({ 
   person, 
   onClose,
-  onBack 
+  onBack,
+  onFilterCategory,
+  categoryRaceMap,
+  leaderboardCategories,
 }: CurateViewResultsOverlayProps) {
   const [expandedImage, setExpandedImage] = useState<CelebrityImage | null>(null);
   const { toast } = useToast();
@@ -97,7 +104,11 @@ export function CurateViewResultsOverlay({
             <div className="flex flex-col justify-center">
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-serif font-bold">{person.name}</h2>
-                <CategoryPill category={person.category} />
+                <InteractiveCategoryPill
+                  category={person.category}
+                  onFilter={() => onFilterCategory?.(person.category)}
+                  leaderboardCategories={leaderboardCategories}
+                />
               </div>
               <span className="text-sm text-muted-foreground">
                 {totalVotes.toLocaleString('en-US')} total votes

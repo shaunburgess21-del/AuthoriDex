@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Filter, Trophy, Users } from "lucide-react";
-import { getMarketCategoryLabel } from "@shared/constants";
+import { Filter, Trophy, Users, ExternalLink } from "lucide-react";
+import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { getCategoryStyle } from "@/components/CategoryPill";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -27,6 +27,9 @@ interface InteractiveCategoryPillProps {
   category: string;
   onFilter: () => void;
   raceMarketId?: string | null;
+  leaderboardCategories?: Set<string>;
+  detailHref?: string;
+  detailLabel?: string;
   size?: keyof typeof SIZE_CLASSES;
   className?: string;
   "data-testid"?: string;
@@ -34,15 +37,25 @@ interface InteractiveCategoryPillProps {
 
 function MenuItems({
   label,
+  category,
   raceMarketId,
+  leaderboardCategories,
+  detailHref,
+  detailLabel,
   onFilter,
   CloseWrapper,
 }: {
   label: string;
+  category: string;
   raceMarketId?: string | null;
+  leaderboardCategories?: Set<string>;
+  detailHref?: string;
+  detailLabel?: string;
   onFilter: () => void;
   CloseWrapper: React.ComponentType<{ children: React.ReactNode; asChild?: boolean }>;
 }) {
+  const showLeaderboard = !leaderboardCategories || leaderboardCategories.has(normalizeMarketCategory(category));
+
   return (
     <div className="flex flex-col gap-1 py-1">
       <CloseWrapper asChild>
@@ -68,15 +81,29 @@ function MenuItems({
         </CloseWrapper>
       )}
 
-      <CloseWrapper asChild>
-        <Link
-          href={`/?category=${encodeURIComponent(label)}#leaderboard`}
-          className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm rounded-md hover:bg-muted/60 transition-colors no-underline text-foreground"
-        >
-          <Users className="h-4 w-4 opacity-60 shrink-0" />
-          View {label} on Leaderboard
-        </Link>
-      </CloseWrapper>
+      {detailHref && (
+        <CloseWrapper asChild>
+          <Link
+            href={detailHref}
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm rounded-md hover:bg-muted/60 transition-colors no-underline text-foreground"
+          >
+            <ExternalLink className="h-4 w-4 opacity-60 shrink-0" />
+            {detailLabel || "View Details"}
+          </Link>
+        </CloseWrapper>
+      )}
+
+      {showLeaderboard && (
+        <CloseWrapper asChild>
+          <Link
+            href={`/?category=${encodeURIComponent(label)}#leaderboard`}
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm rounded-md hover:bg-muted/60 transition-colors no-underline text-foreground"
+          >
+            <Users className="h-4 w-4 opacity-60 shrink-0" />
+            View {label} on Leaderboard
+          </Link>
+        </CloseWrapper>
+      )}
     </div>
   );
 }
@@ -85,6 +112,9 @@ export function InteractiveCategoryPill({
   category,
   onFilter,
   raceMarketId,
+  leaderboardCategories,
+  detailHref,
+  detailLabel,
   size = "default",
   className = "",
   "data-testid": testId,
@@ -105,6 +135,15 @@ export function InteractiveCategoryPill({
     </button>
   );
 
+  const menuProps = {
+    label,
+    category,
+    raceMarketId,
+    leaderboardCategories,
+    detailHref,
+    detailLabel,
+  };
+
   if (isMobile) {
     return (
       <Drawer open={open} onOpenChange={setOpen}>
@@ -113,8 +152,7 @@ export function InteractiveCategoryPill({
           <div className="px-2 pb-4">
             <DrawerTitle className="sr-only">{label} actions</DrawerTitle>
             <MenuItems
-              label={label}
-              raceMarketId={raceMarketId}
+              {...menuProps}
               onFilter={() => {
                 onFilter();
                 setOpen(false);
@@ -132,8 +170,7 @@ export function InteractiveCategoryPill({
       <PopoverTrigger asChild>{pillButton}</PopoverTrigger>
       <PopoverContent align="end" className="w-56 p-1">
         <MenuItems
-          label={label}
-          raceMarketId={raceMarketId}
+          {...menuProps}
           onFilter={() => {
             onFilter();
             setOpen(false);

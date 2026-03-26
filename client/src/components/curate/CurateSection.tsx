@@ -26,11 +26,17 @@ interface TrendingPerson {
 interface CurateSectionProps {
   categoryFilter: FilterCategory;
   compact?: boolean;
+  onFilterCategory?: (category: string) => void;
+  categoryRaceMap?: Map<string, string>;
+  leaderboardCategories?: Set<string>;
 }
 
 export function CurateSection({ 
   categoryFilter,
-  compact = false
+  compact = false,
+  onFilterCategory,
+  categoryRaceMap,
+  leaderboardCategories,
 }: CurateSectionProps) {
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [viewResultsPerson, setViewResultsPerson] = useState<CuratePerson | null>(null);
@@ -103,6 +109,9 @@ export function CurateSection({
                   onComplete={handleComplete}
                   onViewResults={handleViewResults}
                   cycleNumber={0}
+                  onFilterCategory={onFilterCategory}
+                  categoryRaceMap={categoryRaceMap}
+                  leaderboardCategories={leaderboardCategories}
                 />
               ))}
             </div>
@@ -141,6 +150,9 @@ export function CurateSection({
                         onComplete={handleComplete}
                         onViewResults={handleViewResults}
                         cycleNumber={0}
+                        onFilterCategory={onFilterCategory}
+                        categoryRaceMap={categoryRaceMap}
+                        leaderboardCategories={leaderboardCategories}
                       />
                     </div>
                   </SwiperSlide>
@@ -170,6 +182,9 @@ export function CurateSection({
           <CurateViewAllOverlay
             onClose={() => setViewAllOpen(false)}
             onSelectPerson={handleSelectFromViewAll}
+            onFilterCategory={onFilterCategory}
+            categoryRaceMap={categoryRaceMap}
+            leaderboardCategories={leaderboardCategories}
           />
         )}
       </AnimatePresence>
@@ -179,6 +194,9 @@ export function CurateSection({
           <CurateViewResultsOverlay
             person={viewResultsPerson}
             onClose={() => setViewResultsPerson(null)}
+            onFilterCategory={onFilterCategory}
+            categoryRaceMap={categoryRaceMap}
+            leaderboardCategories={leaderboardCategories}
           />
         )}
       </AnimatePresence>

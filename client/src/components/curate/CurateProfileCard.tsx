@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CategoryPill } from "@/components/CategoryPill";
+import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
+import { normalizeMarketCategory } from "@shared/constants";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -34,6 +35,9 @@ interface CurateProfileCardProps {
   onComplete: () => void;
   onViewResults: (person: CuratePerson) => void;
   cycleNumber?: number;
+  onFilterCategory?: (category: string) => void;
+  categoryRaceMap?: Map<string, string>;
+  leaderboardCategories?: Set<string>;
 }
 
 export function CurateProfileCard({
@@ -42,6 +46,9 @@ export function CurateProfileCard({
   onComplete,
   onViewResults,
   cycleNumber = 0,
+  onFilterCategory,
+  categoryRaceMap,
+  leaderboardCategories,
 }: CurateProfileCardProps) {
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [showShimmer, setShowShimmer] = useState(false);
@@ -143,7 +150,11 @@ export function CurateProfileCard({
         </AnimatePresence>
 
         <div className="absolute top-3 right-3 z-20">
-          <CategoryPill category={person.category} />
+          <InteractiveCategoryPill
+            category={person.category}
+            onFilter={() => onFilterCategory?.(person.category)}
+            leaderboardCategories={leaderboardCategories}
+          />
         </div>
 
         <div className="relative p-4 md:p-4 flex flex-col flex-1">

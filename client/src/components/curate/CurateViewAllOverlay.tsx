@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { CategoryPill } from "@/components/CategoryPill";
+import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
+import { normalizeMarketCategory } from "@shared/constants";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -32,6 +33,9 @@ interface CelebrityImage {
 interface CurateViewAllOverlayProps {
   onClose: () => void;
   onSelectPerson: (person: CuratePerson) => void;
+  onFilterCategory?: (category: string) => void;
+  categoryRaceMap?: Map<string, string>;
+  leaderboardCategories?: Set<string>;
 }
 
 const CURATE_CATEGORIES = [
@@ -53,11 +57,17 @@ const CURATE_CATEGORIES = [
 function CelebCard({ 
   person, 
   onClick,
-  rank
+  rank,
+  onFilterCategory,
+  categoryRaceMap,
+  leaderboardCategories,
 }: { 
   person: TrendingPerson; 
   onClick: () => void;
   rank: number;
+  onFilterCategory?: (category: string) => void;
+  categoryRaceMap?: Map<string, string>;
+  leaderboardCategories?: Set<string>;
 }) {
   const { data: images = [] } = useQuery<CelebrityImage[]>({
     queryKey: ['/api/people', person.id, 'images'],
@@ -87,7 +97,11 @@ function CelebCard({
     >
       <div className="p-3 relative">
         <div className="absolute top-3 right-3 z-10 hidden md:block">
-          <CategoryPill category={person.category} />
+          <InteractiveCategoryPill
+            category={person.category}
+            onFilter={() => onFilterCategory?.(person.category)}
+            leaderboardCategories={leaderboardCategories}
+          />
         </div>
         <div className="flex items-center gap-2 mb-2">
           <PersonAvatar name={person.name} avatar={winningAvatar} size="sm" />
@@ -137,7 +151,10 @@ function CelebCard({
 
 export function CurateViewAllOverlay({ 
   onClose, 
-  onSelectPerson 
+  onSelectPerson,
+  onFilterCategory,
+  categoryRaceMap,
+  leaderboardCategories,
 }: CurateViewAllOverlayProps) {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -219,6 +236,9 @@ export function CurateViewAllOverlay({
                 key={person.id}
                 person={person}
                 rank={idx}
+                onFilterCategory={onFilterCategory}
+                categoryRaceMap={categoryRaceMap}
+                leaderboardCategories={leaderboardCategories}
                 onClick={() => onSelectPerson({
                   id: person.id,
                   name: person.name,

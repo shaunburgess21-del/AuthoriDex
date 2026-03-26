@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
+import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { UserMenu } from "@/components/UserMenu";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -300,6 +301,7 @@ function VersusCard({
   onRemoveVote,
   onFilterCategory,
   categoryRaceMap,
+  leaderboardCategories,
 }: { 
   matchup: MatchupData; 
   userVote: string | null;
@@ -307,6 +309,7 @@ function VersusCard({
   onRemoveVote: (matchupId: string) => void;
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
+  leaderboardCategories?: Set<string>;
 }) {
   const hasVoted = userVote !== null;
   const votedA = userVote === 'option_a';
@@ -324,7 +327,9 @@ function VersusCard({
           <InteractiveCategoryPill
             category={matchup.category}
             onFilter={() => onFilterCategory(matchup.category)}
-            raceMarketId={categoryRaceMap.get(normalizeMarketCategory(matchup.category))}
+            leaderboardCategories={leaderboardCategories}
+            detailHref={matchup.slug ? `/vote/matchups/${matchup.slug}` : undefined}
+            detailLabel="View Matchup Details"
             data-testid={`badge-matchup-${matchup.id}`}
           />
         </div>
@@ -505,6 +510,7 @@ function InductionCandidateCard({
   onXPGain,
   onFilterCategory,
   categoryRaceMap,
+  leaderboardCategories,
 }: { 
   candidate: InductionCandidate;
   rank: number;
@@ -514,6 +520,7 @@ function InductionCandidateCard({
   onXPGain: (event: React.MouseEvent) => void;
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
+  leaderboardCategories?: Set<string>;
 }) {
   const [showVoteAnimation, setShowVoteAnimation] = useState(false);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -564,7 +571,9 @@ function InductionCandidateCard({
         <InteractiveCategoryPill
           category={candidate.category}
           onFilter={() => onFilterCategory(candidate.category)}
-          raceMarketId={categoryRaceMap.get(normalizeMarketCategory(candidate.category))}
+          leaderboardCategories={leaderboardCategories}
+          detailHref="/vote/induction"
+          detailLabel="View Induction Queue"
           data-testid={`badge-category-${candidate.id}`}
         />
       </div>
@@ -631,6 +640,7 @@ function CurateProfileCard({
   onViewResults,
   onFilterCategory,
   categoryRaceMap,
+  leaderboardCategories,
 }: { 
   poll: CurateProfilePoll; 
   onVote: () => void;
@@ -638,6 +648,7 @@ function CurateProfileCard({
   onViewResults: (poll: CurateProfilePoll) => void;
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
+  leaderboardCategories?: Set<string>;
 }) {
   const [selectedChoice, setSelectedChoice] = useState<'a' | 'b' | null>(null);
   const [isExiting, setIsExiting] = useState(false);
@@ -753,7 +764,7 @@ function CurateProfileCard({
           <InteractiveCategoryPill
             category={poll.category}
             onFilter={() => onFilterCategory(poll.category)}
-            raceMarketId={categoryRaceMap.get(normalizeMarketCategory(poll.category))}
+            leaderboardCategories={leaderboardCategories}
             data-testid={`badge-curate-${poll.id}`}
           />
         </div>
@@ -894,16 +905,18 @@ function CurateProfileCard({
   );
 }
 
-function DiscourseCard({ 
-  topic, 
+function DiscourseCard({
+  topic,
   onVote,
   onFilterCategory,
   categoryRaceMap,
-}: { 
-  topic: any; 
+  leaderboardCategories,
+}: {
+  topic: any;
   onVote: (choice: 'support' | 'neutral' | 'oppose') => void;
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
+  leaderboardCategories?: Set<string>;
 }) {
   const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
@@ -947,7 +960,9 @@ function DiscourseCard({
         <InteractiveCategoryPill
           category={topic.category}
           onFilter={() => onFilterCategory(topic.category)}
-          raceMarketId={categoryRaceMap.get(normalizeMarketCategory(topic.category))}
+          leaderboardCategories={leaderboardCategories}
+          detailHref={topic.slug ? `/polls/${topic.slug}` : undefined}
+          detailLabel="View Poll Details"
           data-testid={`badge-category-${topic.id}`}
         />
       </div>
@@ -1149,11 +1164,13 @@ function OpinionPollCard({
   onVote,
   onFilterCategory,
   categoryRaceMap,
+  leaderboardCategories,
 }: {
   poll: any;
   onVote: (pollSlug: string, optionId: string) => Promise<void>;
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
+  leaderboardCategories?: Set<string>;
 }) {
   const { toast } = useToast();
   const [voted, setVoted] = useState<string | null>(poll.userVote || null);
@@ -1227,7 +1244,9 @@ function OpinionPollCard({
           <InteractiveCategoryPill
             category={poll.category}
             onFilter={() => onFilterCategory(poll.category)}
-            raceMarketId={categoryRaceMap.get(normalizeMarketCategory(poll.category))}
+            leaderboardCategories={leaderboardCategories}
+            detailHref={poll.slug ? `/vote/opinion-polls/${poll.slug}` : undefined}
+            detailLabel="View Poll Details"
             data-testid={`badge-opinion-category-${poll.id}`}
           />
         </div>
@@ -2060,7 +2079,8 @@ export default function VotePage() {
   const voteOnboardingRef = useRef<OnboardingDrawerHandle>(null);
   const { favorites, favoriteIds, isAuthenticated } = useFavorites();
   const raceMap = useCategoryRaceMap();
-  
+  const leaderboardCats = useLeaderboardCategories();
+
   const handleAuthRequired = () => {
     setLocation("/login");
   };
@@ -2733,6 +2753,7 @@ export default function VotePage() {
                   onRemoveVote={handleMatchupRemoveVote}
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
+                  leaderboardCategories={leaderboardCats}
                 />
               ))}
             </CardSection>
@@ -2838,6 +2859,7 @@ export default function VotePage() {
                   onVote={(choice) => handleDiscourseVote(topic.id, choice)}
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
+                  leaderboardCategories={leaderboardCats}
                 />
               ))}
             </CardSection>
@@ -2944,6 +2966,7 @@ export default function VotePage() {
                   }}
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
+                  leaderboardCategories={leaderboardCats}
                 />
               ))}
             </CardSection>
@@ -3030,6 +3053,9 @@ export default function VotePage() {
                   key={person.id} 
                   person={person}
                   onVisitProfile={() => setLocation(`/person/${person.id}`)}
+                  onFilterCategory={handleCategoryPillFilter}
+                  categoryRaceMap={raceMap}
+                  leaderboardCategories={leaderboardCats}
                 />
               ))}
             </CardSection>
@@ -3173,6 +3199,7 @@ export default function VotePage() {
                   onXPGain={handleInductionXP}
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
+                  leaderboardCategories={leaderboardCats}
                 />
               ))}
             </CardSection>
@@ -3263,7 +3290,7 @@ export default function VotePage() {
             </div>
           </div>
 
-          <CurateSection categoryFilter={curateCategoryFilter} />
+          <CurateSection categoryFilter={curateCategoryFilter} onFilterCategory={handleCategoryPillFilter} categoryRaceMap={raceMap} leaderboardCategories={leaderboardCats} />
         </section>
         )}
 
@@ -4127,6 +4154,7 @@ export default function VotePage() {
                     onXPGain={handleInductionXP}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
+                    leaderboardCategories={leaderboardCats}
                   />
                 ))}
               </div>
@@ -4182,6 +4210,7 @@ export default function VotePage() {
                     onVote={(choice) => handleDiscourseVote(topic.id, choice)}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
+                    leaderboardCategories={leaderboardCats}
                   />
                 ))}
               </div>
@@ -4244,6 +4273,7 @@ export default function VotePage() {
                     onRemoveVote={handleMatchupRemoveVote}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
+                    leaderboardCategories={leaderboardCats}
                   />
                 ))}
               </div>
@@ -4307,6 +4337,7 @@ export default function VotePage() {
                     }}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
+                    leaderboardCategories={leaderboardCats}
                   />
                 ))}
               </div>
@@ -4369,6 +4400,9 @@ export default function VotePage() {
                       window.history.replaceState({}, "");
                       setLocation(`/person/${person.id}`);
                     }}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
+                    leaderboardCategories={leaderboardCats}
                   />
                 ))}
               </div>
