@@ -1,15 +1,12 @@
 import { useState, useRef, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Swiper, SwiperSlide } from "swiper/react";
-import type { Swiper as SwiperType } from "swiper";
 import { ArrowLeft, Inbox } from "lucide-react";
 import { sharePage } from "@/lib/share";
 import { CategoryTabStrip } from "./CategoryTabStrip";
 import { SnapScrollActionRow } from "./SnapScrollActionRow";
 import { CommentsBottomSheet } from "./CommentsBottomSheet";
 import { type CommentEntityType } from "@/components/comments/CardComments";
-import "swiper/css";
 
 export type SnapSectionType = "matchups" | "sentiment" | "opinion";
 
@@ -56,8 +53,7 @@ export function VoteSnapScrollView({
   renderCard,
 }: VoteSnapScrollViewProps) {
   const [, setLocation] = useLocation();
-  const swiperRef = useRef<SwiperType | null>(null);
-  const scrollRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [activeCommentSlug, setActiveCommentSlug] = useState("");
@@ -89,34 +85,25 @@ export function VoteSnapScrollView({
     return map;
   }, [items, categories]);
 
-  const currentItems = categoryItems.get(activeCategory) || [];
-
-  const visibleItemForComments = useRef<SnapItem | null>(null);
-
-  const getVisibleItem = useCallback((cat: string): SnapItem | null => {
-    const container = scrollRefs.current.get(cat);
-    const catItems = categoryItems.get(cat) || [];
+  const getVisibleItem = useCallback((): SnapItem | null => {
+    const catItems = categoryItems.get(activeCategory) || [];
+    const container = scrollRef.current;
     if (!container || catItems.length === 0) return catItems[0] || null;
 
     const scrollTop = container.scrollTop;
     const frameHeight = container.clientHeight;
     const idx = Math.round(scrollTop / frameHeight);
     return catItems[Math.min(idx, catItems.length - 1)] || null;
-  }, [categoryItems]);
-
-  useEffect(() => {
-    visibleItemForComments.current = getVisibleItem(activeCategory);
-  }, [activeCategory, getVisibleItem]);
+  }, [categoryItems, activeCategory]);
 
   useEffect(() => {
     if (!open || !initialItemId) return;
     const timer = setTimeout(() => {
       const cat = categories[initialCategoryIdx] || "All";
-      const container = scrollRefs.current.get(cat);
       const catItems = categoryItems.get(cat) || [];
       const idx = catItems.findIndex((i) => i.id === initialItemId);
-      if (container && idx > 0) {
-        container.scrollTo({ top: idx * container.clientHeight, behavior: "auto" });
+      if (scrollRef.current && idx > 0) {
+        scrollRef.current.scrollTo({ top: idx * scrollRef.current.clientHeight, behavior: "auto" });
       }
     }, 100);
     return () => clearTimeout(timer);
@@ -134,40 +121,33 @@ export function VoteSnapScrollView({
     const idx = categories.indexOf(cat);
     if (idx >= 0) {
       setActiveCategoryIdx(idx);
-      swiperRef.current?.slideTo(idx);
     }
   }, [categories]);
 
-  const handleSlideChange = useCallback((swiper: SwiperType) => {
-    setActiveCategoryIdx(swiper.activeIndex);
-  }, []);
-
   const openComments = useCallback(() => {
-    const item = getVisibleItem(activeCategory);
+    const item = getVisibleItem();
     if (item) {
       setActiveCommentSlug(item.slug);
       setCommentsOpen(true);
     }
-  }, [activeCategory, getVisibleItem]);
+  }, [getVisibleItem]);
 
   const navigateToDetail = useCallback(() => {
-    const item = getVisibleItem(activeCategory);
+    const item = getVisibleItem();
     if (item?.slug) {
       onClose();
       setLocation(`${SECTION_DETAIL_PREFIX[sectionType]}${item.slug}`);
     }
-  }, [activeCategory, getVisibleItem, sectionType, onClose, setLocation]);
+  }, [getVisibleItem, sectionType, onClose, setLocation]);
 
   const handleShare = useCallback(() => {
-    const item = getVisibleItem(activeCategory);
+    const item = getVisibleItem();
     if (item) {
       sharePage(item.title);
     }
-  }, [activeCategory, getVisibleItem]);
-
-  const handleScroll = useCallback((cat: string) => {
-    visibleItemForComments.current = getVisibleItem(cat);
   }, [getVisibleItem]);
+
+  const activeItems = categoryItems.get(activeCategory) || [];
 
   return (
     <AnimatePresence>
@@ -197,67 +177,45 @@ export function VoteSnapScrollView({
             </div>
           </div>
 
-          {/* Content: horizontal Swiper with vertical scroll-snap feeds */}
+          {/* Vertical scroll-snap feed for active category */}
           <div className="flex-1 min-h-0">
-            <Swiper
-              onSwiper={(s) => { swiperRef.current = s; }}
-              onSlideChange={handleSlideChange}
-              slidesPerView={1}
-              threshold={20}
-              touchAngle={35}
-              resistance
-              resistanceRatio={0.5}
-              initialSlide={initialCategoryIdx}
-              className="h-full"
-            >
-              {categories.map((cat) => {
-                const catItems = categoryItems.get(cat) || [];
-
-                return (
-                  <SwiperSlide key={cat} className="h-full">
-                    {catItems.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-3 px-8">
-                        <Inbox className="h-10 w-10 opacity-40" />
-                        <p className="text-sm text-center">
-                          No {SECTION_LABEL[sectionType]} in{" "}
-                          <span className="font-semibold">{cat}</span> yet
-                        </p>
-                      </div>
-                    ) : (
-                      <div
-                        ref={(el) => {
-                          if (el) scrollRefs.current.set(cat, el);
-                          else scrollRefs.current.delete(cat);
-                        }}
-                        onScroll={() => handleScroll(cat)}
-                        className="h-full overflow-y-auto snap-y snap-mandatory"
-                        style={{ scrollSnapType: "y mandatory" }}
-                      >
-                        {catItems.map((item) => (
-                          <div
-                            key={item.id}
-                            className="snap-start flex flex-col justify-center px-3"
-                            style={{
-                              height: "calc(100dvh - 52px)",
-                              scrollSnapAlign: "start",
-                            }}
-                          >
-                            <div className="flex-1 min-h-0 flex flex-col justify-center overflow-hidden">
-                              {renderCard(item)}
-                            </div>
-                            <SnapScrollActionRow
-                              onComments={openComments}
-                              onDetail={navigateToDetail}
-                              onShare={handleShare}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </SwiperSlide>
-                );
-              })}
-            </Swiper>
+            {activeItems.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-3 px-8">
+                <Inbox className="h-10 w-10 opacity-40" />
+                <p className="text-sm text-center">
+                  No {SECTION_LABEL[sectionType]} in{" "}
+                  <span className="font-semibold">{activeCategory}</span> yet
+                </p>
+              </div>
+            ) : (
+              <div
+                key={activeCategory}
+                ref={scrollRef}
+                className="h-full overflow-y-auto snap-y snap-mandatory"
+                style={{ scrollSnapType: "y mandatory" }}
+              >
+                {activeItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="snap-start flex flex-col items-center justify-center px-3"
+                    style={{
+                      height: "calc(100dvh - 52px)",
+                      scrollSnapAlign: "start",
+                      paddingBottom: "env(safe-area-inset-bottom, 16px)",
+                    }}
+                  >
+                    <div className="w-full max-w-lg">
+                      {renderCard(item)}
+                    </div>
+                    <SnapScrollActionRow
+                      onComments={openComments}
+                      onDetail={navigateToDetail}
+                      onShare={handleShare}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Comments bottom sheet */}

@@ -2385,9 +2385,6 @@ export default function VotePage() {
     if (event && !previousVote) {
       addXP(15, event);
     }
-    if (isMobile && !previousVote && !snapScrollOpen) {
-      setTimeout(() => openSnapScroll("matchups", matchupId), 600);
-    }
   };
   
   const handleMatchupRemoveVote = (matchupId: string) => {
@@ -2597,9 +2594,6 @@ export default function VotePage() {
       discourseVoteMutation.mutate({ slug: topic.slug, choice });
     }
     addXP(25, event as React.MouseEvent);
-    if (isMobile && !snapScrollOpen) {
-      setTimeout(() => openSnapScroll("sentiment", topicId), 600);
-    }
   };
 
   const handleSuggestSubmit = () => {
@@ -3030,9 +3024,6 @@ export default function VotePage() {
                     onVote={async (pollSlug, optionId) => {
                       await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
                       queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
-                      if (isMobile && !snapScrollOpen) {
-                        setTimeout(() => openSnapScroll("opinion", poll.id), 600);
-                      }
                     }}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
