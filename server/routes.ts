@@ -6978,7 +6978,16 @@ Only return the JSON object.`;
       if (!existing) {
         return res.status(404).json({ error: "Celebrity not found" });
       }
-      
+
+      // Clean up references that don't have ON DELETE CASCADE in the DB yet
+      await db.delete(trendingPeople).where(eq(trendingPeople.id, id));
+      await db.update(matchups).set({ personAId: null }).where(eq(matchups.personAId, id));
+      await db.update(matchups).set({ personBId: null }).where(eq(matchups.personBId, id));
+      await db.update(marketEntries).set({ personId: null }).where(eq(marketEntries.personId, id));
+      await db.update(predictionMarkets).set({ personId: null }).where(eq(predictionMarkets.personId, id));
+      await db.update(opinionPollOptions).set({ personId: null }).where(eq(opinionPollOptions.personId, id));
+      await db.delete(cardRelatedPeople).where(eq(cardRelatedPeople.personId, id));
+
       await db.delete(trackedPeople).where(eq(trackedPeople.id, id));
       
       // Audit log

@@ -486,8 +486,8 @@ export const matchups = pgTable("face_offs", {
   isActive: boolean("is_active").notNull().default(true),
   displayOrder: integer("display_order").notNull().default(0),
   status: text("status").notNull().default("draft"),
-  personAId: varchar("person_a_id").references(() => trackedPeople.id),
-  personBId: varchar("person_b_id").references(() => trackedPeople.id),
+  personAId: varchar("person_a_id").references(() => trackedPeople.id, { onDelete: "set null" }),
+  personBId: varchar("person_b_id").references(() => trackedPeople.id, { onDelete: "set null" }),
   promptText: text("prompt_text"),
   description: text("description"),
   seedVotesA: integer("seed_votes_a").notNull().default(0),
@@ -887,7 +887,7 @@ export const marketEntries = pgTable("market_entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   marketId: varchar("market_id").notNull().references(() => predictionMarkets.id, { onDelete: "cascade" }),
   entryType: text("entry_type").notNull().default("custom"), // 'person' (linked to tracked_people) or 'custom'
-  personId: varchar("person_id").references(() => trackedPeople.id), // Nullable - for celebrity-based entries
+  personId: varchar("person_id").references(() => trackedPeople.id, { onDelete: "set null" }), // Nullable - for celebrity-based entries
   label: text("label").notNull(), // Display name (snapshotted for non-person entries)
   description: text("description"),
   displayOrder: integer("display_order").notNull().default(0),
@@ -1257,7 +1257,7 @@ export const opinionPollOptions = pgTable("opinion_poll_options", {
   pollId: varchar("poll_id").notNull().references(() => opinionPolls.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   imageUrl: text("image_url"),
-  personId: varchar("person_id").references(() => trackedPeople.id),
+  personId: varchar("person_id").references(() => trackedPeople.id, { onDelete: "set null" }),
   orderIndex: integer("order_index").notNull().default(0),
   seedCount: integer("seed_count").notNull().default(0),
 }, (table) => ({
@@ -1421,7 +1421,7 @@ export const cardRelatedPeople = pgTable("card_related_people", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   cardType: text("card_type").notNull(),
   cardId: varchar("card_id").notNull(),
-  personId: varchar("person_id").notNull().references(() => trackedPeople.id),
+  personId: varchar("person_id").notNull().references(() => trackedPeople.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
   uniqueCardPerson: uniqueIndex("card_related_people_unique_idx").on(table.cardType, table.cardId, table.personId),
