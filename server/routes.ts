@@ -17,6 +17,7 @@ import { JACKPOT_TICKET_COST, JACKPOT_MAX_PREDICTED_SCORE } from "./config/const
 import { isAdminRole } from "./utils/authz";
 import { applyAdminCreditAdjustment } from "./utils/admin-credits";
 import { optimizeImage } from "./utils/image-optimize";
+import geoip from "geoip-lite";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext } from "./providers/serper";
 import { getSourceStats } from "./scoring/sourceStats";
@@ -333,12 +334,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return next();
     }
     
-    // Copy request data before scheduling async task (req may be recycled)
+    // Resolve country from IP before the request object is recycled
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip = (typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : req.socket.remoteAddress) || null;
+    let country: string | null = null;
+    if (ip) {
+      const geo = geoip.lookup(ip);
+      if (geo?.country) country = geo.country;
+    }
+
     const pageData = {
       path: req.path,
       userAgent: req.headers['user-agent'] || null,
       referrer: req.headers['referer'] || null,
       sessionId: (req as any).sessionID || null,
+      country,
     };
     
     // Log the page view asynchronously (don't block the response)
@@ -6303,6 +6313,20 @@ Only return the JSON object.`;
         .groupBy(pageViews.path)
         .orderBy(sql`count(*) DESC`)
         .limit(5);
+
+      // Top countries (last 30 days)
+      const topCountries = await db.select({
+        country: pageViews.country,
+        views: sql<number>`count(*)`,
+      })
+        .from(pageViews)
+        .where(and(
+          gte(pageViews.createdAt, thirtyDaysAgo),
+          isNotNull(pageViews.country),
+        ))
+        .groupBy(pageViews.country)
+        .orderBy(sql`count(*) DESC`)
+        .limit(10);
       
       res.json({
         total: Number(stats?.total || 0),
@@ -6310,6 +6334,7 @@ Only return the JSON object.`;
         last7Days: Number(stats?.last7Days || 0),
         last30Days: Number(stats?.last30Days || 0),
         topPages: topPages.map(p => ({ path: p.path, views: Number(p.views) })),
+        topCountries: topCountries.map(c => ({ country: c.country, views: Number(c.views) })),
       });
     } catch (error: any) {
       console.error("Error fetching traffic stats:", error.message);

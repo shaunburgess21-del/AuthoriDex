@@ -90,6 +90,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import * as Flags from "country-flag-icons/react/3x2";
 import type { TrendingPoll } from "@shared/schema";
 import { MARKET_CATEGORY_OPTIONS, normalizeMarketCategory, type CanonicalMarketCategory } from "@shared/constants";
 
@@ -113,6 +114,7 @@ interface TrafficStats {
   last7Days: number;
   last30Days: number;
   topPages: { path: string; views: number }[];
+  topCountries?: { country: string; views: number }[];
 }
 
 interface UserProfile {
@@ -3534,6 +3536,29 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 )}
+
+                {trafficStats?.topCountries && trafficStats.topCountries.length > 0 && (() => {
+                  const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
+                  return (
+                    <div className="mt-4 pt-4 border-t border-border">
+                      <h4 className="text-sm font-medium mb-2">Top Countries (30 days)</h4>
+                      <div className="space-y-2">
+                        {trafficStats.topCountries.map((entry) => {
+                          const FlagComponent = (Flags as any)[entry.country];
+                          return (
+                            <div key={entry.country} className="flex items-center justify-between text-sm">
+                              <span className="flex items-center gap-2 text-muted-foreground">
+                                {FlagComponent && <FlagComponent className="w-5 h-3.5 rounded-sm shrink-0" />}
+                                <span>{regionNames.of(entry.country) || entry.country}</span>
+                              </span>
+                              <Badge variant="secondary">{entry.views} views</Badge>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
 

@@ -1047,6 +1047,7 @@ export const pageViews = pgTable("page_views", {
   referrer: text("referrer"), // Where they came from
   sessionId: text("session_id"), // Anonymous session tracking
   userId: varchar("user_id"), // Optional: logged-in user
+  country: text("country"), // ISO 3166-1 alpha-2 country code from IP geolocation
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
   createdAtIdx: index("page_views_created_at_idx").on(table.createdAt),
