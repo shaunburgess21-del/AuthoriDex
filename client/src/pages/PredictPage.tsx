@@ -1267,7 +1267,7 @@ function TopGainerCard({
                   </div>
                 ) : (
                   <div className="h-6 w-6 rounded-full bg-muted/50 flex items-center justify-center shrink-0">
-                    <span className="text-[10px] font-bold text-violet-400">#{leader.rank || (i + 1)}</span>
+                    <span className="text-[10px] font-bold text-violet-400">{leader.rank ? `#${leader.rank}` : 'New'}</span>
                   </div>
                 )}
                 <PersonAvatar name={leader.name} avatar={leader.avatar} className="h-12 w-12" />
@@ -1423,7 +1423,7 @@ function GainerCandidatesDialog({
                         <Crown className="h-3 w-3 text-amber-500" />
                       </div>
                     ) : (
-                      <span className="text-xs font-bold text-violet-500">#{candidate.rank || (idx + 1)}</span>
+                      <span className="text-xs font-bold text-violet-500">{candidate.rank ? `#${candidate.rank}` : 'New'}</span>
                     )}
                   </div>
                   <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="sm" />
@@ -2125,7 +2125,7 @@ function CelebritySearchModal({
                   <PersonAvatar name={person.name} avatar={person.avatar || ""} size="sm" />
                   <div className="flex-1 text-left">
                     <p className="font-medium text-sm">{person.name}</p>
-                    <p className="text-xs text-muted-foreground">Rank #{person.rank}</p>
+                    <p className="text-xs text-muted-foreground">{person.rank ? `Rank #${person.rank}` : 'New'}</p>
                   </div>
                   <span className="text-xs font-mono text-muted-foreground">{Math.round(person.trendScore).toLocaleString('en-US')}</span>
                 </button>
@@ -2227,7 +2227,7 @@ function WeeklyJackpotHero({
                       <PersonAvatar name={selectedPerson.name} avatar={selectedPerson.avatar || ""} size="sm" />
                       <div className="text-left">
                         <p className="font-semibold">{selectedPerson.name}</p>
-                        <p className="text-xs text-muted-foreground">Rank #{selectedPerson.rank}</p>
+                        <p className="text-xs text-muted-foreground">{selectedPerson.rank ? `Rank #${selectedPerson.rank}` : 'New'}</p>
                       </div>
                     </>
                   ) : (

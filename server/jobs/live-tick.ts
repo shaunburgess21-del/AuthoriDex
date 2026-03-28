@@ -145,9 +145,13 @@ async function runLiveTickOnce(): Promise<{ processed: number; moved: number }> 
     const canonicalRank = canonicalRankMap.get(item.id) ?? newLiveRank;
 
     let finalRank = newLiveRank;
-    const rankDelta = Math.abs(newLiveRank - canonicalRank);
-    if (rankDelta > MAX_RANK_DELTA) {
-      finalRank = canonicalRank + (newLiveRank > canonicalRank ? MAX_RANK_DELTA : -MAX_RANK_DELTA);
+    if (canonicalRank === 0) {
+      finalRank = 0;
+    } else {
+      const rankDelta = Math.abs(newLiveRank - canonicalRank);
+      if (rankDelta > MAX_RANK_DELTA) {
+        finalRank = canonicalRank + (newLiveRank > canonicalRank ? MAX_RANK_DELTA : -MAX_RANK_DELTA);
+      }
     }
 
     if (finalRank !== canonicalRank) moved++;

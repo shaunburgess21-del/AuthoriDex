@@ -12,7 +12,7 @@ This document is the **source of truth** for how we align databases with `shared
 
 ## Generic ensure runner (`db:ensure`)
 
-All idempotent “catch-up” SQL lives in **`server/sql/ensure/`**, sorted lexically:
+All idempotent "catch-up" SQL lives in **`server/sql/ensure/`**, sorted lexically:
 
 - `001_induction_candidate_columns.sql` — induction queue columns from migration 0004.
 - Add **`002_…sql`**, **`003_…sql`** for future additive fixes (one concern per file is easiest to review).
@@ -49,7 +49,7 @@ That does **not** mean you should skip schema alignment. It means you need a **d
    - **`npm run db:ensure`** (for anything mirrored under `server/sql/ensure/`), or
    - **`psql`** / admin client with the same `DATABASE_URL` as production.
 
-4. **Avoid** `drizzle-kit migrate` on “messy” legacy DBs unless you have reconciled the journal (baseline) with help from someone who knows the full history.
+4. **Avoid** `drizzle-kit migrate` on "messy" legacy DBs unless you have reconciled the journal (baseline) with help from someone who knows the full history.
 
 ## Induction queue columns (`x_handle`, `induction_status`)
 
@@ -95,10 +95,34 @@ npx tsx --env-file=.env server/scripts/validate-induction-post-import.ts
 
 `npm run db:push` (see `scripts/db-push-safe.cjs`) can help **development** environments stay close to `shared/schema.ts`, but production should prefer **explicit, reviewable SQL** or **idempotent ensure** files under `server/sql/ensure/` so you never depend on interactive prompts or accidental destructive defaults.
 
+## Cold-start "New" badge for newly inducted leaderboard entrants
+
+When a candidate is approved via the admin portal, code inserts a `trending_people` row with **`rank = 0`**, **`fame_index = 0`**, **`trend_score = 0`**.
+
+- The leaderboard API returns **`leaderboardRank: null`** for anyone with `fame_index = 0` (cold-start).
+- The frontend `LeaderboardRow` displays a **"New"** badge instead of a numeric rank when `rank` is null or 0.
+- The live-tick job skips rank clamping for `rank = 0` people (keeps the sentinel intact).
+- After the **first successful ingestion cycle**, `fame_index` and `rank` are set to real computed values (`1..N`), the "New" badge disappears, and the real dynamic rank shows automatically.
+- `fame_index = 0` is never a legitimate post-ingest value (ingest's 50k avg safeguard ensures real values are in the 100k-600k range).
+
+**One-time repair for existing rows** (e.g. rows still showing `rank = 999` from before this change):
+
+```sql
+UPDATE trending_people SET rank = 0 WHERE fame_index = 0 OR rank >= 999;
+```
+
+Alternatively, a **successful full data ingestion** will recompute all ranks as `1..N` by fame and replace any placeholder automatically.
+
+**Expected cold-start behavior (not bugs):**
+
+- **24h / 7d deltas** stay null ("—") until at least two ingest snapshots with `snapshot_origin = 'ingest'` exist.
+- **Approval rating** stays "—" until users vote.
+- **GDELT news gating** sorts by `trending_people.rank`; `rank = 0` people sort before rank 1 numerically, which is harmless since GDELT picks candidates by top-N rank and wiki pageviews. After first ingest they get a real rank.
+
 ## Local UI sanity (Induction Queue)
 
 After a successful import and **`GET /api/vote/induction` → 200**:
 
-- Open **Vote → Induction Queue** with category **All**; you should see cards (not perpetual spinner, not “No candidates match your filter criteria” unless a filter is set).
+- Open **Vote → Induction Queue** with category **All**; you should see cards (not perpetual spinner, not "No candidates match your filter criteria" unless a filter is set).
 - **Images** load from Supabase `celebrity-large/{image_slug}/1.webp` (with URL-encoded slug segments for accents).
 - **Voting:** `POST /api/vote/induction/:id/vote` requires an authenticated session — verify while **signed in** in the browser.

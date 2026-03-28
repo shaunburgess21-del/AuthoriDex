@@ -51,11 +51,17 @@ export async function runPostInductionOnboarding(args: {
         id: personId,
         name: tp.name,
         category: tp.category,
-        rank: 999,
+        rank: 0,
         trendScore: 0,
         fameIndex: 0,
       })
-      .onConflictDoNothing();
+      .onConflictDoUpdate({
+        target: trendingPeople.id,
+        set: {
+          name: tp.name,
+          category: tp.category,
+        },
+      });
 
     const [hasSnap] = await db
       .select({ id: trendSnapshots.id })

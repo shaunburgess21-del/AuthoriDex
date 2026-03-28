@@ -168,7 +168,7 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                                 <Globe className="h-3 w-3" />
                                 Rank
                               </span>
-                              <span className="font-mono font-medium">#{person.rank}</span>
+                              <span className="font-mono font-medium">{person.rank ? `#${person.rank}` : 'New'}</span>
                             </div>
                             {showRankChange && (
                               <div className="flex items-center justify-between gap-2">

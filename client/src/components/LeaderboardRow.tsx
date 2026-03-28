@@ -125,6 +125,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
   const showVotePulse = !hasVoted && !hasEverVoted;
   const [justVoted, setJustVoted] = useState(false);
   const rank = person.leaderboardRank ?? (person as any).liveRank ?? person.rank;
+  const isColdStart = rank == null || rank === 0;
 
   const prevScoreRef = useRef(fameScore);
   const [scoreFlash, setScoreFlash] = useState(false);
@@ -149,9 +150,13 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
           data-testid={`rank-avatar-unit-${person.id}`}
         >
           <div className="flex items-center justify-center min-w-[32px] sm:min-w-[36px] h-12 lg:h-[58px] rounded-l-lg" style={{ backgroundColor: "#101318" }}>
-            <span className="font-mono font-semibold text-slate-400 text-[16px] sm:text-[18px]">
-              {rank}
-            </span>
+            {isColdStart ? (
+              <span className="text-[10px] sm:text-xs font-bold text-cyan-400 leading-tight">New</span>
+            ) : (
+              <span className="font-mono font-semibold text-slate-400 text-[16px] sm:text-[18px]">
+                {rank}
+              </span>
+            )}
           </div>
           <PersonAvatar
             name={person.name}

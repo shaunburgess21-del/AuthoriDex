@@ -1544,7 +1544,7 @@ export default function PersonDetailPage() {
                       data-testid="text-header-rank"
                     >
                       <Trophy className="h-3.5 w-3.5" />
-                      <span><span className="hidden sm:inline">Overall </span>#{person.rank}</span>
+                      <span><span className="hidden sm:inline">Overall </span>{person.rank ? `#${person.rank}` : 'New'}</span>
                     </div>
                   </TouchTooltip>
                 </div>

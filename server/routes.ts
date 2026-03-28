@@ -3004,7 +3004,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let leaderboardRank: number | null = null;
 
         if (tab === 'fame') {
-          leaderboardRank = person.liveRank ?? person.rank;
+          leaderboardRank = (person.fameIndex === 0 || person.fameIndex === null)
+            ? null
+            : (person.liveRank ?? person.rank);
         } else if (tab === 'approval') {
           leaderboardRank = approvalRankById.get(person.id) ?? null;
         } else {
@@ -5512,7 +5514,7 @@ Only return the JSON object.`;
           name: person[0]?.name || "Unknown",
           imageUrl: person[0]?.avatar || null,
           category: person[0]?.category || "Other",
-          rank: trending[0]?.rank || 999,
+          rank: trending[0]?.rank || null,
           change: trending[0]?.change24h || 0,
         };
       }));
@@ -13717,7 +13719,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           id: personId,
           name: candidate.displayName,
           category: candidate.category,
-          rank: 999,
+          rank: 0,
           trendScore: 0,
           fameIndex: 0,
         }).onConflictDoNothing();
