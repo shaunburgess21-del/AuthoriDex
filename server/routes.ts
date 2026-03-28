@@ -7031,12 +7031,25 @@ Only return the JSON object.`;
         personId: string;
         name: string;
         currentSlug: string | null;
-        status: "ok" | "redirect" | "low_views" | "missing" | "not_found" | "error";
+        status: "ok" | "redirect" | "redirect_ok" | "low_views" | "missing" | "not_found" | "error";
         viewsPerDay: number | null;
+        canonicalViews: number | null;
         suggestedSlug: string | null;
+        note: string | null;
       }
 
       const results: AuditEntry[] = [];
+
+      const fetchDayViews = async (slug: string): Promise<number | null> => {
+        const yesterday = new Date();
+        yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+        const dateStr = yesterday.toISOString().slice(0, 10).replace(/-/g, "");
+        const pvUrl = `https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/all-agents/${encodeURIComponent(slug)}/daily/${dateStr}/${dateStr}`;
+        const pvRes = await fetch(pvUrl, { headers: { "User-Agent": WIKI_UA, Accept: "application/json" } });
+        if (!pvRes.ok) return null;
+        const pvData = await pvRes.json() as any;
+        return pvData?.items?.[0]?.views ?? 0;
+      }
 
       for (const person of people) {
         if (!person.wikiSlug) {
@@ -7046,16 +7059,17 @@ Only return the JSON object.`;
             currentSlug: null,
             status: "missing",
             viewsPerDay: null,
+            canonicalViews: null,
             suggestedSlug: null,
+            note: null,
           });
           continue;
         }
 
         try {
-          // Check redirect via MediaWiki API (batches of 1 to keep it simple)
           const mwUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(person.wikiSlug)}&redirects&format=json`;
           const mwRes = await fetch(mwUrl, { headers: { "User-Agent": WIKI_UA, Accept: "application/json" } });
-          let suggestedSlug: string | null = null;
+          let canonicalSlug: string | null = null;
           let isRedirect = false;
 
           if (mwRes.ok) {
@@ -7063,7 +7077,7 @@ Only return the JSON object.`;
             const redirects = mwData?.query?.redirects;
             if (Array.isArray(redirects) && redirects.length > 0) {
               isRedirect = true;
-              suggestedSlug = (redirects[redirects.length - 1].to as string).replace(/ /g, "_");
+              canonicalSlug = (redirects[redirects.length - 1].to as string).replace(/ /g, "_");
             }
             const pages = mwData?.query?.pages;
             if (pages && Object.keys(pages).some(k => k === "-1")) {
@@ -7073,41 +7087,48 @@ Only return the JSON object.`;
                 currentSlug: person.wikiSlug,
                 status: "not_found",
                 viewsPerDay: null,
+                canonicalViews: null,
                 suggestedSlug: null,
+                note: null,
               });
               await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
               continue;
             }
           }
 
-          // Fetch yesterday's pageviews
-          const yesterday = new Date();
-          yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-          const dateStr = yesterday.toISOString().slice(0, 10).replace(/-/g, "");
-          const pvUrl = `https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/all-agents/${encodeURIComponent(person.wikiSlug)}/daily/${dateStr}/${dateStr}`;
-          const pvRes = await fetch(pvUrl, { headers: { "User-Agent": WIKI_UA, Accept: "application/json" } });
-
-          let viewsPerDay: number | null = null;
-          if (pvRes.ok) {
-            const pvData = await pvRes.json() as any;
-            viewsPerDay = pvData?.items?.[0]?.views ?? 0;
-          }
+          const viewsPerDay = await fetchDayViews(person.wikiSlug);
 
           let status: AuditEntry["status"];
-          if (isRedirect) {
-            status = "redirect";
+          let suggestedSlug: string | null = null;
+          let canonicalViews: number | null = null;
+          let note: string | null = null;
+
+          if (isRedirect && canonicalSlug) {
+            // Compare views: redirect slug vs canonical slug
+            canonicalViews = await fetchDayViews(canonicalSlug);
+            await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+
+            const redirectViews = viewsPerDay ?? 0;
+            const canonViews = canonicalViews ?? 0;
+            const totalViews = redirectViews + canonViews;
+
+            if (canonViews > redirectViews) {
+              status = "redirect";
+              suggestedSlug = canonicalSlug;
+              note = `Redirect gets ${redirectViews.toLocaleString()}/day, canonical gets ${canonViews.toLocaleString()}/day — consider switching. Ingestion now sums both (${totalViews.toLocaleString()} total).`;
+            } else {
+              status = "redirect_ok";
+              note = `Redirect gets ${redirectViews.toLocaleString()}/day, canonical gets ${canonViews.toLocaleString()}/day — keep current slug. Ingestion sums both (${totalViews.toLocaleString()} total).`;
+            }
           } else if (viewsPerDay !== null && viewsPerDay < LOW_VIEW_THRESHOLD) {
             status = "low_views";
-            // For low-view non-redirects, try name-based search for a suggestion
-            if (!suggestedSlug) {
-              const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(person.name)}&srlimit=1&format=json`;
-              const searchRes = await fetch(searchUrl, { headers: { "User-Agent": WIKI_UA, Accept: "application/json" } });
-              if (searchRes.ok) {
-                const searchData = await searchRes.json() as any;
-                const topResult = searchData?.query?.search?.[0]?.title;
-                if (topResult && topResult.replace(/ /g, "_") !== person.wikiSlug) {
-                  suggestedSlug = topResult.replace(/ /g, "_");
-                }
+            const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(person.name)}&srlimit=1&format=json`;
+            const searchRes = await fetch(searchUrl, { headers: { "User-Agent": WIKI_UA, Accept: "application/json" } });
+            if (searchRes.ok) {
+              const searchData = await searchRes.json() as any;
+              const topResult = searchData?.query?.search?.[0]?.title;
+              if (topResult && topResult.replace(/ /g, "_") !== person.wikiSlug) {
+                suggestedSlug = topResult.replace(/ /g, "_");
               }
             }
           } else {
@@ -7120,7 +7141,9 @@ Only return the JSON object.`;
             currentSlug: person.wikiSlug,
             status,
             viewsPerDay,
+            canonicalViews,
             suggestedSlug,
+            note,
           });
         } catch (err) {
           results.push({
@@ -7129,19 +7152,21 @@ Only return the JSON object.`;
             currentSlug: person.wikiSlug,
             status: "error",
             viewsPerDay: null,
+            canonicalViews: null,
             suggestedSlug: null,
+            note: null,
           });
         }
 
         await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
       }
 
-      const issues = results.filter(r => r.status !== "ok");
+      const issues = results.filter(r => r.status !== "ok" && r.status !== "redirect_ok");
       res.json({
         total: results.length,
         issueCount: issues.length,
         results: results.sort((a, b) => {
-          const order: Record<string, number> = { redirect: 0, not_found: 1, low_views: 2, missing: 3, error: 4, ok: 5 };
+          const order: Record<string, number> = { redirect: 0, not_found: 1, low_views: 2, missing: 3, error: 4, redirect_ok: 5, ok: 6 };
           return (order[a.status] ?? 9) - (order[b.status] ?? 9);
         }),
       });

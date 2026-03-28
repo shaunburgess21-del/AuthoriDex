@@ -6125,7 +6125,7 @@ export default function AdminDashboard() {
                               <th className="px-2 py-1.5 text-left font-medium">Current Slug</th>
                               <th className="px-2 py-1.5 text-left font-medium">Status</th>
                               <th className="px-2 py-1.5 text-right font-medium">Views/day</th>
-                              <th className="px-2 py-1.5 text-left font-medium">Suggested Fix</th>
+                              <th className="px-2 py-1.5 text-left font-medium">Note / Suggested Fix</th>
                               <th className="px-2 py-1.5 text-right font-medium"></th>
                             </tr>
                           </thead>
@@ -6133,7 +6133,7 @@ export default function AdminDashboard() {
                             {wikiAuditResults.results.map((r: any) => (
                               <tr key={r.personId} className={cn(
                                 "border-b last:border-0",
-                                r.status === "ok" ? "opacity-50" : "hover:bg-muted/30",
+                                r.status === "ok" || r.status === "redirect_ok" ? "opacity-50" : "hover:bg-muted/30",
                               )}>
                                 <td className="px-2 py-1.5 font-medium">{r.name}</td>
                                 <td className="px-2 py-1.5 text-muted-foreground font-mono max-w-[180px] truncate" title={r.currentSlug || ""}>
@@ -6141,22 +6141,32 @@ export default function AdminDashboard() {
                                 </td>
                                 <td className="px-2 py-1.5">
                                   <Badge variant="outline" className={cn("text-[10px]", {
-                                    "border-green-500/50 text-green-500": r.status === "ok",
-                                    "border-red-500/50 text-red-500": r.status === "redirect" || r.status === "not_found",
-                                    "border-yellow-500/50 text-yellow-500": r.status === "low_views" || r.status === "missing",
+                                    "border-green-500/50 text-green-500": r.status === "ok" || r.status === "redirect_ok",
+                                    "border-red-500/50 text-red-500": r.status === "not_found",
+                                    "border-yellow-500/50 text-yellow-500": r.status === "redirect" || r.status === "low_views" || r.status === "missing",
                                     "border-muted-foreground/50": r.status === "error",
                                   })}>
-                                    {r.status === "ok" ? "OK" : r.status === "redirect" ? "Redirect" : r.status === "low_views" ? "Low Views" : r.status === "missing" ? "Missing" : r.status === "not_found" ? "Not Found" : "Error"}
+                                    {r.status === "ok" ? "OK"
+                                      : r.status === "redirect_ok" ? "Redirect (OK)"
+                                      : r.status === "redirect" ? "Redirect"
+                                      : r.status === "low_views" ? "Low Views"
+                                      : r.status === "missing" ? "Missing"
+                                      : r.status === "not_found" ? "Not Found"
+                                      : "Error"}
                                   </Badge>
                                 </td>
                                 <td className="px-2 py-1.5 text-right tabular-nums">
                                   {r.viewsPerDay != null ? r.viewsPerDay.toLocaleString() : "—"}
                                 </td>
-                                <td className="px-2 py-1.5 text-muted-foreground font-mono max-w-[180px] truncate" title={r.suggestedSlug || ""}>
-                                  {r.suggestedSlug || "—"}
+                                <td className="px-2 py-1.5 text-muted-foreground max-w-[260px]">
+                                  {r.note ? (
+                                    <span className="text-[10px] leading-tight block" title={r.note}>{r.note}</span>
+                                  ) : r.suggestedSlug ? (
+                                    <span className="font-mono truncate block" title={r.suggestedSlug}>{r.suggestedSlug}</span>
+                                  ) : "—"}
                                 </td>
                                 <td className="px-2 py-1.5 text-right">
-                                  {r.suggestedSlug && r.status !== "ok" && (
+                                  {r.suggestedSlug && r.status !== "ok" && r.status !== "redirect_ok" && (
                                     <button
                                       type="button"
                                       className="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
@@ -6176,7 +6186,7 @@ export default function AdminDashboard() {
                                             issueCount: prev.issueCount - 1,
                                             results: prev.results.map((item: any) =>
                                               item.personId === r.personId
-                                                ? { ...item, currentSlug: r.suggestedSlug, status: "ok", suggestedSlug: null }
+                                                ? { ...item, currentSlug: r.suggestedSlug, status: "ok", suggestedSlug: null, note: null }
                                                 : item
                                             ),
                                           }));
