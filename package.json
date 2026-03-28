@@ -13,7 +13,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:baseline": "tsx --env-file=.env scripts/db-baseline.cjs",
     "db:push": "tsx --env-file=.env scripts/db-push-safe.cjs",
-    "db:push:raw": "drizzle-kit push"
+    "db:push:raw": "drizzle-kit push",
+    "import:induction": "tsx --env-file=.env server/scripts/import-induction-csv.ts"
   },
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.25",

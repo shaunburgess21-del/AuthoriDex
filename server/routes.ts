@@ -13618,10 +13618,18 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   // POST /api/admin/induction - Admin: create a new induction candidate
   app.post("/api/admin/induction", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { displayName, category, imageSlug, wikiSlug, seedVotes } = req.body;
+      const { displayName, category, imageSlug, wikiSlug, seedVotes, xHandle, inductionStatus } = req.body;
       if (!displayName || !category) return res.status(400).json({ error: "displayName and category are required" });
 
-      const autoSlug = imageSlug || displayName.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
+      const autoSlug = (typeof imageSlug === "string" && imageSlug.trim())
+        ? imageSlug.trim()
+        : displayName.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-");
+      const statusStr = (typeof inductionStatus === "string" && inductionStatus.trim()) ? inductionStatus.trim() : "Queue";
+      const activeFromStatus = !["inducted", "rejected", "inactive", "archived"].includes(statusStr.toLowerCase());
+      const xh = (typeof xHandle === "string" && xHandle.trim()) ? xHandle.trim().replace(/^@+/, "") : null;
+      const sv = typeof seedVotes === "number" && !Number.isNaN(seedVotes)
+        ? Math.max(0, Math.floor(seedVotes))
+        : Math.max(0, parseInt(String(seedVotes ?? "0"), 10) || 0);
 
       const existing = await db.select({ id: inductionCandidates.id }).from(inductionCandidates).where(eq(inductionCandidates.displayName, displayName)).limit(1);
       if (existing.length > 0) return res.status(409).json({ error: "Candidate with this name already exists" });
@@ -13631,8 +13639,10 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         category,
         imageSlug: autoSlug,
         wikiSlug: wikiSlug || null,
-        seedVotes: seedVotes || 0,
-        isActive: true,
+        seedVotes: sv,
+        xHandle: xh,
+        inductionStatus: statusStr,
+        isActive: activeFromStatus,
       }).returning();
 
       res.json(created);
@@ -13646,7 +13656,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   app.patch("/api/admin/induction/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { displayName, category, imageSlug, wikiSlug, seedVotes, isActive } = req.body;
+      const { displayName, category, imageSlug, wikiSlug, seedVotes, isActive, xHandle, inductionStatus } = req.body;
 
       const updates: any = {};
       if (displayName !== undefined) updates.displayName = displayName;
@@ -13654,6 +13664,16 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       if (imageSlug !== undefined) updates.imageSlug = imageSlug;
       if (wikiSlug !== undefined) updates.wikiSlug = wikiSlug;
       if (seedVotes !== undefined) updates.seedVotes = seedVotes;
+      if (xHandle !== undefined) {
+        updates.xHandle = (typeof xHandle === "string" && xHandle.trim()) ? xHandle.trim().replace(/^@+/, "") : null;
+      }
+      if (inductionStatus !== undefined) {
+        const st = (typeof inductionStatus === "string" && inductionStatus.trim()) ? inductionStatus.trim() : "Queue";
+        updates.inductionStatus = st;
+        if (isActive === undefined) {
+          updates.isActive = !["inducted", "rejected", "inactive", "archived"].includes(st.toLowerCase());
+        }
+      }
       if (isActive !== undefined) updates.isActive = isActive;
 
       if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });

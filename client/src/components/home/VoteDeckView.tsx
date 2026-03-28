@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { handleImageError } from "@/lib/imageResolver";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { Card } from "@/components/ui/card";
@@ -11,7 +11,6 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
 import { 
   Swords, 
   MessageSquare, 
@@ -38,25 +37,32 @@ import {
   Clapperboard,
   Gamepad2,
   UtensilsCrossed,
-  Heart
+  Heart,
+  Laugh
 } from "lucide-react";
 import {
   DISCOURSE_TOPICS,
-  INDUCTION_CANDIDATES,
   type MatchupData,
   type DiscourseTopicData,
-  type InductionCandidate,
 } from "@/data/vote";
 import { CurateSection } from "@/components/curate";
 import { HomeSectionHeader } from "@/components/home/HomeSectionHeader";
 import { getFilterCategories, type FilterCategory } from "@shared/constants";
-import { useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { ValueVotePerson } from "@/components/UnderratedOverratedCard";
 
 type VoteSection = "All" | "Matchups" | "Sentiment Polls" | "Underrated / Overrated" | "Induction Queue" | "Curate Profile";
 const SECTION_TOGGLES: VoteSection[] = ["All", "Matchups", "Sentiment Polls", "Underrated / Overrated", "Induction Queue", "Curate Profile"];
+
+interface DeckInductionCandidate {
+  id: string;
+  name: string;
+  category: string;
+  votes: number;
+  imageSlug: string | null;
+}
 
 interface VoteDeckViewProps {
   onExplore: () => void;
@@ -294,7 +300,7 @@ function InductionCard({
   isVoted,
   onVote,
 }: {
-  candidate: InductionCandidate;
+  candidate: DeckInductionCandidate;
   isVoted: boolean;
   onVote: (id: string) => void;
 }) {
@@ -310,7 +316,7 @@ function InductionCard({
         </div>
         
         <div className="flex flex-col items-center text-center mb-4">
-          <PersonAvatar name={candidate.name} avatar={(candidate as any).avatar} imageSlug={(candidate as any).imageSlug} imageContext="induction" size="xl" />
+          <PersonAvatar name={candidate.name} imageSlug={candidate.imageSlug} imageContext="induction" size="xl" />
           <h3 className="font-semibold text-base mt-3">{candidate.name}</h3>
         </div>
         
@@ -494,13 +500,61 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
     [categoryFilter, searchQuery]
   );
 
+  const { data: inductionApi } = useQuery<{
+    data: Array<{
+      id: string;
+      displayName: string;
+      category: string;
+      imageSlug: string | null;
+      seedVotes: number;
+    }>;
+  }>({
+    queryKey: ["/api/vote/induction"],
+    staleTime: 60_000,
+  });
+
+  const { data: myInductionVoteIds } = useQuery<string[]>({
+    queryKey: ["/api/me/induction-votes"],
+    enabled: !!user,
+  });
+
+  const inductionVoteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/vote/induction/${id}/vote`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/me/induction-votes"] });
+    },
+  });
+
+  const deckInductionCandidates: DeckInductionCandidate[] = useMemo(
+    () =>
+      (inductionApi?.data || []).map((c) => ({
+        id: c.id,
+        name: c.displayName,
+        category: c.category,
+        votes: c.seedVotes,
+        imageSlug: c.imageSlug,
+      })),
+    [inductionApi],
+  );
+
+  useEffect(() => {
+    if (!user) {
+      setInductionVotes(new Set());
+      return;
+    }
+    if (Array.isArray(myInductionVoteIds)) {
+      setInductionVotes(new Set(myInductionVoteIds));
+    }
+  }, [user, myInductionVoteIds]);
+
   const filteredInduction = useMemo(() =>
-    INDUCTION_CANDIDATES.filter(c => {
+    deckInductionCandidates.filter(c => {
       const matchesCategory = categoryFilter === "All" || categoryFilter === "Trending" || c.category === categoryFilter;
       const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     }).sort((a: any, b: any) => categoryFilter === "Trending" ? ((b.votes ?? 0) - (a.votes ?? 0)) : 0),
-    [categoryFilter, searchQuery]
+    [categoryFilter, searchQuery, deckInductionCandidates]
   );
 
   interface ValueLeaderboardResponse {
@@ -561,11 +615,24 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   };
 
   const handleInductionVote = (id: string) => {
-    setInductionVotes(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+    if (!user) {
+      setLocation("/login");
+      return;
+    }
+    if (inductionVotes.has(id)) return;
+    inductionVoteMutation.mutate(id, {
+      onSuccess: () => {
+        setInductionVotes((prev) => new Set(prev).add(id));
+      },
+      onError: (error: any) => {
+        toast({
+          title: "Vote failed",
+          description: error.message?.includes("401")
+            ? "Please sign in to vote"
+            : error.message || "Failed to submit vote",
+          variant: "destructive",
+        });
+      },
     });
   };
 
@@ -661,6 +728,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
             {cat === "Film & TV" && <Clapperboard className="h-3.5 w-3.5" />}
             {cat === "Gaming" && <Gamepad2 className="h-3.5 w-3.5" />}
             {cat === "Creator" && <Video className="h-3.5 w-3.5" />}
+            {cat === "Comedy" && <Laugh className="h-3.5 w-3.5" />}
             {cat === "Food & Drink" && <UtensilsCrossed className="h-3.5 w-3.5" />}
             {cat === "Lifestyle" && <Heart className="h-3.5 w-3.5" />}
             {cat === "Favorites" ? <span className="hidden md:inline">{cat}</span> : cat}

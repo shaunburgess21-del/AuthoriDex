@@ -11,6 +11,10 @@ export type ImageContext = "tile" | "expanded" | "induction";
  * Leaderboard/profile use celebrity-large. Induction tries celebrity-large first (same bucket after consolidation),
  * then leaders-large for legacy objects still in that bucket.
  */
+function storagePathSegment(slug: string): string {
+  return encodeURIComponent(slug);
+}
+
 export function getImageCandidates(
   supabaseUrl: string,
   slug: string,
@@ -19,20 +23,22 @@ export function getImageCandidates(
 ): string[] {
   const base = `${supabaseUrl}/storage/v1/object/public`;
   const candidates: string[] = [];
+  const seg = storagePathSegment(slug);
 
   if (context === "induction") {
-    candidates.push(`${base}/${CELEBRITY_BUCKET}/${slug}/1.webp`);
-    candidates.push(`${base}/${CELEBRITY_BUCKET}/${slug}/2.webp`);
-    candidates.push(`${base}/${LEADERS_BUCKET}/${slug}/1.webp`);
-    candidates.push(`${base}/${LEADERS_BUCKET}/${slug}/2.webp`);
-    candidates.push(`${base}/celebrity_images/${slug}/1.png`);
+    for (const n of [1, 2, 3, 4] as const) {
+      candidates.push(`${base}/${CELEBRITY_BUCKET}/${seg}/${n}.webp`);
+    }
+    candidates.push(`${base}/${LEADERS_BUCKET}/${seg}/1.webp`);
+    candidates.push(`${base}/${LEADERS_BUCKET}/${seg}/2.webp`);
+    candidates.push(`${base}/celebrity_images/${seg}/1.png`);
   } else {
     // tile and expanded: same bucket and path
-    candidates.push(`${base}/${CELEBRITY_BUCKET}/${slug}/${index}.webp`);
+    candidates.push(`${base}/${CELEBRITY_BUCKET}/${seg}/${index}.webp`);
     if (index > 1) {
-      candidates.push(`${base}/${CELEBRITY_BUCKET}/${slug}/1.webp`);
+      candidates.push(`${base}/${CELEBRITY_BUCKET}/${seg}/1.webp`);
     }
-    candidates.push(`${base}/celebrity_images/${slug}/1.png`);
+    candidates.push(`${base}/celebrity_images/${seg}/1.png`);
   }
 
   return candidates;

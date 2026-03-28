@@ -41,6 +41,11 @@ const CATEGORY_STYLES: Record<CanonicalMarketCategory, { bg: string; border: str
     border: 'border-[#FACC15]/40',
     text: 'text-[#FACC15]',
   },
+  comedy: {
+    bg: 'bg-[#F97316]/10',
+    border: 'border-[#F97316]/40',
+    text: 'text-[#F97316]',
+  },
   "food-drink": {
     bg: 'bg-[#D97706]/10',
     border: 'border-[#D97706]/40',

@@ -419,6 +419,8 @@ export const inductionCandidates = pgTable("induction_candidates", {
   imageSlug: text("image_slug"),
   seedVotes: integer("seed_votes").notNull().default(0),
   wikiSlug: text("wiki_slug"),
+  xHandle: text("x_handle"),
+  inductionStatus: text("induction_status").notNull().default("Queue"),
   isActive: boolean("is_active").notNull().default(true),
 });
 

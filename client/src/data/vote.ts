@@ -125,23 +125,6 @@ export const DISCOURSE_TOPICS: DiscourseTopicData[] = [
   { id: "d6", headline: "NFL Sunday Ticket pricing", description: "Is streaming football too expensive?", category: "Sports", approvePercent: 18, neutralPercent: 22, disapprovePercent: 60, totalVotes: 76543, personName: "Roger Goodell", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/roger-goodell/1.png" },
 ];
 
-export interface InductionCandidate {
-  id: string;
-  name: string;
-  initials: string;
-  avatar: string;
-  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics" | "Film & TV" | "Gaming" | "Food & Drink" | "Lifestyle";
-  votes: number;
-}
-
-export const INDUCTION_CANDIDATES: InductionCandidate[] = [
-  { id: "i1", name: "Jensen Huang", initials: "JH", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/jensen-huang/1.png", category: "Tech", votes: 12406 },
-  { id: "i2", name: "Charli XCX", initials: "CX", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/charli-xcx/1.png", category: "Music", votes: 11205 },
-  { id: "i3", name: "Kai Cenat", initials: "KC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/kai-cenat/1.png", category: "Creator", votes: 10892 },
-  { id: "i4", name: "Sabrina Carpenter", initials: "SC", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sabrina-carpenter/1.png", category: "Music", votes: 9847 },
-  { id: "i5", name: "Ice Spice", initials: "IS", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/ice-spice/1.png", category: "Music", votes: 8934 },
-  { id: "i6", name: "Sam Altman", initials: "SA", avatar: "https://etpnpiqwfjgyvbyfdbmw.supabase.co/storage/v1/object/public/celebrity_images/sam-altman/1.png", category: "Tech", votes: 8421 },
-];
 
 export interface CurateProfilePoll {
   id: string;

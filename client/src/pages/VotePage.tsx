@@ -57,6 +57,7 @@ import {
   Gamepad2,
   UtensilsCrossed,
   Heart,
+  Laugh,
   CheckCircle2,
   type LucideIcon
 } from "lucide-react";
@@ -128,6 +129,7 @@ const VOTE_CATEGORIES = [
   { value: "Film & TV", label: "Film & TV" },
   { value: "Gaming", label: "Gaming" },
   { value: "Creator", label: "Creator" },
+  { value: "Comedy", label: "Comedy" },
   { value: "Food & Drink", label: "Food & Drink" },
   { value: "Lifestyle", label: "Lifestyle" },
 ];
@@ -151,7 +153,7 @@ interface InductionCandidate {
   name: string;
   initials: string;
   imageSlug: string | null;
-  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics" | "Film & TV" | "Gaming" | "Food & Drink" | "Lifestyle";
+  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics" | "Film & TV" | "Gaming" | "Food & Drink" | "Lifestyle" | "Comedy";
   votes: number;
 }
 
@@ -1992,6 +1994,7 @@ const VOTE_CATEGORY_ICONS: Record<string, LucideIcon> = {
   "Film & TV": Clapperboard,
   Gaming: Gamepad2,
   Creator: Video,
+  Comedy: Laugh,
   "Food & Drink": UtensilsCrossed,
   Lifestyle: Heart,
   misc: Sparkles,

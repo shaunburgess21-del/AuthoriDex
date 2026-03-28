@@ -68,6 +68,7 @@ const FILTER_CATEGORIES: { value: string; label: string }[] = [
   { value: "Film & TV", label: "Film & TV" },
   { value: "Gaming", label: "Gaming" },
   { value: "Creator", label: "Creator" },
+  { value: "Comedy", label: "Comedy" },
   { value: "Food & Drink", label: "Food & Drink" },
   { value: "Lifestyle", label: "Lifestyle" },
 ];
