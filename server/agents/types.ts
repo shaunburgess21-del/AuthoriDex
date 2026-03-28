@@ -62,13 +62,14 @@ export interface PredictionDecision {
   confidence?: number;
   source?: "deterministic" | "gpt-5.4-world";
   reasoning?: string;
+  predictedScore?: number;
 }
 
 export interface ScheduledActionData {
   agentId: string;
   marketId: string;
   entryId: string;
-  actionType: "predict";
+  actionType: "predict" | "jackpot_bet" | "conviction";
   decisionPayload: PredictionDecision;
   stakeAmount: number;
   executeAfter: Date;

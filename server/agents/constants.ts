@@ -71,6 +71,10 @@ export const WORLD_CONVICTION_INTERVAL_DAYS = 30;
 export const WORLD_CONVICTION_CHANCE = 0.30;
 export const WORLD_CONVICTION_MIN_DAYS_OPEN = 14;
 
+// Jackpot agent betting
+export const JACKPOT_AGENT_MIN_BUFFER_HOURS = 6;
+export const JACKPOT_AGENT_COLLISION_RANGE = 50;
+
 // Agent-specific stake modifiers (by username)
 export const AGENT_STAKE_OVERRIDES: Record<string, { multiplier?: number; cap?: number; floor?: number }> = {
   ironhands_official: { multiplier: 2.5 },

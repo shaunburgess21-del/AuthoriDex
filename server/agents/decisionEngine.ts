@@ -16,7 +16,9 @@ import {
   NEGATIVE_HINTS,
   CONTRARIAN_TRIGGER_THRESHOLD,
   WORLD_MARKET_BOOST_ENABLED,
+  JACKPOT_AGENT_COLLISION_RANGE,
 } from "./constants";
+import { JACKPOT_MAX_PREDICTED_SCORE } from "../config/constants";
 import { productionRNG, type RNG } from "./prng";
 
 export function computePrediction(
@@ -218,4 +220,166 @@ function computeSignalBoost(
   boost += normalizedDelta * 0.1 * agent.recencyWeight;
 
   return boost;
+}
+
+/**
+ * Deterministic jackpot prediction: picks an integer score for a celebrity
+ * based on their current trend signals and the agent's personality traits.
+ * Receives taken numbers from the caller so this file stays DB-free.
+ */
+export function computeJackpotPrediction(
+  agent: AgentConfigData,
+  signals: TrendSignals,
+  takenNumbers: Set<number>,
+  marketCategory: string | null,
+  rng: RNG = productionRNG,
+): PredictionDecision {
+  const abstain = (
+    reason: PredictionDecision["abstainReason"]
+  ): PredictionDecision => ({ abstain: true, abstainReason: reason });
+
+  // Activity gate (same pattern as computePrediction)
+  if (rng.nextFloat() > agent.activityRate) return abstain("activity_gate");
+
+  // Domain filter — jackpots are celebrity-linked so category relevance matters
+  const category = (marketCategory ?? "").toLowerCase();
+  const domainMatch =
+    category !== "" &&
+    agent.specialties.some((s) => category.includes(s) || s.includes(category));
+  const skipProbability = domainMatch ? 0.10 : 0.35;
+  if (rng.nextFloat() < skipProbability) return abstain("domain");
+
+  // Final random abstain (10% — slightly lower than standard to ensure jackpot participation)
+  if (rng.nextFloat() < 0.10) return abstain("random");
+
+  const anchor = signals.fameIndex;
+  let prediction = anchor;
+  let reasoning = "";
+
+  // Archetype-driven adjustments
+  switch (agent.archetype) {
+    case "momentum_chaser": {
+      const momentum = signals.scoreDelta7d * agent.recencyWeight * 1.5;
+      prediction += momentum;
+      reasoning = `Extrapolated ${signals.scoreDelta7d > 0 ? "upward" : "downward"} trend (7d delta ${signals.scoreDelta7d.toFixed(1)})`;
+      break;
+    }
+    case "prestige_maximiser": {
+      const pullToBaseline = (signals.scoreBaseline - anchor) * agent.prestigeBias * 0.4;
+      prediction += pullToBaseline;
+      reasoning = `Biased toward prestige baseline (${signals.scoreBaseline})`;
+      break;
+    }
+    case "contrarian": {
+      const deviation = anchor - signals.scoreBaseline;
+      const reversion = -deviation * agent.contrarianism * 0.5;
+      prediction += reversion;
+      reasoning = `Mean-reverted from current (deviation ${deviation > 0 ? "+" : ""}${deviation.toFixed(0)} from baseline)`;
+      break;
+    }
+    case "news_reactive": {
+      const newsBoost = signals.newsLevel === "red" ? 80 : signals.newsLevel === "green" ? -40 : 10;
+      const wikiBoost = signals.wikiPulse === "rising" ? 50 : signals.wikiPulse === "falling" ? -30 : 0;
+      prediction += (newsBoost + wikiBoost) * agent.recencyWeight;
+      reasoning = `Weighted news=${signals.newsLevel}, wiki=${signals.wikiPulse}`;
+      break;
+    }
+    case "long_horizon": {
+      const drift = signals.scoreDelta7d * 0.2 * (1 - agent.boldness);
+      prediction += drift;
+      reasoning = `Minimal change expected (long-horizon stable assumption)`;
+      break;
+    }
+    case "recency_bias": {
+      const recentMove = signals.scoreDelta7d * agent.recencyWeight * 2.0;
+      prediction += recentMove;
+      reasoning = `Heavily weighted recent movement (7d delta ${signals.scoreDelta7d.toFixed(1)})`;
+      break;
+    }
+    case "domain_specialist": {
+      const variance = domainMatch ? 0.3 : 1.0;
+      const drift = signals.scoreDelta7d * variance * agent.recencyWeight;
+      prediction += drift;
+      reasoning = domainMatch
+        ? `Domain match — tight prediction near current score`
+        : `Outside specialty — wider spread`;
+      break;
+    }
+    case "culture_tracker": {
+      const socialBoost = signals.wikiPulse === "rising" ? 60 : signals.wikiPulse === "falling" ? -40 : 0;
+      const momentum = signals.scoreDelta7d * agent.recencyWeight;
+      prediction += socialBoost + momentum;
+      reasoning = `Social/cultural signals: wiki=${signals.wikiPulse}, momentum=${signals.scoreDelta7d.toFixed(1)}`;
+      break;
+    }
+    case "high_conviction": {
+      const smallAdjust = signals.scoreDelta7d * 0.5;
+      prediction += smallAdjust;
+      reasoning = `High conviction — committed near current score with minor trend adjust`;
+      break;
+    }
+    case "conservative": {
+      const tinyDrift = signals.scoreDelta7d * 0.15;
+      prediction += tinyDrift;
+      reasoning = `Conservative — minimal deviation from current ${anchor}`;
+      break;
+    }
+    case "chaos_agent": {
+      const maxOffset = anchor * 0.15 * agent.riskAppetite;
+      const chaosOffset = (rng.nextFloat() * 2 - 1) * maxOffset * agent.boldness;
+      prediction += chaosOffset;
+      reasoning = `Chaos pick — random offset ${chaosOffset > 0 ? "+" : ""}${chaosOffset.toFixed(0)} from anchor`;
+      break;
+    }
+    default: {
+      const defaultDrift = signals.scoreDelta7d * 0.5;
+      prediction += defaultDrift;
+      reasoning = `Default: anchored to current score with trend adjustment`;
+    }
+  }
+
+  // Add PRNG noise scaled by boldness and riskAppetite
+  const noiseScale = anchor * 0.02 * agent.boldness * (0.5 + agent.riskAppetite * 0.5);
+  const noise = (rng.nextFloat() * 2 - 1) * noiseScale;
+  prediction += noise;
+
+  // Clamp and round
+  let score = Math.round(prediction);
+  score = Math.max(1, Math.min(JACKPOT_MAX_PREDICTED_SCORE, score));
+
+  // Find an available number if taken
+  if (takenNumbers.has(score)) {
+    let found = false;
+    for (let offset = 1; offset <= JACKPOT_AGENT_COLLISION_RANGE; offset++) {
+      if (score + offset <= JACKPOT_MAX_PREDICTED_SCORE && !takenNumbers.has(score + offset)) {
+        score = score + offset;
+        found = true;
+        break;
+      }
+      if (score - offset >= 1 && !takenNumbers.has(score - offset)) {
+        score = score - offset;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      return abstain("low_edge");
+    }
+  }
+
+  // Confidence: tighter predictions (closer to anchor) get higher confidence
+  const distFromAnchor = Math.abs(score - anchor);
+  const maxReasonableDist = anchor * 0.1 || 500;
+  const rawConfidence = 1 - Math.min(1, distFromAnchor / maxReasonableDist);
+  const confidence = parseFloat(
+    (0.4 + rawConfidence * 0.55 * agent.confidenceCal).toFixed(3)
+  );
+
+  return {
+    abstain: false,
+    predictedScore: score,
+    confidence,
+    reasoning,
+    source: "deterministic",
+  };
 }

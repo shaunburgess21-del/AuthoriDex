@@ -17,8 +17,9 @@ import {
 } from "@shared/schema";
 import { eq, and, sql, gte, desc, inArray } from "drizzle-orm";
 import { log } from "../log";
-import { computePrediction } from "./decisionEngine";
+import { computePrediction, computeJackpotPrediction } from "./decisionEngine";
 import { computeWorldMarketPrediction } from "./worldMarketEngine";
+import { JACKPOT_TICKET_COST } from "../config/constants";
 import type {
   AgentConfigData,
   MarketWithEntries,
@@ -46,6 +47,7 @@ import {
   WORLD_CONVICTION_INTERVAL_DAYS,
   WORLD_CONVICTION_CHANCE,
   WORLD_CONVICTION_MIN_DAYS_OPEN,
+  JACKPOT_AGENT_MIN_BUFFER_HOURS,
 } from "./constants";
 
 const AGENT_RUNNER_LOCK_KEY = 5_201;
@@ -361,6 +363,90 @@ async function runAgentBatchOnce(): Promise<{
       };
 
       // --- Route decision by market type ---
+      const isJackpot = market.marketType === "jackpot";
+
+      if (isJackpot) {
+        // Jackpot-specific path: predict a score integer instead of picking an entry
+        const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
+        const cutoff = market.endAt ? new Date(market.endAt.getTime() - 2 * 24 * 60 * 60 * 1000) : null;
+        if (cutoff && now.getTime() >= cutoff.getTime() - bufferMs) {
+          skipped++;
+          continue;
+        }
+
+        const signals = await getTrendSignals(market.personId);
+
+        // Gather taken numbers: active bets + pending agent actions
+        const activeBets = await db
+          .select({ betMetadata: marketBets.betMetadata })
+          .from(marketBets)
+          .where(and(eq(marketBets.marketId, market.id), eq(marketBets.status, "active")));
+
+        const pendingActions = await db
+          .select({ decisionPayload: scheduledAgentActions.decisionPayload })
+          .from(scheduledAgentActions)
+          .where(
+            and(
+              eq(scheduledAgentActions.marketId, market.id),
+              eq(scheduledAgentActions.actionType, "jackpot_bet"),
+              sql`${scheduledAgentActions.status} IN ('pending', 'in_progress')`
+            )
+          );
+
+        const takenNumbers = new Set<number>();
+        for (const bet of activeBets) {
+          const meta = bet.betMetadata as Record<string, unknown> | null;
+          const score = Number(meta?.predictedScore);
+          if (Number.isFinite(score) && score > 0) takenNumbers.add(Math.round(score));
+        }
+        for (const action of pendingActions) {
+          const payload = action.decisionPayload as Record<string, unknown> | null;
+          const score = Number(payload?.predictedScore);
+          if (Number.isFinite(score) && score > 0) takenNumbers.add(Math.round(score));
+        }
+
+        const decision = computeJackpotPrediction(agentData, signals, takenNumbers, market.category);
+
+        if (decision.abstain) {
+          abstained++;
+          log(`[AgentRunner] ${agent.displayName} abstained on jackpot ${market.id.slice(0, 8)}: ${decision.abstainReason}`);
+          continue;
+        }
+
+        if (!decision.predictedScore) {
+          skippedNoEntryId++;
+          log(`[AgentRunner] ${agent.displayName} jackpot decision had no predictedScore for ${market.id.slice(0, 8)}`);
+          continue;
+        }
+
+        // Clamp executeAfter to at least JACKPOT_AGENT_MIN_BUFFER_HOURS before cutoff
+        let executeAfter = computeExecuteAfter(agent.archetype);
+        if (cutoff && executeAfter.getTime() > cutoff.getTime() - bufferMs) {
+          executeAfter = new Date(cutoff.getTime() - bufferMs - Math.floor(Math.random() * 3_600_000));
+          if (executeAfter <= now) executeAfter = new Date(now.getTime() + 60_000);
+        }
+
+        const jackpotEntryId = entries[0]?.id ?? "";
+
+        await db.insert(scheduledAgentActions).values({
+          agentId: agent.id,
+          marketId: market.id,
+          entryId: jackpotEntryId,
+          actionType: "jackpot_bet",
+          decisionPayload: decision,
+          stakeAmount: JACKPOT_TICKET_COST,
+          executeAfter,
+          status: "pending",
+        });
+
+        // Track taken number for subsequent agents in this sweep
+        takenNumbers.add(decision.predictedScore);
+
+        scheduled++;
+        log(`[AgentRunner] ${agent.displayName} → jackpot ${market.title?.slice(0, 30)} (score=${decision.predictedScore}, confidence=${decision.confidence?.toFixed(2)}, execAfter=${executeAfter.toISOString()})`);
+        continue;
+      }
+
       let decision: PredictionDecision;
 
       if (isCommunity) {
