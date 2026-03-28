@@ -5,8 +5,7 @@ import { ArrowLeft, Inbox } from "lucide-react";
 import { sharePage } from "@/lib/share";
 import { CategoryTabStrip } from "./CategoryTabStrip";
 import { SnapScrollActionRow } from "./SnapScrollActionRow";
-import { CommentsBottomSheet } from "./CommentsBottomSheet";
-import { type CommentEntityType } from "@/components/comments/CardComments";
+import { CardComments, type CommentEntityType } from "@/components/comments/CardComments";
 
 export type SnapSectionType = "matchups" | "sentiment" | "opinion";
 
@@ -55,9 +54,6 @@ export function VoteSnapScrollView({
   const [, setLocation] = useLocation();
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const [commentsOpen, setCommentsOpen] = useState(false);
-  const [activeCommentSlug, setActiveCommentSlug] = useState("");
-
   const categories = useMemo(() => {
     const cats = new Set<string>();
     items.forEach((item) => cats.add(item.category));
@@ -74,6 +70,12 @@ export function VoteSnapScrollView({
 
   const [activeCategoryIdx, setActiveCategoryIdx] = useState(initialCategoryIdx);
   const activeCategory = categories[activeCategoryIdx] || "All";
+
+  useEffect(() => {
+    if (open) {
+      setActiveCategoryIdx(initialCategoryIdx);
+    }
+  }, [open, initialCategoryIdx]);
 
   const categoryItems = useMemo(() => {
     const map = new Map<string, SnapItem[]>();
@@ -109,14 +111,6 @@ export function VoteSnapScrollView({
     return () => clearTimeout(timer);
   }, [open, initialItemId, initialCategoryIdx, categories, categoryItems]);
 
-  const handleBack = useCallback(() => {
-    if (commentsOpen) {
-      setCommentsOpen(false);
-      return;
-    }
-    onClose();
-  }, [commentsOpen, onClose]);
-
   const handleCategorySelect = useCallback((cat: string) => {
     const idx = categories.indexOf(cat);
     if (idx >= 0) {
@@ -124,21 +118,12 @@ export function VoteSnapScrollView({
     }
   }, [categories]);
 
-  const openComments = useCallback(() => {
-    const item = getVisibleItem();
-    if (item) {
-      setActiveCommentSlug(item.slug);
-      setCommentsOpen(true);
-    }
-  }, [getVisibleItem]);
-
   const navigateToDetail = useCallback(() => {
     const item = getVisibleItem();
     if (item?.slug) {
-      onClose();
       setLocation(`${SECTION_DETAIL_PREFIX[sectionType]}${item.slug}`);
     }
-  }, [getVisibleItem, sectionType, onClose, setLocation]);
+  }, [getVisibleItem, sectionType, setLocation]);
 
   const handleShare = useCallback(() => {
     const item = getVisibleItem();
@@ -148,6 +133,7 @@ export function VoteSnapScrollView({
   }, [getVisibleItem]);
 
   const activeItems = categoryItems.get(activeCategory) || [];
+  const commentEntityType = SECTION_COMMENT_TYPE[sectionType];
 
   return (
     <AnimatePresence>
@@ -162,7 +148,7 @@ export function VoteSnapScrollView({
           {/* Header */}
           <div className="shrink-0 flex items-center border-b border-border/30 bg-background/95 backdrop-blur-md safe-top">
             <button
-              onClick={handleBack}
+              onClick={onClose}
               className="p-3 text-muted-foreground hover:text-foreground transition-colors"
               data-interactive="true"
             >
@@ -197,34 +183,36 @@ export function VoteSnapScrollView({
                 {activeItems.map((item) => (
                   <div
                     key={item.id}
-                    className="snap-start flex flex-col items-center justify-center px-3"
+                    className="snap-start flex flex-col px-3 pt-3"
                     style={{
                       height: "calc(100dvh - 52px)",
                       scrollSnapAlign: "start",
                       paddingBottom: "env(safe-area-inset-bottom, 16px)",
                     }}
                   >
-                    <div className="w-full max-w-lg">
+                    <div className="w-full max-w-lg mx-auto shrink-0">
                       {renderCard(item)}
                     </div>
-                    <SnapScrollActionRow
-                      onComments={openComments}
-                      onDetail={navigateToDetail}
-                      onShare={handleShare}
-                    />
+                    <div className="shrink-0">
+                      <SnapScrollActionRow
+                        onDetail={navigateToDetail}
+                        onShare={handleShare}
+                      />
+                    </div>
+                    <div className="flex-1 min-h-0 overflow-y-auto max-w-lg mx-auto w-full mt-1">
+                      <CardComments
+                        entityType={commentEntityType}
+                        slug={item.slug}
+                        variant="inline"
+                        maxHeight="none"
+                        placeholder="Add a comment..."
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
-
-          {/* Comments bottom sheet */}
-          <CommentsBottomSheet
-            open={commentsOpen}
-            onOpenChange={setCommentsOpen}
-            entityType={SECTION_COMMENT_TYPE[sectionType]}
-            slug={activeCommentSlug}
-          />
         </motion.div>
       )}
     </AnimatePresence>

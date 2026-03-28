@@ -62,8 +62,8 @@ export function CategoryTabStrip({ categories, activeCategory, onSelect }: Categ
             className="shrink-0 px-3 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap"
             style={
               isActive
-                ? { color: hex, borderBottom: `2px solid ${hex}`, opacity: 1 }
-                : { color: "rgba(255,255,255,0.45)", borderBottom: "2px solid transparent", opacity: 0.7 }
+                ? { color: hex, opacity: 1 }
+                : { color: "rgba(255,255,255,0.45)", opacity: 0.7 }
             }
           >
             {label}
