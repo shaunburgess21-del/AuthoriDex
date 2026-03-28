@@ -14,6 +14,7 @@ import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { JackpotEntryModal } from "@/components/JackpotEntryModal";
 import { RulesModal, RULES_CONTENT } from "@/components/predict/RulesContent";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
+import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -40,7 +41,6 @@ import {
   Wallet, 
   ListChecks,
   HelpCircle,
-  X,
   Check,
   ChevronRight,
   ChevronLeft,
@@ -1904,12 +1904,14 @@ function FullScreenOverlay({
     <div ref={scrollRef} onScroll={(e) => saveOverlayScroll(overlayName, e.currentTarget.scrollTop)} className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto premium-scrollbar" data-testid="overlay-view-all">
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-serif font-bold text-xl">{title}</h2>
-            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close" data-testid="button-close-overlay">
-              <X className="h-5 w-5" />
-            </Button>
-          </div>
+          <ViewAllOverlayHeader
+            onClose={onClose}
+            closeTestId="button-close-overlay"
+            backTestId="button-back-overlay"
+            className="flex items-center justify-between gap-2 mb-4"
+          >
+            <h2 className="font-serif font-bold text-xl truncate">{title}</h2>
+          </ViewAllOverlayHeader>
           
           <OverlayFilterBar
             value={categoryFilter}

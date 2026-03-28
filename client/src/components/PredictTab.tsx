@@ -29,7 +29,6 @@ import {
   UserPlus, 
   BarChart3,
   Swords,
-  X,
   Search,
   HelpCircle,
   Loader2,
@@ -37,6 +36,7 @@ import {
   Check
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { normalizeMarketCategory, getMarketCategoryLabel } from "@shared/constants";
 
 interface PredictTabProps {
@@ -759,15 +759,17 @@ function ViewAllCommunityOverlay({
     <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden" data-testid="overlay-community-predictions">
       <div className="h-full flex flex-col">
         <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b p-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-serif font-bold">World Predictions</h2>
+          <ViewAllOverlayHeader
+            onClose={onClose}
+            closeTestId="button-close-community-overlay"
+            backTestId="button-back-community-overlay"
+            className="flex items-center justify-between gap-2 mb-4"
+          >
+            <div className="min-w-0">
+              <h2 className="text-lg font-serif font-bold truncate">World Predictions</h2>
               <p className="text-sm text-muted-foreground">{filteredMarkets.length} predictions about {personName}</p>
             </div>
-            <Button variant="ghost" size="icon" onClick={onClose} className="relative z-20" aria-label="Close" data-testid="button-close-community-overlay">
-              <X className="h-5 w-5" />
-            </Button>
-          </div>
+          </ViewAllOverlayHeader>
           
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

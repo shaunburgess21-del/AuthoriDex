@@ -91,6 +91,7 @@ import { CardSection } from "@/components/CardSection";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
+import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 
 const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
@@ -4118,17 +4119,14 @@ export default function VotePage() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
           >
-            <div className="flex items-center justify-between p-4 border-b">
+            <ViewAllOverlayHeader
+              onClose={closeOverlay}
+              closeTestId="button-close-candidates-overlay"
+              backTestId="button-back-candidates-overlay"
+              className="flex items-center justify-between gap-2 p-4 border-b"
+            >
               <h2 className="text-xl font-serif font-bold">All candidates</h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={closeOverlay}
-                data-testid="button-close-candidates-overlay"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
+            </ViewAllOverlayHeader>
             
             <OverlayFilterBar
               value={inductionCategoryFilter}
@@ -4178,17 +4176,14 @@ export default function VotePage() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
           >
-            <div className="flex items-center justify-between p-4 border-b">
+            <ViewAllOverlayHeader
+              onClose={closeOverlay}
+              closeTestId="button-close-topics-overlay"
+              backTestId="button-back-topics-overlay"
+              className="flex items-center justify-between gap-2 p-4 border-b"
+            >
               <h2 className="text-xl font-serif font-bold">All topics</h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={closeOverlay}
-                data-testid="button-close-topics-overlay"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
+            </ViewAllOverlayHeader>
             
             <OverlayFilterBar
               value={topicsCategoryFilter}
@@ -4234,22 +4229,19 @@ export default function VotePage() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
           >
-            <div className="flex items-center justify-between p-4 border-b border-cyan-500/20">
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+            <ViewAllOverlayHeader
+              onClose={closeOverlay}
+              closeTestId="button-close-matchups-overlay"
+              backTestId="button-back-matchups-overlay"
+              className="flex items-center justify-between gap-2 p-4 border-b border-cyan-500/20"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex shrink-0 items-center justify-center">
                   <Swords className="h-4 w-4 text-cyan-400" />
                 </div>
-                <h2 className="text-xl font-serif font-bold">All Matchups</h2>
+                <h2 className="text-xl font-serif font-bold truncate">All Matchups</h2>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={closeOverlay}
-                data-testid="button-close-matchups-overlay"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
+            </ViewAllOverlayHeader>
             
             <OverlayFilterBar
               value={matchupsCategoryFilter}
@@ -4297,22 +4289,19 @@ export default function VotePage() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
           >
-            <div className="flex items-center justify-between p-4 border-b border-cyan-500/20">
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+            <ViewAllOverlayHeader
+              onClose={closeOverlay}
+              closeTestId="button-close-opinion-polls-overlay"
+              backTestId="button-back-opinion-polls-overlay"
+              className="flex items-center justify-between gap-2 p-4 border-b border-cyan-500/20"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex shrink-0 items-center justify-center">
                   <ListChecks className="h-4 w-4 text-cyan-400" />
                 </div>
-                <h2 className="text-xl font-serif font-bold">All Opinion Polls</h2>
+                <h2 className="text-xl font-serif font-bold truncate">All Opinion Polls</h2>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={closeOverlay}
-                data-testid="button-close-opinion-polls-overlay"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
+            </ViewAllOverlayHeader>
             
             <OverlayFilterBar
               value={opinionPollsCategoryFilter}
@@ -4361,22 +4350,19 @@ export default function VotePage() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
           >
-            <div className="flex items-center justify-between p-4 border-b border-amber-500/20">
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+            <ViewAllOverlayHeader
+              onClose={closeOverlay}
+              closeTestId="button-close-value-overlay"
+              backTestId="button-back-value-overlay"
+              className="flex items-center justify-between gap-2 p-4 border-b border-amber-500/20"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex shrink-0 items-center justify-center">
                   <BarChart3 className="h-4 w-4 text-amber-400" />
                 </div>
-                <h2 className="text-xl font-serif font-bold">Underrated / Overrated</h2>
+                <h2 className="text-xl font-serif font-bold truncate">Underrated / Overrated</h2>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={closeOverlay}
-                data-testid="button-close-value-overlay"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
+            </ViewAllOverlayHeader>
             
             <OverlayFilterBar
               value={valuePerceptionCategoryFilter}

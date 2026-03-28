@@ -62,6 +62,7 @@ import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { getExceptionalIndicator } from "@/lib/leaderboard-exceptional";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 
 const LazyPredictTab = lazy(() =>
   import("@/components/PredictTab").then((m) => ({ default: m.PredictTab }))
@@ -989,12 +990,14 @@ function ViewAllPollsOverlay({
     <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto premium-scrollbar" data-testid="overlay-view-all-polls">
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-serif font-bold text-xl">{title}</h2>
-            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close" data-testid="button-close-polls-overlay">
-              <X className="h-5 w-5" />
-            </Button>
-          </div>
+          <ViewAllOverlayHeader
+            onClose={onClose}
+            closeTestId="button-close-polls-overlay"
+            backTestId="button-back-polls-overlay"
+            className="flex items-center justify-between gap-2 mb-4"
+          >
+            <h2 className="font-serif font-bold text-xl truncate">{title}</h2>
+          </ViewAllOverlayHeader>
           
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

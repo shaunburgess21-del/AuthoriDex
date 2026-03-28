@@ -1,14 +1,14 @@
 import { useState, useMemo } from "react";
-import { Button } from "@/components/ui/button";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { normalizeMarketCategory } from "@shared/constants";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
+import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { X, Crown, ImageIcon, Users } from "lucide-react";
+import { Crown, ImageIcon, Users } from "lucide-react";
 import { type FilterCategory } from "@shared/constants";
 import type { CuratePerson } from "./CurateProfileCard";
 
@@ -191,20 +191,17 @@ export function CurateViewAllOverlay({
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
     >
-      <div className="flex items-center justify-between p-4 border-b">
-        <div>
+      <ViewAllOverlayHeader
+        onClose={onClose}
+        closeTestId="button-close-view-all"
+        backTestId="button-back-view-all"
+        className="flex items-center justify-between gap-2 p-4 border-b"
+      >
+        <div className="min-w-0">
           <h2 className="text-xl font-serif font-bold">All Profiles</h2>
           <p className="text-sm text-muted-foreground">Vote on which photos best represent each celebrity</p>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClose}
-          data-testid="button-close-view-all"
-        >
-          <X className="h-5 w-5" />
-        </Button>
-      </div>
+      </ViewAllOverlayHeader>
       
       <OverlayFilterBar
         value={categoryFilter}
