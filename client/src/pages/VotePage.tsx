@@ -93,6 +93,8 @@ import { FilterDropdown } from "@/components/FilterDropdown";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 
 const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
@@ -2225,6 +2227,11 @@ export default function VotePage() {
   const opinionPollsScrollRef = useRef<HTMLDivElement>(null);
   const valuePerceptionScrollRef = useRef<HTMLDivElement>(null);
 
+  const isMobile = useIsMobile();
+  const [snapScrollOpen, setSnapScrollOpen] = useState(false);
+  const [snapScrollSection, setSnapScrollSection] = useState<SnapSectionType>("matchups");
+  const [snapScrollInitialId, setSnapScrollInitialId] = useState<string | undefined>();
+
   const enrichedCandidates = dbInductionCandidates;
   
   const filteredCandidates = enrichedCandidates.filter(c => {
@@ -2378,6 +2385,9 @@ export default function VotePage() {
     if (event && !previousVote) {
       addXP(15, event);
     }
+    if (isMobile && !previousVote && !snapScrollOpen) {
+      setTimeout(() => openSnapScroll("matchups", matchupId), 600);
+    }
   };
   
   const handleMatchupRemoveVote = (matchupId: string) => {
@@ -2399,14 +2409,59 @@ export default function VotePage() {
     return matchesCategory && matchesSearch && f.isActive;
   }).sort((a: any, b: any) => matchupsCategoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
 
+  const matchupSnapItems: SnapItem[] = useMemo(() =>
+    matchups.filter(m => m.isActive).map(m => ({
+      id: m.id,
+      slug: m.slug || m.id,
+      category: m.category,
+      title: m.title,
+    })), [matchups]);
+
+  const sentimentSnapItems: SnapItem[] = useMemo(() =>
+    dbPolls.map((t: any) => ({
+      id: t.id,
+      slug: t.slug || t.id,
+      category: t.category || "misc",
+      title: t.headline || t.title || "",
+    })), [dbPolls]);
+
+  const opinionSnapItems: SnapItem[] = useMemo(() =>
+    opinionPolls.map((p: any) => ({
+      id: p.id,
+      slug: p.slug || p.id,
+      category: p.category || "misc",
+      title: p.title || "",
+    })), [opinionPolls]);
+
+  const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string) => {
+    if (!isMobile) return;
+    setSnapScrollSection(section);
+    setSnapScrollInitialId(itemId);
+    setSnapScrollOpen(true);
+    window.history.pushState({ overlay: `snap-${section}` }, "");
+  }, [isMobile]);
+
+  const closeSnapScroll = useCallback(() => {
+    setSnapScrollOpen(false);
+    window.history.back();
+  }, []);
+
+  const handleCardEmptyTap = useCallback((e: React.MouseEvent, section: SnapSectionType, itemId: string) => {
+    if (!isMobile) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, input, textarea, select, [role="button"], [data-interactive]')) return;
+    e.stopPropagation();
+    openSnapScroll(section, itemId);
+  }, [isMobile, openSnapScroll]);
+
   useEffect(() => {
-    if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen || matchupsOverlayOpen || inductionSuggestOpen || matchupSuggestOpen || valuePerceptionOverlayOpen || opinionPollsOverlayOpen) {
+    if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen || matchupsOverlayOpen || inductionSuggestOpen || matchupSuggestOpen || valuePerceptionOverlayOpen || opinionPollsOverlayOpen || snapScrollOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen, matchupsOverlayOpen, inductionSuggestOpen, matchupSuggestOpen, valuePerceptionOverlayOpen, opinionPollsOverlayOpen]);
+  }, [inductionOverlayOpen, topicsOverlayOpen, suggestModalOpen, startPollModalOpen, matchupsOverlayOpen, inductionSuggestOpen, matchupSuggestOpen, valuePerceptionOverlayOpen, opinionPollsOverlayOpen, snapScrollOpen]);
 
   const applyOverlayState = useCallback((name: string | undefined) => {
     setInductionOverlayOpen(name === "induction");
@@ -2414,6 +2469,9 @@ export default function VotePage() {
     setMatchupsOverlayOpen(name === "matchups");
     setOpinionPollsOverlayOpen(name === "opinion-polls");
     setValuePerceptionOverlayOpen(name === "value-perception");
+    const isSnap = name?.startsWith("snap-") ?? false;
+    setSnapScrollOpen(isSnap);
+    if (isSnap && name) setSnapScrollSection(name.replace("snap-", "") as SnapSectionType);
   }, []);
 
   const openOverlay = useCallback((name: string) => {
@@ -2539,6 +2597,9 @@ export default function VotePage() {
       discourseVoteMutation.mutate({ slug: topic.slug, choice });
     }
     addXP(25, event as React.MouseEvent);
+    if (isMobile && !snapScrollOpen) {
+      setTimeout(() => openSnapScroll("sentiment", topicId), 600);
+    }
   };
 
   const handleSuggestSubmit = () => {
@@ -2749,16 +2810,17 @@ export default function VotePage() {
           ) : (
             <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-matchups">
               {filteredMatchups.map((matchup) => (
-                <VersusCard 
-                  key={matchup.id} 
-                  matchup={matchup} 
-                  userVote={matchupUserVotes[matchup.id] || null}
-                  onVote={handleMatchupVote}
-                  onRemoveVote={handleMatchupRemoveVote}
-                  onFilterCategory={handleCategoryPillFilter}
-                  categoryRaceMap={raceMap}
-                  leaderboardCategories={leaderboardCats}
-                />
+                <div key={matchup.id} onClick={(e) => handleCardEmptyTap(e, "matchups", matchup.id)} className="h-full">
+                  <VersusCard 
+                    matchup={matchup} 
+                    userVote={matchupUserVotes[matchup.id] || null}
+                    onVote={handleMatchupVote}
+                    onRemoveVote={handleMatchupRemoveVote}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
+                    leaderboardCategories={leaderboardCats}
+                  />
+                </div>
               ))}
             </CardSection>
           )}
@@ -2857,14 +2919,15 @@ export default function VotePage() {
           ) : filteredTopics.length > 0 ? (
             <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-topics">
               {filteredTopics.map((topic) => (
-                <DiscourseCard 
-                  key={topic.id} 
-                  topic={topic} 
-                  onVote={(choice) => handleDiscourseVote(topic.id, choice)}
-                  onFilterCategory={handleCategoryPillFilter}
-                  categoryRaceMap={raceMap}
-                  leaderboardCategories={leaderboardCats}
-                />
+                <div key={topic.id} onClick={(e) => handleCardEmptyTap(e, "sentiment", topic.id)} className="h-full">
+                  <DiscourseCard 
+                    topic={topic} 
+                    onVote={(choice) => handleDiscourseVote(topic.id, choice)}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
+                    leaderboardCategories={leaderboardCats}
+                  />
+                </div>
               ))}
             </CardSection>
           ) : (
@@ -2961,17 +3024,21 @@ export default function VotePage() {
           ) : filteredOpinionPolls.length > 0 ? (
             <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="section-opinion-polls">
               {filteredOpinionPolls.map((poll: any) => (
-                <OpinionPollCard
-                  key={poll.id}
-                  poll={poll}
-                  onVote={async (pollSlug, optionId) => {
-                    await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
-                    queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
-                  }}
-                  onFilterCategory={handleCategoryPillFilter}
-                  categoryRaceMap={raceMap}
-                  leaderboardCategories={leaderboardCats}
-                />
+                <div key={poll.id} onClick={(e) => handleCardEmptyTap(e, "opinion", poll.id)} className="h-full">
+                  <OpinionPollCard
+                    poll={poll}
+                    onVote={async (pollSlug, optionId) => {
+                      await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                      queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
+                      if (isMobile && !snapScrollOpen) {
+                        setTimeout(() => openSnapScroll("opinion", poll.id), 600);
+                      }
+                    }}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
+                    leaderboardCategories={leaderboardCats}
+                  />
+                </div>
               ))}
             </CardSection>
           ) : (
@@ -4404,6 +4471,77 @@ export default function VotePage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Snap Scroll Overlays (mobile only) */}
+      {isMobile && (
+        <>
+          <VoteSnapScrollView
+            open={snapScrollOpen && snapScrollSection === "matchups"}
+            onClose={closeSnapScroll}
+            sectionType="matchups"
+            items={matchupSnapItems}
+            initialItemId={snapScrollInitialId}
+            renderCard={(item) => {
+              const m = matchups.find(x => x.id === item.id);
+              if (!m) return null;
+              return (
+                <VersusCard
+                  matchup={m}
+                  userVote={matchupUserVotes[m.id] || null}
+                  onVote={handleMatchupVote}
+                  onRemoveVote={handleMatchupRemoveVote}
+                  onFilterCategory={handleCategoryPillFilter}
+                  categoryRaceMap={raceMap}
+                  leaderboardCategories={leaderboardCats}
+                />
+              );
+            }}
+          />
+          <VoteSnapScrollView
+            open={snapScrollOpen && snapScrollSection === "sentiment"}
+            onClose={closeSnapScroll}
+            sectionType="sentiment"
+            items={sentimentSnapItems}
+            initialItemId={snapScrollInitialId}
+            renderCard={(item) => {
+              const t = dbPolls.find((x: any) => x.id === item.id);
+              if (!t) return null;
+              return (
+                <DiscourseCard
+                  topic={t}
+                  onVote={(choice) => handleDiscourseVote(t.id, choice)}
+                  onFilterCategory={handleCategoryPillFilter}
+                  categoryRaceMap={raceMap}
+                  leaderboardCategories={leaderboardCats}
+                />
+              );
+            }}
+          />
+          <VoteSnapScrollView
+            open={snapScrollOpen && snapScrollSection === "opinion"}
+            onClose={closeSnapScroll}
+            sectionType="opinion"
+            items={opinionSnapItems}
+            initialItemId={snapScrollInitialId}
+            renderCard={(item) => {
+              const p = opinionPolls.find((x: any) => x.id === item.id);
+              if (!p) return null;
+              return (
+                <OpinionPollCard
+                  poll={p}
+                  onVote={async (pollSlug, optionId) => {
+                    await apiRequest("POST", `/api/opinion-polls/${pollSlug}/vote`, { optionId });
+                    queryClient.invalidateQueries({ queryKey: ['/api/opinion-polls'] });
+                  }}
+                  onFilterCategory={handleCategoryPillFilter}
+                  categoryRaceMap={raceMap}
+                  leaderboardCategories={leaderboardCats}
+                />
+              );
+            }}
+          />
+        </>
+      )}
     </div>
   );
 }

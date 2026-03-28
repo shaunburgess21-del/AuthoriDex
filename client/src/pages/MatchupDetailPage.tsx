@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { handleImageError } from "@/lib/imageResolver";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
@@ -10,25 +10,19 @@ import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest } from "@/lib/queryClient";
-import { formatTimeAgo, formatDate } from "@/lib/formatDate";
+import { formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
+import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import {
   ArrowLeft,
   Clock,
   Users,
   Loader2,
-  Send,
-  ThumbsUp,
-  ThumbsDown,
   BarChart3,
   Info,
   Share2,
   MessageSquare,
-  ArrowUpDown,
   Copy,
   Star,
   Check,
@@ -60,18 +54,6 @@ interface MatchupDetail {
   optionBPercent: number;
 }
 
-interface MatchupComment {
-  id: string;
-  matchupId: string;
-  userId: string;
-  username: string | null;
-  avatarUrl: string | null;
-  body: string;
-  parentId: string | null;
-  upvotes: number;
-  downvotes: number;
-  createdAt: string;
-}
 
 export default function MatchupDetailPage() {
   const params = useParams<{ slug: string }>();
@@ -81,8 +63,7 @@ export default function MatchupDetailPage() {
   const queryClient = useQueryClient();
   const { user, isLoggedIn } = useAuth();
 
-  const [commentBody, setCommentBody] = useState("");
-  const [commentSort, setCommentSort] = useState<"top" | "newest">("top");
+  const matchupCommentCount = useCommentCount("matchup", slug || "");
 
   const { data: matchup, isLoading, error } = useQuery<MatchupDetail>({
     queryKey: ["/api/matchups/by-slug", slug],
@@ -96,16 +77,6 @@ export default function MatchupDetailPage() {
 
   const { data: userVotes } = useQuery<Record<string, string>>({
     queryKey: ["/api/matchups/user-votes"],
-  });
-
-  const { data: comments = [] } = useQuery<MatchupComment[]>({
-    queryKey: ["/api/matchups", slug, "comments"],
-    queryFn: async () => {
-      const res = await fetch(`/api/matchups/${slug}/comments`);
-      if (!res.ok) throw new Error("Failed to fetch comments");
-      return res.json();
-    },
-    enabled: !!slug,
   });
 
   const voteMutation = useMutation({
@@ -134,45 +105,6 @@ export default function MatchupDetailPage() {
     },
   });
 
-  const commentMutation = useMutation({
-    mutationFn: async (body: string) => {
-      const res = await apiRequest("POST", `/api/matchups/${slug}/comments`, { body });
-      return res.json();
-    },
-    onSuccess: () => {
-      setCommentBody("");
-      queryClient.invalidateQueries({ queryKey: ["/api/matchups", slug, "comments"] });
-      toast({ title: "Comment Posted" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to post comment. Please sign in.", variant: "destructive" });
-    },
-  });
-
-  const commentVoteMutation = useMutation({
-    mutationFn: async ({ commentId, voteType }: { commentId: string; voteType: "up" | "down" }) => {
-      const res = await apiRequest("POST", `/api/matchups/comments/${commentId}/vote`, { voteType });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/matchups", slug, "comments"] });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to vote. Please sign in.", variant: "destructive" });
-    },
-  });
-
-  const sortedComments = useMemo(() => {
-    if (!comments.length) return [];
-    const sorted = [...comments];
-    if (commentSort === "top") {
-      sorted.sort((a, b) => (b.upvotes - b.downvotes) - (a.upvotes - a.downvotes));
-    } else {
-      sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    }
-    return sorted;
-  }, [comments, commentSort]);
-
   const handleVote = (matchupId: string, option: 'option_a' | 'option_b') => {
     voteMutation.mutate({ matchupId, option });
   };
@@ -183,11 +115,6 @@ export default function MatchupDetailPage() {
 
   const handleShare = () => {
     sharePage(matchup ? `${matchup.title} on VoxDex` : "VoxDex");
-  };
-
-  const handlePostComment = () => {
-    if (!commentBody.trim()) return;
-    commentMutation.mutate(commentBody.trim());
   };
 
   if (isLoading) {
@@ -496,7 +423,7 @@ export default function MatchupDetailPage() {
           </Card>
           <Card className="p-3 text-center">
             <MessageSquare className="h-4 w-4 text-cyan-500 mx-auto mb-1" />
-            <p className="text-lg font-bold font-mono" data-testid="text-comment-count">{comments.length}</p>
+            <p className="text-lg font-bold font-mono" data-testid="text-comment-count">{matchupCommentCount}</p>
             <p className="text-xs text-muted-foreground">Comments</p>
           </Card>
           <Card className="p-3 text-center">
@@ -522,141 +449,7 @@ export default function MatchupDetailPage() {
         )}
 
         {/* Discussion */}
-        <Card className="p-5 mb-6" data-testid="section-comments">
-          <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
-            <h2 className="text-lg font-serif font-bold flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-cyan-500" />
-              Discussion ({comments.length})
-            </h2>
-            <div className="flex items-center gap-1">
-              <Button
-                variant={commentSort === "top" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setCommentSort("top")}
-                data-testid="button-sort-top"
-              >
-                <ArrowUpDown className="h-3.5 w-3.5 mr-1" />
-                Top
-              </Button>
-              <Button
-                variant={commentSort === "newest" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setCommentSort("newest")}
-                data-testid="button-sort-newest"
-              >
-                <Clock className="h-3.5 w-3.5 mr-1" />
-                Newest
-              </Button>
-            </div>
-          </div>
-
-          {isLoggedIn ? (
-            <div className="mb-5">
-              <Textarea
-                placeholder="Share your thoughts on this matchup..."
-                value={commentBody}
-                onChange={(e) => setCommentBody(e.target.value)}
-                className="mb-2 bg-background/50 resize-none"
-                rows={3}
-                data-testid="input-comment"
-              />
-              <div className="flex justify-end">
-                <Button
-                  size="sm"
-                  disabled={!commentBody.trim() || commentMutation.isPending}
-                  onClick={handlePostComment}
-                  data-testid="button-submit-comment"
-                >
-                  {commentMutation.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                  ) : (
-                    <Send className="h-3.5 w-3.5 mr-1.5" />
-                  )}
-                  Post
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-3 mb-4 rounded-lg border border-dashed border-border/50">
-              <p className="text-sm text-muted-foreground">
-                <Button variant="ghost" className="p-0 h-auto text-cyan-400 underline" onClick={() => setLocation("/login")} data-testid="link-login-to-comment">
-                  Sign in
-                </Button>{" "}
-                to join the discussion
-              </p>
-            </div>
-          )}
-
-          {sortedComments.length > 0 ? (
-            <ScrollArea className="max-h-[500px]">
-              <div className="space-y-4">
-                {sortedComments.map((comment, idx) => {
-                  const netVotes = comment.upvotes - comment.downvotes;
-                  const isTopComment = commentSort === "top" && idx === 0 && netVotes > 0;
-                  return (
-                    <div
-                      key={comment.id}
-                      className={`flex gap-3 p-3 rounded-lg ${isTopComment ? "bg-cyan-500/5 border border-cyan-500/20" : ""}`}
-                      data-testid={`comment-${comment.id}`}
-                    >
-                      <Avatar className="h-8 w-8 shrink-0">
-                        {comment.avatarUrl && <AvatarImage src={comment.avatarUrl} alt={comment.username || ""} />}
-                        <AvatarFallback className="bg-cyan-500/20 text-cyan-400 text-xs font-semibold">
-                          {(comment.username || "?").slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-semibold" data-testid={`text-comment-user-${comment.id}`}>
-                            {comment.username || "Anonymous"}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {formatTimeAgo(comment.createdAt)}
-                          </span>
-                          {isTopComment && (
-                            <Badge variant="outline" className="text-[10px] border-cyan-500/30 text-cyan-400 py-0">
-                              Top Take
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap" data-testid={`text-comment-body-${comment.id}`}>
-                          {comment.body}
-                        </p>
-                        <div className="flex items-center gap-3 mt-2">
-                          <button
-                            onClick={() => commentVoteMutation.mutate({ commentId: comment.id, voteType: "up" })}
-                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-400 transition-colors"
-                            data-testid={`button-upvote-${comment.id}`}
-                          >
-                            <ThumbsUp className="h-3.5 w-3.5" />
-                            {comment.upvotes > 0 && <span>{comment.upvotes}</span>}
-                          </button>
-                          <button
-                            onClick={() => commentVoteMutation.mutate({ commentId: comment.id, voteType: "down" })}
-                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-rose-400 transition-colors"
-                            data-testid={`button-downvote-${comment.id}`}
-                          >
-                            <ThumbsDown className="h-3.5 w-3.5" />
-                            {comment.downvotes > 0 && <span>{comment.downvotes}</span>}
-                          </button>
-                          {netVotes !== 0 && (
-                            <span className={`text-xs font-mono ${netVotes > 0 ? "text-cyan-400" : "text-rose-400"}`}>
-                              {netVotes > 0 ? `+${netVotes}` : netVotes}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </ScrollArea>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              No comments yet. Be the first to share your thoughts!
-            </p>
-          )}
-        </Card>
+        <CardComments entityType="matchup" slug={slug || ""} placeholder="Share your thoughts on this matchup..." />
 
         {/* Back to Vote */}
         <div className="flex justify-center pb-8">
