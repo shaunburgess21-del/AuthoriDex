@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { formatTimeAgo, formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import {
@@ -392,6 +392,8 @@ export default function MarketDetailPage() {
   const [selectedDirection, setSelectedDirection] = useState<"yes" | "no">("yes");
   const [stakeAmount, setStakeAmount] = useState("");
   const [commentBody, setCommentBody] = useState("");
+  const [jackpotScoreInput, setJackpotScoreInput] = useState("");
+  const [jackpotSuggestions, setJackpotSuggestions] = useState<number[]>([]);
   const [pickApplied, setPickApplied] = useState(false);
   const [headerImgError, setHeaderImgError] = useState(false);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
@@ -426,7 +428,7 @@ export default function MarketDetailPage() {
       }
 
       if (market.marketType === "jackpot") {
-        throw new Error("Jackpot entries are submitted from the Predict page.");
+        throw new Error("Use the jackpot entry form on this page.");
       }
 
       const res = await apiRequest("POST", `/api/native-markets/${market.id}/bet`, {
@@ -453,6 +455,64 @@ export default function MarketDetailPage() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to place prediction", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const jackpotPredictedScore = useMemo(() => {
+    const parsed = Number(jackpotScoreInput);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) return null;
+    return parsed;
+  }, [jackpotScoreInput]);
+
+  const jackpotMutation = useMutation({
+    mutationFn: async (predictedScore: number) => {
+      if (!market) throw new Error("Market not loaded");
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        ...(await getAuthHeaders()),
+      };
+      const res = await fetch(`/api/native-markets/${market.id}/jackpot-bet`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ predictedScore }),
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err: any = new Error(data.message || data.error || "Failed to place jackpot entry");
+        err.code = data.error;
+        err.suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+        throw err;
+      }
+      return data as { predictedScore: number };
+    },
+    onSuccess: async (data) => {
+      toast({
+        title: "Jackpot entry placed!",
+        description: `Your prediction ${data.predictedScore.toLocaleString("en-US")} has been recorded.`,
+      });
+      setJackpotScoreInput("");
+      setJackpotSuggestions([]);
+      await Promise.all([
+        refreshProfile(),
+        queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/open-markets", params.slug] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/predict/recent-activity"] }),
+      ]);
+    },
+    onError: (error: any) => {
+      if (error?.code === "NUMBER_TAKEN") {
+        setJackpotSuggestions(error?.suggestions || []);
+      } else {
+        setJackpotSuggestions([]);
+      }
+      toast({
+        title: "Failed to place jackpot entry",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -716,7 +776,7 @@ export default function MarketDetailPage() {
           )}
         </div>
 
-        {isOpen && !isInactive && !isJackpotMarket && (
+        {isOpen && !isInactive && (
           <Card className="p-5 mb-6 border-border/40 bg-muted/5" data-testid="section-place-prediction">
             <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
               <Trophy className="h-5 w-5 text-violet-500" />
@@ -728,6 +788,63 @@ export default function MarketDetailPage() {
                 <p className="text-sm text-muted-foreground mb-3">Sign in to place predictions</p>
                 <Button onClick={() => setLocation("/login")} data-testid="button-login-to-predict">
                   Sign In
+                </Button>
+              </div>
+            ) : isJackpotMarket ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">Predict exact closing Trend Score</label>
+                  <Input
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="Enter exact score (e.g. 352000)"
+                    value={jackpotScoreInput}
+                    onChange={(e) => setJackpotScoreInput(e.target.value)}
+                    className="bg-background/50"
+                    data-testid="input-jackpot-predicted-score"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Jackpot entries are unique per score and cost 100 credits.
+                  </p>
+                </div>
+
+                {jackpotSuggestions.length > 0 && (
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                    <p className="text-xs text-amber-400 mb-2">That number is taken. Try one of these:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {jackpotSuggestions.map((suggestion) => (
+                        <Button
+                          key={suggestion}
+                          size="sm"
+                          variant="outline"
+                          className="border-amber-500/30 text-amber-400"
+                          onClick={() => setJackpotScoreInput(String(suggestion))}
+                          data-testid={`button-jackpot-suggestion-${suggestion}`}
+                        >
+                          {suggestion.toLocaleString("en-US")}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <Button
+                  className="w-full bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black font-semibold"
+                  disabled={!jackpotPredictedScore || jackpotMutation.isPending}
+                  onClick={() => jackpotPredictedScore && jackpotMutation.mutate(jackpotPredictedScore)}
+                  data-testid="button-submit-jackpot-entry"
+                >
+                  {jackpotMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Zap className="h-4 w-4 mr-2" />
+                  )}
+                  {jackpotMutation.isPending
+                    ? "Submitting..."
+                    : !jackpotPredictedScore
+                      ? "Enter an exact score"
+                      : `Submit ${jackpotPredictedScore.toLocaleString("en-US")}`}
                 </Button>
               </div>
             ) : effectiveOpenMarketType === "multi" ? (
@@ -914,6 +1031,7 @@ export default function MarketDetailPage() {
           </Card>
         )}
 
+        {!isJackpotMarket && (
         <Card className="p-5 mb-6" data-testid="section-outcomes">
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
             <Target className="h-5 w-5 text-violet-500" />
@@ -948,6 +1066,7 @@ export default function MarketDetailPage() {
             />
           )}
         </Card>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6" data-testid="section-stats">
           <Card className="p-3 text-center">
