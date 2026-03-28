@@ -7144,6 +7144,151 @@ Only return the JSON object.`;
     }
   });
 
+  // ============ ADMIN: MEDIASTACK NEWS AUDIT ============
+
+  app.post("/api/admin/mediastack-audit", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const people = await db.select({
+        id: trackedPeople.id,
+        name: trackedPeople.name,
+        newsQueryWidened: trackedPeople.newsQueryWidened,
+        searchQueryOverride: trackedPeople.searchQueryOverride,
+        category: trackedPeople.category,
+      }).from(trackedPeople).orderBy(trackedPeople.name);
+
+      const now = new Date();
+      const STALE_HOURS = 24;
+
+      interface MediastackAuditEntry {
+        personId: string;
+        name: string;
+        category: string;
+        queryUsed: string;
+        articleCount: number | null;
+        topHeadlines: string[];
+        status: "ok" | "zero_articles" | "no_cache" | "stale";
+        cacheAge: string | null;
+        cachedAt: string | null;
+        widenedQuery: string | null;
+        widenedArticleCount: number | null;
+        widenedHeadlines: string[];
+      }
+
+      // Build all cache keys upfront and batch-fetch from api_cache
+      const cacheKeyMap = new Map<string, { id: string; name: string; category: string; newsQueryWidened: string | null; searchQueryOverride: string | null }>();
+      const allCacheKeys: string[] = [];
+
+      for (const person of people) {
+        const slug = person.name.replace(/\s+/g, "_").toLowerCase();
+        const primaryKey = `mediastack:news:${slug}`;
+        const widenedKey = `mediastack:news:${slug}:widened`;
+        cacheKeyMap.set(primaryKey, person);
+        cacheKeyMap.set(widenedKey, person);
+        allCacheKeys.push(primaryKey, widenedKey);
+      }
+
+      // Fetch all relevant cache entries in one query
+      const cacheRows = allCacheKeys.length > 0
+        ? await db.select({
+            cacheKey: apiCache.cacheKey,
+            responseData: apiCache.responseData,
+            fetchedAt: apiCache.fetchedAt,
+          }).from(apiCache).where(inArray(apiCache.cacheKey, allCacheKeys))
+        : [];
+
+      const cacheMap = new Map<string, { responseData: string; fetchedAt: Date }>();
+      for (const row of cacheRows) {
+        cacheMap.set(row.cacheKey, { responseData: row.responseData, fetchedAt: row.fetchedAt });
+      }
+
+      const results: MediastackAuditEntry[] = [];
+
+      for (const person of people) {
+        const slug = person.name.replace(/\s+/g, "_").toLowerCase();
+        const primaryKey = `mediastack:news:${slug}`;
+        const widenedKey = `mediastack:news:${slug}:widened`;
+
+        const primaryCache = cacheMap.get(primaryKey);
+        const widenedCache = cacheMap.get(widenedKey);
+
+        let articleCount: number | null = null;
+        let topHeadlines: string[] = [];
+        let queryUsed = person.name;
+        let cachedAt: string | null = null;
+        let cacheAge: string | null = null;
+        let status: MediastackAuditEntry["status"] = "no_cache";
+
+        if (primaryCache) {
+          try {
+            const data = JSON.parse(primaryCache.responseData);
+            articleCount = data.articleCount24h ?? 0;
+            topHeadlines = (data.topHeadlines || []).slice(0, 3);
+            queryUsed = data.query || person.name;
+            cachedAt = primaryCache.fetchedAt.toISOString();
+
+            const ageMs = now.getTime() - primaryCache.fetchedAt.getTime();
+            const ageHours = ageMs / (1000 * 60 * 60);
+
+            if (ageHours > STALE_HOURS) {
+              cacheAge = `${Math.round(ageHours)}h ago`;
+              status = "stale";
+            } else if (ageHours >= 1) {
+              cacheAge = `${Math.round(ageHours)}h ago`;
+            } else {
+              cacheAge = `${Math.round(ageMs / (1000 * 60))}m ago`;
+            }
+
+            if (status !== "stale") {
+              status = (articleCount ?? 0) > 0 ? "ok" : "zero_articles";
+            }
+          } catch {
+            status = "no_cache";
+          }
+        }
+
+        let widenedArticleCount: number | null = null;
+        let widenedHeadlines: string[] = [];
+        let widenedQuery: string | null = person.newsQueryWidened || null;
+
+        if (widenedCache) {
+          try {
+            const data = JSON.parse(widenedCache.responseData);
+            widenedArticleCount = data.articleCount24h ?? 0;
+            widenedHeadlines = (data.topHeadlines || []).slice(0, 3);
+          } catch { /* ignore parse errors */ }
+        }
+
+        results.push({
+          personId: person.id,
+          name: person.name,
+          category: person.category,
+          queryUsed,
+          articleCount,
+          topHeadlines,
+          status,
+          cacheAge,
+          cachedAt,
+          widenedQuery,
+          widenedArticleCount,
+          widenedHeadlines,
+        });
+      }
+
+      const issueCount = results.filter(r => r.status !== "ok").length;
+      res.json({
+        total: results.length,
+        issueCount,
+        results: results.sort((a, b) => {
+          const order: Record<string, number> = { zero_articles: 0, no_cache: 1, stale: 2, ok: 3 };
+          return (order[a.status] ?? 9) - (order[b.status] ?? 9);
+        }),
+      });
+    } catch (error: any) {
+      console.error("Error in mediastack audit:", error);
+      res.status(500).json({ error: "Mediastack audit failed" });
+    }
+  });
+
   // ============ ADMIN: SCORE BREAKDOWN (Why Did This Move?) ============
   app.get("/api/admin/celebrities/:id/score-breakdown", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {

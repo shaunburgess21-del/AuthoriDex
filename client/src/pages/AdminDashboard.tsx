@@ -1511,6 +1511,10 @@ export default function AdminDashboard() {
   const [wikiAuditLoading, setWikiAuditLoading] = useState(false);
   const [wikiAuditExpanded, setWikiAuditExpanded] = useState(false);
   const [wikiSlugFixingId, setWikiSlugFixingId] = useState<string | null>(null);
+  const [msAuditResults, setMsAuditResults] = useState<any>(null);
+  const [msAuditLoading, setMsAuditLoading] = useState(false);
+  const [msAuditExpanded, setMsAuditExpanded] = useState(false);
+  const [msAuditFilter, setMsAuditFilter] = useState<"all" | "zero_articles" | "no_cache" | "stale" | "ok">("all");
   const [showCelebrityModal, setShowCelebrityModal] = useState(false);
   const [editingCelebrity, setEditingCelebrity] = useState<Celebrity | null>(null);
   const [celebrityForm, setCelebrityForm] = useState({
@@ -6195,6 +6199,138 @@ export default function AdminDashboard() {
                       </div>
                     )}
                   </div>
+
+                  <div className="p-3 rounded-lg border">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">Mediastack News Audit</span>
+                      <div className="flex items-center gap-2">
+                        {msAuditResults && (
+                          <button
+                            type="button"
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            onClick={() => setMsAuditExpanded(prev => !prev)}
+                          >
+                            {msAuditResults.issueCount} issue{msAuditResults.issueCount !== 1 ? "s" : ""} / {msAuditResults.total} total
+                            {msAuditExpanded ? <ChevronUp className="inline h-3 w-3 ml-1" /> : <ChevronDown className="inline h-3 w-3 ml-1" />}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+                          disabled={msAuditLoading}
+                          onClick={async () => {
+                            setMsAuditLoading(true);
+                            try {
+                              const headers = await getAuthHeaders();
+                              const resp = await fetch("/api/admin/mediastack-audit", {
+                                method: "POST",
+                                headers,
+                              });
+                              if (!resp.ok) throw new Error(await resp.text());
+                              const data = await resp.json();
+                              setMsAuditResults(data);
+                              setMsAuditExpanded(true);
+                            } catch (err: any) {
+                              console.error("Mediastack audit failed:", err);
+                            } finally {
+                              setMsAuditLoading(false);
+                            }
+                          }}
+                        >
+                          {msAuditLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                          {msAuditLoading ? "Auditing..." : "Run Audit"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {msAuditExpanded && msAuditResults?.results && (
+                      <div className="mt-3">
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {(["all", "zero_articles", "no_cache", "stale", "ok"] as const).map(f => {
+                            const count = f === "all"
+                              ? msAuditResults.results.length
+                              : msAuditResults.results.filter((r: any) => r.status === f).length;
+                            return (
+                              <button
+                                key={f}
+                                type="button"
+                                className={cn(
+                                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors border",
+                                  msAuditFilter === f
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-background text-muted-foreground border-border hover:bg-muted/50"
+                                )}
+                                onClick={() => setMsAuditFilter(f)}
+                              >
+                                {f === "all" ? "All" : f === "zero_articles" ? "Zero Articles" : f === "no_cache" ? "No Cache" : f === "stale" ? "Stale" : "OK"}
+                                <span className="opacity-70">({count})</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="max-h-80 overflow-y-auto rounded border bg-background/50 text-xs">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b text-muted-foreground sticky top-0 bg-background">
+                                <th className="px-2 py-1.5 text-left font-medium">Name</th>
+                                <th className="px-2 py-1.5 text-left font-medium">Query Used</th>
+                                <th className="px-2 py-1.5 text-right font-medium">Articles</th>
+                                <th className="px-2 py-1.5 text-left font-medium">Top Headlines</th>
+                                <th className="px-2 py-1.5 text-left font-medium">Status</th>
+                                <th className="px-2 py-1.5 text-right font-medium">Cache Age</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {msAuditResults.results
+                                .filter((r: any) => msAuditFilter === "all" || r.status === msAuditFilter)
+                                .map((r: any) => (
+                                <tr key={r.personId} className={cn(
+                                  "border-b last:border-0",
+                                  r.status === "ok" ? "opacity-50" : "hover:bg-muted/30",
+                                )}>
+                                  <td className="px-2 py-1.5 font-medium whitespace-nowrap">{r.name}</td>
+                                  <td className="px-2 py-1.5 text-muted-foreground max-w-[140px] truncate" title={r.queryUsed}>
+                                    {r.queryUsed}
+                                    {r.widenedQuery && (
+                                      <span className="ml-1 text-yellow-500" title={`Widened: ${r.widenedQuery} (${r.widenedArticleCount ?? 0} articles)`}>
+                                        (+W)
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums">
+                                    {r.articleCount != null ? r.articleCount : "—"}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-muted-foreground max-w-[250px]">
+                                    {r.topHeadlines?.length > 0 ? (
+                                      <span className="line-clamp-2 text-[10px]" title={r.topHeadlines.join(" | ")}>
+                                        {r.topHeadlines[0]}
+                                      </span>
+                                    ) : (
+                                      <span className="italic text-muted-foreground/50">none</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-1.5">
+                                    <Badge variant="outline" className={cn("text-[10px]", {
+                                      "border-green-500/50 text-green-500": r.status === "ok",
+                                      "border-red-500/50 text-red-500": r.status === "zero_articles",
+                                      "border-yellow-500/50 text-yellow-500": r.status === "no_cache" || r.status === "stale",
+                                    })}>
+                                      {r.status === "ok" ? "OK" : r.status === "zero_articles" ? "Zero Articles" : r.status === "no_cache" ? "No Cache" : "Stale"}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right text-muted-foreground whitespace-nowrap">
+                                    {r.cacheAge || "—"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                 </CardContent>
               </Card>
             )}
