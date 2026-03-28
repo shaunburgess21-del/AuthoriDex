@@ -1,15 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatTimeAgo } from "@/lib/formatDate";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import {
   MessageSquare,
   ArrowUpDown,
@@ -18,9 +15,15 @@ import {
   Loader2,
   ThumbsUp,
   ThumbsDown,
+  Reply,
+  MoreVertical,
+  Maximize2,
+  Minimize2,
+  X,
 } from "lucide-react";
+import { CommentActionDrawer } from "./CommentActionDrawer";
 
-export type CommentEntityType = "matchup" | "poll" | "opinion-poll";
+export type CommentEntityType = "matchup" | "poll" | "opinion-poll" | "open-market";
 
 interface CardComment {
   id: string;
@@ -38,14 +41,13 @@ const API_BASE: Record<CommentEntityType, string> = {
   matchup: "/api/matchups",
   poll: "/api/polls",
   "opinion-poll": "/api/opinion-polls",
+  "open-market": "/api/open-markets",
 };
 
 interface CardCommentsProps {
   entityType: CommentEntityType;
   slug: string;
-  /** 'card' wraps in a headed Card (for detail pages), 'inline' renders bare list (for bottom sheet) */
   variant?: "card" | "inline";
-  /** Override max height of the scrollable comments area */
   maxHeight?: string;
   placeholder?: string;
 }
@@ -57,13 +59,17 @@ export function CardComments({
   maxHeight = "500px",
   placeholder = "Share your thoughts...",
 }: CardCommentsProps) {
-  const { user, isLoggedIn } = useAuth();
+  const { user, isLoggedIn, profile } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [commentBody, setCommentBody] = useState("");
   const [commentSort, setCommentSort] = useState<"top" | "newest">("top");
+  const [replyTo, setReplyTo] = useState<{ id: string; username: string } | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [drawerComment, setDrawerComment] = useState<CardComment | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const base = API_BASE[entityType];
   const queryKey = [base, slug, "comments"];
@@ -79,12 +85,14 @@ export function CardComments({
   });
 
   const commentMutation = useMutation({
-    mutationFn: async (body: string) => {
-      const res = await apiRequest("POST", `${base}/${slug}/comments`, { body });
+    mutationFn: async ({ body, parentId }: { body: string; parentId?: string | null }) => {
+      const res = await apiRequest("POST", `${base}/${slug}/comments`, { body, parentId: parentId || null });
       return res.json();
     },
     onSuccess: () => {
       setCommentBody("");
+      setReplyTo(null);
+      setExpanded(false);
       queryClient.invalidateQueries({ queryKey });
       if (entityType === "opinion-poll") {
         queryClient.invalidateQueries({ queryKey: [base, slug] });
@@ -109,188 +117,313 @@ export function CardComments({
     },
   });
 
-  const sortedComments = useMemo(() => {
+  const reportMutation = useMutation({
+    mutationFn: async ({ commentId, reason }: { commentId: string; reason: string }) => {
+      const res = await apiRequest("POST", `${base}/comments/${commentId}/report`, { reason });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Report submitted", description: "Thank you. An admin will review this comment." });
+      setDrawerComment(null);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to report. Please sign in.", variant: "destructive" });
+    },
+  });
+
+  const threadedComments = useMemo(() => {
     if (!comments.length) return [];
-    const sorted = [...comments];
+    const topLevel = comments.filter((c) => !c.parentId);
+    const replies = comments.filter((c) => !!c.parentId);
+
     if (commentSort === "top") {
-      sorted.sort((a, b) => (b.upvotes - b.downvotes) - (a.upvotes - a.downvotes));
+      topLevel.sort((a, b) => (b.upvotes - b.downvotes) - (a.upvotes - a.downvotes));
     } else {
-      sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      topLevel.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
-    return sorted;
+
+    const replyMap = new Map<string, CardComment[]>();
+    for (const r of replies) {
+      const pid = r.parentId!;
+      if (!replyMap.has(pid)) replyMap.set(pid, []);
+      replyMap.get(pid)!.push(r);
+    }
+    Array.from(replyMap.values()).forEach((arr) => {
+      arr.sort((a: CardComment, b: CardComment) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    });
+
+    return topLevel.map((parent) => ({
+      parent,
+      replies: replyMap.get(parent.id) || [],
+    }));
   }, [comments, commentSort]);
 
-  const handlePost = () => {
+  const handlePost = useCallback(() => {
     if (!commentBody.trim()) return;
-    commentMutation.mutate(commentBody.trim());
-  };
+    commentMutation.mutate({ body: commentBody.trim(), parentId: replyTo?.id });
+  }, [commentBody, replyTo, commentMutation]);
+
+  const startReply = useCallback((comment: CardComment) => {
+    setReplyTo({ id: comment.id, username: comment.username || "Anonymous" });
+    setExpanded(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
 
   const isAuthenticated = isLoggedIn || !!user;
 
   const sortBar = (
-    <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
-      {variant === "card" && (
-        <h2 className="text-lg font-serif font-bold flex items-center gap-2">
-          <MessageSquare className="h-5 w-5 text-cyan-500" />
-          Discussion ({comments.length})
-        </h2>
-      )}
-      {variant === "inline" && (
-        <span className="text-sm font-semibold text-muted-foreground">
-          {comments.length} {comments.length === 1 ? "comment" : "comments"}
+    <div className="flex items-center justify-between gap-2 mb-3 flex-wrap px-1">
+      <div className="flex items-center gap-2">
+        <MessageSquare className="h-4 w-4 text-cyan-500" />
+        <span className="text-sm font-semibold">
+          {variant === "card" ? `Discussion (${comments.length})` : `${comments.length} ${comments.length === 1 ? "comment" : "comments"}`}
         </span>
-      )}
-      <div className="flex items-center gap-1">
-        <Button
-          variant={commentSort === "top" ? "default" : "ghost"}
-          size="sm"
+      </div>
+      <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5">
+        <button
           onClick={() => setCommentSort("top")}
+          className={`relative flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all ${
+            commentSort === "top" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
+          }`}
           data-testid="button-sort-top"
         >
-          <ArrowUpDown className="h-3.5 w-3.5 mr-1" />
+          <ArrowUpDown className="h-3 w-3" />
           Top
-        </Button>
-        <Button
-          variant={commentSort === "newest" ? "default" : "ghost"}
-          size="sm"
+          {commentSort === "top" && (
+            <span className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-[#3C83F6]" />
+          )}
+        </button>
+        <button
           onClick={() => setCommentSort("newest")}
+          className={`relative flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all ${
+            commentSort === "newest" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
+          }`}
           data-testid="button-sort-newest"
         >
-          <Clock className="h-3.5 w-3.5 mr-1" />
+          <Clock className="h-3 w-3" />
           Newest
-        </Button>
-      </div>
-    </div>
-  );
-
-  const inputArea = isAuthenticated ? (
-    <div className="mb-5">
-      <Textarea
-        placeholder={placeholder}
-        value={commentBody}
-        onChange={(e) => setCommentBody(e.target.value)}
-        className="mb-2 bg-background/50 resize-none"
-        rows={3}
-        data-testid="input-comment"
-      />
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          disabled={!commentBody.trim() || commentMutation.isPending}
-          onClick={handlePost}
-          data-testid="button-submit-comment"
-        >
-          {commentMutation.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-          ) : (
-            <Send className="h-3.5 w-3.5 mr-1.5" />
+          {commentSort === "newest" && (
+            <span className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-[#3C83F6]" />
           )}
-          Post
-        </Button>
+        </button>
       </div>
-    </div>
-  ) : (
-    <div className="text-center py-3 mb-4 rounded-lg border border-dashed border-border/50">
-      <p className="text-sm text-muted-foreground">
-        <Button
-          variant="ghost"
-          className="p-0 h-auto text-cyan-400 underline"
-          onClick={() => setLocation("/login")}
-          data-testid="link-login-to-comment"
-        >
-          Sign in
-        </Button>{" "}
-        to join the discussion
-      </p>
     </div>
   );
 
-  const commentsList = sortedComments.length > 0 ? (
-    <ScrollArea style={{ maxHeight }}>
-      <div className="space-y-4">
-        {sortedComments.map((comment, idx) => {
-          const netVotes = (comment.upvotes || 0) - (comment.downvotes || 0);
+  const renderComment = (comment: CardComment, isTopComment: boolean, isReply: boolean) => {
+    const netVotes = (comment.upvotes || 0) - (comment.downvotes || 0);
+    return (
+      <div
+        key={comment.id}
+        id={`comment-${comment.id}`}
+        className={`flex gap-3 py-3 ${isReply ? "ml-8 pl-3 border-l-2 border-border/20" : ""} ${
+          isTopComment ? "bg-cyan-500/5 px-3 rounded-lg border border-cyan-500/20" : ""
+        }`}
+        data-testid={`comment-${comment.id}`}
+      >
+        <Avatar className={`${isReply ? "h-6 w-6" : "h-8 w-8"} shrink-0`}>
+          {comment.avatarUrl && <AvatarImage src={comment.avatarUrl} alt={comment.username || ""} />}
+          <AvatarFallback className="bg-cyan-500/20 text-cyan-400 text-[10px] font-semibold">
+            {(comment.username || "?").slice(0, 2).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <span className="text-sm font-semibold truncate" data-testid={`text-comment-user-${comment.id}`}>
+                {comment.username || "Anonymous"}
+              </span>
+              <span className="text-xs text-muted-foreground shrink-0">
+                {formatTimeAgo(comment.createdAt)}
+              </span>
+              {isTopComment && (
+                <Badge variant="outline" className="text-[10px] border-cyan-500/30 text-cyan-400 py-0">
+                  Top Take
+                </Badge>
+              )}
+            </div>
+            <button
+              onClick={() => setDrawerComment(comment)}
+              className="shrink-0 p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              data-interactive="true"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap" data-testid={`text-comment-body-${comment.id}`}>
+            {comment.body}
+          </p>
+          <div className="flex items-center gap-4 mt-2">
+            <button
+              onClick={() => commentVoteMutation.mutate({ commentId: comment.id, voteType: "up" })}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-400 transition-colors"
+              data-testid={`button-upvote-${comment.id}`}
+            >
+              <ThumbsUp className="h-3.5 w-3.5" />
+              {(comment.upvotes || 0) > 0 && <span>{comment.upvotes}</span>}
+            </button>
+            <button
+              onClick={() => commentVoteMutation.mutate({ commentId: comment.id, voteType: "down" })}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-rose-400 transition-colors"
+              data-testid={`button-downvote-${comment.id}`}
+            >
+              <ThumbsDown className="h-3.5 w-3.5" />
+              {(comment.downvotes || 0) > 0 && <span>{comment.downvotes}</span>}
+            </button>
+            {!isReply && (
+              <button
+                onClick={() => startReply(comment)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-400 transition-colors"
+                data-testid={`button-reply-${comment.id}`}
+              >
+                <Reply className="h-3.5 w-3.5" />
+                Reply
+              </button>
+            )}
+            {netVotes !== 0 && (
+              <span className={`text-xs font-mono ${netVotes > 0 ? "text-cyan-400" : "text-rose-400"}`}>
+                {netVotes > 0 ? `+${netVotes}` : netVotes}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const commentsList = threadedComments.length > 0 ? (
+    <div
+      className={maxHeight !== "none" ? "overflow-y-auto" : undefined}
+      style={maxHeight !== "none" ? { maxHeight } : undefined}
+    >
+      <div className="divide-y divide-border/10">
+        {threadedComments.map(({ parent, replies: threadReplies }, idx) => {
+          const netVotes = (parent.upvotes || 0) - (parent.downvotes || 0);
           const isTopComment = commentSort === "top" && idx === 0 && netVotes > 0;
           return (
-            <div
-              key={comment.id}
-              className={`flex gap-3 p-3 rounded-lg ${isTopComment ? "bg-cyan-500/5 border border-cyan-500/20" : ""}`}
-              data-testid={`comment-${comment.id}`}
-            >
-              <Avatar className="h-8 w-8 shrink-0">
-                {comment.avatarUrl && <AvatarImage src={comment.avatarUrl} alt={comment.username || ""} />}
-                <AvatarFallback className="bg-cyan-500/20 text-cyan-400 text-xs font-semibold">
-                  {(comment.username || "?").slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold" data-testid={`text-comment-user-${comment.id}`}>
-                    {comment.username || "Anonymous"}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatTimeAgo(comment.createdAt)}
-                  </span>
-                  {isTopComment && (
-                    <Badge variant="outline" className="text-[10px] border-cyan-500/30 text-cyan-400 py-0">
-                      Top Take
-                    </Badge>
-                  )}
+            <div key={parent.id}>
+              {renderComment(parent, isTopComment, false)}
+              {threadReplies.length > 0 && (
+                <div className="pb-2">
+                  {threadReplies.map((r) => renderComment(r, false, true))}
                 </div>
-                <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap" data-testid={`text-comment-body-${comment.id}`}>
-                  {comment.body}
-                </p>
-                <div className="flex items-center gap-3 mt-2">
-                  <button
-                    onClick={() => commentVoteMutation.mutate({ commentId: comment.id, voteType: "up" })}
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-400 transition-colors"
-                    data-testid={`button-upvote-${comment.id}`}
-                  >
-                    <ThumbsUp className="h-3.5 w-3.5" />
-                    {(comment.upvotes || 0) > 0 && <span>{comment.upvotes}</span>}
-                  </button>
-                  <button
-                    onClick={() => commentVoteMutation.mutate({ commentId: comment.id, voteType: "down" })}
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-rose-400 transition-colors"
-                    data-testid={`button-downvote-${comment.id}`}
-                  >
-                    <ThumbsDown className="h-3.5 w-3.5" />
-                    {(comment.downvotes || 0) > 0 && <span>{comment.downvotes}</span>}
-                  </button>
-                  {netVotes !== 0 && (
-                    <span className={`text-xs font-mono ${netVotes > 0 ? "text-cyan-400" : "text-rose-400"}`}>
-                      {netVotes > 0 ? `+${netVotes}` : netVotes}
-                    </span>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           );
         })}
       </div>
-    </ScrollArea>
+    </div>
   ) : (
     <p className="text-sm text-muted-foreground text-center py-6">
       No comments yet. Be the first to share your thoughts!
     </p>
   );
 
-  if (variant === "inline") {
-    return (
-      <div className="flex flex-col h-full">
-        {sortBar}
-        {inputArea}
-        <div className="flex-1 min-h-0">{commentsList}</div>
+  const inputArea = isAuthenticated ? (
+    <div className="pt-3 border-t border-border/20">
+      {replyTo && (
+        <div className="flex items-center gap-2 mb-2 px-1">
+          <span className="text-xs text-cyan-400">
+            Replying to @{replyTo.username}
+          </span>
+          <button
+            onClick={() => setReplyTo(null)}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
+      <div className="flex items-end gap-2">
+        <Avatar className="h-7 w-7 shrink-0">
+          {profile?.avatarUrl && <AvatarImage src={profile.avatarUrl} alt="" />}
+          <AvatarFallback className="bg-cyan-500/20 text-cyan-400 text-[10px] font-semibold">
+            {(profile?.username || user?.email || "?").slice(0, 2).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0 relative">
+          <textarea
+            ref={inputRef}
+            placeholder={replyTo ? `Reply to @${replyTo.username}...` : placeholder}
+            value={commentBody}
+            onChange={(e) => setCommentBody(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handlePost();
+              }
+            }}
+            className="w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 pr-16 text-sm resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
+            rows={expanded ? 4 : 1}
+            data-testid="input-comment"
+          />
+          <div className="absolute right-2 bottom-1.5 flex items-center gap-1">
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              type="button"
+            >
+              {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              disabled={!commentBody.trim() || commentMutation.isPending}
+              onClick={handlePost}
+              className="p-1 text-cyan-400 hover:text-cyan-300 disabled:text-muted-foreground/30 transition-colors"
+              data-testid="button-submit-comment"
+            >
+              {commentMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
       </div>
-    );
-  }
+    </div>
+  ) : (
+    <div className="text-center py-3 border-t border-border/20">
+      <p className="text-sm text-muted-foreground">
+        <button
+          className="text-cyan-400 underline hover:text-cyan-300 transition-colors"
+          onClick={() => setLocation("/login")}
+          data-testid="link-login-to-comment"
+        >
+          Sign in
+        </button>{" "}
+        to join the discussion
+      </p>
+    </div>
+  );
 
   return (
-    <div className="p-5 mb-6 rounded-xl border bg-card text-card-foreground shadow" data-testid="section-comments">
-      {sortBar}
-      {inputArea}
-      {commentsList}
-    </div>
+    <>
+      <div className={`${variant === "inline" ? "flex flex-col h-full" : "mb-6 px-1"}`} data-testid="section-comments">
+        {sortBar}
+        {variant === "inline" ? (
+          <>
+            <div className="flex-1 min-h-0 overflow-y-auto">{commentsList}</div>
+            {inputArea}
+          </>
+        ) : (
+          <>
+            {commentsList}
+            {inputArea}
+          </>
+        )}
+      </div>
+      <CommentActionDrawer
+        open={!!drawerComment}
+        onClose={() => setDrawerComment(null)}
+        onReport={(reason) => {
+          if (drawerComment) {
+            reportMutation.mutate({ commentId: drawerComment.id, reason });
+          }
+        }}
+        commentId={drawerComment?.id || null}
+        entitySlug={slug}
+      />
+    </>
   );
 }
 

@@ -1,0 +1,124 @@
+import { useState, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { Share2, Flag, X } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+interface CommentActionDrawerProps {
+  open: boolean;
+  onClose: () => void;
+  onReport: (reason: string) => void;
+  commentId: string | null;
+  entitySlug: string;
+}
+
+const REPORT_REASONS = [
+  "Spam or misleading",
+  "Hate speech or harassment",
+  "Misinformation",
+  "Off-topic",
+  "Other",
+];
+
+export function CommentActionDrawer({
+  open,
+  onClose,
+  onReport,
+  commentId,
+  entitySlug,
+}: CommentActionDrawerProps) {
+  const { toast } = useToast();
+  const [showReportPicker, setShowReportPicker] = useState(false);
+
+  useEffect(() => {
+    if (!open) setShowReportPicker(false);
+  }, [open]);
+
+  const handleShare = useCallback(async () => {
+    const url = `${window.location.origin}${window.location.pathname}#comment-${commentId}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Check out this comment", url });
+        onClose();
+        return;
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          onClose();
+          return;
+        }
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Link copied!" });
+    } catch {
+      toast({ title: "Could not copy link", variant: "destructive" });
+    }
+    onClose();
+  }, [commentId, entitySlug, onClose, toast]);
+
+  const handleReport = useCallback((reason: string) => {
+    onReport(reason);
+  }, [onReport]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[70]" data-interactive="true">
+      <div
+        className="absolute inset-0 bg-black/50 transition-opacity"
+        onClick={onClose}
+      />
+      <div className="absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl animate-in slide-in-from-bottom duration-200 pb-[env(safe-area-inset-bottom,16px)]">
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full bg-muted-foreground/20" />
+        </div>
+
+        {!showReportPicker ? (
+          <div className="px-4 pb-4">
+            <button
+              onClick={handleShare}
+              className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors"
+            >
+              <Share2 className="h-5 w-5 text-muted-foreground" />
+              <span className="text-sm font-medium">Share</span>
+            </button>
+            <button
+              onClick={() => setShowReportPicker(true)}
+              className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors"
+            >
+              <Flag className="h-5 w-5 text-muted-foreground" />
+              <span className="text-sm font-medium">Report</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors mt-1 border-t border-border/10 pt-3"
+            >
+              <X className="h-5 w-5 text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground">Cancel</span>
+            </button>
+          </div>
+        ) : (
+          <div className="px-4 pb-4">
+            <h3 className="text-sm font-semibold mb-3 px-4">Why are you reporting this comment?</h3>
+            {REPORT_REASONS.map((reason) => (
+              <button
+                key={reason}
+                onClick={() => handleReport(reason)}
+                className="flex items-center w-full px-4 py-3 rounded-xl hover:bg-muted/50 transition-colors text-sm"
+              >
+                {reason}
+              </button>
+            ))}
+            <button
+              onClick={() => setShowReportPicker(false)}
+              className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors mt-1 border-t border-border/10 pt-3"
+            >
+              <span className="text-sm font-medium text-muted-foreground">Back</span>
+            </button>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}

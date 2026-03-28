@@ -1002,6 +1002,19 @@ export const insertOpenMarketCommentSchema = createInsertSchema(openMarketCommen
 export type OpenMarketComment = typeof openMarketComments.$inferSelect;
 export type InsertOpenMarketComment = z.infer<typeof insertOpenMarketCommentSchema>;
 
+export const openMarketCommentVotes = pgTable("open_market_comment_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  commentId: varchar("comment_id").notNull().references(() => openMarketComments.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  voteType: text("vote_type").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueUserComment: unique("omc_votes_user_comment_unique").on(table.userId, table.commentId),
+  commentIdx: index("omc_votes_comment_idx").on(table.commentId),
+}));
+
+export type OpenMarketCommentVote = typeof openMarketCommentVotes.$inferSelect;
+
 export const openMarketCommentsRelations = relations(openMarketComments, ({ one }) => ({
   market: one(predictionMarkets, {
     fields: [openMarketComments.marketId],
@@ -1333,6 +1346,24 @@ export const opinionPollCommentVotes = pgTable("opinion_poll_comment_votes", {
 }));
 
 export type OpinionPollCommentVote = typeof opinionPollCommentVotes.$inferSelect;
+
+// ============================================================================
+// COMMENT REPORTS
+// ============================================================================
+
+export const commentReports = pgTable("comment_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  commentId: varchar("comment_id").notNull(),
+  entityType: text("entity_type").notNull(),
+  reporterId: varchar("reporter_id").notNull(),
+  reason: text("reason"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  commentIdx: index("comment_reports_comment_idx").on(table.commentId),
+  reporterIdx: index("comment_reports_reporter_idx").on(table.reporterId),
+}));
+
+export type CommentReport = typeof commentReports.$inferSelect;
 
 // ============================================================================
 // AI AGENT PREDICTION SYSTEM

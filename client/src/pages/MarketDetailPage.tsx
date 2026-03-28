@@ -10,13 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { formatTimeAgo, formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
+import { CardComments } from "@/components/comments/CardComments";
 import {
   ArrowLeft,
   Star,
@@ -30,8 +29,6 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  Send,
-  ThumbsUp,
   Zap,
   Trophy,
   BarChart3,
@@ -391,7 +388,6 @@ export default function MarketDetailPage() {
   const [selectedEntry, setSelectedEntry] = useState<string | null>(null);
   const [selectedDirection, setSelectedDirection] = useState<"yes" | "no">("yes");
   const [stakeAmount, setStakeAmount] = useState("");
-  const [commentBody, setCommentBody] = useState("");
   const [jackpotScoreInput, setJackpotScoreInput] = useState("");
   const [jackpotSuggestions, setJackpotSuggestions] = useState<number[]>([]);
   const [pickApplied, setPickApplied] = useState(false);
@@ -516,20 +512,6 @@ export default function MarketDetailPage() {
     },
   });
 
-  const commentMutation = useMutation({
-    mutationFn: async (body: string) => {
-      const res = await apiRequest("POST", `/api/open-markets/${params.slug}/comments`, { body });
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Comment posted!" });
-      queryClient.invalidateQueries({ queryKey: ["/api/open-markets", params.slug] });
-      setCommentBody("");
-    },
-    onError: (err: Error) => {
-      toast({ title: "Failed to post comment", description: err.message, variant: "destructive" });
-    },
-  });
 
   useEffect(() => {
     if (pickParam && market?.entries && !pickApplied) {
@@ -594,15 +576,6 @@ export default function MarketDetailPage() {
       return;
     }
     betMutation.mutate({ entryId: selectedEntry, stakeAmount: amount, direction: selectedDirection });
-  };
-
-  const handlePostComment = () => {
-    if (!isLoggedIn) {
-      setLocation("/login");
-      return;
-    }
-    if (!commentBody.trim()) return;
-    commentMutation.mutate(commentBody.trim());
   };
 
   if (isLoading) {
@@ -1164,86 +1137,7 @@ export default function MarketDetailPage() {
         )}
 
         {isCommunityMarket && (
-        <Card className="p-5 mb-6" data-testid="section-comments">
-          <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
-            <Users className="h-5 w-5 text-violet-500" />
-            Discussion ({market.comments?.length || 0})
-          </h2>
-
-          {isLoggedIn ? (
-            <div className="mb-4">
-              <Textarea
-                placeholder="Share your thoughts..."
-                value={commentBody}
-                onChange={(e) => setCommentBody(e.target.value)}
-                className="mb-2 bg-background/50 resize-none"
-                rows={3}
-                data-testid="input-comment"
-              />
-              <div className="flex justify-end">
-                <Button
-                  size="sm"
-                  disabled={!commentBody.trim() || commentMutation.isPending}
-                  onClick={handlePostComment}
-                  data-testid="button-submit-comment"
-                >
-                  {commentMutation.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                  ) : (
-                    <Send className="h-3.5 w-3.5 mr-1.5" />
-                  )}
-                  Post
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-3 mb-4 rounded-lg border border-dashed border-border/50">
-              <p className="text-sm text-muted-foreground">
-                <Button variant="ghost" className="p-0 h-auto text-violet-400 underline" onClick={() => setLocation("/login")} data-testid="link-login-to-comment">
-                  Sign in
-                </Button>{" "}
-                to join the discussion
-              </p>
-            </div>
-          )}
-
-          {market.comments && market.comments.length > 0 ? (
-            <ScrollArea className="max-h-96">
-              <div className="space-y-3">
-                {market.comments.map((comment) => (
-                  <div key={comment.id} className="flex gap-3" data-testid={`comment-${comment.id}`}>
-                    <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarFallback className="bg-violet-500/20 text-violet-400 text-xs font-semibold">
-                        {(comment.username || "?").slice(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold" data-testid={`text-comment-user-${comment.id}`}>
-                          {comment.username}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {formatTimeAgo(comment.createdAt)}
-                        </span>
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-0.5" data-testid={`text-comment-body-${comment.id}`}>
-                        {comment.body}
-                      </p>
-                      {comment.upvotes > 0 && (
-                        <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
-                          <ThumbsUp className="h-3 w-3" />
-                          <span>{comment.upvotes}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">No comments yet. Be the first to share your thoughts!</p>
-          )}
-        </Card>
+          <CardComments entityType="open-market" slug={params.slug || ""} />
         )}
 
         {/* Related Markets - placeholder for future implementation */}

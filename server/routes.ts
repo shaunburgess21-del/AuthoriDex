@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
 import { db } from "./db";
-import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, cardRelatedPeople, approvalSnapshots, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { trendSnapshots, trackedPeople, communityInsights, insightVotes, insightComments, commentVotes, matchups, votes, xpActions, xpLedger, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, adminAuditLog, predictionMarkets, marketEntries, marketBets, openMarketComments, openMarketCommentVotes, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, trendingPollComments, trendingPollCommentVotes, matchupComments, matchupCommentVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollComments, opinionPollCommentVotes, imageVotes, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, insertCommunityInsightSchema, insertInsightVoteSchema, insertInsightCommentSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
@@ -4623,6 +4623,66 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error voting on matchup comment:", error.message);
       res.status(500).json({ error: "Failed to vote on comment" });
+    }
+  });
+
+  // ============================================================================
+  // COMMENT REPORT ROUTES
+  // ============================================================================
+
+  const handleCommentReport = async (req: AuthRequest, res: any, entityType: string) => {
+    try {
+      const userId = req.userId!;
+      const { commentId } = req.params;
+      const { reason } = req.body;
+
+      const [existing] = await db.select().from(commentReports)
+        .where(and(eq(commentReports.commentId, commentId), eq(commentReports.reporterId, userId)));
+      if (existing) {
+        return res.json({ message: "Already reported" });
+      }
+
+      await db.insert(commentReports).values({
+        commentId,
+        entityType,
+        reporterId: userId,
+        reason: reason || null,
+      });
+
+      res.json({ message: "Report submitted" });
+    } catch (error: any) {
+      console.error(`Error reporting ${entityType} comment:`, error.message);
+      res.status(500).json({ error: "Failed to report comment" });
+    }
+  };
+
+  app.post("/api/matchups/comments/:commentId/report", requireAuth, (req, res) =>
+    handleCommentReport(req as AuthRequest, res, "matchup"));
+
+  app.post("/api/polls/comments/:commentId/report", requireAuth, (req, res) =>
+    handleCommentReport(req as AuthRequest, res, "poll"));
+
+  app.post("/api/opinion-polls/comments/:commentId/report", requireAuth, (req, res) =>
+    handleCommentReport(req as AuthRequest, res, "opinion-poll"));
+
+  app.post("/api/open-markets/comments/:commentId/report", requireAuth, (req, res) =>
+    handleCommentReport(req as AuthRequest, res, "open-market"));
+
+  app.get("/api/admin/moderation/comment-reports", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const reports = await db.select({
+        id: commentReports.id,
+        commentId: commentReports.commentId,
+        entityType: commentReports.entityType,
+        reporterId: commentReports.reporterId,
+        reason: commentReports.reason,
+        createdAt: commentReports.createdAt,
+      }).from(commentReports).orderBy(desc(commentReports.createdAt)).limit(200);
+
+      res.json(reports);
+    } catch (error: any) {
+      console.error("Error fetching comment reports:", error.message);
+      res.status(500).json({ error: "Failed to fetch comment reports" });
     }
   });
 
@@ -11076,6 +11136,54 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     } catch (error) {
       console.error("[Open Markets] Comments list error:", error);
       res.status(500).json({ error: "Failed to fetch comments" });
+    }
+  });
+
+  app.post("/api/open-markets/comments/:commentId/vote", requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      if (!checkVoteRateLimit(authReq.userId!)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
+      const userId = authReq.userId!;
+      const { commentId } = req.params;
+      const { voteType } = req.body;
+      if (!voteType || (voteType !== "up" && voteType !== "down")) {
+        return res.status(400).json({ error: "Invalid vote type" });
+      }
+      await db.transaction(async (tx) => {
+        const [existing] = await tx.select().from(openMarketCommentVotes)
+          .where(and(eq(openMarketCommentVotes.userId, userId), eq(openMarketCommentVotes.commentId, commentId)));
+        if (existing) {
+          if (existing.voteType === voteType) {
+            await tx.delete(openMarketCommentVotes).where(eq(openMarketCommentVotes.id, existing.id));
+            if (voteType === "up") {
+              await tx.update(openMarketComments).set({ upvotes: sql`GREATEST(upvotes - 1, 0)` }).where(eq(openMarketComments.id, commentId));
+            } else {
+              await tx.update(openMarketComments).set({ downvotes: sql`GREATEST(downvotes - 1, 0)` }).where(eq(openMarketComments.id, commentId));
+            }
+          } else {
+            await tx.update(openMarketCommentVotes).set({ voteType }).where(eq(openMarketCommentVotes.id, existing.id));
+            if (voteType === "up") {
+              await tx.update(openMarketComments).set({ upvotes: sql`upvotes + 1`, downvotes: sql`GREATEST(downvotes - 1, 0)` }).where(eq(openMarketComments.id, commentId));
+            } else {
+              await tx.update(openMarketComments).set({ downvotes: sql`downvotes + 1`, upvotes: sql`GREATEST(upvotes - 1, 0)` }).where(eq(openMarketComments.id, commentId));
+            }
+          }
+        } else {
+          await tx.insert(openMarketCommentVotes).values({ commentId, userId, voteType });
+          if (voteType === "up") {
+            await tx.update(openMarketComments).set({ upvotes: sql`upvotes + 1` }).where(eq(openMarketComments.id, commentId));
+          } else {
+            await tx.update(openMarketComments).set({ downvotes: sql`downvotes + 1` }).where(eq(openMarketComments.id, commentId));
+          }
+        }
+      });
+      const [updated] = await db.select().from(openMarketComments).where(eq(openMarketComments.id, commentId));
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error voting on open-market comment:", error.message);
+      res.status(500).json({ error: "Failed to vote on comment" });
     }
   });
 
