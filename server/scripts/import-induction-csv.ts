@@ -1,8 +1,10 @@
 ﻿import fs from "fs";
 import path from "path";
+import pRetry from "p-retry";
 import { db, pool } from "../db";
 import { inductionCandidates } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { ensureInductionCandidateColumns } from "./ensure-induction-candidate-columns";
 
 function deriveIsActive(status: string): boolean {
   const s = (status || "Queue").trim().toLowerCase();
@@ -66,63 +68,79 @@ async function main() {
   const iStatus = idx("Induction Status");
   const iImg = idx("Image Slug");
 
-  let inserted = 0;
-  let updated = 0;
+  await ensureInductionCandidateColumns();
 
-  for (let r = 1; r < lines.length; r++) {
-    const cols = parseCsvRow(lines[r]);
-    if (cols.length < header.length) continue;
-    const displayName = cols[iName]?.trim();
-    if (!displayName) continue;
-    const category = cols[iCat]?.trim();
-    if (!category) continue;
-    const wikiSlug = cols[iWiki]?.trim() || null;
-    const xHandle = normalizeXHandle(cols[iX] || "");
-    const seedVotes = Math.max(0, parseInt(String(cols[iSeed] ?? "0"), 10) || 0);
-    const inductionStatus = (cols[iStatus]?.trim() || "Queue") || "Queue";
-    const imageSlug = cols[iImg]?.trim();
-    if (!imageSlug) {
-      console.warn("Skipping row without Image Slug:", displayName);
-      continue;
-    }
-    const isActive = deriveIsActive(inductionStatus);
+  await pRetry(
+    async () => {
+      let inserted = 0;
+      let updated = 0;
 
-    const existing = await db
-      .select({ id: inductionCandidates.id })
-      .from(inductionCandidates)
-      .where(eq(inductionCandidates.displayName, displayName))
-      .limit(1);
+      for (let r = 1; r < lines.length; r++) {
+        const cols = parseCsvRow(lines[r]);
+        if (cols.length < header.length) continue;
+        const displayName = cols[iName]?.trim();
+        if (!displayName) continue;
+        const category = cols[iCat]?.trim();
+        if (!category) continue;
+        const wikiSlug = cols[iWiki]?.trim() || null;
+        const xHandle = normalizeXHandle(cols[iX] || "");
+        const seedVotes = Math.max(0, parseInt(String(cols[iSeed] ?? "0"), 10) || 0);
+        const inductionStatus = (cols[iStatus]?.trim() || "Queue") || "Queue";
+        const imageSlug = cols[iImg]?.trim();
+        if (!imageSlug) {
+          console.warn("Skipping row without Image Slug:", displayName);
+          continue;
+        }
+        const isActive = deriveIsActive(inductionStatus);
 
-    if (existing[0]) {
-      await db
-        .update(inductionCandidates)
-        .set({
-          category,
-          imageSlug,
-          wikiSlug,
-          seedVotes,
-          xHandle,
-          inductionStatus,
-          isActive,
-        })
-        .where(eq(inductionCandidates.id, existing[0].id));
-      updated++;
-    } else {
-      await db.insert(inductionCandidates).values({
-        displayName,
-        category,
-        imageSlug,
-        wikiSlug,
-        seedVotes,
-        xHandle,
-        inductionStatus,
-        isActive,
-      });
-      inserted++;
-    }
-  }
+        const existing = await db
+          .select({ id: inductionCandidates.id })
+          .from(inductionCandidates)
+          .where(eq(inductionCandidates.displayName, displayName))
+          .limit(1);
 
-  console.log(`Induction CSV import done: ${inserted} inserted, ${updated} updated`);
+        if (existing[0]) {
+          await db
+            .update(inductionCandidates)
+            .set({
+              category,
+              imageSlug,
+              wikiSlug,
+              seedVotes,
+              xHandle,
+              inductionStatus,
+              isActive,
+            })
+            .where(eq(inductionCandidates.id, existing[0].id));
+          updated++;
+        } else {
+          await db.insert(inductionCandidates).values({
+            displayName,
+            category,
+            imageSlug,
+            wikiSlug,
+            seedVotes,
+            xHandle,
+            inductionStatus,
+            isActive,
+          });
+          inserted++;
+        }
+      }
+
+      console.log(`Induction CSV import done: ${inserted} inserted, ${updated} updated`);
+    },
+    {
+      retries: 6,
+      minTimeout: 3000,
+      factor: 2,
+      onFailedAttempt: ({ error, attemptNumber }) => {
+        console.warn(
+          `[import:induction] attempt ${attemptNumber} failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      },
+    },
+  );
 }
 
 main()

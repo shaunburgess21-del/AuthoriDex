@@ -14,7 +14,8 @@
     "db:baseline": "tsx --env-file=.env scripts/db-baseline.cjs",
     "db:push": "tsx --env-file=.env scripts/db-push-safe.cjs",
     "db:push:raw": "drizzle-kit push",
-    "import:induction": "tsx --env-file=.env server/scripts/import-induction-csv.ts"
+    "import:induction": "tsx --env-file=.env server/scripts/import-induction-csv.ts",
+    "db:ensure-induction-cols": "tsx --env-file=.env server/scripts/ensure-induction-candidate-columns.ts"
   },
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.25",
