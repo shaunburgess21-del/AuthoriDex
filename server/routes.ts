@@ -5636,6 +5636,23 @@ Only return the JSON object.`;
       `);
       const signals = signalRow.rows?.[0] || {};
 
+      const zeroNewsRow = await db.execute(sql`
+        SELECT tp.name, tp.news_query_widened, tp.search_query_override,
+               ts.news_count, tp.id as person_id
+        FROM trend_snapshots ts
+        JOIN tracked_people tp ON tp.id = ts.person_id
+        WHERE ts.timestamp = (SELECT MAX(timestamp) FROM trend_snapshots)
+          AND (ts.news_count = 0 OR ts.news_count IS NULL)
+        ORDER BY tp.name ASC
+      `);
+      const zeroNewsPeople = (zeroNewsRow.rows || []).map((r: any) => ({
+        personId: r.person_id,
+        name: r.name,
+        newsQueryWidened: r.news_query_widened || null,
+        searchQueryOverride: r.search_query_override || null,
+        newsCount: Number(r.news_count ?? 0),
+      }));
+
       const refRow = await db.execute(sql`
         SELECT fetched_at, expires_at
         FROM api_cache 
@@ -5931,6 +5948,7 @@ Only return the JSON object.`;
           zeroSearch: Number(signals.zero_search || 0),
           avgConfidence: Number(signals.avg_confidence || 0),
         },
+        zeroNewsPeople,
         sourceStatsReference: sourceStatsRef ? {
           lastComputed: new Date(sourceStatsRef.fetched_at).toISOString(),
           expiresAt: new Date(sourceStatsRef.expires_at).toISOString(),
@@ -6952,6 +6970,152 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error deleting celebrity:", error.message);
       res.status(500).json({ error: "Failed to delete celebrity" });
+    }
+  });
+
+  // ============ ADMIN: WIKI SLUG AUDIT ============
+  let _wikiAuditRunning = false;
+
+  app.post("/api/admin/wiki-slug-audit", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    if (_wikiAuditRunning) {
+      return res.status(429).json({ error: "Wiki slug audit is already running. Please wait." });
+    }
+    _wikiAuditRunning = true;
+
+    try {
+      const people = await db.select({
+        id: trackedPeople.id,
+        name: trackedPeople.name,
+        wikiSlug: trackedPeople.wikiSlug,
+      }).from(trackedPeople).orderBy(trackedPeople.name);
+
+      const WIKI_UA = "VoxDex/1.0 (https://voxdex.com; contact@voxdex.com)";
+      const BATCH_DELAY_MS = 120;
+      const LOW_VIEW_THRESHOLD = 100;
+
+      interface AuditEntry {
+        personId: string;
+        name: string;
+        currentSlug: string | null;
+        status: "ok" | "redirect" | "low_views" | "missing" | "not_found" | "error";
+        viewsPerDay: number | null;
+        suggestedSlug: string | null;
+      }
+
+      const results: AuditEntry[] = [];
+
+      for (const person of people) {
+        if (!person.wikiSlug) {
+          results.push({
+            personId: person.id,
+            name: person.name,
+            currentSlug: null,
+            status: "missing",
+            viewsPerDay: null,
+            suggestedSlug: null,
+          });
+          continue;
+        }
+
+        try {
+          // Check redirect via MediaWiki API (batches of 1 to keep it simple)
+          const mwUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(person.wikiSlug)}&redirects&format=json`;
+          const mwRes = await fetch(mwUrl, { headers: { "User-Agent": WIKI_UA, Accept: "application/json" } });
+          let suggestedSlug: string | null = null;
+          let isRedirect = false;
+
+          if (mwRes.ok) {
+            const mwData = await mwRes.json() as any;
+            const redirects = mwData?.query?.redirects;
+            if (Array.isArray(redirects) && redirects.length > 0) {
+              isRedirect = true;
+              suggestedSlug = (redirects[redirects.length - 1].to as string).replace(/ /g, "_");
+            }
+            const pages = mwData?.query?.pages;
+            if (pages && Object.keys(pages).some(k => k === "-1")) {
+              results.push({
+                personId: person.id,
+                name: person.name,
+                currentSlug: person.wikiSlug,
+                status: "not_found",
+                viewsPerDay: null,
+                suggestedSlug: null,
+              });
+              await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+              continue;
+            }
+          }
+
+          // Fetch yesterday's pageviews
+          const yesterday = new Date();
+          yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+          const dateStr = yesterday.toISOString().slice(0, 10).replace(/-/g, "");
+          const pvUrl = `https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/all-agents/${encodeURIComponent(person.wikiSlug)}/daily/${dateStr}/${dateStr}`;
+          const pvRes = await fetch(pvUrl, { headers: { "User-Agent": WIKI_UA, Accept: "application/json" } });
+
+          let viewsPerDay: number | null = null;
+          if (pvRes.ok) {
+            const pvData = await pvRes.json() as any;
+            viewsPerDay = pvData?.items?.[0]?.views ?? 0;
+          }
+
+          let status: AuditEntry["status"];
+          if (isRedirect) {
+            status = "redirect";
+          } else if (viewsPerDay !== null && viewsPerDay < LOW_VIEW_THRESHOLD) {
+            status = "low_views";
+            // For low-view non-redirects, try name-based search for a suggestion
+            if (!suggestedSlug) {
+              const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(person.name)}&srlimit=1&format=json`;
+              const searchRes = await fetch(searchUrl, { headers: { "User-Agent": WIKI_UA, Accept: "application/json" } });
+              if (searchRes.ok) {
+                const searchData = await searchRes.json() as any;
+                const topResult = searchData?.query?.search?.[0]?.title;
+                if (topResult && topResult.replace(/ /g, "_") !== person.wikiSlug) {
+                  suggestedSlug = topResult.replace(/ /g, "_");
+                }
+              }
+            }
+          } else {
+            status = "ok";
+          }
+
+          results.push({
+            personId: person.id,
+            name: person.name,
+            currentSlug: person.wikiSlug,
+            status,
+            viewsPerDay,
+            suggestedSlug,
+          });
+        } catch (err) {
+          results.push({
+            personId: person.id,
+            name: person.name,
+            currentSlug: person.wikiSlug,
+            status: "error",
+            viewsPerDay: null,
+            suggestedSlug: null,
+          });
+        }
+
+        await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+      }
+
+      const issues = results.filter(r => r.status !== "ok");
+      res.json({
+        total: results.length,
+        issueCount: issues.length,
+        results: results.sort((a, b) => {
+          const order: Record<string, number> = { redirect: 0, not_found: 1, low_views: 2, missing: 3, error: 4, ok: 5 };
+          return (order[a.status] ?? 9) - (order[b.status] ?? 9);
+        }),
+      });
+    } catch (error: any) {
+      console.error("Error in wiki slug audit:", error);
+      res.status(500).json({ error: "Wiki slug audit failed" });
+    } finally {
+      _wikiAuditRunning = false;
     }
   });
 

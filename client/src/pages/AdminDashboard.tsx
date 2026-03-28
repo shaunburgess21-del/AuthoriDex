@@ -1504,6 +1504,11 @@ export default function AdminDashboard() {
   const [creditHistoryUserId, setCreditHistoryUserId] = useState<string | null>(null);
   const [confirmText, setConfirmText] = useState("");
   
+  const [showZeroNewsPeople, setShowZeroNewsPeople] = useState(false);
+  const [wikiAuditResults, setWikiAuditResults] = useState<any>(null);
+  const [wikiAuditLoading, setWikiAuditLoading] = useState(false);
+  const [wikiAuditExpanded, setWikiAuditExpanded] = useState(false);
+  const [wikiSlugFixingId, setWikiSlugFixingId] = useState<string | null>(null);
   const [showCelebrityModal, setShowCelebrityModal] = useState(false);
   const [editingCelebrity, setEditingCelebrity] = useState<Celebrity | null>(null);
   const [celebrityForm, setCelebrityForm] = useState({
@@ -5888,11 +5893,50 @@ export default function AdminDashboard() {
                             {engineHealth.signalQuality?.zeroWiki || 0}
                           </span>
                         </div>
-                        <div className="flex justify-between">
-                          <span>Zero news</span>
-                          <span className={cn("font-medium", (engineHealth.signalQuality?.zeroNews || 0) > 20 ? "text-red-500" : (engineHealth.signalQuality?.zeroNews || 0) > 10 ? "text-yellow-500" : "text-muted-foreground")}>
-                            {engineHealth.signalQuality?.zeroNews || 0}
-                          </span>
+                        <div>
+                          <button
+                            type="button"
+                            className="flex w-full justify-between items-center hover:bg-muted/50 rounded px-1 -mx-1 transition-colors"
+                            onClick={() => setShowZeroNewsPeople(prev => !prev)}
+                          >
+                            <span className="flex items-center gap-1">
+                              Zero news
+                              {(engineHealth.signalQuality?.zeroNews || 0) > 0 && (
+                                showZeroNewsPeople ? <ChevronUp className="h-3 w-3 text-muted-foreground" /> : <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                              )}
+                            </span>
+                            <span className={cn("font-medium", (engineHealth.signalQuality?.zeroNews || 0) > 20 ? "text-red-500" : (engineHealth.signalQuality?.zeroNews || 0) > 10 ? "text-yellow-500" : "text-muted-foreground")}>
+                              {engineHealth.signalQuality?.zeroNews || 0}
+                            </span>
+                          </button>
+                          {showZeroNewsPeople && (engineHealth.zeroNewsPeople?.length ?? 0) > 0 && (
+                            <div className="mt-2 max-h-60 overflow-y-auto rounded border bg-background/50 text-xs">
+                              <table className="w-full">
+                                <thead>
+                                  <tr className="border-b text-muted-foreground">
+                                    <th className="px-2 py-1 text-left font-medium">Name</th>
+                                    <th className="px-2 py-1 text-left font-medium">Query Used</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {engineHealth.zeroNewsPeople.map((p: any) => (
+                                    <tr key={p.personId} className="border-b last:border-0 hover:bg-muted/30">
+                                      <td className="px-2 py-1 font-medium">{p.name}</td>
+                                      <td className="px-2 py-1 text-muted-foreground">
+                                        {p.newsQueryWidened ? (
+                                          <span title={`Widened: ${p.newsQueryWidened}`}>
+                                            {p.name} <span className="text-yellow-500">(+widened)</span>
+                                          </span>
+                                        ) : (
+                                          <span>{p.searchQueryOverride || p.name}</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
                         </div>
                         <div className="flex justify-between">
                           <span>Zero search</span>
@@ -5998,6 +6042,133 @@ export default function AdminDashboard() {
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg border">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">Wiki Slug Audit</span>
+                      <div className="flex items-center gap-2">
+                        {wikiAuditResults && (
+                          <button
+                            type="button"
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            onClick={() => setWikiAuditExpanded(prev => !prev)}
+                          >
+                            {wikiAuditResults.issueCount} issue{wikiAuditResults.issueCount !== 1 ? "s" : ""} / {wikiAuditResults.total} total
+                            {wikiAuditExpanded ? <ChevronUp className="inline h-3 w-3 ml-1" /> : <ChevronDown className="inline h-3 w-3 ml-1" />}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+                          disabled={wikiAuditLoading}
+                          onClick={async () => {
+                            setWikiAuditLoading(true);
+                            try {
+                              const headers = await getAuthHeaders();
+                              const resp = await fetch("/api/admin/wiki-slug-audit", {
+                                method: "POST",
+                                headers,
+                              });
+                              if (!resp.ok) throw new Error(await resp.text());
+                              const data = await resp.json();
+                              setWikiAuditResults(data);
+                              setWikiAuditExpanded(true);
+                            } catch (err: any) {
+                              console.error("Wiki audit failed:", err);
+                            } finally {
+                              setWikiAuditLoading(false);
+                            }
+                          }}
+                        >
+                          {wikiAuditLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                          {wikiAuditLoading ? "Auditing..." : "Run Audit"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {wikiAuditExpanded && wikiAuditResults?.results && (
+                      <div className="mt-3 max-h-80 overflow-y-auto rounded border bg-background/50 text-xs">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b text-muted-foreground sticky top-0 bg-background">
+                              <th className="px-2 py-1.5 text-left font-medium">Name</th>
+                              <th className="px-2 py-1.5 text-left font-medium">Current Slug</th>
+                              <th className="px-2 py-1.5 text-left font-medium">Status</th>
+                              <th className="px-2 py-1.5 text-right font-medium">Views/day</th>
+                              <th className="px-2 py-1.5 text-left font-medium">Suggested Fix</th>
+                              <th className="px-2 py-1.5 text-right font-medium"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {wikiAuditResults.results.map((r: any) => (
+                              <tr key={r.personId} className={cn(
+                                "border-b last:border-0",
+                                r.status === "ok" ? "opacity-50" : "hover:bg-muted/30",
+                              )}>
+                                <td className="px-2 py-1.5 font-medium">{r.name}</td>
+                                <td className="px-2 py-1.5 text-muted-foreground font-mono max-w-[180px] truncate" title={r.currentSlug || ""}>
+                                  {r.currentSlug || <span className="italic">none</span>}
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <Badge variant="outline" className={cn("text-[10px]", {
+                                    "border-green-500/50 text-green-500": r.status === "ok",
+                                    "border-red-500/50 text-red-500": r.status === "redirect" || r.status === "not_found",
+                                    "border-yellow-500/50 text-yellow-500": r.status === "low_views" || r.status === "missing",
+                                    "border-muted-foreground/50": r.status === "error",
+                                  })}>
+                                    {r.status === "ok" ? "OK" : r.status === "redirect" ? "Redirect" : r.status === "low_views" ? "Low Views" : r.status === "missing" ? "Missing" : r.status === "not_found" ? "Not Found" : "Error"}
+                                  </Badge>
+                                </td>
+                                <td className="px-2 py-1.5 text-right tabular-nums">
+                                  {r.viewsPerDay != null ? r.viewsPerDay.toLocaleString() : "—"}
+                                </td>
+                                <td className="px-2 py-1.5 text-muted-foreground font-mono max-w-[180px] truncate" title={r.suggestedSlug || ""}>
+                                  {r.suggestedSlug || "—"}
+                                </td>
+                                <td className="px-2 py-1.5 text-right">
+                                  {r.suggestedSlug && r.status !== "ok" && (
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+                                      disabled={wikiSlugFixingId === r.personId}
+                                      onClick={async () => {
+                                        setWikiSlugFixingId(r.personId);
+                                        try {
+                                          const headers = await getAuthHeaders();
+                                          const resp = await fetch(`/api/admin/celebrities/${r.personId}`, {
+                                            method: "PATCH",
+                                            headers: { ...headers, "Content-Type": "application/json" },
+                                            body: JSON.stringify({ wikiSlug: r.suggestedSlug }),
+                                          });
+                                          if (!resp.ok) throw new Error(await resp.text());
+                                          setWikiAuditResults((prev: any) => ({
+                                            ...prev,
+                                            issueCount: prev.issueCount - 1,
+                                            results: prev.results.map((item: any) =>
+                                              item.personId === r.personId
+                                                ? { ...item, currentSlug: r.suggestedSlug, status: "ok", suggestedSlug: null }
+                                                : item
+                                            ),
+                                          }));
+                                        } catch (err: any) {
+                                          console.error("Failed to fix wiki slug:", err);
+                                        } finally {
+                                          setWikiSlugFixingId(null);
+                                        }
+                                      }}
+                                    >
+                                      {wikiSlugFixingId === r.personId ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Check className="h-2.5 w-2.5" />}
+                                      Fix
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -6439,7 +6610,7 @@ export default function AdminDashboard() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingCelebrity ? "Edit Celebrity" : "Add Celebrity"}</DialogTitle>
             <DialogDescription>
