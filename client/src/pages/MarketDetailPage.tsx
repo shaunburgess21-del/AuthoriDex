@@ -66,6 +66,17 @@ interface ResolutionSource {
   url: string;
 }
 
+interface ResolutionSummary {
+  outcomeLabel?: string | null;
+  openScore?: number | null;
+  closeScore?: number | null;
+  actualScore?: number | null;
+  winningPrediction?: number | null;
+  margin?: number | null;
+  closeSnapshotAt?: string | null;
+  notesText?: string | null;
+}
+
 interface MarketData {
   id: string;
   marketType: string;
@@ -94,6 +105,11 @@ interface MarketData {
   startAt?: string | null;
   endAt?: string | null;
   closeAt?: string | null;
+  resolvedAt?: string | null;
+  baselineScore?: string | number | null;
+  voidReason?: string | null;
+  resolutionNotes?: string | null;
+  resolutionSummary?: ResolutionSummary | null;
   createdAt: string;
   entries: MarketEntry[];
   comments?: MarketComment[];
@@ -204,6 +220,47 @@ function formatNumber(n: number): string {
   return n.toLocaleString('en-US');
 }
 
+function formatScoreValue(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "TBD";
+  const num = typeof value === "number" ? value : Number(value);
+  if (Number.isFinite(num)) return Math.round(num).toLocaleString("en-US");
+  return String(value);
+}
+
+function getEntryResolutionTone(status: string | null | undefined) {
+  switch (status) {
+    case "winner":
+      return {
+        cardClass: "border-amber-400/70 bg-amber-500/10 shadow-[0_0_18px_rgba(245,158,11,0.16)]",
+        rowClass: "bg-amber-500/10 ring-1 ring-amber-400/30",
+        barClass: "from-amber-400 via-amber-500 to-yellow-500 shadow-[0_0_12px_rgba(245,158,11,0.35)]",
+        labelClass: "bg-amber-500/15 text-amber-300 border border-amber-400/40",
+        textClass: "text-amber-300",
+        label: "Winner",
+      };
+    case "loser":
+      return {
+        cardClass: "border-slate-600/40 bg-slate-800/40",
+        rowClass: "bg-slate-800/40 opacity-80",
+        barClass: "from-slate-600 to-slate-500",
+        labelClass: "bg-slate-500/10 text-slate-300 border border-slate-500/30",
+        textClass: "text-slate-300",
+        label: "Lost",
+      };
+    case "void":
+      return {
+        cardClass: "border-slate-500/50 bg-slate-500/5",
+        rowClass: "bg-slate-500/5 ring-1 ring-slate-500/20",
+        barClass: "from-slate-500 to-slate-400",
+        labelClass: "bg-slate-500/10 text-slate-300 border border-slate-500/30",
+        textClass: "text-slate-300",
+        label: "Void",
+      };
+    default:
+      return null;
+  }
+}
+
 function BinaryOutcomes({
   entries,
   selectedEntry,
@@ -218,6 +275,8 @@ function BinaryOutcomes({
   const sorted = [...entries].sort((a, b) => a.displayOrder - b.displayOrder);
   const yesEntry = sorted[0];
   const noEntry = sorted[1];
+  const yesTone = getEntryResolutionTone(yesEntry?.resolutionStatus);
+  const noTone = getEntryResolutionTone(noEntry?.resolutionStatus);
 
   return (
     <div className="grid grid-cols-2 gap-3">
@@ -229,9 +288,16 @@ function BinaryOutcomes({
             selectedEntry === yesEntry.id
               ? "border-green-500 bg-green-500/15 shadow-lg shadow-green-500/20"
               : "border-green-500/20 bg-green-500/5 hover:border-green-500/40"
-          } ${disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+          } ${yesTone?.cardClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
           data-testid={`button-outcome-${yesEntry.id}`}
         >
+          {yesTone && (
+            <div className="absolute right-3 top-3">
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${yesTone.labelClass}`}>
+                {yesTone.label}
+              </span>
+            </div>
+          )}
           <div className="flex items-center gap-2 mb-2">
             <CheckCircle2 className="h-5 w-5 text-green-500" />
             <span className="font-semibold text-green-400">{yesEntry.label}</span>
@@ -251,9 +317,16 @@ function BinaryOutcomes({
             selectedEntry === noEntry.id
               ? "border-red-500 bg-red-500/15 shadow-lg shadow-red-500/20"
               : "border-red-500/20 bg-red-500/5 hover:border-red-500/40"
-          } ${disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+          } ${noTone?.cardClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
           data-testid={`button-outcome-${noEntry.id}`}
         >
+          {noTone && (
+            <div className="absolute right-3 top-3">
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${noTone.labelClass}`}>
+                {noTone.label}
+              </span>
+            </div>
+          )}
           <div className="flex items-center gap-2 mb-2">
             <XCircle className="h-5 w-5 text-red-500" />
             <span className="font-semibold text-red-400">{noEntry.label}</span>
@@ -288,6 +361,7 @@ function MultiOutcomes({
       {sorted.map((entry) => {
         const isLeading = entry.percentage === maxPercentage && entry.percentage > 0;
         const isUserPick = selectedEntry === entry.id;
+        const tone = getEntryResolutionTone(entry.resolutionStatus);
         return (
           <button
             type="button"
@@ -296,7 +370,7 @@ function MultiOutcomes({
             onClick={() => !disabled && onSelect(entry.id)}
             className={`flex items-center gap-3 w-full text-left rounded-lg py-0.5 -mx-1 px-1 transition-colors ${
               isUserPick ? "bg-violet-500/5 ring-1 ring-violet-500/20" : ""
-            } ${disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-muted/20"}`}
+            } ${tone?.rowClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer hover:bg-muted/20"}`}
             data-testid={`button-outcome-${entry.id}`}
           >
             {(entry as any).imageUrl ? (
@@ -320,7 +394,9 @@ function MultiOutcomes({
             <div className="flex-1 h-6 rounded-md overflow-hidden border border-blue-500/25 bg-gradient-to-b from-slate-900/90 to-slate-950/95 backdrop-blur-sm shadow-[inset_0_1px_2px_rgba(59,130,246,0.1)]">
               <div
                 className={`h-full rounded-sm transition-all duration-700 ease-out ${
-                  isLeading
+                  tone
+                    ? `bg-gradient-to-r ${tone.barClass}`
+                    : isLeading
                     ? "bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 shadow-[0_0_12px_rgba(59,130,246,0.35)]"
                     : "bg-gradient-to-r from-blue-600/95 to-blue-500/75"
                 }`}
@@ -329,11 +405,16 @@ function MultiOutcomes({
             </div>
             <span
               className={`text-sm font-mono font-bold shrink-0 w-[48px] text-right ${
-                isLeading ? "text-violet-300" : "text-blue-300"
+                tone?.textClass ?? (isLeading ? "text-violet-300" : "text-blue-300")
               }`}
             >
               {entry.percentage}%
             </span>
+            {tone && (
+              <span className={`hidden sm:inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shrink-0 ${tone.labelClass}`}>
+                {tone.label}
+              </span>
+            )}
             <span className="text-xs text-muted-foreground shrink-0 w-[56px] text-right hidden sm:block">
               {formatNumber(entry.displayStake)}
             </span>
@@ -379,6 +460,7 @@ function UpDownOutcomes({
       <div className="grid grid-cols-2 gap-3">
         {sorted.map((entry) => {
           const isAbove = entry.label.toLowerCase().includes("above") || entry.label.toLowerCase().includes("yes") || entry.displayOrder === 0;
+          const tone = getEntryResolutionTone(entry.resolutionStatus);
           return (
             <button
               key={entry.id}
@@ -392,9 +474,16 @@ function UpDownOutcomes({
                   : isAbove
                     ? "border-green-500/20 bg-green-500/5 hover:border-green-500/40"
                     : "border-red-500/20 bg-red-500/5 hover:border-red-500/40"
-              } ${disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+              } ${tone?.cardClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
               data-testid={`button-outcome-${entry.id}`}
             >
+              {tone && (
+                <div className="absolute right-3 top-3">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tone.labelClass}`}>
+                    {tone.label}
+                  </span>
+                </div>
+              )}
               <div className="flex items-center gap-2 mb-2">
                 {isAbove ? (
                   <TrendingUp className="h-5 w-5 text-green-500" />
@@ -669,6 +758,29 @@ export default function MarketDetailPage() {
   const statusConfig = STATUS_CONFIG[market.status] || STATUS_CONFIG.OPEN;
   const isOpen = market.status === "OPEN";
   const isInactive = (market as any).visibility === "inactive";
+  const isClosedMarket = market.status !== "OPEN";
+  const resultOpenScore = market.resolutionSummary?.openScore ?? market.baselineScore ?? null;
+  const resultCloseScore = market.resolutionSummary?.closeScore ?? null;
+  const resultActualScore = market.resolutionSummary?.actualScore ?? null;
+  const resultWinningPrediction = market.resolutionSummary?.winningPrediction ?? null;
+  const resultResolvedAt = market.resolutionSummary?.closeSnapshotAt || market.resolvedAt || null;
+
+  let resultTitle = "Market Closed";
+  let resultDescription = "Betting has ended for this market.";
+  if (market.status === "CLOSED_PENDING") {
+    resultTitle = "Awaiting Resolution";
+    resultDescription = "Betting is closed. We are waiting for the final outcome to be confirmed.";
+  } else if (market.status === "RESOLVED") {
+    resultTitle = "Official Result";
+    resultDescription = market.resolutionSummary?.outcomeLabel
+      ? `${market.resolutionSummary.outcomeLabel} was the final outcome.`
+      : isJackpotMarket
+        ? "This jackpot market has been resolved."
+        : "This market has been officially resolved.";
+  } else if (market.status === "VOID") {
+    resultTitle = "Market Voided";
+    resultDescription = market.voidReason || "This market was cancelled and any affected bets were voided or refunded.";
+  }
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
@@ -1050,6 +1162,87 @@ export default function MarketDetailPage() {
                 </Button>
               </div>
             )}
+          </Card>
+        )}
+
+        {isClosedMarket && (
+          <Card className="p-5 mb-6 border-violet-500/20 bg-violet-500/5" data-testid="section-result-summary">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="h-10 w-10 rounded-full bg-violet-500/10 flex items-center justify-center shrink-0">
+                {market.status === "VOID" ? (
+                  <AlertTriangle className="h-5 w-5 text-amber-400" />
+                ) : market.status === "CLOSED_PENDING" ? (
+                  <Clock className="h-5 w-5 text-amber-400" />
+                ) : (
+                  <Trophy className="h-5 w-5 text-violet-400" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-lg font-serif font-bold">{resultTitle}</h2>
+                <p className="text-sm text-muted-foreground">{resultDescription}</p>
+              </div>
+            </div>
+
+            {(market.resolutionSummary?.outcomeLabel || market.resolutionSummary?.notesText || market.voidReason) && (
+              <div className="rounded-lg border border-border/50 bg-background/40 px-4 py-3 mb-4">
+                {market.resolutionSummary?.outcomeLabel && (
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">Outcome:</span>{" "}
+                    <span className="font-semibold text-foreground">{market.resolutionSummary.outcomeLabel}</span>
+                  </p>
+                )}
+                {!market.resolutionSummary?.outcomeLabel && (market.resolutionSummary?.notesText || market.voidReason) && (
+                  <p className="text-sm text-muted-foreground">
+                    {market.voidReason || market.resolutionSummary?.notesText}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {(resultOpenScore !== null && resultOpenScore !== undefined) && (
+                <Card className="p-3 text-center bg-background/40">
+                  <BarChart3 className="h-4 w-4 text-violet-400 mx-auto mb-1" />
+                  <p className="text-sm font-semibold font-mono">{formatScoreValue(resultOpenScore)}</p>
+                  <p className="text-xs text-muted-foreground">Open Score</p>
+                </Card>
+              )}
+              {(resultCloseScore !== null && resultCloseScore !== undefined) && (
+                <Card className="p-3 text-center bg-background/40">
+                  <Target className="h-4 w-4 text-violet-400 mx-auto mb-1" />
+                  <p className="text-sm font-semibold font-mono">{formatScoreValue(resultCloseScore)}</p>
+                  <p className="text-xs text-muted-foreground">Close Score</p>
+                </Card>
+              )}
+              {(resultActualScore !== null && resultActualScore !== undefined) && (
+                <Card className="p-3 text-center bg-background/40">
+                  <Target className="h-4 w-4 text-amber-400 mx-auto mb-1" />
+                  <p className="text-sm font-semibold font-mono">{formatScoreValue(resultActualScore)}</p>
+                  <p className="text-xs text-muted-foreground">Actual Score</p>
+                </Card>
+              )}
+              {(resultWinningPrediction !== null && resultWinningPrediction !== undefined) && (
+                <Card className="p-3 text-center bg-background/40">
+                  <Trophy className="h-4 w-4 text-amber-400 mx-auto mb-1" />
+                  <p className="text-sm font-semibold font-mono">{formatScoreValue(resultWinningPrediction)}</p>
+                  <p className="text-xs text-muted-foreground">Winning Prediction</p>
+                </Card>
+              )}
+              {resultResolvedAt && (
+                <Card className="p-3 text-center bg-background/40">
+                  <Clock className="h-4 w-4 text-violet-400 mx-auto mb-1" />
+                  <p className="text-sm font-semibold">{formatDate(resultResolvedAt)}</p>
+                  <p className="text-xs text-muted-foreground">Resolved At</p>
+                </Card>
+              )}
+              {market.resolveMethod && (
+                <Card className="p-3 text-center bg-background/40">
+                  <Gavel className="h-4 w-4 text-violet-400 mx-auto mb-1" />
+                  <p className="text-sm font-semibold capitalize">{market.resolveMethod.replace(/_/g, " ")}</p>
+                  <p className="text-xs text-muted-foreground">Method</p>
+                </Card>
+              )}
+            </div>
           </Card>
         )}
 

@@ -327,6 +327,37 @@ function generateImageSlug(name: string): string {
     .replace(/^-|-$/g, "");
 }
 
+function buildMarketResolutionSummary(resolutionNotes: string | null | undefined) {
+  if (!resolutionNotes || !resolutionNotes.trim()) return null;
+
+  try {
+    const parsed = JSON.parse(resolutionNotes) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object") return null;
+
+    return {
+      outcomeLabel: typeof parsed.outcome === "string" ? parsed.outcome : null,
+      openScore: typeof parsed.openScore === "number" ? parsed.openScore : null,
+      closeScore: typeof parsed.closeScore === "number" ? parsed.closeScore : null,
+      actualScore: typeof parsed.actualScore === "number" ? parsed.actualScore : null,
+      winningPrediction: typeof parsed.winningPrediction === "number" ? parsed.winningPrediction : null,
+      margin: typeof parsed.margin === "number" ? parsed.margin : null,
+      closeSnapshotAt: typeof parsed.closeSnapshotAt === "string" ? parsed.closeSnapshotAt : null,
+      notesText: null,
+    };
+  } catch {
+    return {
+      outcomeLabel: null,
+      openScore: null,
+      closeScore: null,
+      actualScore: null,
+      winningPrediction: null,
+      margin: null,
+      closeSnapshotAt: null,
+      notesText: resolutionNotes,
+    };
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Using local PostgreSQL database instead of Supabase
   // Supabase seeding disabled while Supabase is paused
@@ -10335,6 +10366,10 @@ Aim for 3-5 substantive paragraphs separated by blank lines. Be informative, eng
           featured: predictionMarkets.featured,
           timezone: predictionMarkets.timezone,
           resolutionCriteria: predictionMarkets.resolutionCriteria,
+          resolutionSources: predictionMarkets.resolutionSources,
+          resolutionNotes: predictionMarkets.resolutionNotes,
+          resolveMethod: predictionMarkets.resolveMethod,
+          voidReason: predictionMarkets.voidReason,
           closeAt: predictionMarkets.closeAt,
           personId: predictionMarkets.personId,
           visibility: predictionMarkets.visibility,
@@ -10417,6 +10452,8 @@ Aim for 3-5 substantive paragraphs separated by blank lines. Be informative, eng
         }
       }
 
+      const resolutionSummary = buildMarketResolutionSummary(market.resolutionNotes);
+
       res.json({
         ...market,
         entries: entriesWithCounts,
@@ -10424,6 +10461,7 @@ Aim for 3-5 substantive paragraphs separated by blank lines. Be informative, eng
         totalParticipants: Number(participantResult?.uniqueParticipants || 0),
         linkedPersonName,
         linkedPersonAvatar,
+        resolutionSummary,
       });
     } catch (error) {
       console.error("[Open Markets] Detail error:", error);
