@@ -7713,6 +7713,77 @@ Only return the JSON object.`;
     }
   });
 
+  // Sync Supabase storage images into celebrity_images table for curate gallery
+  app.post("/api/admin/sync-curate-images", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      if (!supabaseUrl) return res.status(503).json({ error: "SUPABASE_URL not configured" });
+
+      const people = await db.select({ id: trackedPeople.id, name: trackedPeople.name, imageSlug: trackedPeople.imageSlug })
+        .from(trackedPeople)
+        .where(sql`${trackedPeople.imageSlug} IS NOT NULL AND ${trackedPeople.imageSlug} != ''`);
+
+      const BUCKET = "celebrity-large";
+      const publicBase = `${supabaseUrl}/storage/v1/object/public/${BUCKET}`;
+      let totalSynced = 0;
+      let peopleProcessed = 0;
+      let errors: string[] = [];
+
+      for (const person of people) {
+        const slug = person.imageSlug!;
+        const { data: files, error: listError } = await supabaseServer.storage.from(BUCKET).list(slug);
+
+        if (listError || !files) {
+          errors.push(`${person.name}: ${listError?.message || "no files"}`);
+          continue;
+        }
+
+        const imageFiles = files.filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f.name));
+        if (imageFiles.length === 0) continue;
+
+        const existing = await db.select({ imageUrl: celebrityImages.imageUrl })
+          .from(celebrityImages)
+          .where(eq(celebrityImages.personId, person.id));
+        const existingUrls = new Set(existing.map(r => r.imageUrl));
+
+        const hasPrimary = existing.length > 0
+          ? (await db.select({ cnt: count() }).from(celebrityImages)
+              .where(and(eq(celebrityImages.personId, person.id), eq(celebrityImages.isPrimary, true))))[0]?.cnt > 0
+          : false;
+
+        let insertedForPerson = 0;
+        for (const file of imageFiles) {
+          const publicUrl = `${publicBase}/${encodeURIComponent(slug)}/${file.name}`;
+          if (existingUrls.has(publicUrl)) continue;
+
+          const isFirst = !hasPrimary && insertedForPerson === 0 && file.name.startsWith("1.");
+          await db.insert(celebrityImages).values({
+            personId: person.id,
+            imageUrl: publicUrl,
+            source: "supabase-sync",
+            isPrimary: isFirst,
+          });
+          insertedForPerson++;
+        }
+
+        if (insertedForPerson > 0) {
+          totalSynced += insertedForPerson;
+          peopleProcessed++;
+        }
+      }
+
+      res.json({
+        totalSynced,
+        peopleProcessed,
+        totalPeopleScanned: people.length,
+        errors: errors.length > 0 ? errors.slice(0, 20) : undefined,
+      });
+    } catch (error: any) {
+      console.error("Error syncing curate images:", error);
+      res.status(500).json({ error: "Sync failed" });
+    }
+  });
+
   // Get celebrity images for management
   app.get("/api/admin/celebrities/:id/images", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
