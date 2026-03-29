@@ -20,6 +20,7 @@ import { log } from "../log";
 import { computePrediction, computeJackpotPrediction } from "./decisionEngine";
 import { computeWorldMarketPrediction } from "./worldMarketEngine";
 import { JACKPOT_TICKET_COST } from "../config/constants";
+import { getWeeklyBettingCutoff } from "../jobs/market-generator";
 import type {
   AgentConfigData,
   MarketWithEntries,
@@ -366,7 +367,7 @@ async function runAgentBatchOnce(): Promise<{
       const isWeeklyNative = ["jackpot", "updown", "h2h", "gainer"].includes(market.marketType);
       if (isWeeklyNative && market.endAt) {
         const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
-        const cutoff = new Date(market.endAt.getTime() - 2 * 24 * 60 * 60 * 1000);
+        const cutoff = getWeeklyBettingCutoff(market.endAt);
         if (now.getTime() >= cutoff.getTime() - bufferMs) {
           skipped++;
           continue;
@@ -378,7 +379,7 @@ async function runAgentBatchOnce(): Promise<{
 
       if (isJackpot) {
         const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
-        const cutoff = market.endAt ? new Date(market.endAt.getTime() - 2 * 24 * 60 * 60 * 1000) : null;
+        const cutoff = market.endAt ? getWeeklyBettingCutoff(market.endAt) : null;
 
         const signals = await getTrendSignals(market.personId);
 

@@ -23,6 +23,7 @@ import {
 import { JACKPOT_TICKET_COST } from "../config/constants";
 import type { PredictionDecision } from "./types";
 import { buildAgentActionStakeIdempotencyKey, buildAgentBetMetadata } from "./actionWorker-utils";
+import { getWeeklyBettingCutoff } from "../jobs/market-generator";
 
 const STALE_IN_PROGRESS_TIMEOUT_MINUTES = 30;
 
@@ -157,6 +158,17 @@ async function executeAction(action: {
         })
         .where(eq(scheduledAgentActions.id, action.id));
       return;
+    }
+
+    const isWeeklyNative = ["updown", "h2h", "gainer"].includes(market.marketType);
+    if (isWeeklyNative && market.endAt) {
+      const cutoff = getWeeklyBettingCutoff(market.endAt);
+      if (new Date() > cutoff) {
+        await db.update(scheduledAgentActions)
+          .set({ status: "skipped", errorMessage: "Betting cutoff passed (Fri 23:59 UTC)", executedAt: new Date() })
+          .where(eq(scheduledAgentActions.id, action.id));
+        return;
+      }
     }
 
     // Get agent info
