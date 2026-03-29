@@ -33,7 +33,7 @@ interface ValuePerson {
   fairlyRatedPct: number | null;
   valueScore: number | null;
   userValueVote: string | null;
-  leaderboardRank: number;
+  leaderboardRank: number | null;
   imageSlug?: string | null;
 }
 
@@ -201,7 +201,7 @@ export default function ValueRatingsPage() {
   }, []);
 
   const { data: leaderboardData, isLoading, error, refetch } = useQuery<{ data: ValuePerson[]; totalCount: number }>({
-    queryKey: ["/api/leaderboard?tab=value&limit=300"],
+    queryKey: ["/api/leaderboard?tab=value&limit=1000"],
   });
 
   const allPeople = leaderboardData?.data ?? [];
@@ -317,7 +317,7 @@ export default function ValueRatingsPage() {
               <p className="text-muted-foreground text-sm">Try adjusting your filters or search.</p>
             </div>
           ) : (
-            <div>{filtered.map((person, idx) => <RankingRow key={person.id} person={person} rank={idx + 1} focusId={focusId} />)}</div>
+            <div>{filtered.map((person, idx) => <RankingRow key={person.id} person={person} rank={person.leaderboardRank ?? idx + 1} focusId={focusId} />)}</div>
           )}
         </Card>
 

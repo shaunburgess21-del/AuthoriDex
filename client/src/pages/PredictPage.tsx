@@ -1550,7 +1550,7 @@ function UserBetResult({ betResult, isMarketClosed = false }: { betResult?: { re
 function OpenMarketCard({ market, onNavigate, isMarketClosed = false, userBetResult, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
   const entries = market.entries || [];
   const isCommunity = market.marketType === "community";
-  const totalStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0), 0);
+  const totalStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0) + (e.noStake || 0), 0);
   const totalPool = isCommunity ? totalStake : totalStake + Number(market.seedVolume || 0);
   const participants = market.activeParticipantCount || market.betCount || 0;
   const isInactive = market.visibility === "inactive";
@@ -1653,9 +1653,19 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
 }
 
 function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, onNavigate, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, onFilterCategory, categoryRaceMap, leaderboardCategories }: { market: any; entries: any[]; totalPool: number; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string> }) {
-  const totalEntryStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0), 0) || 1;
+  const totalEntryStake = entries.reduce((sum: number, e: any) => sum + (e.totalStake || 0) + (e.noStake || 0), 0) || 1;
   const rankedEntries = [...entries]
-    .map((e: any) => ({ ...e, pct: Math.round(((e.totalStake || 0) / totalEntryStake) * 100) }))
+    .map((e: any) => {
+      const yesStake = e.totalStake || 0;
+      const noStake = e.noStake || 0;
+      const entryPool = yesStake + noStake;
+      return {
+        ...e,
+        pct: Math.round((entryPool / totalEntryStake) * 100),
+        yesPct: entryPool > 0 ? Math.round((yesStake / entryPool) * 100) : 50,
+        noPct: entryPool > 0 ? 100 - Math.round((yesStake / entryPool) * 100) : 50,
+      };
+    })
     .sort((a: any, b: any) => b.pct - a.pct);
 
   return (
@@ -1691,7 +1701,6 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
 
       <div className="space-y-1.5 mb-2">
         {rankedEntries.slice(0, 4).map((entry: any) => {
-          const noPct = 100 - entry.pct;
           return (
             <div key={entry.id} className="flex items-center gap-2">
               {entry.imageUrl ? (
@@ -1724,7 +1733,7 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
                   </button>
                 </div>
               ) : (
-                <span className="text-[11px] text-muted-foreground shrink-0 w-14 text-right">{noPct}% No</span>
+                <span className="text-[11px] text-muted-foreground shrink-0 w-20 text-right">{entry.yesPct}% Yes / {entry.noPct}% No</span>
               )}
             </div>
           );

@@ -12,6 +12,7 @@ interface ValueLeaderboardRow {
   avatar: string | null;
   category: string | null;
   fameIndex: number | null;
+  leaderboardRank: number | null;
   underratedPct: number | null;
   overratedPct: number | null;
   fairlyRatedPct: number | null;
@@ -30,7 +31,7 @@ export default function ValueRankingsPage() {
       : null;
 
   const { data, isLoading } = useQuery<ValueLeaderboardResponse>({
-    queryKey: ["/api/leaderboard?tab=value&limit=100"],
+    queryKey: ["/api/leaderboard?tab=value&limit=1000"],
     staleTime: 60 * 1000,
   });
 
@@ -71,8 +72,8 @@ export default function ValueRankingsPage() {
           <p className="text-center text-muted-foreground py-12">No rankings loaded yet.</p>
         ) : (
           <div className="space-y-2">
-            {rows.map((person, index) => {
-              const rank = index + 1;
+            {rows.map((person) => {
+              const rank = person.leaderboardRank ?? "—";
               const isFocus = focusId === person.id;
               const u = person.underratedPct ?? 0;
               const o = person.overratedPct ?? 0;

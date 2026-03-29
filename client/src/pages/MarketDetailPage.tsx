@@ -43,6 +43,7 @@ interface MarketEntry {
   id: string;
   label: string;
   totalStake: number;
+  noStake?: number;
   seedCount: number;
   displayOrder: number;
   resolutionStatus: string;
@@ -141,15 +142,60 @@ function useCountdown(endDate: string | null) {
 }
 
 function getEntryPercentages(entries: MarketEntry[]) {
-  const totalWeight = entries.reduce((sum, e) => sum + (e.totalStake || 0) + (e.seedCount || 0), 0);
+  const totalWeight = entries.reduce(
+    (sum, e) => sum + (e.totalStake || 0) + (e.noStake || 0) + (e.seedCount || 0),
+    0,
+  );
   return entries.map((e) => {
-    const weight = (e.totalStake || 0) + (e.seedCount || 0);
+    const yesStake = e.totalStake || 0;
+    const noStake = e.noStake || 0;
+    const weight = yesStake + noStake + (e.seedCount || 0);
+    const livePool = yesStake + noStake;
+    const yesPercentage = livePool > 0 ? Math.round((yesStake / livePool) * 100) : 50;
     return {
       ...e,
       percentage: totalWeight > 0 ? Math.round((weight / totalWeight) * 100) : Math.round(100 / entries.length),
       displayStake: weight,
+      yesPercentage,
+      noPercentage: livePool > 0 ? 100 - yesPercentage : 50,
     };
   });
+}
+
+function calculateProjectedPayout(
+  entries: MarketEntry[],
+  entryId: string,
+  stakeAmount: number,
+  direction: "yes" | "no",
+) {
+  const currentEntry = entries.find((entry) => entry.id === entryId);
+  if (!currentEntry) return null;
+
+  const otherEntries = entries.filter((entry) => entry.id !== entryId);
+  const totalPoolBefore = entries.reduce(
+    (sum, entry) => sum + (entry.totalStake || 0) + (entry.noStake || 0),
+    0,
+  );
+  const totalNoPoolBefore = entries.reduce((sum, entry) => sum + (entry.noStake || 0), 0);
+
+  let winnerPoolBefore = 0;
+  if (direction === "no") {
+    const likelyWinningEntry = otherEntries.reduce<MarketEntry | null>((best, entry) => {
+      if (!best) return entry;
+      return (entry.totalStake || 0) > (best.totalStake || 0) ? entry : best;
+    }, null);
+    winnerPoolBefore =
+      (likelyWinningEntry?.totalStake || 0) +
+      (totalNoPoolBefore - (likelyWinningEntry?.noStake || 0));
+  } else {
+    winnerPoolBefore =
+      (currentEntry.totalStake || 0) +
+      otherEntries.reduce((sum, entry) => sum + (entry.noStake || 0), 0);
+  }
+
+  const winnerPoolAfter = winnerPoolBefore + stakeAmount;
+  const totalPoolAfter = totalPoolBefore + stakeAmount;
+  return Math.round((stakeAmount / Math.max(winnerPoolAfter, 1)) * totalPoolAfter);
 }
 
 function formatNumber(n: number): string {
@@ -555,6 +601,9 @@ export default function MarketDetailPage() {
     if (!selectedEntry || !stakeAmount || !market) return null;
     const amount = Number(stakeAmount);
     if (isNaN(amount) || amount <= 0) return null;
+    if (market.marketType === "community") {
+      return calculateProjectedPayout(market.entries || [], selectedEntry, amount, selectedDirection);
+    }
     const entry = entriesWithPercentages.find((e) => e.id === selectedEntry);
     if (!entry || entry.percentage === 0) return null;
     const pctFraction = selectedDirection === "no"

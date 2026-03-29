@@ -5101,6 +5101,7 @@ Only return the JSON object.`;
           potentialPayout: marketBets.potentialPayout,
           payoutAmount: marketBets.payoutAmount,
           betStatus: marketBets.status,
+          direction: marketBets.direction,
           betCreatedAt: marketBets.createdAt,
           settledAt: marketBets.settledAt,
           betMetadata: marketBets.betMetadata,
@@ -5130,13 +5131,17 @@ Only return the JSON object.`;
           : b.betStatus === "lost" ? -b.stakeAmount
           : 0;
         const meta = b.betMetadata as Record<string, any> | null;
+        const displayEntryLabel =
+          b.marketType === "community" && b.direction === "no"
+            ? `No on ${b.entryLabel}`
+            : b.entryLabel;
         return {
           betId: b.betId,
           marketSlug: b.marketSlug,
           marketTitle: b.marketTitle,
           marketType: b.marketType,
           marketCategory: b.marketCategory,
-          entryLabel: b.entryLabel,
+          entryLabel: displayEntryLabel,
           stakeAmount: b.stakeAmount,
           payout,
           pnl,
@@ -5395,7 +5400,9 @@ Only return the JSON object.`;
             entryId: marketBets.entryId,
             stakeAmount: marketBets.stakeAmount,
             potentialPayout: marketBets.potentialPayout,
+            payoutAmount: marketBets.payoutAmount,
             betStatus: marketBets.status,
+            direction: marketBets.direction,
             betCreatedAt: marketBets.createdAt,
             marketSlug: predictionMarkets.slug,
             marketTitle: predictionMarkets.title,
@@ -5429,11 +5436,16 @@ Only return the JSON object.`;
       const predictions = bets.map(b => {
         let result: 'won' | 'lost' | 'refunded' | 'pending' = 'pending';
         let payout = 0;
+        const displayEntryLabel =
+          b.marketType === 'community' && b.direction === 'no'
+            ? `No on ${b.entryLabel}`
+            : b.entryLabel;
+
         if (b.marketStatus === 'RESOLVED') {
-          if (b.entryResolutionStatus === 'winner') {
+          if (b.betStatus === 'won' || (b.betStatus === 'active' && b.entryResolutionStatus === 'winner')) {
             result = 'won';
-            payout = b.potentialPayout || 0;
-          } else {
+            payout = b.payoutAmount ?? b.potentialPayout ?? 0;
+          } else if (b.betStatus === 'lost' || b.betStatus === 'active') {
             result = 'lost';
           }
         } else if (b.marketStatus === 'VOID') {
@@ -5452,7 +5464,7 @@ Only return the JSON object.`;
           marketType: b.marketType,
           marketCadence: isNative ? (b.marketCadence ?? 'weekly') : b.marketCadence,
           marketCategory: b.marketCategory,
-          entryLabel: b.entryLabel,
+          entryLabel: displayEntryLabel,
           stakeAmount: b.stakeAmount,
           potentialPayout: b.potentialPayout,
           result,
@@ -11239,19 +11251,37 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         .from(marketEntries)
         .where(eq(marketEntries.marketId, marketId));
 
-      const totalYesPool = allEntries.reduce((sum, e) => sum + e.totalStake, 0);
       const currentEntry = allEntries.find(e => e.id === entryId);
+      const otherEntries = allEntries.filter(e => e.id !== entryId);
+      const totalPoolBefore = allEntries.reduce((sum, e) => sum + e.totalStake + e.noStake, 0);
+      const totalNoPoolBefore = allEntries.reduce((sum, e) => sum + e.noStake, 0);
 
       let potentialPayout: number;
       if (direction === "no") {
-        const entryYes = currentEntry?.totalStake ?? 0;
-        const entryShare = totalYesPool > 0 ? entryYes / totalYesPool : 1 / allEntries.length;
-        potentialPayout = Math.round(stakeAmount / Math.max(1 - entryShare, 0.01));
+        const likelyWinningEntry = otherEntries.reduce<typeof allEntries[number] | null>(
+          (best, entry) => {
+            if (!best) return entry;
+            return entry.totalStake > best.totalStake ? entry : best;
+          },
+          null,
+        );
+        const winnerPoolBefore =
+          (likelyWinningEntry?.totalStake ?? 0) +
+          (totalNoPoolBefore - (likelyWinningEntry?.noStake ?? 0));
+        const winnerPoolAfter = winnerPoolBefore + stakeAmount;
+        const totalPoolAfter = totalPoolBefore + stakeAmount;
+        potentialPayout = Math.round(
+          (stakeAmount / Math.max(winnerPoolAfter, 1)) * totalPoolAfter
+        );
       } else {
-        const totalPool = totalYesPool + stakeAmount;
-        const entryPool = (currentEntry?.totalStake ?? 0) + stakeAmount;
-        const entryShare = entryPool / totalPool;
-        potentialPayout = Math.round(stakeAmount / Math.max(entryShare, 0.01));
+        const winnerPoolBefore =
+          (currentEntry?.totalStake ?? 0) +
+          otherEntries.reduce((sum, entry) => sum + entry.noStake, 0);
+        const winnerPoolAfter = winnerPoolBefore + stakeAmount;
+        const totalPoolAfter = totalPoolBefore + stakeAmount;
+        potentialPayout = Math.round(
+          (stakeAmount / Math.max(winnerPoolAfter, 1)) * totalPoolAfter
+        );
       }
 
       const [insertedBet] = await tx
