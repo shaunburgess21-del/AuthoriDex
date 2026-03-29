@@ -418,6 +418,7 @@ export function StakeModal({
           <MarketResolutionInfo
             baselineScore={selection.startScore || selection.baselineScore || 0}
             baselineTimestamp={selection.baselineTimestamp}
+            bettingCutoff={selection.bettingCutoff}
             tieRule={selection.tieRule || "refund"}
             personName={selection.marketName}
             compact

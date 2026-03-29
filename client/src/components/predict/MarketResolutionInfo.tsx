@@ -1,10 +1,12 @@
 import { Card } from "@/components/ui/card";
-import { Shield, Clock, TrendingUp, TrendingDown, RefreshCw, Database, CheckCircle } from "lucide-react";
+import { Shield, Clock, TrendingUp, TrendingDown, RefreshCw, Database, CheckCircle, Lock } from "lucide-react";
 
 interface MarketResolutionInfoProps {
   baselineScore: number;
   baselineTimestamp?: string;
   closeTime?: string;
+  /** ISO date for weekly betting cutoff (Fri 23:59 UTC); falls back to label if missing */
+  bettingCutoff?: string | null;
   tieRule?: string;
   resolveMethod?: string;
   personName?: string;
@@ -23,6 +25,16 @@ function formatTimestamp(ts?: string): string {
   return `${days[d.getUTCDay()]} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`;
 }
 
+/** Full UTC string matching market "closes" line, or null if invalid */
+function formatBettingCutoffUtc(iso?: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return d.toUTCString().replace(/ GMT$/, " UTC");
+}
+
+const BETTING_CUTOFF_FALLBACK = "Fri 23:59 UTC";
+
 const TIE_RULE_LABELS: Record<string, string> = {
   refund: "All positions refunded",
   down_wins: "DOWN wins on exact tie",
@@ -33,6 +45,7 @@ export function MarketResolutionInfo({
   baselineScore,
   baselineTimestamp,
   closeTime,
+  bettingCutoff,
   tieRule = "refund",
   resolveMethod,
   personName,
@@ -44,10 +57,15 @@ export function MarketResolutionInfo({
     resolveMethod === "admin_manual"
       ? "Admin resolution"
       : "Auto-calculated from VoxDex trend engine";
+  const predictionsCloseLabel = formatBettingCutoffUtc(bettingCutoff) ?? BETTING_CUTOFF_FALLBACK;
 
   if (compact) {
     return (
       <div className="text-[11px] text-muted-foreground space-y-0.5 leading-snug">
+        <p>
+          <Lock className="inline h-3 w-3 text-amber-500 mr-1" />
+          Predictions close: <span className="font-medium text-foreground">{predictionsCloseLabel}</span>
+        </p>
         <p>
           <TrendingUp className="inline h-3 w-3 text-green-500 mr-1" />
           UP wins if {name} closes above {formatScore(baselineScore)}
@@ -83,6 +101,13 @@ export function MarketResolutionInfo({
         <div className="flex items-start gap-1.5">
           <Clock className="h-3 w-3 mt-0.5 shrink-0" />
           <span>Market closes: <span className="font-medium text-foreground">{closeTime || "Sun 23:59 UTC"}</span></span>
+        </div>
+        <div className="flex items-start gap-1.5">
+          <Lock className="h-3 w-3 mt-0.5 shrink-0 text-amber-500" />
+          <span>
+            Predictions close:{" "}
+            <span className="font-medium text-foreground">{predictionsCloseLabel}</span>
+          </span>
         </div>
         <div className="flex items-start gap-1.5">
           <TrendingUp className="h-3 w-3 mt-0.5 shrink-0 text-green-500" />

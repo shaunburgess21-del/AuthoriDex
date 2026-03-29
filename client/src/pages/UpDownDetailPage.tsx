@@ -450,6 +450,7 @@ export default function UpDownDetailPage() {
           baselineScore={hydrated.baselineScore}
           baselineTimestamp={hydrated.startAt}
           closeTime={hydrated.endAt ? new Date(hydrated.endAt).toUTCString().replace(/ GMT$/, " UTC") : "Sun 23:59 UTC"}
+          bettingCutoff={hydrated.bettingCutoff}
           tieRule={hydrated.tieRule}
           personName={hydrated.personName}
         />

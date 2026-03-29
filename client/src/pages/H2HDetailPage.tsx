@@ -573,6 +573,20 @@ export default function H2HDetailPage() {
               </span>
             </div>
             <div className="flex items-start gap-1.5">
+              <Lock className="h-3 w-3 mt-0.5 shrink-0 text-amber-500" />
+              <span>
+                Predictions close:{" "}
+                <span className="font-medium text-foreground">
+                  {(() => {
+                    if (!hydrated.bettingCutoff) return "Fri 23:59 UTC";
+                    const d = new Date(hydrated.bettingCutoff);
+                    if (isNaN(d.getTime())) return "Fri 23:59 UTC";
+                    return d.toUTCString().replace(/ GMT$/, " UTC");
+                  })()}
+                </span>
+              </span>
+            </div>
+            <div className="flex items-start gap-1.5">
               <TrendingUp className="h-3 w-3 mt-0.5 shrink-0 text-blue-400" />
               <span>
                 {hydrated.person1.name} wins if their final Trend Score is higher
