@@ -232,7 +232,7 @@ export default function MatchupDetailPage() {
 
         {/* Cast Your Vote — full-bleed on mobile so option images use full width like list card */}
         <div className="-mx-4 sm:mx-0">
-          <Card className="p-5 mb-6 border-cyan-500/20 overflow-hidden" data-testid="section-vote-module">
+          <Card className="p-5 mb-6 border-0 shadow-none bg-transparent overflow-hidden" data-testid="section-vote-module">
             <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
               <Swords className="h-5 w-5 text-cyan-500" />
               Cast Your Vote
@@ -243,16 +243,16 @@ export default function MatchupDetailPage() {
               onClick={() => {
                 if (!hasVoted || votedB) handleVote(matchup.id, 'option_a');
               }}
-              className={`flex-1 flex flex-col rounded-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
+              className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
                 hasVoted
                   ? votedA
-                    ? 'border-blue-500/60 ring-2 ring-blue-500/30'
-                    : 'border-border/30 opacity-70 hover:opacity-90 hover:border-blue-500/30'
-                  : 'border-border/50 hover:border-blue-500/50'
+                    ? 'border-slate-300/60 ring-2 ring-white/15'
+                    : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-400/40'
+                  : 'border-slate-700/50 hover:border-slate-400/50'
               }`}
               data-testid="button-vote-option-a"
             >
-              <div className="relative" style={{ minHeight: '320px' }}>
+              <div className="relative min-h-[222px] md:min-h-0 md:aspect-[100/111]">
                 {matchup.optionAImage ? (
                   <div className="absolute inset-0">
                     <img
@@ -274,13 +274,13 @@ export default function MatchupDetailPage() {
                 )}
               </div>
               <div className="px-3 py-3 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
-                <span className="font-semibold truncate block">{matchup.optionAText}</span>
+                <span className={`font-semibold text-sm truncate block ${votedA ? 'text-blue-400' : ''}`}>{matchup.optionAText}</span>
               </div>
             </button>
 
-            <div className="absolute left-1/2 top-[calc(50%-16px)] -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
-              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
-                <span className="text-xs font-bold text-slate-200">VS</span>
+            <div className="absolute left-1/2 top-[calc(50%-18px)] -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
+              <div className="h-14 w-14 md:h-11 md:w-11 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
+                <span className="text-sm md:text-xs font-bold text-slate-200">VS</span>
               </div>
             </div>
 
@@ -288,16 +288,16 @@ export default function MatchupDetailPage() {
               onClick={() => {
                 if (!hasVoted || votedA) handleVote(matchup.id, 'option_b');
               }}
-              className={`flex-1 flex flex-col rounded-lg border transition-all duration-300 overflow-hidden cursor-pointer ${
+              className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
                 hasVoted
                   ? votedB
-                    ? 'border-amber-500/60 ring-2 ring-amber-500/30'
-                    : 'border-border/30 opacity-70 hover:opacity-90 hover:border-amber-500/30'
-                  : 'border-border/50 hover:border-amber-500/50'
+                    ? 'border-slate-300/60 ring-2 ring-white/15'
+                    : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-400/40'
+                  : 'border-slate-700/50 hover:border-slate-400/50'
               }`}
               data-testid="button-vote-option-b"
             >
-              <div className="relative" style={{ minHeight: '320px' }}>
+              <div className="relative min-h-[222px] md:min-h-0 md:aspect-[100/111]">
                 {matchup.optionBImage ? (
                   <div className="absolute inset-0">
                     <img
@@ -319,7 +319,7 @@ export default function MatchupDetailPage() {
                 )}
               </div>
               <div className="px-3 py-3 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
-                <span className="font-semibold truncate block">{matchup.optionBText}</span>
+                <span className={`font-semibold text-sm truncate block ${votedB ? 'text-amber-400' : ''}`}>{matchup.optionBText}</span>
               </div>
             </button>
           </div>

@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { UserMenu } from "@/components/UserMenu";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { CategoryPill } from "@/components/CategoryPill";
+import { CategoryPill, getCategoryTextColor } from "@/components/CategoryPill";
 import { VoteDeckView } from "@/components/home/VoteDeckView";
 import { PredictDeckView } from "@/components/home/PredictDeckView";
 import { TrendingNowFeed } from "@/components/TrendingNowFeed";
@@ -117,7 +117,7 @@ function MarketPulseCard({
                   <PersonAvatar name={person.name} avatar={person.avatar} imageSlug={(person as any).imageSlug} size="sm" />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-xs truncate text-slate-200">{person.name}</p>
-                    <p className="text-[10px] text-slate-500">{person.category}</p>
+                    <p className={`text-[10px] ${getCategoryTextColor(person.category ?? "")}`}>{person.category}</p>
                   </div>
                   <span 
                     className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${

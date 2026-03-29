@@ -390,9 +390,9 @@ function VersusCard({
             </div>
           </button>
           
-          <div className="absolute left-1/2 top-[calc(50%-16px)] -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
-            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
-              <span className="text-xs font-bold text-slate-200">VS</span>
+          <div className="absolute left-1/2 top-[calc(50%-18px)] -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
+            <div className="h-14 w-14 md:h-11 md:w-11 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
+              <span className="text-sm md:text-xs font-bold text-slate-200">VS</span>
             </div>
           </div>
           
@@ -706,22 +706,25 @@ function CurateProfileCard({
     };
   }, []);
 
-  const handlePick = (choice: 'a' | 'b') => {
+  const handlePick = async (choice: 'a' | 'b') => {
     if (!selectedChoice && imageA && imageB) {
       setSelectedChoice(choice);
       setShowShimmer(true);
-      onVote();
-      
-      // Vote up for selected, vote down for other
+
       const selectedImage = choice === 'a' ? imageA : imageB;
       const otherImage = choice === 'a' ? imageB : imageA;
-      voteMutation.mutate({ imageId: selectedImage.id, direction: 'up' });
-      voteMutation.mutate({ imageId: otherImage.id, direction: 'down' });
-      
-      timeoutRef1.current = setTimeout(() => {
+      try {
+        await voteMutation.mutateAsync({ imageId: selectedImage.id, direction: "up" });
+        await voteMutation.mutateAsync({ imageId: otherImage.id, direction: "down" });
+        onVote();
+        timeoutRef1.current = setTimeout(() => {
+          setShowShimmer(false);
+          setShowResults(true);
+        }, 600);
+      } catch {
+        setSelectedChoice(null);
         setShowShimmer(false);
-        setShowResults(true);
-      }, 600);
+      }
     }
   };
 
@@ -827,12 +830,12 @@ function CurateProfileCard({
               <button
                 onClick={() => handlePick('a')}
                 disabled={!!selectedChoice}
-                className={`relative aspect-square rounded-lg overflow-hidden border-3 transition-all duration-300 group cursor-pointer ${
+                className={`relative aspect-square rounded-lg overflow-hidden transition-all duration-300 group cursor-pointer ${
                   selectedChoice === 'a' 
                     ? 'border-green-500 ring-4 ring-green-500/30 scale-105' 
                     : selectedChoice === 'b'
                     ? 'border-muted opacity-40 scale-95'
-                    : 'border-transparent hover:border-cyan-500/50 hover:scale-102'
+                    : 'border border-slate-700/50 hover:border-slate-400/50 hover:scale-102'
                 }`}
                 data-testid={`button-photo-a-${poll.id}`}
               >
@@ -866,12 +869,12 @@ function CurateProfileCard({
               <button
                 onClick={() => handlePick('b')}
                 disabled={!!selectedChoice}
-                className={`relative aspect-square rounded-lg overflow-hidden border-3 transition-all duration-300 group cursor-pointer ${
+                className={`relative aspect-square rounded-lg overflow-hidden transition-all duration-300 group cursor-pointer ${
                   selectedChoice === 'b' 
                     ? 'border-green-500 ring-4 ring-green-500/30 scale-105' 
                     : selectedChoice === 'a'
                     ? 'border-muted opacity-40 scale-95'
-                    : 'border-transparent hover:border-cyan-500/50 hover:scale-102'
+                    : 'border border-slate-700/50 hover:border-slate-400/50 hover:scale-102'
                 }`}
                 data-testid={`button-photo-b-${poll.id}`}
               >

@@ -1594,59 +1594,57 @@ function BinaryMarketCard({ market, entries, totalPool, participants, timeLabel,
           <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
-      <div className="flex items-center gap-2 mb-2 flex-wrap">
-        <LinkedPersonChip market={market} />
-        <FreshnessBadge market={market} />
-      </div>
       {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
       
-      {/* Mobile: mt-2 only — avoids a large empty band between teaser and split bar (md+ keeps mt-auto spacer) */}
-      <div className="mt-2 md:mt-auto md:pt-1">
-        <div className="mb-2 md:mb-3">
-          <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
+      {/* Mobile: max-md:mt-auto pulls participants + pool + Yes/No to card base; md:contents keeps desktop flex layout unchanged */}
+      <div className="flex flex-col max-md:mt-auto md:contents">
+        <div className="pt-1 md:mt-auto md:pt-1">
+          <div className="mb-2 md:mb-3">
+            <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
+          </div>
+          
+          <div className="mb-2 md:mb-3">
+            <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
+            </div>
+            <div className="flex items-center justify-between text-xs mt-1.5">
+              <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
+              <span className="text-red-500 font-semibold">No {noPercent}%</span>
+            </div>
+          </div>
         </div>
         
-        <div className="mb-2 md:mb-3">
-          <div className="h-3 rounded-full bg-red-500/20 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
+        <div className="max-md:mt-1">
+          <div className="flex items-center justify-center mb-1.5">
+            <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')}</span>
           </div>
-          <div className="flex items-center justify-between text-xs mt-1.5">
-            <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
-            <span className="text-red-500 font-semibold">No {noPercent}%</span>
-          </div>
-        </div>
-      </div>
-      
-      <div className="max-md:mt-1">
-        <div className="flex items-center justify-center mb-1.5">
-          <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')}</span>
-        </div>
-        
-        {isMarketClosed ? (
-          <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
-            <Lock className="h-4 w-4 mr-2" />
-            Closed
-          </Button>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {/* Match UnderratedOverratedCard mobile tap targets: py-3.5; compact on md+ */}
-            <Button
-              className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
-              onClick={() => onNavigate(market.slug, 'yes')}
-              data-testid={`button-yes-${market.slug}`}
-            >
-              Yes {yesPercent}%
+          
+          {isMarketClosed ? (
+            <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
+              <Lock className="h-4 w-4 mr-2" />
+              Closed
             </Button>
-            <Button
-              className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
-              onClick={() => onNavigate(market.slug, 'no')}
-              data-testid={`button-no-${market.slug}`}
-            >
-              No {noPercent}%
-            </Button>
-          </div>
-        )}
-        <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {/* Match UnderratedOverratedCard mobile tap targets: py-3.5; compact on md+ */}
+              <Button
+                className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+                onClick={() => onNavigate(market.slug, 'yes')}
+                data-testid={`button-yes-${market.slug}`}
+              >
+                Yes {yesPercent}%
+              </Button>
+              <Button
+                className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+                onClick={() => onNavigate(market.slug, 'no')}
+                data-testid={`button-no-${market.slug}`}
+              >
+                No {noPercent}%
+              </Button>
+            </div>
+          )}
+          <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
+        </div>
       </div>
     </PredictCard>
   );
@@ -1684,10 +1682,6 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
           <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
-      <div className="flex items-center gap-2 mb-2 flex-wrap">
-        <LinkedPersonChip market={market} />
-        <FreshnessBadge market={market} />
-      </div>
       {market.teaser && (
         <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) onNavigate(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
           <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? 'hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
@@ -1699,54 +1693,63 @@ function MultiMarketCard({ market, entries, totalPool, participants, timeLabel, 
         <Badge variant="outline" className="text-[10px] ml-auto">{entries.length} options</Badge>
       </div>
 
-      <div className="space-y-1.5 mb-2">
-        {rankedEntries.slice(0, 4).map((entry: any) => {
-          return (
-            <div key={entry.id} className="flex items-center gap-2">
-              {entry.imageUrl ? (
-                <Avatar className="h-7 w-7 shrink-0 rounded-md">
-                  <AvatarImage src={entry.imageUrl} alt={entry.label} className="object-cover" />
-                  <AvatarFallback className="text-[9px] rounded-md">{entry.label?.[0]}</AvatarFallback>
-                </Avatar>
-              ) : (
-                <div className="h-7 w-7 shrink-0 rounded-md bg-muted/40 flex items-center justify-center">
-                  <span className="text-[10px] font-semibold text-muted-foreground">{entry.label?.[0]}</span>
-                </div>
-              )}
-              <span className="text-[13px] font-medium truncate flex-1 min-w-0">{entry.label}</span>
-              <span className="text-[13px] font-mono font-semibold text-muted-foreground w-9 text-right shrink-0">{entry.pct}%</span>
-              {!isMarketClosed ? (
-                <div className="flex gap-1 shrink-0">
-                  <button
-                    className="px-2 py-1 text-[11px] font-semibold rounded bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 transition-colors"
-                    onClick={(e) => { e.stopPropagation(); onNavigate(market.slug, entry.id, 'yes'); }}
-                    data-testid={`button-yes-${entry.id}`}
-                  >
-                    Yes
-                  </button>
-                  <button
-                    className="px-2 py-1 text-[11px] font-semibold rounded bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 transition-colors"
-                    onClick={(e) => { e.stopPropagation(); onNavigate(market.slug, entry.id, 'no'); }}
-                    data-testid={`button-no-${entry.id}`}
-                  >
-                    No
-                  </button>
-                </div>
-              ) : (
-                <span className="text-[11px] text-muted-foreground shrink-0 w-20 text-right">{entry.yesPct}% Yes / {entry.noPct}% No</span>
-              )}
-            </div>
-          );
-        })}
-        {entries.length > 4 && <button className="text-xs text-violet-400 hover:text-violet-300 text-center mt-1 w-full cursor-pointer transition-colors font-medium" onClick={(e) => { e.stopPropagation(); onNavigate(market.slug); }}>+{entries.length - 4} more</button>}
+      <div className="flex items-center justify-center mb-3">
+        <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')}</span>
       </div>
 
-      <div className="mt-auto">
-        <div className="flex items-center justify-center mb-1">
-          <span className="text-sm font-semibold text-muted-foreground">Pool: {totalPool.toLocaleString('en-US')}</span>
+      <div className="flex flex-col flex-1 min-h-0">
+        <div className="space-y-1.5">
+          {rankedEntries.slice(0, 4).map((entry: any) => {
+            return (
+              <div key={entry.id} className="flex items-center gap-2">
+                {entry.imageUrl ? (
+                  <Avatar className="h-9 w-9 shrink-0 rounded-md">
+                    <AvatarImage src={entry.imageUrl} alt={entry.label} className="object-cover" />
+                    <AvatarFallback className="text-[11px] rounded-md">{entry.label?.[0]}</AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <div className="h-9 w-9 shrink-0 rounded-md bg-muted/40 flex items-center justify-center">
+                    <span className="text-[11px] font-semibold text-muted-foreground">{entry.label?.[0]}</span>
+                  </div>
+                )}
+                <span className="text-[14px] font-medium truncate flex-1 min-w-0">{entry.label}</span>
+                <span className="text-[14px] font-mono font-semibold text-muted-foreground w-10 text-right shrink-0">{entry.pct}%</span>
+                {!isMarketClosed ? (
+                  <div className="flex gap-1.5 shrink-0">
+                    <button
+                      className="px-3 py-2 text-xs font-semibold rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 transition-colors"
+                      onClick={(e) => { e.stopPropagation(); onNavigate(market.slug, entry.id, 'yes'); }}
+                      data-testid={`button-yes-${entry.id}`}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      className="px-3 py-2 text-xs font-semibold rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 transition-colors"
+                      onClick={(e) => { e.stopPropagation(); onNavigate(market.slug, entry.id, 'no'); }}
+                      data-testid={`button-no-${entry.id}`}
+                    >
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground shrink-0 w-24 text-right">{entry.yesPct}% Yes / {entry.noPct}% No</span>
+                )}
+              </div>
+            );
+          })}
         </div>
-        <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
+        {entries.length > 4 && (
+          <button
+            type="button"
+            className="text-xs text-violet-400 hover:text-violet-300 text-center w-full cursor-pointer transition-colors font-medium mt-auto pt-3"
+            onClick={(e) => { e.stopPropagation(); onNavigate(market.slug); }}
+          >
+            +{entries.length - 4} more
+          </button>
+        )}
       </div>
+
+      <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
     </PredictCard>
   );
 }
@@ -1776,21 +1779,7 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
           <p className={`text-[16px] leading-[1.4] font-semibold line-clamp-2 ${isInactive ? '' : 'hover:text-violet-400'} transition-colors`}>{market.title}</p>
         </div>
       </a>
-      <div className="flex items-center gap-2 mb-2 flex-wrap">
-        <LinkedPersonChip market={market} />
-        <FreshnessBadge market={market} />
-      </div>
       {market.teaser && <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4]">{market.teaser}</p>}
-      
-      {market.underlying && (
-        <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-violet-500/5 border border-violet-500/10">
-          <TrendingUp className="h-4 w-4 text-violet-500" />
-          <div className="text-xs">
-            <span className="text-muted-foreground">{market.underlying} {market.metric}: </span>
-            <span className="font-semibold">{market.unit}{Number(market.strike).toLocaleString('en-US')}</span>
-          </div>
-        </div>
-      )}
       
       <div className="mt-auto pt-1">
         <div className="mb-2">
@@ -1820,10 +1809,18 @@ function UpDownMarketCard({ market, entries, totalPool, participants, timeLabel,
           </Button>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            <Button className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20" onClick={() => onNavigate(market.slug, 'above')} data-testid={`button-above-${market.slug}`}>
+            <Button
+              className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+              onClick={() => onNavigate(market.slug, 'above')}
+              data-testid={`button-above-${market.slug}`}
+            >
               Above {abovePercent}%
             </Button>
-            <Button className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20" onClick={() => onNavigate(market.slug, 'below')} data-testid={`button-below-${market.slug}`}>
+            <Button
+              className="!min-h-0 px-4 py-3.5 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+              onClick={() => onNavigate(market.slug, 'below')}
+              data-testid={`button-below-${market.slug}`}
+            >
               Below {belowPercent}%
             </Button>
           </div>

@@ -5,7 +5,7 @@ import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { normalizeMarketCategory } from "@shared/constants";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { motion, AnimatePresence } from "framer-motion";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
@@ -82,23 +82,6 @@ export function CurateProfileCard({
     [images]
   );
 
-  const voteMutation = useMutation({
-    mutationFn: async ({ imageId, direction }: { imageId: string; direction: 'up' | 'down' }) => {
-      const response = await apiRequest('POST', `/api/people/${person.id}/images/${imageId}/vote`, { direction });
-      return response.json() as Promise<{ alreadyVoted?: boolean }>;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/people', person.id, 'images'] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to record vote",
-        variant: "destructive",
-      });
-    },
-  });
-
   useEffect(() => {
     return () => {
       if (timeoutRef1.current) clearTimeout(timeoutRef1.current);
@@ -129,26 +112,31 @@ export function CurateProfileCard({
     setShowShimmer(true);
     setIsEditingVote(false);
     setResultMessage("recorded");
-    onVote();
 
     try {
-      const selectedResult = await voteMutation.mutateAsync({ imageId, direction: 'up' });
-      await Promise.all(
-        displayImages
-          .filter(img => img.id !== imageId)
-          .map((img) => voteMutation.mutateAsync({ imageId: img.id, direction: 'down' }))
-      );
-
-      setResultMessage(selectedResult?.alreadyVoted ? "saved" : "recorded");
+      const upRes = await apiRequest("POST", `/api/people/${person.id}/images/${imageId}/vote`, { direction: "up" });
+      const upData = await upRes.json() as { alreadyVoted?: boolean };
+      for (const img of displayImages.filter((i) => i.id !== imageId)) {
+        await apiRequest("POST", `/api/people/${person.id}/images/${img.id}/vote`, { direction: "down" });
+      }
+      await queryClient.invalidateQueries({ queryKey: ["/api/people", person.id, "images"] });
+      setResultMessage(upData?.alreadyVoted ? "saved" : "recorded");
+      onVote();
       onComplete();
       timeoutRef1.current = setTimeout(() => {
         setShowShimmer(false);
         setShowResults(true);
       }, 600);
-    } catch {
+    } catch (error: unknown) {
       setShowShimmer(false);
       setSelectedPhoto(persistedSelectedPhoto);
       setShowResults(Boolean(persistedSelectedPhoto));
+      const message = error instanceof Error ? error.message : "Failed to record vote";
+      toast({
+        title: "Error",
+        description: message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -290,12 +278,12 @@ export function CurateProfileCard({
                       key={image.id}
                       onClick={() => handleSelectPhoto(image.id)}
                       disabled={hasVoted}
-                      className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                      className={`relative aspect-square rounded-lg overflow-hidden border transition-all duration-300 ${
                         hasVoted
                           ? isSelected
-                            ? 'border-cyan-500 ring-2 ring-cyan-500/30'
-                            : 'border-slate-700/30 opacity-50'
-                          : 'border-slate-700/50 hover:border-cyan-500/50 cursor-pointer'
+                            ? 'border-slate-300/60 ring-2 ring-white/15'
+                            : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-400/40'
+                          : 'border-slate-700/50 hover:border-slate-400/50 cursor-pointer'
                       }`}
                       data-testid={`button-curate-photo-${image.id}`}
                     >

@@ -7,6 +7,7 @@ import { useState, useEffect, useRef } from "react";
 import { compactNumber, formatDelta, compactVotes, getApprovalColor } from "@/lib/formatNumber";
 import { ThumbsUp, Star, Zap, TrendingUp, TrendingDown, Check, X } from "lucide-react";
 import { getExceptionalIndicator, type PercentileThresholds } from "@/lib/leaderboard-exceptional";
+import { getCategoryTextColor } from "@/components/CategoryPill";
 
 export { getExceptionalIndicator, computePercentileThresholds } from "@/lib/leaderboard-exceptional";
 export type { PercentileThresholds } from "@/lib/leaderboard-exceptional";
@@ -191,7 +192,7 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
             )}
           </div>
           {person.category && (
-            <p className="hidden md:block text-sm truncate text-[#94A3B8]">
+            <p className={`hidden md:block text-sm truncate ${getCategoryTextColor(person.category)}`}>
               {person.category}
             </p>
           )}

@@ -151,8 +151,8 @@ export function CurateViewResultsOverlay({
                     transition={{ delay: idx * 0.05 }}
                     className={`flex items-center gap-4 p-3 rounded-lg border transition-all ${
                       isLeading 
-                        ? 'bg-cyan-500/10 border-cyan-500/30' 
-                        : 'bg-muted/30 border-border hover:border-cyan-500/30'
+                        ? 'bg-white/5 border-slate-300/60' 
+                        : 'bg-muted/30 border-border hover:border-slate-400/40'
                     }`}
                     data-testid={`view-results-image-${image.id}`}
                   >
@@ -167,7 +167,7 @@ export function CurateViewResultsOverlay({
                     
                     <button
                       onClick={() => setExpandedImage(image)}
-                      className="relative h-16 w-16 rounded-lg overflow-hidden shrink-0 group cursor-pointer border border-slate-700/50 hover:border-cyan-500/50 transition-colors"
+                      className="relative h-16 w-16 rounded-lg overflow-hidden shrink-0 group cursor-pointer border border-slate-700/50 hover:border-slate-400/50 transition-colors"
                       aria-label={`Expand ${person.name} photo ${idx + 1}`}
                       data-testid={`button-expand-image-${image.id}`}
                     >
