@@ -923,8 +923,12 @@ function DiscourseCard({
   categoryRaceMap: Map<string, string>;
   leaderboardCategories?: Set<string>;
 }) {
-  const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(null);
+  const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(topic.userVote || null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setVoted(topic.userVote ?? null);
+  }, [topic.userVote]);
 
   const imgSources = [topic.personAvatar, topic.imageUrl].filter(Boolean) as string[];
   const [imgIdx, setImgIdx] = useState(0);
@@ -1148,7 +1152,7 @@ function DiscourseCard({
   );
 }
 
-function parseOpinionPollVoteError(err: unknown): string {
+function parseVoteError(err: unknown): string {
   if (err instanceof Error && err.message) {
     const jsonMatch = err.message.match(/^\d+:\s*(\{[\s\S]*\})\s*$/);
     if (jsonMatch) {
@@ -1159,6 +1163,7 @@ function parseOpinionPollVoteError(err: unknown): string {
         /* ignore */
       }
     }
+    if (err.message.startsWith("429")) return "Too many votes. Please slow down.";
     return err.message;
   }
   return "Something went wrong. Please try again.";
@@ -1199,7 +1204,7 @@ function OpinionPollCard({
       } catch (err) {
         toast({
           title: "Could not record vote",
-          description: parseOpinionPollVoteError(err),
+          description: parseVoteError(err),
           variant: "destructive",
         });
       }
@@ -1222,7 +1227,7 @@ function OpinionPollCard({
     } catch (err) {
       toast({
         title: "Could not change vote",
-        description: parseOpinionPollVoteError(err),
+        description: parseVoteError(err),
         variant: "destructive",
       });
     }
@@ -2349,7 +2354,7 @@ export default function VotePage() {
       }
       toast({
         title: "Error",
-        description: error.message || "Failed to submit vote",
+        description: parseVoteError(error),
         variant: "destructive",
       });
     },
@@ -2372,7 +2377,7 @@ export default function VotePage() {
       setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [variables.matchupId]: variables.previousVote }));
       toast({
         title: "Error",
-        description: error.message || "Failed to remove vote",
+        description: parseVoteError(error),
         variant: "destructive",
       });
     },
@@ -2585,6 +2590,14 @@ export default function VotePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
       queryClient.invalidateQueries({ queryKey: ['/api/gamification/stats'] });
+    },
+    onError: (error: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
+      toast({
+        title: "Error",
+        description: parseVoteError(error),
+        variant: "destructive",
+      });
     },
   });
 

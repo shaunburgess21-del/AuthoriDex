@@ -20,6 +20,8 @@ import {
   Maximize2,
   Minimize2,
   X,
+  ExternalLink,
+  Share2,
 } from "lucide-react";
 import { CommentActionDrawer } from "./CommentActionDrawer";
 
@@ -50,6 +52,8 @@ interface CardCommentsProps {
   variant?: "card" | "inline";
   maxHeight?: string;
   placeholder?: string;
+  onDetail?: () => void;
+  onShare?: () => void;
 }
 
 export function CardComments({
@@ -58,6 +62,8 @@ export function CardComments({
   variant = "card",
   maxHeight = "500px",
   placeholder = "Share your thoughts...",
+  onDetail,
+  onShare,
 }: CardCommentsProps) {
   const { user, isLoggedIn, profile } = useAuth();
   const [, setLocation] = useLocation();
@@ -172,7 +178,7 @@ export function CardComments({
   const isAuthenticated = isLoggedIn || !!user;
 
   const sortBar = (
-    <div className="flex items-center justify-between gap-2 mb-3 flex-wrap px-1">
+    <div className="flex items-center gap-2 mb-3 px-1">
       <div className="flex items-center gap-2">
         <MessageSquare className="h-4 w-4 text-cyan-500" />
         <span className="text-sm font-semibold">
@@ -207,6 +213,20 @@ export function CardComments({
           )}
         </button>
       </div>
+      {(onDetail || onShare) && (
+        <div className="flex items-center gap-3 ml-auto">
+          {onDetail && (
+            <button onClick={onDetail} className="text-muted-foreground hover:text-cyan-400 transition-colors" data-interactive="true">
+              <ExternalLink className="h-4 w-4" />
+            </button>
+          )}
+          {onShare && (
+            <button onClick={onShare} className="text-muted-foreground hover:text-cyan-400 transition-colors" data-interactive="true">
+              <Share2 className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 
@@ -320,7 +340,7 @@ export function CardComments({
   );
 
   const inputArea = isAuthenticated ? (
-    <div className="pt-3 border-t border-border/20">
+    <div className="pt-3 border-t border-border/20" style={{ paddingBottom: "env(safe-area-inset-bottom, 4px)" }}>
       {replyTo && (
         <div className="flex items-center gap-2 mb-2 px-1">
           <span className="text-xs text-cyan-400">
@@ -334,7 +354,7 @@ export function CardComments({
           </button>
         </div>
       )}
-      <div className="flex items-end gap-2">
+      <div className="flex items-center gap-2">
         <Avatar className="h-7 w-7 shrink-0">
           {profile?.avatarUrl && <AvatarImage src={profile.avatarUrl} alt="" />}
           <AvatarFallback className="bg-cyan-500/20 text-cyan-400 text-[10px] font-semibold">

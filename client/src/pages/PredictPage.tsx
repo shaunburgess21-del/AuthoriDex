@@ -2982,7 +2982,7 @@ export default function PredictPage() {
   const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
 
   return (
-    <div className="min-h-screen pb-20 md:pb-0 overflow-x-hidden">
+    <div className="min-h-screen pb-20 md:pb-0 overflow-x-clip">
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">

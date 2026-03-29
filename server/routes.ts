@@ -8161,8 +8161,10 @@ Only return the JSON object.`;
     return `${process.env.SUPABASE_URL}/storage/v1/object/public/sentiment-polls/${slug}/1.webp`;
   }
 
-  app.get("/api/trending-polls", async (req, res) => {
+  app.get("/api/trending-polls", optionalAuth, async (req, res) => {
     try {
+      const userId = (req as AuthRequest).userId || null;
+
       const polls = await db
         .select({
           id: trendingPolls.id,
@@ -8189,6 +8191,17 @@ Only return the JSON object.`;
       const pollIds = polls.map(p => p.id);
       const relatedMap = await getRelatedPeopleForCards("sentiment_poll", pollIds);
 
+      const userVoteMap: Record<string, string> = {};
+      if (userId && pollIds.length > 0) {
+        const userVotes = await db
+          .select({ pollId: trendingPollVotes.pollId, choice: trendingPollVotes.choice })
+          .from(trendingPollVotes)
+          .where(and(eq(trendingPollVotes.userId, userId), inArray(trendingPollVotes.pollId, pollIds)));
+        for (const v of userVotes) {
+          userVoteMap[v.pollId] = v.choice;
+        }
+      }
+
       const result = polls.map(p => {
         const total = (p.seedSupportCount || 0) + (p.seedNeutralCount || 0) + (p.seedOpposeCount || 0);
         const effectiveSlug = p.slug || slugifyHeadline(p.headline);
@@ -8211,6 +8224,7 @@ Only return the JSON object.`;
           status: p.status,
           relatedPersonIds: (relatedMap[p.id] || []).map(rp => rp.id),
           relatedPeople: relatedMap[p.id] || [],
+          userVote: userVoteMap[p.id] || null,
         };
       });
 

@@ -1,10 +1,9 @@
 import { useState, useRef, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Inbox } from "lucide-react";
+import { ArrowLeft, Inbox, ChevronUp, ChevronDown } from "lucide-react";
 import { sharePage } from "@/lib/share";
 import { CategoryTabStrip } from "./CategoryTabStrip";
-import { SnapScrollActionRow } from "./SnapScrollActionRow";
 import { CardComments, type CommentEntityType } from "@/components/comments/CardComments";
 
 export type SnapSectionType = "matchups" | "sentiment" | "opinion";
@@ -43,6 +42,8 @@ const SECTION_LABEL: Record<SnapSectionType, string> = {
   opinion: "opinion polls",
 };
 
+const DRAG_THRESHOLD = 40;
+
 export function VoteSnapScrollView({
   open,
   onClose,
@@ -53,6 +54,8 @@ export function VoteSnapScrollView({
 }: VoteSnapScrollViewProps) {
   const [, setLocation] = useLocation();
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const dragStartY = useRef<number | null>(null);
 
   const categories = useMemo(() => {
     const cats = new Set<string>();
@@ -74,6 +77,7 @@ export function VoteSnapScrollView({
   useEffect(() => {
     if (open) {
       setActiveCategoryIdx(initialCategoryIdx);
+      setExpandedItemId(null);
     }
   }, [open, initialCategoryIdx]);
 
@@ -115,6 +119,7 @@ export function VoteSnapScrollView({
     const idx = categories.indexOf(cat);
     if (idx >= 0) {
       setActiveCategoryIdx(idx);
+      setExpandedItemId(null);
     }
   }, [categories]);
 
@@ -131,6 +136,21 @@ export function VoteSnapScrollView({
       sharePage(item.title);
     }
   }, [getVisibleItem]);
+
+  const handleDragStart = useCallback((e: React.TouchEvent) => {
+    dragStartY.current = e.touches[0].clientY;
+  }, []);
+
+  const handleDragEnd = useCallback((e: React.TouchEvent, itemId: string) => {
+    if (dragStartY.current === null) return;
+    const deltaY = e.changedTouches[0].clientY - dragStartY.current;
+    dragStartY.current = null;
+    if (deltaY < -DRAG_THRESHOLD) {
+      setExpandedItemId(itemId);
+    } else if (deltaY > DRAG_THRESHOLD) {
+      setExpandedItemId(null);
+    }
+  }, []);
 
   const activeItems = categoryItems.get(activeCategory) || [];
   const commentEntityType = SECTION_COMMENT_TYPE[sectionType];
@@ -180,36 +200,56 @@ export function VoteSnapScrollView({
                 className="h-full overflow-y-auto snap-y snap-mandatory"
                 style={{ scrollSnapType: "y mandatory" }}
               >
-                {activeItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="snap-start flex flex-col px-3 pt-3"
-                    style={{
-                      height: "calc(100dvh - 52px)",
-                      scrollSnapAlign: "start",
-                      paddingBottom: "env(safe-area-inset-bottom, 16px)",
-                    }}
-                  >
-                    <div className="w-full max-w-lg mx-auto shrink-0">
-                      {renderCard(item)}
+                {activeItems.map((item) => {
+                  const isExpanded = expandedItemId === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      className="snap-start flex flex-col px-3 pt-3"
+                      style={{
+                        height: "calc(100dvh - 52px)",
+                        scrollSnapAlign: "start",
+                        paddingBottom: "env(safe-area-inset-bottom, 16px)",
+                      }}
+                    >
+                      {/* Vote card - hidden when comments expanded */}
+                      <div
+                        className={`w-full max-w-lg mx-auto shrink-0 transition-all duration-200 overflow-hidden ${
+                          isExpanded ? "max-h-0 opacity-0" : "max-h-[2000px] opacity-100"
+                        }`}
+                      >
+                        {renderCard(item)}
+                      </div>
+
+                      {/* Drag handle */}
+                      <div
+                        className="flex flex-col items-center py-1 cursor-grab active:cursor-grabbing touch-none select-none"
+                        onTouchStart={handleDragStart}
+                        onTouchEnd={(e) => handleDragEnd(e, item.id)}
+                      >
+                        <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+                        {isExpanded ? (
+                          <ChevronDown className="h-3 w-3 text-muted-foreground/40 mt-0.5" />
+                        ) : (
+                          <ChevronUp className="h-3 w-3 text-muted-foreground/40 mt-0.5" />
+                        )}
+                      </div>
+
+                      {/* Comments section */}
+                      <div className="flex-1 min-h-0 overflow-y-auto max-w-lg mx-auto w-full">
+                        <CardComments
+                          entityType={commentEntityType}
+                          slug={item.slug}
+                          variant="inline"
+                          maxHeight="none"
+                          placeholder="Add a comment..."
+                          onDetail={navigateToDetail}
+                          onShare={handleShare}
+                        />
+                      </div>
                     </div>
-                    <div className="shrink-0">
-                      <SnapScrollActionRow
-                        onDetail={navigateToDetail}
-                        onShare={handleShare}
-                      />
-                    </div>
-                    <div className="flex-1 min-h-0 overflow-y-auto max-w-lg mx-auto w-full mt-1">
-                      <CardComments
-                        entityType={commentEntityType}
-                        slug={item.slug}
-                        variant="inline"
-                        maxHeight="none"
-                        placeholder="Add a comment..."
-                      />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
