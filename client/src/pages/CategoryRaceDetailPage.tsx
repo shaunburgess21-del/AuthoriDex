@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
+import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
@@ -17,6 +18,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import {
   ArrowLeft,
   TrendingUp,
@@ -49,6 +52,7 @@ export default function CategoryRaceDetailPage() {
   const [, setLocation] = useLocation();
   const marketId = params?.marketId || "";
   const { user, profile } = useAuth();
+  const { toast } = useToast();
   const walletCredits = profile?.predictCredits ?? 0;
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -65,8 +69,20 @@ export default function CategoryRaceDetailPage() {
     return found?.bettingCutoff || null;
   }, [allGainerMarkets, marketId]);
 
+  const serverResolutionDeadline = useMemo(() => {
+    if (!allGainerMarkets) return null;
+    const found = allGainerMarkets.find((m: any) => m.id === marketId);
+    return found?.endAt || null;
+  }, [allGainerMarkets, marketId]);
+
   const marketState = useMarketCycle(serverCutoff);
   const isMarketClosed = marketState.status !== "OPEN";
+  const closedMarketMessage = useMemo(() => {
+    return getClosedMarketMessage({
+      bettingCutoff: serverCutoff,
+      resolutionDeadline: serverResolutionDeadline,
+    });
+  }, [serverCutoff, serverResolutionDeadline]);
 
   const { data: userBets } = useQuery<any[]>({
     queryKey: ["/api/me/bets"],
@@ -168,7 +184,14 @@ export default function CategoryRaceDetailPage() {
 
   const handleCandidateSelect = useCallback(
     (candidate: GainerCandidate) => {
-      if (isMarketClosed || userPick) return;
+      if (userPick) return;
+      if (isMarketClosed) {
+        toast({
+          title: closedMarketMessage.title,
+          description: closedMarketMessage.description,
+        });
+        return;
+      }
       setPendingSelection({
         type: "gainer",
         marketId,
@@ -180,7 +203,7 @@ export default function CategoryRaceDetailPage() {
       } as StakeSelection);
       setStakeModalOpen(true);
     },
-    [isMarketClosed, userPick, marketId, categoryLabel]
+    [isMarketClosed, userPick, marketId, categoryLabel, toast, closedMarketMessage]
   );
 
   const handleConfirmStake = useCallback(
@@ -369,24 +392,30 @@ export default function CategoryRaceDetailPage() {
               const globalIdx = candidates.indexOf(candidate);
               const isLeader = globalIdx === 0;
               const isUserPick = userPick?.entryId === candidate.entryId;
-              const canSelect = !isMarketClosed && !userPick;
+              const canSelect = !userPick;
 
               return (
-                <div
+                <ClosedMarketActionTrigger
                   key={candidate.entryId || candidate.name}
-                  className={`flex items-center gap-3 p-3 rounded-lg transition-colors relative overflow-hidden ${
-                    canSelect ? "cursor-pointer" : ""
-                  } ${
-                    isLeader
-                      ? "bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30"
-                      : isUserPick
-                      ? "border border-green-500/40 bg-green-500/5"
-                      : canSelect
-                      ? "hover:bg-muted/50"
-                      : ""
-                  }`}
-                  onClick={() => canSelect && handleCandidateSelect(candidate)}
+                  isClosed={isMarketClosed && canSelect}
+                  message={closedMarketMessage}
+                  side="top"
+                  align="center"
                 >
+                  <div
+                    className={`flex items-center gap-3 p-3 rounded-lg transition-colors relative overflow-hidden ${
+                      canSelect ? "cursor-pointer" : ""
+                    } ${
+                      isLeader
+                        ? "bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/30"
+                        : isUserPick
+                        ? "border border-green-500/40 bg-green-500/5"
+                        : canSelect
+                        ? "hover:bg-muted/50"
+                        : ""
+                    }`}
+                    onClick={() => canSelect && handleCandidateSelect(candidate)}
+                  >
                   {/* Relative gain bar */}
                   <div
                     className="absolute inset-y-0 left-0 bg-green-500/8 transition-all"
@@ -459,7 +488,8 @@ export default function CategoryRaceDetailPage() {
                       {formatSignedPercent(candidate.percentGain)}
                     </p>
                   </div>
-                </div>
+                  </div>
+                </ClosedMarketActionTrigger>
               );
             })}
 
@@ -580,22 +610,19 @@ export default function CategoryRaceDetailPage() {
                 #{userPickRank}/{candidates.length}
               </span>
             </div>
-          ) : isMarketClosed ? (
-            <Button className="w-full bg-muted text-muted-foreground" disabled>
-              <Lock className="h-4 w-4 mr-2" />
-              Market Closed
-            </Button>
           ) : (
-            <Button
-              className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3 h-auto text-base font-semibold"
-              onClick={() => {
-                document.querySelector("input")?.focus();
-                window.scrollTo({ top: 300, behavior: "smooth" });
-              }}
-            >
-              <Trophy className="h-5 w-5 mr-2" />
-              Choose Candidate
-            </Button>
+            <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="center">
+              <Button
+                className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3 h-auto text-base font-semibold"
+                onClick={() => {
+                  document.querySelector("input")?.focus();
+                  window.scrollTo({ top: 300, behavior: "smooth" });
+                }}
+              >
+                <Trophy className="h-5 w-5 mr-2" />
+                Choose Candidate
+              </Button>
+            </ClosedMarketActionTrigger>
           )}
         </div>
       </div>

@@ -20,6 +20,9 @@ import { TrendingPerson } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
+import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
+import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { formatSignedPercent, formatSignedPoints, getRecentActivityMarketPath } from "@/lib/predict-display";
 import {
   AGENT_AVATAR_FALLBACK_CLASS,
@@ -799,6 +802,7 @@ function PredictCard({
 function WeeklyUpDownCard({ 
   market, 
   isMarketClosed = false,
+  closedMessage,
   onSelect,
   onFilterCategory,
   categoryRaceMap,
@@ -806,6 +810,7 @@ function WeeklyUpDownCard({
 }: { 
   market: PredictionMarket; 
   isMarketClosed?: boolean;
+  closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
   onSelect?: (choice: "up" | "down") => void;
   onFilterCategory?: (category: string) => void;
   categoryRaceMap?: Map<string, string>;
@@ -902,35 +907,27 @@ function WeeklyUpDownCard({
         </div>
       </div>
       
-      <div>
-        {isMarketClosed ? (
+      <div className="grid grid-cols-2 gap-2">
+        <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="start">
           <Button 
-            className="w-full bg-muted text-muted-foreground cursor-not-allowed"
-            disabled
+            className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 py-3 md:py-2 h-auto"
+            onClick={() => onSelect?.("up")}
+            data-testid={`button-up-${market.id}`}
           >
-            <Lock className="h-4 w-4 mr-2" />
-            Market Closed
+            <TrendingUp className="h-4 w-4 mr-1" />
+            Up
           </Button>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <Button 
-              className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 py-3 md:py-2 h-auto"
-              onClick={() => onSelect?.("up")}
-              data-testid={`button-up-${market.id}`}
-            >
-              <TrendingUp className="h-4 w-4 mr-1" />
-              Up
-            </Button>
-            <Button 
-              className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 py-3 md:py-2 h-auto"
-              onClick={() => onSelect?.("down")}
-              data-testid={`button-down-${market.id}`}
-            >
-              <TrendingDown className="h-4 w-4 mr-1" />
-              Down
-            </Button>
-          </div>
-        )}
+        </ClosedMarketActionTrigger>
+        <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="end">
+          <Button 
+            className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 py-3 md:py-2 h-auto"
+            onClick={() => onSelect?.("down")}
+            data-testid={`button-down-${market.id}`}
+          >
+            <TrendingDown className="h-4 w-4 mr-1" />
+            Down
+          </Button>
+        </ClosedMarketActionTrigger>
       </div>
       </div>
     </PredictCard>
@@ -940,6 +937,7 @@ function WeeklyUpDownCard({
 function HeadToHeadCard({ 
   market, 
   isMarketClosed = false,
+  closedMessage,
   onSelect,
   userPick,
   onFilterCategory,
@@ -948,6 +946,7 @@ function HeadToHeadCard({
 }: { 
   market: HeadToHeadMarket; 
   isMarketClosed?: boolean;
+  closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
   onSelect?: (person: 1 | 2) => void;
   userPick?: 1 | 2 | null;
   onFilterCategory?: (category: string) => void;
@@ -1039,22 +1038,26 @@ function HeadToHeadCard({
         </Link>
         
         <div className="flex items-center justify-between px-2 mb-2">
-          <div
-            className={`flex flex-col items-center flex-1 ${!isMarketClosed && !hasPicked ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
-            onClick={() => !isMarketClosed && !hasPicked && onSelect?.(1)}
-          >
-            <p className="text-sm font-semibold text-center">{smartName(market.person1.name)}</p>
-            <span className="text-[10px] font-mono text-muted-foreground">{market.person1.currentScore?.toLocaleString('en-US') || ''}</span>
-            <span className="text-xs text-blue-400 font-semibold">{market.person1Percent}%</span>
-          </div>
-          <div
-            className={`flex flex-col items-center flex-1 ${!isMarketClosed && !hasPicked ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
-            onClick={() => !isMarketClosed && !hasPicked && onSelect?.(2)}
-          >
-            <p className="text-sm font-semibold text-center">{smartName(market.person2.name)}</p>
-            <span className="text-[10px] font-mono text-muted-foreground">{market.person2.currentScore?.toLocaleString('en-US') || ''}</span>
-            <span className="text-xs text-purple-400 font-semibold">{100 - market.person1Percent}%</span>
-          </div>
+          <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="start">
+            <div
+              className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
+              onClick={() => !hasPicked && onSelect?.(1)}
+            >
+              <p className="text-sm font-semibold text-center">{smartName(market.person1.name)}</p>
+              <span className="text-[10px] font-mono text-muted-foreground">{market.person1.currentScore?.toLocaleString('en-US') || ''}</span>
+              <span className="text-xs text-blue-400 font-semibold">{market.person1Percent}%</span>
+            </div>
+          </ClosedMarketActionTrigger>
+          <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="end">
+            <div
+              className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
+              onClick={() => !hasPicked && onSelect?.(2)}
+            >
+              <p className="text-sm font-semibold text-center">{smartName(market.person2.name)}</p>
+              <span className="text-[10px] font-mono text-muted-foreground">{market.person2.currentScore?.toLocaleString('en-US') || ''}</span>
+              <span className="text-xs text-purple-400 font-semibold">{100 - market.person1Percent}%</span>
+            </div>
+          </ClosedMarketActionTrigger>
         </div>
         
         <div className="h-2 rounded-full overflow-hidden mb-2 flex">
@@ -1094,30 +1097,26 @@ function HeadToHeadCard({
                 {pickWinning ? "Winning" : pickTied ? "Tied" : "Behind"}
               </Badge>
             </div>
-          ) : isMarketClosed ? (
-            <Button 
-              className="w-full bg-muted text-muted-foreground cursor-not-allowed"
-              disabled
-            >
-              <Lock className="h-4 w-4 mr-2" />
-              Awaiting Results
-            </Button>
           ) : (
             <div className="grid grid-cols-2 gap-2">
-              <Button 
-                className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 md:py-2 h-auto"
-                onClick={() => onSelect?.(1)}
-                data-testid={`button-pick1-${market.id}`}
-              >
-                {smartName(market.person1.name)}
-              </Button>
-              <Button 
-                className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 md:py-2 h-auto"
-                onClick={() => onSelect?.(2)}
-                data-testid={`button-pick2-${market.id}`}
-              >
-                {smartName(market.person2.name)}
-              </Button>
+              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="start">
+                <Button 
+                  className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 md:py-2 h-auto"
+                  onClick={() => onSelect?.(1)}
+                  data-testid={`button-pick1-${market.id}`}
+                >
+                  {smartName(market.person1.name)}
+                </Button>
+              </ClosedMarketActionTrigger>
+              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="end">
+                <Button 
+                  className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 md:py-2 h-auto"
+                  onClick={() => onSelect?.(2)}
+                  data-testid={`button-pick2-${market.id}`}
+                >
+                  {smartName(market.person2.name)}
+                </Button>
+              </ClosedMarketActionTrigger>
             </div>
           )}
         </div>
@@ -1129,6 +1128,7 @@ function HeadToHeadCard({
 function TopGainerCard({ 
   market, 
   isMarketClosed = false,
+  closedMessage,
   onShowAllCandidates,
   isPredicted = false,
   isShimmering = false,
@@ -1138,6 +1138,7 @@ function TopGainerCard({
 }: { 
   market: TopGainerMarket; 
   isMarketClosed?: boolean;
+  closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
   onShowAllCandidates?: (market: TopGainerMarket, initialCandidate?: GainerCandidate) => void;
   isPredicted?: boolean;
   isShimmering?: boolean;
@@ -1146,7 +1147,7 @@ function TopGainerCard({
   leaderboardCategories?: Set<string>;
 }) {
   const visibleCandidateCount = market.candidateCount ?? market.allCandidates?.length ?? market.totalEntries ?? market.leaders.length;
-  const canPick = !isMarketClosed && !isPredicted;
+  const canPick = !isPredicted;
 
   const handlePlacePrediction = () => {
     onShowAllCandidates?.(market);
@@ -1244,23 +1245,17 @@ function TopGainerCard({
           >
             Predicted
           </Button>
-        ) : isMarketClosed ? (
-          <Button 
-            className="w-full bg-muted text-muted-foreground cursor-not-allowed"
-            disabled
-          >
-            <Lock className="h-4 w-4 mr-2" />
-            Awaiting Results
-          </Button>
         ) : (
-          <Button 
-            className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3 md:py-2 h-auto"
-            data-testid={`button-place-prediction-${market.id}`}
-            onClick={handlePlacePrediction}
-          >
-            Choose Candidate
-            <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
+          <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
+            <Button 
+              className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3 md:py-2 h-auto"
+              data-testid={`button-place-prediction-${market.id}`}
+              onClick={handlePlacePrediction}
+            >
+              Choose Candidate
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </ClosedMarketActionTrigger>
         )}
       </div>
     </PredictCard>
@@ -1403,24 +1398,17 @@ function GainerCandidatesDialog({
           <Button variant="outline" className="flex-1" onClick={onClose}>
             Cancel
           </Button>
-          {isMarketClosed ? (
-            <Button disabled className="flex-1 gap-1.5 opacity-60">
-              <Lock className="h-4 w-4" />
-              Entries Closed
-            </Button>
-          ) : (
-            <Button
-              className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-              disabled={!selectedCandidate}
-              onClick={() => {
-                if (!selectedCandidate) return;
-                onContinue(selectedCandidate);
-                onClose();
-              }}
-            >
-              {selectedCandidate ? `Pick ${selectedCandidate.name.split(" ")[0]}` : "Select a candidate"}
-            </Button>
-          )}
+          <Button
+            className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+            disabled={!selectedCandidate}
+            onClick={() => {
+              if (!selectedCandidate) return;
+              onContinue(selectedCandidate);
+              onClose();
+            }}
+          >
+            {selectedCandidate ? `Pick ${selectedCandidate.name.split(" ")[0]}` : "Select a candidate"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -2373,6 +2361,12 @@ export default function PredictPage() {
 
   const marketCycle = useMarketCycle({ bettingCutoff: serverBettingCutoff, resolutionDeadline: serverResolutionDeadline });
   const isMarketClosed = marketCycle.status !== "OPEN";
+  const closedMarketMessage = useMemo(() => {
+    return getClosedMarketMessage({
+      bettingCutoff: serverBettingCutoff,
+      resolutionDeadline: serverResolutionDeadline,
+    });
+  }, [serverBettingCutoff, serverResolutionDeadline]);
   const { data: userBetsData, error: userBetsError, refetch: refetchUserBets } = useQuery<any>({
     queryKey: ['/api/me/predictions'],
     enabled: !!user,
@@ -2743,6 +2737,13 @@ export default function PredictPage() {
   };
 
   const handleUpDownSelect = (market: PredictionMarket, choice: "up" | "down") => {
+    if (isMarketClosed) {
+      toast({
+        title: closedMarketMessage.title,
+        description: closedMarketMessage.description,
+      });
+      return;
+    }
     if (!user) {
       toast({
         title: "Sign in required",
@@ -2781,6 +2782,13 @@ export default function PredictPage() {
   };
 
   const handleH2HSelect = (market: HeadToHeadMarket, person: 1 | 2) => {
+    if (isMarketClosed) {
+      toast({
+        title: closedMarketMessage.title,
+        description: closedMarketMessage.description,
+      });
+      return;
+    }
     if (!user) {
       toast({ title: "Sign in required", description: "Sign in to place predictions." });
       setLocation("/login");
@@ -2817,7 +2825,10 @@ export default function PredictPage() {
 
   const handleGainerSelect = (market: TopGainerMarket, candidate: GainerCandidate) => {
     if (isMarketClosed) {
-      toast({ title: "Entries closed", description: "Predictions close Friday 23:59 UTC. Results announced Sunday." });
+      toast({
+        title: closedMarketMessage.title,
+        description: closedMarketMessage.description,
+      });
       return;
     }
     if (!user) {
@@ -2848,6 +2859,17 @@ export default function PredictPage() {
       bettingCutoff: market.bettingCutoff,
     });
     openStakeModal();
+  };
+
+  const openGainerPicker = (market: TopGainerMarket, initialCandidate?: GainerCandidate | null) => {
+    if (isMarketClosed) {
+      toast({
+        title: closedMarketMessage.title,
+        description: closedMarketMessage.description,
+      });
+      return;
+    }
+    setGainerPickerState({ market, initialCandidate });
   };
 
   const handleConfirmStake = (amount: number) => {
@@ -3437,6 +3459,7 @@ export default function PredictPage() {
                     key={market.id} 
                     market={market} 
                     isMarketClosed={isMarketClosed}
+                    closedMessage={closedMarketMessage}
                     onSelect={(choice) => handleUpDownSelect(market, choice)}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
@@ -3526,6 +3549,7 @@ export default function PredictPage() {
                       key={market.id} 
                       market={market} 
                       isMarketClosed={isMarketClosed}
+                      closedMessage={closedMarketMessage}
                       onSelect={(person) => handleH2HSelect(market, person)}
                       userPick={h2hUserPick}
                       onFilterCategory={handleCategoryPillFilter}
@@ -3610,7 +3634,8 @@ export default function PredictPage() {
                     key={market.id} 
                     market={market} 
                     isMarketClosed={isMarketClosed}
-                    onShowAllCandidates={(pickedMarket, initialCandidate) => setGainerPickerState({ market: pickedMarket, initialCandidate })}
+                    closedMessage={closedMarketMessage}
+                    onShowAllCandidates={openGainerPicker}
                     isPredicted={predictedMarkets.has(market.id)}
                     isShimmering={false}
                     onFilterCategory={handleCategoryPillFilter}
@@ -3681,6 +3706,7 @@ export default function PredictPage() {
               key={market.id} 
               market={market} 
               isMarketClosed={isMarketClosed}
+              closedMessage={closedMarketMessage}
               onSelect={(choice) => handleUpDownSelect(market, choice)}
               onFilterCategory={(cat) => setOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
               categoryRaceMap={raceMap}
@@ -3718,6 +3744,7 @@ export default function PredictPage() {
                 key={market.id} 
                 market={market} 
                 isMarketClosed={isMarketClosed}
+                closedMessage={closedMarketMessage}
                 onSelect={(person) => handleH2HSelect(market, person)}
                 userPick={h2hUserPick}
                 onFilterCategory={(cat) => setOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
@@ -3745,7 +3772,8 @@ export default function PredictPage() {
               key={market.id} 
               market={market} 
               isMarketClosed={isMarketClosed}
-              onShowAllCandidates={(pickedMarket, initialCandidate) => setGainerPickerState({ market: pickedMarket, initialCandidate })}
+              closedMessage={closedMarketMessage}
+              onShowAllCandidates={openGainerPicker}
               isPredicted={predictedMarkets.has(market.id)}
               isShimmering={false}
               onFilterCategory={(cat) => setOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
@@ -3804,7 +3832,7 @@ export default function PredictPage() {
           if (!market) return;
           const currentCandidate = (market.allCandidates || market.leaders).find((candidate) => candidate.entryId === pendingSelection.entryId);
           setStakeModalOpen(false);
-          setGainerPickerState({ market, initialCandidate: currentCandidate || null });
+          openGainerPicker(market, currentCandidate || null);
         } : undefined}
         onDirectionChange={(dir) => {
           if (!pendingSelection || pendingSelection.type !== "updown") return;

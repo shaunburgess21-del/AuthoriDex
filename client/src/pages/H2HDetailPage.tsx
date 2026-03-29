@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
+import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { UserMenu } from "@/components/UserMenu";
@@ -14,6 +15,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import {
   ArrowLeft,
   Swords,
@@ -48,6 +51,7 @@ export default function H2HDetailPage() {
   const [, setLocation] = useLocation();
   const marketId = params?.marketId || "";
   const { user, profile } = useAuth();
+  const { toast } = useToast();
   const walletCredits = profile?.predictCredits ?? 0;
 
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
@@ -63,8 +67,20 @@ export default function H2HDetailPage() {
     return found?.bettingCutoff || null;
   }, [allH2hMarkets, marketId]);
 
+  const serverResolutionDeadline = useMemo(() => {
+    if (!allH2hMarkets) return null;
+    const found = allH2hMarkets.find((m: any) => m.id === marketId);
+    return found?.endAt || null;
+  }, [allH2hMarkets, marketId]);
+
   const marketState = useMarketCycle(serverCutoff);
   const isMarketClosed = marketState.status !== "OPEN";
+  const closedMarketMessage = useMemo(() => {
+    return getClosedMarketMessage({
+      bettingCutoff: serverCutoff,
+      resolutionDeadline: serverResolutionDeadline,
+    });
+  }, [serverCutoff, serverResolutionDeadline]);
 
   const { data: userBetsData } = useQuery<any>({
     queryKey: ["/api/me/predictions"],
@@ -137,7 +153,14 @@ export default function H2HDetailPage() {
 
   const handleSelect = useCallback(
     (person: 1 | 2) => {
-      if (!hydrated || isMarketClosed || userPickSide) return;
+      if (!hydrated || userPickSide) return;
+      if (isMarketClosed) {
+        toast({
+          title: closedMarketMessage.title,
+          description: closedMarketMessage.description,
+        });
+        return;
+      }
       const picked = person === 1 ? hydrated.person1 : hydrated.person2;
       const opponent = person === 1 ? hydrated.person2 : hydrated.person1;
       setPendingSelection({
@@ -153,7 +176,7 @@ export default function H2HDetailPage() {
       });
       setStakeModalOpen(true);
     },
-    [hydrated, isMarketClosed, userPickSide, marketId]
+    [hydrated, isMarketClosed, userPickSide, marketId, toast, closedMarketMessage]
   );
 
   const handleConfirmStake = useCallback(
@@ -267,12 +290,11 @@ export default function H2HDetailPage() {
             <div className="relative mb-4" style={{ padding: '0 5px' }}>
               <div className="flex" style={{ gap: '7px' }}>
                 {/* Person 1 */}
-                <div
-                  className={`flex-1 relative ${
-                    !isMarketClosed && !userPickSide ? "cursor-pointer group/p1" : ""
-                  }`}
-                  onClick={() => !isMarketClosed && !userPickSide && handleSelect(1)}
-                >
+                <ClosedMarketActionTrigger isClosed={isMarketClosed && !userPickSide} message={closedMarketMessage} side="top" align="start">
+                  <div
+                    className={`flex-1 relative ${!userPickSide ? "cursor-pointer group/p1" : ""}`}
+                    onClick={() => !userPickSide && handleSelect(1)}
+                  >
                   <div className="absolute -inset-4 rounded-md bg-blue-500/20 blur-lg pointer-events-none transition-opacity group-hover/p1:bg-blue-500/40" />
                   <div className="rounded-lg overflow-hidden ring-2 ring-transparent transition-all group-hover/p1:ring-blue-500/60">
                     <PersonAvatar
@@ -286,14 +308,14 @@ export default function H2HDetailPage() {
                       <Crown className="h-3.5 w-3.5 text-amber-400" />
                     </div>
                   )}
-                </div>
+                  </div>
+                </ClosedMarketActionTrigger>
                 {/* Person 2 */}
-                <div
-                  className={`flex-1 relative ${
-                    !isMarketClosed && !userPickSide ? "cursor-pointer group/p2" : ""
-                  }`}
-                  onClick={() => !isMarketClosed && !userPickSide && handleSelect(2)}
-                >
+                <ClosedMarketActionTrigger isClosed={isMarketClosed && !userPickSide} message={closedMarketMessage} side="top" align="end">
+                  <div
+                    className={`flex-1 relative ${!userPickSide ? "cursor-pointer group/p2" : ""}`}
+                    onClick={() => !userPickSide && handleSelect(2)}
+                  >
                   <div className="absolute -inset-4 rounded-md bg-purple-500/20 blur-lg pointer-events-none transition-opacity group-hover/p2:bg-purple-500/40" />
                   <div className="rounded-lg overflow-hidden ring-2 ring-transparent transition-all group-hover/p2:ring-purple-500/60">
                     <PersonAvatar
@@ -307,7 +329,8 @@ export default function H2HDetailPage() {
                       <Crown className="h-3.5 w-3.5 text-amber-400" />
                     </div>
                   )}
-                </div>
+                  </div>
+                </ClosedMarketActionTrigger>
               </div>
               {/* VS badge */}
               <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
@@ -653,25 +676,24 @@ export default function H2HDetailPage() {
                   : "Behind"}
               </Badge>
             </div>
-          ) : isMarketClosed ? (
-            <Button className="w-full bg-muted text-muted-foreground" disabled>
-              <Lock className="h-4 w-4 mr-2" />
-              Market Closed
-            </Button>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              <Button
-                className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 h-auto text-base font-semibold"
-                onClick={() => handleSelect(1)}
-              >
-                {smartName(hydrated.person1.name)}
-              </Button>
-              <Button
-                className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 h-auto text-base font-semibold"
-                onClick={() => handleSelect(2)}
-              >
-                {smartName(hydrated.person2.name)}
-              </Button>
+              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="start">
+                <Button
+                  className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 h-auto text-base font-semibold"
+                  onClick={() => handleSelect(1)}
+                >
+                  {smartName(hydrated.person1.name)}
+                </Button>
+              </ClosedMarketActionTrigger>
+              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="end">
+                <Button
+                  className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 h-auto text-base font-semibold"
+                  onClick={() => handleSelect(2)}
+                >
+                  {smartName(hydrated.person2.name)}
+                </Button>
+              </ClosedMarketActionTrigger>
             </div>
           )}
         </div>

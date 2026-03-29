@@ -25,6 +25,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
+import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { TrendingPerson } from "@shared/schema";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -553,9 +554,21 @@ export default function HomePage() {
     return allNative.some((m: any) => m.isCutoffPassed === true);
   }, [nativeUpdownData]);
 
+  const leaderboardClosedMessage = useMemo(() => {
+    const allNative = (nativeUpdownData || []) as any[];
+    const firstMarket = allNative[0];
+    return getClosedMarketMessage({
+      bettingCutoff: firstMarket?.bettingCutoff,
+      resolutionDeadline: firstMarket?.resolutionDeadline || firstMarket?.endAt,
+    });
+  }, [nativeUpdownData]);
+
   const handleLeaderboardPredict = useCallback((personId: string, direction: "up" | "down") => {
     if (isUpdownCutoffPassed) {
-      toast({ title: "Entries closed", description: "Predictions close Friday 23:59 UTC. Results announced Sunday." });
+      toast({
+        title: leaderboardClosedMessage.title,
+        description: leaderboardClosedMessage.description,
+      });
       return;
     }
     const market = updownMarkets.find(m => m.personId === personId);
@@ -577,7 +590,7 @@ export default function HomePage() {
       bettingCutoff: market.bettingCutoff,
     });
     setStakeModalOpen(true);
-  }, [updownMarkets, isUpdownCutoffPassed, toast]);
+  }, [updownMarkets, isUpdownCutoffPassed, toast, leaderboardClosedMessage]);
 
   const handleConfirmStake = useCallback((amount: number) => {
     setWalletCredits(prev => prev - amount);
@@ -1151,6 +1164,7 @@ export default function HomePage() {
                         onPredictUp={() => handleLeaderboardPredict(person.id, "up")}
                         onPredictDown={() => handleLeaderboardPredict(person.id, "down")}
                         predictionsDisabled={isUpdownCutoffPassed}
+                        predictionsClosedMessage={leaderboardClosedMessage}
                         showExceptional={exceptionalIds.has(person.id)}
                         thresholds={percentileThresholds}
                         approvalShowResults={approvalShowResults}

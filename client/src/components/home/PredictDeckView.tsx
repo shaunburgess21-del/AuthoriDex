@@ -17,6 +17,10 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
+import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -86,10 +90,12 @@ function UpDownCard({
   market, 
   onPredict,
   isClosed,
+  closedMessage,
 }: { 
   market: PredictionMarket; 
   onPredict: (marketId: string, direction: 'up' | 'down', personName: string, multiplier: number) => void;
   isClosed?: boolean;
+  closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
 }) {
   const isUp = market.change7d >= 0;
   
@@ -135,13 +141,8 @@ function UpDownCard({
           <span className="text-red-500">Down {market.downMultiplier}x</span>
         </div>
         
-        {isClosed ? (
-          <Button size="sm" disabled className="w-full gap-1.5 opacity-60">
-            <Lock className="h-4 w-4" />
-            Awaiting Results
-          </Button>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2">
+          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="start">
             <Button
               size="sm"
               variant="outline"
@@ -152,6 +153,8 @@ function UpDownCard({
               <TrendingUp className="h-4 w-4 mr-1" />
               Up
             </Button>
+          </ClosedMarketActionTrigger>
+          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="end">
             <Button
               size="sm"
               variant="outline"
@@ -162,8 +165,8 @@ function UpDownCard({
               <TrendingDown className="h-4 w-4 mr-1" />
               Down
             </Button>
-          </div>
-        )}
+          </ClosedMarketActionTrigger>
+        </div>
       </div>
     </Card>
   );
@@ -173,10 +176,12 @@ function H2HCard({
   market, 
   onPredict,
   isClosed,
+  closedMessage,
 }: { 
   market: HeadToHeadMarket; 
   onPredict: (marketId: string, selection: 'person1' | 'person2', personName: string) => void;
   isClosed?: boolean;
+  closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
 }) {
   return (
     <Card className="relative overflow-hidden bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20" style={{ minHeight: '340px' }}>
@@ -202,19 +207,21 @@ function H2HCard({
         </div>
         
         <div className="flex items-center justify-between mb-4">
-          <div
-            className={`flex flex-col items-center flex-1 ${isClosed ? "" : "cursor-pointer"} group/p1`}
-            onClick={() => !isClosed && onPredict(market.id, 'person1', market.person1.name)}
-          >
-            <div className="relative">
-              <div className="absolute -inset-3 rounded-full bg-blue-500/30 blur-md transition-opacity group-hover/p1:bg-blue-500/50" />
-              <div className="relative rounded-full ring-2 ring-transparent transition-all group-hover/p1:ring-blue-500/60">
-                <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} size="xl" />
+          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="start">
+            <div
+              className={`flex flex-col items-center flex-1 ${isClosed ? "" : "cursor-pointer"} group/p1`}
+              onClick={() => !isClosed && onPredict(market.id, 'person1', market.person1.name)}
+            >
+              <div className="relative">
+                <div className="absolute -inset-3 rounded-full bg-blue-500/30 blur-md transition-opacity group-hover/p1:bg-blue-500/50" />
+                <div className="relative rounded-full ring-2 ring-transparent transition-all group-hover/p1:ring-blue-500/60">
+                  <PersonAvatar name={market.person1.name} avatar={market.person1.avatar} size="xl" />
+                </div>
               </div>
+              <p className="text-sm font-semibold mt-2 text-center">{smartName(market.person1.name)}</p>
+              <span className="text-xs text-blue-400">{market.person1Percent}%</span>
             </div>
-            <p className="text-sm font-semibold mt-2 text-center">{smartName(market.person1.name)}</p>
-            <span className="text-xs text-blue-400">{market.person1Percent}%</span>
-          </div>
+          </ClosedMarketActionTrigger>
           
           <div className="relative mx-2">
             <div className="h-14 w-14 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
@@ -222,19 +229,21 @@ function H2HCard({
             </div>
           </div>
           
-          <div
-            className={`flex flex-col items-center flex-1 ${isClosed ? "" : "cursor-pointer"} group/p2`}
-            onClick={() => !isClosed && onPredict(market.id, 'person2', market.person2.name)}
-          >
-            <div className="relative">
-              <div className="absolute -inset-3 rounded-full bg-purple-500/30 blur-md transition-opacity group-hover/p2:bg-purple-500/50" />
-              <div className="relative rounded-full ring-2 ring-transparent transition-all group-hover/p2:ring-purple-500/60">
-                <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} size="xl" />
+          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="end">
+            <div
+              className={`flex flex-col items-center flex-1 ${isClosed ? "" : "cursor-pointer"} group/p2`}
+              onClick={() => !isClosed && onPredict(market.id, 'person2', market.person2.name)}
+            >
+              <div className="relative">
+                <div className="absolute -inset-3 rounded-full bg-purple-500/30 blur-md transition-opacity group-hover/p2:bg-purple-500/50" />
+                <div className="relative rounded-full ring-2 ring-transparent transition-all group-hover/p2:ring-purple-500/60">
+                  <PersonAvatar name={market.person2.name} avatar={market.person2.avatar} size="xl" />
+                </div>
               </div>
+              <p className="text-sm font-semibold mt-2 text-center">{smartName(market.person2.name)}</p>
+              <span className="text-xs text-purple-400">{100 - market.person1Percent}%</span>
             </div>
-            <p className="text-sm font-semibold mt-2 text-center">{smartName(market.person2.name)}</p>
-            <span className="text-xs text-purple-400">{100 - market.person1Percent}%</span>
-          </div>
+          </ClosedMarketActionTrigger>
         </div>
         
         <div className="h-2 rounded-full bg-muted overflow-hidden mb-3">
@@ -250,13 +259,8 @@ function H2HCard({
           </span>
         </div>
         
-        {isClosed ? (
-          <Button size="sm" disabled className="w-full gap-1.5 opacity-60">
-            <Lock className="h-4 w-4" />
-            Awaiting Results
-          </Button>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2">
+          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="start">
             <Button 
               size="sm" 
               className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 md:py-2 h-auto"
@@ -265,6 +269,8 @@ function H2HCard({
             >
               {smartName(market.person1.name)}
             </Button>
+          </ClosedMarketActionTrigger>
+          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="end">
             <Button 
               size="sm" 
               className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 md:py-2 h-auto"
@@ -273,8 +279,8 @@ function H2HCard({
             >
               {smartName(market.person2.name)}
             </Button>
-          </div>
-        )}
+          </ClosedMarketActionTrigger>
+        </div>
       </div>
     </Card>
   );
@@ -374,10 +380,12 @@ function GainerCard({
   market,
   onPredict,
   isClosed,
+  closedMessage,
 }: {
   market: TopGainerMarket;
   onPredict: (marketId: string, leaderName: string) => void;
   isClosed?: boolean;
+  closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
 }) {
   const categoryLabel = market.category.charAt(0).toUpperCase() + market.category.slice(1);
   
@@ -434,12 +442,7 @@ function GainerCard({
           </span>
         </div>
         
-        {isClosed ? (
-          <Button size="sm" disabled className="w-full gap-1.5 opacity-60">
-            <Lock className="h-4 w-4" />
-            Awaiting Results
-          </Button>
-        ) : (
+        <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="center">
           <Button
             size="sm"
             className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500"
@@ -449,7 +452,7 @@ function GainerCard({
             <ChevronRight className="h-4 w-4 mr-1.5" />
             Place Prediction
           </Button>
-        )}
+        </ClosedMarketActionTrigger>
       </div>
     </Card>
   );
@@ -551,6 +554,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
 
   const marketState = useMarketCycle({ bettingCutoff: serverBettingCutoff, resolutionDeadline: serverResolutionDeadline });
   const { user } = useAuth();
+  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [activeSection, setActiveSection] = useState<PredictSection>("All");
   const [searchQuery, setSearchQuery] = useState("");
@@ -617,9 +621,21 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
   );
 
   const isClosed = marketState.status !== "OPEN";
+  const closedMarketMessage = useMemo(() => {
+    return getClosedMarketMessage({
+      bettingCutoff: serverBettingCutoff,
+      resolutionDeadline: serverResolutionDeadline,
+    });
+  }, [serverBettingCutoff, serverResolutionDeadline]);
 
   const handleUpDownPredict = useCallback((marketId: string, direction: 'up' | 'down', personName: string, multiplier: number) => {
-    if (isClosed) return;
+    if (isClosed) {
+      toast({
+        title: closedMarketMessage.title,
+        description: closedMarketMessage.description,
+      });
+      return;
+    }
     setStakeModal({
       isOpen: true,
       type: 'updown',
@@ -632,10 +648,16 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
         setUpDownInteracted(true);
       },
     });
-  }, [isClosed]);
+  }, [isClosed, toast, closedMarketMessage]);
 
   const handleH2HPredict = useCallback((marketId: string, selection: 'person1' | 'person2', personName: string) => {
-    if (isClosed) return;
+    if (isClosed) {
+      toast({
+        title: closedMarketMessage.title,
+        description: closedMarketMessage.description,
+      });
+      return;
+    }
     setStakeModal({
       isOpen: true,
       type: 'h2h',
@@ -647,10 +669,16 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
         setH2hInteracted(true);
       },
     });
-  }, [isClosed]);
+  }, [isClosed, toast, closedMarketMessage]);
 
   const handleGainerPredict = useCallback((marketId: string, leaderName: string) => {
-    if (isClosed) return;
+    if (isClosed) {
+      toast({
+        title: closedMarketMessage.title,
+        description: closedMarketMessage.description,
+      });
+      return;
+    }
     setStakeModal({
       isOpen: true,
       type: 'community',
@@ -662,7 +690,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
         setGainerInteracted(true);
       },
     });
-  }, [isClosed]);
+  }, [isClosed, toast, closedMarketMessage]);
 
   const closeStakeModal = () => {
     setStakeModal(null);
@@ -830,6 +858,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
                 market={market}
                 onPredict={(id, dir, name, mult) => handleUpDownPredict(id, dir, name, mult)}
                 isClosed={isClosed}
+                closedMessage={closedMarketMessage}
               />
             )}
             emptyMessage="No up/down markets match your filters"
@@ -863,6 +892,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
                 market={market}
                 onPredict={(id, sel, name) => handleH2HPredict(id, sel, name)}
                 isClosed={isClosed}
+                closedMessage={closedMarketMessage}
               />
             )}
             emptyMessage="No head-to-head markets match your filters"
@@ -896,6 +926,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
                 market={market}
                 onPredict={(id, leaderName) => handleGainerPredict(id, leaderName)}
                 isClosed={isClosed}
+                closedMessage={closedMarketMessage}
               />
             )}
             emptyMessage="No gainer markets match your filters"

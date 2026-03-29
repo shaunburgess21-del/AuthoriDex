@@ -10,6 +10,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
+import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import {
   ArrowLeft,
   TrendingUp,
@@ -33,6 +36,7 @@ export default function UpDownDetailPage() {
   const [, setLocation] = useLocation();
   const marketId = params?.marketId || "";
   const { user, profile } = useAuth();
+  const { toast } = useToast();
   const walletCredits = profile?.predictCredits ?? 0;
 
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
@@ -48,8 +52,20 @@ export default function UpDownDetailPage() {
     return found?.bettingCutoff || null;
   }, [allUpdownMarkets, marketId]);
 
+  const serverResolutionDeadline = useMemo(() => {
+    if (!allUpdownMarkets) return null;
+    const found = allUpdownMarkets.find((m: any) => m.id === marketId);
+    return found?.endAt || null;
+  }, [allUpdownMarkets, marketId]);
+
   const marketState = useMarketCycle(serverCutoff);
   const isMarketClosed = marketState.status !== "OPEN";
+  const closedMarketMessage = useMemo(() => {
+    return getClosedMarketMessage({
+      bettingCutoff: serverCutoff,
+      resolutionDeadline: serverResolutionDeadline,
+    });
+  }, [serverCutoff, serverResolutionDeadline]);
 
   const { data: userBetsData } = useQuery<any>({
     queryKey: ["/api/me/predictions"],
@@ -123,7 +139,14 @@ export default function UpDownDetailPage() {
 
   const handleSelect = useCallback(
     (choice: "up" | "down") => {
-      if (!hydrated || isMarketClosed || userPick) return;
+      if (!hydrated || userPick) return;
+      if (isMarketClosed) {
+        toast({
+          title: closedMarketMessage.title,
+          description: closedMarketMessage.description,
+        });
+        return;
+      }
       setPendingSelection({
         type: "updown",
         marketId,
@@ -141,7 +164,7 @@ export default function UpDownDetailPage() {
       });
       setStakeModalOpen(true);
     },
-    [hydrated, isMarketClosed, userPick, marketId]
+    [hydrated, isMarketClosed, userPick, marketId, toast, closedMarketMessage]
   );
 
   const handleConfirmStake = useCallback(
@@ -494,27 +517,26 @@ export default function UpDownDetailPage() {
                   : "Behind"}
               </Badge>
             </div>
-          ) : isMarketClosed ? (
-            <Button className="w-full bg-muted text-muted-foreground" disabled>
-              <Lock className="h-4 w-4 mr-2" />
-              Market Closed
-            </Button>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              <Button
-                className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 py-3 h-auto text-base font-semibold"
-                onClick={() => handleSelect("up")}
-              >
-                <TrendingUp className="h-5 w-5 mr-2" />
-                UP
-              </Button>
-              <Button
-                className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 py-3 h-auto text-base font-semibold"
-                onClick={() => handleSelect("down")}
-              >
-                <TrendingDown className="h-5 w-5 mr-2" />
-                DOWN
-              </Button>
+              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="start">
+                <Button
+                  className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 py-3 h-auto text-base font-semibold"
+                  onClick={() => handleSelect("up")}
+                >
+                  <TrendingUp className="h-5 w-5 mr-2" />
+                  UP
+                </Button>
+              </ClosedMarketActionTrigger>
+              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="end">
+                <Button
+                  className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 py-3 h-auto text-base font-semibold"
+                  onClick={() => handleSelect("down")}
+                >
+                  <TrendingDown className="h-5 w-5 mr-2" />
+                  DOWN
+                </Button>
+              </ClosedMarketActionTrigger>
             </div>
           )}
         </div>

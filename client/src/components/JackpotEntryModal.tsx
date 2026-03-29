@@ -11,6 +11,7 @@ import { getSupabase } from "@/lib/supabase";
 import { Crown, Check, X, Loader2, Lock, TicketCheck, HelpCircle, Clock } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent";
+import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import type { TrendingPerson } from "@shared/schema";
 
 interface JackpotEntry {
@@ -60,6 +61,11 @@ export function JackpotEntryModal({
   }, [scoreInput]);
 
   const isAuthReady = !!session?.access_token && !loading;
+  const closedMarketMessage = useMemo(() => {
+    return getClosedMarketMessage({
+      bettingCutoff,
+    });
+  }, [bettingCutoff]);
 
   const { data: takenData } = useQuery({
     queryKey: ["/api/native-markets", marketId, "jackpot-taken-numbers", session?.access_token],
@@ -240,10 +246,12 @@ export function JackpotEntryModal({
         ) : isCutoffPassed ? (
           <div className="text-center py-6">
             <Lock className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-            <p className="font-semibold mb-1">Entries Closed</p>
-            <p className="text-sm text-muted-foreground mb-4">
-              Jackpot entries close Friday at 23:59 UTC. Results will be announced Sunday at 23:59 UTC.
-            </p>
+            <p className="font-semibold mb-1">{closedMarketMessage.title}</p>
+            <div className="text-sm text-muted-foreground mb-4 space-y-2">
+              {closedMarketMessage.lines.map((line, idx) => (
+                <p key={`jackpot-closed-line-${idx}`}>{line}</p>
+              ))}
+            </div>
             {existingEntries.length > 0 && (
               <div className="mt-4 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
                 <p className="text-xs font-medium text-amber-500 mb-2">Your predictions</p>
