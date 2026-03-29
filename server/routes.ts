@@ -48,6 +48,7 @@ import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generat
 import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
 import { runPostInductionOnboarding } from "./services/induction-onboarding";
 import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
+import { resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
 
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
@@ -4283,16 +4284,12 @@ Only return the JSON object.`;
   app.get("/api/matchups/by-slug/:slug", async (req, res) => {
     try {
       const { slug } = req.params;
-      
-      const [matchup] = await db.select().from(matchups).where(eq(matchups.slug, slug));
+
+      const matchup = await resolvePublicMatchupBySlugOrId(slug);
       if (!matchup) {
         return res.status(404).json({ error: "Matchup not found" });
       }
-      
-      if (matchup.visibility !== 'live' && matchup.visibility !== 'inactive') {
-        return res.status(404).json({ error: "Matchup not found" });
-      }
-      
+
       const celebrities = await db.select({
         id: trackedPeople.id,
         name: trackedPeople.name,
@@ -4530,7 +4527,7 @@ Only return the JSON object.`;
   app.get("/api/matchups/:slug/comments", async (req, res) => {
     try {
       const { slug } = req.params;
-      const [matchup] = await db.select().from(matchups).where(eq(matchups.slug, slug));
+      const matchup = await resolvePublicMatchupBySlugOrId(slug);
       if (!matchup) {
         return res.status(404).json({ error: "Matchup not found" });
       }
@@ -4557,7 +4554,7 @@ Only return the JSON object.`;
       if (body.length > COMMENT_MAX_LENGTH) {
         return res.status(400).json({ error: `Comment body must be at most ${COMMENT_MAX_LENGTH} characters` });
       }
-      const [matchup] = await db.select().from(matchups).where(eq(matchups.slug, slug));
+      const matchup = await resolvePublicMatchupBySlugOrId(slug);
       if (!matchup) {
         return res.status(404).json({ error: "Matchup not found" });
       }

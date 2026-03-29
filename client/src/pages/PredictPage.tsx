@@ -3028,14 +3028,20 @@ export default function PredictPage() {
               </Link>
             </div>
             <div className="flex items-center gap-2.5 md:hidden">
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setRulesModalOpen("predictions")} aria-label="How predictions work">
+                <HelpCircle className="h-4 w-4 text-muted-foreground" />
+              </Button>
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-violet-500/10 border border-violet-500/30">
                 <Wallet className="h-[14px] w-[14px] text-violet-500" />
                 <span className="font-mono font-bold text-sm">{walletCredits.toLocaleString('en-US')}</span>
               </div>
-              <div className="flex items-center gap-1.5 text-muted-foreground">
+              <button
+                onClick={() => setShowMyPositions(!showMyPositions)}
+                className={`flex items-center gap-1.5 ${showMyPositions ? 'text-violet-400' : 'text-muted-foreground'}`}
+              >
                 <ListChecks className="h-[14px] w-[14px]" />
                 <span className="text-sm">{activePredictions}</span>
-              </div>
+              </button>
             </div>
             <UserMenu />
           </div>
@@ -3060,10 +3066,24 @@ export default function PredictPage() {
                 <span className="hidden sm:inline">{type.label}</span>
               </button>
             ))}
+            {user && activePredictions > 0 && !userBetsError && (
+              <button
+                onClick={() => setShowMyPositions(!showMyPositions)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit md:hidden ${
+                  showMyPositions
+                    ? 'bg-violet-500/20 text-violet-400 border border-violet-400/40 shadow-sm shadow-violet-500/20'
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent'
+                }`}
+                data-testid="toggle-my-positions-pill"
+              >
+                <Wallet className="h-4 w-4" />
+                Positions ({activePredictions})
+              </button>
+            )}
           </HorizontalScroll>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setRulesModalOpen("predictions")} aria-label="How predictions work">
+              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 hidden md:inline-flex" onClick={() => setRulesModalOpen("predictions")} aria-label="How predictions work">
                 <HelpCircle className="h-4 w-4 text-muted-foreground" />
               </Button>
             </TooltipTrigger>
@@ -3085,7 +3105,7 @@ export default function PredictPage() {
               variant={showMyPositions ? "default" : "outline"}
               size="sm"
               onClick={() => setShowMyPositions(!showMyPositions)}
-              className={`whitespace-nowrap shrink-0 ${showMyPositions ? 'bg-violet-500 hover:bg-violet-600 text-white' : ''}`}
+              className={`whitespace-nowrap shrink-0 hidden md:inline-flex ${showMyPositions ? 'bg-violet-500 hover:bg-violet-600 text-white' : ''}`}
               data-testid="toggle-my-positions"
             >
               <Wallet className="h-3.5 w-3.5 mr-1.5" />

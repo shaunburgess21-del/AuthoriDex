@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { handleImageError } from "@/lib/imageResolver";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
@@ -57,7 +57,15 @@ interface MatchupDetail {
 
 export default function MatchupDetailPage() {
   const params = useParams<{ slug: string }>();
-  const slug = params.slug;
+  const slugParam = params.slug;
+  const slug = useMemo(() => {
+    if (!slugParam) return "";
+    try {
+      return decodeURIComponent(slugParam);
+    } catch {
+      return slugParam;
+    }
+  }, [slugParam]);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -68,7 +76,7 @@ export default function MatchupDetailPage() {
   const { data: matchup, isLoading, error } = useQuery<MatchupDetail>({
     queryKey: ["/api/matchups/by-slug", slug],
     queryFn: async () => {
-      const res = await fetch(`/api/matchups/by-slug/${slug}`);
+      const res = await fetch(`/api/matchups/by-slug/${encodeURIComponent(slug)}`);
       if (!res.ok) throw new Error("Matchup not found");
       return res.json();
     },
