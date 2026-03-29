@@ -94,6 +94,7 @@ import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 
 const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
@@ -2264,7 +2265,7 @@ export default function VotePage() {
 
   const filteredTopics = dbPolls.filter((t: any) => {
     const matchesCategory = topicsCategoryFilter === "All" || topicsCategoryFilter === "Trending" || t.category === topicsCategoryFilter;
-    const matchesSearch = t.headline.toLowerCase().includes(topicsSearchQuery.toLowerCase()) ||
+    const matchesSearch = (t.headline ?? '').toLowerCase().includes(topicsSearchQuery.toLowerCase()) ||
                          (t.description || '').toLowerCase().includes(topicsSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   }).sort((a: any, b: any) => topicsCategoryFilter === "Trending" ? (b.totalVotes ?? 0) - (a.totalVotes ?? 0) : 0);
@@ -2408,9 +2409,9 @@ export default function VotePage() {
   
   const filteredMatchups = matchups.filter(f => {
     const matchesCategory = matchupsCategoryFilter === "All" || matchupsCategoryFilter === "Trending" || f.category === matchupsCategoryFilter;
-    const matchesSearch = f.title.toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
-                         f.optionAText.toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
-                         f.optionBText.toLowerCase().includes(matchupsSearchQuery.toLowerCase());
+    const matchesSearch = (f.title ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
+                         (f.optionAText ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
+                         (f.optionBText ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch && f.isActive;
   }).sort((a: any, b: any) => matchupsCategoryFilter === "Trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
 
@@ -2747,18 +2748,14 @@ export default function VotePage() {
         {/* ZONE 1: Public Opinion - Matchups Section (First) */}
         {(activeSection === "All" || activeSection === "Matchups") && (
         <section className="mb-10 mt-[5px]">
-          <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
-                  <Swords className="h-5 w-5 text-cyan-400" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-serif font-bold">Matchups</h2>
-                  <p className="text-sm text-muted-foreground">Vote on A vs B</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
+          <UnifiedSectionHeader
+            title="Matchups"
+            subtitle="Vote on A vs B"
+            icon={<Swords className="h-5 w-5 text-cyan-400" />}
+            accent="cyan"
+            testId="section-header-matchups"
+            actions={
+              <>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -2791,12 +2788,10 @@ export default function VotePage() {
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div ref={dragScrollRef3} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:min-w-0 sm:flex-1">
+              </>
+            }
+          >
+            <div ref={dragScrollRef3} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2809,7 +2804,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-          </div>
+          </UnifiedSectionHeader>
           
           {matchupsLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -2858,18 +2853,14 @@ export default function VotePage() {
         {/* ZONE 1: Public Opinion - Sentiment Polls Section (Second) */}
         {(activeSection === "All" || activeSection === "Sentiment Polls") && (
         <section className="mb-10">
-          <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
-                  <MessageSquare className="h-5 w-5 text-cyan-400" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-serif font-bold">Sentiment Polls</h2>
-                  <p className="text-sm text-muted-foreground">Weigh in on current events</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
+          <UnifiedSectionHeader
+            title="Sentiment Polls"
+            subtitle="Weigh in on current events"
+            icon={<MessageSquare className="h-5 w-5 text-cyan-400" />}
+            accent="cyan"
+            testId="section-header-sentiment"
+            actions={
+              <>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -2902,12 +2893,10 @@ export default function VotePage() {
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div ref={dragScrollRef4} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:min-w-0 sm:flex-1">
+              </>
+            }
+          >
+            <div ref={dragScrollRef4} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2920,7 +2909,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-          </div>
+          </UnifiedSectionHeader>
           
           {pollsLoading ? (
             <div className="flex items-center justify-center py-8">
@@ -2963,18 +2952,14 @@ export default function VotePage() {
         {/* ZONE 1.5: Opinion Polls - Multi-option community polls */}
         {(activeSection === "All" || activeSection === "Opinion Polls") && (
         <section className="mb-10">
-          <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
-                  <ListChecks className="h-5 w-5 text-cyan-400" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-serif font-bold">Opinion Polls</h2>
-                  <p className="text-sm text-muted-foreground">Choose who leads the pack</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
+          <UnifiedSectionHeader
+            title="Opinion Polls"
+            subtitle="Choose who leads the pack"
+            icon={<ListChecks className="h-5 w-5 text-cyan-400" />}
+            accent="cyan"
+            testId="section-header-opinion"
+            actions={
+              <>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -3007,12 +2992,10 @@ export default function VotePage() {
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div ref={dragScrollRef8} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:min-w-0 sm:flex-1">
+              </>
+            }
+          >
+            <div ref={dragScrollRef8} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -3025,7 +3008,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-          </div>
+          </UnifiedSectionHeader>
 
           {opinionPollsLoading ? (
             <div className="flex items-center justify-center py-8">
@@ -3072,40 +3055,32 @@ export default function VotePage() {
         {/* ZONE 2: Value Perception - Underrated/Overrated Section */}
         {(activeSection === "All" || activeSection === "Underrated/Overrated") && (
         <section className="mb-10">
-          <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
-                  <BarChart3 className="h-5 w-5 text-cyan-400" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-serif font-bold">Underrated / Overrated</h2>
-                  <p className="text-sm text-muted-foreground">overhyped or underappreciated?</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setRulesModalOpen("value")}
-                      className="text-cyan-400"
-                      data-testid="button-rules-value"
-                    >
-                      <HelpCircle className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
-                    How it works
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div ref={dragScrollRef5} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:min-w-0 sm:flex-1">
+          <UnifiedSectionHeader
+            title="Underrated / Overrated"
+            subtitle="overhyped or underappreciated?"
+            icon={<BarChart3 className="h-5 w-5 text-cyan-400" />}
+            accent="cyan"
+            testId="section-header-value"
+            actions={
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setRulesModalOpen("value")}
+                    className="text-cyan-400"
+                    data-testid="button-rules-value"
+                  >
+                    <HelpCircle className="h-5 w-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                  How it works
+                </TooltipContent>
+              </Tooltip>
+            }
+          >
+            <div ref={dragScrollRef5} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -3118,7 +3093,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-          </div>
+          </UnifiedSectionHeader>
           
           {valueLoading ? (
             <div className="flex items-center justify-center py-8">
@@ -3185,18 +3160,14 @@ export default function VotePage() {
         {/* ZONE 3: Governance - Induction Queue Section */}
         {(activeSection === "All" || activeSection === "Induction Queue") && (
         <section className="mb-10">
-          <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
-                  <Vote className="h-5 w-5 text-cyan-400" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-serif font-bold">The Induction Queue</h2>
-                  <p className="text-sm text-muted-foreground">Who joins the leaderboard next</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
+          <UnifiedSectionHeader
+            title="The Induction Queue"
+            subtitle="Who joins the leaderboard next"
+            icon={<Vote className="h-5 w-5 text-cyan-400" />}
+            accent="cyan"
+            testId="section-header-induction"
+            actions={
+              <>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -3229,23 +3200,22 @@ export default function VotePage() {
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
+              </>
+            }
+            meta={
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
+                  <Clock className="h-3 w-3 text-cyan-400" />
+                  <span className="text-slate-300">Ends in: {countdown}</span>
+                </div>
+                <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
+                  <Star className="h-3 w-3 text-amber-400" />
+                  <span className="text-slate-300">Top 1 will be inducted</span>
+                </div>
               </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
-              <Clock className="h-3 w-3 text-cyan-400" />
-              <span className="text-slate-300">Ends in: {countdown}</span>
-            </div>
-            <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
-              <Star className="h-3 w-3 text-amber-400" />
-              <span className="text-slate-300">Top 1 will be inducted</span>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div ref={dragScrollRef6} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:min-w-0 sm:flex-1">
+            }
+          >
+            <div ref={dragScrollRef6} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
               {getFilterCategories(false).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -3258,7 +3228,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-          </div>
+          </UnifiedSectionHeader>
 
           {inductionLoading ? (
             <div className="flex items-center justify-center py-8">
@@ -3304,18 +3274,14 @@ export default function VotePage() {
         {/* ZONE 3: Governance - Curate Profile Section */}
         {(activeSection === "All" || activeSection === "Curate Profile") && (
         <section className="mb-10">
-          <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
-                  <Camera className="h-5 w-5 text-cyan-400" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-serif font-bold">Curate the Profile</h2>
-                  <p className="text-sm text-muted-foreground">Help select their profile photo</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
+          <UnifiedSectionHeader
+            title="Curate the Profile"
+            subtitle="Help select their profile photo"
+            icon={<Camera className="h-5 w-5 text-cyan-400" />}
+            accent="cyan"
+            testId="section-header-curate"
+            actions={
+              <>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -3348,12 +3314,10 @@ export default function VotePage() {
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <div ref={dragScrollRef7} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:min-w-0 sm:flex-1">
+              </>
+            }
+          >
+            <div ref={dragScrollRef7} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
               {getFilterCategories(false).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -3366,7 +3330,7 @@ export default function VotePage() {
                 />
               ))}
             </div>
-          </div>
+          </UnifiedSectionHeader>
 
           <CurateSection categoryFilter={curateCategoryFilter} onFilterCategory={handleCategoryPillFilter} categoryRaceMap={raceMap} leaderboardCategories={leaderboardCats} />
         </section>

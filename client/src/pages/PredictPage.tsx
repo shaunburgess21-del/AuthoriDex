@@ -87,6 +87,7 @@ import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { formatActivityAge } from "@/lib/formatDate";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
+import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 
 const PREDICT_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
@@ -602,70 +603,6 @@ function HorizontalScroll({ children, className = "" }: { children: React.ReactN
   );
 }
 
-function SectionHeader({ 
-  title, 
-  children, 
-  icon,
-  onViewAll, 
-  onRulesClick,
-  rulesTitle 
-}: { 
-  title: string; 
-  children?: React.ReactNode; 
-  icon?: React.ReactNode;
-  onViewAll?: () => void;
-  onRulesClick?: () => void;
-  rulesTitle?: string;
-}) {
-  return (
-    <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {icon && (
-            <div className="h-10 w-10 rounded-lg bg-violet-500/10 hidden sm:flex items-center justify-center shrink-0">
-              {icon}
-            </div>
-          )}
-          <div>
-            <h2 className="text-xl font-serif font-bold">{title}</h2>
-            {children}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {onRulesClick && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  onClick={onRulesClick}
-                  className="text-violet-400 hover:text-violet-300"
-                  aria-label="How it works"
-                  data-testid={`button-rules-${title.toLowerCase().replace(/\s+/g, '-')}`}
-                >
-                  <HelpCircle className="h-5 w-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">How it works</TooltipContent>
-            </Tooltip>
-          )}
-          {onViewAll && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="text-violet-500 hover:text-violet-400"
-              onClick={onViewAll}
-            >
-              View All
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function SectionFilterBar({
   categoryFilter,
   onCategoryChange,
@@ -703,7 +640,7 @@ function SectionFilterBar({
   const filters = getPredictCategoryFilters(includeCustomTopic);
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
       <div ref={dragScrollRef} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
         {filters.map((cat) => {
           const IconComponent = CATEGORY_ICONS[cat.id];
@@ -3180,18 +3117,14 @@ export default function PredictPage() {
         {/* World Markets Section - First */}
         {showSection("community") && (
           <section className="mb-12 mt-[5px]">
-            <div className="relative mb-[15px] py-3 px-4 rounded-lg bg-gradient-to-r from-violet-500/5 via-violet-500/10 to-transparent border border-violet-500/20">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-violet-500/10 hidden sm:flex items-center justify-center shrink-0">
-                    <Scale className="h-5 w-5 text-violet-400" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-serif font-bold">World Markets</h2>
-                    <p className="text-sm text-muted-foreground">Predict the outcome of global events</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
+            <UnifiedSectionHeader
+              title="World Markets"
+              subtitle="Predict the outcome of global events"
+              icon={<Scale className="h-5 w-5 text-violet-400" />}
+              accent="violet"
+              testId="section-header-world-markets"
+              actions={
+                <>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button 
@@ -3223,21 +3156,22 @@ export default function PredictPage() {
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
-                </div>
-              </div>
-            </div>
-            <SectionFilterBar
-              categoryFilter={communityCategory}
-              onCategoryChange={setCommunityCategory}
-              searchQuery={communitySearch}
-              onSearchChange={setCommunitySearch}
-              searchPlaceholder="Search predictions..."
-              testIdPrefix="community"
-              user={user}
-              onAuthRequired={() => setLocation("/login")}
-              includeCustomTopic={true}
-              showSearch={false}
-            />
+                </>
+              }
+            >
+              <SectionFilterBar
+                categoryFilter={communityCategory}
+                onCategoryChange={setCommunityCategory}
+                searchQuery={communitySearch}
+                onSearchChange={setCommunitySearch}
+                searchPlaceholder="Search predictions..."
+                testIdPrefix="community"
+                user={user}
+                onAuthRequired={() => setLocation("/login")}
+                includeCustomTopic={true}
+                showSearch={false}
+              />
+            </UnifiedSectionHeader>
             {openMarketsError ? (
               <Card className="p-8 text-center">
                 <p className="text-destructive mb-2">Couldn&apos;t load World Markets</p>
@@ -3432,24 +3366,42 @@ export default function PredictPage() {
 
         {showSection("updown") && (
           <section className="mb-10">
-            <SectionHeader
+            <UnifiedSectionHeader
               title="Weekly Up / Down"
+              subtitle="Will their trend score be higher / lower"
               icon={<TrendingUp className="h-5 w-5 text-violet-400" />}
-              onRulesClick={() => setRulesModalOpen("updown")}
+              accent="violet"
+              testId="section-header-updown"
+              actions={
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => setRulesModalOpen("updown")}
+                      className="text-violet-400 hover:text-violet-300"
+                      aria-label="How it works"
+                      data-testid="button-rules-weekly-up-/-down"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">How it works</TooltipContent>
+                </Tooltip>
+              }
             >
-              <p className="text-sm text-muted-foreground">Will their trend score be higher / lower</p>
-            </SectionHeader>
-            <SectionFilterBar
-              categoryFilter={updownCategory}
-              onCategoryChange={setUpdownCategory}
-              searchQuery={updownSearch}
-              onSearchChange={setUpdownSearch}
-              searchPlaceholder="Search celebrities..."
-              testIdPrefix="updown"
-              user={user}
-              onAuthRequired={() => setLocation("/login")}
-              showSearch={false}
-            />
+              <SectionFilterBar
+                categoryFilter={updownCategory}
+                onCategoryChange={setUpdownCategory}
+                searchQuery={updownSearch}
+                onSearchChange={setUpdownSearch}
+                searchPlaceholder="Search celebrities..."
+                testIdPrefix="updown"
+                user={user}
+                onAuthRequired={() => setLocation("/login")}
+                showSearch={false}
+              />
+            </UnifiedSectionHeader>
             {updownError ? (
               <Card className="p-8 text-center">
                 <p className="text-destructive mb-2">Couldn&apos;t load Up/Down markets</p>
@@ -3496,24 +3448,42 @@ export default function PredictPage() {
 
         {showSection("h2h") && (
           <section className="mb-10">
-            <SectionHeader
+            <UnifiedSectionHeader
               title="Head-to-Head Battles"
+              subtitle="Who will gain more points"
               icon={<Swords className="h-5 w-5 text-violet-400" />}
-              onRulesClick={() => setRulesModalOpen("h2h")}
+              accent="violet"
+              testId="section-header-h2h"
+              actions={
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => setRulesModalOpen("h2h")}
+                      className="text-violet-400 hover:text-violet-300"
+                      aria-label="How it works"
+                      data-testid="button-rules-head-to-head-battles"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">How it works</TooltipContent>
+                </Tooltip>
+              }
             >
-              <p className="text-sm text-muted-foreground">Who will gain more points</p>
-            </SectionHeader>
-            <SectionFilterBar
-              categoryFilter={h2hCategory}
-              onCategoryChange={setH2hCategory}
-              searchQuery={h2hSearch}
-              onSearchChange={setH2hSearch}
-              searchPlaceholder="Search matchups..."
-              testIdPrefix="h2h"
-              user={user}
-              onAuthRequired={() => setLocation("/login")}
-              showSearch={false}
-            />
+              <SectionFilterBar
+                categoryFilter={h2hCategory}
+                onCategoryChange={setH2hCategory}
+                searchQuery={h2hSearch}
+                onSearchChange={setH2hSearch}
+                searchPlaceholder="Search matchups..."
+                testIdPrefix="h2h"
+                user={user}
+                onAuthRequired={() => setLocation("/login")}
+                showSearch={false}
+              />
+            </UnifiedSectionHeader>
             {h2hError ? (
               <Card className="p-8 text-center">
                 <p className="text-destructive mb-2">Couldn&apos;t load Head-to-Head markets</p>
@@ -3569,24 +3539,42 @@ export default function PredictPage() {
 
         {showSection("gainer") && (
           <section className="mb-10">
-            <SectionHeader
+            <UnifiedSectionHeader
               title="Category Races"
+              subtitle="Pick the biggest mover in each category"
               icon={<Trophy className="h-5 w-5 text-violet-400" />}
-              onRulesClick={() => setRulesModalOpen("gainer")}
+              accent="violet"
+              testId="section-header-gainer"
+              actions={
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => setRulesModalOpen("gainer")}
+                      className="text-violet-400 hover:text-violet-300"
+                      aria-label="How it works"
+                      data-testid="button-rules-category-races"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">How it works</TooltipContent>
+                </Tooltip>
+              }
             >
-              <p className="text-sm text-muted-foreground">Pick the biggest mover in each category</p>
-            </SectionHeader>
-            <SectionFilterBar
-              categoryFilter={gainerCategory}
-              onCategoryChange={setGainerCategory}
-              searchQuery={gainerSearch}
-              onSearchChange={setGainerSearch}
-              searchPlaceholder="Search gainers..."
-              testIdPrefix="gainer"
-              user={user}
-              onAuthRequired={() => setLocation("/login")}
-              showSearch={false}
-            />
+              <SectionFilterBar
+                categoryFilter={gainerCategory}
+                onCategoryChange={setGainerCategory}
+                searchQuery={gainerSearch}
+                onSearchChange={setGainerSearch}
+                searchPlaceholder="Search gainers..."
+                testIdPrefix="gainer"
+                user={user}
+                onAuthRequired={() => setLocation("/login")}
+                showSearch={false}
+              />
+            </UnifiedSectionHeader>
             {gainerError ? (
               <Card className="p-8 text-center">
                 <p className="text-destructive mb-2">Couldn&apos;t load Category Race markets</p>

@@ -15,7 +15,7 @@ interface HotMover {
   fameIndex: number | null;
   change24h: number | null;
   rankChange: number | null;
-  badge: { label: string; color: string; description: string };
+  badge?: { label: string; color: string; description: string };
   sourceBreakdown?: { sources: Array<{ key: string; pct: number; status?: string }>; activeSources: number; dominantDriver?: string | null } | null;
 }
 
@@ -118,6 +118,8 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
               const delta = formatDelta(person.change24h);
               const isUp = (person.change24h ?? 0) > 0;
               const tag = person.badge;
+              const displayName = person.name ?? "";
+              const firstName = displayName.split(" ")[0] || "this";
               const ctx = trendContexts?.[person.id];
               const rc = person.rankChange ?? null;
               const showRankChange = rc !== null && Math.abs(rc) >= 3;
@@ -129,11 +131,13 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                   data-testid={`trending-now-item-${person.id}`}
                 >
                   <span className="font-mono font-bold text-slate-500 w-4 text-center text-[14px]">{idx + 1}</span>
-                  <PersonAvatar name={person.name} avatar={person.avatar} size="sm" />
+                  <PersonAvatar name={displayName} avatar={person.avatar} size="sm" />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-xs truncate text-slate-200">{person.name}</p>
+                    <p className="font-medium text-xs truncate text-slate-200">{displayName}</p>
                     <div className="flex items-center gap-1.5">
-                      <span className={`text-[10px] ${tag.color}`}>{tag.label}</span>
+                      {tag ? (
+                        <span className={`text-[10px] ${tag.color}`}>{tag.label}</span>
+                      ) : null}
                       <Popover>
                         <PopoverTrigger asChild>
                           <button
@@ -150,7 +154,7 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
                           className="w-[230px] p-3"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <p className="font-semibold text-xs mb-2">Why {person.name.split(" ")[0]} is moving</p>
+                          <p className="font-semibold text-xs mb-2">Why {firstName} is moving</p>
                           <div className="space-y-1.5 text-[11px]">
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-muted-foreground flex items-center gap-1">

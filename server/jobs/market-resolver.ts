@@ -870,8 +870,12 @@ export async function resolveExpiredMarkets(): Promise<void> {
 
 export function startMarketResolverScheduler(): void {
   log("[MarketResolver] Starting scheduler (every 5 min, 2-min startup delay)");
+  const safeResolve = () =>
+    resolveExpiredMarkets().catch((err) =>
+      console.error("[MarketResolver] Unhandled error in resolveExpiredMarkets:", err),
+    );
   setTimeout(() => {
-    resolveExpiredMarkets();
-    setInterval(resolveExpiredMarkets, RESOLVER_INTERVAL_MS);
+    safeResolve();
+    setInterval(safeResolve, RESOLVER_INTERVAL_MS);
   }, RESOLVER_STARTUP_DELAY_MS);
 }
