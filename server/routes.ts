@@ -316,6 +316,17 @@ async function syncRelatedPeople(cardType: string, cardId: string, personIds: st
   }
 }
 
+function generateImageSlug(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Note: Using local PostgreSQL database instead of Supabase
   // Supabase seeding disabled while Supabase is paused
@@ -7655,6 +7666,7 @@ Only return the JSON object.`;
         name,
         category: category || 'Other',
         status: status || 'main_leaderboard',
+        imageSlug: generateImageSlug(name),
         wikiSlug: wikiSlug || null,
         xHandle: xHandle || null,
         avatar: avatar || null,
@@ -7675,6 +7687,29 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error creating celebrity:", error.message);
       res.status(500).json({ error: "Failed to create celebrity" });
+    }
+  });
+
+  // Backfill imageSlug for tracked_people with null slug
+  app.post("/api/admin/backfill-image-slugs", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const missing = await db.select({ id: trackedPeople.id, name: trackedPeople.name })
+        .from(trackedPeople)
+        .where(sql`${trackedPeople.imageSlug} IS NULL OR ${trackedPeople.imageSlug} = ''`);
+
+      let updated = 0;
+      for (const person of missing) {
+        const slug = generateImageSlug(person.name);
+        await db.update(trackedPeople)
+          .set({ imageSlug: slug })
+          .where(eq(trackedPeople.id, person.id));
+        updated++;
+      }
+
+      res.json({ updated, total: missing.length, examples: missing.slice(0, 10).map(p => ({ name: p.name, slug: generateImageSlug(p.name) })) });
+    } catch (error: any) {
+      console.error("Error backfilling image slugs:", error);
+      res.status(500).json({ error: "Backfill failed" });
     }
   });
 
@@ -14150,7 +14185,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       const autoSlug = (typeof imageSlug === "string" && imageSlug.trim())
         ? imageSlug.trim()
-        : displayName.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-");
+        : generateImageSlug(displayName);
       const statusStr = (typeof inductionStatus === "string" && inductionStatus.trim()) ? inductionStatus.trim() : "Queue";
       const activeFromStatus = !["inducted", "rejected", "inactive", "archived"].includes(statusStr.toLowerCase());
       const xh = (typeof xHandle === "string" && xHandle.trim()) ? xHandle.trim().replace(/^@+/, "") : null;
