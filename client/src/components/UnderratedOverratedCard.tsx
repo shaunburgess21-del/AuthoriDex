@@ -9,6 +9,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { Link, useLocation } from "wouter";
 
 type VoteType = 'underrated' | 'overrated' | 'fairly_rated';
@@ -54,6 +55,7 @@ export function UnderratedOverratedCard({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
 
   const totalVotes = (person.underratedCount ?? 0) + (person.overratedCount ?? 0) + (person.fairlyRatedCount ?? 0);
   const underratedPct = person.underratedPct ?? 33;
@@ -88,6 +90,10 @@ export function UnderratedOverratedCard({
   });
 
   const handleVote = (voteType: VoteType) => {
+    if (!user) {
+      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      return;
+    }
     if (!localVote) {
       valueVoteMutation.mutate(voteType);
     }

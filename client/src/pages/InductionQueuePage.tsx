@@ -4,6 +4,7 @@ import { useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { UserMenu } from "@/components/UserMenu";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
@@ -97,8 +98,12 @@ export default function InductionQueuePage() {
   });
 
   useEffect(() => {
+    if (!isLoggedIn) {
+      setVotedIds(new Set());
+      return;
+    }
     if (myVoteIds) setVotedIds(new Set(myVoteIds));
-  }, [myVoteIds]);
+  }, [isLoggedIn, myVoteIds]);
 
   useEffect(() => {
     return () => { if (animRef.current) clearTimeout(animRef.current); };
@@ -110,12 +115,25 @@ export default function InductionQueuePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] });
       queryClient.invalidateQueries({ queryKey: ["/api/me/induction-votes"] });
     },
-    onError: (err: any) => {
-      toast({ title: "Vote failed", description: err.message || "Please sign in to vote", variant: "destructive" });
+    onError: (err: any, id: string) => {
+      setVotedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      if (isUnauthorizedApiError(err)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({ title: "Vote failed", description: err.message || "Something went wrong", variant: "destructive" });
+      }
     },
   });
 
   const handleVote = (id: string) => {
+    if (!user) {
+      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      return;
+    }
     if (votedIds.has(id)) return;
     setVotedIds((prev) => new Set(prev).add(id));
     setShowVoteAnim(id);

@@ -1193,6 +1193,7 @@ function OpinionPollCard({
   leaderboardCategories?: Set<string>;
 }) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [voted, setVoted] = useState<string | null>(poll.userVote || null);
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
@@ -1212,11 +1213,15 @@ function OpinionPollCard({
         await onVote(poll.slug, optionId);
         setVoted(optionId);
       } catch (err) {
-        toast({
-          title: "Could not record vote",
-          description: parseVoteError(err),
-          variant: "destructive",
-        });
+        if (isUnauthorizedApiError(err)) {
+          toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        } else {
+          toast({
+            title: "Could not record vote",
+            description: parseVoteError(err),
+            variant: "destructive",
+          });
+        }
       }
     }
   };
@@ -1235,11 +1240,15 @@ function OpinionPollCard({
       setChangeDialogOpen(false);
       setPendingOption(null);
     } catch (err) {
-      toast({
-        title: "Could not change vote",
-        description: parseVoteError(err),
-        variant: "destructive",
-      });
+      if (isUnauthorizedApiError(err)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Could not change vote",
+          description: parseVoteError(err),
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -2167,10 +2176,42 @@ export default function VotePage() {
     staleTime: 60 * 1000,
   });
 
+  const { data: myInductionVoteIds } = useQuery<string[]>({
+    queryKey: ["/api/me/induction-votes"],
+    enabled: !!user,
+  });
+
+  useEffect(() => {
+    if (!user) {
+      setVotedIds(new Set());
+      return;
+    }
+    if (Array.isArray(myInductionVoteIds)) {
+      setVotedIds(new Set(myInductionVoteIds));
+    }
+  }, [user, myInductionVoteIds]);
+
   const inductionVoteMutation = useMutation({
     mutationFn: (id: string) => apiRequest('POST', `/api/vote/induction/${id}/vote`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/me/induction-votes'] });
+    },
+    onError: (err, candidateId) => {
+      setVotedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(candidateId);
+        return next;
+      });
+      if (isUnauthorizedApiError(err)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Error",
+          description: parseVoteError(err),
+          variant: "destructive",
+        });
+      }
     },
   });
 
@@ -2190,6 +2231,7 @@ export default function VotePage() {
     if (params.get("section") === "induction") return true;
     return window.history.state?.overlay === "induction";
   });
+  const prevInductionOverlayOpenRef = useRef(inductionOverlayOpen);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   const [topicsCategoryFilter, setTopicsCategoryFilter] = useState<FilterCategory>("All");
@@ -2366,11 +2408,15 @@ export default function VotePage() {
           return next;
         });
       }
-      toast({
-        title: "Error",
-        description: parseVoteError(error),
-        variant: "destructive",
-      });
+      if (isUnauthorizedApiError(error)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Error",
+          description: parseVoteError(error),
+          variant: "destructive",
+        });
+      }
     },
   });
   
@@ -2389,15 +2435,23 @@ export default function VotePage() {
     },
     onError: (error: any, variables) => {
       setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [variables.matchupId]: variables.previousVote }));
-      toast({
-        title: "Error",
-        description: parseVoteError(error),
-        variant: "destructive",
-      });
+      if (isUnauthorizedApiError(error)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Error",
+          description: parseVoteError(error),
+          variant: "destructive",
+        });
+      }
     },
   });
 
   const handleMatchupVote = (matchupId: string, option: 'option_a' | 'option_b', event?: React.MouseEvent) => {
+    if (!user) {
+      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      return;
+    }
     const previousVote = matchupUserVotes[matchupId] || null;
     setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [matchupId]: option }));
     matchupVoteMutation.mutate({ matchupId, option, previousVote });
@@ -2407,6 +2461,10 @@ export default function VotePage() {
   };
   
   const handleMatchupRemoveVote = (matchupId: string) => {
+    if (!user) {
+      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      return;
+    }
     const previousVote = matchupUserVotes[matchupId];
     if (!previousVote) return;
     setLocalMatchupVotes((prev: Record<string, string>) => {
@@ -2469,6 +2527,13 @@ export default function VotePage() {
     e.stopPropagation();
     openSnapScroll(section, itemId);
   }, [isMobile, openSnapScroll]);
+
+  useEffect(() => {
+    if (prevInductionOverlayOpenRef.current && !inductionOverlayOpen) {
+      setInductionSearchQuery("");
+    }
+    prevInductionOverlayOpenRef.current = inductionOverlayOpen;
+  }, [inductionOverlayOpen]);
 
   useEffect(() => {
     if (inductionOverlayOpen || topicsOverlayOpen || suggestModalOpen || startPollModalOpen || matchupsOverlayOpen || inductionSuggestOpen || matchupSuggestOpen || valuePerceptionOverlayOpen || opinionPollsOverlayOpen || snapScrollOpen) {
@@ -2582,6 +2647,10 @@ export default function VotePage() {
   }, []);
 
   const handleToggleVote = (candidateId: string) => {
+    if (!user) {
+      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      return;
+    }
     if (votedIds.has(candidateId)) return;
     setVotedIds(prev => {
       const newSet = new Set(prev);
@@ -2607,15 +2676,23 @@ export default function VotePage() {
     },
     onError: (error: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
-      toast({
-        title: "Error",
-        description: parseVoteError(error),
-        variant: "destructive",
-      });
+      if (isUnauthorizedApiError(error)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Error",
+          description: parseVoteError(error),
+          variant: "destructive",
+        });
+      }
     },
   });
 
   const handleDiscourseVote = (topicId: string, choice: 'support' | 'neutral' | 'oppose', event?: React.MouseEvent) => {
+    if (!user) {
+      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      return;
+    }
     const topic = dbPolls.find((t: any) => t.id === topicId);
     if (topic?.slug) {
       discourseVoteMutation.mutate({ slug: topic.slug, choice });

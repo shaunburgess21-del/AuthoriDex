@@ -7,7 +7,11 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { Vote, Crown, Check, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 
 export interface InductionCandidate {
   id: string;
@@ -150,20 +154,57 @@ export function InductionLeaderboardSlice({
   votedCandidates = new Set(),
   onToggleVote,
 }: InductionLeaderboardSliceProps) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+
   const { data: inductionData } = useQuery<any>({
     queryKey: ['/api/vote/induction'],
     staleTime: 60 * 1000,
     enabled: !candidates,
   });
 
+  const { data: myInductionVoteIds } = useQuery<string[]>({
+    queryKey: ["/api/me/induction-votes"],
+    enabled: !!user && !onToggleVote,
+  });
+
+  const [localVotedIds, setLocalVotedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (onToggleVote) return;
+    if (!user) {
+      setLocalVotedIds(new Set());
+      return;
+    }
+    if (Array.isArray(myInductionVoteIds)) {
+      setLocalVotedIds(new Set(myInductionVoteIds));
+    }
+  }, [onToggleVote, user, myInductionVoteIds]);
+
   const inductionVoteMutation = useMutation({
     mutationFn: (id: string) => apiRequest('POST', `/api/vote/induction/${id}/vote`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/me/induction-votes'] });
+    },
+    onError: (err, id) => {
+      setLocalVotedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      if (isUnauthorizedApiError(err)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Vote failed",
+          description: err instanceof Error ? err.message : "Something went wrong",
+          variant: "destructive",
+        });
+      }
     },
   });
-
-  const [localVotedIds, setLocalVotedIds] = useState<Set<string>>(new Set());
 
   const dbCandidates: InductionCandidate[] = (inductionData?.data || []).map((c: any) => ({
     id: c.id,
@@ -181,6 +222,10 @@ export function InductionLeaderboardSlice({
   const resolvedVotedIds = onToggleVote ? votedCandidates : localVotedIds;
 
   const handleVote = onToggleVote || ((id: string) => {
+    if (!user) {
+      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      return;
+    }
     if (localVotedIds.has(id)) return;
     setLocalVotedIds(prev => {
       const next = new Set(prev);
