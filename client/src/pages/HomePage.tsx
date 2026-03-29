@@ -1071,32 +1071,36 @@ export default function HomePage() {
                     </div>
                   </div>
                   {leaderboardTab === "fame" && percentileThresholds && (
-                    <div className="px-4 sm:px-6 py-2.5 border-b bg-muted/20 flex items-center gap-4 flex-wrap text-[11px] text-muted-foreground" data-testid="indicator-legend">
-                      <TouchTooltip content="Big score surge combined with a major rank jump" side="bottom" className="text-xs max-w-[200px]">
-                        <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-breakout">
-                          <Rocket className="h-3 w-3 text-orange-400" />
-                          Breakout
-                        </span>
-                      </TouchTooltip>
-                      <TouchTooltip content="Top percentile score spike or rank jump in the last 24 hours" side="bottom" className="text-xs max-w-[200px]">
-                        <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-surging">
-                          <Flame className="h-3 w-3 text-yellow-400" />
-                          Surging
-                        </span>
-                      </TouchTooltip>
-                      <TouchTooltip content="Fading momentum or dropping in rank" side="bottom" className="text-xs max-w-[200px]">
-                        <span className="inline-flex items-center gap-1 cursor-help opacity-80" data-testid="legend-cooling">
-                          <TrendingDown className="h-3 w-3 text-sky-300" />
-                          Cooling
-                        </span>
-                      </TouchTooltip>
-                      <TouchTooltip
-                        content="Predict whether each celebrity's Trend Score will go Up or Down this week."
-                        side="bottom"
-                        className="text-xs max-w-[220px]"
-                      >
-                        <span className="ml-auto lg:hidden text-[11px] font-medium uppercase tracking-wider text-muted-foreground cursor-help">Predict</span>
-                      </TouchTooltip>
+                    <div className="px-4 sm:px-6 py-2.5 border-b bg-muted/20 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground" data-testid="indicator-legend">
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+                        <TouchTooltip content="Big score surge combined with a major rank jump" side="bottom" className="text-xs max-w-[200px]">
+                          <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-breakout">
+                            <Rocket className="h-3 w-3 text-orange-400" />
+                            Breakout
+                          </span>
+                        </TouchTooltip>
+                        <TouchTooltip content="Top percentile score spike or rank jump in the last 24 hours" side="bottom" className="text-xs max-w-[200px]">
+                          <span className="inline-flex items-center gap-1 cursor-help" data-testid="legend-surging">
+                            <Flame className="h-3 w-3 text-yellow-400" />
+                            Surging
+                          </span>
+                        </TouchTooltip>
+                        <TouchTooltip content="Fading momentum or dropping in rank" side="bottom" className="text-xs max-w-[200px]">
+                          <span className="inline-flex items-center gap-1 cursor-help opacity-80" data-testid="legend-cooling">
+                            <TrendingDown className="h-3 w-3 text-sky-300" />
+                            Cooling
+                          </span>
+                        </TouchTooltip>
+                      </div>
+                      <div className="ml-auto shrink-0 lg:hidden">
+                        <TouchTooltip
+                          content="Predict whether each celebrity's Trend Score will go Up or Down this week."
+                          side="bottom"
+                          className="text-xs max-w-[220px]"
+                        >
+                          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground cursor-help">Predict</span>
+                        </TouchTooltip>
+                      </div>
                     </div>
                   )}
                   {leaderboardTab === "approval" && (
