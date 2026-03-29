@@ -9,7 +9,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
-import { useMarketCycle } from "@/hooks/useMarketCycle";
+import { useMarketCycle, type MarketStatus } from "@/hooks/useMarketCycle";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { JackpotEntryModal } from "@/components/JackpotEntryModal";
 import { RulesModal, RULES_CONTENT } from "@/components/predict/RulesContent";
@@ -2149,7 +2149,7 @@ function CelebritySearchModal({
 
 function WeeklyJackpotHero({ 
   onEnterJackpot, 
-  isMarketClosed,
+  marketStatus,
   timeRemaining,
   trendingPeople,
   selectedPerson,
@@ -2159,7 +2159,7 @@ function WeeklyJackpotHero({
   onRulesClick,
 }: {
   onEnterJackpot: () => void;
-  isMarketClosed: boolean;
+  marketStatus: MarketStatus;
   timeRemaining: { days: number; hours: number; minutes: number; seconds: number };
   trendingPeople: TrendingPerson[];
   selectedPerson: TrendingPerson | null;
@@ -2189,11 +2189,38 @@ function WeeklyJackpotHero({
 
   const entryCount = jackpotMarket?.totalBets || jackpotMarket?.activeParticipantCount || 0;
 
-  const isCutoffPassed = useMemo(() => {
-    if (jackpotMarket?.isCutoffPassed) return true;
-    if (!jackpotMarket?.bettingCutoff) return false;
-    return new Date() > new Date(jackpotMarket.bettingCutoff);
-  }, [jackpotMarket]);
+  const timerLabel = marketStatus === "ENTRIES_CLOSED" ? "Results In" : "Time Remaining";
+
+  const renderCTA = () => {
+    if (marketStatus === "RESOLVED") {
+      return (
+        <Button size="lg" className="bg-muted text-muted-foreground cursor-not-allowed" disabled>
+          <Lock className="h-5 w-5 mr-2" />
+          Market Resolved
+        </Button>
+      );
+    }
+    if (marketStatus === "ENTRIES_CLOSED") {
+      return (
+        <Button size="lg" className="bg-muted text-muted-foreground cursor-not-allowed" disabled>
+          <Clock className="h-5 w-5 mr-2" />
+          Entries Closed — Results Sunday
+        </Button>
+      );
+    }
+    return (
+      <Button 
+        size="lg"
+        className="bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
+        onClick={onEnterJackpot}
+        disabled={!selectedPerson}
+        data-testid="button-enter-jackpot"
+      >
+        <Crown className="h-5 w-5 mr-2" />
+        Enter Jackpot — 100 Credits
+      </Button>
+    );
+  };
 
   return (
     <div 
@@ -2251,44 +2278,27 @@ function WeeklyJackpotHero({
             
             <p className="text-sm text-muted-foreground mb-4 max-w-md">Predict the exact Trend Score. Closest wins the jackpot!</p>
             
-            {isMarketClosed ? (
-              <Button size="lg" className="bg-muted text-muted-foreground cursor-not-allowed" disabled>
-                <Lock className="h-5 w-5 mr-2" />
-                Market Closed
-              </Button>
-            ) : isCutoffPassed ? (
-              <Button size="lg" className="bg-muted text-muted-foreground cursor-not-allowed" disabled>
-                <Lock className="h-5 w-5 mr-2" />
-                Entries Closed — Results Sunday
-              </Button>
-            ) : (
-              <Button 
-                size="lg"
-                className="bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
-                onClick={onEnterJackpot}
-                disabled={!selectedPerson}
-                data-testid="button-enter-jackpot"
-              >
-                <Crown className="h-5 w-5 mr-2" />
-                Enter Jackpot — 100 Credits
-              </Button>
-            )}
+            {renderCTA()}
           </div>
           
           <div className="flex flex-col items-end gap-2">
-            <p className="text-xs text-muted-foreground">Time Remaining</p>
-            <div className="flex gap-2">
-              {[
-                { value: timeRemaining.days, label: 'd' },
-                { value: timeRemaining.hours, label: 'h' },
-                { value: timeRemaining.minutes, label: 'm' },
-              ].map((item, i) => (
-                <div key={i} className="flex items-baseline gap-0.5">
-                  <span className="font-mono text-2xl font-bold text-amber-500">{item.value}</span>
-                  <span className="text-xs text-muted-foreground">{item.label}</span>
+            {marketStatus !== "RESOLVED" && (
+              <>
+                <p className="text-xs text-muted-foreground">{timerLabel}</p>
+                <div className="flex gap-2">
+                  {[
+                    { value: timeRemaining.days, label: 'd' },
+                    { value: timeRemaining.hours, label: 'h' },
+                    { value: timeRemaining.minutes, label: 'm' },
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-baseline gap-0.5">
+                      <span className="font-mono text-2xl font-bold text-amber-500">{item.value}</span>
+                      <span className="text-xs text-muted-foreground">{item.label}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
             <p className="text-sm font-semibold text-amber-500 mt-2">
               Pool: {poolSize > 0 ? poolSize.toLocaleString() : "0"} credits
             </p>
@@ -2398,16 +2408,20 @@ export default function PredictPage() {
     queryKey: ['/api/native-markets/gainer'],
   });
 
-  const serverBettingCutoff = useMemo(() => {
+  const { serverBettingCutoff, serverResolutionDeadline } = useMemo(() => {
     const allNative = [...(nativeUpdownData || []), ...(nativeH2hData || []), ...(nativeGainerData || [])];
     const cutoffs = allNative.map((m: any) => m.bettingCutoff).filter(Boolean) as string[];
-    if (cutoffs.length === 0) return null;
+    const endAts = allNative.map((m: any) => m.endAt).filter(Boolean).map((d: string) => typeof d === "string" ? d : new Date(d).toISOString());
     cutoffs.sort();
-    return cutoffs[0];
+    endAts.sort();
+    return {
+      serverBettingCutoff: cutoffs[0] || null,
+      serverResolutionDeadline: endAts[0] || null,
+    };
   }, [nativeUpdownData, nativeH2hData, nativeGainerData]);
 
-  const marketCycle = useMarketCycle(serverBettingCutoff);
-  const isMarketClosed = marketCycle.status === "CLOSED";
+  const marketCycle = useMarketCycle({ bettingCutoff: serverBettingCutoff, resolutionDeadline: serverResolutionDeadline });
+  const isMarketClosed = marketCycle.status !== "OPEN";
   const { data: userBetsData, error: userBetsError, refetch: refetchUserBets } = useQuery<any>({
     queryKey: ['/api/me/predictions'],
     enabled: !!user,
@@ -3404,7 +3418,7 @@ export default function PredictPage() {
           ) : (
             <WeeklyJackpotHero 
               onEnterJackpot={handleEnterJackpot}
-              isMarketClosed={isMarketClosed}
+              marketStatus={marketCycle.status}
               timeRemaining={marketCycle.timeRemaining}
               trendingPeople={trendingPeople}
               selectedPerson={selectedJackpotPerson}

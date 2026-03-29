@@ -49,7 +49,7 @@ export default function UpDownDetailPage() {
   }, [allUpdownMarkets, marketId]);
 
   const marketState = useMarketCycle(serverCutoff);
-  const isMarketClosed = marketState.status === "CLOSED";
+  const isMarketClosed = marketState.status !== "OPEN";
 
   const { data: userBetsData } = useQuery<any>({
     queryKey: ["/api/me/predictions"],

@@ -64,7 +64,7 @@ export default function H2HDetailPage() {
   }, [allH2hMarkets, marketId]);
 
   const marketState = useMarketCycle(serverCutoff);
-  const isMarketClosed = marketState.status === "CLOSED";
+  const isMarketClosed = marketState.status !== "OPEN";
 
   const { data: userBetsData } = useQuery<any>({
     queryKey: ["/api/me/predictions"],

@@ -507,7 +507,21 @@ function StakeModal({
 }
 
 export function PredictDeckView({ trendingPeople, isLoading, onExplore }: PredictDeckViewProps) {
-  const marketState = useMarketCycle();
+  const { data: nativeUpdownData } = useQuery<any[]>({ queryKey: ['/api/native-markets/updown'] });
+
+  const { serverBettingCutoff, serverResolutionDeadline } = useMemo(() => {
+    const allNative = nativeUpdownData || [];
+    const cutoffs = allNative.map((m: any) => m.bettingCutoff).filter(Boolean) as string[];
+    const endAts = allNative.map((m: any) => m.endAt).filter(Boolean).map((d: string) => typeof d === "string" ? d : new Date(d).toISOString());
+    cutoffs.sort();
+    endAts.sort();
+    return {
+      serverBettingCutoff: cutoffs[0] || null,
+      serverResolutionDeadline: endAts[0] || null,
+    };
+  }, [nativeUpdownData]);
+
+  const marketState = useMarketCycle({ bettingCutoff: serverBettingCutoff, resolutionDeadline: serverResolutionDeadline });
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [activeSection, setActiveSection] = useState<PredictSection>("All");
@@ -746,7 +760,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
           />
           <WeeklyJackpotCard
             onEnterJackpot={onExplore}
-            isMarketClosed={marketState.status === "CLOSED"}
+            marketStatus={marketState.status}
             timeRemaining={marketState.timeRemaining}
             trendingPeople={trendingPeople}
             selectedPerson={selectedPerson}

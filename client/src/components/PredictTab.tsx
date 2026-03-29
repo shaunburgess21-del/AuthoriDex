@@ -871,16 +871,20 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
   const { data: nativeGainerData, isLoading: gainerLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/gainer'] });
   const { data: nativeJackpotData, isLoading: jackpotLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/jackpot'] });
 
-  const serverBettingCutoff = useMemo(() => {
+  const { serverBettingCutoff, serverResolutionDeadline } = useMemo(() => {
     const allNative = [...(nativeUpdownData || []), ...(nativeH2hData || []), ...(nativeGainerData || [])];
     const cutoffs = allNative.map((m: any) => m.bettingCutoff).filter(Boolean) as string[];
-    if (cutoffs.length === 0) return null;
+    const endAts = allNative.map((m: any) => m.endAt).filter(Boolean).map((d: string) => typeof d === "string" ? d : new Date(d).toISOString());
     cutoffs.sort();
-    return cutoffs[0];
+    endAts.sort();
+    return {
+      serverBettingCutoff: cutoffs[0] || null,
+      serverResolutionDeadline: endAts[0] || null,
+    };
   }, [nativeUpdownData, nativeH2hData, nativeGainerData]);
 
-  const marketCycle = useMarketCycle(serverBettingCutoff);
-  const isMarketClosed = marketCycle.status === "CLOSED";
+  const marketCycle = useMarketCycle({ bettingCutoff: serverBettingCutoff, resolutionDeadline: serverResolutionDeadline });
+  const isMarketClosed = marketCycle.status !== "OPEN";
   const { data: openMarketsData, isLoading: openMarketsLoading } = useQuery<any[]>({ queryKey: ['/api/open-markets'] });
 
   const isLoading = updownLoading || h2hLoading || gainerLoading || jackpotLoading || openMarketsLoading;
@@ -1360,7 +1364,9 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
             <div className="h-10 w-px bg-border hidden sm:block" />
             
             <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Ends In</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                {marketCycle.status === "ENTRIES_CLOSED" ? "Results In" : "Entries Close In"}
+              </p>
               <p className="text-sm font-mono font-bold">
                 {marketCycle.timeRemaining.days}d {marketCycle.timeRemaining.hours}h {marketCycle.timeRemaining.minutes}m
               </p>
@@ -1372,8 +1378,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
               className="bg-muted text-muted-foreground cursor-not-allowed"
               disabled
             >
-              <Lock className="h-4 w-4 mr-2" />
-              Awaiting Results
+              <Clock className="h-4 w-4 mr-2" />
+              Entries Closed — Results Sunday
             </Button>
           ) : (
             <Button 

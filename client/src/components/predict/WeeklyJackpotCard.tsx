@@ -5,12 +5,13 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { Crown, ChevronDown, Search, Lock } from "lucide-react";
+import { Crown, ChevronDown, Search, Lock, Clock } from "lucide-react";
 import { TrendingPerson } from "@shared/schema";
+import type { MarketStatus } from "@/hooks/useMarketCycle";
 
 export interface WeeklyJackpotCardProps {
   onEnterJackpot: () => void;
-  isMarketClosed?: boolean;
+  marketStatus?: MarketStatus;
   timeRemaining: { days: number; hours: number; minutes: number; seconds: number };
   trendingPeople: TrendingPerson[];
   selectedPerson: TrendingPerson | null;
@@ -110,7 +111,7 @@ function CelebritySearchModal({
 
 export function WeeklyJackpotCard({ 
   onEnterJackpot, 
-  isMarketClosed = false,
+  marketStatus = "OPEN",
   timeRemaining,
   trendingPeople,
   selectedPerson,
@@ -119,6 +120,39 @@ export function WeeklyJackpotCard({
   compact = false
 }: WeeklyJackpotCardProps) {
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+
+  const timerLabel = marketStatus === "ENTRIES_CLOSED" ? "Results In" : "Time Remaining";
+
+  const renderCTA = () => {
+    if (marketStatus === "RESOLVED") {
+      return (
+        <Button size={compact ? "default" : "lg"} className="bg-muted text-muted-foreground cursor-not-allowed w-full" disabled>
+          <Lock className="h-5 w-5 mr-2" />
+          Market Resolved
+        </Button>
+      );
+    }
+    if (marketStatus === "ENTRIES_CLOSED") {
+      return (
+        <Button size={compact ? "default" : "lg"} className="bg-muted text-muted-foreground cursor-not-allowed w-full" disabled>
+          <Clock className="h-5 w-5 mr-2" />
+          Entries Closed — Results Sunday
+        </Button>
+      );
+    }
+    return (
+      <Button 
+        size={compact ? "default" : "lg"}
+        className="bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30 w-full"
+        onClick={onEnterJackpot}
+        disabled={!selectedPerson}
+        data-testid="button-enter-jackpot"
+      >
+        <Crown className="h-5 w-5 mr-2" />
+        Enter Jackpot
+      </Button>
+    );
+  };
 
   return (
     <div 
@@ -171,41 +205,27 @@ export function WeeklyJackpotCard({
               Predict the exact Trend Score at week's end. Closest wins the jackpot!
             </p>
             
-            {isMarketClosed ? (
-              <Button size={compact ? "default" : "lg"} className="bg-muted text-muted-foreground cursor-not-allowed w-full" disabled>
-                <Lock className="h-5 w-5 mr-2" />
-                Market Closed
-              </Button>
-            ) : (
-              <Button 
-                size={compact ? "default" : "lg"}
-                className="bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30 w-full"
-                onClick={onEnterJackpot}
-                disabled={!selectedPerson}
-                data-testid="button-enter-jackpot"
-              >
-                <Crown className="h-5 w-5 mr-2" />
-                Enter Jackpot
-              </Button>
-            )}
+            {renderCTA()}
           </div>
           
           <div className={`flex ${compact ? 'flex-row justify-between items-center w-full pt-3 border-t border-amber-500/20' : 'flex-col items-end gap-2'}`}>
-            <div className={compact ? '' : 'text-right'}>
-              <p className="text-xs text-muted-foreground mb-1">Time Remaining</p>
-              <div className="flex gap-2">
-                {[
-                  { value: timeRemaining.days, label: 'd' },
-                  { value: timeRemaining.hours, label: 'h' },
-                  { value: timeRemaining.minutes, label: 'm' },
-                ].map((item, i) => (
-                  <div key={i} className="flex items-baseline gap-0.5">
-                    <span className={`font-mono font-bold text-amber-500 ${compact ? 'text-xl' : 'text-2xl'}`}>{item.value}</span>
-                    <span className="text-xs text-muted-foreground">{item.label}</span>
-                  </div>
-                ))}
+            {marketStatus !== "RESOLVED" && (
+              <div className={compact ? '' : 'text-right'}>
+                <p className="text-xs text-muted-foreground mb-1">{timerLabel}</p>
+                <div className="flex gap-2">
+                  {[
+                    { value: timeRemaining.days, label: 'd' },
+                    { value: timeRemaining.hours, label: 'h' },
+                    { value: timeRemaining.minutes, label: 'm' },
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-baseline gap-0.5">
+                      <span className={`font-mono font-bold text-amber-500 ${compact ? 'text-xl' : 'text-2xl'}`}>{item.value}</span>
+                      <span className="text-xs text-muted-foreground">{item.label}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
             <p className={`text-sm font-semibold text-amber-500 ${compact ? '' : 'mt-2'}`}>
               Pool: 50,000+ credits
             </p>

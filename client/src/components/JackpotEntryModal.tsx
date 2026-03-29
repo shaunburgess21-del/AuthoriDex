@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSupabase } from "@/lib/supabase";
-import { Crown, Check, X, Loader2, Lock, TicketCheck, HelpCircle } from "lucide-react";
+import { Crown, Check, X, Loader2, Lock, TicketCheck, HelpCircle, Clock } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent";
 import type { TrendingPerson } from "@shared/schema";
@@ -280,7 +280,28 @@ export function JackpotEntryModal({
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Person context */}
+            {(() => {
+              if (!bettingCutoff) return null;
+              const cutoffDate = new Date(bettingCutoff);
+              const msUntilClose = cutoffDate.getTime() - Date.now();
+              const hoursUntilClose = msUntilClose / (1000 * 60 * 60);
+              const isUrgent = hoursUntilClose > 0 && hoursUntilClose <= 48;
+              return (
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium ${
+                  isUrgent
+                    ? "bg-amber-500/15 border border-amber-500/30 text-amber-400"
+                    : "bg-muted/50 text-muted-foreground"
+                }`}>
+                  <Clock className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {isUrgent
+                      ? `Entries close in ${Math.floor(hoursUntilClose)}h ${Math.floor((hoursUntilClose % 1) * 60)}m — Results Sunday 23:59 UTC`
+                      : "Entries close Friday 23:59 UTC · Results Sunday 23:59 UTC"}
+                  </span>
+                </div>
+              );
+            })()}
+
             <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
               <PersonAvatar name={person.name} avatar={person.avatar || ""} size="md" />
               <div className="flex-1 min-w-0">

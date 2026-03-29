@@ -66,7 +66,7 @@ export default function CategoryRaceDetailPage() {
   }, [allGainerMarkets, marketId]);
 
   const marketState = useMarketCycle(serverCutoff);
-  const isMarketClosed = marketState.status === "CLOSED";
+  const isMarketClosed = marketState.status !== "OPEN";
 
   const { data: userBets } = useQuery<any[]>({
     queryKey: ["/api/me/bets"],

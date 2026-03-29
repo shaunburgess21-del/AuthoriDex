@@ -31,14 +31,26 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
   const { status, timeRemaining, urgencyLevel } = marketState;
   
   const getStatusBadge = () => {
-    if (status === "CLOSED") {
+    if (status === "RESOLVED") {
       return (
         <Badge 
           className="px-3 py-1.5 text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/40"
           data-testid="status-badge-closed"
         >
           <span className="inline-block w-2 h-2 bg-red-400 rounded-full mr-2" />
-          ENTRIES CLOSED
+          RESOLVED
+        </Badge>
+      );
+    }
+
+    if (status === "ENTRIES_CLOSED") {
+      return (
+        <Badge 
+          className="px-3 py-1.5 text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/40"
+          data-testid="status-badge-awaiting"
+        >
+          <span className="inline-block w-2 h-2 bg-amber-400 rounded-full mr-2 animate-pulse" />
+          AWAITING RESULTS
         </Badge>
       );
     }
@@ -76,6 +88,19 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
         );
     }
   };
+
+  const getLabel = () => {
+    if (status === "RESOLVED") {
+      return { desktop: "Market Resolved — New Week Monday", mobile: "Resolved" };
+    }
+    if (status === "ENTRIES_CLOSED") {
+      return { desktop: "Results In", mobile: "Results In" };
+    }
+    return { desktop: "Betting Closes In", mobile: "Closes In" };
+  };
+
+  const label = getLabel();
+  const showTimer = status !== "RESOLVED";
   
   return (
     <div 
@@ -85,27 +110,14 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
     >
       <div className="relative z-10 px-4 py-2 md:px-6 md:py-4">
         <div className="flex flex-row items-center justify-between gap-2 md:gap-4">
-          {status === "CLOSED" ? (
-            <>
-              <p className="text-gray-400 text-[10px] font-medium uppercase tracking-widest hidden md:block">
-                Entries Closed — Results Sunday
-              </p>
-              <p className="text-gray-400 text-[9px] font-medium uppercase tracking-widest md:hidden shrink-0">
-                Entries Closed
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-gray-400 text-[10px] font-medium uppercase tracking-widest hidden md:block">
-                Betting Closes In
-              </p>
-              <p className="text-gray-400 text-[9px] font-medium uppercase tracking-widest md:hidden shrink-0">
-                Closes In
-              </p>
-            </>
-          )}
+          <p className="text-gray-400 text-[10px] font-medium uppercase tracking-widest hidden md:block">
+            {label.desktop}
+          </p>
+          <p className="text-gray-400 text-[9px] font-medium uppercase tracking-widest md:hidden shrink-0">
+            {label.mobile}
+          </p>
           
-          {status !== "CLOSED" && (
+          {showTimer && (
             <div 
               className="flex items-center gap-1.5 md:gap-2"
               data-testid="countdown-timer"
@@ -136,7 +148,7 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
             </div>
           )}
           
-          <div className="hidden md:flex items-center">
+          <div className="flex items-center">
             {getStatusBadge()}
           </div>
         </div>
