@@ -7696,7 +7696,12 @@ Only return the JSON object.`;
       const allPeople = await db.select({ id: trackedPeople.id, name: trackedPeople.name, imageSlug: trackedPeople.imageSlug })
         .from(trackedPeople);
 
-      const missing = allPeople.filter(p => !p.imageSlug || p.imageSlug.trim() === '');
+      const missing = allPeople.filter(p => {
+        if (!p.imageSlug || p.imageSlug.trim() === '') return true;
+        return p.imageSlug !== generateImageSlug(p.name);
+      });
+      const nullCount = missing.filter(p => !p.imageSlug || p.imageSlug.trim() === '').length;
+      const staleCount = missing.length - nullCount;
 
       let updated = 0;
       for (const person of missing) {
@@ -7710,6 +7715,8 @@ Only return the JSON object.`;
       res.json({
         updated,
         total: missing.length,
+        nullSlugs: nullCount,
+        staleSlugs: staleCount,
         totalTracked: allPeople.length,
         sampleSlugs: allPeople.slice(0, 5).map(p => ({
           name: p.name,
@@ -7718,7 +7725,8 @@ Only return the JSON object.`;
         })),
         examples: missing.slice(0, 10).map(p => ({
           name: p.name,
-          slug: generateImageSlug(p.name),
+          oldSlug: p.imageSlug,
+          newSlug: generateImageSlug(p.name),
         })),
       });
     } catch (error: any) {
