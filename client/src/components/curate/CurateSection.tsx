@@ -117,7 +117,7 @@ export function CurateSection({
             </div>
 
             {/* Mobile: Swiper carousel */}
-            <div className="md:hidden voxdex-swiper w-screen relative left-1/2 -ml-[50vw]" data-dot-active="cyan">
+            <div className="md:hidden voxdex-swiper relative w-full" data-dot-active="cyan">
               <Swiper
                 modules={[Pagination, A11y, Virtual]}
                 spaceBetween={0}
@@ -143,7 +143,7 @@ export function CurateSection({
               >
                 {curatePersons.map((person, i) => (
                   <SwiperSlide key={person.id} virtualIndex={i}>
-                    <div className="w-full px-0">
+                    <div className="w-full px-2.5 md:px-0">
                       <CurateProfileCard
                         person={person}
                         onVote={handleVote}
