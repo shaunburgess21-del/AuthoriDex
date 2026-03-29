@@ -7970,8 +7970,8 @@ Only return the JSON object.`;
           groups.set(filename, list);
         }
 
-        for (const [filename, group] of groups.entries()) {
-          const currentSlugMatches = group.filter((image) =>
+        for (const [filename, group] of Array.from(groups.entries())) {
+          const currentSlugMatches = group.filter((image: { id: string; imageUrl: string; addedAt: Date }) =>
             imageUrlMatchesCurrentSlugPath(image.imageUrl, slug, filename)
           );
 
