@@ -650,23 +650,31 @@
     animation: count-flash 0.3s ease-out;
   }
 
-  /* ===== SWIPER CAROUSEL - VoxDex pagination overrides ===== */
-  /* Inactive dots: muted grey (slate-600) */
+  /* ===== SWIPER CAROUSEL - VoxDex pagination (Instagram-style: fixed round dots, opacity only) ===== */
   .voxdex-swiper .swiper-pagination-bullet {
-    background: rgb(71 85 105);
-    opacity: 1;
-    width: 8px;
-    height: 8px;
-    transition: background 0.2s, width 0.2s;
+    width: 6px !important;
+    height: 6px !important;
+    border-radius: 9999px !important;
+    transform: none !important;
+    transition: opacity 200ms ease-in-out !important;
   }
-  /* Active dot: cyan/teal by default */
+  .voxdex-swiper .swiper-pagination-bullet:not(.swiper-pagination-bullet-active) {
+    opacity: 0.3 !important;
+    background: rgb(100 116 139) !important; /* slate-500 — light mode inactive */
+  }
+  .dark .voxdex-swiper .swiper-pagination-bullet:not(.swiper-pagination-bullet-active) {
+    background: rgb(203 213 225) !important; /* slate-300 — dark mode inactive */
+    opacity: 0.3 !important;
+  }
   .voxdex-swiper .swiper-pagination-bullet-active {
-    background: rgb(34 211 238);
-    width: 24px;
-    border-radius: 4px;
+    width: 6px !important;
+    height: 6px !important;
+    border-radius: 9999px !important;
+    opacity: 1 !important;
+    background: rgb(34 211 238) !important; /* cyan-400 */
   }
   .voxdex-swiper[data-dot-active="violet"] .swiper-pagination-bullet-active {
-    background: rgb(139 92 246);
+    background: rgb(139 92 246) !important; /* violet-500 */
   }
   .voxdex-swiper .swiper-pagination-bullets {
     position: relative;

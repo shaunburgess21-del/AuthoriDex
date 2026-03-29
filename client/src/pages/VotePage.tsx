@@ -11,8 +11,6 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useUserStats } from "@/hooks/useGamification";
-import { useDragScroll } from "@/hooks/use-drag-scroll";
-import { useScrollHint } from "@/hooks/use-scroll-hint";
 import { 
   ArrowLeft, 
   ArrowUp,
@@ -95,6 +93,7 @@ import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
+import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 
 const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
@@ -2122,22 +2121,6 @@ export default function VotePage() {
   const [xpFloaters, setXpFloaters] = useState<XPFloater[]>([]);
   const floaterIdRef = useRef(0);
   
-  const dragScrollRef1 = useDragScroll<HTMLDivElement>();
-  const dragScrollRef2 = useDragScroll<HTMLDivElement>();
-  const dragScrollRef3 = useDragScroll<HTMLDivElement>();
-  const dragScrollRef4 = useDragScroll<HTMLDivElement>();
-  const dragScrollRef5 = useDragScroll<HTMLDivElement>();
-  const dragScrollRef6 = useDragScroll<HTMLDivElement>();
-  const dragScrollRef7 = useDragScroll<HTMLDivElement>();
-  const dragScrollRef8 = useDragScroll<HTMLDivElement>();
-
-  useScrollHint(dragScrollRef3);
-  useScrollHint(dragScrollRef4);
-  useScrollHint(dragScrollRef5);
-  useScrollHint(dragScrollRef6);
-  useScrollHint(dragScrollRef7);
-  useScrollHint(dragScrollRef8);
-
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
 
   interface InductionAPIResponse {
@@ -2719,7 +2702,7 @@ export default function VotePage() {
         data-testid="section-toggles-container"
       >
         <div className="container mx-auto px-4 py-3 max-w-7xl">
-          <div ref={dragScrollRef1} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 relative">
+          <ScrollMaskedChipRow className="pb-1 relative">
             {SECTION_TOGGLES.map((section) => (
               <button
                 key={section}
@@ -2740,8 +2723,7 @@ export default function VotePage() {
                 {section}
               </button>
             ))}
-            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-10 md:hidden" />
-          </div>
+          </ScrollMaskedChipRow>
         </div>
       </div>
       <div className="container mx-auto px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
@@ -2791,7 +2773,7 @@ export default function VotePage() {
               </>
             }
           >
-            <div ref={dragScrollRef3} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            <ScrollMaskedChipRow>
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2803,7 +2785,7 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               ))}
-            </div>
+            </ScrollMaskedChipRow>
           </UnifiedSectionHeader>
           
           {matchupsLoading ? (
@@ -2896,7 +2878,7 @@ export default function VotePage() {
               </>
             }
           >
-            <div ref={dragScrollRef4} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            <ScrollMaskedChipRow>
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -2908,7 +2890,7 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               ))}
-            </div>
+            </ScrollMaskedChipRow>
           </UnifiedSectionHeader>
           
           {pollsLoading ? (
@@ -2995,7 +2977,7 @@ export default function VotePage() {
               </>
             }
           >
-            <div ref={dragScrollRef8} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            <ScrollMaskedChipRow>
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -3007,7 +2989,7 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               ))}
-            </div>
+            </ScrollMaskedChipRow>
           </UnifiedSectionHeader>
 
           {opinionPollsLoading ? (
@@ -3080,7 +3062,7 @@ export default function VotePage() {
               </Tooltip>
             }
           >
-            <div ref={dragScrollRef5} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            <ScrollMaskedChipRow>
               {getFilterCategories(true).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -3092,7 +3074,7 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               ))}
-            </div>
+            </ScrollMaskedChipRow>
           </UnifiedSectionHeader>
           
           {valueLoading ? (
@@ -3215,7 +3197,7 @@ export default function VotePage() {
               </div>
             }
           >
-            <div ref={dragScrollRef6} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            <ScrollMaskedChipRow>
               {getFilterCategories(false).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -3227,7 +3209,7 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               ))}
-            </div>
+            </ScrollMaskedChipRow>
           </UnifiedSectionHeader>
 
           {inductionLoading ? (
@@ -3317,7 +3299,7 @@ export default function VotePage() {
               </>
             }
           >
-            <div ref={dragScrollRef7} className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            <ScrollMaskedChipRow>
               {getFilterCategories(false).map((cat) => (
                 <FilterChip
                   key={cat}
@@ -3329,7 +3311,7 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               ))}
-            </div>
+            </ScrollMaskedChipRow>
           </UnifiedSectionHeader>
 
           <CurateSection categoryFilter={curateCategoryFilter} onFilterCategory={handleCategoryPillFilter} categoryRaceMap={raceMap} leaderboardCategories={leaderboardCats} />

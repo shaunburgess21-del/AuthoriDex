@@ -128,11 +128,7 @@ export function CurateSection({
                 speed={300}
                 cssMode={false}
                 virtual
-                pagination={{
-                  clickable: true,
-                  dynamicBullets: true,
-                  dynamicMainBullets: 3,
-                }}
+                pagination={{ clickable: true }}
                 a11y={{
                   enabled: true,
                   prevSlideMessage: "Previous slide",

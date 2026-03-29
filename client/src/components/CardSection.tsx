@@ -49,17 +49,13 @@ export function CardSection({
           speed={300}
           cssMode={false}
           virtual
-          pagination={{
-            clickable: true,
-            dynamicBullets: true,
-            dynamicMainBullets: 3,
-          }}
+          pagination={{ clickable: true }}
           a11y={{
             enabled: true,
             prevSlideMessage: "Previous slide",
             nextSlideMessage: "Next slide",
           }}
-          className="py-2"
+          className="pt-0 pb-2 md:py-2"
           data-testid={`${testIdPrefix}-carousel`}
         >
           {items.map((item, i) => (

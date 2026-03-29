@@ -30,6 +30,7 @@ import {
 import { useFavorites } from "@/hooks/useFavorites";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useScrollHint } from "@/hooks/use-scroll-hint";
+import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -626,9 +627,6 @@ function SectionFilterBar({
   includeCustomTopic?: boolean;
   showSearch?: boolean;
 }) {
-  const dragScrollRef = useDragScroll<HTMLDivElement>();
-  useScrollHint(dragScrollRef);
-
   const handleCategoryClick = (catId: CategoryFilter) => {
     if (catId === "favorites" && !user) {
       onAuthRequired?.();
@@ -641,7 +639,7 @@ function SectionFilterBar({
 
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-      <div ref={dragScrollRef} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0">
+      <ScrollMaskedChipRow className="pb-1 sm:pb-0">
         {filters.map((cat) => {
           const IconComponent = CATEGORY_ICONS[cat.id];
           const isIconOnly = cat.id === "favorites";
@@ -666,7 +664,7 @@ function SectionFilterBar({
             </button>
           );
         })}
-      </div>
+      </ScrollMaskedChipRow>
       {showSearch && (
         <div className="relative sm:ml-auto">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

@@ -12,12 +12,12 @@ interface UnifiedSectionHeaderProps {
 const accentMap = {
   cyan: {
     borderTop: "border-t-cyan-500",
-    gradient: "from-cyan-500/5 via-cyan-500/8 to-transparent",
+    gradient: "from-cyan-500/10 via-cyan-500/5 to-transparent",
     iconBg: "bg-cyan-500/10",
   },
   violet: {
     borderTop: "border-t-violet-500",
-    gradient: "from-violet-500/5 via-violet-500/8 to-transparent",
+    gradient: "from-violet-500/10 via-violet-500/5 to-transparent",
     iconBg: "bg-violet-500/10",
   },
 } as const;
@@ -57,7 +57,9 @@ export function UnifiedSectionHeader({
 
         {meta && <div className="pl-3 pr-3 pb-2 md:pl-0 md:pr-0">{meta}</div>}
 
-        {children && <div className="pl-3 pr-3 pb-3 md:pl-0 md:pr-0">{children}</div>}
+        {children && (
+          <div className="pl-3 pr-3 pb-1 md:pb-3 md:pl-0 md:pr-0">{children}</div>
+        )}
       </div>
     </div>
   );
