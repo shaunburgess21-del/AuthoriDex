@@ -45,6 +45,7 @@ export interface StakeSelection {
   candidateRank?: number;
   candidatePercentGain?: number;
   candidatePointsAdded?: number;
+  bettingCutoff?: string | null;
 }
 
 interface StakeModalProps {
@@ -83,7 +84,7 @@ export function StakeModal({
   const parsedAmount = parseInt(stakeAmount) || 0;
   const balanceAfter = walletBalance - parsedAmount;
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
-  const marketCycle = useMarketCycle();
+  const marketCycle = useMarketCycle(selection?.bettingCutoff);
   const { isLoggedIn } = useAuth();
   const [, setLocation] = useLocation();
   const [confidence, setConfidence] = useState(0);

@@ -32,10 +32,8 @@ export default function UpDownDetailPage() {
   const [, params] = useRoute("/predict/updown/:marketId");
   const [, setLocation] = useLocation();
   const marketId = params?.marketId || "";
-  const marketState = useMarketCycle();
   const { user, profile } = useAuth();
   const walletCredits = profile?.predictCredits ?? 0;
-  const isMarketClosed = marketState.status === "CLOSED";
 
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
@@ -43,6 +41,15 @@ export default function UpDownDetailPage() {
   const { data: allUpdownMarkets, isLoading } = useQuery<any[]>({
     queryKey: ["/api/native-markets/updown"],
   });
+
+  const serverCutoff = useMemo(() => {
+    if (!allUpdownMarkets) return null;
+    const found = allUpdownMarkets.find((m: any) => m.id === marketId);
+    return found?.bettingCutoff || null;
+  }, [allUpdownMarkets, marketId]);
+
+  const marketState = useMarketCycle(serverCutoff);
+  const isMarketClosed = marketState.status === "CLOSED";
 
   const { data: userBetsData } = useQuery<any>({
     queryKey: ["/api/me/predictions"],
@@ -94,6 +101,7 @@ export default function UpDownDetailPage() {
       tieRule: market.tieRule || "refund",
       startAt: market.startAt,
       endAt: market.endAt,
+      bettingCutoff: market.bettingCutoff || null,
     };
   }, [market]);
 
@@ -129,6 +137,7 @@ export default function UpDownDetailPage() {
         estimatedPayout: choice === "up" ? hydrated.upMultiplier : hydrated.downMultiplier,
         tieRule: hydrated.tieRule,
         endAt: hydrated.endAt,
+        bettingCutoff: hydrated.bettingCutoff,
       });
       setStakeModalOpen(true);
     },

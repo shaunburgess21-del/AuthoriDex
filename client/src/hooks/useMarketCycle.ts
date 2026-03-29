@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 
 export type MarketStatus = "OPEN" | "CLOSED";
 
@@ -53,14 +53,21 @@ function getUrgencyLevel(totalSeconds: number): MarketCycleState["urgencyLevel"]
   return "normal";
 }
 
-export function useMarketCycle(): MarketCycleState {
-  const [deadline] = useState(() => getNextSundayMidnight());
-  const [timeRemaining, setTimeRemaining] = useState(() => calculateTimeRemaining(deadline));
+export function useMarketCycle(bettingCutoff?: string | Date | null): MarketCycleState {
+  const resolvedDeadline = useMemo(() => {
+    if (bettingCutoff) {
+      const d = typeof bettingCutoff === "string" ? new Date(bettingCutoff) : bettingCutoff;
+      if (!isNaN(d.getTime())) return d;
+    }
+    return getNextSundayMidnight();
+  }, [bettingCutoff]);
+
+  const [timeRemaining, setTimeRemaining] = useState(() => calculateTimeRemaining(resolvedDeadline));
   
   const updateTime = useCallback(() => {
-    const remaining = calculateTimeRemaining(deadline);
+    const remaining = calculateTimeRemaining(resolvedDeadline);
     setTimeRemaining(remaining);
-  }, [deadline]);
+  }, [resolvedDeadline]);
   
   useEffect(() => {
     updateTime();
@@ -74,7 +81,7 @@ export function useMarketCycle(): MarketCycleState {
   return {
     status,
     timeRemaining,
-    deadline,
+    deadline: resolvedDeadline,
     urgencyLevel,
   };
 }

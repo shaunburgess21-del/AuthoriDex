@@ -362,17 +362,23 @@ async function runAgentBatchOnce(): Promise<{
         entries,
       };
 
+      // --- Friday cutoff for all weekly native markets ---
+      const isWeeklyNative = ["jackpot", "updown", "h2h", "gainer"].includes(market.marketType);
+      if (isWeeklyNative && market.endAt) {
+        const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
+        const cutoff = new Date(market.endAt.getTime() - 2 * 24 * 60 * 60 * 1000);
+        if (now.getTime() >= cutoff.getTime() - bufferMs) {
+          skipped++;
+          continue;
+        }
+      }
+
       // --- Route decision by market type ---
       const isJackpot = market.marketType === "jackpot";
 
       if (isJackpot) {
-        // Jackpot-specific path: predict a score integer instead of picking an entry
         const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
         const cutoff = market.endAt ? new Date(market.endAt.getTime() - 2 * 24 * 60 * 60 * 1000) : null;
-        if (cutoff && now.getTime() >= cutoff.getTime() - bufferMs) {
-          skipped++;
-          continue;
-        }
 
         const signals = await getTrendSignals(market.personId);
 

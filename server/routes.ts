@@ -11785,6 +11785,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
+  function getWeeklyBettingCutoff(endAt: Date): Date {
+    const cutoff = new Date(endAt);
+    cutoff.setUTCDate(cutoff.getUTCDate() - 2);
+    cutoff.setUTCHours(23, 59, 59, 999);
+    return cutoff;
+  }
+
   app.post("/api/native-markets/updown/:marketId/bet", requireAuth, async (req, res) => {
     try {
       const authReq = req as AuthRequest;
@@ -11825,6 +11832,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
 
       const now = new Date();
+      if (market.endAt) {
+        const bettingCutoff = getWeeklyBettingCutoff(market.endAt);
+        if (now > bettingCutoff) {
+          return res.status(400).json({
+            error: "Betting closes Friday at 23:59 UTC. This market is now locked.",
+            bettingCutoff: bettingCutoff.toISOString(),
+          });
+        }
+      }
       if (
         (market.closeAt && new Date(market.closeAt) < now) ||
         (market.endAt && new Date(market.endAt) < now)
@@ -11893,6 +11909,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
 
       const now = new Date();
+      if (market.endAt) {
+        const bettingCutoff = getWeeklyBettingCutoff(market.endAt);
+        if (now > bettingCutoff) {
+          return res.status(400).json({
+            error: "Betting closes Friday at 23:59 UTC. This market is now locked.",
+            bettingCutoff: bettingCutoff.toISOString(),
+          });
+        }
+      }
       if (
         (market.closeAt && new Date(market.closeAt) < now) ||
         (market.endAt && new Date(market.endAt) < now)
@@ -11924,13 +11949,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   // --- Weekly Jackpot endpoints ---
 
   interface JackpotBetMetadata { predictedScore: number; }
-
-  function getJackpotBettingCutoff(endAt: Date): Date {
-    const cutoff = new Date(endAt);
-    cutoff.setUTCDate(cutoff.getUTCDate() - 2);
-    cutoff.setUTCHours(23, 59, 59, 999);
-    return cutoff;
-  }
 
   async function ensureJackpotEntry(marketId: string, txOrDb: any = db): Promise<string> {
     const [existing] = await txOrDb
@@ -12001,7 +12019,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
 
       const now = new Date();
-      const bettingCutoff = getJackpotBettingCutoff(market.endAt!);
+      const bettingCutoff = getWeeklyBettingCutoff(market.endAt!);
       if (now > bettingCutoff) {
         return res.status(400).json({
           error: "Jackpot entries close on Friday at 23:59 UTC. This jackpot is now locked.",
@@ -12203,7 +12221,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         .from(marketBets)
         .where(and(eq(marketBets.marketId, marketId), eq(marketBets.status, "active")));
 
-      const bettingCutoff = getJackpotBettingCutoff(market.endAt!);
+      const bettingCutoff = getWeeklyBettingCutoff(market.endAt!);
 
       return res.json({
         entries: userBets.map(b => ({
@@ -12467,6 +12485,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       const engagement = await getMarketEngagementPreview(marketIds);
 
+      const nowForCutoff = new Date();
+      const addCutoffFields = (m: { endAt: Date | null }) => {
+        const bc = m.endAt ? getWeeklyBettingCutoff(m.endAt) : null;
+        return {
+          bettingCutoff: bc?.toISOString() ?? null,
+          isCutoffPassed: bc ? nowForCutoff > bc : false,
+        };
+      };
+
       if (type === 'updown' || type === 'jackpot') {
         const personIds = markets.map(m => m.personId).filter(Boolean) as string[];
         let persons: any[] = [];
@@ -12477,6 +12504,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
         const enriched = markets.map(m => ({
           ...m,
+          ...addCutoffFields(m),
           person: m.personId ? personMap[m.personId] || null : null,
           entries: entries.filter(e => e.marketId === m.id),
           recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
@@ -12496,6 +12524,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
         const enriched = markets.map(m => ({
           ...m,
+          ...addCutoffFields(m),
           entries: entries.filter(e => e.marketId === m.id).map(e => ({
             ...e,
             person: e.personId ? personMap[e.personId] || null : null,
@@ -12509,6 +12538,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       res.json(markets.map(m => ({
         ...m,
+        ...addCutoffFields(m),
         entries: entries.filter(e => e.marketId === m.id),
         recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
         activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,

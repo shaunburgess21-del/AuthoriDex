@@ -38,7 +38,7 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
           data-testid="status-badge-closed"
         >
           <span className="inline-block w-2 h-2 bg-red-400 rounded-full mr-2" />
-          LOCKED
+          ENTRIES CLOSED
         </Badge>
       );
     }
@@ -85,54 +85,61 @@ export function MarketCycleHero({ marketState, constrainedWidth = false }: Marke
     >
       <div className="relative z-10 px-4 py-2 md:px-6 md:py-4">
         <div className="flex flex-row items-center justify-between gap-2 md:gap-4">
-          <p className="text-gray-400 text-[10px] font-medium uppercase tracking-widest hidden md:block">
-            Weekly Market Closes In
-          </p>
-          <p className="text-gray-400 text-[9px] font-medium uppercase tracking-widest md:hidden shrink-0">
-            Closes In
-          </p>
+          {status === "CLOSED" ? (
+            <>
+              <p className="text-gray-400 text-[10px] font-medium uppercase tracking-widest hidden md:block">
+                Entries Closed — Results Sunday
+              </p>
+              <p className="text-gray-400 text-[9px] font-medium uppercase tracking-widest md:hidden shrink-0">
+                Entries Closed
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-gray-400 text-[10px] font-medium uppercase tracking-widest hidden md:block">
+                Betting Closes In
+              </p>
+              <p className="text-gray-400 text-[9px] font-medium uppercase tracking-widest md:hidden shrink-0">
+                Closes In
+              </p>
+            </>
+          )}
           
-          <div 
-            className="flex items-center gap-1.5 md:gap-2"
-            data-testid="countdown-timer"
-          >
-            <TimerSegment 
-              value={padZero(timeRemaining.days)} 
-              label="Days" 
-              testId="timer-days" 
-            />
-            <span className="text-violet-500 text-lg font-bold">:</span>
-            <TimerSegment 
-              value={padZero(timeRemaining.hours)} 
-              label="Hrs" 
-              testId="timer-hours" 
-            />
-            <span className="text-violet-500 text-lg font-bold">:</span>
-            <TimerSegment 
-              value={padZero(timeRemaining.minutes)} 
-              label="Min" 
-              testId="timer-minutes" 
-            />
-            <span className="text-violet-500 text-lg font-bold">:</span>
-            <TimerSegment 
-              value={padZero(timeRemaining.seconds)} 
-              label="Sec" 
-              testId="timer-seconds" 
-            />
-          </div>
+          {status !== "CLOSED" && (
+            <div 
+              className="flex items-center gap-1.5 md:gap-2"
+              data-testid="countdown-timer"
+            >
+              <TimerSegment 
+                value={padZero(timeRemaining.days)} 
+                label="Days" 
+                testId="timer-days" 
+              />
+              <span className="text-violet-500 text-lg font-bold">:</span>
+              <TimerSegment 
+                value={padZero(timeRemaining.hours)} 
+                label="Hrs" 
+                testId="timer-hours" 
+              />
+              <span className="text-violet-500 text-lg font-bold">:</span>
+              <TimerSegment 
+                value={padZero(timeRemaining.minutes)} 
+                label="Min" 
+                testId="timer-minutes" 
+              />
+              <span className="text-violet-500 text-lg font-bold">:</span>
+              <TimerSegment 
+                value={padZero(timeRemaining.seconds)} 
+                label="Sec" 
+                testId="timer-seconds" 
+              />
+            </div>
+          )}
           
           <div className="hidden md:flex items-center">
             {getStatusBadge()}
           </div>
         </div>
-        
-        {status === "CLOSED" && (
-          <div className="mt-3 text-center">
-            <p className="text-gray-400 text-xs">
-              Markets are being resolved. New week opens soon.
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );

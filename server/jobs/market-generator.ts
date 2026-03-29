@@ -6,6 +6,13 @@ import { eq, and, desc, inArray, sql, gte } from "drizzle-orm";
 import { buildOpeningScores } from "../native-markets/openingScores";
 import { log } from "../log";
 
+export function getWeeklyBettingCutoff(endAt: Date): Date {
+  const cutoff = new Date(endAt);
+  cutoff.setUTCDate(cutoff.getUTCDate() - 2);
+  cutoff.setUTCHours(23, 59, 59, 999);
+  return cutoff;
+}
+
 export function getWeekContext(now = new Date()) {
   const dayOfWeek = now.getUTCDay();
   const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -94,6 +101,7 @@ export async function generateWeeklyUpDown(): Promise<number> {
       status: "OPEN" as const,
       startAt: monday,
       endAt: sunday,
+      closeAt: getWeeklyBettingCutoff(sunday),
       weekNumber,
       seedParticipants: 0,
       seedVolume: "0",
@@ -177,6 +185,7 @@ export async function ensureUpDownMarketForInductee(person: {
     status: "OPEN" as const,
     startAt: monday,
     endAt: sunday,
+    closeAt: getWeeklyBettingCutoff(sunday),
     weekNumber,
     seedParticipants: 0,
     seedVolume: "0",
@@ -329,6 +338,7 @@ export async function generateWeeklyJackpot(): Promise<number> {
       status: "OPEN" as const,
       startAt: monday,
       endAt: sunday,
+      closeAt: getWeeklyBettingCutoff(sunday),
       weekNumber,
       seedParticipants: 0,
       seedVolume: "0",
@@ -440,6 +450,7 @@ export async function generateWeeklyH2H(): Promise<number> {
         status: "OPEN",
         startAt: monday,
         endAt: sunday,
+        closeAt: getWeeklyBettingCutoff(sunday),
         weekNumber,
         seedParticipants: 0,
         seedVolume: "0",
@@ -621,6 +632,7 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
             status: "OPEN",
             startAt: monday,
             endAt: sunday,
+            closeAt: getWeeklyBettingCutoff(sunday),
             weekNumber,
             seedParticipants: 0,
             seedVolume: "0",
@@ -651,6 +663,7 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
               status: "OPEN",
               startAt: monday,
               endAt: sunday,
+              closeAt: getWeeklyBettingCutoff(sunday),
               weekNumber,
               seedParticipants: 0,
               seedVolume: "0",

@@ -48,10 +48,8 @@ export default function CategoryRaceDetailPage() {
   const [, params] = useRoute("/predict/race/:marketId");
   const [, setLocation] = useLocation();
   const marketId = params?.marketId || "";
-  const marketState = useMarketCycle();
   const { user, profile } = useAuth();
   const walletCredits = profile?.predictCredits ?? 0;
-  const isMarketClosed = marketState.status === "CLOSED";
 
   const [searchQuery, setSearchQuery] = useState("");
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
@@ -60,6 +58,15 @@ export default function CategoryRaceDetailPage() {
   const { data: allGainerMarkets, isLoading } = useQuery<any[]>({
     queryKey: ["/api/native-markets/gainer"],
   });
+
+  const serverCutoff = useMemo(() => {
+    if (!allGainerMarkets) return null;
+    const found = allGainerMarkets.find((m: any) => m.id === marketId);
+    return found?.bettingCutoff || null;
+  }, [allGainerMarkets, marketId]);
+
+  const marketState = useMarketCycle(serverCutoff);
+  const isMarketClosed = marketState.status === "CLOSED";
 
   const { data: userBets } = useQuery<any[]>({
     queryKey: ["/api/me/bets"],
@@ -169,6 +176,7 @@ export default function CategoryRaceDetailPage() {
         choice: candidate.name,
         marketName: `Category Race: ${categoryLabel}`,
         candidatePercentGain: candidate.percentGain,
+        bettingCutoff: market?.bettingCutoff || null,
       } as StakeSelection);
       setStakeModalOpen(true);
     },

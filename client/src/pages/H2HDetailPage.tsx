@@ -40,16 +40,15 @@ interface HydratedH2H {
   tieRule: string;
   startAt?: string;
   endAt?: string;
+  bettingCutoff?: string | null;
 }
 
 export default function H2HDetailPage() {
   const [, params] = useRoute("/predict/h2h/:marketId");
   const [, setLocation] = useLocation();
   const marketId = params?.marketId || "";
-  const marketState = useMarketCycle();
   const { user, profile } = useAuth();
   const walletCredits = profile?.predictCredits ?? 0;
-  const isMarketClosed = marketState.status === "CLOSED";
 
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
@@ -57,6 +56,15 @@ export default function H2HDetailPage() {
   const { data: allH2hMarkets, isLoading } = useQuery<any[]>({
     queryKey: ["/api/native-markets/h2h"],
   });
+
+  const serverCutoff = useMemo(() => {
+    if (!allH2hMarkets) return null;
+    const found = allH2hMarkets.find((m: any) => m.id === marketId);
+    return found?.bettingCutoff || null;
+  }, [allH2hMarkets, marketId]);
+
+  const marketState = useMarketCycle(serverCutoff);
+  const isMarketClosed = marketState.status === "CLOSED";
 
   const { data: userBetsData } = useQuery<any>({
     queryKey: ["/api/me/predictions"],
@@ -108,6 +116,7 @@ export default function H2HDetailPage() {
       tieRule: market.tieRule || "refund",
       startAt: market.startAt,
       endAt: market.endAt,
+      bettingCutoff: market.bettingCutoff || null,
     };
   }, [market]);
 
@@ -140,6 +149,7 @@ export default function H2HDetailPage() {
         currentScore: picked.currentScore,
         opponentScore: opponent.currentScore,
         crowdSentiment: person === 1 ? hydrated.person1Percent : 100 - hydrated.person1Percent,
+        bettingCutoff: hydrated.bettingCutoff,
       });
       setStakeModalOpen(true);
     },

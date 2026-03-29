@@ -225,6 +225,7 @@ interface PredictionMarket {
   featured?: boolean;
   activeParticipantCount?: number;
   recentParticipants?: ParticipantPreview[];
+  bettingCutoff?: string | null;
 }
 
 interface ParticipantPreview {
@@ -382,6 +383,7 @@ interface HeadToHeadMarket {
   totalBets?: number;
   activeParticipantCount?: number;
   recentParticipants?: ParticipantPreview[];
+  bettingCutoff?: string | null;
 }
 
 const headToHeadMarkets: HeadToHeadMarket[] = [
@@ -469,6 +471,7 @@ interface TopGainerMarket {
   totalBets?: number;
   activeParticipantCount?: number;
   recentParticipants?: ParticipantPreview[];
+  bettingCutoff?: string | null;
 }
 
 function smartName(fullName: string): string {
@@ -2187,9 +2190,9 @@ function WeeklyJackpotHero({
   const entryCount = jackpotMarket?.totalBets || jackpotMarket?.activeParticipantCount || 0;
 
   const isCutoffPassed = useMemo(() => {
-    if (!jackpotMarket?.endAt) return false;
-    const cutoff = new Date(new Date(jackpotMarket.endAt).getTime() - 48 * 60 * 60 * 1000);
-    return new Date() > cutoff;
+    if (jackpotMarket?.isCutoffPassed) return true;
+    if (!jackpotMarket?.bettingCutoff) return false;
+    return new Date() > new Date(jackpotMarket.bettingCutoff);
   }, [jackpotMarket]);
 
   return (
@@ -2375,9 +2378,6 @@ export default function PredictPage() {
   const [townSquareCollapsed, setTownSquareCollapsed] = useState(true);
   const [gainerPickerState, setGainerPickerState] = useState<{ market: TopGainerMarket; initialCandidate?: GainerCandidate | null } | null>(null);
   
-  const marketCycle = useMarketCycle();
-  const isMarketClosed = marketCycle.status === "CLOSED";
-  
   const { data: trendingResponse, isLoading: isLoadingPeople, error: trendingError, refetch: refetchTrending } = useQuery<{ data: TrendingPerson[], totalCount: number, hasMore: boolean }>({
     queryKey: ['/api/trending?sort=rank'],
   });
@@ -2397,6 +2397,17 @@ export default function PredictPage() {
   const { data: nativeGainerData, isLoading: gainerLoading, error: gainerError, refetch: refetchGainers } = useQuery<any[]>({
     queryKey: ['/api/native-markets/gainer'],
   });
+
+  const serverBettingCutoff = useMemo(() => {
+    const allNative = [...(nativeUpdownData || []), ...(nativeH2hData || []), ...(nativeGainerData || [])];
+    const cutoffs = allNative.map((m: any) => m.bettingCutoff).filter(Boolean) as string[];
+    if (cutoffs.length === 0) return null;
+    cutoffs.sort();
+    return cutoffs[0];
+  }, [nativeUpdownData, nativeH2hData, nativeGainerData]);
+
+  const marketCycle = useMarketCycle(serverBettingCutoff);
+  const isMarketClosed = marketCycle.status === "CLOSED";
   const { data: userBetsData, error: userBetsError, refetch: refetchUserBets } = useQuery<any>({
     queryKey: ['/api/me/predictions'],
     enabled: !!user,
@@ -2498,6 +2509,7 @@ export default function PredictPage() {
           featured: m.featured || false,
           activeParticipantCount: Number(m.activeParticipantCount || 0),
           recentParticipants: m.recentParticipants || [],
+          bettingCutoff: m.bettingCutoff || null,
         } as PredictionMarket;
       });
     }
@@ -2534,6 +2546,7 @@ export default function PredictPage() {
           totalBets: (Number(m.activeParticipantCount || 0) || 0) + Number(m.seedConfig?.participants || 0),
           activeParticipantCount: Number(m.activeParticipantCount || 0),
           recentParticipants: m.recentParticipants || [],
+          bettingCutoff: m.bettingCutoff || null,
         } as HeadToHeadMarket;
       });
     }
@@ -2588,6 +2601,7 @@ export default function PredictPage() {
           candidateCount: allCandidates.length,
           activeParticipantCount: Number(m.activeParticipantCount || 0),
           recentParticipants: m.recentParticipants || [],
+          bettingCutoff: m.bettingCutoff || null,
         } as TopGainerMarket;
       });
     }
@@ -2796,6 +2810,7 @@ export default function PredictPage() {
       baselineTimestamp: market.startAt,
       tieRule: market.tieRule || "refund",
       endAt: market.endAt,
+      bettingCutoff: market.bettingCutoff,
     });
     openStakeModal();
   };
@@ -2830,6 +2845,7 @@ export default function PredictPage() {
       opponentScore: opponent.currentScore,
       crowdSentiment: sentiment,
       estimatedPayout,
+      bettingCutoff: market.bettingCutoff,
     });
     openStakeModal();
   };
@@ -2860,6 +2876,7 @@ export default function PredictPage() {
       candidateRank: candidate.rank,
       candidatePercentGain: candidate.percentGain,
       candidatePointsAdded: candidate.currentGain,
+      bettingCutoff: market.bettingCutoff,
     });
     openStakeModal();
   };
@@ -3814,8 +3831,8 @@ export default function PredictPage() {
           person={selectedJackpotPerson}
           marketId={jackpotMarketForPerson?.id || null}
           userCredits={walletCredits}
-          bettingCutoff={jackpotMarketForPerson?.endAt ? new Date(new Date(jackpotMarketForPerson.endAt).getTime() - 48 * 60 * 60 * 1000).toISOString() : null}
-          isCutoffPassed={jackpotMarketForPerson?.endAt ? new Date() > new Date(new Date(jackpotMarketForPerson.endAt).getTime() - 48 * 60 * 60 * 1000) : false}
+          bettingCutoff={jackpotMarketForPerson?.bettingCutoff || null}
+          isCutoffPassed={jackpotMarketForPerson?.isCutoffPassed || false}
         />
       )}
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-t md:hidden">

@@ -862,8 +862,6 @@ function SectionHeader({
 }
 
 export function PredictTab({ personId, personName, personAvatar, currentScore }: PredictTabProps) {
-  const marketCycle = useMarketCycle();
-  const isMarketClosed = marketCycle.status === "CLOSED";
   const [jackpotModalOpen, setJackpotModalOpen] = useState(false);
   const [showCommunityOverlay, setShowCommunityOverlay] = useState(false);
   const [gainerPickerState, setGainerPickerState] = useState<{ market: TopGainerMarket; initialCandidate?: GainerCandidate | null } | null>(null);
@@ -872,6 +870,17 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
   const { data: nativeH2hData, isLoading: h2hLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/h2h'] });
   const { data: nativeGainerData, isLoading: gainerLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/gainer'] });
   const { data: nativeJackpotData, isLoading: jackpotLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/jackpot'] });
+
+  const serverBettingCutoff = useMemo(() => {
+    const allNative = [...(nativeUpdownData || []), ...(nativeH2hData || []), ...(nativeGainerData || [])];
+    const cutoffs = allNative.map((m: any) => m.bettingCutoff).filter(Boolean) as string[];
+    if (cutoffs.length === 0) return null;
+    cutoffs.sort();
+    return cutoffs[0];
+  }, [nativeUpdownData, nativeH2hData, nativeGainerData]);
+
+  const marketCycle = useMarketCycle(serverBettingCutoff);
+  const isMarketClosed = marketCycle.status === "CLOSED";
   const { data: openMarketsData, isLoading: openMarketsLoading } = useQuery<any[]>({ queryKey: ['/api/open-markets'] });
 
   const isLoading = updownLoading || h2hLoading || gainerLoading || jackpotLoading || openMarketsLoading;
@@ -1390,8 +1399,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
         person={{ id: personId, name: personName, avatar: personAvatar || "", trendScore: currentScore } as any}
         marketId={jackpotMarket?.id || null}
         userCredits={walletCredits}
-        bettingCutoff={jackpotMarket?.endAt ? new Date(new Date(jackpotMarket.endAt).getTime() - 48 * 60 * 60 * 1000).toISOString() : null}
-        isCutoffPassed={jackpotMarket?.endAt ? new Date() > new Date(new Date(jackpotMarket.endAt).getTime() - 48 * 60 * 60 * 1000) : false}
+        bettingCutoff={jackpotMarket?.bettingCutoff || null}
+        isCutoffPassed={jackpotMarket?.isCutoffPassed || false}
       />
       </section>
 
