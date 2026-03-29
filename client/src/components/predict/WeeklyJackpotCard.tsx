@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ClosedMarketActionTrigger } from "./ClosedMarketActionTrigger";
+import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -11,6 +13,8 @@ import type { MarketStatus } from "@/hooks/useMarketCycle";
 
 export interface WeeklyJackpotCardProps {
   onEnterJackpot: () => void;
+  /** When entries are closed, popover copy uses this (falls back to weekly client deadlines if omitted). */
+  bettingCutoff?: string | null;
   marketStatus?: MarketStatus;
   timeRemaining: { days: number; hours: number; minutes: number; seconds: number };
   trendingPeople: TrendingPerson[];
@@ -111,6 +115,7 @@ function CelebritySearchModal({
 
 export function WeeklyJackpotCard({ 
   onEnterJackpot, 
+  bettingCutoff,
   marketStatus = "OPEN",
   timeRemaining,
   trendingPeople,
@@ -120,6 +125,11 @@ export function WeeklyJackpotCard({
   compact = false
 }: WeeklyJackpotCardProps) {
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+
+  const entriesClosedMessage = useMemo(
+    () => getClosedMarketMessage({ bettingCutoff: bettingCutoff ?? undefined }),
+    [bettingCutoff],
+  );
 
   const timerLabel = marketStatus === "ENTRIES_CLOSED" ? "Results In" : "Time Remaining";
 
@@ -134,10 +144,16 @@ export function WeeklyJackpotCard({
     }
     if (marketStatus === "ENTRIES_CLOSED") {
       return (
-        <Button size={compact ? "default" : "lg"} className="bg-muted text-muted-foreground cursor-not-allowed w-full" disabled>
-          <Clock className="h-5 w-5 mr-2" />
-          Entries Closed — Results Sunday
-        </Button>
+        <ClosedMarketActionTrigger isClosed message={entriesClosedMessage} side="top" align="center">
+          <Button
+            type="button"
+            size={compact ? "default" : "lg"}
+            className="bg-muted text-muted-foreground w-full"
+          >
+            <Clock className="h-5 w-5 mr-2" />
+            Entries Closed — Results Sunday
+          </Button>
+        </ClosedMarketActionTrigger>
       );
     }
     return (

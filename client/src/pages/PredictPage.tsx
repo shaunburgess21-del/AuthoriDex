@@ -22,6 +22,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
+import { WeeklyUpDownActionButtons } from "@/components/predict/WeeklyUpDownActionButtons";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { formatSignedPercent, formatSignedPoints, getRecentActivityMarketPath } from "@/lib/predict-display";
 import {
@@ -907,28 +908,12 @@ function WeeklyUpDownCard({
         </div>
       </div>
       
-      <div className="grid grid-cols-2 gap-2">
-        <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
-          <Button 
-            className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 py-3 md:py-2 h-auto"
-            onClick={() => onSelect?.("up")}
-            data-testid={`button-up-${market.id}`}
-          >
-            <TrendingUp className="h-4 w-4 mr-1" />
-            Up
-          </Button>
-        </ClosedMarketActionTrigger>
-        <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
-          <Button 
-            className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 py-3 md:py-2 h-auto"
-            onClick={() => onSelect?.("down")}
-            data-testid={`button-down-${market.id}`}
-          >
-            <TrendingDown className="h-4 w-4 mr-1" />
-            Down
-          </Button>
-        </ClosedMarketActionTrigger>
-      </div>
+      <WeeklyUpDownActionButtons
+        marketId={market.id}
+        isMarketClosed={!!isMarketClosed}
+        closedMessage={closedMessage}
+        onSelect={onSelect}
+      />
       </div>
     </PredictCard>
   );
@@ -2738,10 +2723,6 @@ export default function PredictPage() {
 
   const handleUpDownSelect = (market: PredictionMarket, choice: "up" | "down") => {
     if (isMarketClosed) {
-      toast({
-        title: closedMarketMessage.title,
-        description: closedMarketMessage.description,
-      });
       return;
     }
     if (!user) {
@@ -2783,10 +2764,6 @@ export default function PredictPage() {
 
   const handleH2HSelect = (market: HeadToHeadMarket, person: 1 | 2) => {
     if (isMarketClosed) {
-      toast({
-        title: closedMarketMessage.title,
-        description: closedMarketMessage.description,
-      });
       return;
     }
     if (!user) {
@@ -2825,10 +2802,6 @@ export default function PredictPage() {
 
   const handleGainerSelect = (market: TopGainerMarket, candidate: GainerCandidate) => {
     if (isMarketClosed) {
-      toast({
-        title: closedMarketMessage.title,
-        description: closedMarketMessage.description,
-      });
       return;
     }
     if (!user) {
@@ -2863,10 +2836,6 @@ export default function PredictPage() {
 
   const openGainerPicker = (market: TopGainerMarket, initialCandidate?: GainerCandidate | null) => {
     if (isMarketClosed) {
-      toast({
-        title: closedMarketMessage.title,
-        description: closedMarketMessage.description,
-      });
       return;
     }
     setGainerPickerState({ market, initialCandidate });

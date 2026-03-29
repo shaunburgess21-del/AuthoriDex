@@ -565,10 +565,6 @@ export default function HomePage() {
 
   const handleLeaderboardPredict = useCallback((personId: string, direction: "up" | "down") => {
     if (isUpdownCutoffPassed) {
-      toast({
-        title: leaderboardClosedMessage.title,
-        description: leaderboardClosedMessage.description,
-      });
       return;
     }
     const market = updownMarkets.find(m => m.personId === personId);
@@ -590,7 +586,7 @@ export default function HomePage() {
       bettingCutoff: market.bettingCutoff,
     });
     setStakeModalOpen(true);
-  }, [updownMarkets, isUpdownCutoffPassed, toast, leaderboardClosedMessage]);
+  }, [updownMarkets, isUpdownCutoffPassed]);
 
   const handleConfirmStake = useCallback((amount: number) => {
     setWalletCredits(prev => prev - amount);

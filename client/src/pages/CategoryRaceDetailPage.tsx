@@ -18,7 +18,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import {
   ArrowLeft,
@@ -52,7 +51,6 @@ export default function CategoryRaceDetailPage() {
   const [, setLocation] = useLocation();
   const marketId = params?.marketId || "";
   const { user, profile } = useAuth();
-  const { toast } = useToast();
   const walletCredits = profile?.predictCredits ?? 0;
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -186,10 +184,6 @@ export default function CategoryRaceDetailPage() {
     (candidate: GainerCandidate) => {
       if (userPick) return;
       if (isMarketClosed) {
-        toast({
-          title: closedMarketMessage.title,
-          description: closedMarketMessage.description,
-        });
         return;
       }
       setPendingSelection({
@@ -203,7 +197,7 @@ export default function CategoryRaceDetailPage() {
       } as StakeSelection);
       setStakeModalOpen(true);
     },
-    [isMarketClosed, userPick, marketId, categoryLabel, toast, closedMarketMessage]
+    [isMarketClosed, userPick, marketId, categoryLabel]
   );
 
   const handleConfirmStake = useCallback(

@@ -17,7 +17,6 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -554,7 +553,6 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
 
   const marketState = useMarketCycle({ bettingCutoff: serverBettingCutoff, resolutionDeadline: serverResolutionDeadline });
   const { user } = useAuth();
-  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [activeSection, setActiveSection] = useState<PredictSection>("All");
   const [searchQuery, setSearchQuery] = useState("");
@@ -630,10 +628,6 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
 
   const handleUpDownPredict = useCallback((marketId: string, direction: 'up' | 'down', personName: string, multiplier: number) => {
     if (isClosed) {
-      toast({
-        title: closedMarketMessage.title,
-        description: closedMarketMessage.description,
-      });
       return;
     }
     setStakeModal({
@@ -648,14 +642,10 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
         setUpDownInteracted(true);
       },
     });
-  }, [isClosed, toast, closedMarketMessage]);
+  }, [isClosed]);
 
   const handleH2HPredict = useCallback((marketId: string, selection: 'person1' | 'person2', personName: string) => {
     if (isClosed) {
-      toast({
-        title: closedMarketMessage.title,
-        description: closedMarketMessage.description,
-      });
       return;
     }
     setStakeModal({
@@ -669,14 +659,10 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
         setH2hInteracted(true);
       },
     });
-  }, [isClosed, toast, closedMarketMessage]);
+  }, [isClosed]);
 
   const handleGainerPredict = useCallback((marketId: string, leaderName: string) => {
     if (isClosed) {
-      toast({
-        title: closedMarketMessage.title,
-        description: closedMarketMessage.description,
-      });
       return;
     }
     setStakeModal({
@@ -690,7 +676,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
         setGainerInteracted(true);
       },
     });
-  }, [isClosed, toast, closedMarketMessage]);
+  }, [isClosed]);
 
   const closeStakeModal = () => {
     setStakeModal(null);
@@ -821,6 +807,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
           />
           <WeeklyJackpotCard
             onEnterJackpot={onExplore}
+            bettingCutoff={serverBettingCutoff}
             marketStatus={marketState.status}
             timeRemaining={marketState.timeRemaining}
             trendingPeople={trendingPeople}

@@ -15,7 +15,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import {
   ArrowLeft,
@@ -51,7 +50,6 @@ export default function H2HDetailPage() {
   const [, setLocation] = useLocation();
   const marketId = params?.marketId || "";
   const { user, profile } = useAuth();
-  const { toast } = useToast();
   const walletCredits = profile?.predictCredits ?? 0;
 
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
@@ -155,10 +153,6 @@ export default function H2HDetailPage() {
     (person: 1 | 2) => {
       if (!hydrated || userPickSide) return;
       if (isMarketClosed) {
-        toast({
-          title: closedMarketMessage.title,
-          description: closedMarketMessage.description,
-        });
         return;
       }
       const picked = person === 1 ? hydrated.person1 : hydrated.person2;
@@ -176,7 +170,7 @@ export default function H2HDetailPage() {
       });
       setStakeModalOpen(true);
     },
-    [hydrated, isMarketClosed, userPickSide, marketId, toast, closedMarketMessage]
+    [hydrated, isMarketClosed, userPickSide, marketId]
   );
 
   const handleConfirmStake = useCallback(

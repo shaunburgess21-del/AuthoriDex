@@ -2,6 +2,13 @@ import { getClientWeekDeadlines } from "@/hooks/useMarketCycle";
 
 type DateInput = string | Date | null | undefined;
 
+/** Next calendar day at 00:00:00.000 UTC (typical “reopens Monday” messaging anchor). */
+function nextUtcMidnightAfter(date: Date): Date {
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1, 0, 0, 0, 0),
+  );
+}
+
 export interface ClosedMarketMessageOptions {
   bettingCutoff?: DateInput;
   resolutionDeadline?: DateInput;
@@ -48,6 +55,10 @@ function formatLocalShort(date: Date): string {
   return formatter.format(date).replace(",", "");
 }
 
+/**
+ * Client-only fallback when API has not supplied cutoff/deadline yet.
+ * Matches getClientWeekDeadlines() (weekly Fri/Sun UTC); prefer passing server times when available.
+ */
 function getFallbackDates() {
   const { friday, sunday } = getClientWeekDeadlines();
   return {
@@ -60,7 +71,7 @@ export function getClosedMarketTimes(options: ClosedMarketMessageOptions = {}): 
   const fallback = getFallbackDates();
   const cutoff = toDate(options.bettingCutoff) ?? fallback.cutoff;
   const resolve = toDate(options.resolutionDeadline) ?? fallback.resolve;
-  const reopen = new Date(resolve.getTime() + 1);
+  const reopen = nextUtcMidnightAfter(resolve);
 
   return {
     cutoffUtc: formatUtcShort(cutoff),

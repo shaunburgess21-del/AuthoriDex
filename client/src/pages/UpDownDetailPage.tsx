@@ -18,7 +18,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import {
   ArrowLeft,
@@ -36,7 +35,6 @@ export default function UpDownDetailPage() {
   const [, setLocation] = useLocation();
   const marketId = params?.marketId || "";
   const { user, profile } = useAuth();
-  const { toast } = useToast();
   const walletCredits = profile?.predictCredits ?? 0;
 
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
@@ -141,10 +139,6 @@ export default function UpDownDetailPage() {
     (choice: "up" | "down") => {
       if (!hydrated || userPick) return;
       if (isMarketClosed) {
-        toast({
-          title: closedMarketMessage.title,
-          description: closedMarketMessage.description,
-        });
         return;
       }
       setPendingSelection({
@@ -164,7 +158,7 @@ export default function UpDownDetailPage() {
       });
       setStakeModalOpen(true);
     },
-    [hydrated, isMarketClosed, userPick, marketId, toast, closedMarketMessage]
+    [hydrated, isMarketClosed, userPick, marketId]
   );
 
   const handleConfirmStake = useCallback(

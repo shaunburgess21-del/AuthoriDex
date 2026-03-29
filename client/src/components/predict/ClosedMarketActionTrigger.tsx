@@ -1,4 +1,11 @@
-import { cloneElement, isValidElement, type ReactElement, type ReactNode } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -9,12 +16,17 @@ type PopoverAlign = "start" | "center" | "end";
 interface ClosedMarketActionTriggerProps {
   isClosed: boolean;
   message: Pick<ClosedMarketMessage, "title" | "lines">;
+  /** Prefer a native `<button>` or `<Button>` so popover + keyboard activation behave predictably. */
   children: ReactElement;
   side?: PopoverSide;
   align?: PopoverAlign;
   contentClassName?: string;
 }
 
+/**
+ * When `isClosed` is true, wraps `children` in a popover trigger and blocks the child's default action
+ * (stops propagation to parent rows/cards). Popover-first UX: pair with silent early-returns in handlers.
+ */
 export function ClosedMarketActionTrigger({
   isClosed,
   message,
@@ -27,21 +39,12 @@ export function ClosedMarketActionTrigger({
     return children;
   }
 
-  const wrappedChild = cloneElement(children as ReactElement<any>, {
+  const wrappedChild = cloneElement(children as ReactElement<Record<string, unknown>>, {
     "aria-disabled": true,
-    onClick: (event: any) => {
+    onClick: (event: MouseEvent) => {
       event.stopPropagation();
     },
-    onClickCapture: (event: any) => {
-      event.stopPropagation();
-    },
-    onPointerDownCapture: (event: any) => {
-      event.stopPropagation();
-    },
-    onKeyDown: (event: any) => {
-      event.stopPropagation();
-    },
-    onKeyDownCapture: (event: any) => {
+    onPointerDownCapture: (event: PointerEvent) => {
       event.stopPropagation();
     },
   });
