@@ -20,6 +20,7 @@ interface CelebrityImage {
   votesUp: number;
   votesDown: number;
   addedAt: string;
+  currentUserDirection?: 'up' | 'down' | null;
 }
 
 export interface CuratePerson {
@@ -55,6 +56,8 @@ export function CurateProfileCard({
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [showShimmer, setShowShimmer] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [isEditingVote, setIsEditingVote] = useState(false);
+  const [resultMessage, setResultMessage] = useState<"recorded" | "saved">("recorded");
   const timeoutRef1 = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -74,10 +77,15 @@ export function CurateProfileCard({
     return shuffled.slice(0, 4);
   }, [images, person.id, cycleNumber]);
 
+  const persistedSelectedPhoto = useMemo(
+    () => images.find((img) => img.currentUserDirection === 'up')?.id ?? null,
+    [images]
+  );
+
   const voteMutation = useMutation({
     mutationFn: async ({ imageId, direction }: { imageId: string; direction: 'up' | 'down' }) => {
       const response = await apiRequest('POST', `/api/people/${person.id}/images/${imageId}/vote`, { direction });
-      return response.json();
+      return response.json() as Promise<{ alreadyVoted?: boolean }>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/people', person.id, 'images'] });
@@ -97,22 +105,51 @@ export function CurateProfileCard({
     };
   }, []);
 
-  const handleSelectPhoto = (imageId: string) => {
+  useEffect(() => {
+    if (isEditingVote) return;
+
+    if (persistedSelectedPhoto) {
+      setSelectedPhoto(persistedSelectedPhoto);
+      setShowResults(true);
+      setResultMessage("saved");
+      return;
+    }
+
+    if (!showShimmer) {
+      setSelectedPhoto(null);
+      setShowResults(false);
+      setResultMessage("recorded");
+    }
+  }, [persistedSelectedPhoto, isEditingVote, showShimmer]);
+
+  const handleSelectPhoto = async (imageId: string) => {
     if (selectedPhoto) return;
-    
+
     setSelectedPhoto(imageId);
     setShowShimmer(true);
+    setIsEditingVote(false);
+    setResultMessage("recorded");
     onVote();
-    
-    voteMutation.mutate({ imageId, direction: 'up' });
-    displayImages
-      .filter(img => img.id !== imageId)
-      .forEach(img => voteMutation.mutate({ imageId: img.id, direction: 'down' }));
-    
-    timeoutRef1.current = setTimeout(() => {
+
+    try {
+      const selectedResult = await voteMutation.mutateAsync({ imageId, direction: 'up' });
+      await Promise.all(
+        displayImages
+          .filter(img => img.id !== imageId)
+          .map((img) => voteMutation.mutateAsync({ imageId: img.id, direction: 'down' }))
+      );
+
+      setResultMessage(selectedResult?.alreadyVoted ? "saved" : "recorded");
+      onComplete();
+      timeoutRef1.current = setTimeout(() => {
+        setShowShimmer(false);
+        setShowResults(true);
+      }, 600);
+    } catch {
       setShowShimmer(false);
-      setShowResults(true);
-    }, 600);
+      setSelectedPhoto(persistedSelectedPhoto);
+      setShowResults(Boolean(persistedSelectedPhoto));
+    }
   };
 
   const totalVotes = useMemo(() => {
@@ -189,7 +226,9 @@ export function CurateProfileCard({
               >
                 <Check className="h-6 w-6 text-green-400" />
               </motion.div>
-              <p className="font-medium text-green-400 mb-1">Vote recorded!</p>
+              <p className="font-medium text-green-400 mb-1">
+                {resultMessage === "saved" ? "Your vote is saved!" : "Vote recorded!"}
+              </p>
               <p className="text-xs text-muted-foreground mb-4">
                 {totalVotes.toLocaleString('en-US')} total votes
               </p>
@@ -211,6 +250,8 @@ export function CurateProfileCard({
                     onClick={() => {
                       setSelectedPhoto(null);
                       setShowResults(false);
+                      setIsEditingVote(true);
+                      setResultMessage("recorded");
                     }}
                     className="border-slate-600/50 text-slate-300 hover:text-white hover:border-slate-500"
                     data-testid={`button-change-vote-${person.id}`}

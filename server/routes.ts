@@ -1953,17 +1953,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all images for a celebrity (for "Curate Profile" voting)
-  app.get("/api/people/:id/images", async (req, res) => {
+  app.get("/api/people/:id/images", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      
+
       const images = await db
         .select()
         .from(celebrityImages)
         .where(eq(celebrityImages.personId, id))
         .orderBy(desc(celebrityImages.isPrimary), desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`));
-      
-      res.json(images);
+
+      const userId = req.userId || null;
+      if (!userId || images.length === 0) {
+        return res.json(images);
+      }
+
+      const votes = await db
+        .select({
+          imageId: imageVotes.imageId,
+          direction: imageVotes.direction,
+        })
+        .from(imageVotes)
+        .where(and(
+          eq(imageVotes.userId, userId),
+          inArray(imageVotes.imageId, images.map((img) => img.id)),
+        ));
+
+      const voteMap = new Map(votes.map((vote) => [vote.imageId, vote.direction]));
+      res.json(images.map((image) => ({
+        ...image,
+        currentUserDirection: voteMap.get(image.id) || null,
+      })));
     } catch (error) {
       console.error("Error fetching celebrity images:", error);
       res.status(500).json({ error: "Failed to fetch celebrity images" });
