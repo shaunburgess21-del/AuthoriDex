@@ -41,7 +41,7 @@ import {
 } from "./scoring/sourceHealth";
 import { getLastFullRefreshAt } from "./jobs/live-tick";
 import { getLastRunMeta } from "./jobs/ingest";
-import { getMediastackBudgetSummary } from "./providers/mediastack";
+import { getMediastackBudgetSummary, probeMediastackLive } from "./providers/mediastack";
 import pLimit from "p-limit";
 import { buildOpeningScores } from "./native-markets/openingScores";
 import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext } from "./jobs/market-generator";
@@ -7389,6 +7389,27 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error in mediastack audit:", error);
       res.status(500).json({ error: "Mediastack audit failed" });
+    }
+  });
+
+  // ============ ADMIN: MEDIASTACK LIVE PROBE ============
+
+  app.post("/api/admin/mediastack-probe", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { personName } = req.body;
+      if (!personName || typeof personName !== "string") {
+        return res.status(400).json({ error: "personName is required" });
+      }
+
+      const result = await probeMediastackLive(personName.trim());
+      if (!result) {
+        return res.status(503).json({ error: "Mediastack API key not configured" });
+      }
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error in mediastack probe:", error);
+      res.status(500).json({ error: "Mediastack probe failed" });
     }
   });
 

@@ -1515,6 +1515,8 @@ export default function AdminDashboard() {
   const [msAuditLoading, setMsAuditLoading] = useState(false);
   const [msAuditExpanded, setMsAuditExpanded] = useState(false);
   const [msAuditFilter, setMsAuditFilter] = useState<"all" | "zero_articles" | "no_cache" | "stale" | "ok">("all");
+  const [msProbeLoading, setMsProbeLoading] = useState<string | null>(null);
+  const [msProbeResults, setMsProbeResults] = useState<Record<string, any>>({});
   const [showCelebrityModal, setShowCelebrityModal] = useState(false);
   const [editingCelebrity, setEditingCelebrity] = useState<Celebrity | null>(null);
   const [celebrityForm, setCelebrityForm] = useState({
@@ -6289,6 +6291,7 @@ export default function AdminDashboard() {
                                 <th className="px-2 py-1.5 text-left font-medium">Top Headlines</th>
                                 <th className="px-2 py-1.5 text-left font-medium">Status</th>
                                 <th className="px-2 py-1.5 text-right font-medium">Cache Age</th>
+                                <th className="px-2 py-1.5 text-center font-medium">Live Test</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -6331,6 +6334,47 @@ export default function AdminDashboard() {
                                   </td>
                                   <td className="px-2 py-1.5 text-right text-muted-foreground whitespace-nowrap">
                                     {r.cacheAge || "—"}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-center">
+                                    {msProbeResults[r.personId] ? (
+                                      <div className="text-[10px] leading-tight">
+                                        {msProbeResults[r.personId].recommendation === "relaxed_helps" ? (
+                                          <span className="text-green-500" title={`EN: ${msProbeResults[r.personId].withLanguageFilter.articleCount}, All langs: ${msProbeResults[r.personId].withoutLanguageFilter.articleCount}`}>
+                                            +{msProbeResults[r.personId].withoutLanguageFilter.articleCount} (no lang filter)
+                                          </span>
+                                        ) : msProbeResults[r.personId].recommendation === "no_results" ? (
+                                          <span className="text-red-400">0 both</span>
+                                        ) : (
+                                          <span className="text-muted-foreground">{msProbeResults[r.personId].withLanguageFilter.articleCount} EN</span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        className="inline-flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 disabled:opacity-50"
+                                        disabled={msProbeLoading === r.personId}
+                                        onClick={async () => {
+                                          setMsProbeLoading(r.personId);
+                                          try {
+                                            const headers = await getAuthHeaders();
+                                            const resp = await fetch("/api/admin/mediastack-probe", {
+                                              method: "POST",
+                                              headers: { ...headers, "Content-Type": "application/json" },
+                                              body: JSON.stringify({ personName: r.name }),
+                                            });
+                                            if (!resp.ok) throw new Error(await resp.text());
+                                            const data = await resp.json();
+                                            setMsProbeResults(prev => ({ ...prev, [r.personId]: data }));
+                                          } catch (err: any) {
+                                            console.error("Probe failed:", err);
+                                          } finally {
+                                            setMsProbeLoading(null);
+                                          }
+                                        }}
+                                      >
+                                        {msProbeLoading === r.personId ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : "Test"}
+                                      </button>
+                                    )}
                                   </td>
                                 </tr>
                               ))}

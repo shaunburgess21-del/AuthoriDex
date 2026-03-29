@@ -21,6 +21,7 @@ export interface MediastackNewsData {
   topHeadlines: string[];
   source: "mediastack";
   paginationTotal: number;
+  languageRelaxed?: boolean;
 }
 
 export interface MediastackBatchStats {
@@ -325,19 +326,35 @@ export async function fetchMediastackNews(
       console.log(`[Mediastack] Widened query for ${personName}: "${keywordsOverride}"`);
     }
 
-    const url = `${MEDIASTACK_BASE_URL}?access_key=${MEDIASTACK_API_KEY}&keywords=${keywords}&languages=en&sort=published_desc&limit=100&date=${dateFrom},${dateTo}`;
+    const urlWithLang = `${MEDIASTACK_BASE_URL}?access_key=${MEDIASTACK_API_KEY}&keywords=${keywords}&languages=en&sort=published_desc&limit=100&date=${dateFrom},${dateTo}`;
 
-    const data = await fetchWithRetry(url);
+    const data = await fetchWithRetry(urlWithLang);
     await trackApiCall();
 
     if (!data || !data.pagination) {
       return null;
     }
 
-    const articleCount24h = data.pagination.total;
-    const topHeadlines = (data.data || [])
+    let articleCount24h = data.pagination.total;
+    let topHeadlines = (data.data || [])
       .slice(0, 3)
       .map(a => a.title || "");
+    let languageRelaxed = false;
+
+    if (articleCount24h === 0) {
+      const urlNoLang = `${MEDIASTACK_BASE_URL}?access_key=${MEDIASTACK_API_KEY}&keywords=${keywords}&sort=published_desc&limit=100&date=${dateFrom},${dateTo}`;
+      const retryData = await fetchWithRetry(urlNoLang);
+      await trackApiCall();
+
+      if (retryData?.pagination && retryData.pagination.total > 0) {
+        articleCount24h = retryData.pagination.total;
+        topHeadlines = (retryData.data || [])
+          .slice(0, 3)
+          .map(a => a.title || "");
+        languageRelaxed = true;
+        console.log(`[Mediastack] Language-relaxed retry for "${queryText}": ${articleCount24h} articles (vs 0 with languages=en)`);
+      }
+    }
 
     const result: MediastackNewsData = {
       query: queryText,
@@ -347,7 +364,8 @@ export async function fetchMediastackNews(
       delta: 0,
       topHeadlines,
       source: "mediastack",
-      paginationTotal: data.pagination.total,
+      paginationTotal: articleCount24h,
+      languageRelaxed,
     };
 
     await setCachedResponse(cacheKey, "mediastack", JSON.stringify(result), CACHE_TTL_HOURS);
@@ -670,5 +688,51 @@ export async function getMediastackBudgetSummary() {
     dayOfMonth,
     daysInMonth,
     status: usagePct >= BUDGET_HARD_STOP_PCT ? "hard_stop" : usagePct >= BUDGET_WARN_PCT ? "warning" : "ok",
+  };
+}
+
+export interface MediastackProbeResult {
+  personName: string;
+  withLanguageFilter: { articleCount: number; topHeadlines: string[] };
+  withoutLanguageFilter: { articleCount: number; topHeadlines: string[] };
+  recommendation: "ok" | "relaxed_helps" | "no_results";
+}
+
+export async function probeMediastackLive(personName: string): Promise<MediastackProbeResult | null> {
+  if (!MEDIASTACK_API_KEY) return null;
+
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const keywords = encodeURIComponent(personName);
+  const dateFrom = formatDate(yesterday);
+  const dateTo = formatDate(now);
+
+  const urlWithLang = `${MEDIASTACK_BASE_URL}?access_key=${MEDIASTACK_API_KEY}&keywords=${keywords}&languages=en&sort=published_desc&limit=100&date=${dateFrom},${dateTo}`;
+  const dataWithLang = await fetchWithRetry(urlWithLang);
+  await trackApiCall();
+
+  const withLangCount = dataWithLang?.pagination?.total ?? 0;
+  const withLangHeadlines = (dataWithLang?.data || []).slice(0, 3).map(a => a.title || "");
+
+  const urlNoLang = `${MEDIASTACK_BASE_URL}?access_key=${MEDIASTACK_API_KEY}&keywords=${keywords}&sort=published_desc&limit=100&date=${dateFrom},${dateTo}`;
+  const dataNoLang = await fetchWithRetry(urlNoLang);
+  await trackApiCall();
+
+  const noLangCount = dataNoLang?.pagination?.total ?? 0;
+  const noLangHeadlines = (dataNoLang?.data || []).slice(0, 3).map(a => a.title || "");
+
+  let recommendation: MediastackProbeResult["recommendation"] = "ok";
+  if (withLangCount === 0 && noLangCount > 0) {
+    recommendation = "relaxed_helps";
+  } else if (withLangCount === 0 && noLangCount === 0) {
+    recommendation = "no_results";
+  }
+
+  return {
+    personName,
+    withLanguageFilter: { articleCount: withLangCount, topHeadlines: withLangHeadlines },
+    withoutLanguageFilter: { articleCount: noLangCount, topHeadlines: noLangHeadlines },
+    recommendation,
   };
 }
