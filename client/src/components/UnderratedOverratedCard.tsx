@@ -7,8 +7,9 @@ import { normalizeMarketCategory } from "@shared/constants";
 import { ArrowUp, ArrowDown, Minus, Users, Loader2, BarChart2, ChevronRight } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 type VoteType = 'underrated' | 'overrated' | 'fairly_rated';
 
@@ -52,6 +53,7 @@ export function UnderratedOverratedCard({
   );
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   const totalVotes = (person.underratedCount ?? 0) + (person.overratedCount ?? 0) + (person.fairlyRatedCount ?? 0);
   const underratedPct = person.underratedPct ?? 33;
@@ -73,11 +75,15 @@ export function UnderratedOverratedCard({
     },
     onError: (error: any) => {
       setLocalVote(person.userValueVote ?? null);
-      toast({
-        title: "Vote failed",
-        description: error.message || "Please sign in to vote",
-        variant: "destructive",
-      });
+      if (isUnauthorizedApiError(error)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Vote failed",
+          description: error.message || "Something went wrong",
+          variant: "destructive",
+        });
+      }
     },
   });
 

@@ -20,6 +20,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { apiRequest } from "@/lib/queryClient";
+import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import {
@@ -89,11 +90,15 @@ export default function OpinionPollDetailPage() {
       toast({ title: "Vote recorded" });
     },
     onError: (error) => {
-      toast({
-        title: "Could not vote",
-        description: parseOpinionPollVoteError(error),
-        variant: "destructive",
-      });
+      if (isUnauthorizedApiError(error)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Could not vote",
+          description: parseOpinionPollVoteError(error),
+          variant: "destructive",
+        });
+      }
     },
   });
 

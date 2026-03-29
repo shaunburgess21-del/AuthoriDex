@@ -6,7 +6,9 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 import { X, Crown, ThumbsUp, ChevronLeft, Maximize2, ZoomIn } from "lucide-react";
 import type { CuratePerson } from "./CurateProfileCard";
 
@@ -40,6 +42,7 @@ export function CurateViewResultsOverlay({
 }: CurateViewResultsOverlayProps) {
   const [expandedImage, setExpandedImage] = useState<CelebrityImage | null>(null);
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   const { data: images = [], isLoading } = useQuery<CelebrityImage[]>({
     queryKey: ['/api/people', person.id, 'images'],
@@ -66,11 +69,15 @@ export function CurateViewResultsOverlay({
       });
     },
     onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to record vote",
-        variant: "destructive",
-      });
+      if (isUnauthorizedApiError(error)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to record vote",
+          variant: "destructive",
+        });
+      }
     },
   });
 

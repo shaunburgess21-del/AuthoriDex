@@ -62,6 +62,7 @@ import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { getExceptionalIndicator } from "@/lib/leaderboard-exceptional";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 
 const LazyPredictTab = lazy(() =>
@@ -427,6 +428,7 @@ function OpinionPollCardProfile({
   onVote: (pollSlug: string, optionId: string) => Promise<void>;
 }) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [voted, setVoted] = useState<string | null>(poll.userVote || null);
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
@@ -447,11 +449,15 @@ function OpinionPollCardProfile({
         await onVote(poll.slug, optionId);
         setVoted(optionId);
       } catch (err) {
-        toast({
-          title: "Could not record vote",
-          description: parseOpinionPollVoteError(err),
-          variant: "destructive",
-        });
+        if (isUnauthorizedApiError(err)) {
+          toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+        } else {
+          toast({
+            title: "Could not record vote",
+            description: parseOpinionPollVoteError(err),
+            variant: "destructive",
+          });
+        }
       }
     }
   };
@@ -470,11 +476,15 @@ function OpinionPollCardProfile({
       setChangeDialogOpen(false);
       setPendingOption(null);
     } catch (err) {
-      toast({
-        title: "Could not change vote",
-        description: parseOpinionPollVoteError(err),
-        variant: "destructive",
-      });
+      if (isUnauthorizedApiError(err)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Could not change vote",
+          description: parseOpinionPollVoteError(err),
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -1207,11 +1217,15 @@ export default function PersonDetailPage() {
         }
         return next;
       });
-      toast({
-        title: "Error",
-        description: error.message || "Failed to submit vote",
-        variant: "destructive",
-      });
+      if (isUnauthorizedApiError(error)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to submit vote",
+          variant: "destructive",
+        });
+      }
     },
   });
 
@@ -1241,11 +1255,15 @@ export default function PersonDetailPage() {
         }
         return next;
       });
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update vote",
-        variant: "destructive",
-      });
+      if (isUnauthorizedApiError(error)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to update vote",
+          variant: "destructive",
+        });
+      }
     },
   });
 

@@ -7,7 +7,9 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { Check, ChevronRight, Camera, Eye, RefreshCw, User } from "lucide-react";
 
@@ -61,6 +63,7 @@ export function CurateProfileCard({
   const timeoutRef1 = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
 
   const { data: images = [], isLoading } = useQuery<CelebrityImage[]>({
     queryKey: ['/api/people', person.id, 'images'],
@@ -108,6 +111,11 @@ export function CurateProfileCard({
   const handleSelectPhoto = async (imageId: string) => {
     if (selectedPhoto) return;
 
+    if (!user) {
+      toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      return;
+    }
+
     setSelectedPhoto(imageId);
     setShowShimmer(true);
     setIsEditingVote(false);
@@ -131,12 +139,16 @@ export function CurateProfileCard({
       setShowShimmer(false);
       setSelectedPhoto(persistedSelectedPhoto);
       setShowResults(Boolean(persistedSelectedPhoto));
-      const message = error instanceof Error ? error.message : "Failed to record vote";
-      toast({
-        title: "Error",
-        description: message,
-        variant: "destructive",
-      });
+      if (isUnauthorizedApiError(error)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        const message = error instanceof Error ? error.message : "Failed to record vote";
+        toast({
+          title: "Error",
+          description: message,
+          variant: "destructive",
+        });
+      }
     }
   };
 

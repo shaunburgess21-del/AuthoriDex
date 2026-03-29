@@ -61,6 +61,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { isUnauthorizedApiError, signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation, Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -662,6 +663,7 @@ function CurateProfileCard({
   const timeoutRef1 = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timeoutRef2 = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   // Fetch celebrity images for this person
   const { data: images = [], isLoading } = useQuery<CelebrityImage[]>({
@@ -691,11 +693,15 @@ function CurateProfileCard({
       queryClient.invalidateQueries({ queryKey: ['/api/people', poll.personId, 'images'] });
     },
     onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to record vote",
-        variant: "destructive",
-      });
+      if (isUnauthorizedApiError(error)) {
+        toast({ ...signInToVoteToastOptions(() => setLocation("/login")) });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to record vote",
+          variant: "destructive",
+        });
+      }
     },
   });
 
