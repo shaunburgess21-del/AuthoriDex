@@ -2611,6 +2611,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/celebrity/:id/approval-rating - Logged-in user's 1–5 approval rating for this person (cross-device sync)
+  app.get("/api/celebrity/:id/approval-rating", optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const celebrityId = req.params.id;
+      const userId = req.userId;
+
+      if (!userId) {
+        return res.json({ rating: null });
+      }
+
+      const [row] = await db
+        .select({ rating: userVotes.rating })
+        .from(userVotes)
+        .where(and(eq(userVotes.userId, userId), eq(userVotes.personId, celebrityId)))
+        .limit(1);
+
+      const r = row?.rating;
+      const rating =
+        r != null && Number(r) >= 1 && Number(r) <= 5 ? Number(r) : null;
+      res.json({ rating });
+    } catch (error: any) {
+      console.error("[approval-rating GET] Error:", error);
+      res.status(500).json({ error: "Failed to get approval rating" });
+    }
+  });
+
+  // POST /api/celebrity/:id/approval-rating - Submit or update 1–5 approval (persists via API + recomputes metrics)
+  app.post("/api/celebrity/:id/approval-rating", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const celebrityId = req.params.id;
+      const userId = req.userId!;
+
+      if (!checkVoteRateLimit(userId)) {
+        return res.status(429).json({ error: "Too many votes. Please slow down." });
+      }
+
+      const raw = req.body?.rating;
+      const rating = typeof raw === "number" ? raw : parseInt(String(raw), 10);
+      if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+        return res.status(400).json({ error: "rating must be an integer from 1 to 5" });
+      }
+
+      const [celebrity] = await db
+        .select({ id: trendingPeople.id, name: trendingPeople.name })
+        .from(trendingPeople)
+        .where(eq(trendingPeople.id, celebrityId))
+        .limit(1);
+
+      if (!celebrity) {
+        return res.status(404).json({ error: "Celebrity not found" });
+      }
+
+      await db
+        .insert(userVotes)
+        .values({
+          userId,
+          personId: celebrityId,
+          personName: celebrity.name,
+          rating,
+        })
+        .onConflictDoUpdate({
+          target: [userVotes.userId, userVotes.personId],
+          set: {
+            personName: celebrity.name,
+            rating,
+            votedAt: new Date(),
+          },
+        });
+
+      await recomputeCelebrityMetrics(celebrityId);
+
+      res.json({ success: true, rating });
+    } catch (error: any) {
+      console.error("[approval-rating POST] Error:", error);
+      res.status(500).json({ error: "Failed to submit approval rating" });
+    }
+  });
+
   // GET /api/celebrity/:id/sentiment-stats - Get real sentiment stats from celebrity_metrics
   app.get("/api/celebrity/:id/sentiment-stats", async (req, res) => {
     try {

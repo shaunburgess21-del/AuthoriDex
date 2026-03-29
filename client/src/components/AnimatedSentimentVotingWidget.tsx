@@ -2,10 +2,10 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { getSupabase } from "@/lib/supabase";
 import { useLocation } from "wouter";
 import { ArrowLeft, Users, Loader2 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 
 interface AnimatedSentimentVotingWidgetProps {
   personId: string;
@@ -217,19 +217,68 @@ export function AnimatedSentimentVotingWidget({
   isProfilePage = false 
 }: AnimatedSentimentVotingWidgetProps) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [currentValue, setCurrentValue] = useState<number | null>(null);
   const [hasInteracted, setHasInteracted] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showingResults, setShowingResults] = useState(false);
 
+  const { data: approvalFromServer, isFetched: approvalFetched } = useQuery<{ rating: number | null }>({
+    queryKey: ["/api/celebrity", personId, "approval-rating", user?.id ?? ""],
+    queryFn: async () => {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/celebrity/${personId}/approval-rating`, {
+        credentials: "include",
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to fetch approval rating");
+      return res.json();
+    },
+    enabled: !!user?.id,
+    staleTime: 60 * 1000,
+  });
+
   useEffect(() => {
+    setCurrentValue(null);
+    setIsSubmitted(false);
+    setHasInteracted(false);
+    setShowingResults(false);
+
+    if (!user?.id) {
+      const savedVote = localStorage.getItem(`sentiment-vote-${personId}`);
+      if (savedVote) {
+        const n = parseInt(savedVote, 10);
+        if (n >= 1 && n <= 5) {
+          setCurrentValue(n);
+          setIsSubmitted(true);
+        }
+      }
+    }
+  }, [personId, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !approvalFetched) return;
+    if (approvalFromServer?.rating != null) {
+      const r = approvalFromServer.rating;
+      setCurrentValue(r);
+      setIsSubmitted(true);
+      try {
+        localStorage.setItem(`sentiment-vote-${personId}`, String(r));
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     const savedVote = localStorage.getItem(`sentiment-vote-${personId}`);
     if (savedVote) {
-      setCurrentValue(parseInt(savedVote, 10));
-      setIsSubmitted(true);
+      const n = parseInt(savedVote, 10);
+      if (n >= 1 && n <= 5) {
+        setCurrentValue(n);
+        setIsSubmitted(true);
+      }
     }
-  }, [personId]);
+  }, [user?.id, personId, approvalFetched, approvalFromServer?.rating]);
 
   const handleSegmentClick = (segmentValue: number) => {
     setCurrentValue(segmentValue);
@@ -239,38 +288,46 @@ export function AnimatedSentimentVotingWidget({
   const handleVoteSubmit = async () => {
     if (!currentValue) return;
 
-    setIsSubmitted(true);
-    localStorage.setItem(`sentiment-vote-${personId}`, currentValue.toString());
-
     try {
       localStorage.setItem("authoridex-has-ever-voted", "1");
-    } catch {}
-    window.dispatchEvent(new CustomEvent('authoridex-ever-voted'));
-    
-    window.dispatchEvent(new CustomEvent('sentiment-vote-updated', {
-      detail: { personId, value: currentValue }
-    }));
-    
+    } catch {
+      /* ignore */
+    }
+    window.dispatchEvent(new CustomEvent("authoridex-ever-voted"));
+    window.dispatchEvent(
+      new CustomEvent("sentiment-vote-updated", {
+        detail: { personId, value: currentValue },
+      })
+    );
+
     if (user) {
       try {
-        const supabase = await getSupabase();
-        const { error } = await supabase
-          .from('user_votes')
-          .upsert({
-            user_id: user.id,
-            person_id: personId,
-            person_name: personName,
-            rating: currentValue,
-          }, {
-            onConflict: 'user_id,person_id',
-          });
-
-        if (error) {
-          console.error('Error saving vote to Supabase:', error);
+        await apiRequest("POST", `/api/celebrity/${personId}/approval-rating`, {
+          rating: currentValue,
+        });
+        try {
+          localStorage.setItem(`sentiment-vote-${personId}`, currentValue.toString());
+        } catch {
+          /* ignore */
         }
+        setIsSubmitted(true);
+        await queryClient.invalidateQueries({
+          queryKey: ["/api/celebrity", personId, "approval-rating"],
+        });
+        await queryClient.invalidateQueries({ queryKey: [`/api/trending/${personId}`] });
+        await queryClient.invalidateQueries({
+          queryKey: ["/api/celebrity", personId, "sentiment-stats"],
+        });
       } catch (error) {
-        console.error('Error connecting to Supabase:', error);
+        console.error("Error saving approval rating:", error);
       }
+    } else {
+      try {
+        localStorage.setItem(`sentiment-vote-${personId}`, currentValue.toString());
+      } catch {
+        /* ignore */
+      }
+      setIsSubmitted(true);
     }
   };
 
