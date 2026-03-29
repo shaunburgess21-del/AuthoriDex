@@ -12,12 +12,14 @@ interface UnifiedSectionHeaderProps {
 const accentMap = {
   cyan: {
     borderTop: "border-t-cyan-500",
-    gradient: "from-cyan-500/10 via-cyan-500/5 to-transparent",
+    shellBg:
+      "bg-[linear-gradient(to_bottom,rgba(0,200,200,0.08)_0%,transparent_75%)]",
     iconBg: "bg-cyan-500/10",
   },
   violet: {
     borderTop: "border-t-violet-500",
-    gradient: "from-violet-500/10 via-violet-500/5 to-transparent",
+    shellBg:
+      "bg-[linear-gradient(to_bottom,rgba(139,92,246,0.08)_0%,transparent_75%)]",
     iconBg: "bg-violet-500/10",
   },
 } as const;
@@ -37,7 +39,7 @@ export function UnifiedSectionHeader({
   return (
     <div className="px-1.5 md:px-0">
       <div
-        className={`mb-3 border-t-[3px] border-b-0 ${a.borderTop} rounded-t-lg bg-gradient-to-r ${a.gradient}`}
+        className={`mb-3 border-t-[3px] border-b-0 ${a.borderTop} rounded-t-lg ${a.shellBg}`}
         data-testid={testId}
       >
         <div className="flex items-center justify-between pl-3 pr-3 py-3 md:pl-0 md:pr-0">

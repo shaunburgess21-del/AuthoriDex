@@ -650,51 +650,6 @@
     animation: count-flash 0.3s ease-out;
   }
 
-  /* ===== SWIPER CAROUSEL - VoxDex pagination (Instagram-style: fixed round dots, opacity only) ===== */
-  .voxdex-swiper .swiper-pagination-bullet {
-    width: 6px !important;
-    height: 6px !important;
-    border-radius: 9999px !important;
-    transform: none !important;
-    transition: opacity 200ms ease-in-out !important;
-  }
-  .voxdex-swiper .swiper-pagination-bullet:not(.swiper-pagination-bullet-active) {
-    opacity: 0.3 !important;
-    background: rgb(100 116 139) !important; /* slate-500 — light mode inactive */
-  }
-  .dark .voxdex-swiper .swiper-pagination-bullet:not(.swiper-pagination-bullet-active) {
-    background: rgb(203 213 225) !important; /* slate-300 — dark mode inactive */
-    opacity: 0.3 !important;
-  }
-  .voxdex-swiper .swiper-pagination-bullet-active {
-    width: 6px !important;
-    height: 6px !important;
-    border-radius: 9999px !important;
-    opacity: 1 !important;
-    background: rgb(34 211 238) !important; /* cyan-400 */
-  }
-  .voxdex-swiper[data-dot-active="violet"] .swiper-pagination-bullet-active {
-    background: rgb(139 92 246) !important; /* violet-500 */
-  }
-  .voxdex-swiper .swiper-pagination-bullets {
-    position: relative;
-    margin-top: 1rem;
-  }
-  @media (min-width: 768px) {
-    .voxdex-swiper .swiper-pagination-bullets {
-      margin-top: 1rem;
-    }
-  }
-  /* Multi-slide carousels: show pagination only on mobile (1 slide) */
-  .voxdex-swiper-multi .swiper-pagination {
-    display: flex;
-  }
-  @media (min-width: 768px) {
-    .voxdex-swiper-multi .swiper-pagination {
-      display: none;
-    }
-  }
-
   /* ===== PULL TO REFRESH ===== */
   @keyframes ptr-spin {
     to { transform: rotate(360deg); }

@@ -78,9 +78,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Swiper, SwiperSlide } from "swiper/react";
-import { Pagination, A11y } from "swiper/modules";
+import { A11y } from "swiper/modules";
+import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
-import "swiper/css/pagination";
 import { motion, AnimatePresence } from "framer-motion";
 import { getFilterCategories, getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory } from "@shared/constants";
 import type { TrendingPerson } from "@shared/schema";
@@ -94,6 +94,7 @@ import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
+import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 
@@ -1489,6 +1490,13 @@ function CarouselSection({
   icon: typeof Vote;
 }) {
   const slides = Children.toArray(children);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const swiperRef = useRef<SwiperType | null>(null);
+
+  useEffect(() => {
+    setActiveIndex(0);
+    swiperRef.current?.slideTo(0, 0);
+  }, [slides.length]);
 
   return (
     <section className="mb-10">
@@ -1502,9 +1510,9 @@ function CarouselSection({
         </div>
       </div>
 
-      <div className="predict-carousel w-screen relative left-1/2 -ml-[50vw] md:w-auto md:relative md:left-0 md:ml-0 md:-mx-2 voxdex-swiper voxdex-swiper-multi" data-dot-active="cyan">
+      <div className="predict-carousel w-screen relative left-1/2 -ml-[50vw] md:w-auto md:relative md:left-0 md:ml-0 md:-mx-2">
         <Swiper
-          modules={[Pagination, A11y]}
+          modules={[A11y]}
           spaceBetween={12}
           slidesPerView={3}
           threshold={10}
@@ -1518,7 +1526,11 @@ function CarouselSection({
             768: { spaceBetween: 12 },
             1024: { slidesPerView: 2 },
           }}
-          pagination={{ clickable: true }}
+          pagination={false}
+          onSwiper={(s) => {
+            swiperRef.current = s;
+          }}
+          onSlideChange={(s) => setActiveIndex(s.activeIndex)}
           a11y={{ enabled: true, prevSlideMessage: "Previous slide", nextSlideMessage: "Next slide" }}
         >
           {slides.map((child, i) => (
@@ -1527,6 +1539,15 @@ function CarouselSection({
             </SwiperSlide>
           ))}
         </Swiper>
+        <div className="flex md:hidden justify-center">
+          <WindowedDotIndicator
+            totalSlides={slides.length}
+            activeIndex={activeIndex}
+            accent="cyan"
+            testIdPrefix="carousel-section-dots"
+            onDotClick={(idx) => swiperRef.current?.slideTo(idx)}
+          />
+        </div>
       </div>
     </section>
   );

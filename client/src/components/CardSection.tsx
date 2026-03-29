@@ -1,9 +1,10 @@
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, useRef, useEffect, type ReactNode } from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
-import { Pagination, A11y, Virtual } from "swiper/modules";
+import { A11y, Virtual } from "swiper/modules";
+import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
-import "swiper/css/pagination";
 import "swiper/css/virtual";
+import { WindowedDotIndicator, type WindowedDotAccent } from "@/components/WindowedDotIndicator";
 
 interface CardSectionProps {
   children: ReactNode[];
@@ -24,7 +25,14 @@ export function CardSection({
 }: CardSectionProps) {
   const items = useMemo(() => children.filter(Boolean), [children]);
   const desktopItems = items.slice(0, desktopLimit);
-  const dotActive = dotActiveColor.includes("violet") ? "violet" : "cyan";
+  const dotActive: WindowedDotAccent = dotActiveColor.includes("violet") ? "violet" : "cyan";
+  const [activeIndex, setActiveIndex] = useState(0);
+  const swiperRef = useRef<SwiperType | null>(null);
+
+  useEffect(() => {
+    setActiveIndex(0);
+    swiperRef.current?.slideTo(0, 0);
+  }, [items.length]);
 
   if (items.length === 0) return null;
 
@@ -38,9 +46,9 @@ export function CardSection({
         {desktopItems}
       </div>
 
-      <div className="md:hidden voxdex-swiper relative w-full" data-dot-active={dotActive}>
+      <div className="md:hidden relative w-full">
         <Swiper
-          modules={[Pagination, A11y, Virtual]}
+          modules={[A11y, Virtual]}
           spaceBetween={0}
           slidesPerView={1}
           threshold={10}
@@ -49,7 +57,11 @@ export function CardSection({
           speed={300}
           cssMode={false}
           virtual
-          pagination={{ clickable: true }}
+          pagination={false}
+          onSwiper={(s) => {
+            swiperRef.current = s;
+          }}
+          onSlideChange={(s) => setActiveIndex(s.activeIndex)}
           a11y={{
             enabled: true,
             prevSlideMessage: "Previous slide",
@@ -66,6 +78,13 @@ export function CardSection({
             </SwiperSlide>
           ))}
         </Swiper>
+        <WindowedDotIndicator
+          totalSlides={items.length}
+          activeIndex={activeIndex}
+          accent={dotActive}
+          testIdPrefix={`${testIdPrefix}-dots`}
+          onDotClick={(idx) => swiperRef.current?.slideTo(idx)}
+        />
       </div>
     </div>
   );

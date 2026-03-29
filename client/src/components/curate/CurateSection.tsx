@@ -1,13 +1,14 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "framer-motion";
 import { ImageIcon, ChevronRight } from "lucide-react";
 import { Swiper, SwiperSlide } from "swiper/react";
-import { Pagination, A11y, Virtual } from "swiper/modules";
+import { A11y, Virtual } from "swiper/modules";
+import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
-import "swiper/css/pagination";
 import "swiper/css/virtual";
+import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { CurateProfileCard, type CuratePerson } from "./CurateProfileCard";
 import { CurateViewResultsOverlay } from "./CurateViewResultsOverlay";
 import { CurateViewAllOverlay } from "./CurateViewAllOverlay";
@@ -40,6 +41,8 @@ export function CurateSection({
 }: CurateSectionProps) {
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [viewResultsPerson, setViewResultsPerson] = useState<CuratePerson | null>(null);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const swiperRef = useRef<SwiperType | null>(null);
 
   const { data: allCelebritiesResponse, isLoading } = useQuery<{ data: TrendingPerson[] } | TrendingPerson[]>({
     queryKey: ['/api/trending?sort=rank&limit=100'],
@@ -71,6 +74,11 @@ export function CurateSection({
       imageUrl: person.avatar || person.imageUrl || null,
     }));
   }, [filteredCelebrities]);
+
+  useEffect(() => {
+    setCarouselIndex(0);
+    swiperRef.current?.slideTo(0, 0);
+  }, [curatePersons.length]);
 
   const handleVote = useCallback(() => {}, []);
 
@@ -117,9 +125,9 @@ export function CurateSection({
             </div>
 
             {/* Mobile: Swiper carousel */}
-            <div className="md:hidden voxdex-swiper relative w-full" data-dot-active="cyan">
+            <div className="md:hidden relative w-full">
               <Swiper
-                modules={[Pagination, A11y, Virtual]}
+                modules={[A11y, Virtual]}
                 spaceBetween={0}
                 slidesPerView={1}
                 threshold={10}
@@ -128,7 +136,11 @@ export function CurateSection({
                 speed={300}
                 cssMode={false}
                 virtual
-                pagination={{ clickable: true }}
+                pagination={false}
+                onSwiper={(s) => {
+                  swiperRef.current = s;
+                }}
+                onSlideChange={(s) => setCarouselIndex(s.activeIndex)}
                 a11y={{
                   enabled: true,
                   prevSlideMessage: "Previous slide",
@@ -154,6 +166,13 @@ export function CurateSection({
                   </SwiperSlide>
                 ))}
               </Swiper>
+              <WindowedDotIndicator
+                totalSlides={curatePersons.length}
+                activeIndex={carouselIndex}
+                accent="cyan"
+                testIdPrefix="section-curate-dots"
+                onDotClick={(idx) => swiperRef.current?.slideTo(idx)}
+              />
             </div>
           </>
         )}

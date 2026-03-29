@@ -1,11 +1,13 @@
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
 import { useLocation } from "wouter";
 import { BattleCard, HeadToHeadBattle } from "@/components/BattleCard";
 import { Swiper, SwiperSlide } from "swiper/react";
-import { Pagination, A11y } from "swiper/modules";
+import { A11y } from "swiper/modules";
+import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
-import "swiper/css/pagination";
+import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 
 const trendingBattles: HeadToHeadBattle[] = [
   {
@@ -43,6 +45,13 @@ const trendingBattles: HeadToHeadBattle[] = [
 
 export function PredictionMarketsTeaser() {
   const [, setLocation] = useLocation();
+  const [activeIndex, setActiveIndex] = useState(0);
+  const swiperRef = useRef<SwiperType | null>(null);
+
+  useEffect(() => {
+    setActiveIndex(0);
+    swiperRef.current?.slideTo(0, 0);
+  }, [trendingBattles.length]);
 
   return (
     <section className="mb-12" data-testid="prediction-markets-teaser">
@@ -62,9 +71,9 @@ export function PredictionMarketsTeaser() {
         </Button>
       </div>
 
-      <div className="predict-carousel w-screen relative left-1/2 -ml-[50vw] md:w-auto md:relative md:left-0 md:ml-0 md:-mx-2 voxdex-swiper voxdex-swiper-multi" data-dot-active="violet">
+      <div className="predict-carousel w-screen relative left-1/2 -ml-[50vw] md:w-auto md:relative md:left-0 md:ml-0 md:-mx-2">
         <Swiper
-          modules={[Pagination, A11y]}
+          modules={[A11y]}
           spaceBetween={12}
           slidesPerView={3}
           threshold={10}
@@ -78,7 +87,11 @@ export function PredictionMarketsTeaser() {
             768: { spaceBetween: 12 },
             1024: { slidesPerView: 2 },
           }}
-          pagination={{ clickable: true }}
+          pagination={false}
+          onSwiper={(s) => {
+            swiperRef.current = s;
+          }}
+          onSlideChange={(s) => setActiveIndex(s.activeIndex)}
           a11y={{ enabled: true, prevSlideMessage: "Previous slide", nextSlideMessage: "Next slide" }}
         >
           {trendingBattles.map((battle) => (
@@ -87,6 +100,15 @@ export function PredictionMarketsTeaser() {
             </SwiperSlide>
           ))}
         </Swiper>
+        <div className="flex md:hidden justify-center">
+          <WindowedDotIndicator
+            totalSlides={trendingBattles.length}
+            activeIndex={activeIndex}
+            accent="violet"
+            testIdPrefix="prediction-teaser-dots"
+            onDotClick={(idx) => swiperRef.current?.slideTo(idx)}
+          />
+        </div>
       </div>
     </section>
   );
