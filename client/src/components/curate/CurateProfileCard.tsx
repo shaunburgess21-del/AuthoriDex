@@ -34,6 +34,7 @@ interface CurateProfileCardProps {
   onVote: () => void;
   onComplete: () => void;
   onViewResults: (person: CuratePerson) => void;
+  showVisitProfileCta?: boolean;
   cycleNumber?: number;
   onFilterCategory?: (category: string) => void;
   categoryRaceMap?: Map<string, string>;
@@ -45,6 +46,7 @@ export function CurateProfileCard({
   onVote,
   onComplete,
   onViewResults,
+  showVisitProfileCta = true,
   cycleNumber = 0,
   onFilterCategory,
   categoryRaceMap,
@@ -217,16 +219,18 @@ export function CurateProfileCard({
                     Change Vote
                   </Button>
                 </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setLocation(`/person/${person.id}`)}
-                  className="text-muted-foreground hover:text-cyan-400 text-xs"
-                  data-testid={`button-visit-profile-${person.id}`}
-                >
-                  <User className="h-3 w-3 mr-1" />
-                  Visit Profile
-                </Button>
+                {showVisitProfileCta && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setLocation(`/person/${person.id}`)}
+                    className="text-muted-foreground hover:text-cyan-400 text-xs"
+                    data-testid={`button-visit-profile-${person.id}`}
+                  >
+                    <User className="h-3 w-3 mr-1" />
+                    Visit Profile
+                  </Button>
+                )}
               </div>
             </div>
           ) : (

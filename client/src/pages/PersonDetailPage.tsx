@@ -1919,6 +1919,7 @@ export default function PersonDetailPage() {
                     onVote={() => {}}
                     onComplete={() => setCurateCompleted(true)}
                     onViewResults={() => {}}
+                    showVisitProfileCta={false}
                     cycleNumber={0}
                   />
                 </div>
