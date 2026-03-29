@@ -327,6 +327,39 @@ function generateImageSlug(name: string): string {
     .replace(/^-|-$/g, "");
 }
 
+function extractImageFilenameFromUrl(imageUrl: string | null | undefined): string | null {
+  if (!imageUrl) return null;
+  try {
+    const url = new URL(imageUrl);
+    const raw = url.pathname.split("/").filter(Boolean).pop();
+    return raw ? decodeURIComponent(raw) : null;
+  } catch {
+    const raw = imageUrl.split("/").filter(Boolean).pop();
+    return raw ? decodeURIComponent(raw.split("?")[0]) : null;
+  }
+}
+
+function buildCelebrityLargePublicUrl(supabaseUrl: string, slug: string, filename: string): string {
+  return `${supabaseUrl}/storage/v1/object/public/celebrity-large/${encodeURIComponent(slug)}/${filename}`;
+}
+
+function imageUrlMatchesCurrentSlugPath(imageUrl: string | null | undefined, slug: string, filename?: string | null): boolean {
+  if (!imageUrl || !slug) return false;
+  try {
+    const path = decodeURIComponent(new URL(imageUrl).pathname);
+    const expectedPrefix = `/storage/v1/object/public/celebrity-large/${slug}/`;
+    if (!path.includes(expectedPrefix)) return false;
+    if (!filename) return true;
+    return extractImageFilenameFromUrl(imageUrl) === filename;
+  } catch {
+    const decoded = decodeURIComponent(imageUrl);
+    const expectedPrefix = `/storage/v1/object/public/celebrity-large/${slug}/`;
+    if (!decoded.includes(expectedPrefix)) return false;
+    if (!filename) return true;
+    return extractImageFilenameFromUrl(imageUrl) === filename;
+  }
+}
+
 function buildMarketResolutionSummary(resolutionNotes: string | null | undefined) {
   if (!resolutionNotes || !resolutionNotes.trim()) return null;
 
@@ -7839,7 +7872,11 @@ Only return the JSON object.`;
         const existing = await db.select({ imageUrl: celebrityImages.imageUrl })
           .from(celebrityImages)
           .where(eq(celebrityImages.personId, person.id));
-        const existingUrls = new Set(existing.map(r => r.imageUrl));
+        const existingFilenames = new Set(
+          existing
+            .map(r => extractImageFilenameFromUrl(r.imageUrl))
+            .filter((filename): filename is string => Boolean(filename))
+        );
 
         const hasPrimary = existing.length > 0
           ? (await db.select({ cnt: count() }).from(celebrityImages)
@@ -7848,16 +7885,18 @@ Only return the JSON object.`;
 
         let insertedForPerson = 0;
         for (const file of imageFiles) {
-          const publicUrl = `${publicBase}/${encodeURIComponent(slug)}/${file.name}`;
-          if (existingUrls.has(publicUrl)) continue;
+          const filename = file.name;
+          const publicUrl = buildCelebrityLargePublicUrl(supabaseUrl, slug, filename);
+          if (existingFilenames.has(filename)) continue;
 
-          const isFirst = !hasPrimary && insertedForPerson === 0 && file.name.startsWith("1.");
+          const isFirst = !hasPrimary && insertedForPerson === 0 && filename.startsWith("1.");
           await db.insert(celebrityImages).values({
             personId: person.id,
             imageUrl: publicUrl,
             source: "supabase-sync",
             isPrimary: isFirst,
           });
+          existingFilenames.add(filename);
           insertedForPerson++;
         }
 
@@ -7886,6 +7925,96 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error syncing curate images:", error);
       res.status(500).json({ error: "Sync failed" });
+    }
+  });
+
+  app.post("/api/admin/dedupe-curate-images", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const people = await db
+        .select({ id: trackedPeople.id, name: trackedPeople.name, imageSlug: trackedPeople.imageSlug })
+        .from(trackedPeople)
+        .where(and(isNotNull(trackedPeople.imageSlug), ne(trackedPeople.imageSlug, "")));
+
+      let totalDeleted = 0;
+      let peopleAffected = 0;
+      const examples: Array<{ name: string; before: number; after: number }> = [];
+
+      for (const person of people) {
+        const slug = person.imageSlug?.trim();
+        if (!slug) continue;
+
+        const images = await db
+          .select({
+            id: celebrityImages.id,
+            imageUrl: celebrityImages.imageUrl,
+            addedAt: celebrityImages.addedAt,
+          })
+          .from(celebrityImages)
+          .where(eq(celebrityImages.personId, person.id))
+          .orderBy(asc(celebrityImages.addedAt), asc(celebrityImages.id));
+
+        if (images.length === 0) continue;
+
+        const before = images.length;
+        const groups = new Map<string, typeof images>();
+        const deleteIds = new Set<string>();
+
+        for (const image of images) {
+          const filename = extractImageFilenameFromUrl(image.imageUrl);
+          if (!filename) {
+            deleteIds.add(image.id);
+            continue;
+          }
+          const list = groups.get(filename) ?? [];
+          list.push(image);
+          groups.set(filename, list);
+        }
+
+        for (const [filename, group] of groups.entries()) {
+          const currentSlugMatches = group.filter((image) =>
+            imageUrlMatchesCurrentSlugPath(image.imageUrl, slug, filename)
+          );
+
+          if (currentSlugMatches.length === 1) {
+            for (const image of group) {
+              if (image.id !== currentSlugMatches[0].id) deleteIds.add(image.id);
+            }
+            continue;
+          }
+
+          if (currentSlugMatches.length > 1) {
+            const keepId = currentSlugMatches[0].id;
+            for (const image of group) {
+              if (image.id !== keepId) deleteIds.add(image.id);
+            }
+            continue;
+          }
+
+          for (const image of group) {
+            deleteIds.add(image.id);
+          }
+        }
+
+        if (deleteIds.size === 0) continue;
+
+        await db
+          .delete(celebrityImages)
+          .where(inArray(celebrityImages.id, Array.from(deleteIds)));
+
+        await syncWinningAvatarForPerson(person.id);
+
+        const after = before - deleteIds.size;
+        totalDeleted += deleteIds.size;
+        peopleAffected++;
+        if (examples.length < 10) {
+          examples.push({ name: person.name, before, after });
+        }
+      }
+
+      res.json({ totalDeleted, peopleAffected, examples });
+    } catch (error: any) {
+      console.error("Error deduping curate images:", error);
+      res.status(500).json({ error: "Dedupe failed" });
     }
   });
 
@@ -14145,6 +14274,9 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       await db.update(celebrityImages).set({ isPrimary: true }).where(eq(celebrityImages.id, topImage.id));
       await db.update(trackedPeople).set({ avatar: topImage.imageUrl }).where(eq(trackedPeople.id, personId));
       await db.update(trendingPeople).set({ avatar: topImage.imageUrl }).where(eq(trendingPeople.id, personId));
+    } else {
+      await db.update(trackedPeople).set({ avatar: null }).where(eq(trackedPeople.id, personId));
+      await db.update(trendingPeople).set({ avatar: null }).where(eq(trendingPeople.id, personId));
     }
   }
 
