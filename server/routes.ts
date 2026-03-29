@@ -7693,9 +7693,10 @@ Only return the JSON object.`;
   // Backfill imageSlug for tracked_people with null slug
   app.post("/api/admin/backfill-image-slugs", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
     try {
-      const missing = await db.select({ id: trackedPeople.id, name: trackedPeople.name })
-        .from(trackedPeople)
-        .where(sql`${trackedPeople.imageSlug} IS NULL OR ${trackedPeople.imageSlug} = ''`);
+      const allPeople = await db.select({ id: trackedPeople.id, name: trackedPeople.name, imageSlug: trackedPeople.imageSlug })
+        .from(trackedPeople);
+
+      const missing = allPeople.filter(p => !p.imageSlug || p.imageSlug.trim() === '');
 
       let updated = 0;
       for (const person of missing) {
@@ -7706,7 +7707,20 @@ Only return the JSON object.`;
         updated++;
       }
 
-      res.json({ updated, total: missing.length, examples: missing.slice(0, 10).map(p => ({ name: p.name, slug: generateImageSlug(p.name) })) });
+      res.json({
+        updated,
+        total: missing.length,
+        totalTracked: allPeople.length,
+        sampleSlugs: allPeople.slice(0, 5).map(p => ({
+          name: p.name,
+          currentSlug: p.imageSlug,
+          generatedSlug: generateImageSlug(p.name),
+        })),
+        examples: missing.slice(0, 10).map(p => ({
+          name: p.name,
+          slug: generateImageSlug(p.name),
+        })),
+      });
     } catch (error: any) {
       console.error("Error backfilling image slugs:", error);
       res.status(500).json({ error: "Backfill failed" });
@@ -7719,27 +7733,49 @@ Only return the JSON object.`;
       const supabaseUrl = process.env.SUPABASE_URL;
       if (!supabaseUrl) return res.status(503).json({ error: "SUPABASE_URL not configured" });
 
-      const people = await db.select({ id: trackedPeople.id, name: trackedPeople.name, imageSlug: trackedPeople.imageSlug })
-        .from(trackedPeople)
-        .where(sql`${trackedPeople.imageSlug} IS NOT NULL AND ${trackedPeople.imageSlug} != ''`);
+      const allPeople = await db.select({ id: trackedPeople.id, name: trackedPeople.name, imageSlug: trackedPeople.imageSlug })
+        .from(trackedPeople);
+      const people = allPeople.filter(p => p.imageSlug && p.imageSlug.trim() !== '');
 
       const BUCKET = "celebrity-large";
       const publicBase = `${supabaseUrl}/storage/v1/object/public/${BUCKET}`;
       let totalSynced = 0;
       let peopleProcessed = 0;
       let errors: string[] = [];
+      let foldersMissing: string[] = [];
+      let foldersEmpty: string[] = [];
+      let alreadySynced: string[] = [];
+      const sampleListResults: Array<{ name: string; slug: string; rawFiles: string[]; imageFiles: string[] }> = [];
 
       for (const person of people) {
-        const slug = person.imageSlug!;
+        const slug = person.imageSlug!.trim();
         const { data: files, error: listError } = await supabaseServer.storage.from(BUCKET).list(slug);
+
+        if (sampleListResults.length < 3) {
+          sampleListResults.push({
+            name: person.name,
+            slug,
+            rawFiles: files?.map(f => f.name) ?? [],
+            imageFiles: files?.filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f.name)).map(f => f.name) ?? [],
+          });
+        }
 
         if (listError || !files) {
           errors.push(`${person.name}: ${listError?.message || "no files"}`);
+          foldersMissing.push(slug);
+          continue;
+        }
+
+        if (files.length === 0) {
+          foldersMissing.push(slug);
           continue;
         }
 
         const imageFiles = files.filter(f => /\.(webp|jpg|jpeg|png)$/i.test(f.name));
-        if (imageFiles.length === 0) continue;
+        if (imageFiles.length === 0) {
+          foldersEmpty.push(`${slug} (files: ${files.map(f => f.name).join(', ')})`);
+          continue;
+        }
 
         const existing = await db.select({ imageUrl: celebrityImages.imageUrl })
           .from(celebrityImages)
@@ -7769,6 +7805,8 @@ Only return the JSON object.`;
         if (insertedForPerson > 0) {
           totalSynced += insertedForPerson;
           peopleProcessed++;
+        } else if (imageFiles.length > 0) {
+          alreadySynced.push(slug);
         }
       }
 
@@ -7776,6 +7814,14 @@ Only return the JSON object.`;
         totalSynced,
         peopleProcessed,
         totalPeopleScanned: people.length,
+        totalTrackedWithoutSlug: allPeople.length - people.length,
+        foldersMissing: foldersMissing.length,
+        foldersMissingSample: foldersMissing.slice(0, 10),
+        foldersEmpty: foldersEmpty.length,
+        foldersEmptySample: foldersEmpty.slice(0, 10),
+        alreadySynced: alreadySynced.length,
+        alreadySyncedSample: alreadySynced.slice(0, 10),
+        sampleListResults,
         errors: errors.length > 0 ? errors.slice(0, 20) : undefined,
       });
     } catch (error: any) {
