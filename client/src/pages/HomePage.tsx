@@ -543,11 +543,21 @@ export default function HomePage() {
         upMultiplier: upStake > 0 ? +(total / upStake).toFixed(1) : 2.0,
         downMultiplier: downStake > 0 ? +(total / downStake).toFixed(1) : 2.0,
         upPoolPercent: upPercent || 50,
+        bettingCutoff: (m.bettingCutoff as string) || null,
       };
     });
   }, [nativeUpdownData]);
 
+  const isUpdownCutoffPassed = useMemo(() => {
+    const allNative = (nativeUpdownData || []) as any[];
+    return allNative.some((m: any) => m.isCutoffPassed === true);
+  }, [nativeUpdownData]);
+
   const handleLeaderboardPredict = useCallback((personId: string, direction: "up" | "down") => {
+    if (isUpdownCutoffPassed) {
+      toast({ title: "Entries closed", description: "Predictions close Friday 23:59 UTC. Results announced Sunday." });
+      return;
+    }
     const market = updownMarkets.find(m => m.personId === personId);
     if (!market) {
       toast({ title: "No active market", description: "No active prediction market for this person this week." });
@@ -564,9 +574,10 @@ export default function HomePage() {
       currentScore: market.currentScore,
       crowdSentiment,
       estimatedPayout,
+      bettingCutoff: market.bettingCutoff,
     });
     setStakeModalOpen(true);
-  }, [updownMarkets, toast]);
+  }, [updownMarkets, isUpdownCutoffPassed, toast]);
 
   const handleConfirmStake = useCallback((amount: number) => {
     setWalletCredits(prev => prev - amount);
@@ -1139,6 +1150,7 @@ export default function HomePage() {
                         onVoteClick={() => handleVoteClick(person.id)}
                         onPredictUp={() => handleLeaderboardPredict(person.id, "up")}
                         onPredictDown={() => handleLeaderboardPredict(person.id, "down")}
+                        predictionsDisabled={isUpdownCutoffPassed}
                         showExceptional={exceptionalIds.has(person.id)}
                         thresholds={percentileThresholds}
                         approvalShowResults={approvalShowResults}

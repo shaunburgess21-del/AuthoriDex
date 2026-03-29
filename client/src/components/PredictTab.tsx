@@ -541,12 +541,14 @@ function GainerCandidatesDialog({
   initialCandidate,
   onClose,
   onContinue,
+  isMarketClosed,
 }: {
   market: TopGainerMarket | null;
   open: boolean;
   initialCandidate?: GainerCandidate | null;
   onClose: () => void;
   onContinue: (candidate: GainerCandidate) => void;
+  isMarketClosed?: boolean;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCandidateKey, setSelectedCandidateKey] = useState<string | null>(null);
@@ -582,6 +584,13 @@ function GainerCandidatesDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {isMarketClosed && (
+          <div className="shrink-0 mx-4 mb-2 rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2 flex items-center gap-2">
+            <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <p className="text-xs text-amber-400">Entries closed Friday 23:59 UTC — Awaiting results Sunday</p>
+          </div>
+        )}
+
         <div className="shrink-0 px-4 pb-3 space-y-2">
           <div className="rounded-md bg-violet-500/5 border border-violet-500/15 px-3 py-2">
             <p className="text-xs text-muted-foreground leading-relaxed">
@@ -599,7 +608,7 @@ function GainerCandidatesDialog({
             />
           </div>
           <p className="text-[11px] text-muted-foreground">
-            {candidates.length} candidates &middot; Tap to pick, then continue
+            {candidates.length} candidates {isMarketClosed ? "" : "\u00b7 Tap to pick, then continue"}
           </p>
         </div>
 
@@ -662,17 +671,24 @@ function GainerCandidatesDialog({
           <Button variant="outline" className="flex-1" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-            disabled={!selectedCandidate}
-            onClick={() => {
-              if (!selectedCandidate) return;
-              onContinue(selectedCandidate);
-              onClose();
-            }}
-          >
-            {selectedCandidate ? `Pick ${selectedCandidate.name.split(" ")[0]}` : "Select a candidate"}
-          </Button>
+          {isMarketClosed ? (
+            <Button disabled className="flex-1 gap-1.5 opacity-60">
+              <Lock className="h-4 w-4" />
+              Entries Closed
+            </Button>
+          ) : (
+            <Button
+              className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+              disabled={!selectedCandidate}
+              onClick={() => {
+                if (!selectedCandidate) return;
+                onContinue(selectedCandidate);
+                onClose();
+              }}
+            >
+              {selectedCandidate ? `Pick ${selectedCandidate.name.split(" ")[0]}` : "Select a candidate"}
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -1160,6 +1176,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
       baselineTimestamp: market.startAt,
       tieRule: market.tieRule ?? "refund",
       endAt: market.endAt,
+      bettingCutoff: serverBettingCutoff,
     });
     setStakeModalOpen(true);
   };
@@ -1191,11 +1208,16 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
       opponentScore: opponent.currentScore,
       crowdSentiment: sentiment,
       estimatedPayout,
+      bettingCutoff: serverBettingCutoff,
     });
     setStakeModalOpen(true);
   };
 
   const handleGainerSelect = (market: TopGainerMarket, candidate: GainerCandidate) => {
+    if (isMarketClosed) {
+      toast({ title: "Entries closed", description: "Predictions close Friday 23:59 UTC. Results announced Sunday." });
+      return;
+    }
     if (!user) {
       toast({ title: "Sign in required", description: "Sign in to place predictions." });
       setLocation("/login");
@@ -1216,6 +1238,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
       candidateRank: candidate.rank,
       candidatePercentGain: candidate.percentGain,
       candidatePointsAdded: candidate.currentGain,
+      bettingCutoff: serverBettingCutoff,
     });
     setStakeModalOpen(true);
   };
@@ -1528,6 +1551,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
             handleGainerSelect(gainerPickerState.market, candidate);
           }
         }}
+        isMarketClosed={isMarketClosed}
       />
 
       <StakeModal

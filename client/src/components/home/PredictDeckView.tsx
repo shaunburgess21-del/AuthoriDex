@@ -35,7 +35,8 @@ import {
   Briefcase,
   Music2,
   Video,
-  LayoutGrid
+  LayoutGrid,
+  Lock
 } from "lucide-react";
 import {
   MOCK_MARKETS,
@@ -83,10 +84,12 @@ interface StakeModalState {
 
 function UpDownCard({ 
   market, 
-  onPredict 
+  onPredict,
+  isClosed,
 }: { 
   market: PredictionMarket; 
   onPredict: (marketId: string, direction: 'up' | 'down', personName: string, multiplier: number) => void;
+  isClosed?: boolean;
 }) {
   const isUp = market.change7d >= 0;
   
@@ -132,28 +135,35 @@ function UpDownCard({
           <span className="text-red-500">Down {market.downMultiplier}x</span>
         </div>
         
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-green-500/30 text-green-500 hover:bg-green-500/10"
-            onClick={() => onPredict(market.id, 'up', market.personName, market.upMultiplier)}
-            data-testid={`button-predict-up-${market.id}`}
-          >
-            <TrendingUp className="h-4 w-4 mr-1" />
-            Up
+        {isClosed ? (
+          <Button size="sm" disabled className="w-full gap-1.5 opacity-60">
+            <Lock className="h-4 w-4" />
+            Awaiting Results
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-red-500/30 text-red-500 hover:bg-red-500/10"
-            onClick={() => onPredict(market.id, 'down', market.personName, market.downMultiplier)}
-            data-testid={`button-predict-down-${market.id}`}
-          >
-            <TrendingDown className="h-4 w-4 mr-1" />
-            Down
-          </Button>
-        </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-green-500/30 text-green-500 hover:bg-green-500/10"
+              onClick={() => onPredict(market.id, 'up', market.personName, market.upMultiplier)}
+              data-testid={`button-predict-up-${market.id}`}
+            >
+              <TrendingUp className="h-4 w-4 mr-1" />
+              Up
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-red-500/30 text-red-500 hover:bg-red-500/10"
+              onClick={() => onPredict(market.id, 'down', market.personName, market.downMultiplier)}
+              data-testid={`button-predict-down-${market.id}`}
+            >
+              <TrendingDown className="h-4 w-4 mr-1" />
+              Down
+            </Button>
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -161,10 +171,12 @@ function UpDownCard({
 
 function H2HCard({ 
   market, 
-  onPredict 
+  onPredict,
+  isClosed,
 }: { 
   market: HeadToHeadMarket; 
   onPredict: (marketId: string, selection: 'person1' | 'person2', personName: string) => void;
+  isClosed?: boolean;
 }) {
   return (
     <Card className="relative overflow-hidden bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border border-violet-500/20" style={{ minHeight: '340px' }}>
@@ -191,8 +203,8 @@ function H2HCard({
         
         <div className="flex items-center justify-between mb-4">
           <div
-            className="flex flex-col items-center flex-1 cursor-pointer group/p1"
-            onClick={() => onPredict(market.id, 'person1', market.person1.name)}
+            className={`flex flex-col items-center flex-1 ${isClosed ? "" : "cursor-pointer"} group/p1`}
+            onClick={() => !isClosed && onPredict(market.id, 'person1', market.person1.name)}
           >
             <div className="relative">
               <div className="absolute -inset-3 rounded-full bg-blue-500/30 blur-md transition-opacity group-hover/p1:bg-blue-500/50" />
@@ -211,8 +223,8 @@ function H2HCard({
           </div>
           
           <div
-            className="flex flex-col items-center flex-1 cursor-pointer group/p2"
-            onClick={() => onPredict(market.id, 'person2', market.person2.name)}
+            className={`flex flex-col items-center flex-1 ${isClosed ? "" : "cursor-pointer"} group/p2`}
+            onClick={() => !isClosed && onPredict(market.id, 'person2', market.person2.name)}
           >
             <div className="relative">
               <div className="absolute -inset-3 rounded-full bg-purple-500/30 blur-md transition-opacity group-hover/p2:bg-purple-500/50" />
@@ -238,24 +250,31 @@ function H2HCard({
           </span>
         </div>
         
-        <div className="grid grid-cols-2 gap-2">
-          <Button 
-            size="sm" 
-            className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 md:py-2 h-auto"
-            onClick={() => onPredict(market.id, 'person1', market.person1.name)}
-            data-testid={`button-h2h-p1-${market.id}`}
-          >
-            {smartName(market.person1.name)}
+        {isClosed ? (
+          <Button size="sm" disabled className="w-full gap-1.5 opacity-60">
+            <Lock className="h-4 w-4" />
+            Awaiting Results
           </Button>
-          <Button 
-            size="sm" 
-            className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 md:py-2 h-auto"
-            onClick={() => onPredict(market.id, 'person2', market.person2.name)}
-            data-testid={`button-h2h-p2-${market.id}`}
-          >
-            {smartName(market.person2.name)}
-          </Button>
-        </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <Button 
+              size="sm" 
+              className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 md:py-2 h-auto"
+              onClick={() => onPredict(market.id, 'person1', market.person1.name)}
+              data-testid={`button-h2h-p1-${market.id}`}
+            >
+              {smartName(market.person1.name)}
+            </Button>
+            <Button 
+              size="sm" 
+              className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 md:py-2 h-auto"
+              onClick={() => onPredict(market.id, 'person2', market.person2.name)}
+              data-testid={`button-h2h-p2-${market.id}`}
+            >
+              {smartName(market.person2.name)}
+            </Button>
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -354,9 +373,11 @@ function CommunityCard({
 function GainerCard({
   market,
   onPredict,
+  isClosed,
 }: {
   market: TopGainerMarket;
   onPredict: (marketId: string, leaderName: string) => void;
+  isClosed?: boolean;
 }) {
   const categoryLabel = market.category.charAt(0).toUpperCase() + market.category.slice(1);
   
@@ -413,15 +434,22 @@ function GainerCard({
           </span>
         </div>
         
-        <Button
-          size="sm"
-          className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500"
-          onClick={() => onPredict(market.id, market.leaders[0].name)}
-          data-testid={`button-gainer-predict-${market.id}`}
-        >
-          <ChevronRight className="h-4 w-4 mr-1.5" />
-          Place Prediction
-        </Button>
+        {isClosed ? (
+          <Button size="sm" disabled className="w-full gap-1.5 opacity-60">
+            <Lock className="h-4 w-4" />
+            Awaiting Results
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500"
+            onClick={() => onPredict(market.id, market.leaders[0].name)}
+            data-testid={`button-gainer-predict-${market.id}`}
+          >
+            <ChevronRight className="h-4 w-4 mr-1.5" />
+            Place Prediction
+          </Button>
+        )}
       </div>
     </Card>
   );
@@ -588,7 +616,10 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
     [categoryFilter, searchQuery, predictions]
   );
 
+  const isClosed = marketState.status !== "OPEN";
+
   const handleUpDownPredict = useCallback((marketId: string, direction: 'up' | 'down', personName: string, multiplier: number) => {
+    if (isClosed) return;
     setStakeModal({
       isOpen: true,
       type: 'updown',
@@ -601,9 +632,10 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
         setUpDownInteracted(true);
       },
     });
-  }, []);
+  }, [isClosed]);
 
   const handleH2HPredict = useCallback((marketId: string, selection: 'person1' | 'person2', personName: string) => {
+    if (isClosed) return;
     setStakeModal({
       isOpen: true,
       type: 'h2h',
@@ -615,9 +647,10 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
         setH2hInteracted(true);
       },
     });
-  }, []);
+  }, [isClosed]);
 
   const handleGainerPredict = useCallback((marketId: string, leaderName: string) => {
+    if (isClosed) return;
     setStakeModal({
       isOpen: true,
       type: 'community',
@@ -629,7 +662,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
         setGainerInteracted(true);
       },
     });
-  }, []);
+  }, [isClosed]);
 
   const closeStakeModal = () => {
     setStakeModal(null);
@@ -796,6 +829,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
               <UpDownCard
                 market={market}
                 onPredict={(id, dir, name, mult) => handleUpDownPredict(id, dir, name, mult)}
+                isClosed={isClosed}
               />
             )}
             emptyMessage="No up/down markets match your filters"
@@ -828,6 +862,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
               <H2HCard
                 market={market}
                 onPredict={(id, sel, name) => handleH2HPredict(id, sel, name)}
+                isClosed={isClosed}
               />
             )}
             emptyMessage="No head-to-head markets match your filters"
@@ -860,6 +895,7 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
               <GainerCard
                 market={market}
                 onPredict={(id, leaderName) => handleGainerPredict(id, leaderName)}
+                isClosed={isClosed}
               />
             )}
             emptyMessage="No gainer markets match your filters"

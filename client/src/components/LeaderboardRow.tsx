@@ -5,7 +5,7 @@ import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { Popover, PopoverTrigger, PopoverContent, PopoverClose } from "@/components/ui/popover";
 import { useState, useEffect, useRef } from "react";
 import { compactNumber, formatDelta, compactVotes, getApprovalColor } from "@/lib/formatNumber";
-import { ThumbsUp, Star, Zap, TrendingUp, TrendingDown, Check, X } from "lucide-react";
+import { ThumbsUp, Star, Zap, TrendingUp, TrendingDown, Check, X, Lock } from "lucide-react";
 import { getExceptionalIndicator, type PercentileThresholds } from "@/lib/leaderboard-exceptional";
 import { getCategoryTextColor } from "@/components/CategoryPill";
 
@@ -40,6 +40,7 @@ interface LeaderboardRowProps {
   onVoteClick?: () => void;
   onPredictUp?: () => void;
   onPredictDown?: () => void;
+  predictionsDisabled?: boolean;
   showExceptional?: boolean;
   thresholds?: PercentileThresholds;
   approvalShowResults?: boolean;
@@ -62,7 +63,7 @@ function markEverVoted() {
   } catch {}
 }
 
-export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onVoteClick, onPredictUp, onPredictDown, showExceptional = true, thresholds, approvalShowResults }: LeaderboardRowProps) {
+export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onVoteClick, onPredictUp, onPredictDown, predictionsDisabled, showExceptional = true, thresholds, approvalShowResults }: LeaderboardRowProps) {
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
   const [hasEverVoted, setHasEverVoted] = useState(getHasEverVoted);
 
@@ -260,30 +261,39 @@ export function LeaderboardRow({ person, activeTab = "fame", onVisitProfile, onV
               </p>
             </div>
             <div className="w-[88px] shrink-0 flex justify-end gap-1">
-              <button
-                className="no-default-hover-elevate no-default-active-elevate inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-medium border bg-[#00C853]/10 border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 transition-colors"
-                aria-label={`Predict ${person.name} Up`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPredictUp?.();
-                }}
-                data-testid={`button-predict-up-${person.id}`}
-              >
-                <TrendingUp style={{ width: 12, height: 12 }} />
-                Up
-              </button>
-              <button
-                className="no-default-hover-elevate no-default-active-elevate inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-medium border bg-[#FF0000]/10 border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 transition-colors"
-                aria-label={`Predict ${person.name} Down`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPredictDown?.();
-                }}
-                data-testid={`button-predict-down-${person.id}`}
-              >
-                <TrendingDown style={{ width: 12, height: 12 }} />
-                Dn
-              </button>
+              {predictionsDisabled ? (
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium text-muted-foreground border border-muted/40 bg-muted/10">
+                  <Lock style={{ width: 10, height: 10 }} />
+                  Closed
+                </span>
+              ) : (
+                <>
+                  <button
+                    className="no-default-hover-elevate no-default-active-elevate inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-medium border bg-[#00C853]/10 border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 transition-colors"
+                    aria-label={`Predict ${person.name} Up`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPredictUp?.();
+                    }}
+                    data-testid={`button-predict-up-${person.id}`}
+                  >
+                    <TrendingUp style={{ width: 12, height: 12 }} />
+                    Up
+                  </button>
+                  <button
+                    className="no-default-hover-elevate no-default-active-elevate inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-medium border bg-[#FF0000]/10 border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 transition-colors"
+                    aria-label={`Predict ${person.name} Down`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPredictDown?.();
+                    }}
+                    data-testid={`button-predict-down-${person.id}`}
+                  >
+                    <TrendingDown style={{ width: 12, height: 12 }} />
+                    Dn
+                  </button>
+                </>
+              )}
             </div>
           </>
         )}

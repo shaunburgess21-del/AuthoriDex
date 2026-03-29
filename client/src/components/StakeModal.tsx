@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Target, Clock, TrendingUp, TrendingDown, LogIn, Star, MessageSquarePlus, HelpCircle } from "lucide-react";
+import { Target, Clock, TrendingUp, TrendingDown, LogIn, Star, MessageSquarePlus, HelpCircle, Lock } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
@@ -93,6 +93,7 @@ export function StakeModal({
 
   if (!selection) return null;
 
+  const isCutoffPassed = selection.bettingCutoff ? marketCycle.status !== "OPEN" : false;
   const missionText = MISSION_HEADERS[selection.type] || "Place your prediction on this market.";
   const showJackpotWarning = selection.type === "jackpot";
   const isUpDown = selection.type === "updown";
@@ -485,15 +486,26 @@ export function StakeModal({
             Cancel
           </Button>
           {isLoggedIn ? (
-            <Button
-              ref={confirmButtonRef}
-              onClick={handleConfirm}
-              className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-              disabled={!stakeAmount || parsedAmount < MIN_STAKE || balanceAfter < 0}
-              data-testid="button-confirm-stake"
-            >
-              Confirm
-            </Button>
+            isCutoffPassed ? (
+              <Button
+                disabled
+                className="flex-1 gap-1.5 opacity-60"
+                data-testid="button-confirm-stake"
+              >
+                <Lock className="h-4 w-4" />
+                Entries Closed
+              </Button>
+            ) : (
+              <Button
+                ref={confirmButtonRef}
+                onClick={handleConfirm}
+                className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                disabled={!stakeAmount || parsedAmount < MIN_STAKE || balanceAfter < 0}
+                data-testid="button-confirm-stake"
+              >
+                Confirm
+              </Button>
+            )
           ) : (
             <Button
               onClick={() => { onClose(); setLocation("/login"); }}
@@ -509,6 +521,11 @@ export function StakeModal({
         {!isLoggedIn && (
           <p className="text-xs text-muted-foreground text-center -mt-1">
             Sign in to place your prediction
+          </p>
+        )}
+        {isCutoffPassed && isLoggedIn && (
+          <p className="text-xs text-amber-400/80 text-center -mt-1">
+            Predictions closed Friday 23:59 UTC — Results Sunday
           </p>
         )}
       </DialogContent>
