@@ -142,7 +142,7 @@ function UpDownCard({
         </div>
         
         <div className="grid grid-cols-2 gap-2">
-          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="start">
+          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="center">
             <Button
               size="sm"
               variant="outline"
@@ -154,7 +154,7 @@ function UpDownCard({
               Up
             </Button>
           </ClosedMarketActionTrigger>
-          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="end">
+          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="center">
             <Button
               size="sm"
               variant="outline"
@@ -207,7 +207,7 @@ function H2HCard({
         </div>
         
         <div className="flex items-center justify-between mb-4">
-          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="start">
+          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="center">
             <div
               className={`flex flex-col items-center flex-1 ${isClosed ? "" : "cursor-pointer"} group/p1`}
               onClick={() => !isClosed && onPredict(market.id, 'person1', market.person1.name)}
@@ -229,7 +229,7 @@ function H2HCard({
             </div>
           </div>
           
-          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="end">
+          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="center">
             <div
               className={`flex flex-col items-center flex-1 ${isClosed ? "" : "cursor-pointer"} group/p2`}
               onClick={() => !isClosed && onPredict(market.id, 'person2', market.person2.name)}
@@ -260,7 +260,7 @@ function H2HCard({
         </div>
         
         <div className="grid grid-cols-2 gap-2">
-          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="start">
+          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="center">
             <Button 
               size="sm" 
               className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 md:py-2 h-auto"
@@ -270,7 +270,7 @@ function H2HCard({
               {smartName(market.person1.name)}
             </Button>
           </ClosedMarketActionTrigger>
-          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="end">
+          <ClosedMarketActionTrigger isClosed={!!isClosed} message={closedMessage} side="top" align="center">
             <Button 
               size="sm" 
               className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 md:py-2 h-auto"

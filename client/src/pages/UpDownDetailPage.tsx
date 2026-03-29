@@ -519,7 +519,7 @@ export default function UpDownDetailPage() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="start">
+              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="center">
                 <Button
                   className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 py-3 h-auto text-base font-semibold"
                   onClick={() => handleSelect("up")}
@@ -528,7 +528,7 @@ export default function UpDownDetailPage() {
                   UP
                 </Button>
               </ClosedMarketActionTrigger>
-              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="end">
+              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="center">
                 <Button
                   className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 py-3 h-auto text-base font-semibold"
                   onClick={() => handleSelect("down")}

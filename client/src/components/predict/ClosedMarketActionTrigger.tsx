@@ -27,28 +27,22 @@ export function ClosedMarketActionTrigger({
     return children;
   }
 
-  const childProps = children.props as {
-    onClick?: (event: any) => void;
-    onKeyDown?: (event: any) => void;
-    onPointerDown?: (event: any) => void;
-  };
-
   const wrappedChild = cloneElement(children as ReactElement<any>, {
     "aria-disabled": true,
     onClick: (event: any) => {
-      event.preventDefault();
       event.stopPropagation();
     },
-    onPointerDown: (event: any) => {
+    onClickCapture: (event: any) => {
       event.stopPropagation();
-      childProps.onPointerDown?.(event);
+    },
+    onPointerDownCapture: (event: any) => {
+      event.stopPropagation();
     },
     onKeyDown: (event: any) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-      childProps.onKeyDown?.(event);
+      event.stopPropagation();
+    },
+    onKeyDownCapture: (event: any) => {
+      event.stopPropagation();
     },
   });
 
@@ -58,10 +52,10 @@ export function ClosedMarketActionTrigger({
       <PopoverContent
         side={side}
         align={align}
-        sideOffset={8}
+        sideOffset={10}
         collisionPadding={12}
         onClick={(event) => event.stopPropagation()}
-        className={`w-[min(20rem,92vw)] p-3 ${contentClassName}`.trim()}
+        className={`w-[min(22rem,94vw)] p-3 ${contentClassName}`.trim()}
       >
         <div className="space-y-2">
           <p className="text-sm font-semibold">{message.title}</p>

@@ -290,7 +290,7 @@ export default function H2HDetailPage() {
             <div className="relative mb-4" style={{ padding: '0 5px' }}>
               <div className="flex" style={{ gap: '7px' }}>
                 {/* Person 1 */}
-                <ClosedMarketActionTrigger isClosed={isMarketClosed && !userPickSide} message={closedMarketMessage} side="top" align="start">
+                <ClosedMarketActionTrigger isClosed={isMarketClosed && !userPickSide} message={closedMarketMessage} side="top" align="center">
                   <div
                     className={`flex-1 relative ${!userPickSide ? "cursor-pointer group/p1" : ""}`}
                     onClick={() => !userPickSide && handleSelect(1)}
@@ -311,7 +311,7 @@ export default function H2HDetailPage() {
                   </div>
                 </ClosedMarketActionTrigger>
                 {/* Person 2 */}
-                <ClosedMarketActionTrigger isClosed={isMarketClosed && !userPickSide} message={closedMarketMessage} side="top" align="end">
+                <ClosedMarketActionTrigger isClosed={isMarketClosed && !userPickSide} message={closedMarketMessage} side="top" align="center">
                   <div
                     className={`flex-1 relative ${!userPickSide ? "cursor-pointer group/p2" : ""}`}
                     onClick={() => !userPickSide && handleSelect(2)}
@@ -678,7 +678,7 @@ export default function H2HDetailPage() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="start">
+              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="center">
                 <Button
                   className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 h-auto text-base font-semibold"
                   onClick={() => handleSelect(1)}
@@ -686,7 +686,7 @@ export default function H2HDetailPage() {
                   {smartName(hydrated.person1.name)}
                 </Button>
               </ClosedMarketActionTrigger>
-              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="end">
+              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="center">
                 <Button
                   className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 h-auto text-base font-semibold"
                   onClick={() => handleSelect(2)}

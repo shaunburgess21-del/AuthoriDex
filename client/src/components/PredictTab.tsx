@@ -217,7 +217,7 @@ function WeeklyUpDownCard({
       </div>
       
       <div className="grid grid-cols-2 gap-2">
-        <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="start">
+        <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
           <Button 
             className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 py-3 md:py-2 h-auto"
             onClick={() => onSelect?.("up")}
@@ -227,7 +227,7 @@ function WeeklyUpDownCard({
             Up
           </Button>
         </ClosedMarketActionTrigger>
-        <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="end">
+        <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
           <Button 
             className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 py-3 md:py-2 h-auto"
             onClick={() => onSelect?.("down")}
@@ -334,7 +334,7 @@ function HeadToHeadCard({
         </Link>
         
         <div className="flex items-center justify-between px-2 mb-2">
-          <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="start">
+          <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="center">
             <div
               className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
               onClick={() => !hasPicked && onSelect?.(1)}
@@ -344,7 +344,7 @@ function HeadToHeadCard({
               <span className="text-xs text-blue-400 font-semibold">{market.person1Percent}%</span>
             </div>
           </ClosedMarketActionTrigger>
-          <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="end">
+          <ClosedMarketActionTrigger isClosed={isMarketClosed && !hasPicked} message={closedMessage} side="top" align="center">
             <div
               className={`flex flex-col items-center flex-1 ${!hasPicked ? 'cursor-pointer hover:opacity-80' : ''} transition-opacity`}
               onClick={() => !hasPicked && onSelect?.(2)}
@@ -395,7 +395,7 @@ function HeadToHeadCard({
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2">
-              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="start">
+              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
                 <Button 
                   className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 md:py-2 h-auto"
                   onClick={() => onSelect?.(1)}
@@ -404,7 +404,7 @@ function HeadToHeadCard({
                   {smartName(market.person1.name)}
                 </Button>
               </ClosedMarketActionTrigger>
-              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="end">
+              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
                 <Button 
                   className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 md:py-2 h-auto"
                   onClick={() => onSelect?.(2)}

@@ -287,7 +287,7 @@ export function LeaderboardRow({
               <ClosedMarketActionTrigger
                 isClosed={!!predictionsDisabled}
                 message={closedPredictMessage}
-                side="left"
+                side="top"
                 align="center"
               >
                 <button
@@ -306,7 +306,7 @@ export function LeaderboardRow({
               <ClosedMarketActionTrigger
                 isClosed={!!predictionsDisabled}
                 message={closedPredictMessage}
-                side="left"
+                side="top"
                 align="center"
               >
                 <button
