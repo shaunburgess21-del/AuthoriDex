@@ -64,7 +64,7 @@ export function CardSection({
         >
           {items.map((item, i) => (
             <SwiperSlide key={i} virtualIndex={i}>
-              <div className="w-full px-2.5 md:px-0">
+              <div className="w-full px-1.5 md:px-0">
                 {item}
               </div>
             </SwiperSlide>

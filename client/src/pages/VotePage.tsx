@@ -144,11 +144,11 @@ const VOTE_CATEGORIES_WITH_CUSTOM = [
 ];
 
 const mockCelebrityList = [
-  "Taylor Swift", "Elon Musk", "Keanu Reeves", "Beyoncé", "Dwayne Johnson",
+  "Taylor Swift", "Elon Musk", "Keanu Reeves", "BeyoncÃ©", "Dwayne Johnson",
   "Rihanna", "LeBron James", "Kim Kardashian", "Justin Bieber", "Ariana Grande",
   "Cristiano Ronaldo", "Lionel Messi", "Drake", "Selena Gomez", "Kylie Jenner",
   "Billie Eilish", "Bad Bunny", "Post Malone", "The Weeknd", "Zendaya",
-  "Tom Holland", "Timothée Chalamet", "Margot Robbie", "Ryan Reynolds", "Dua Lipa",
+  "Tom Holland", "TimothÃ©e Chalamet", "Margot Robbie", "Ryan Reynolds", "Dua Lipa",
   "Harry Styles", "Olivia Rodrigo", "Ice Spice", "Travis Scott", "SZA"
 ];
 
@@ -195,7 +195,7 @@ const curateProfilePolls: CurateProfilePoll[] = [
   { 
     id: "pp3", 
     personId: "670e5278-f359-4558-abb8-ea0caa371395",
-    personName: "Beyoncé", 
+    personName: "BeyoncÃ©", 
     category: "Music",
   },
   { 
@@ -259,7 +259,7 @@ const SECTION_RULES = {
   },
   value: {
     title: "How It Works",
-    content: "This vote is about public perception — not your personal like/dislike. Vote Underrated if you think they deserve more recognition than they currently get. Vote Overrated if you think they receive more attention or praise than they deserve. Compare your view with the community results. Your vote updates the Underrated/Overrated split in real time."
+    content: "This vote is about public perception â€” not your personal like/dislike. Vote Underrated if you think they deserve more recognition than they currently get. Vote Overrated if you think they receive more attention or praise than they deserve. Compare your view with the community results. Your vote updates the Underrated/Overrated split in real time."
   }
 };
 
@@ -349,7 +349,7 @@ function VersusCard({
         <div className="rounded-t-lg border border-slate-700/30 border-b-0 bg-slate-900/80 backdrop-blur-sm px-4 py-2 text-center mb-0 mt-[5px]">
           {matchup.slug ? (
             <Link href={`/vote/matchups/${matchup.slug}`} className={`text-sm font-semibold transition-colors ${hasVoted ? 'text-cyan-400 hover:text-cyan-300' : 'text-slate-300 hover:text-cyan-400'}`} data-testid={`link-matchup-${matchup.id}`}>
-              {hasVoted ? "View details →" : (matchup.promptText || "Who do you prefer?")}
+              {hasVoted ? "View details â†’" : (matchup.promptText || "Who do you prefer?")}
             </Link>
           ) : (
             <span className="text-sm font-semibold text-slate-300">
@@ -741,7 +741,7 @@ function CurateProfileCard({
 
   return (
     <motion.div 
-      className="px-2.5"
+      className="px-1.5 md:px-0"
       initial={{ opacity: 1, x: 0 }}
       animate={{ opacity: isExiting ? 0 : 1, x: isExiting ? -100 : 0 }}
       transition={{ duration: 0.3 }}
@@ -1967,7 +1967,7 @@ function ContenderSelector({
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{celebrity.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {celebrity.category} • Auto-image
+                          {celebrity.category} â€¢ Auto-image
                         </p>
                       </div>
                       <Badge variant="outline" className="text-xs bg-cyan-500/10 text-cyan-300 border-cyan-400/30">
@@ -4037,7 +4037,7 @@ export default function VotePage() {
                   </div>
                   <div className="flex items-start gap-2">
                     <Globe className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />
-                    <span>Anything Goes: People, brands, sports, ideas — even random preferences.</span>
+                    <span>Anything Goes: People, brands, sports, ideas â€” even random preferences.</span>
                   </div>
                   <div className="flex items-start gap-2">
                     <Zap className="h-4 w-4 text-cyan-400 mt-0.5 shrink-0" />

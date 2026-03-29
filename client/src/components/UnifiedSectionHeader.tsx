@@ -35,28 +35,30 @@ export function UnifiedSectionHeader({
   const a = accentMap[accent];
 
   return (
-    <div
-      className={`mb-3 border-t-[3px] border-b-0 ${a.borderTop} rounded-t-lg bg-gradient-to-r ${a.gradient}`}
-      data-testid={testId}
-    >
-      <div className="flex items-center justify-between px-0 py-3">
-        <div className="flex items-center gap-3">
-          {icon && (
-            <div className={`h-10 w-10 rounded-lg ${a.iconBg} hidden sm:flex items-center justify-center shrink-0`}>
-              {icon}
+    <div className="px-1.5 md:px-0">
+      <div
+        className={`mb-3 border-t-[3px] border-b-0 ${a.borderTop} rounded-t-lg bg-gradient-to-r ${a.gradient}`}
+        data-testid={testId}
+      >
+        <div className="flex items-center justify-between pl-3 pr-3 py-3 md:pl-0 md:pr-0">
+          <div className="flex items-center gap-3">
+            {icon && (
+              <div className={`h-10 w-10 rounded-lg ${a.iconBg} hidden sm:flex items-center justify-center shrink-0`}>
+                {icon}
+              </div>
+            )}
+            <div>
+              <h2 className="text-xl font-serif font-bold">{title}</h2>
+              {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
             </div>
-          )}
-          <div>
-            <h2 className="text-xl font-serif font-bold">{title}</h2>
-            {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
           </div>
+          {actions && <div className="flex items-center gap-2">{actions}</div>}
         </div>
-        {actions && <div className="flex items-center gap-2">{actions}</div>}
+
+        {meta && <div className="pl-3 pr-3 pb-2 md:pl-0 md:pr-0">{meta}</div>}
+
+        {children && <div className="pl-3 pr-3 pb-3 md:pl-0 md:pr-0">{children}</div>}
       </div>
-
-      {meta && <div className="px-0 pb-2">{meta}</div>}
-
-      {children && <div className="px-0 pb-3 pr-2">{children}</div>}
     </div>
   );
 }
