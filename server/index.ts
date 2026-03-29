@@ -437,6 +437,7 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests, please try again later." },
+  skip: (req) => req.path === "/config/supabase",
 });
 app.use("/api/", apiLimiter);
 
