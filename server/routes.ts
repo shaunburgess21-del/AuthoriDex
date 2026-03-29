@@ -910,7 +910,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const m = metrics[0];
 
       const tracked = await db
-        .select({ wikiSlug: trackedPeople.wikiSlug })
+        .select({ wikiSlug: trackedPeople.wikiSlug, imageSlug: trackedPeople.imageSlug })
         .from(trackedPeople)
         .where(eq(trackedPeople.id, id))
         .limit(1);
@@ -921,6 +921,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         approvalAvgRating: m?.approvalAvgRating ?? null,
         approvalVotesCount: m?.approvalVotesCount ?? 0,
         wikiSlug: tracked[0]?.wikiSlug ?? null,
+        imageSlug: tracked[0]?.imageSlug ?? null,
       });
     } catch (error) {
       console.error("Error fetching person:", error);
