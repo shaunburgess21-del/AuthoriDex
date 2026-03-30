@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ComponentType } from "react";
 import { Switch, Route } from "wouter";
+import { MotionConfig } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -121,19 +122,21 @@ function XpCelebrationWatcher() {
 function App() {
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <TooltipProvider>
-            <ScrollToTop />
-            <Toaster />
-            <XpCelebrationWatcher />
-            <ErrorBoundary>
-              <Router />
-            </ErrorBoundary>
-            <BottomNav />
-          </TooltipProvider>
-        </AuthProvider>
-      </QueryClientProvider>
+      <MotionConfig reducedMotion="user">
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <TooltipProvider>
+              <ScrollToTop />
+              <Toaster />
+              <XpCelebrationWatcher />
+              <ErrorBoundary>
+                <Router />
+              </ErrorBoundary>
+              <BottomNav />
+            </TooltipProvider>
+          </AuthProvider>
+        </QueryClientProvider>
+      </MotionConfig>
     </ErrorBoundary>
   );
 }

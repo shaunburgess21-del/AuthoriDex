@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth, UserProfile } from "@/contexts/AuthContext";
+import { useThemeToggle } from "@/hooks/useThemeToggle";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,27 +37,6 @@ import {
   LayoutDashboard,
   Flame,
 } from "lucide-react";
-
-function useTheme() {
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
-    const initialTheme = savedTheme || "dark";
-    setTheme(initialTheme);
-    root.classList.toggle("dark", initialTheme === "dark");
-  }, []);
-
-  const toggleTheme = () => {
-    const newTheme = theme === "dark" ? "light" : "dark";
-    setTheme(newTheme);
-    document.documentElement.classList.toggle("dark", newTheme === "dark");
-    localStorage.setItem("theme", newTheme);
-  };
-
-  return { theme, toggleTheme };
-}
 
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(false);
@@ -376,7 +356,7 @@ function UserMenuContent({
 export function UserMenu() {
   const [, setLocation] = useLocation();
   const { isLoggedIn, profile, signOut } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme } = useThemeToggle();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const [sheetOpen, setSheetOpen] = useState(false);
 

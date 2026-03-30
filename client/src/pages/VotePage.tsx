@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback, Children } from "react";
+import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { handleImageError } from "@/lib/imageResolver";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CardGridSkeleton } from "@/components/ui/card-skeletons";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
@@ -379,6 +381,8 @@ function VersusCard({
                   <img 
                     src={matchup.optionAImage} 
                     alt={matchup.optionAText}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover"
                     onError={(e) => handleImageError(e, matchup.optionAFallbackImage)}
                   />
@@ -417,6 +421,8 @@ function VersusCard({
                   <img 
                     src={matchup.optionBImage} 
                     alt={matchup.optionBText}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover"
                     onError={(e) => handleImageError(e, matchup.optionBFallbackImage)}
                   />
@@ -788,9 +794,7 @@ function CurateProfileCard({
         </div>
         
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
-          </div>
+          <CardGridSkeleton count={2} />
         ) : !imageA || !imageB ? (
           <div className="text-center py-8 text-muted-foreground">
             <Camera className="h-10 w-10 mx-auto mb-2 opacity-50" />
@@ -849,6 +853,8 @@ function CurateProfileCard({
                 <img 
                   src={imageA.imageUrl} 
                   alt={`${poll.personName} Look A`}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
@@ -888,6 +894,8 @@ function CurateProfileCard({
                 <img 
                   src={imageB.imageUrl} 
                   alt={`${poll.personName} Look B`}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
@@ -2194,10 +2202,12 @@ export default function VotePage() {
   const inductionVoteMutation = useMutation({
     mutationFn: (id: string) => apiRequest('POST', `/api/vote/induction/${id}/vote`),
     onSuccess: () => {
+      hapticSuccess();
       queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
       queryClient.invalidateQueries({ queryKey: ['/api/me/induction-votes'] });
     },
     onError: (err, candidateId) => {
+      hapticError();
       setVotedIds((prev) => {
         const next = new Set(prev);
         next.delete(candidateId);
@@ -2390,6 +2400,7 @@ export default function VotePage() {
       return response.json();
     },
     onSuccess: (data, variables) => {
+      hapticSuccess();
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
       const isChange = !!variables.previousVote;
@@ -2901,7 +2912,7 @@ export default function VotePage() {
           ) : (
             <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-matchups">
               {filteredMatchups.map((matchup) => (
-                <div key={matchup.id} onClick={(e) => handleCardEmptyTap(e, "matchups", matchup.id)} className="h-full">
+                <div key={matchup.id} role="button" tabIndex={0} onClick={(e) => handleCardEmptyTap(e, "matchups", matchup.id)} onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "matchups", matchup.id); }} className="h-full">
                   <VersusCard 
                     matchup={matchup} 
                     userVote={matchupUserVotes[matchup.id] || null}
@@ -2998,13 +3009,11 @@ export default function VotePage() {
           </UnifiedSectionHeader>
           
           {pollsLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-            </div>
+            <CardGridSkeleton count={3} />
           ) : filteredTopics.length > 0 ? (
             <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-topics">
               {filteredTopics.map((topic) => (
-                <div key={topic.id} onClick={(e) => handleCardEmptyTap(e, "sentiment", topic.id)} className="h-full">
+                <div key={topic.id} role="button" tabIndex={0} onClick={(e) => handleCardEmptyTap(e, "sentiment", topic.id)} onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "sentiment", topic.id); }} className="h-full">
                   <DiscourseCard 
                     topic={topic} 
                     onVote={(choice) => handleDiscourseVote(topic.id, choice)}
@@ -3097,13 +3106,11 @@ export default function VotePage() {
           </UnifiedSectionHeader>
 
           {opinionPollsLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-            </div>
+            <CardGridSkeleton count={3} />
           ) : filteredOpinionPolls.length > 0 ? (
             <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="section-opinion-polls">
               {filteredOpinionPolls.map((poll: any) => (
-                <div key={poll.id} onClick={(e) => handleCardEmptyTap(e, "opinion", poll.id)} className="h-full">
+                <div key={poll.id} role="button" tabIndex={0} onClick={(e) => handleCardEmptyTap(e, "opinion", poll.id)} onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "opinion", poll.id); }} className="h-full">
                   <OpinionPollCard
                     poll={poll}
                     onVote={async (pollSlug, optionId) => {
@@ -3182,9 +3189,7 @@ export default function VotePage() {
           </UnifiedSectionHeader>
           
           {valueLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-            </div>
+            <CardGridSkeleton count={3} />
           ) : filteredValueCelebrities.length > 0 ? (
             <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-value">
               {filteredValueCelebrities.map((person) => (
@@ -3317,9 +3322,7 @@ export default function VotePage() {
           </UnifiedSectionHeader>
 
           {inductionLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-            </div>
+            <CardGridSkeleton count={3} />
           ) : filteredCandidates.length > 0 ? (
             <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-induction">
               {filteredCandidates.map((candidate, index) => (

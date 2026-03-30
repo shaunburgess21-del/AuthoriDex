@@ -90,6 +90,13 @@ export default {
           offline: "rgb(156 163 175)",
         },
       },
+      fontSize: {
+        "fluid-sm": "clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem)",
+        "fluid-base": "clamp(0.875rem, 0.8rem + 0.35vw, 1rem)",
+        "fluid-lg": "clamp(1.125rem, 1rem + 0.5vw, 1.5rem)",
+        "fluid-xl": "clamp(1.5rem, 1.2rem + 1vw, 2.25rem)",
+        "fluid-2xl": "clamp(1.75rem, 1.4rem + 1.5vw, 3rem)",
+      },
       fontFamily: {
         sans: ["var(--font-sans)"],
         serif: ["var(--font-serif)"],

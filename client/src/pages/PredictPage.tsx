@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CardGridSkeleton } from "@/components/ui/card-skeletons";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
@@ -2709,6 +2711,7 @@ export default function PredictPage() {
       return res.json();
     },
     onSuccess: async () => {
+      hapticSuccess();
       toast({
         title: "Prediction placed!",
         description: "Your weekly up/down prediction has been recorded.",
@@ -2723,6 +2726,7 @@ export default function PredictPage() {
       ]);
     },
     onError: (err: Error) => {
+      hapticError();
       toast({
         title: "Failed to place prediction",
         description: err.message,
@@ -2737,6 +2741,7 @@ export default function PredictPage() {
       return res.json();
     },
     onSuccess: async (_data, variables) => {
+      hapticSuccess();
       toast({
         title: "Prediction placed!",
         description: variables.marketType === "h2h" ? "Your head-to-head prediction has been recorded." : "Your top gainer prediction has been recorded.",
@@ -2751,6 +2756,7 @@ export default function PredictPage() {
       ]);
     },
     onError: (err: Error) => {
+      hapticError();
       toast({
         title: "Failed to place prediction",
         description: err.message,
@@ -3463,9 +3469,7 @@ export default function PredictPage() {
                 <Button onClick={() => refetchUpdown()} data-testid="button-retry-updown">Retry</Button>
               </Card>
             ) : updownLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="h-8 w-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
-              </div>
+              <CardGridSkeleton count={3} />
             ) : filteredUpDown.length > 0 ? (
               <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-violet-500">
                 {filteredUpDown.map((market) => (
@@ -3546,9 +3550,7 @@ export default function PredictPage() {
                 <Button onClick={() => refetchH2h()} data-testid="button-retry-h2h">Retry</Button>
               </Card>
             ) : h2hLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="h-8 w-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
-              </div>
+              <CardGridSkeleton count={3} />
             ) : filteredH2H.length > 0 ? (
               <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-violet-500">
                 {filteredH2H.map((market) => {
@@ -3638,9 +3640,7 @@ export default function PredictPage() {
                 <Button onClick={() => refetchGainers()} data-testid="button-retry-gainers">Retry</Button>
               </Card>
             ) : gainerLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="h-8 w-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
-              </div>
+              <CardGridSkeleton count={3} />
             ) : filteredGainers.length > 0 ? (
               <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-violet-500">
                 {filteredGainers.map((market) => (
@@ -3898,34 +3898,6 @@ export default function PredictPage() {
           isCutoffPassed={jackpotMarketForPerson?.isCutoffPassed || false}
         />
       )}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-t md:hidden">
-        <div className="flex items-center justify-around h-16">
-          <Link href="/">
-            <button className="flex flex-col items-center gap-1 px-4 py-2 text-muted-foreground">
-              <Target className="h-5 w-5" />
-              <span className="text-xs">Home</span>
-            </button>
-          </Link>
-          <Link href="/vote">
-            <button className="flex flex-col items-center gap-1 px-4 py-2 text-muted-foreground">
-              <Users className="h-5 w-5" />
-              <span className="text-xs">Vote</span>
-            </button>
-          </Link>
-          <Link href="/predict">
-            <button className="flex flex-col items-center gap-1 px-4 py-2 text-violet-500">
-              <Zap className="h-5 w-5" />
-              <span className="text-xs">Predict</span>
-            </button>
-          </Link>
-          <Link href="/me">
-            <button className="flex flex-col items-center gap-1 px-4 py-2 text-muted-foreground">
-              <Trophy className="h-5 w-5" />
-              <span className="text-xs">Me</span>
-            </button>
-          </Link>
-        </div>
-      </nav>
     </div>
   );
 }

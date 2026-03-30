@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { hapticSuccess } from "@/lib/haptic";
 import { handleImageError } from "@/lib/imageResolver";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { Card } from "@/components/ui/card";
@@ -124,6 +125,8 @@ function VersusCard({
                 <img 
                   src={matchup.optionAImage} 
                   alt={matchup.optionAText}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover object-center"
                   onError={(e) => handleImageError(e, matchup.optionAFallbackImage)}
                 />
@@ -166,6 +169,8 @@ function VersusCard({
                 <img 
                   src={matchup.optionBImage} 
                   alt={matchup.optionBText}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover object-center"
                   onError={(e) => handleImageError(e, matchup.optionBFallbackImage)}
                 />
@@ -521,6 +526,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
   const inductionVoteMutation = useMutation({
     mutationFn: (id: string) => apiRequest("POST", `/api/vote/induction/${id}/vote`),
     onSuccess: () => {
+      hapticSuccess();
       queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] });
       queryClient.invalidateQueries({ queryKey: ["/api/me/induction-votes"] });
     },
@@ -587,6 +593,7 @@ export function VoteDeckView({ onExplore }: VoteDeckViewProps) {
       return apiRequest('POST', `/api/celebrity/${personId}/value-vote`, { vote });
     },
     onSuccess: (_, variables) => {
+      hapticSuccess();
       queryClient.invalidateQueries({ queryKey: ['/api/celebrity', variables.personId, 'value-vote'] });
       queryClient.invalidateQueries({ queryKey: ['/api/trending'] });
       queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
