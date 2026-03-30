@@ -499,7 +499,8 @@ export function VoxDexPulse() {
   const trackRef = useRef<HTMLDivElement>(null);
   const wasPlayingBeforeSeekRef = useRef(false);
   const pulseSectionRef = useRef<HTMLElement>(null);
-  const approvalRatingButtonRef = useRef<HTMLButtonElement>(null);
+  const pulseControlsRowRef = useRef<HTMLDivElement>(null);
+  const pulseInfoIconRef = useRef<HTMLSpanElement>(null);
   const fastLabelRef = useRef<HTMLSpanElement>(null);
   const [mobileSpeedSliderShiftPx, setMobileSpeedSliderShiftPx] = useState(0);
 
@@ -678,26 +679,29 @@ export function VoxDexPulse() {
 
     const measure = () => {
       requestAnimationFrame(() => {
-        if (!isTimelapse || !isNarrow()) {
-          setMobileSpeedSliderShiftPx(0);
-          return;
-        }
-        const approval = approvalRatingButtonRef.current;
-        const fast = fastLabelRef.current;
-        if (!approval || !fast) {
-          setMobileSpeedSliderShiftPx(0);
-          return;
-        }
-        const approvalRight = approval.getBoundingClientRect().right;
-        const fastRight = fast.getBoundingClientRect().right;
-        setMobileSpeedSliderShiftPx(Math.max(0, approvalRight - fastRight));
+        requestAnimationFrame(() => {
+          if (!isTimelapse || !isNarrow()) {
+            setMobileSpeedSliderShiftPx(0);
+            return;
+          }
+          const info = pulseInfoIconRef.current;
+          const fast = fastLabelRef.current;
+          if (!info || !fast) {
+            return;
+          }
+          const infoRight = info.getBoundingClientRect().right;
+          const fastRight = fast.getBoundingClientRect().right;
+          setMobileSpeedSliderShiftPx(Math.max(0, infoRight - fastRight));
+        });
       });
     };
 
     measure();
     const ro = new ResizeObserver(measure);
-    const el = pulseSectionRef.current;
-    if (el) ro.observe(el);
+    const sec = pulseSectionRef.current;
+    const controls = pulseControlsRowRef.current;
+    if (sec) ro.observe(sec);
+    if (controls) ro.observe(controls);
     window.addEventListener("resize", measure);
     mq.addEventListener("change", measure);
     return () => {
@@ -705,7 +709,7 @@ export function VoxDexPulse() {
       window.removeEventListener("resize", measure);
       mq.removeEventListener("change", measure);
     };
-  }, [isTimelapse, mode, timeRange, category, limit, isMobile, trendLoading, pulseIsError, hasFrames]);
+  }, [isTimelapse, mode, timeRange, category, limit, trendLoading, pulseIsError, hasFrames]);
 
   const clientXToFrameIndex = useCallback((clientX: number): number => {
     const track = trackRef.current;
@@ -796,30 +800,23 @@ export function VoxDexPulse() {
 
   return (
     <section ref={pulseSectionRef} className="container mx-auto px-4 max-w-7xl pt-4 pb-2 flex flex-col">
-      {/* Section label + mobile speed (Fast label aligned with Approval toggle via translateX) */}
+      {/* Section label + mobile speed (Fast label aligned with pulse info icon via translateX) */}
       <div className="order-1 flex items-center mb-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground shrink-0">
           VoxDex Pulse
         </p>
         {isTimelapse && (
-          <>
-            <div className="w-[7px] shrink-0 sm:hidden" aria-hidden />
-            <div
-              className="shrink-0 sm:hidden"
-              style={
-                mobileSpeedSliderShiftPx > 0
-                  ? { transform: `translateX(${mobileSpeedSliderShiftPx}px)` }
-                  : undefined
-              }
-            >
-              <SpeedSlider
-                speed={speed}
-                onChange={setSpeed}
-                accentColor={accentColor}
-                fastLabelRef={fastLabelRef}
-              />
-            </div>
-          </>
+          <div
+            className="shrink-0 sm:hidden"
+            style={{ transform: `translateX(${mobileSpeedSliderShiftPx}px)` }}
+          >
+            <SpeedSlider
+              speed={speed}
+              onChange={setSpeed}
+              accentColor={accentColor}
+              fastLabelRef={fastLabelRef}
+            />
+          </div>
         )}
       </div>
 
@@ -843,7 +840,7 @@ export function VoxDexPulse() {
         )}
 
         {/* Single row on desktop (Speed right of Pause); wraps on mobile so Top sits left of 48h */}
-        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3">
+        <div ref={pulseControlsRowRef} className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3">
           <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5 shrink-0">
             <button
               onClick={() => setMode("trend")}
@@ -856,7 +853,6 @@ export function VoxDexPulse() {
               Trend Score
             </button>
             <button
-              ref={approvalRatingButtonRef}
               onClick={() => setMode("approval")}
               className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                 mode === "approval" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
@@ -874,10 +870,12 @@ export function VoxDexPulse() {
             contentClassName="max-w-[280px]"
             showCloseButton
           >
-            <Info
-              className={`h-4 w-4 cursor-help shrink-0 ${mode === "trend" ? "text-[#3C83F6]/60" : "text-[#22D3EE]/60"}`}
-              data-testid="icon-pulse-info"
-            />
+            <span ref={pulseInfoIconRef} className="inline-flex shrink-0">
+              <Info
+                className={`h-4 w-4 cursor-help shrink-0 ${mode === "trend" ? "text-[#3C83F6]/60" : "text-[#22D3EE]/60"}`}
+                data-testid="icon-pulse-info"
+              />
+            </span>
           </TouchTooltip>
 
           {mode === "trend" && (
