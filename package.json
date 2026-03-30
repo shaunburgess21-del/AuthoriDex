@@ -8,7 +8,7 @@
     "build": "npm run check && vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && npx drizzle-kit push",
     "start": "cross-env NODE_ENV=production node dist/index.js",
     "check": "tsc",
-    "test": "tsx --test tests/**/*.test.ts",
+    "test": "tsx --test tests/*.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:baseline": "tsx --env-file=.env scripts/db-baseline.cjs",
