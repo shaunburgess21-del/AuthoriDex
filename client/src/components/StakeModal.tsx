@@ -84,7 +84,10 @@ export function StakeModal({
   const parsedAmount = parseInt(stakeAmount) || 0;
   const balanceAfter = walletBalance - parsedAmount;
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
-  const marketCycle = useMarketCycle(selection?.bettingCutoff);
+  const marketCycle = useMarketCycle({
+    bettingCutoff: selection?.bettingCutoff,
+    resolutionDeadline: selection?.endAt,
+  });
   const { isLoggedIn } = useAuth();
   const [, setLocation] = useLocation();
   const [confidence, setConfidence] = useState(0);

@@ -56,7 +56,7 @@ export default function UpDownDetailPage() {
     return found?.endAt || null;
   }, [allUpdownMarkets, marketId]);
 
-  const marketState = useMarketCycle(serverCutoff);
+  const marketState = useMarketCycle({ bettingCutoff: serverCutoff, resolutionDeadline: serverResolutionDeadline });
   const isMarketClosed = marketState.status !== "OPEN";
   const closedMarketMessage = useMemo(() => {
     return getClosedMarketMessage({

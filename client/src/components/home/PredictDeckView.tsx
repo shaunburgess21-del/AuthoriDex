@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { 
@@ -540,15 +541,8 @@ export function PredictDeckView({ trendingPeople, isLoading, onExplore }: Predic
   const { data: nativeUpdownData } = useQuery<any[]>({ queryKey: ['/api/native-markets/updown'] });
 
   const { serverBettingCutoff, serverResolutionDeadline } = useMemo(() => {
-    const allNative = nativeUpdownData || [];
-    const cutoffs = allNative.map((m: any) => m.bettingCutoff).filter(Boolean) as string[];
-    const endAts = allNative.map((m: any) => m.endAt).filter(Boolean).map((d: string) => typeof d === "string" ? d : new Date(d).toISOString());
-    cutoffs.sort();
-    endAts.sort();
-    return {
-      serverBettingCutoff: cutoffs[0] || null,
-      serverResolutionDeadline: endAts[0] || null,
-    };
+    const canonical = getCanonicalNativeCycle(nativeUpdownData || []);
+    return { serverBettingCutoff: canonical.bettingCutoff, serverResolutionDeadline: canonical.resolutionDeadline };
   }, [nativeUpdownData]);
 
   const marketState = useMarketCycle({ bettingCutoff: serverBettingCutoff, resolutionDeadline: serverResolutionDeadline });

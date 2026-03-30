@@ -13,7 +13,8 @@ import { startMarketResolverScheduler } from "./jobs/market-resolver";
 import { runSeedBatch } from "./jobs/seed-engine";
 import { startAgentRunnerScheduler } from "./agents/agentRunner";
 import { startActionWorkerScheduler } from "./agents/actionWorker";
-import { startMarketGeneratorScheduler } from "./jobs/market-generator";
+import { generateAllWeeklyMarkets, startMarketGeneratorScheduler } from "./jobs/market-generator";
+import { resolveExpiredMarkets } from "./jobs/market-resolver";
 import { startVoteWorkerScheduler } from "./agents/voteWorker";
 import { pool, db, startDbPoolMonitor } from "./db";
 import { setDbGuardrailsVerified } from "./guardrails";
@@ -523,6 +524,11 @@ async function startServer() {
 
     runStartupTask("hydrate trending people", hydrateTrendingPeopleFromSnapshots);
     runStartupTask("verify database constraints", verifyDbConstraints);
+    runStartupTask("weekly market reconcile", async () => {
+      const generation = await generateAllWeeklyMarkets();
+      await resolveExpiredMarkets();
+      log(`[Startup] Weekly market reconcile complete for week ${generation.weekNumber}`);
+    });
 
     const schedulersDisabled = process.env.DISABLE_SCHEDULERS === "true";
     if (schedulersDisabled) {
@@ -552,7 +558,12 @@ async function startServer() {
     startScheduler("Staleness Monitor", startStalenessMonitor);
 
     // Start weekly market generation (updown, jackpot, h2h, gainer)
-    startScheduler("MarketGenerator", startMarketGeneratorScheduler);
+    // In serverless, prefer external CRON (/api/cron/generate-weekly-markets).
+    if (!SERVERLESS_MODE) {
+      startScheduler("MarketGenerator", startMarketGeneratorScheduler);
+    } else {
+      log("[MarketGenerator] Skipped - serverless mode enabled. Use /api/cron/generate-weekly-markets.");
+    }
 
     // Start AI agent prediction system
     startScheduler("AgentRunner", startAgentRunnerScheduler);

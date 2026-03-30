@@ -73,7 +73,7 @@ export default function CategoryRaceDetailPage() {
     return found?.endAt || null;
   }, [allGainerMarkets, marketId]);
 
-  const marketState = useMarketCycle(serverCutoff);
+  const marketState = useMarketCycle({ bettingCutoff: serverCutoff, resolutionDeadline: serverResolutionDeadline });
   const isMarketClosed = marketState.status !== "OPEN";
   const closedMarketMessage = useMemo(() => {
     return getClosedMarketMessage({

@@ -4,27 +4,16 @@ import { predictionMarkets, marketEntries, trackedPeople, trendingPeople } from 
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { eq, and, desc, inArray, sql, gte } from "drizzle-orm";
 import { buildOpeningScores } from "../native-markets/openingScores";
+import { getWeeklyBettingCutoff as getWeeklyBettingCutoffForEndAt } from "../native-markets/lifecycle";
+import { getWeekContext as getUtcWeekContext } from "../native-markets/week-context";
 import { log } from "../log";
 
 export function getWeeklyBettingCutoff(endAt: Date): Date {
-  const cutoff = new Date(endAt);
-  cutoff.setUTCDate(cutoff.getUTCDate() - 2);
-  cutoff.setUTCHours(23, 59, 59, 999);
-  return cutoff;
+  return getWeeklyBettingCutoffForEndAt(endAt);
 }
 
 export function getWeekContext(now = new Date()) {
-  const dayOfWeek = now.getUTCDay();
-  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  const monday = new Date(now);
-  monday.setUTCDate(now.getUTCDate() + mondayOffset);
-  monday.setUTCHours(0, 0, 0, 0);
-  const sunday = new Date(monday);
-  sunday.setUTCDate(monday.getUTCDate() + 6);
-  sunday.setUTCHours(23, 59, 59, 999);
-  const jan1 = new Date(now.getUTCFullYear(), 0, 1);
-  const weekNumber = Math.ceil(((monday.getTime() - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
-  return { monday, sunday, weekNumber };
+  return getUtcWeekContext(now);
 }
 
 export async function generateWeeklyUpDown(): Promise<number> {
@@ -696,13 +685,27 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
 }
 
 export async function generateAllWeeklyMarkets(): Promise<{ updown: number; jackpot: number; h2h: number; gainer: number; gainerUpdated: number; weekNumber: number }> {
-  const { weekNumber } = getWeekContext();
+  const { weekNumber, monday } = getWeekContext();
   log(`[MarketGenerator] Generating weekly markets for week ${weekNumber}...`);
 
   const updown = await generateWeeklyUpDown();
   const jackpot = await generateWeeklyJackpot();
   const h2h = await generateWeeklyH2H();
   const gainerResult = await generateWeeklyGainer();
+
+  const [openCount] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(predictionMarkets)
+    .where(and(
+      eq(predictionMarkets.status, "OPEN"),
+      inArray(predictionMarkets.marketType, ["updown", "h2h", "gainer", "jackpot"]),
+      eq(predictionMarkets.weekNumber, weekNumber),
+      gte(predictionMarkets.endAt, monday),
+    ));
+
+  if ((openCount?.count ?? 0) === 0) {
+    log(`[MarketGenerator][ALERT] No OPEN native weekly markets found for week ${weekNumber}`);
+  }
 
   log(`[MarketGenerator] Week ${weekNumber}: created ${updown} updown, ${jackpot} jackpot, ${h2h} h2h, ${gainerResult.created} gainer (${gainerResult.updated} updated)`);
   return { updown, jackpot, h2h, gainer: gainerResult.created, gainerUpdated: gainerResult.updated, weekNumber };

@@ -44,7 +44,9 @@ import { getLastRunMeta } from "./jobs/ingest";
 import { getMediastackBudgetSummary, probeMediastackLive } from "./providers/mediastack";
 import pLimit from "p-limit";
 import { buildOpeningScores } from "./native-markets/openingScores";
-import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext } from "./jobs/market-generator";
+import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, generateAllWeeklyMarkets, getWeekContext } from "./jobs/market-generator";
+import { resolveExpiredMarkets, voidMarketBets } from "./jobs/market-resolver";
+import { deriveNativeMarketLifecycle, getWeeklyBettingCutoff } from "./native-markets/lifecycle";
 import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
 import { runPostInductionOnboarding } from "./services/induction-onboarding";
 import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
@@ -10224,6 +10226,54 @@ Aim for 3-5 substantive paragraphs separated by blank lines. Be informative, eng
       });
     }
   });
+
+  // Ensure current-week native markets exist (safe to call repeatedly).
+  app.post("/api/cron/generate-weekly-markets", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const result = await generateAllWeeklyMarkets();
+      const { monday, sunday, weekNumber } = getWeekContext();
+      res.json({
+        success: true,
+        message: "Weekly market generation completed",
+        weekNumber,
+        weekWindowUtc: { monday: monday.toISOString(), sunday: sunday.toISOString() },
+        result,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Weekly market generation error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
+  // Resolve any expired OPEN markets. Safe to run frequently.
+  app.post("/api/cron/resolve-markets", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      await resolveExpiredMarkets();
+      res.json({
+        success: true,
+        message: "Expired market resolution run completed",
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Market resolution error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
   
   // PREVIEW scoring health check (uses cached API data WITHOUT writing to DB)
   // NOTE: This does NOT update trending_people - only ingest.ts writes to that table.
@@ -11863,13 +11913,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
-  function getWeeklyBettingCutoff(endAt: Date): Date {
-    const cutoff = new Date(endAt);
-    cutoff.setUTCDate(cutoff.getUTCDate() - 2);
-    cutoff.setUTCHours(23, 59, 59, 999);
-    return cutoff;
-  }
-
   app.post("/api/native-markets/updown/:marketId/bet", requireAuth, async (req, res) => {
     try {
       const authReq = req as AuthRequest;
@@ -12564,11 +12607,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const engagement = await getMarketEngagementPreview(marketIds);
 
       const nowForCutoff = new Date();
-      const addCutoffFields = (m: { endAt: Date | null }) => {
-        const bc = m.endAt ? getWeeklyBettingCutoff(m.endAt) : null;
+      const addLifecycleFields = (m: { endAt: Date | null }) => {
+        const lifecycle = deriveNativeMarketLifecycle(m.endAt, nowForCutoff);
         return {
-          bettingCutoff: bc?.toISOString() ?? null,
-          isCutoffPassed: bc ? nowForCutoff > bc : false,
+          bettingCutoff: lifecycle.bettingCutoff?.toISOString() ?? null,
+          resolutionDeadline: lifecycle.resolutionDeadline?.toISOString() ?? null,
+          lifecycleStatus: lifecycle.status,
+          isCutoffPassed: lifecycle.isCutoffPassed,
         };
       };
 
@@ -12582,7 +12627,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
         const enriched = markets.map(m => ({
           ...m,
-          ...addCutoffFields(m),
+          ...addLifecycleFields(m),
           person: m.personId ? personMap[m.personId] || null : null,
           entries: entries.filter(e => e.marketId === m.id),
           recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
@@ -12602,7 +12647,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
         const enriched = markets.map(m => ({
           ...m,
-          ...addCutoffFields(m),
+          ...addLifecycleFields(m),
           entries: entries.filter(e => e.marketId === m.id).map(e => ({
             ...e,
             person: e.personId ? personMap[e.personId] || null : null,
@@ -12616,7 +12661,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       res.json(markets.map(m => ({
         ...m,
-        ...addCutoffFields(m),
+        ...addLifecycleFields(m),
         entries: entries.filter(e => e.marketId === m.id),
         recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
         activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
@@ -14182,12 +14227,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
   app.post("/api/admin/weekly-reset", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const now = new Date();
-      const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-      const dayNum = d.getUTCDay() || 7;
-      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-      const currentWeek = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+      const { weekNumber: currentWeek } = getWeekContext();
 
       const openMarkets = await db.select()
         .from(predictionMarkets)
@@ -14198,7 +14238,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           )
         );
 
-      const { voidMarketBets } = await import("./jobs/market-resolver");
       let settled = 0;
       for (const market of openMarkets) {
         if (market.weekNumber && market.weekNumber < currentWeek) {

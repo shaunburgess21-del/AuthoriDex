@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { WeeklyUpDownActionButtons } from "@/components/predict/WeeklyUpDownActionButtons";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -2334,14 +2335,8 @@ export default function PredictPage() {
 
   const { serverBettingCutoff, serverResolutionDeadline } = useMemo(() => {
     const allNative = [...(nativeUpdownData || []), ...(nativeH2hData || []), ...(nativeGainerData || [])];
-    const cutoffs = allNative.map((m: any) => m.bettingCutoff).filter(Boolean) as string[];
-    const endAts = allNative.map((m: any) => m.endAt).filter(Boolean).map((d: string) => typeof d === "string" ? d : new Date(d).toISOString());
-    cutoffs.sort();
-    endAts.sort();
-    return {
-      serverBettingCutoff: cutoffs[0] || null,
-      serverResolutionDeadline: endAts[0] || null,
-    };
+    const canonical = getCanonicalNativeCycle(allNative);
+    return { serverBettingCutoff: canonical.bettingCutoff, serverResolutionDeadline: canonical.resolutionDeadline };
   }, [nativeUpdownData, nativeH2hData, nativeGainerData]);
 
   const marketCycle = useMarketCycle({ bettingCutoff: serverBettingCutoff, resolutionDeadline: serverResolutionDeadline });
@@ -2795,6 +2790,7 @@ export default function PredictPage() {
       opponentScore: opponent.currentScore,
       crowdSentiment: sentiment,
       estimatedPayout,
+      endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: market.bettingCutoff,
     });
     openStakeModal();
@@ -2829,6 +2825,7 @@ export default function PredictPage() {
       candidateRank: candidate.rank,
       candidatePercentGain: candidate.percentGain,
       candidatePointsAdded: candidate.currentGain,
+      endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: market.bettingCutoff,
     });
     openStakeModal();
