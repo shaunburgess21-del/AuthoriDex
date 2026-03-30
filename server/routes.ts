@@ -14399,12 +14399,36 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const [candidate] = await db.select().from(inductionCandidates).where(eq(inductionCandidates.id, id)).limit(1);
       if (!candidate) return res.status(404).json({ error: "Candidate not found" });
 
-      const existingPerson = await db.select({ id: trackedPeople.id }).from(trackedPeople).where(eq(trackedPeople.name, candidate.displayName)).limit(1);
+      const existingPerson = await db
+        .select({
+          id: trackedPeople.id,
+          imageSlug: trackedPeople.imageSlug,
+          status: trackedPeople.status,
+        })
+        .from(trackedPeople)
+        .where(eq(trackedPeople.name, candidate.displayName))
+        .limit(1);
 
       let personId: string;
 
       if (existingPerson.length > 0) {
         personId = existingPerson[0].id;
+        const backfillUpdates: Partial<{
+          imageSlug: string | null;
+          status: string;
+        }> = {};
+        if (!existingPerson[0].imageSlug && candidate.imageSlug) {
+          backfillUpdates.imageSlug = candidate.imageSlug;
+        }
+        if (existingPerson[0].status !== "main_leaderboard") {
+          backfillUpdates.status = "main_leaderboard";
+        }
+        if (Object.keys(backfillUpdates).length > 0) {
+          await db
+            .update(trackedPeople)
+            .set(backfillUpdates)
+            .where(eq(trackedPeople.id, personId));
+        }
       } else {
         const maxOrder = await db.select({ maxOrder: sql<number>`COALESCE(MAX(${trackedPeople.displayOrder}), 0)` }).from(trackedPeople);
         const [newPerson] = await db.insert(trackedPeople).values({

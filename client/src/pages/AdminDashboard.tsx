@@ -90,6 +90,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { PersonAvatar } from "@/components/PersonAvatar";
 import * as Flags from "country-flag-icons/react/3x2";
 import type { TrendingPoll } from "@shared/schema";
 import { MARKET_CATEGORY_OPTIONS, normalizeMarketCategory, type CanonicalMarketCategory } from "@shared/constants";
@@ -204,6 +205,7 @@ interface Celebrity {
   category: string;
   status: string;
   avatar: string | null;
+  imageSlug?: string | null;
   wikiSlug: string | null;
   xHandle: string | null;
   searchQueryOverride: string | null;
@@ -3714,17 +3716,12 @@ export default function AdminDashboard() {
                         data-testid={`celebrity-row-${celebrity.id}`}
                       >
                         <div className="flex items-center gap-3">
-                          {celebrity.avatar ? (
-                            <img 
-                              src={celebrity.avatar} 
-                              alt={celebrity.name} 
-                              className="h-10 w-10 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                              <Star className="h-5 w-5 text-muted-foreground" />
-                            </div>
-                          )}
+                          <PersonAvatar
+                            name={celebrity.name}
+                            avatar={celebrity.avatar}
+                            imageSlug={celebrity.imageSlug}
+                            size="sm"
+                          />
                           <div>
                             <p className="font-medium">{celebrity.name}</p>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
