@@ -5,8 +5,16 @@ import { db } from "./db";
 import { profiles } from "@shared/schema";
 import { isAdminRole, resolveProfileRole } from "./utils/authz";
 
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!;
+function requireEnv(name: "SUPABASE_URL" | "SUPABASE_ANON_KEY"): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`${name} is required for auth middleware`);
+  }
+  return value;
+}
+
+const supabaseUrl = requireEnv("SUPABASE_URL");
+const supabaseAnonKey = requireEnv("SUPABASE_ANON_KEY");
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 

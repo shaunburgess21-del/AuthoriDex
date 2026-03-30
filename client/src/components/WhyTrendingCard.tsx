@@ -98,6 +98,7 @@ export function WhyTrendingCard({ personId, personName, hotMover }: WhyTrendingC
               size="sm"
               onClick={handleRetry}
               disabled={isFetching}
+              aria-label="Retry loading trending summary"
               data-testid="button-retry-why-trending"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
@@ -130,6 +131,7 @@ export function WhyTrendingCard({ personId, personName, hotMover }: WhyTrendingC
                 size="sm"
                 onClick={handleRetry}
                 disabled={isFetching}
+                aria-label="Refresh trending summary"
                 data-testid="button-refresh-why-trending"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />

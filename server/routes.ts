@@ -59,6 +59,16 @@ const COMMENT_MAX_LENGTH = 5000;
 const BOT_UA_PATTERNS = /bot|crawl|spider|slurp|wget|curl|fetch|headless|phantom|puppet|selenium|lighthouse|preview|embed|scrape/i;
 const PREFETCH_HEADERS = ['purpose', 'sec-purpose', 'x-purpose'];
 const SESSION_COOKIE_NAME = 'fdx_sid';
+const LEADERBOARD_DEFAULT_LIMIT = 100;
+const LEADERBOARD_MAX_LIMIT = Math.max(
+  LEADERBOARD_DEFAULT_LIMIT,
+  parseInt(process.env.LEADERBOARD_MAX_LIMIT || "500", 10) || 500,
+);
+const LEADERBOARD_MAX_OFFSET = Math.max(
+  0,
+  parseInt(process.env.LEADERBOARD_MAX_OFFSET || "20000", 10) || 20000,
+);
+const LEADERBOARD_THRESHOLDS_TTL_MS = 5 * 60 * 1000;
 
 const _viewDedupe = new Map<string, number>();
 const _viewIpCounts = new Map<string, { count: number; resetAt: number }>();
@@ -127,6 +137,21 @@ let _cachedHotMovers: any | null = null;
 let _hotMoversCachedAt: number = 0;
 let _hotMoversCachedRunId: string | null = null;
 const HOT_MOVERS_TTL_MS = 10 * 60 * 1000; // 10 minutes
+type LeaderboardThresholds = {
+  rankChangeP90: number;
+  deltaP90: number;
+  negRankChangeP10: number;
+  negDeltaP10: number;
+};
+let _cachedLeaderboardThresholds:
+  | { runId: string | null; computedAt: number; value: LeaderboardThresholds }
+  | null = null;
+
+function parseBoundedInt(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = typeof value === "string" ? parseInt(value, 10) : Number.NaN;
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
 
 async function getLatestCompletedRunId(): Promise<string | null> {
   try {
@@ -2655,8 +2680,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sortDir = (req.query.sortDir as string) || (req.query.sort as string) || 'desc'; // 'asc' | 'desc'
       const category = req.query.category as string;
       const search = req.query.search as string;
-      const limit = parseInt(req.query.limit as string) || 100;
-      const offset = parseInt(req.query.offset as string) || 0;
+      const limit = parseBoundedInt(req.query.limit, LEADERBOARD_DEFAULT_LIMIT, 1, LEADERBOARD_MAX_LIMIT);
+      const offset = parseBoundedInt(req.query.offset, 0, 0, LEADERBOARD_MAX_OFFSET);
       const userId = req.userId;
 
       // Build conditions arrays:
@@ -2773,35 +2798,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const prevRankLookup = await getSnapshotRankMap();
       const baselineStatus = prevRankLookup.size > 0 ? "normal" : "degraded";
 
-      const allPeopleForThresholds = await db
-        .select({
-          id: trendingPeople.id,
-          rank: trendingPeople.rank,
-          change24h: trendingPeople.change24h,
-        })
-        .from(trendingPeople);
+      const runIdForThresholds = _lastCompletedRunId;
+      const now = Date.now();
+      let canonicalThresholds: LeaderboardThresholds;
+      if (
+        _cachedLeaderboardThresholds &&
+        _cachedLeaderboardThresholds.runId === runIdForThresholds &&
+        now - _cachedLeaderboardThresholds.computedAt < LEADERBOARD_THRESHOLDS_TTL_MS
+      ) {
+        canonicalThresholds = _cachedLeaderboardThresholds.value;
+      } else {
+        const allPeopleForThresholds = await db
+          .select({
+            id: trendingPeople.id,
+            rank: trendingPeople.rank,
+            change24h: trendingPeople.change24h,
+          })
+          .from(trendingPeople);
 
-      const allRankChanges = allPeopleForThresholds
-        .map(p => (prevRankLookup.get(p.id) ?? p.rank) - p.rank)
-        .filter(v => v !== 0);
-      const allDeltas = allPeopleForThresholds
-        .map(p => p.change24h)
-        .filter((v): v is number => v != null && v !== 0);
+        const allRankChanges = allPeopleForThresholds
+          .map(p => (prevRankLookup.get(p.id) ?? p.rank) - p.rank)
+          .filter(v => v !== 0);
+        const allDeltas = allPeopleForThresholds
+          .map(p => p.change24h)
+          .filter((v): v is number => v != null && v !== 0);
 
-      const positiveRC = allRankChanges.filter(v => v > 0).sort((a, b) => b - a);
-      const positiveDeltas = allDeltas.filter(v => v > 0).sort((a, b) => b - a);
-      const negativeRC = allRankChanges.filter(v => v < 0).sort((a, b) => a - b);
-      const negativeDeltas = allDeltas.filter(v => v < 0).sort((a, b) => a - b);
+        const positiveRC = allRankChanges.filter(v => v > 0).sort((a, b) => b - a);
+        const positiveDeltas = allDeltas.filter(v => v > 0).sort((a, b) => b - a);
+        const negativeRC = allRankChanges.filter(v => v < 0).sort((a, b) => a - b);
+        const negativeDeltas = allDeltas.filter(v => v < 0).sort((a, b) => a - b);
 
-      const p5Idx = (arr: number[]) => Math.max(0, Math.ceil(arr.length * 0.05) - 1);
-      const p10Idx = (arr: number[]) => Math.max(0, Math.ceil(arr.length * 0.10) - 1);
+        const p5Idx = (arr: number[]) => Math.max(0, Math.ceil(arr.length * 0.05) - 1);
+        const p10Idx = (arr: number[]) => Math.max(0, Math.ceil(arr.length * 0.10) - 1);
 
-      const canonicalThresholds = {
-        rankChangeP90: positiveRC.length > 0 ? positiveRC[p5Idx(positiveRC)] : 999,
-        deltaP90: positiveDeltas.length > 0 ? positiveDeltas[p5Idx(positiveDeltas)] : 999,
-        negRankChangeP10: negativeRC.length > 0 ? negativeRC[p10Idx(negativeRC)] : -999,
-        negDeltaP10: negativeDeltas.length > 0 ? negativeDeltas[p10Idx(negativeDeltas)] : -999,
-      };
+        canonicalThresholds = {
+          rankChangeP90: positiveRC.length > 0 ? positiveRC[p5Idx(positiveRC)] : 999,
+          deltaP90: positiveDeltas.length > 0 ? positiveDeltas[p5Idx(positiveDeltas)] : 999,
+          negRankChangeP10: negativeRC.length > 0 ? negativeRC[p10Idx(negativeRC)] : -999,
+          negDeltaP10: negativeDeltas.length > 0 ? negativeDeltas[p10Idx(negativeDeltas)] : -999,
+        };
+
+        _cachedLeaderboardThresholds = {
+          runId: runIdForThresholds,
+          computedAt: now,
+          value: canonicalThresholds,
+        };
+      }
 
       let approvalRankById = new Map<string, number>();
       if (tab === 'approval') {
