@@ -1006,6 +1006,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(trackedPeople.id, id))
         .limit(1);
 
+      let categoryRank: number | undefined;
+      if (person.category?.trim()) {
+        const rankRows = await db.execute(sql`
+          WITH ranked AS (
+            SELECT ${trendingPeople.id} AS id,
+              ROW_NUMBER() OVER (
+                PARTITION BY ${trendingPeople.category}
+                ORDER BY COALESCE(${trendingPeople.fameIndexLive}, ${trendingPeople.fameIndex}) DESC NULLS LAST, ${trendingPeople.name} ASC
+              ) AS category_rank
+            FROM ${trendingPeople}
+            WHERE ${trendingPeople.category} = ${person.category}
+          )
+          SELECT category_rank FROM ranked WHERE id = ${id}
+        `);
+        const row = (rankRows as { rows: Record<string, unknown>[] }).rows?.[0];
+        const raw = row?.category_rank ?? row?.categoryRank;
+        const n = raw != null ? Number(raw) : NaN;
+        if (Number.isFinite(n) && n > 0) categoryRank = n;
+      }
+
       res.json({
         ...person,
         approvalPct: m?.approvalPct ?? null,
@@ -1013,6 +1033,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         approvalVotesCount: m?.approvalVotesCount ?? 0,
         wikiSlug: tracked[0]?.wikiSlug ?? null,
         imageSlug: tracked[0]?.imageSlug ?? null,
+        ...(categoryRank != null ? { categoryRank } : {}),
       });
     } catch (error) {
       console.error("Error fetching person:", error);

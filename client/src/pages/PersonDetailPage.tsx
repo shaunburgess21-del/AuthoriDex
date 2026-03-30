@@ -1110,7 +1110,9 @@ export default function PersonDetailPage() {
     });
   };
 
-  const { data: person, isLoading, error } = useQuery<TrendingPerson & { wikiSlug?: string | null }>({
+  const { data: person, isLoading, error } = useQuery<
+    TrendingPerson & { wikiSlug?: string | null; imageSlug?: string | null; categoryRank?: number }
+  >({
     queryKey: [`/api/trending/${params?.id}`],
     enabled: !!params?.id,
   });
@@ -1505,7 +1507,7 @@ export default function PersonDetailPage() {
             <PersonAvatar
               name={person.name}
               avatar={person.avatar}
-              imageSlug={(person as any).imageSlug}
+              imageSlug={person.imageSlug}
               imageContext="expanded"
               size="xl"
               onExpand={(url) => setExpandedProfileImage(url)}
@@ -1516,7 +1518,16 @@ export default function PersonDetailPage() {
                   {person.name}
                 </h1>
                 <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
-                  <p className="text-lg text-muted-foreground">{person.category}</p>
+                  {person.category && (
+                    <p className="text-lg text-muted-foreground">{person.category}</p>
+                  )}
+                  {person.category && person.categoryRank != null && person.categoryRank > 0 && (
+                    <CategoryRankPill
+                      category={person.category}
+                      rank={person.categoryRank}
+                      personName={person.name}
+                    />
+                  )}
                 </div>
               </div>
               <div className="flex flex-row flex-wrap items-center gap-2">
