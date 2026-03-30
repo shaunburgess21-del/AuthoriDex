@@ -91,6 +91,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { PersonAvatar } from "@/components/PersonAvatar";
+import { getAdminAccessBlock } from "@/pages/admin/AdminAccessGate";
 import * as Flags from "country-flag-icons/react/3x2";
 import type { TrendingPoll } from "@shared/schema";
 import { MARKET_CATEGORY_OPTIONS, normalizeMarketCategory, type CanonicalMarketCategory } from "@shared/constants";
@@ -2793,69 +2794,14 @@ export default function AdminDashboard() {
   }, [baselineTotalVotes, seedApprovalCounts]);
 
   // ============ CONDITIONAL RENDERING (after all hooks) ============
-  
-  // Show loading while auth is initializing
-  if (profileLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">Checking admin access...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // If user is not logged in, prompt them to sign in
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="p-8 text-center max-w-md">
-          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <h2 className="text-xl font-semibold mb-2">Sign In Required</h2>
-          <p className="text-muted-foreground mb-4">
-            Please sign in to access the admin panel.
-          </p>
-          <Button onClick={() => setLocation("/")} data-testid="button-go-home">
-            Go to Homepage
-          </Button>
-        </Card>
-      </div>
-    );
-  }
-
-  // User is logged in but profile hasn't loaded yet
-  if (profile === null) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading profile...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Check if user is admin
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="p-8 text-center max-w-md">
-          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
-          <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
-          <p className="text-muted-foreground mb-4">
-            You do not have permission to access the admin panel.
-          </p>
-          <p className="text-xs text-muted-foreground mb-4">
-            Debug: Role = "{profile?.role}" | Expected = "admin"
-          </p>
-          <Button onClick={() => setLocation("/")} data-testid="button-go-home">
-            Go to Homepage
-          </Button>
-        </Card>
-      </div>
-    );
-  }
+  const adminAccessBlock = getAdminAccessBlock({
+    profileLoading,
+    user,
+    profile,
+    isAdmin,
+    onGoHome: () => setLocation("/"),
+  });
+  if (adminAccessBlock) return adminAccessBlock;
 
   // ============ ADMIN DASHBOARD UI ============
 

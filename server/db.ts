@@ -11,14 +11,30 @@ if (!process.env.DATABASE_URL) {
 
 const DB_POOL_MAX = parseInt(process.env.DB_POOL_MAX || "10", 10);
 
-export const pool = new Pool({ 
+/**
+ * Default: `rejectUnauthorized: false` (common for Neon/Railway-style TLS without bundling CA).
+ * For stricter TLS: set `DATABASE_SSL_REJECT_UNAUTHORIZED=true` and optionally `DATABASE_CA_CERT` (PEM string).
+ */
+function buildPgSsl():
+  | { rejectUnauthorized: false }
+  | { rejectUnauthorized: true; ca?: string } {
+  const ca = process.env.DATABASE_CA_CERT?.trim();
+  const strict = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true";
+  if (strict || ca) {
+    return {
+      rejectUnauthorized: true,
+      ...(ca ? { ca } : {}),
+    };
+  }
+  return { rejectUnauthorized: false };
+}
+
+export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: DB_POOL_MAX,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: buildPgSsl(),
 });
 export const db = drizzle(pool, { schema });
 

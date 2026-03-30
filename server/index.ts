@@ -432,13 +432,17 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
+/** Same default as pre-tiered behavior: one bucket for all /api methods (120/min per IP). */
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 120,
+  max: parseInt(process.env.API_RATE_LIMIT_MAX || "120", 10),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests, please try again later." },
-  skip: (req) => req.path === "/config/supabase",
+  skip: (req: Request) => {
+    const p = req.path;
+    return p === "/api/config/supabase" || p === "/api/health" || p.endsWith("/config/supabase");
+  },
 });
 app.use("/api/", apiLimiter);
 

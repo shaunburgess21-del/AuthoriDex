@@ -44,8 +44,14 @@ test("shouldRenderCrowdSentiment renders 0 but not nullish values", () => {
   assert.equal(shouldRenderCrowdSentiment(undefined), false);
 });
 
-test("getRecentActivityMarketPath routes to market details when slug exists", () => {
-  assert.equal(getRecentActivityMarketPath("weekly-foo"), "/markets/weekly-foo");
+test("getRecentActivityMarketPath routes native market types to details when slug exists", () => {
+  assert.equal(getRecentActivityMarketPath("weekly-foo", "updown"), "/markets/weekly-foo");
+  assert.equal(getRecentActivityMarketPath("weekly-foo", "jackpot"), "/markets/weekly-foo");
+  assert.equal(getRecentActivityMarketPath("weekly-foo", "h2h"), "/markets/weekly-foo");
+});
+
+test("getRecentActivityMarketPath stays on /predict without slug or without native type", () => {
+  assert.equal(getRecentActivityMarketPath("weekly-foo"), "/predict");
   assert.equal(getRecentActivityMarketPath(""), "/predict");
   assert.equal(getRecentActivityMarketPath(undefined), "/predict");
   assert.equal(getRecentActivityMarketPath(null), "/predict");
