@@ -2325,22 +2325,74 @@ export default function PredictPage() {
 
   const { data: nativeUpdownData, isLoading: updownLoading, error: updownError, refetch: refetchUpdown } = useQuery<any[]>({
     queryKey: ['/api/native-markets/updown'],
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
   const { data: nativeH2hData, isLoading: h2hLoading, error: h2hError, refetch: refetchH2h } = useQuery<any[]>({
     queryKey: ['/api/native-markets/h2h'],
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
   const { data: nativeGainerData, isLoading: gainerLoading, error: gainerError, refetch: refetchGainers } = useQuery<any[]>({
     queryKey: ['/api/native-markets/gainer'],
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+  const { data: nativeJackpotData, error: jackpotError, refetch: refetchJackpot } = useQuery<any[]>({
+    queryKey: ['/api/native-markets/jackpot'],
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const { serverBettingCutoff, serverResolutionDeadline } = useMemo(() => {
-    const allNative = [...(nativeUpdownData || []), ...(nativeH2hData || []), ...(nativeGainerData || [])];
+    const allNative = [
+      ...(nativeUpdownData || []),
+      ...(nativeH2hData || []),
+      ...(nativeGainerData || []),
+      ...(nativeJackpotData || []),
+    ];
     const canonical = getCanonicalNativeCycle(allNative);
     return { serverBettingCutoff: canonical.bettingCutoff, serverResolutionDeadline: canonical.resolutionDeadline };
-  }, [nativeUpdownData, nativeH2hData, nativeGainerData]);
+  }, [nativeUpdownData, nativeH2hData, nativeGainerData, nativeJackpotData]);
 
   const marketCycle = useMarketCycle({ bettingCutoff: serverBettingCutoff, resolutionDeadline: serverResolutionDeadline });
   const isMarketClosed = marketCycle.status !== "OPEN";
+  useEffect(() => {
+    if (marketCycle.status !== "RESOLVED") return;
+
+    const isAfterMondayStartUtc = () => {
+      const now = new Date();
+      return now.getUTCDay() !== 0;
+    };
+    if (!isAfterMondayStartUtc()) return;
+
+    const refreshNativeMarkets = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      void Promise.all([
+        refetchUpdown(),
+        refetchH2h(),
+        refetchGainers(),
+        refetchJackpot(),
+      ]);
+    };
+
+    refreshNativeMarkets();
+    window.addEventListener("focus", refreshNativeMarkets);
+    document.addEventListener("visibilitychange", refreshNativeMarkets);
+    return () => {
+      window.removeEventListener("focus", refreshNativeMarkets);
+      document.removeEventListener("visibilitychange", refreshNativeMarkets);
+    };
+  }, [marketCycle.status, refetchUpdown, refetchH2h, refetchGainers, refetchJackpot]);
+
   const closedMarketMessage = useMemo(() => {
     return getClosedMarketMessage({
       bettingCutoff: serverBettingCutoff,
@@ -2557,10 +2609,6 @@ export default function PredictPage() {
       setSelectedJackpotPerson(rank1Person);
     }
   }, [trendingPeople, selectedJackpotPerson]);
-
-  const { data: nativeJackpotData, error: jackpotError, refetch: refetchJackpot } = useQuery<any[]>({
-    queryKey: ['/api/native-markets/jackpot'],
-  });
 
   const predictLoadErrors = useMemo(
     () =>

@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { db } from "../db";
+import { db, withDbAdvisoryLock } from "../db";
 import { predictionMarkets, marketEntries, trackedPeople, trendingPeople } from "@shared/schema";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { eq, and, desc, inArray, sql, gte } from "drizzle-orm";
@@ -8,12 +8,29 @@ import { getWeeklyBettingCutoff as getWeeklyBettingCutoffForEndAt } from "../nat
 import { getWeekContext as getUtcWeekContext } from "../native-markets/week-context";
 import { log } from "../log";
 
+const MARKET_GENERATOR_LOCK_KEY = 5_204;
+const MARKET_GENERATOR_RETRY_DELAY_MS = 15 * 60 * 1000;
+const MARKET_GENERATOR_MAX_RETRIES = 4;
+
 export function getWeeklyBettingCutoff(endAt: Date): Date {
   return getWeeklyBettingCutoffForEndAt(endAt);
 }
 
 export function getWeekContext(now = new Date()) {
   return getUtcWeekContext(now);
+}
+
+async function countOpenNativeMarketsForWeek(weekNumber: number, monday: Date): Promise<number> {
+  const [openCount] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(predictionMarkets)
+    .where(and(
+      eq(predictionMarkets.status, "OPEN"),
+      inArray(predictionMarkets.marketType, ["updown", "h2h", "gainer", "jackpot"]),
+      eq(predictionMarkets.weekNumber, weekNumber),
+      gte(predictionMarkets.endAt, monday),
+    ));
+  return openCount?.count ?? 0;
 }
 
 export async function generateWeeklyUpDown(): Promise<number> {
@@ -693,17 +710,9 @@ export async function generateAllWeeklyMarkets(): Promise<{ updown: number; jack
   const h2h = await generateWeeklyH2H();
   const gainerResult = await generateWeeklyGainer();
 
-  const [openCount] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(predictionMarkets)
-    .where(and(
-      eq(predictionMarkets.status, "OPEN"),
-      inArray(predictionMarkets.marketType, ["updown", "h2h", "gainer", "jackpot"]),
-      eq(predictionMarkets.weekNumber, weekNumber),
-      gte(predictionMarkets.endAt, monday),
-    ));
+  const openCount = await countOpenNativeMarketsForWeek(weekNumber, monday);
 
-  if ((openCount?.count ?? 0) === 0) {
+  if (openCount === 0) {
     log(`[MarketGenerator][ALERT] No OPEN native weekly markets found for week ${weekNumber}`);
   }
 
@@ -711,16 +720,63 @@ export async function generateAllWeeklyMarkets(): Promise<{ updown: number; jack
   return { updown, jackpot, h2h, gainer: gainerResult.created, gainerUpdated: gainerResult.updated, weekNumber };
 }
 
+export async function ensureWeeklyMarketsForCurrentWeek(reason: "read-self-heal" | "startup" | "scheduled" | "retry" | "cron" = "scheduled"): Promise<{
+  outcome: "already-open" | "generated" | "lock-busy";
+  weekNumber: number;
+  openBefore: number;
+  openAfter: number;
+}> {
+  const { weekNumber, monday } = getWeekContext();
+  const openBefore = await countOpenNativeMarketsForWeek(weekNumber, monday);
+  if (openBefore > 0) {
+    return { outcome: "already-open", weekNumber, openBefore, openAfter: openBefore };
+  }
+
+  const locked = await withDbAdvisoryLock(
+    MARKET_GENERATOR_LOCK_KEY,
+    "MarketGenerator",
+    async () => {
+      const openInsideLock = await countOpenNativeMarketsForWeek(weekNumber, monday);
+      if (openInsideLock > 0) {
+        return { generated: false, openAfter: openInsideLock };
+      }
+      await generateAllWeeklyMarkets();
+      const openAfterGenerate = await countOpenNativeMarketsForWeek(weekNumber, monday);
+      return { generated: true, openAfter: openAfterGenerate };
+    },
+  );
+
+  if (!locked.acquired) {
+    return { outcome: "lock-busy", weekNumber, openBefore, openAfter: openBefore };
+  }
+
+  const lockResult = locked.result ?? { generated: false, openAfter: openBefore };
+  const outcome = lockResult.generated ? "generated" : "already-open";
+  log(`[MarketGenerator] ensureWeeklyMarkets(${reason}) outcome=${outcome} week=${weekNumber} before=${openBefore} after=${lockResult.openAfter}`);
+  return { outcome, weekNumber, openBefore, openAfter: lockResult.openAfter };
+}
+
+export function getNextMondayGenerationAt(now = new Date()): Date {
+  const next = new Date(now);
+  const dayOfWeek = now.getUTCDay();
+  const daysUntilMonday = dayOfWeek === 0 ? 1 : dayOfWeek === 1 && now.getUTCHours() < 1 ? 0 : 8 - dayOfWeek;
+  next.setUTCDate(now.getUTCDate() + daysUntilMonday);
+  next.setUTCHours(0, 5, 0, 0);
+  if (next <= now) next.setUTCDate(next.getUTCDate() + 7);
+  return next;
+}
+
 export function startMarketGeneratorScheduler() {
   log("[MarketGenerator] Starting scheduler (checks on boot, then every Monday 00:05 UTC)");
 
   const BOOT_DELAY_MS = 120_000;
+  let retryAttempts = 0;
   log(`[MarketGenerator] Will check/generate markets in ${BOOT_DELAY_MS / 1000}s to let other services stabilize`);
 
   setTimeout(async () => {
     try {
       log("[MarketGenerator] Boot: ensuring all market types exist for current week");
-      await generateAllWeeklyMarkets();
+      await ensureWeeklyMarketsForCurrentWeek("startup");
     } catch (e) {
       log(`[MarketGenerator] Boot generation error: ${e}`);
     }
@@ -730,23 +786,35 @@ export function startMarketGeneratorScheduler() {
 
   function scheduleNextMonday() {
     const now = new Date();
-    const next = new Date(now);
-    const dayOfWeek = now.getUTCDay();
-    const daysUntilMonday = dayOfWeek === 0 ? 1 : dayOfWeek === 1 && now.getUTCHours() < 1 ? 0 : 8 - dayOfWeek;
-    next.setUTCDate(now.getUTCDate() + daysUntilMonday);
-    next.setUTCHours(0, 5, 0, 0);
-    if (next <= now) next.setUTCDate(next.getUTCDate() + 7);
+    const next = getNextMondayGenerationAt(now);
 
     const ms = next.getTime() - now.getTime();
     const hours = Math.round(ms / 1000 / 60 / 60);
     log(`[MarketGenerator] Next generation at ${next.toISOString()} (in ~${hours}h)`);
 
+    scheduleAt(next, "scheduled");
+  }
+
+  function scheduleAt(target: Date, mode: "scheduled" | "retry") {
+    const ms = Math.max(0, target.getTime() - Date.now());
     setTimeout(async () => {
       try {
-        await generateAllWeeklyMarkets();
+        await ensureWeeklyMarketsForCurrentWeek(mode);
+        retryAttempts = 0;
       } catch (e) {
-        log(`[MarketGenerator] Scheduled generation error: ${e}`);
+        log(`[MarketGenerator] ${mode} generation error: ${e}`);
+        if (retryAttempts < MARKET_GENERATOR_MAX_RETRIES) {
+          retryAttempts += 1;
+          const retryAt = new Date(Date.now() + MARKET_GENERATOR_RETRY_DELAY_MS);
+          log(
+            `[MarketGenerator] Retry ${retryAttempts}/${MARKET_GENERATOR_MAX_RETRIES} scheduled for ${retryAt.toISOString()}`,
+          );
+          scheduleAt(retryAt, "retry");
+          return;
+        }
+        log("[MarketGenerator] Retry budget exhausted; waiting for next weekly schedule");
       }
+      retryAttempts = 0;
       scheduleNextMonday();
     }, ms);
   }

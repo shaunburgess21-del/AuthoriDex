@@ -44,7 +44,7 @@ import { getLastRunMeta } from "./jobs/ingest";
 import { getMediastackBudgetSummary, probeMediastackLive } from "./providers/mediastack";
 import pLimit from "p-limit";
 import { buildOpeningScores } from "./native-markets/openingScores";
-import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext } from "./jobs/market-generator";
+import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext, ensureWeeklyMarketsForCurrentWeek } from "./jobs/market-generator";
 import { voidMarketBets } from "./jobs/market-resolver";
 import { deriveNativeMarketLifecycle, getWeeklyBettingCutoff } from "./native-markets/lifecycle";
 import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
@@ -69,9 +69,11 @@ const LEADERBOARD_MAX_OFFSET = Math.max(
   parseInt(process.env.LEADERBOARD_MAX_OFFSET || "20000", 10) || 20000,
 );
 const LEADERBOARD_THRESHOLDS_TTL_MS = 5 * 60 * 1000;
+const NATIVE_MARKETS_SELF_HEAL_COOLDOWN_MS = 2 * 60 * 1000;
 
 const _viewDedupe = new Map<string, number>();
 const _viewIpCounts = new Map<string, { count: number; resetAt: number }>();
+const _nativeMarketsSelfHealByType = new Map<string, number>();
 
 function cleanViewDedupe() {
   const now = Date.now();
@@ -12110,16 +12112,37 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(400).json({ error: "Invalid market type" });
       }
 
-      const markets = await db.select()
-        .from(predictionMarkets)
-        .where(
-          and(
-            eq(predictionMarkets.marketType, type),
-            eq(predictionMarkets.status, "OPEN"),
-            inArray(predictionMarkets.visibility, ["live", "inactive"])
+      const nowForCutoff = new Date();
+      const fetchOpenNativeMarkets = async () =>
+        db.select()
+          .from(predictionMarkets)
+          .where(
+            and(
+              eq(predictionMarkets.marketType, type),
+              eq(predictionMarkets.status, "OPEN"),
+              inArray(predictionMarkets.visibility, ["live", "inactive"]),
+              gt(predictionMarkets.endAt, nowForCutoff),
+            )
           )
-        )
-        .orderBy(desc(predictionMarkets.featured), predictionMarkets.category);
+          .orderBy(desc(predictionMarkets.featured), predictionMarkets.category);
+
+      let markets = await fetchOpenNativeMarkets();
+      if (markets.length === 0) {
+        const nowMs = Date.now();
+        const lastAttemptAt = _nativeMarketsSelfHealByType.get(type) ?? 0;
+        if (nowMs - lastAttemptAt > NATIVE_MARKETS_SELF_HEAL_COOLDOWN_MS) {
+          _nativeMarketsSelfHealByType.set(type, nowMs);
+          try {
+            const ensureResult = await ensureWeeklyMarketsForCurrentWeek("read-self-heal");
+            console.log(
+              `[Native Markets] Self-heal attempt type=${type} outcome=${ensureResult.outcome} week=${ensureResult.weekNumber} before=${ensureResult.openBefore} after=${ensureResult.openAfter}`,
+            );
+          } catch (selfHealError: any) {
+            console.warn(`[Native Markets] Self-heal failed for type=${type}:`, selfHealError?.message || selfHealError);
+          }
+          markets = await fetchOpenNativeMarkets();
+        }
+      }
 
       const marketIds = markets.map(m => m.id);
       let entries: any[] = [];
@@ -12131,8 +12154,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
 
       const engagement = await getMarketEngagementPreview(marketIds);
-
-      const nowForCutoff = new Date();
       const addLifecycleFields = (m: { endAt: Date | null }) => {
         const lifecycle = deriveNativeMarketLifecycle(m.endAt, nowForCutoff);
         return {

@@ -861,10 +861,15 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
   const { data: nativeJackpotData, isLoading: jackpotLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/jackpot'] });
 
   const { serverBettingCutoff, serverResolutionDeadline } = useMemo(() => {
-    const allNative = [...(nativeUpdownData || []), ...(nativeH2hData || []), ...(nativeGainerData || [])];
+    const allNative = [
+      ...(nativeUpdownData || []),
+      ...(nativeH2hData || []),
+      ...(nativeGainerData || []),
+      ...(nativeJackpotData || []),
+    ];
     const canonical = getCanonicalNativeCycle(allNative);
     return { serverBettingCutoff: canonical.bettingCutoff, serverResolutionDeadline: canonical.resolutionDeadline };
-  }, [nativeUpdownData, nativeH2hData, nativeGainerData]);
+  }, [nativeUpdownData, nativeH2hData, nativeGainerData, nativeJackpotData]);
 
   const marketCycle = useMarketCycle({ bettingCutoff: serverBettingCutoff, resolutionDeadline: serverResolutionDeadline });
   const isMarketClosed = marketCycle.status !== "OPEN";

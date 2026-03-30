@@ -12,12 +12,14 @@ function toIso(input: string | Date | null | undefined): string | null {
 
 /**
  * Picks one canonical cutoff+resolution pair from native market payloads.
- * We anchor to the earliest valid resolution deadline and keep its matching cutoff.
+ * Uses the latest resolution deadline so a stray stale OPEN row (old week) does not
+ * force the whole Predict UI into RESOLVED when current-week markets are also present.
  */
 export function getCanonicalNativeCycle(markets: NativeMarketCycleLike[]): {
   bettingCutoff: string | null;
   resolutionDeadline: string | null;
 } {
+  const nowMs = Date.now();
   const normalized = markets
     .map((m) => ({
       bettingCutoff: toIso(m.bettingCutoff),
@@ -29,27 +31,38 @@ export function getCanonicalNativeCycle(markets: NativeMarketCycleLike[]): {
     return { bettingCutoff: null, resolutionDeadline: null };
   }
 
-  const withResolution = normalized
+  const freshResolutionCandidates = normalized.filter(
+    (m) =>
+      !!m.resolutionDeadline &&
+      new Date(m.resolutionDeadline!).getTime() >= nowMs - 60_000,
+  );
+  const sourceForResolution = freshResolutionCandidates.length > 0 ? freshResolutionCandidates : normalized;
+
+  const withResolution = sourceForResolution
     .filter((m) => !!m.resolutionDeadline)
-    .sort((a, b) => new Date(a.resolutionDeadline!).getTime() - new Date(b.resolutionDeadline!).getTime());
+    .sort((a, b) => new Date(b.resolutionDeadline!).getTime() - new Date(a.resolutionDeadline!).getTime());
 
   if (withResolution.length > 0) {
     const chosen = withResolution[0];
-    const fallbackCutoff = normalized
-      .filter((m) => !!m.bettingCutoff)
-      .sort((a, b) => new Date(a.bettingCutoff!).getTime() - new Date(b.bettingCutoff!).getTime())[0]?.bettingCutoff ?? null;
+    const sameWeekCutoff = normalized.find(
+      (m) => m.resolutionDeadline === chosen.resolutionDeadline && m.bettingCutoff,
+    )?.bettingCutoff;
+    const latestCutoff =
+      normalized
+        .filter((m) => !!m.bettingCutoff)
+        .sort((a, b) => new Date(b.bettingCutoff!).getTime() - new Date(a.bettingCutoff!).getTime())[0]?.bettingCutoff ?? null;
     return {
-      bettingCutoff: chosen.bettingCutoff ?? fallbackCutoff,
+      bettingCutoff: chosen.bettingCutoff ?? sameWeekCutoff ?? latestCutoff,
       resolutionDeadline: chosen.resolutionDeadline!,
     };
   }
 
-  const firstCutoff = normalized
+  const latestOnlyCutoff = normalized
     .filter((m) => !!m.bettingCutoff)
-    .sort((a, b) => new Date(a.bettingCutoff!).getTime() - new Date(b.bettingCutoff!).getTime())[0]?.bettingCutoff ?? null;
+    .sort((a, b) => new Date(b.bettingCutoff!).getTime() - new Date(a.bettingCutoff!).getTime())[0]?.bettingCutoff ?? null;
 
   return {
-    bettingCutoff: firstCutoff,
+    bettingCutoff: latestOnlyCutoff,
     resolutionDeadline: null,
   };
 }
