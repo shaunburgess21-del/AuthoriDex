@@ -6217,18 +6217,27 @@ Only return the JSON object.`;
         .limit(5);
 
       // Top countries (last 30 days)
-      const topCountries = await db.select({
-        country: pageViews.country,
-        views: sql<number>`count(*)`,
-      })
-        .from(pageViews)
-        .where(and(
-          gte(pageViews.createdAt, thirtyDaysAgo),
-          isNotNull(pageViews.country),
-        ))
-        .groupBy(pageViews.country)
-        .orderBy(sql`count(*) DESC`)
-        .limit(10);
+      let topCountries: Array<{ country: string | null; views: number }> = [];
+      try {
+        topCountries = await db.select({
+          country: pageViews.country,
+          views: sql<number>`count(*)`,
+        })
+          .from(pageViews)
+          .where(and(
+            gte(pageViews.createdAt, thirtyDaysAgo),
+            isNotNull(pageViews.country),
+          ))
+          .groupBy(pageViews.country)
+          .orderBy(sql`count(*) DESC`)
+          .limit(10);
+      } catch (countryError: any) {
+        const code = String(countryError?.code ?? "");
+        const message = String(countryError?.message ?? "");
+        const missingCountryColumn = code === "42703" || /column\s+"?country"?\s+does not exist/i.test(message);
+        if (!missingCountryColumn) throw countryError;
+        console.warn("[/api/admin/traffic] country column missing on page_views; returning empty topCountries until migration is applied");
+      }
       
       res.json({
         total: Number(stats?.total || 0),

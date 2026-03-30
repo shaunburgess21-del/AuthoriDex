@@ -11,6 +11,7 @@ const RESOLVER_INTERVAL_MS = 5 * 60 * 1000;
 const RESOLVER_STARTUP_DELAY_MS = 2 * 60 * 1000;
 const SNAPSHOT_TOLERANCE_HOURS = 3;
 const MARKET_RESOLVER_LOCK_KEY = 5_202;
+const LEGACY_BLOCK_AUTO_VOID_DAYS = 14;
 
 let _lastResolverRunAt: Date | null = null;
 export function getLastResolverRunAt(): Date | null { return _lastResolverRunAt; }
@@ -768,6 +769,36 @@ async function resolveJackpot(market: any): Promise<"resolved" | "blocked"> {
   return "resolved";
 }
 
+function isStaleBlockedLegacyMarket(market: any, now: Date): boolean {
+  if (!market?.endAt) return false;
+  const endedAt = ensureDate(market.endAt);
+  if (!endedAt) return false;
+  const ageMs = now.getTime() - endedAt.getTime();
+  return ageMs >= LEGACY_BLOCK_AUTO_VOID_DAYS * 24 * 60 * 60 * 1000;
+}
+
+async function autoVoidBlockedLegacyMarket(market: any, now: Date): Promise<boolean> {
+  if (!isStaleBlockedLegacyMarket(market, now)) return false;
+  try {
+    await voidMarketBets(market.id);
+    await db.update(predictionMarkets).set({
+      resolveMethod: "auto",
+      voidReason: "Auto-voided stale blocked legacy market",
+      resolutionNotes: JSON.stringify({
+        type: market.marketType,
+        pendingReason: "auto_void_stale_blocked_legacy",
+        thresholdDays: LEGACY_BLOCK_AUTO_VOID_DAYS,
+      }),
+      updatedAt: now,
+    }).where(eq(predictionMarkets.id, market.id));
+    log(`[MarketResolver] Auto-voided stale blocked market ${market.id} (${market.marketType})`);
+    return true;
+  } catch (err: any) {
+    log(`[MarketResolver] Failed auto-void for stale blocked market ${market.id}: ${err?.message ?? err}`);
+    return false;
+  }
+}
+
 async function resolveExpiredMarketsOnce(): Promise<void> {
   try {
     const now = new Date();
@@ -792,25 +823,16 @@ async function resolveExpiredMarketsOnce(): Promise<void> {
 
     for (const market of expiredMarkets) {
       try {
-        let outcome: "resolved" | "voided" | "blocked";
+        let outcome: "resolved" | "voided" | "blocked" | null = null;
         switch (market.marketType) {
           case "updown":
             outcome = await resolveUpDown(market);
-            if (outcome === "resolved") resolved++;
-            else if (outcome === "voided") voided++;
-            else blocked++;
             break;
           case "h2h":
             outcome = await resolveH2H(market);
-            if (outcome === "resolved") resolved++;
-            else if (outcome === "voided") voided++;
-            else blocked++;
             break;
           case "gainer":
             outcome = await resolveGainer(market);
-            if (outcome === "resolved") resolved++;
-            else if (outcome === "voided") voided++;
-            else blocked++;
             break;
           case "community":
             await db.update(predictionMarkets).set({
@@ -825,12 +847,20 @@ async function resolveExpiredMarketsOnce(): Promise<void> {
             break;
           case "jackpot":
             outcome = await resolveJackpot(market);
-            if (outcome === "resolved") resolved++;
-            else blocked++;
             break;
           default:
             log(`[MarketResolver] Unknown type '${market.marketType}' for market ${market.id}, skipping`);
             skipped++;
+        }
+
+        if (outcome === "resolved") {
+          resolved++;
+        } else if (outcome === "voided") {
+          voided++;
+        } else if (outcome === "blocked") {
+          const autoVoided = await autoVoidBlockedLegacyMarket(market, now);
+          if (autoVoided) voided++;
+          else blocked++;
         }
       } catch (err: any) {
         log(`[MarketResolver] Error resolving ${market.marketType} market ${market.id}: ${err?.stack || err}`);
