@@ -7554,6 +7554,8 @@ Only return the JSON object.`;
         avatar: avatar || null,
         searchQueryOverride: searchQueryOverride || null,
       }).returning();
+
+      await db.insert(celebrityMetrics).values({ celebrityId: created.id }).onConflictDoNothing();
       
       // Audit log
       await db.insert(adminAuditLog).values({
@@ -14078,14 +14080,26 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       const source = (req.body.source as string) || "admin_upload";
 
+      const [{ cnt: existingImageCount }] = await db
+        .select({ cnt: count() })
+        .from(celebrityImages)
+        .where(eq(celebrityImages.personId, id));
+      const isFirstImageForPerson = Number(existingImageCount) === 0;
+      const publicUrl = urlData.publicUrl;
+
       const [newImage] = await db.insert(celebrityImages).values({
         personId: id,
-        imageUrl: urlData.publicUrl,
+        imageUrl: publicUrl,
         source,
-        isPrimary: false,
+        isPrimary: isFirstImageForPerson,
         votesUp: 0,
         votesDown: 0,
       }).returning();
+
+      if (isFirstImageForPerson) {
+        await db.update(trackedPeople).set({ avatar: publicUrl }).where(eq(trackedPeople.id, id));
+        await db.update(trendingPeople).set({ avatar: publicUrl }).where(eq(trendingPeople.id, id));
+      }
 
       res.json({ success: true, image: newImage });
     } catch (error: any) {

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { 
   LayoutDashboard, 
@@ -351,7 +351,7 @@ interface ScoreBreakdownData {
 
 // Helper function to get auth headers
 async function getAuthHeaders(): Promise<HeadersInit> {
-  const client = await supabase;
+  const client = await getSupabase();
   const { data: { session } } = await client.auth.getSession();
   if (!session?.access_token) {
     throw new Error("Not authenticated");
@@ -1530,6 +1530,10 @@ export default function AdminDashboard() {
     xHandle: "",
     searchQueryOverride: "",
   });
+  const MAX_ADD_CELEBRITY_GALLERY = 5;
+  const [pendingCelebrityGalleryFiles, setPendingCelebrityGalleryFiles] = useState<File[]>([]);
+  const [celebrityGalleryUploading, setCelebrityGalleryUploading] = useState(false);
+  const addCelebrityGalleryInputRef = useRef<HTMLInputElement>(null);
   const [seedApprovalCounts, setSeedApprovalCounts] = useState<SeedApprovalCounts>(DEFAULT_SEED_APPROVAL_COUNTS);
   const [seedApprovalLoading, setSeedApprovalLoading] = useState(false);
   
@@ -2118,24 +2122,76 @@ export default function AdminDashboard() {
     },
   });
 
+  const uploadCurateProfileImages = useCallback(async (personId: string, files: File[]) => {
+    const client = await getSupabase();
+    const { data: { session } } = await client.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error("Not authenticated");
+    const failures: string[] = [];
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("source", "admin_upload");
+      const res = await fetch(`/api/admin/vote/curate-profile/${personId}/images`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        failures.push(`${file.name}: ${(err as { error?: string }).error || res.statusText}`);
+      }
+    }
+    return failures;
+  }, []);
+
   // Celebrity mutations
   const createCelebrityMutation = useMutation({
-    mutationFn: async (data: typeof celebrityForm) => {
+    mutationFn: async (input: { form: typeof celebrityForm; galleryFiles: File[] }) => {
+      const { form, galleryFiles } = input;
       const res = await fetchWithAuth("/api/admin/celebrities", { 
         method: "POST", 
-        body: JSON.stringify(data) 
+        body: JSON.stringify(form) 
       });
-      if (!res.ok) throw new Error("Failed to create celebrity");
-      return res.json();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to create celebrity");
+      }
+      const created = await res.json();
+      return { created, galleryFiles };
     },
-    onSuccess: () => {
-      toast({ title: "Celebrity Created", description: "New celebrity added successfully" });
+    onSuccess: async ({ created, galleryFiles }) => {
+      const personId = created.id as string;
+      try {
+        if (galleryFiles.length > 0) {
+          setCelebrityGalleryUploading(true);
+          const failures = await uploadCurateProfileImages(personId, galleryFiles);
+          if (failures.length > 0) {
+            toast({
+              title: "Celebrity created",
+              description: `Image upload issues: ${failures.slice(0, 2).join(" · ")}${failures.length > 2 ? " …" : ""} Remove extras in Curate Profile if needed.`,
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Celebrity created",
+              description: `New celebrity added with ${galleryFiles.length} image(s) in Supabase.`,
+            });
+          }
+        } else {
+          toast({ title: "Celebrity Created", description: "New celebrity added successfully" });
+        }
+      } finally {
+        setCelebrityGalleryUploading(false);
+        setPendingCelebrityGalleryFiles([]);
+      }
       setShowCelebrityModal(false);
       setEditingCelebrity(null);
       setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
       setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
       setSeedApprovalLoading(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/vote/curate-profile"] });
     },
     onError: (error: any) => {
       toast({ title: "Create Failed", description: error.message, variant: "destructive" });
@@ -2828,6 +2884,7 @@ export default function AdminDashboard() {
   const openEditCelebrity = (celebrity: Celebrity) => {
     setSeedApprovalLoading(true);
     setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
+    setPendingCelebrityGalleryFiles([]);
     setEditingCelebrity(celebrity);
     setCelebrityForm({
       name: celebrity.name,
@@ -2896,7 +2953,10 @@ export default function AdminDashboard() {
         baselineCounts: seedApprovalCounts,
       });
     } else {
-      createCelebrityMutation.mutate(celebrityForm);
+      createCelebrityMutation.mutate({
+        form: celebrityForm,
+        galleryFiles: pendingCelebrityGalleryFiles,
+      });
     }
   };
 
@@ -3617,6 +3677,7 @@ export default function AdminDashboard() {
                 onClick={() => {
                   setEditingCelebrity(null);
                   setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
+                  setPendingCelebrityGalleryFiles([]);
                   setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
                   setSeedApprovalLoading(false);
                   setShowCelebrityModal(true);
@@ -3730,6 +3791,7 @@ export default function AdminDashboard() {
                       onClick={() => {
                         setEditingCelebrity(null);
                         setCelebrityForm({ name: "", category: "Tech", status: "main_leaderboard", wikiSlug: "", xHandle: "", searchQueryOverride: "" });
+                        setPendingCelebrityGalleryFiles([]);
                         setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
                         setSeedApprovalLoading(false);
                         setShowCelebrityModal(true);
@@ -6763,6 +6825,7 @@ export default function AdminDashboard() {
           setShowCelebrityModal(open);
           if (!open) {
             setEditingCelebrity(null);
+            setPendingCelebrityGalleryFiles([]);
             setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
             setSeedApprovalLoading(false);
           }
@@ -6858,6 +6921,68 @@ export default function AdminDashboard() {
                 Custom search query for Serper. Use this to disambiguate common names.
               </p>
             </div>
+            {!editingCelebrity && (
+              <div className="space-y-2 border-t pt-4">
+                <Label>Profile images (optional, max {MAX_ADD_CELEBRITY_GALLERY})</Label>
+                <p className="text-xs text-muted-foreground">
+                  Stored in Supabase, same pipeline as Curate Profile. The first image becomes the primary avatar; uploads run after the person is created.
+                </p>
+                <input
+                  ref={addCelebrityGalleryInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  multiple
+                  className="hidden"
+                  data-testid="input-add-celebrity-gallery"
+                  onChange={(e) => {
+                    const picked = Array.from(e.target.files || []).filter((f) =>
+                      ["image/png", "image/jpeg", "image/webp"].includes(f.type),
+                    );
+                    setPendingCelebrityGalleryFiles((prev) => {
+                      const next = [...prev, ...picked].slice(0, MAX_ADD_CELEBRITY_GALLERY);
+                      return next;
+                    });
+                    e.target.value = "";
+                  }}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={pendingCelebrityGalleryFiles.length >= MAX_ADD_CELEBRITY_GALLERY}
+                    onClick={() => addCelebrityGalleryInputRef.current?.click()}
+                    data-testid="button-add-celebrity-pick-images"
+                  >
+                    <ImagePlus className="h-4 w-4 mr-2" />
+                    Add images
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {pendingCelebrityGalleryFiles.length}/{MAX_ADD_CELEBRITY_GALLERY} selected
+                  </span>
+                </div>
+                {pendingCelebrityGalleryFiles.length > 0 && (
+                  <ul className="text-xs space-y-1 max-h-28 overflow-y-auto">
+                    {pendingCelebrityGalleryFiles.map((f, i) => (
+                      <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2">
+                        <span className="truncate">{f.name}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 shrink-0 px-2"
+                          onClick={() =>
+                            setPendingCelebrityGalleryFiles((prev) => prev.filter((_, j) => j !== i))
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {editingCelebrity && (
               <div className="space-y-3 border-t pt-4">
                 <div>
@@ -6922,11 +7047,17 @@ export default function AdminDashboard() {
                 !celebrityForm.name ||
                 createCelebrityMutation.isPending ||
                 updateCelebrityMutation.isPending ||
+                celebrityGalleryUploading ||
                 (editingCelebrity !== null && seedApprovalLoading)
               }
               data-testid="button-save-celebrity"
             >
-              {(createCelebrityMutation.isPending || updateCelebrityMutation.isPending) ? (
+              {celebrityGalleryUploading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Uploading images…
+                </>
+              ) : (createCelebrityMutation.isPending || updateCelebrityMutation.isPending) ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Saving...
