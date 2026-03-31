@@ -8812,10 +8812,16 @@ Only return the JSON object.`;
   });
 
   function stripCitations(text: string): string {
-    return text
+    const withoutCitations = text
       .replace(/\s*\(\[([^\]]*)\]\([^)]*\)\)/g, "")
       .replace(/\s*\[([^\]]*)\]\([^)]*\)/g, "")
-      .replace(/\s{2,}/g, " ")
+      .trim();
+
+    return withoutCitations
+      .split("\n")
+      .map((line) => line.replace(/[ \t]{2,}/g, " ").trimEnd())
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
       .trim();
   }
 
@@ -8851,7 +8857,7 @@ Only return the JSON object.`;
         ? `\nCurrent content for reference (improve upon this):\n"${existingContent}"`
         : "";
 
-      const systemPrompt = `You are writing content for a sentiment poll on VoxDex, a trend-tracking and prediction platform. Sentiment polls let users vote Support, Neutral, or Oppose on current topics. Use web search to ensure all facts are current and accurate. Write plain text only — no markdown, no headers, no bullets, no bold. Use blank lines between paragraphs for readability.`;
+      const systemPrompt = `You are writing content for a sentiment poll on VoxDex, a trend-tracking and prediction platform. Sentiment polls let users vote Support, Neutral, or Oppose on current topics. Use web search to keep facts current and accurate. Write plain text only. Keep it concise and easy to scan. Use short paragraphs with blank lines between them. If a list improves clarity, you may use simple '-' bullet points. Do not use markdown headers or bold formatting.`;
 
       let userPrompt: string;
       let maxTokens: number;
@@ -8867,14 +8873,17 @@ Write a compelling 1-3 sentence question or statement for this sentiment poll ca
 Category: ${poll.category || "General"}
 Subject/Question: "${poll.subjectText || ""}"${linkedPersonBlock}${existingBlock}
 
-Write a detailed, multi-paragraph context section for this sentiment poll. This will be shown on the poll's detail page under a "Context" heading. Cover:
-- Background and history of the topic
-- Key perspectives on both sides of the debate
-- Recent developments and why this matters now
-- Important facts and figures where relevant
+Write a concise context section for this sentiment poll. This is shown on the detail page under a "Context" heading.
 
-Aim for 3-5 substantive paragraphs separated by blank lines. Be factual, balanced, and informative. Help readers understand the full picture so they can form their own opinion. Use a journalistic, engaging tone.`;
-        maxTokens = 1000;
+Requirements:
+- Prefer 2-3 short paragraphs (1-3 sentences each), separated by blank lines.
+- Optionally use 3-5 '-' bullet points only if it makes the content clearer.
+- Stay balanced, factual, and neutral.
+- Cover only the essentials: background, key perspectives, and what changed recently.
+- Avoid long tangents and avoid repeating the headline.
+
+Target length: about 90-150 words.`;
+        maxTokens = 450;
       }
 
       const openai = new OpenAI({
@@ -9804,7 +9813,7 @@ Aim for 3-5 substantive paragraphs separated by blank lines. Be factual, balance
         ? `\nCurrent content for reference (improve upon this):\n"${existingContent}"`
         : "";
 
-      const systemPrompt = `You are writing content for an opinion poll on VoxDex, a trend-tracking and prediction platform. Opinion polls let users pick their favorite option from a list. Use web search to ensure all facts are current and accurate. Write plain text only — no markdown, no headers, no bullets, no bold. Use blank lines between paragraphs for readability.`;
+      const systemPrompt = `You are writing content for an opinion poll on VoxDex, a trend-tracking and prediction platform. Opinion polls let users pick a favorite option from a list. Use web search to keep facts current and accurate. Write plain text only. Keep it concise and easy to scan. Use short paragraphs with blank lines between them. If a list improves clarity, you may use simple '-' bullet points. Do not use markdown headers or bold formatting.`;
 
       let userPrompt: string;
       let maxTokens: number;
@@ -9822,14 +9831,17 @@ Category: ${poll.category || "General"}
 Options: ${optionNames}
 ${poll.description ? `Subject/Question: "${poll.description}"` : ""}${existingBlock}
 
-Write a detailed, multi-paragraph context section for this opinion poll. This will be shown on the poll's detail page under a "Context" heading. Cover:
-- Background on the topic and why it's interesting
-- What makes each option compelling or noteworthy
-- Relevant context, history, or recent developments
-- Why this debate matters to people
+Write a concise context section for this opinion poll. This is shown on the detail page under a "Context" heading.
 
-Aim for 3-5 substantive paragraphs separated by blank lines. Be informative, engaging, and balanced. Help readers appreciate the nuances of each option so they can make a thoughtful choice.`;
-        maxTokens = 1000;
+Requirements:
+- Prefer 2-3 short paragraphs (1-3 sentences each), separated by blank lines.
+- Optionally use 3-5 '-' bullet points only if it improves readability.
+- Be balanced and neutral across options.
+- Focus on essentials: why this choice matters, what distinguishes options, and recent context.
+- Keep it practical and avoid overexplaining.
+
+Target length: about 90-150 words.`;
+        maxTokens = 450;
       }
 
       const openai = new OpenAI({
