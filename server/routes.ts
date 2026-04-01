@@ -6503,7 +6503,10 @@ Only return the JSON object.`;
       res.json({ url: urlData.publicUrl, path: filePath });
     } catch (error: any) {
       console.error("Upload error:", error);
-      if (error.message?.includes('Only PNG')) {
+      if (
+        error.message?.includes('Only PNG') ||
+        error.message?.includes('Could not compress image below')
+      ) {
         return res.status(400).json({ error: error.message });
       }
       res.status(500).json({ error: "Upload failed" });
@@ -14043,7 +14046,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.status(400).json({ error: "No file uploaded" });
       }
 
-      const optimized = await optimizeImage(file.buffer, { maxWidth: 800 });
+      const optimized = await optimizeImage(file.buffer, {
+        maxWidth: 800,
+        quality: 80,
+        targetBytes: 200 * 1024,
+        minQuality: 60,
+        minWidth: 640,
+      });
 
       const timestamp = Date.now();
       const filePath = `curate-profile/${id}/${timestamp}${optimized.extension}`;
@@ -14116,7 +14125,10 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       res.json({ success: true, image: newImage });
     } catch (error: any) {
       console.error("Error adding celebrity image:", error);
-      if (error.message?.includes('Only PNG')) {
+      if (
+        error.message?.includes('Only PNG') ||
+        error.message?.includes('Could not compress image below')
+      ) {
         return res.status(400).json({ error: error.message });
       }
       res.status(500).json({ error: "Failed to add image" });
