@@ -19,7 +19,7 @@ import { applyAdminCreditAdjustment } from "./utils/admin-credits";
 import { optimizeImage } from "./utils/image-optimize";
 import geoip from "geoip-lite";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
-import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext, probeSerperSearchLive } from "./providers/serper";
+import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext, probeSerperSearchLive, refreshSerperCacheForPerson } from "./providers/serper";
 import { getSourceStats } from "./scoring/sourceStats";
 import { 
   normalizeSourceValue, 
@@ -7378,6 +7378,8 @@ Only return the JSON object.`;
               topResultTitle?: string | null;
               searchVolume?: number;
               topStories?: Array<{ title?: string }>;
+              peopleAlsoAsk?: string[];
+              relatedSearches?: string[];
             };
             searchVolume = typeof data.searchVolume === "number" ? data.searchVolume : null;
             if (typeof data.organicCount === "number") {
@@ -7386,6 +7388,8 @@ Only return the JSON object.`;
             topResultTitle =
               (typeof data.topResultTitle === "string" ? data.topResultTitle : null)
               ?? (data.topStories?.[0]?.title ?? null)
+              ?? (typeof data.peopleAlsoAsk?.[0] === "string" ? data.peopleAlsoAsk[0] : null)
+              ?? (typeof data.relatedSearches?.[0] === "string" ? data.relatedSearches[0] : null)
               ?? null;
 
             cachedAt = row.fetchedAt.toISOString();
@@ -7448,6 +7452,82 @@ Only return the JSON object.`;
   });
 
   // ============ ADMIN: SERPER SEARCH LIVE PROBE ============
+
+  app.post("/api/admin/serper-refresh", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { personIds } = req.body ?? {};
+      if (!Array.isArray(personIds) || personIds.length === 0) {
+        return res.status(400).json({ error: "personIds[] is required" });
+      }
+
+      const uniquePersonIds = Array.from(new Set(personIds.filter((v: unknown) => typeof v === "string" && v.trim())));
+      if (uniquePersonIds.length === 0) {
+        return res.status(400).json({ error: "No valid personIds provided" });
+      }
+      if (uniquePersonIds.length > 25) {
+        return res.status(400).json({ error: "Too many personIds (max 25)" });
+      }
+
+      const people = await db
+        .select({
+          id: trackedPeople.id,
+          name: trackedPeople.name,
+          searchQueryOverride: trackedPeople.searchQueryOverride,
+        })
+        .from(trackedPeople)
+        .where(inArray(trackedPeople.id, uniquePersonIds));
+
+      const limit = pLimit(2);
+      const refreshed: Array<{
+        personId: string;
+        name: string;
+        organicCount: number | null;
+        topResultTitle: string | null;
+        searchVolume: number;
+      }> = [];
+      const failed: Array<{ personId: string; name: string; reason: string }> = [];
+
+      await Promise.all(people.map((person) =>
+        limit(async () => {
+          const refreshedResult = await refreshSerperCacheForPerson(
+            person.name,
+            person.searchQueryOverride ?? null
+          );
+          if (!refreshedResult) {
+            failed.push({
+              personId: person.id,
+              name: person.name,
+              reason: "Serper live refresh failed",
+            });
+            return;
+          }
+          refreshed.push({
+            personId: person.id,
+            name: person.name,
+            organicCount: refreshedResult.organicCount ?? null,
+            topResultTitle: refreshedResult.topResultTitle ?? null,
+            searchVolume: refreshedResult.searchVolume,
+          });
+        })
+      ));
+
+      const missingIds = uniquePersonIds.filter((id) => !people.some((p) => p.id === id));
+      for (const id of missingIds) {
+        failed.push({ personId: id, name: id, reason: "Person not found" });
+      }
+
+      res.json({
+        requestedCount: uniquePersonIds.length,
+        refreshedCount: refreshed.length,
+        failedCount: failed.length,
+        refreshed,
+        failed,
+      });
+    } catch (error: any) {
+      console.error("Error in serper refresh:", error);
+      res.status(500).json({ error: "Serper refresh failed" });
+    }
+  });
 
   app.post("/api/admin/serper-probe", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {

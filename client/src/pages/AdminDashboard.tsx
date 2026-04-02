@@ -1526,6 +1526,7 @@ export default function AdminDashboard() {
   const [serperAuditFilter, setSerperAuditFilter] = useState<
     "all" | "zero_results" | "no_cache" | "stale" | "ok"
   >("all");
+  const [serperRefreshLoading, setSerperRefreshLoading] = useState(false);
   const [serperProbeLoading, setSerperProbeLoading] = useState<string | null>(null);
   const [serperProbeResults, setSerperProbeResults] = useState<Record<string, any>>({});
   const [showCelebrityModal, setShowCelebrityModal] = useState(false);
@@ -6417,6 +6418,47 @@ export default function AdminDashboard() {
                             )}
                           </button>
                         )}
+                        {serperAuditResults?.results?.some((r: any) => r.status === "stale") && (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded border border-yellow-500/40 bg-yellow-500/10 px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-500/20 transition-colors disabled:opacity-50"
+                            disabled={serperRefreshLoading}
+                            onClick={async () => {
+                              const staleIds = serperAuditResults.results
+                                .filter((r: any) => r.status === "stale")
+                                .map((r: any) => r.personId);
+                              if (!staleIds.length) return;
+
+                              setSerperRefreshLoading(true);
+                              try {
+                                const headers = await getAuthHeaders();
+                                const refreshResp = await fetch("/api/admin/serper-refresh", {
+                                  method: "POST",
+                                  headers: { ...headers, "Content-Type": "application/json" },
+                                  body: JSON.stringify({ personIds: staleIds }),
+                                });
+                                if (!refreshResp.ok) throw new Error(await refreshResp.text());
+
+                                const auditResp = await fetch("/api/admin/audit-serper", {
+                                  method: "POST",
+                                  headers,
+                                });
+                                if (!auditResp.ok) throw new Error(await auditResp.text());
+                                const auditData = await auditResp.json();
+                                setSerperAuditResults(auditData);
+                                setSerperAuditExpanded(true);
+                              } catch (err: any) {
+                                console.error("Serper stale refresh failed:", err);
+                              } finally {
+                                setSerperRefreshLoading(false);
+                              }
+                            }}
+                            title="Run live Serper refresh only for stale rows"
+                          >
+                            {serperRefreshLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                            {serperRefreshLoading ? "Refreshing..." : "Refresh Stale"}
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
@@ -6519,7 +6561,15 @@ export default function AdminDashboard() {
                                       {r.queryUsed}
                                     </td>
                                     <td className="px-2 py-1.5 text-right tabular-nums">
-                                      {r.organicCount != null ? r.organicCount : "—"}
+                                      {r.organicCount != null ? (
+                                        r.organicCount
+                                      ) : r.searchVolume != null ? (
+                                        <span title="Composite search activity score (0-100). Organic result count will appear after cache refresh.">
+                                          {r.searchVolume}
+                                        </span>
+                                      ) : (
+                                        "—"
+                                      )}
                                     </td>
                                     <td className="px-2 py-1.5 text-muted-foreground max-w-[250px]">
                                       {r.topResultTitle ? (

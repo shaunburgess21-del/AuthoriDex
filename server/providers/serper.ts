@@ -182,6 +182,38 @@ function buildSerperResultFromApiData(data: SerperSearchResponse): SerperResult 
   };
 }
 
+async function fetchSerperLiveResult(query: string): Promise<SerperResult | null> {
+  if (!SERPER_API_KEY) {
+    return null;
+  }
+
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
+    return null;
+  }
+
+  const response = await serperFetch(SERPER_BASE_URL, {
+    method: "POST",
+    headers: {
+      "X-API-KEY": SERPER_API_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      q: trimmedQuery,
+      num: 10,
+      gl: "us",
+      hl: "en",
+    }),
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data: SerperSearchResponse = await response.json();
+  return buildSerperResultFromApiData(data);
+}
+
 /**
  * Live Serper web search for admin diagnostics (does not read or write api_cache).
  */
@@ -199,29 +231,48 @@ export async function probeSerperSearchLive(
   }
 
   try {
-    const response = await serperFetch(SERPER_BASE_URL, {
-      method: "POST",
-      headers: {
-        "X-API-KEY": SERPER_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        q: searchQueryOverride?.trim() || trimmed,
-        num: 10,
-        gl: "us",
-        hl: "en",
-      }),
-    });
+    const result = await fetchSerperLiveResult(searchQueryOverride?.trim() || trimmed);
+    if (!result) {
+      console.error(`[Serper] Probe API error for ${trimmed}`);
+      return null;
+    }
+    return result;
+  } catch (error) {
+    console.error(`[Serper] Probe error for ${trimmed}:`, error);
+    return null;
+  }
+}
 
-    if (!response.ok) {
-      console.error(`[Serper] Probe API error for ${trimmed}: ${response.status}`);
+/**
+ * Force-refresh Serper cache for one person using a live API call.
+ * This bypasses stale-cache fallback and suspicious-drop guard intentionally.
+ */
+export async function refreshSerperCacheForPerson(
+  name: string,
+  searchQueryOverride?: string | null
+): Promise<SerperResult | null> {
+  if (!SERPER_API_KEY) {
+    return null;
+  }
+
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    return null;
+  }
+
+  const query = searchQueryOverride?.trim() || trimmedName;
+  try {
+    const result = await fetchSerperLiveResult(query);
+    if (!result) {
+      console.error(`[Serper] Refresh API error for ${trimmedName}`);
       return null;
     }
 
-    const data: SerperSearchResponse = await response.json();
-    return buildSerperResultFromApiData(data);
+    const cacheKey = `serper:search:${trimmedName.replace(/\s+/g, "_").toLowerCase()}`;
+    await setCachedResponse(cacheKey, "serper", JSON.stringify(result), 12);
+    return result;
   } catch (error) {
-    console.error(`[Serper] Probe error for ${trimmed}:`, error);
+    console.error(`[Serper] Refresh error for ${trimmedName}:`, error);
     return null;
   }
 }
@@ -259,27 +310,11 @@ export async function fetchSerperData(name: string, searchQueryOverride?: string
     }
 
     _serperSearchCallsAttempted++;
-    const response = await serperFetch(SERPER_BASE_URL, {
-      method: "POST",
-      headers: {
-        "X-API-KEY": SERPER_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        q: searchQueryOverride || name,
-        num: 10,
-        gl: "us",
-        hl: "en",
-      }),
-    });
-
-    if (!response.ok) {
-      console.error(`[Serper] API error for ${name}: ${response.status}`);
+    const result = await fetchSerperLiveResult(searchQueryOverride || name);
+    if (!result) {
+      console.error(`[Serper] API error for ${name}`);
       return null;
     }
-
-    const data: SerperSearchResponse = await response.json();
-    const result = buildSerperResultFromApiData(data);
 
     // CACHE VALIDITY GATE
     // Prevent caching garbage data when there's a suspicious drop.
@@ -293,6 +328,8 @@ export async function fetchSerperData(name: string, searchQueryOverride?: string
       // If drop exceeds 70% and we had meaningful data before, keep cached value
       if (dropPercent > 70 && cachedResult.searchVolume >= 20) {
         console.log(`[Serper] Suspicious drop for ${name}: ${cachedResult.searchVolume.toFixed(1)} → ${result.searchVolume.toFixed(1)} (${dropPercent.toFixed(0)}% drop), keeping cached value`);
+        // Keep existing value but refresh fetchedAt/expiresAt so audit does not show a false stale.
+        await setCachedResponse(cacheKey, "serper", JSON.stringify(cachedResult), CACHE_TTL_HOURS);
         return cachedResult;
       }
     }
