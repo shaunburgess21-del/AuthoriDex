@@ -1520,6 +1520,14 @@ export default function AdminDashboard() {
   const [msAuditFilter, setMsAuditFilter] = useState<"all" | "zero_articles" | "no_cache" | "stale" | "ok">("all");
   const [msProbeLoading, setMsProbeLoading] = useState<string | null>(null);
   const [msProbeResults, setMsProbeResults] = useState<Record<string, any>>({});
+  const [serperAuditResults, setSerperAuditResults] = useState<any>(null);
+  const [serperAuditLoading, setSerperAuditLoading] = useState(false);
+  const [serperAuditExpanded, setSerperAuditExpanded] = useState(false);
+  const [serperAuditFilter, setSerperAuditFilter] = useState<
+    "all" | "zero_results" | "no_cache" | "stale" | "ok"
+  >("all");
+  const [serperProbeLoading, setSerperProbeLoading] = useState<string | null>(null);
+  const [serperProbeResults, setSerperProbeResults] = useState<Record<string, any>>({});
   const [showCelebrityModal, setShowCelebrityModal] = useState(false);
   const [editingCelebrity, setEditingCelebrity] = useState<Celebrity | null>(null);
   const [celebrityForm, setCelebrityForm] = useState({
@@ -6383,6 +6391,214 @@ export default function AdminDashboard() {
                                   </td>
                                 </tr>
                               ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3 rounded-lg border">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">Serper Search Audit</span>
+                      <div className="flex items-center gap-2">
+                        {serperAuditResults && (
+                          <button
+                            type="button"
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            onClick={() => setSerperAuditExpanded((prev) => !prev)}
+                          >
+                            {serperAuditResults.issueCount} issue{serperAuditResults.issueCount !== 1 ? "s" : ""} /{" "}
+                            {serperAuditResults.total} total
+                            {serperAuditExpanded ? (
+                              <ChevronUp className="inline h-3 w-3 ml-1" />
+                            ) : (
+                              <ChevronDown className="inline h-3 w-3 ml-1" />
+                            )}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+                          disabled={serperAuditLoading}
+                          onClick={async () => {
+                            setSerperAuditLoading(true);
+                            try {
+                              const headers = await getAuthHeaders();
+                              const resp = await fetch("/api/admin/audit-serper", {
+                                method: "POST",
+                                headers,
+                              });
+                              if (!resp.ok) throw new Error(await resp.text());
+                              const data = await resp.json();
+                              setSerperAuditResults(data);
+                              setSerperAuditExpanded(true);
+                            } catch (err: any) {
+                              console.error("Serper audit failed:", err);
+                            } finally {
+                              setSerperAuditLoading(false);
+                            }
+                          }}
+                        >
+                          {serperAuditLoading ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Search className="h-3 w-3" />
+                          )}
+                          {serperAuditLoading ? "Auditing..." : "Run Audit"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {serperAuditExpanded && serperAuditResults?.results && (
+                      <div className="mt-3">
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {(["all", "zero_results", "no_cache", "stale", "ok"] as const).map((f) => {
+                            const count =
+                              f === "all"
+                                ? serperAuditResults.results.length
+                                : serperAuditResults.results.filter((r: any) => r.status === f).length;
+                            return (
+                              <button
+                                key={f}
+                                type="button"
+                                className={cn(
+                                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors border",
+                                  serperAuditFilter === f
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-background text-muted-foreground border-border hover:bg-muted/50"
+                                )}
+                                onClick={() => setSerperAuditFilter(f)}
+                              >
+                                {f === "all"
+                                  ? "All"
+                                  : f === "zero_results"
+                                    ? "Zero Results"
+                                    : f === "no_cache"
+                                      ? "No Cache"
+                                      : f === "stale"
+                                        ? "Stale"
+                                        : "OK"}
+                                <span className="opacity-70">({count})</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="max-h-80 overflow-y-auto rounded border bg-background/50 text-xs">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b text-muted-foreground sticky top-0 bg-background">
+                                <th className="px-2 py-1.5 text-left font-medium">Name</th>
+                                <th className="px-2 py-1.5 text-left font-medium">Query Used</th>
+                                <th className="px-2 py-1.5 text-right font-medium">Results</th>
+                                <th className="px-2 py-1.5 text-left font-medium">Top Result Title</th>
+                                <th className="px-2 py-1.5 text-left font-medium">Status</th>
+                                <th className="px-2 py-1.5 text-right font-medium">Cache Age</th>
+                                <th className="px-2 py-1.5 text-center font-medium">Live Test</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {serperAuditResults.results
+                                .filter(
+                                  (r: any) => serperAuditFilter === "all" || r.status === serperAuditFilter
+                                )
+                                .map((r: any) => (
+                                  <tr
+                                    key={r.personId}
+                                    className={cn(
+                                      "border-b last:border-0",
+                                      r.status === "ok" ? "opacity-50" : "hover:bg-muted/30"
+                                    )}
+                                  >
+                                    <td className="px-2 py-1.5 font-medium whitespace-nowrap">{r.name}</td>
+                                    <td
+                                      className="px-2 py-1.5 text-muted-foreground max-w-[140px] truncate"
+                                      title={r.queryUsed}
+                                    >
+                                      {r.queryUsed}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right tabular-nums">
+                                      {r.organicCount != null ? r.organicCount : "—"}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-muted-foreground max-w-[250px]">
+                                      {r.topResultTitle ? (
+                                        <span className="line-clamp-2 text-[10px]" title={r.topResultTitle}>
+                                          {r.topResultTitle}
+                                        </span>
+                                      ) : (
+                                        <span className="italic text-muted-foreground/50">none</span>
+                                      )}
+                                    </td>
+                                    <td className="px-2 py-1.5">
+                                      <Badge
+                                        variant="outline"
+                                        className={cn("text-[10px]", {
+                                          "border-green-500/50 text-green-500": r.status === "ok",
+                                          "border-red-500/50 text-red-500": r.status === "zero_results",
+                                          "border-yellow-500/50 text-yellow-500":
+                                            r.status === "no_cache" || r.status === "stale",
+                                        })}
+                                      >
+                                        {r.status === "ok"
+                                          ? "OK"
+                                          : r.status === "zero_results"
+                                            ? "Zero Results"
+                                            : r.status === "no_cache"
+                                              ? "No Cache"
+                                              : "Stale"}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right text-muted-foreground whitespace-nowrap">
+                                      {r.cacheAge || "—"}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-center">
+                                      {serperProbeResults[r.personId] ? (
+                                        <div className="text-[10px] leading-tight text-muted-foreground">
+                                          <span
+                                            className="tabular-nums"
+                                            title={`Activity ${serperProbeResults[r.personId].searchVolume}`}
+                                          >
+                                            {serperProbeResults[r.personId].organicCount} org
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="inline-flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 disabled:opacity-50"
+                                          disabled={serperProbeLoading === r.personId}
+                                          onClick={async () => {
+                                            setSerperProbeLoading(r.personId);
+                                            try {
+                                              const headers = await getAuthHeaders();
+                                              const resp = await fetch("/api/admin/serper-probe", {
+                                                method: "POST",
+                                                headers: { ...headers, "Content-Type": "application/json" },
+                                                body: JSON.stringify({
+                                                  personName: r.name,
+                                                  searchQueryOverride: r.queryUsed !== r.name ? r.queryUsed : undefined,
+                                                }),
+                                              });
+                                              if (!resp.ok) throw new Error(await resp.text());
+                                              const data = await resp.json();
+                                              setSerperProbeResults((prev) => ({ ...prev, [r.personId]: data }));
+                                            } catch (err: any) {
+                                              console.error("Serper probe failed:", err);
+                                            } finally {
+                                              setSerperProbeLoading(null);
+                                            }
+                                          }}
+                                        >
+                                          {serperProbeLoading === r.personId ? (
+                                            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                          ) : (
+                                            "Test"
+                                          )}
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
                             </tbody>
                           </table>
                         </div>

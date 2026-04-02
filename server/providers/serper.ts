@@ -111,13 +111,17 @@ async function setCachedResponse(
   });
 }
 
-interface SerperResult {
+export interface SerperResult {
   searchVolume: number;
   newsCount: number;
   delta: number;
   relatedSearches?: string[];
   peopleAlsoAsk?: string[];
   topStories?: Array<{ title: string; link: string }>;
+  /** Organic web results count from Serper (for audits; optional on legacy cache rows). */
+  organicCount?: number;
+  /** First organic title, else first top story title (for audits). */
+  topResultTitle?: string | null;
 }
 
 interface SerperSearchResponse {
@@ -129,6 +133,97 @@ interface SerperSearchResponse {
   relatedSearches?: Array<{ query: string }>;
   peopleAlsoAsk?: Array<{ question: string }>;
   sitelinks?: { inline?: Array<{ title: string; link: string }>; expanded?: Array<{ title: string; link: string }> };
+}
+
+function buildSerperResultFromApiData(data: SerperSearchResponse): SerperResult {
+  const organicCount = (data.organic || []).length;
+  const newsCount = (data.news || []).length;
+  const hasKnowledgeGraph = data.knowledgeGraph?.title ? 1 : 0;
+  const hasTopStories = (data.topStories || []).length > 0 ? 1 : 0;
+  const relatedSearchCount = (data.relatedSearches || []).length;
+  const peopleAlsoAskCount = (data.peopleAlsoAsk || []).length;
+  const hasSitelinks = (data.sitelinks?.inline?.length || 0) + (data.sitelinks?.expanded?.length || 0) > 0 ? 1 : 0;
+
+  const searchActivityScore =
+    Math.min(40, organicCount * 4) +
+    hasKnowledgeGraph * 20 +
+    Math.min(15, newsCount * 3) +
+    Math.min(10, relatedSearchCount) +
+    Math.min(10, peopleAlsoAskCount * 2.5) +
+    hasSitelinks * 5;
+
+  const recentResults = (data.organic || []).filter((r) => {
+    if (!r.date) return false;
+    const date = new Date(r.date);
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return date > dayAgo;
+  }).length;
+
+  const searchVolume = searchActivityScore;
+  const delta = recentResults > 3 ? 0.3 : recentResults > 1 ? 0.1 : recentResults > 0 ? 0.05 : 0;
+
+  const rawRelated = (data.relatedSearches || []).map((r) => r.query.trim());
+  const rawPAA = (data.peopleAlsoAsk || []).map((r) => r.question.trim());
+  const deduped = (arr: string[]) => Array.from(new Set(arr)).slice(0, 5);
+  const topStories = (data.topStories || []).slice(0, 3).map((s) => ({ title: s.title, link: s.link }));
+
+  const topResultTitle =
+    (data.organic?.[0]?.title) ?? (data.topStories?.[0]?.title) ?? null;
+
+  return {
+    searchVolume,
+    newsCount,
+    delta,
+    relatedSearches: deduped(rawRelated),
+    peopleAlsoAsk: deduped(rawPAA),
+    topStories,
+    organicCount,
+    topResultTitle,
+  };
+}
+
+/**
+ * Live Serper web search for admin diagnostics (does not read or write api_cache).
+ */
+export async function probeSerperSearchLive(
+  personName: string,
+  searchQueryOverride?: string | null
+): Promise<SerperResult | null> {
+  if (!SERPER_API_KEY) {
+    return null;
+  }
+
+  const trimmed = personName.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const response = await serperFetch(SERPER_BASE_URL, {
+      method: "POST",
+      headers: {
+        "X-API-KEY": SERPER_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        q: searchQueryOverride?.trim() || trimmed,
+        num: 10,
+        gl: "us",
+        hl: "en",
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[Serper] Probe API error for ${trimmed}: ${response.status}`);
+      return null;
+    }
+
+    const data: SerperSearchResponse = await response.json();
+    return buildSerperResultFromApiData(data);
+  } catch (error) {
+    console.error(`[Serper] Probe error for ${trimmed}:`, error);
+    return null;
+  }
 }
 
 export async function fetchSerperData(name: string, searchQueryOverride?: string | null): Promise<SerperResult | null> {
@@ -184,57 +279,7 @@ export async function fetchSerperData(name: string, searchQueryOverride?: string
     }
 
     const data: SerperSearchResponse = await response.json();
-
-    // =========================================================================
-    // COMPOSITE SEARCH ACTIVITY SCORE
-    // =========================================================================
-    // Don't rely on totalResults - it's often 0 or unreliable.
-    // Instead, compute a composite score from multiple stable signals.
-    
-    const organicCount = (data.organic || []).length;
-    const newsCount = (data.news || []).length;
-    const hasKnowledgeGraph = data.knowledgeGraph?.title ? 1 : 0;
-    const hasTopStories = (data.topStories || []).length > 0 ? 1 : 0;
-    const relatedSearchCount = (data.relatedSearches || []).length;
-    const peopleAlsoAskCount = (data.peopleAlsoAsk || []).length;
-    const hasSitelinks = (data.sitelinks?.inline?.length || 0) + (data.sitelinks?.expanded?.length || 0) > 0 ? 1 : 0;
-    
-    // Composite search activity score (0-100 scale)
-    // Weights: organic results (40), knowledge graph (20), news presence (15), 
-    //          related searches (10), people also ask (10), sitelinks (5)
-    const searchActivityScore = 
-      Math.min(40, organicCount * 4) +              // Up to 40 points (10 results = 40)
-      hasKnowledgeGraph * 20 +                       // 20 points if KG present
-      Math.min(15, newsCount * 3) +                  // Up to 15 points (5 news = 15)
-      Math.min(10, relatedSearchCount) +             // Up to 10 points
-      Math.min(10, peopleAlsoAskCount * 2.5) +       // Up to 10 points (4 questions = 10)
-      hasSitelinks * 5;                              // 5 points if sitelinks present
-    
-    // Recent results for delta calculation
-    const recentResults = (data.organic || []).filter((r) => {
-      if (!r.date) return false;
-      const date = new Date(r.date);
-      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      return date > dayAgo;
-    }).length;
-
-    // searchVolume is now the composite score (0-100)
-    const searchVolume = searchActivityScore;
-    const delta = recentResults > 3 ? 0.3 : recentResults > 1 ? 0.1 : recentResults > 0 ? 0.05 : 0;
-
-    const rawRelated = (data.relatedSearches || []).map(r => r.query.trim());
-    const rawPAA = (data.peopleAlsoAsk || []).map(r => r.question.trim());
-    const deduped = (arr: string[]) => Array.from(new Set(arr)).slice(0, 5);
-    const topStories = (data.topStories || []).slice(0, 3).map(s => ({ title: s.title, link: s.link }));
-
-    const result: SerperResult = {
-      searchVolume,
-      newsCount,
-      delta,
-      relatedSearches: deduped(rawRelated),
-      peopleAlsoAsk: deduped(rawPAA),
-      topStories,
-    };
+    const result = buildSerperResultFromApiData(data);
 
     // CACHE VALIDITY GATE
     // Prevent caching garbage data when there's a suspicious drop.
@@ -242,12 +287,12 @@ export async function fetchSerperData(name: string, searchQueryOverride?: string
     if (rawCached) {
       const cachedResult = JSON.parse(rawCached.responseData) as SerperResult;
       const dropPercent = cachedResult.searchVolume > 0 
-        ? (1 - searchVolume / cachedResult.searchVolume) * 100 
+        ? (1 - result.searchVolume / cachedResult.searchVolume) * 100 
         : 0;
       
       // If drop exceeds 70% and we had meaningful data before, keep cached value
       if (dropPercent > 70 && cachedResult.searchVolume >= 20) {
-        console.log(`[Serper] Suspicious drop for ${name}: ${cachedResult.searchVolume.toFixed(1)} → ${searchVolume.toFixed(1)} (${dropPercent.toFixed(0)}% drop), keeping cached value`);
+        console.log(`[Serper] Suspicious drop for ${name}: ${cachedResult.searchVolume.toFixed(1)} → ${result.searchVolume.toFixed(1)} (${dropPercent.toFixed(0)}% drop), keeping cached value`);
         return cachedResult;
       }
     }

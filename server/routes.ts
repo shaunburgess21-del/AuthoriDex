@@ -19,7 +19,7 @@ import { applyAdminCreditAdjustment } from "./utils/admin-credits";
 import { optimizeImage } from "./utils/image-optimize";
 import geoip from "geoip-lite";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
-import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext } from "./providers/serper";
+import { fetchWebSearchContext, fetchTrendingNewsContext, fetchNetWorthContext, probeSerperSearchLive } from "./providers/serper";
 import { getSourceStats } from "./scoring/sourceStats";
 import { 
   normalizeSourceValue, 
@@ -7307,6 +7307,168 @@ Only return the JSON object.`;
     } catch (error: any) {
       console.error("Error in mediastack probe:", error);
       res.status(500).json({ error: "Mediastack probe failed" });
+    }
+  });
+
+  // ============ ADMIN: SERPER SEARCH AUDIT (cached) ============
+
+  app.post("/api/admin/audit-serper", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const people = await db.select({
+        id: trackedPeople.id,
+        name: trackedPeople.name,
+        searchQueryOverride: trackedPeople.searchQueryOverride,
+        category: trackedPeople.category,
+      }).from(trackedPeople).orderBy(trackedPeople.name);
+
+      const now = new Date();
+      const STALE_HOURS = 24;
+
+      interface SerperAuditEntry {
+        personId: string;
+        name: string;
+        category: string;
+        queryUsed: string;
+        organicCount: number | null;
+        topResultTitle: string | null;
+        searchVolume: number | null;
+        status: "ok" | "zero_results" | "no_cache" | "stale";
+        cacheAge: string | null;
+        cachedAt: string | null;
+      }
+
+      const allCacheKeys: string[] = [];
+      for (const person of people) {
+        const slug = person.name.replace(/\s+/g, "_").toLowerCase();
+        allCacheKeys.push(`serper:search:${slug}`);
+      }
+
+      const cacheRows = allCacheKeys.length > 0
+        ? await db.select({
+            cacheKey: apiCache.cacheKey,
+            responseData: apiCache.responseData,
+            fetchedAt: apiCache.fetchedAt,
+          }).from(apiCache).where(inArray(apiCache.cacheKey, allCacheKeys))
+        : [];
+
+      const cacheMap = new Map<string, { responseData: string; fetchedAt: Date }>();
+      for (const row of cacheRows) {
+        cacheMap.set(row.cacheKey, { responseData: row.responseData, fetchedAt: row.fetchedAt });
+      }
+
+      const results: SerperAuditEntry[] = [];
+
+      for (const person of people) {
+        const slug = person.name.replace(/\s+/g, "_").toLowerCase();
+        const cacheKey = `serper:search:${slug}`;
+        const row = cacheMap.get(cacheKey);
+
+        const queryUsed = (person.searchQueryOverride?.trim() || person.name) as string;
+        let organicCount: number | null = null;
+        let topResultTitle: string | null = null;
+        let searchVolume: number | null = null;
+        let cachedAt: string | null = null;
+        let cacheAge: string | null = null;
+        let status: SerperAuditEntry["status"] = "no_cache";
+
+        if (row) {
+          try {
+            const data = JSON.parse(row.responseData) as {
+              organicCount?: number;
+              topResultTitle?: string | null;
+              searchVolume?: number;
+              topStories?: Array<{ title?: string }>;
+            };
+            searchVolume = typeof data.searchVolume === "number" ? data.searchVolume : null;
+            if (typeof data.organicCount === "number") {
+              organicCount = data.organicCount;
+            }
+            topResultTitle =
+              (typeof data.topResultTitle === "string" ? data.topResultTitle : null)
+              ?? (data.topStories?.[0]?.title ?? null)
+              ?? null;
+
+            cachedAt = row.fetchedAt.toISOString();
+            const ageMs = now.getTime() - row.fetchedAt.getTime();
+            const ageHours = ageMs / (1000 * 60 * 60);
+
+            if (ageHours > STALE_HOURS) {
+              cacheAge = `${Math.round(ageHours)}h ago`;
+              status = "stale";
+            } else if (ageHours >= 1) {
+              cacheAge = `${Math.round(ageHours)}h ago`;
+            } else {
+              cacheAge = `${Math.round(ageMs / (1000 * 60))}m ago`;
+            }
+
+            if (status !== "stale") {
+              const zero =
+                typeof data.organicCount === "number"
+                  ? data.organicCount === 0
+                  : (data.searchVolume ?? 0) === 0;
+              status = zero ? "zero_results" : "ok";
+            }
+          } catch {
+            status = "no_cache";
+          }
+        }
+
+        results.push({
+          personId: person.id,
+          name: person.name,
+          category: person.category,
+          queryUsed,
+          organicCount,
+          topResultTitle,
+          searchVolume,
+          status,
+          cacheAge,
+          cachedAt,
+        });
+      }
+
+      const issueCount = results.filter((r) => r.status !== "ok").length;
+      const order: Record<string, number> = {
+        zero_results: 0,
+        no_cache: 1,
+        stale: 2,
+        ok: 3,
+      };
+      res.json({
+        total: results.length,
+        issueCount,
+        results: results.sort(
+          (a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9)
+        ),
+      });
+    } catch (error: any) {
+      console.error("Error in serper audit:", error);
+      res.status(500).json({ error: "Serper audit failed" });
+    }
+  });
+
+  // ============ ADMIN: SERPER SEARCH LIVE PROBE ============
+
+  app.post("/api/admin/serper-probe", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { personName, searchQueryOverride } = req.body ?? {};
+      if (!personName || typeof personName !== "string") {
+        return res.status(400).json({ error: "personName is required" });
+      }
+
+      const result = await probeSerperSearchLive(personName.trim(), searchQueryOverride ?? null);
+      if (!result) {
+        return res.status(503).json({ error: "Serper API key not configured or probe failed" });
+      }
+
+      res.json({
+        organicCount: result.organicCount ?? 0,
+        topResultTitle: result.topResultTitle ?? null,
+        searchVolume: result.searchVolume,
+      });
+    } catch (error: any) {
+      console.error("Error in serper probe:", error);
+      res.status(500).json({ error: "Serper probe failed" });
     }
   });
 
