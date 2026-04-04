@@ -13,6 +13,7 @@ import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { TrendScoreInfoIcon } from "@/components/TrendScoreInfo";
 import { ApprovalRatingInfoIcon } from "@/components/ApprovalRatingInfo";
 import { CardSection } from "@/components/CardSection";
+import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { UnderratedOverratedCard, type ValueVotePerson } from "@/components/UnderratedOverratedCard";
 import { CurateProfileCard, type CuratePerson } from "@/components/curate";
 import {
@@ -1678,19 +1679,13 @@ export default function PersonDetailPage() {
           <>
             {/* Overall Rating / Sentiment Voting */}
             <section id="voting-widget" className="mb-10">
-              <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
-                      <ThumbsUp className="h-5 w-5 text-cyan-400" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-serif font-bold">Overall Rating</h2>
-                      <p className="text-sm text-muted-foreground">How do you feel about {person.name}?</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <UnifiedSectionHeader
+                title="Overall Rating"
+                subtitle={`How do you feel about ${person.name}?`}
+                icon={<ThumbsUp className="h-5 w-5 text-cyan-400" />}
+                accent="cyan"
+                testId="profile-section-overall-rating"
+              />
 
               <Suspense fallback={<ProfileLazyFallback minHeight="200px" />}>
                 <LazyAnimatedSentimentVotingWidget
@@ -1703,19 +1698,13 @@ export default function PersonDetailPage() {
 
             {/* Matchups Section */}
             <section className="mb-10">
-              <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
-                      <Swords className="h-5 w-5 text-cyan-400" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-serif font-bold">Matchups</h2>
-                      <p className="text-sm text-muted-foreground">Head-to-head battles featuring {person.name}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <UnifiedSectionHeader
+                title="Matchups"
+                subtitle="Vote on A vs B"
+                icon={<Swords className="h-5 w-5 text-cyan-400" />}
+                accent="cyan"
+                testId="profile-section-matchups"
+              />
 
               {matchupsLoading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1744,18 +1733,14 @@ export default function PersonDetailPage() {
 
             {/* Sentiment Polls Section */}
             <section className="mb-10">
-              <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
-                      <MessageSquare className="h-5 w-5 text-cyan-400" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-serif font-bold">Sentiment Polls</h2>
-                      <p className="text-sm text-muted-foreground">Community votes on real-world questions</p>
-                    </div>
-                  </div>
-                  {featuredPollsForPerson.length > 3 && (
+              <UnifiedSectionHeader
+                title="Sentiment Polls"
+                subtitle="Weigh in on current events"
+                icon={<MessageSquare className="h-5 w-5 text-cyan-400" />}
+                accent="cyan"
+                testId="profile-section-sentiment"
+                actions={
+                  featuredPollsForPerson.length > 3 ? (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1765,9 +1750,9 @@ export default function PersonDetailPage() {
                     >
                       View all
                     </Button>
-                  )}
-                </div>
-              </div>
+                  ) : undefined
+                }
+              />
 
               {sentimentPollsLoading ? (
                 <div className="flex items-center justify-center py-6">
@@ -1812,19 +1797,13 @@ export default function PersonDetailPage() {
 
             {/* Opinion Polls Section */}
             <section className="mb-10">
-              <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
-                      <ListChecks className="h-5 w-5 text-cyan-400" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-serif font-bold">Opinion Polls</h2>
-                      <p className="text-sm text-muted-foreground">Multi-option polls where {person.name} appears</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <UnifiedSectionHeader
+                title="Opinion Polls"
+                subtitle="Choose who leads the pack"
+                icon={<ListChecks className="h-5 w-5 text-cyan-400" />}
+                accent="cyan"
+                testId="profile-section-opinion"
+              />
 
               {opinionPollsLoading ? (
                 <div className="flex items-center justify-center py-6">
@@ -1852,19 +1831,13 @@ export default function PersonDetailPage() {
 
             {/* Underrated / Overrated Section */}
             <section className="mb-10">
-              <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
-                      <BarChart3 className="h-5 w-5 text-cyan-400" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-serif font-bold">Underrated / Overrated</h2>
-                      <p className="text-sm text-muted-foreground">Is {person.name} overhyped or underappreciated?</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <UnifiedSectionHeader
+                title="Underrated / Overrated"
+                subtitle="Overhyped or underappreciated?"
+                icon={<BarChart3 className="h-5 w-5 text-cyan-400" />}
+                accent="cyan"
+                testId="profile-section-value"
+              />
 
               {valueVotePerson && (
                 <div className="max-w-xl mx-auto">
@@ -1875,17 +1848,13 @@ export default function PersonDetailPage() {
 
             {/* Curate the Profile Section */}
             <section className="mb-10">
-              <div className="relative mb-6 py-3 px-4 rounded-lg bg-gradient-to-r from-cyan-500/5 via-cyan-500/10 to-transparent border border-cyan-500/20">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-cyan-500/10 hidden sm:flex items-center justify-center shrink-0">
-                      <Camera className="h-5 w-5 text-cyan-400" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-serif font-bold">Curate the Profile</h2>
-                      <p className="text-sm text-muted-foreground">Help choose the best profile photo</p>
-                    </div>
-                  </div>
+              <UnifiedSectionHeader
+                title="Curate the Profile"
+                subtitle="Help select their profile photo"
+                icon={<Camera className="h-5 w-5 text-cyan-400" />}
+                accent="cyan"
+                testId="profile-section-curate"
+                actions={
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Help" data-testid="button-curate-info">
@@ -1896,8 +1865,8 @@ export default function PersonDetailPage() {
                       <p>Vote on which image best represents this celebrity. The winning look becomes their primary profile image.</p>
                     </TooltipContent>
                   </Tooltip>
-                </div>
-              </div>
+                }
+              />
 
               {!curateCompleted ? (
                 <div className="max-w-md mx-auto">

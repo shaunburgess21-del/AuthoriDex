@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
+import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { normalizeMarketCategory, getMarketCategoryLabel } from "@shared/constants";
 
 interface PredictTabProps {
@@ -806,34 +807,20 @@ function SectionHeader({
   showViewAll?: boolean;
   infoTooltip?: string;
 }) {
-  return (
-    <div className="flex items-center justify-between mb-4 py-2.5 px-3 rounded-lg bg-gradient-to-r from-violet-500/5 via-transparent to-transparent border border-violet-500/10 backdrop-blur-sm">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="h-8 w-8 rounded-lg bg-violet-500/10 hidden sm:flex items-center justify-center shrink-0">
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="font-serif font-bold truncate">{title}</h3>
-            {count !== undefined && (
-              <Badge variant="secondary" className="text-xs">{count}</Badge>
-            )}
-            {infoTooltip && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" aria-label="Help">
-                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="text-xs">{infoTooltip}</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
-        </div>
-      </div>
+  const actions = (
+    <div className="flex items-center gap-2">
+      {infoTooltip && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" className="text-violet-400 hover:text-violet-300" aria-label="How it works">
+              <HelpCircle className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs max-w-xs">
+            {infoTooltip}
+          </TooltipContent>
+        </Tooltip>
+      )}
       {showViewAll && onViewAll && (
         <Button 
           variant="ghost" 
@@ -847,6 +834,17 @@ function SectionHeader({
         </Button>
       )}
     </div>
+  );
+
+  return (
+    <UnifiedSectionHeader
+      title={title}
+      titleAddon={count !== undefined ? <Badge variant="secondary" className="text-xs">{count}</Badge> : undefined}
+      subtitle={subtitle}
+      icon={icon}
+      accent="violet"
+      actions={actions}
+    />
   );
 }
 
@@ -1289,9 +1287,9 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
       {/* World Markets (Open Markets) */}
       <section>
         <SectionHeader
-          icon={<Users className="h-4 w-4 text-violet-400" />}
+          icon={<Users className="h-5 w-5 text-violet-400" />}
           title="World Markets"
-          subtitle="Predict the outcome of verifiable global events"
+          subtitle="Predict the outcome of global events"
           count={communityPredictions.length || undefined}
           showViewAll={communityPredictions.length > 3}
           onViewAll={() => setShowCommunityOverlay(true)}
@@ -1321,7 +1319,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
       {/* Weekly Jackpot - person specific */}
       <section>
         <SectionHeader
-          icon={<Crown className="h-4 w-4 text-amber-400" />}
+          icon={<Crown className="h-5 w-5 text-amber-400" />}
           title="Weekly Jackpot"
           subtitle="Predict this week's exact Trend Score"
           infoTooltip="Closest prediction to the final score wins the jackpot pot"
@@ -1428,9 +1426,9 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
       {/* Up/Down Predictions */}
       <section>
         <SectionHeader
-          icon={<TrendingUp className="h-4 w-4 text-violet-400" />}
-          title="Up/Down Predictions"
-          subtitle="Will their trend score end the week up or down?"
+          icon={<TrendingUp className="h-5 w-5 text-violet-400" />}
+          title="Weekly Up / Down"
+          subtitle="Will their trend score be higher / lower"
           infoTooltip="Predict whether their trend score finishes the week above or below the starting value"
         />
         {weeklyMarket ? (
@@ -1450,9 +1448,9 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
       {/* Head-to-Head Battles */}
       <section>
         <SectionHeader
-          icon={<Swords className="h-4 w-4 text-violet-400" />}
+          icon={<Swords className="h-5 w-5 text-violet-400" />}
           title="Head-to-Head Battles"
-          subtitle="Predict who will gain more trend points"
+          subtitle="Who will gain more points"
           count={h2hBattles.length || undefined}
           infoTooltip="Face-off markets matching this person against another rival"
         />
@@ -1487,7 +1485,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore }:
       {/* Category Races */}
       <section>
         <SectionHeader
-          icon={<BarChart3 className="h-4 w-4 text-violet-400" />}
+          icon={<Trophy className="h-5 w-5 text-violet-400" />}
           title="Category Races"
           subtitle="Pick the biggest mover in each category"
           count={gainerMarkets.length || undefined}

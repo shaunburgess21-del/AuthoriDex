@@ -906,7 +906,7 @@ export default function HomePage() {
         </div>
       </div>
       */}
-      <div className="container mx-auto px-4 pt-2 pb-8 max-w-7xl" data-content-section>
+      <div className="container mx-auto px-4 pt-0 pb-8 max-w-7xl" data-content-section>
                             <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2 mb-4 md:grid md:grid-cols-3 md:overflow-visible" data-testid="market-pulse-row">
                 <MarketPulseCard 
                   title="Daily Movers" 
@@ -937,7 +937,7 @@ export default function HomePage() {
                 />
               </div>
 
-              <div className="mb-[22px]">
+              <div className="mb-4">
                 <TrendingNowFeed
                   onPersonClick={handleVisitProfile}
                   collapsed={trendingNowCollapsed}
