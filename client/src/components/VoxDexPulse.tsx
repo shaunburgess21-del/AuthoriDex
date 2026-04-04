@@ -326,8 +326,8 @@ function PulseRow({
         }}
       >
         <div className="relative flex items-center shrink-0">
-          <div className="flex items-center justify-center w-[24px] sm:w-[28px] self-stretch rounded-l-md bg-transparent">
-            <span className="font-mono font-semibold text-slate-400 text-[13px] sm:text-[15px]">
+          <div className="flex items-center justify-center w-[26px] sm:w-7 self-stretch rounded-l-md bg-transparent">
+            <span className="font-mono font-bold text-slate-400 text-[14px] text-center tabular-nums">
               {rank}
             </span>
           </div>
@@ -335,20 +335,20 @@ function PulseRow({
             name={person.name}
             imageSlug={person.imageSlug}
             size="sm"
-            className="h-[26px] w-[26px] sm:h-[30px] sm:w-[30px] rounded-none rounded-r-md"
+            className="h-10 w-10 shrink-0 rounded-none rounded-r-md"
           />
         </div>
 
-        <div className="flex flex-col min-w-0 shrink-0 w-[85px] sm:w-[120px] ml-2 sm:ml-3">
-          <span className="text-[11px] sm:text-[13px] font-semibold text-foreground truncate leading-tight text-left">
+        <div className="flex flex-col min-w-0 shrink-0 w-[100px] sm:w-[132px] ml-1.5 sm:ml-2">
+          <span className="font-medium text-xs sm:text-sm text-foreground truncate leading-tight text-left">
             {person.name}
           </span>
-          <span className="text-[9px] sm:text-[10px] font-medium leading-tight mt-0.5 truncate text-left" style={{ color: catHex }}>
+          <span className="text-[10px] sm:text-xs font-medium leading-tight mt-0.5 truncate text-left" style={{ color: catHex }}>
             {getMarketCategoryLabel(person.category)}
           </span>
         </div>
 
-        <div className="flex-1 h-2 sm:h-2.5 bg-muted/20 rounded-full overflow-hidden min-w-0 mx-2 sm:mx-3">
+        <div className="flex-1 h-2 sm:h-2.5 bg-muted/20 rounded-full overflow-hidden min-w-0 mx-1.5 sm:mx-2">
           <motion.div
             className="h-full rounded-full"
             animate={{ width: `${pct}%` }}
@@ -358,7 +358,7 @@ function PulseRow({
         </div>
 
         <span
-          className="text-[11px] sm:text-[13px] font-bold tabular-nums shrink-0 text-right pr-2 sm:pr-3"
+          className="text-xs sm:text-sm font-bold tabular-nums shrink-0 text-right pr-2 sm:pr-3"
           style={{ color: accentColor }}
         >
           {formatScore(score)}
@@ -399,8 +399,8 @@ function PulseRow({
         className="relative flex items-center shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-md"
         aria-label={`View ${person.name} profile`}
       >
-        <div className="flex items-center justify-center w-[24px] sm:w-[28px] self-stretch rounded-l-md bg-transparent">
-          <span className="font-mono font-semibold text-slate-400 text-[13px] sm:text-[15px]">
+        <div className="flex items-center justify-center w-[26px] sm:w-7 self-stretch rounded-l-md bg-transparent">
+          <span className="font-mono font-bold text-slate-400 text-[14px] text-center tabular-nums">
             {rank}
           </span>
         </div>
@@ -408,7 +408,7 @@ function PulseRow({
           name={person.name}
           imageSlug={person.imageSlug}
           size="sm"
-          className="h-[26px] w-[26px] sm:h-[30px] sm:w-[30px] rounded-none rounded-r-md"
+          className="h-10 w-10 shrink-0 rounded-none rounded-r-md"
         />
       </button>
 
@@ -416,18 +416,18 @@ function PulseRow({
       <button
         type="button"
         onClick={onNavigate}
-        className="flex flex-col min-w-0 shrink-0 w-[85px] sm:w-[120px] ml-2 sm:ml-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-sm"
+        className="flex flex-col min-w-0 shrink-0 w-[100px] sm:w-[132px] ml-1.5 sm:ml-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 rounded-sm"
       >
-        <span className="text-[11px] sm:text-[13px] font-semibold text-foreground truncate leading-tight text-left">
+        <span className="font-medium text-xs sm:text-sm text-foreground truncate leading-tight text-left">
           {person.name}
         </span>
-        <span className="text-[9px] sm:text-[10px] font-medium leading-tight mt-0.5 truncate text-left" style={{ color: catHex }}>
+        <span className="text-[10px] sm:text-xs font-medium leading-tight mt-0.5 truncate text-left" style={{ color: catHex }}>
           {getMarketCategoryLabel(person.category)}
         </span>
       </button>
 
       {/* Score/Approval bar */}
-      <div className="flex-1 h-2 sm:h-2.5 bg-muted/20 rounded-full overflow-hidden min-w-0 mx-2 sm:mx-3 border border-white/5">
+      <div className="flex-1 h-2 sm:h-2.5 bg-muted/20 rounded-full overflow-hidden min-w-0 mx-1.5 sm:mx-2 border border-white/5">
         <motion.div
           className="h-full rounded-full overflow-hidden"
           animate={{ width: `${pct}%` }}
@@ -460,7 +460,7 @@ function PulseRow({
 
       {/* Score value */}
       <span
-        className="text-[11px] sm:text-[13px] font-bold tabular-nums shrink-0 text-right pr-2 sm:pr-3"
+        className="text-xs sm:text-sm font-bold tabular-nums shrink-0 text-right pr-2 sm:pr-3"
         style={{ color: APPROVAL_COLORS[Math.min(4, Math.max(0, Math.round(person.approvalAvgRating ?? 3) - 1))] }}
       >
         {(person.approvalAvgRating ?? 0).toFixed(1)}<span style={{ color: "#A3A7B0" }}>/5</span>
