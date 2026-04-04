@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { motion, LayoutGroup } from "framer-motion";
 import {
   Zap, ThumbsUp, TrendingUp, TrendingDown,
-  Play, Pause, Info,
+  Play, Pause, Info, ChevronDown,
 } from "lucide-react";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
@@ -472,7 +472,12 @@ function PulseRow({
 
 // --------------- Main Component ---------------
 
-export function VoxDexPulse() {
+interface VoxDexPulseProps {
+  collapsed: boolean;
+  onToggle: () => void;
+}
+
+export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
   const [, navigate] = useLocation();
   const isMobile = useIsMobile();
   const [mode, setMode] = useState<PulseMode>("trend");
@@ -644,6 +649,10 @@ export function VoxDexPulse() {
   }, [mode, category, timeRange]);
 
   useEffect(() => {
+    if (collapsed) stopPlayback();
+  }, [collapsed]);
+
+  useEffect(() => {
     if (mode === "trend" && hasFrames && !autoStarted && !trendLoading) {
       setAutoStarted(true);
       setSpeed(DEFAULT_SPEED);
@@ -754,14 +763,31 @@ export function VoxDexPulse() {
     : APPROVAL_COLORS[2];
 
   return (
-    <section className="container mx-auto px-4 max-w-7xl pt-4 pb-2 flex flex-col">
-      <div data-voxdex-pulse-widget className="flex min-w-0 w-full flex-col">
-      {/* Section label */}
-      <div className="order-1 flex items-center mb-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground shrink-0">
-          VoxDex Pulse
-        </p>
-      </div>
+    <section className="container mx-auto px-4 max-w-7xl pt-2 pb-2">
+      <div className="rounded-xl pulse-card-voxdex transition-all duration-200">
+        <div className={`p-4 ${collapsed ? 'pt-4 pb-4' : 'pt-5'}`}>
+          {/* Header row — always visible */}
+          <div
+            className="flex items-center gap-3 cursor-pointer select-none group"
+            onClick={onToggle}
+          >
+            <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-voxdex">
+              <Zap className="h-4 w-4 text-blue-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-slate-100">VoxDex Pulse</h3>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+                {mode === "trend" ? "Trend Score" : "Approval Rating"}
+              </p>
+            </div>
+            <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
+              <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
+            </div>
+          </div>
+
+          {/* Body — only when expanded */}
+          {!collapsed && (
+          <div className="flex flex-col mt-4" data-voxdex-pulse-widget>
 
       <div className="order-2 flex flex-col gap-2 mb-2">
         {pulseIsError && (
@@ -985,6 +1011,9 @@ export function VoxDexPulse() {
         )}
       </div>
 
+          </div>
+          )}
+        </div>
       </div>
 
       {isMobile ? (

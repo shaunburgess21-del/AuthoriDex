@@ -57,7 +57,7 @@ function MarketPulseCard({
 }) {
   const colorConfig = {
     daily: {
-      iconColor: "text-blue-400",
+      iconColor: "text-slate-300",
       cardClass: "pulse-card-blue",
       iconBgClass: "pulse-icon-blue",
       subtitle: "Movement \u00B7 24h",
@@ -607,6 +607,19 @@ export default function HomePage() {
     try { localStorage.setItem('trending_now_collapsed', String(next)); } catch {}
   };
 
+  const [pulseCollapsed, setPulseCollapsed] = useState(() => {
+    try {
+      const saved = localStorage.getItem('voxdex_pulse_collapsed');
+      return saved !== null ? saved === 'true' : false;
+    } catch { return false; }
+  });
+
+  const handlePulseToggle = () => {
+    const next = !pulseCollapsed;
+    setPulseCollapsed(next);
+    try { localStorage.setItem('voxdex_pulse_collapsed', String(next)); } catch {}
+  };
+
   const {
     data,
     fetchNextPage,
@@ -863,7 +876,7 @@ export default function HomePage() {
           </div>
         </div>
       </header>
-      <VoxDexPulse />
+      <VoxDexPulse collapsed={pulseCollapsed} onToggle={handlePulseToggle} />
       <WelcomeModal ref={welcomeOnboardingRef} />
       {/* PRESERVED: Sticky toggle bar (Leaderboard/Vote/Predict) - commented out for future re-enable
       <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-blue-500/5 via-background/95 to-blue-500/5 backdrop-blur-xl" data-toggle-bar>
@@ -893,7 +906,7 @@ export default function HomePage() {
         </div>
       </div>
       */}
-      <div className="container mx-auto px-4 py-8 max-w-7xl" data-content-section>
+      <div className="container mx-auto px-4 pt-2 pb-8 max-w-7xl" data-content-section>
                             <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2 mb-4 md:grid md:grid-cols-3 md:overflow-visible" data-testid="market-pulse-row">
                 <MarketPulseCard 
                   title="Daily Movers" 
