@@ -775,7 +775,7 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
               <Zap className="h-4 w-4 text-blue-400" />
             </div>
             <div className="flex-1">
-              <h3 className="text-sm font-semibold text-slate-100">VoxDex Pulse</h3>
+              <h3 className="text-sm font-semibold text-slate-100">Vox Pulse</h3>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider">
                 {mode === "trend" ? "Trend Score" : "Approval Rating"}
               </p>
