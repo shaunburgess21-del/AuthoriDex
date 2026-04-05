@@ -594,18 +594,15 @@
       0 0 50px -10px rgba(239, 68, 68, 0.14);
   }
 
-  /* Icon glow rings for pulse cards */
+  /* Icon tiles for pulse card headers (tinted fill, no outer glow) */
   .pulse-icon-blue {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%);
-    box-shadow: 0 0 20px -4px rgba(255, 255, 255, 0.25);
   }
   .pulse-icon-green {
     background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(34, 197, 94, 0.1) 100%);
-    box-shadow: 0 0 20px -4px rgba(34, 197, 94, 0.4);
   }
   .pulse-icon-red {
     background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
-    box-shadow: 0 0 20px -4px rgba(239, 68, 68, 0.4);
   }
 
   /* ===== ORANGE (Trending Now) ===== */
@@ -632,7 +629,6 @@
   }
   .pulse-icon-orange {
     background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(249, 115, 22, 0.1) 100%);
-    box-shadow: 0 0 20px -4px rgba(249, 115, 22, 0.4);
   }
 
   /* ===== VOXDEX BLUE (VoxDex Pulse) ===== */
@@ -655,7 +651,6 @@
   }
   .pulse-icon-voxdex {
     background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%);
-    box-shadow: 0 0 20px -4px rgba(59, 130, 246, 0.4);
   }
 
   /* ===== VOTE CTA PULSE ===== */

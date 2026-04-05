@@ -125,7 +125,7 @@ function MarketAvatar({ market }: { market: any }) {
   const imgUrl = market.coverImageUrl || market.linkedPersonAvatar;
   if (!imgUrl) return null;
   return (
-    <Avatar className="h-[52px] w-[52px] shrink-0 rounded-md">
+    <Avatar className="h-20 w-20 shrink-0 rounded-md md:h-16 md:w-16">
       <AvatarImage src={imgUrl} alt={market.title} className="object-cover" />
       <AvatarFallback className="text-sm rounded-md">{(market.title || "?")[0]}</AvatarFallback>
     </Avatar>
