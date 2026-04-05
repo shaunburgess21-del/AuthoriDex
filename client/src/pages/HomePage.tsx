@@ -93,11 +93,11 @@ function MarketPulseCard({
             <Icon className={`h-4 w-4 ${iconColor}`} />
           </div>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-slate-100">{title}</h3>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider">{subtitle}</p>
+            <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">{title}</h3>
+            <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">{subtitle}</p>
           </div>
-          <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
-            <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
+          <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
+            <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" />
           </div>
         </div>
         
@@ -110,14 +110,14 @@ function MarketPulseCard({
               return (
                 <div
                   key={person.id}
-                  className="flex items-center gap-2.5 p-2 rounded-lg hover-elevate cursor-pointer bg-slate-800/30 border border-slate-700/30 transition-colors hover:border-slate-600/50"
+                  className="flex items-center gap-2.5 p-2 rounded-lg hover-elevate cursor-pointer bg-muted/40 dark:bg-slate-800/30 border border-border/50 dark:border-slate-700/30 transition-colors hover:border-foreground/20 dark:hover:border-slate-600/50"
                   onClick={() => onPersonClick(person.id)}
                   data-testid={`pulse-item-${person.id}`}
                 >
-                  <span className="font-mono font-bold text-slate-500 w-4 text-center text-[14px]">{idx + 1}</span>
+                  <span className="font-mono font-bold text-muted-foreground dark:text-slate-500 w-4 text-center text-[14px]">{idx + 1}</span>
                   <PersonAvatar name={person.name} avatar={person.avatar} imageSlug={(person as any).imageSlug} size="sm" />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-xs truncate text-slate-200">{person.name}</p>
+                    <p className="font-medium text-xs truncate text-foreground dark:text-slate-200">{person.name}</p>
                     <p className={`text-[10px] ${getCategoryTextColor(person.category ?? "")}`}>{person.category}</p>
                   </div>
                   <span 
@@ -848,7 +848,7 @@ export default function HomePage() {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="text-blue-400" 
+                className="text-blue-400 md:text-sm" 
                 onClick={() => {
                   setActiveView("leaderboard");
                   document.getElementById("leaderboard")?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -860,6 +860,7 @@ export default function HomePage() {
               <Button 
                 variant="ghost" 
                 size="sm" 
+                className="md:text-sm"
                 onClick={() => {
                   setLocation("/vote");
                   window.scrollTo(0, 0);
@@ -868,7 +869,7 @@ export default function HomePage() {
               >
                 Vote
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
+              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
                 Predict
               </Button>
             </div>

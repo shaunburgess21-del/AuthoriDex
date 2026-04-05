@@ -65,16 +65,16 @@ export default function TownSquarePage() {
 
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-4">
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/")}>
+              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/")}>
                 Home
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/predict")}>
+              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/predict")}>
                 Predict
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/vote")}>
+              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/vote")}>
                 Vote
               </Button>
-              <Button variant="ghost" size="sm" className="text-violet-400">
+              <Button variant="ghost" size="sm" className="text-violet-400 md:text-sm">
                 Town Square
               </Button>
             </div>

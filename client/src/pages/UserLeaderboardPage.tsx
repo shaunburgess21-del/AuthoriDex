@@ -390,16 +390,16 @@ export default function UserLeaderboardPage() {
 
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-4">
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/")} data-testid="nav-leaderboard-desktop">
+              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/")} data-testid="nav-leaderboard-desktop">
                 Leaderboard
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/vote")} data-testid="nav-vote-desktop">
+              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/vote")} data-testid="nav-vote-desktop">
                 Vote
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
+              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
                 Predict
               </Button>
-              <Button variant="ghost" size="sm" className="text-amber-400" data-testid="nav-top-predictors-desktop">
+              <Button variant="ghost" size="sm" className="text-amber-400 md:text-sm" data-testid="nav-top-predictors-desktop">
                 Top Predictors
               </Button>
             </div>

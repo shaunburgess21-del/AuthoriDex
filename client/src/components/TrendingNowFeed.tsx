@@ -80,30 +80,30 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-slate-100">Hot Movers</h3>
+              <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Hot Movers</h3>
               {updatedAgo && (
-                <span className="flex items-center gap-1 text-[10px] text-slate-500" data-testid="text-hot-movers-updated">
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground dark:text-slate-500" data-testid="text-hot-movers-updated">
                   <Clock className="h-2.5 w-2.5" />
                   {updatedAgo}
                 </span>
               )}
             </div>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Exceptional 24h movement</p>
+            <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">Exceptional 24h movement</p>
           </div>
-          <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
-            <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
+          <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
+            <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" />
           </div>
         </div>
 
         {!collapsed && hotMovers.length === 0 && (
           <div className="text-center py-6 mt-4" data-testid="trending-now-empty">
-            <p className="text-xs text-slate-500">No exceptional movement right now</p>
-            <p className="text-[10px] text-slate-600 mt-1">Updates every hour</p>
+            <p className="text-xs text-muted-foreground">No exceptional movement right now</p>
+            <p className="text-[10px] text-muted-foreground/70 mt-1">Updates every hour</p>
             <Button
               variant="outline"
               size="sm"
               onClick={scrollToLeaderboard}
-              className="mt-3 gap-1.5 text-[11px] border-slate-600/50 text-slate-400"
+              className="mt-3 gap-1.5 text-[11px] border-border dark:border-slate-600/50 text-muted-foreground dark:text-slate-400"
               data-testid="button-view-leaderboard"
             >
               View full leaderboard
@@ -126,14 +126,14 @@ export function TrendingNowFeed({ onPersonClick, collapsed, onToggle }: Trending
               return (
                 <div
                   key={person.id}
-                  className="flex items-center gap-2.5 p-2 rounded-lg hover-elevate cursor-pointer bg-slate-800/30 border border-slate-700/30 transition-colors hover:border-slate-600/50"
+                  className="flex items-center gap-2.5 p-2 rounded-lg hover-elevate cursor-pointer bg-muted/40 dark:bg-slate-800/30 border border-border/50 dark:border-slate-700/30 transition-colors hover:border-foreground/20 dark:hover:border-slate-600/50"
                   onClick={() => onPersonClick(person.id)}
                   data-testid={`trending-now-item-${person.id}`}
                 >
-                  <span className="font-mono font-bold text-slate-500 w-4 text-center text-[14px]">{idx + 1}</span>
+                  <span className="font-mono font-bold text-muted-foreground dark:text-slate-500 w-4 text-center text-[14px]">{idx + 1}</span>
                   <PersonAvatar name={displayName} avatar={person.avatar} size="sm" />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-xs truncate text-slate-200">{displayName}</p>
+                    <p className="font-medium text-xs truncate text-foreground dark:text-slate-200">{displayName}</p>
                     <div className="flex items-center gap-1.5">
                       {tag ? (
                         <span className={`text-[10px] ${tag.color}`}>{tag.label}</span>

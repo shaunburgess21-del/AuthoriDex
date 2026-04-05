@@ -70,16 +70,16 @@ export default function MePage() {
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-1 mr-2">
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/#leaderboard")} data-testid="nav-leaderboard-desktop">
+              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/#leaderboard")} data-testid="nav-leaderboard-desktop">
                 Leaderboard
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => {
+              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => {
                 setLocation("/vote");
                 window.scrollTo(0, 0);
               }} data-testid="nav-vote-desktop">
                 Vote
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
+              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
                 Predict
               </Button>
             </div>

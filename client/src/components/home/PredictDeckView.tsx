@@ -224,8 +224,8 @@ function H2HCard({
           </ClosedMarketActionTrigger>
           
           <div className="relative mx-2">
-            <div className="h-14 w-14 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
-              <span className="text-sm font-bold text-slate-200">VS</span>
+            <div className="h-14 w-14 rounded-full bg-gradient-to-br from-muted to-card dark:from-slate-700 dark:to-slate-900 border-2 border-border dark:border-slate-500 flex items-center justify-center shadow-lg">
+              <span className="text-sm font-bold text-foreground dark:text-slate-200">VS</span>
             </div>
           </div>
           
@@ -407,7 +407,7 @@ function GainerCard({
             return market.leaders.map((leader, idx) => (
               <div 
                 key={leader.name}
-                className={`flex items-center gap-3 p-2.5 rounded-lg relative overflow-hidden ${idx === 0 ? 'bg-gradient-to-r from-amber-500/10 to-slate-800/50 border border-amber-500/30' : 'bg-slate-800/50 border border-slate-700/30'}`}
+                className={`flex items-center gap-3 p-2.5 rounded-lg relative overflow-hidden ${idx === 0 ? 'bg-gradient-to-r from-amber-500/10 to-muted/50 dark:to-slate-800/50 border border-amber-500/30' : 'bg-muted/50 dark:bg-slate-800/50 border border-border/40 dark:border-slate-700/30'}`}
               >
                 <div className="absolute inset-y-0 left-0 bg-green-500/8 transition-all" style={{ width: `${Math.max((Math.abs(leader.percentGain) / maxGain) * 100, 5)}%` }} />
                 <div className="relative flex items-center gap-2 flex-1 min-w-0">

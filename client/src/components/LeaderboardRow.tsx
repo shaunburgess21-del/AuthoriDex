@@ -174,11 +174,11 @@ export function LeaderboardRow({
           className="relative flex items-center rounded-lg overflow-hidden shrink-0"
           data-testid={`rank-avatar-unit-${person.id}`}
         >
-          <div className="flex items-center justify-center min-w-[32px] sm:min-w-[36px] h-12 lg:h-[58px] rounded-l-lg" style={{ backgroundColor: "#101318" }}>
+          <div className="flex items-center justify-center min-w-[32px] sm:min-w-[36px] h-12 lg:h-[58px] rounded-l-lg bg-muted border-r border-border dark:border-transparent dark:bg-[#101318]">
             {isColdStart ? (
-              <span className="text-[10px] sm:text-xs font-bold text-cyan-400 leading-tight">New</span>
+              <span className="text-[10px] sm:text-xs font-bold text-cyan-600 dark:text-cyan-400 leading-tight">New</span>
             ) : (
-              <span className="font-mono font-semibold text-slate-400 text-[16px] sm:text-[18px]">
+              <span className="font-mono font-semibold text-muted-foreground dark:text-slate-400 text-[16px] sm:text-[18px]">
                 {rank}
               </span>
             )}

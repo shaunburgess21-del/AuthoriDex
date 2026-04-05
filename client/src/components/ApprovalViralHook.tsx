@@ -113,11 +113,11 @@ function ApprovalCard({
           />
           
           <div className="space-y-1">
-            <h3 className="font-semibold text-sm text-slate-100 truncate max-w-full">
+            <h3 className="font-semibold text-sm text-foreground dark:text-slate-100 truncate max-w-full">
               {person.personName}
             </h3>
             {person.category && (
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+              <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">
                 {person.category}
               </p>
             )}

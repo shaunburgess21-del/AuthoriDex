@@ -327,7 +327,7 @@ function PulseRow({
       >
         <div className="relative flex items-center shrink-0">
           <div className="flex items-center justify-center w-[26px] sm:w-7 self-stretch rounded-l-md bg-transparent">
-            <span className="font-mono font-bold text-slate-400 text-[14px] text-center tabular-nums">
+            <span className="font-mono font-bold text-muted-foreground dark:text-slate-400 text-[14px] text-center tabular-nums">
               {rank}
             </span>
           </div>
@@ -400,7 +400,7 @@ function PulseRow({
         aria-label={`View ${person.name} profile`}
       >
         <div className="flex items-center justify-center w-[26px] sm:w-7 self-stretch rounded-l-md bg-transparent">
-          <span className="font-mono font-bold text-slate-400 text-[14px] text-center tabular-nums">
+          <span className="font-mono font-bold text-muted-foreground dark:text-slate-400 text-[14px] text-center tabular-nums">
             {rank}
           </span>
         </div>
@@ -775,13 +775,13 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
               <Zap className="h-4 w-4 text-blue-400" />
             </div>
             <div className="flex-1">
-              <h3 className="text-sm font-semibold text-slate-100">Vox Pulse</h3>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+              <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Vox Pulse</h3>
+              <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">
                 {mode === "trend" ? "Trend Score" : "Approval Rating"}
               </p>
             </div>
-            <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
-              <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
+            <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
+              <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" />
             </div>
           </div>
 

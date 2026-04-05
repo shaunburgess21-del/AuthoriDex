@@ -146,8 +146,8 @@ function VersusCard({
           </button>
           
           <div className="flex items-center justify-center w-12 shrink-0">
-            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
-              <span className="text-xs font-bold text-slate-200">VS</span>
+            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-muted to-card dark:from-slate-700 dark:to-slate-900 border-2 border-border dark:border-slate-500 flex items-center justify-center shadow-lg">
+              <span className="text-xs font-bold text-foreground dark:text-slate-200">VS</span>
             </div>
           </div>
           
@@ -258,7 +258,7 @@ function PollCard({
             </button>
             <button
               onClick={() => onVote(topic.id, 'neutral')}
-              className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15"
+              className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-xl bg-muted/40 border border-border text-foreground dark:bg-white/5 dark:border-white/40 dark:text-white text-sm font-medium transition-all duration-300 hover:border-foreground/40 hover:bg-muted/60 dark:hover:border-white/80 dark:hover:bg-white/15"
               data-testid={`button-neutral-${topic.id}`}
             >
               <Minus className="h-4 w-4 shrink-0" />

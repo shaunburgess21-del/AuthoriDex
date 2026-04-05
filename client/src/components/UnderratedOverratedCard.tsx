@@ -197,7 +197,7 @@ export function UnderratedOverratedCard({
           <button
             onClick={() => handleVote('fairly_rated')}
             disabled={isPending}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15 disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-muted/40 border border-border text-foreground dark:bg-white/5 dark:border-white/40 dark:text-white text-sm font-medium transition-all duration-300 hover:border-foreground/40 hover:bg-muted/60 dark:hover:border-white/80 dark:hover:bg-white/15 disabled:opacity-50"
             data-testid={`button-fairly-rated-${person.id}`}
           >
             {isPending ? (

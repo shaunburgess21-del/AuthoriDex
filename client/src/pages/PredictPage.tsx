@@ -656,8 +656,8 @@ function SectionFilterBar({
               onClick={() => handleCategoryClick(cat.id)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 categoryFilter === cat.id
-                  ? 'bg-violet-500/20 text-violet-300 border border-violet-400/40 shadow-sm shadow-violet-500/20'
-                  : 'bg-slate-800/30 border border-slate-700/40 text-slate-400 hover:border-violet-400/20'
+                  ? 'bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-400/40 shadow-sm shadow-violet-500/20'
+                  : 'bg-muted/50 border border-border/60 text-muted-foreground hover:border-violet-400/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-violet-400/20'
               }`}
               data-testid={cat.id === "misc" ? `${testIdPrefix}-category-custom-topic` : `${testIdPrefix}-category-${cat.id}`}
               aria-label={isIconOnly ? cat.label : undefined}
@@ -679,7 +679,7 @@ function SectionFilterBar({
             placeholder={searchPlaceholder}
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10 h-8 w-full sm:w-48 bg-slate-800/30 border-slate-700/40"
+            className="pl-10 h-8 w-full sm:w-48 bg-muted/40 dark:bg-slate-800/30 border-border/50 dark:border-slate-700/40"
             data-testid={`${testIdPrefix}-search`}
           />
         </div>
@@ -1019,8 +1019,8 @@ function HeadToHeadCard({
             </div>
           </div>
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
-            <div className="h-14 w-14 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
-              <span className="text-sm font-bold text-slate-200">VS</span>
+            <div className="h-14 w-14 rounded-full bg-gradient-to-br from-muted to-card dark:from-slate-700 dark:to-slate-900 border-2 border-border dark:border-slate-500 flex items-center justify-center shadow-lg">
+              <span className="text-sm font-bold text-foreground dark:text-slate-200">VS</span>
             </div>
           </div>
         </Link>
@@ -2151,11 +2151,7 @@ function WeeklyJackpotHero({
 
   return (
     <div 
-      className="relative overflow-hidden rounded-2xl mb-8 border-2 border-amber-500/50"
-      style={{
-        background: "linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 146, 60, 0.05) 50%, transparent 100%)",
-        boxShadow: "inset 0 0 30px rgba(245, 158, 11, 0.1), 0 0 40px rgba(245, 158, 11, 0.15)",
-      }}
+      className="relative overflow-hidden rounded-2xl mb-8 border-2 border-amber-500/50 jackpot-hero-bg"
       data-testid="weekly-jackpot-hero"
     >
       <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl" />
@@ -3043,13 +3039,13 @@ export default function PredictPage() {
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-4">
               <Link href="/#leaderboard">
-                <Button variant="ghost" size="sm">Leaderboard</Button>
+                <Button variant="ghost" size="sm" className="md:text-sm">Leaderboard</Button>
               </Link>
               <Link href="/vote">
-                <Button variant="ghost" size="sm">Vote</Button>
+                <Button variant="ghost" size="sm" className="md:text-sm">Vote</Button>
               </Link>
               <Link href="/predict">
-                <Button variant="ghost" size="sm" className="text-violet-500">Predict</Button>
+                <Button variant="ghost" size="sm" className="text-violet-500 md:text-sm">Predict</Button>
               </Link>
             </div>
             <div className="flex items-center gap-2.5 md:hidden">
@@ -3198,7 +3194,7 @@ export default function PredictPage() {
                         <HelpCircle className="h-5 w-5" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">How it works</TooltipContent>
+                    <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">How it works</TooltipContent>
                   </Tooltip>
                   <Button 
                     onClick={() => setCreateModalOpen(true)}
@@ -3313,16 +3309,16 @@ export default function PredictPage() {
                       <MessageSquare className="h-4 w-4 text-blue-400" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-semibold text-slate-100">Town Square</h3>
-                      <p className="text-[10px] text-slate-500 uppercase tracking-wider">Recent prediction activity across live markets</p>
+                      <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Town Square</h3>
+                      <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">Recent prediction activity across live markets</p>
                     </div>
-                    <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-slate-700/30 transition-transform duration-200 shrink-0 ${townSquareCollapsed ? '' : 'rotate-180'}`}>
-                      <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-slate-200 transition-colors" />
+                    <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 shrink-0 ${townSquareCollapsed ? '' : 'rotate-180'}`}>
+                      <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" />
                     </div>
                   </div>
                   {!townSquareCollapsed && (
                     <div className="mt-4">
-                      <Card className="border-slate-700/50 bg-slate-800/30">
+                      <Card className="border-border/50 dark:border-slate-700/50 bg-muted/30 dark:bg-slate-800/30">
                         <div className="divide-y divide-border/50">
                           {recentActivity.slice(0, 8).map((item) => (
                             <div
@@ -3446,7 +3442,7 @@ export default function PredictPage() {
                       <HelpCircle className="h-5 w-5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">How it works</TooltipContent>
+                  <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">How it works</TooltipContent>
                 </Tooltip>
               }
             >
@@ -3527,7 +3523,7 @@ export default function PredictPage() {
                       <HelpCircle className="h-5 w-5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">How it works</TooltipContent>
+                  <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">How it works</TooltipContent>
                 </Tooltip>
               }
             >
@@ -3617,7 +3613,7 @@ export default function PredictPage() {
                       <HelpCircle className="h-5 w-5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">How it works</TooltipContent>
+                  <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">How it works</TooltipContent>
                 </Tooltip>
               }
             >

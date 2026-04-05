@@ -88,7 +88,7 @@ export function PeoplesVoicePoll({
           </button>
           <button
             onClick={() => handleVote('neutral')}
-            className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/5 border border-white/40 text-white text-sm font-medium transition-all hover:border-white/80 hover:bg-white/15"
+            className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-muted/40 border border-border text-foreground dark:bg-white/5 dark:border-white/40 dark:text-white text-sm font-medium transition-all hover:border-foreground/40 hover:bg-muted/60 dark:hover:border-white/80 dark:hover:bg-white/15"
             data-testid="button-neutral"
           >
             <div className="flex items-center gap-2">

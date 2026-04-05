@@ -313,8 +313,8 @@ function HeadToHeadCard({
             </div>
           </div>
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
-            <div className="h-14 w-14 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
-              <span className="text-sm font-bold text-slate-200">VS</span>
+            <div className="h-14 w-14 rounded-full bg-gradient-to-br from-muted to-card dark:from-slate-700 dark:to-slate-900 border-2 border-border dark:border-slate-500 flex items-center justify-center shadow-lg">
+              <span className="text-sm font-bold text-foreground dark:text-slate-200">VS</span>
             </div>
           </div>
         </Link>
@@ -816,7 +816,7 @@ function SectionHeader({
               <HelpCircle className="h-5 w-5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs max-w-xs">
+          <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs max-w-xs">
             {infoTooltip}
           </TooltipContent>
         </Tooltip>

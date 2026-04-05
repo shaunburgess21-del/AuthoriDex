@@ -164,10 +164,10 @@ export function CurateViewResultsOverlay({
                     data-testid={`view-results-image-${image.id}`}
                   >
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
-                      idx === 0 ? 'bg-yellow-500/20 text-yellow-300' :
-                      idx === 1 ? 'bg-slate-400/20 text-slate-300' :
-                      idx === 2 ? 'bg-orange-500/20 text-orange-300' :
-                      'bg-slate-700/30 text-slate-400'
+                      idx === 0 ? 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-300' :
+                      idx === 1 ? 'bg-slate-400/20 text-slate-500 dark:text-slate-300' :
+                      idx === 2 ? 'bg-orange-500/20 text-orange-600 dark:text-orange-300' :
+                      'bg-muted/50 dark:bg-slate-700/30 text-muted-foreground dark:text-slate-400'
                     }`}>
                       {idx + 1}
                     </div>

@@ -63,10 +63,10 @@ export function OverlayFilterBar({
 }: OverlayFilterBarProps) {
   const isVote = variant === "vote";
   const activeClasses = isVote
-    ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
-    : "bg-violet-500/20 text-violet-300 border border-violet-400/40";
+    ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
+    : "bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-400/40";
   const inactiveClasses = isVote
-    ? "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+    ? "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600"
     : "bg-background/50 border border-border/50 text-muted-foreground hover:bg-muted/80 hover:border-violet-400/20";
 
   return (
@@ -86,7 +86,7 @@ export function OverlayFilterBar({
             placeholder={placeholder}
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
+            className="pl-10 h-9 bg-muted/40 dark:bg-slate-800/30 border-border/50 dark:border-slate-700/40"
             data-testid={`${testIdPrefix}-search`}
           />
         </div>
@@ -132,7 +132,7 @@ export function OverlayFilterBar({
             placeholder={placeholder}
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10 h-9 bg-slate-800/30 border-slate-700/40"
+            className="pl-10 h-9 bg-muted/40 dark:bg-slate-800/30 border-border/50 dark:border-slate-700/40"
             data-testid={`${testIdPrefix}-search-desktop`}
           />
         </div>

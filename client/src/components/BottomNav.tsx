@@ -1,4 +1,4 @@
-import { Home, TrendingUp, Heart } from "lucide-react";
+import { Home, TrendingUp, Vote } from "lucide-react";
 import { useLocation, Link } from "wouter";
 
 interface NavItem {
@@ -9,7 +9,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: "/", label: "Home", icon: Home },
-  { path: "/vote", label: "Vote", icon: Heart },
+  { path: "/vote", label: "Vote", icon: Vote },
   { path: "/predict", label: "Predict", icon: TrendingUp },
 ];
 

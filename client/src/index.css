@@ -653,6 +653,109 @@
     background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%);
   }
 
+  /* ===== LIGHT-MODE PULSE CARD OVERRIDES ===== */
+  :root:not(.dark) .pulse-card-blue {
+    background: linear-gradient(135deg, rgba(148, 163, 184, 0.08) 0%, transparent 40%),
+                linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(220 14% 96%) 100%);
+    border-color: rgba(148, 163, 184, 0.25);
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(148, 163, 184, 0.1);
+  }
+  :root:not(.dark) .pulse-card-blue::before {
+    background: linear-gradient(90deg, rgba(100, 116, 139, 0.5) 0%, rgba(148, 163, 184, 0.15) 100%);
+  }
+  :root:not(.dark) .pulse-card-blue::after {
+    background: radial-gradient(ellipse at top left, rgba(148, 163, 184, 0.08) 0%, transparent 60%);
+  }
+  :root:not(.dark) .pulse-card-blue:hover {
+    border-color: rgba(148, 163, 184, 0.4);
+    box-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(148, 163, 184, 0.15);
+  }
+
+  :root:not(.dark) .pulse-card-green {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, transparent 40%),
+                linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(140 30% 96%) 100%);
+    border-color: rgba(34, 197, 94, 0.25);
+    box-shadow: 0 2px 8px -2px rgba(34, 197, 94, 0.1), 0 0 0 1px rgba(34, 197, 94, 0.08);
+  }
+  :root:not(.dark) .pulse-card-green::before {
+    background: linear-gradient(90deg, rgb(34, 197, 94) 0%, rgba(34, 197, 94, 0.3) 100%);
+  }
+  :root:not(.dark) .pulse-card-green::after {
+    background: radial-gradient(ellipse at top left, rgba(34, 197, 94, 0.1) 0%, transparent 60%);
+  }
+  :root:not(.dark) .pulse-card-green:hover {
+    border-color: rgba(34, 197, 94, 0.4);
+    box-shadow: 0 4px 16px -4px rgba(34, 197, 94, 0.15), 0 0 0 1px rgba(34, 197, 94, 0.12);
+  }
+
+  :root:not(.dark) .pulse-card-red {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.06) 0%, transparent 40%),
+                linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(0 30% 97%) 100%);
+    border-color: rgba(239, 68, 68, 0.2);
+    box-shadow: 0 2px 8px -2px rgba(239, 68, 68, 0.1), 0 0 0 1px rgba(239, 68, 68, 0.06);
+  }
+  :root:not(.dark) .pulse-card-red::before {
+    background: linear-gradient(90deg, rgb(239, 68, 68) 0%, rgba(239, 68, 68, 0.3) 100%);
+  }
+  :root:not(.dark) .pulse-card-red::after {
+    background: radial-gradient(ellipse at top left, rgba(239, 68, 68, 0.08) 0%, transparent 60%);
+  }
+  :root:not(.dark) .pulse-card-red:hover {
+    border-color: rgba(239, 68, 68, 0.35);
+    box-shadow: 0 4px 16px -4px rgba(239, 68, 68, 0.12), 0 0 0 1px rgba(239, 68, 68, 0.1);
+  }
+
+  :root:not(.dark) .pulse-card-orange {
+    background: linear-gradient(135deg, rgba(249, 115, 22, 0.06) 0%, transparent 40%),
+                linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(30 40% 96%) 100%);
+    border-color: rgba(249, 115, 22, 0.25);
+    box-shadow: 0 2px 8px -2px rgba(249, 115, 22, 0.1), 0 0 0 1px rgba(249, 115, 22, 0.06);
+  }
+  :root:not(.dark) .pulse-card-orange::before {
+    background: linear-gradient(90deg, rgb(249, 115, 22) 0%, rgba(249, 115, 22, 0.3) 100%);
+  }
+  :root:not(.dark) .pulse-card-orange::after {
+    background: radial-gradient(ellipse at top left, rgba(249, 115, 22, 0.08) 0%, transparent 60%);
+  }
+  :root:not(.dark) .pulse-card-orange:hover {
+    border-color: rgba(249, 115, 22, 0.4);
+    box-shadow: 0 4px 16px -4px rgba(249, 115, 22, 0.15), 0 0 0 1px rgba(249, 115, 22, 0.1);
+  }
+
+  :root:not(.dark) .pulse-card-voxdex {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.06) 0%, transparent 40%),
+                linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(217 40% 96%) 100%);
+    border-color: rgba(59, 130, 246, 0.25);
+    box-shadow: 0 2px 8px -2px rgba(59, 130, 246, 0.1), 0 0 0 1px rgba(59, 130, 246, 0.06);
+  }
+  :root:not(.dark) .pulse-card-voxdex::before {
+    background: linear-gradient(90deg, rgb(59, 130, 246) 0%, rgba(59, 130, 246, 0.3) 100%);
+  }
+  :root:not(.dark) .pulse-card-voxdex::after {
+    background: radial-gradient(ellipse at top left, rgba(59, 130, 246, 0.08) 0%, transparent 60%);
+  }
+  :root:not(.dark) .pulse-card-voxdex:hover {
+    border-color: rgba(59, 130, 246, 0.4);
+    box-shadow: 0 4px 16px -4px rgba(59, 130, 246, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.1);
+  }
+
+  /* Light-mode icon tile overrides (stronger tint on light bg) */
+  :root:not(.dark) .pulse-icon-blue {
+    background: linear-gradient(135deg, rgba(148, 163, 184, 0.2) 0%, rgba(148, 163, 184, 0.1) 100%);
+  }
+  :root:not(.dark) .pulse-icon-green {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.08) 100%);
+  }
+  :root:not(.dark) .pulse-icon-red {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.08) 100%);
+  }
+  :root:not(.dark) .pulse-icon-orange {
+    background: linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(249, 115, 22, 0.08) 100%);
+  }
+  :root:not(.dark) .pulse-icon-voxdex {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.08) 100%);
+  }
+
   /* ===== VOTE CTA PULSE ===== */
   @keyframes vote-cta-pulse {
     0%, 100% {
@@ -698,6 +801,16 @@
     }
   }
 
+}
+
+/* ===== JACKPOT HERO BACKGROUND ===== */
+.jackpot-hero-bg {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(251, 146, 60, 0.08) 50%, transparent 100%);
+  box-shadow: inset 0 0 30px rgba(245, 158, 11, 0.08), 0 0 20px rgba(245, 158, 11, 0.06);
+}
+.dark .jackpot-hero-bg {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 146, 60, 0.05) 50%, transparent 100%);
+  box-shadow: inset 0 0 30px rgba(245, 158, 11, 0.1), 0 0 40px rgba(245, 158, 11, 0.15);
 }
 
 /* ===== VIEW TRANSITIONS ===== */

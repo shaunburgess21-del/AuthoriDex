@@ -328,7 +328,7 @@ function VersusCard({
   return (
     <div className="relative group h-full">
       <div className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
-    <Card className="relative overflow-visible bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] transition-all h-full flex flex-col rounded-[12px] md:rounded-xl min-h-[390px] md:min-h-0">
+    <Card className="relative overflow-visible bg-card dark:bg-gradient-to-br dark:from-slate-900/90 dark:via-slate-800/90 dark:to-slate-900/90 border border-border/40 dark:border-0 md:border md:border-border/40 dark:md:border-transparent shadow-sm dark:shadow-none md:shadow-sm group-hover:shadow-lg dark:md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] md:group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.08)] transition-all h-full flex flex-col rounded-[12px] md:rounded-xl min-h-[390px] md:min-h-0">
       <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
       
       <div className="relative pt-4 pb-4 flex flex-col flex-1">
@@ -349,13 +349,13 @@ function VersusCard({
           </div>
         </div>
 
-        <div className="rounded-t-lg border border-slate-700/30 border-b-0 bg-slate-900/80 backdrop-blur-sm px-4 py-2 text-center mb-0 mt-[5px]">
+        <div className="rounded-t-lg border border-border/40 dark:border-slate-700/30 border-b-0 bg-muted/60 dark:bg-slate-900/80 backdrop-blur-sm px-4 py-2 text-center mb-0 mt-[5px]">
           {matchup.slug ? (
-            <Link href={`/vote/matchups/${matchup.slug}`} className={`text-sm font-semibold transition-colors ${hasVoted ? 'text-cyan-400 hover:text-cyan-300' : 'text-slate-300 hover:text-cyan-400'}`} data-testid={`link-matchup-${matchup.id}`}>
-              {hasVoted ? "View details â†’" : (matchup.promptText || "Who do you prefer?")}
+            <Link href={`/vote/matchups/${matchup.slug}`} className={`text-sm font-semibold transition-colors ${hasVoted ? 'text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300' : 'text-foreground/80 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400'}`} data-testid={`link-matchup-${matchup.id}`}>
+              {hasVoted ? "View details →" : (matchup.promptText || "Who do you prefer?")}
             </Link>
           ) : (
-            <span className="text-sm font-semibold text-slate-300">
+            <span className="text-sm font-semibold text-foreground/80 dark:text-slate-300">
               {matchup.promptText || "Who do you prefer?"}
             </span>
           )}
@@ -369,9 +369,9 @@ function VersusCard({
             className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
               hasVoted
                 ? votedA
-                  ? 'border-slate-300/60 ring-2 ring-white/15'
-                  : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-400/40'
-                : 'border-slate-700/50 hover:border-slate-400/50'
+                  ? 'border-blue-400/50 dark:border-slate-300/60 ring-2 ring-blue-500/10 dark:ring-white/15'
+                  : 'border-border/40 dark:border-slate-700/30 opacity-70 hover:opacity-90 hover:border-foreground/30 dark:hover:border-slate-400/40'
+                : 'border-border/50 dark:border-slate-700/50 hover:border-foreground/30 dark:hover:border-slate-400/50'
             }`}
             data-testid={`button-vote-a-${matchup.id}`}
           >
@@ -388,17 +388,17 @@ function VersusCard({
                   />
                 </div>
               ) : (
-                <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedA ? 'from-blue-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
+                <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedA ? 'from-blue-100 via-blue-50 to-card dark:from-blue-600/30 dark:via-slate-800 dark:to-slate-900' : 'from-muted via-muted/80 to-card dark:from-slate-700 dark:via-slate-800 dark:to-slate-900'}`} />
               )}
             </div>
-            <div className="px-2 py-2 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
-              <span className={`font-semibold text-sm truncate block ${votedA ? 'text-blue-400' : ''}`}>{matchup.optionAText}</span>
+            <div className="px-2 py-2 bg-muted/60 dark:bg-slate-900/80 backdrop-blur-sm border-t border-border/40 dark:border-slate-700/30 text-center">
+              <span className={`font-semibold text-sm truncate block ${votedA ? 'text-blue-600 dark:text-blue-400' : 'text-foreground'}`}>{matchup.optionAText}</span>
             </div>
           </button>
           
           <div className="absolute left-1/2 top-[calc(50%-18px)] -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none">
-            <div className="h-14 w-14 md:h-11 md:w-11 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-slate-500 flex items-center justify-center shadow-lg">
-              <span className="text-sm md:text-xs font-bold text-slate-200">VS</span>
+            <div className="h-14 w-14 md:h-11 md:w-11 rounded-full bg-gradient-to-br from-muted to-card dark:from-slate-700 dark:to-slate-900 border-2 border-border dark:border-slate-500 flex items-center justify-center shadow-lg">
+              <span className="text-sm md:text-xs font-bold text-foreground dark:text-slate-200">VS</span>
             </div>
           </div>
           
@@ -409,9 +409,9 @@ function VersusCard({
             className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
               hasVoted
                 ? votedB
-                  ? 'border-slate-300/60 ring-2 ring-white/15'
-                  : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-400/40'
-                : 'border-slate-700/50 hover:border-slate-400/50'
+                  ? 'border-amber-400/50 dark:border-slate-300/60 ring-2 ring-amber-500/10 dark:ring-white/15'
+                  : 'border-border/40 dark:border-slate-700/30 opacity-70 hover:opacity-90 hover:border-foreground/30 dark:hover:border-slate-400/40'
+                : 'border-border/50 dark:border-slate-700/50 hover:border-foreground/30 dark:hover:border-slate-400/50'
             }`}
             data-testid={`button-vote-b-${matchup.id}`}
           >
@@ -428,11 +428,11 @@ function VersusCard({
                   />
                 </div>
               ) : (
-                <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? 'from-amber-700/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
+                <div className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? 'from-amber-100 via-amber-50 to-card dark:from-amber-700/30 dark:via-slate-800 dark:to-slate-900' : 'from-muted via-muted/80 to-card dark:from-slate-700 dark:via-slate-800 dark:to-slate-900'}`} />
               )}
             </div>
-            <div className="px-2 py-2 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
-              <span className={`font-semibold text-sm truncate block ${votedB ? 'text-amber-400' : ''}`}>{matchup.optionBText}</span>
+            <div className="px-2 py-2 bg-muted/60 dark:bg-slate-900/80 backdrop-blur-sm border-t border-border/40 dark:border-slate-700/30 text-center">
+              <span className={`font-semibold text-sm truncate block ${votedB ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'}`}>{matchup.optionBText}</span>
             </div>
           </button>
         </div>
@@ -441,7 +441,7 @@ function VersusCard({
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
-                <span className={`text-lg font-bold ${hasVoted ? (votedA ? 'text-blue-400' : 'text-slate-400') : 'text-slate-600'}`}>
+                <span className={`text-lg font-bold ${hasVoted ? (votedA ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground dark:text-slate-400') : 'text-muted-foreground/50 dark:text-slate-600'}`}>
                   {hasVoted ? `${matchup.optionAPercent}%` : '%'}
                 </span>
                 {hasVoted && votedA && (
@@ -456,12 +456,12 @@ function VersusCard({
                     Your pick
                   </Badge>
                 )}
-                <span className={`text-lg font-bold ${hasVoted ? (votedB ? 'text-amber-400' : 'text-slate-400') : 'text-slate-600'}`}>
+                <span className={`text-lg font-bold ${hasVoted ? (votedB ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground dark:text-slate-400') : 'text-muted-foreground/50 dark:text-slate-600'}`}>
                   {hasVoted ? `${matchup.optionBPercent}%` : '%'}
                 </span>
               </div>
             </div>
-            <div className={`h-2.5 rounded-full overflow-hidden flex ${hasVoted ? 'bg-slate-700/50' : 'bg-slate-700/30'}`}>
+            <div className={`h-2.5 rounded-full overflow-hidden flex ${hasVoted ? 'bg-muted dark:bg-slate-700/50' : 'bg-muted/60 dark:bg-slate-700/30'}`}>
               {hasVoted ? (
                 <>
                   <div 
@@ -474,7 +474,7 @@ function VersusCard({
                   />
                 </>
               ) : (
-                <div className="h-full w-full bg-slate-700/40" />
+                <div className="h-full w-full bg-muted dark:bg-slate-700/40" />
               )}
             </div>
             <div className="flex items-center justify-between mt-1.5">
@@ -508,10 +508,10 @@ function VersusCard({
 }
 
 function getRankBadgeStyle(rank: number) {
-  if (rank === 1) return "bg-yellow-500/10 border-yellow-500/20 text-yellow-300";
-  if (rank === 2) return "bg-slate-400/10 border-slate-400/20 text-slate-300";
-  if (rank === 3) return "bg-orange-500/10 border-orange-500/20 text-orange-300";
-  return "bg-slate-500/10 border-slate-500/20 text-slate-400";
+  if (rank === 1) return "bg-yellow-500/10 border-yellow-500/20 text-yellow-600 dark:text-yellow-300";
+  if (rank === 2) return "bg-slate-400/10 border-slate-400/20 text-slate-600 dark:text-slate-300";
+  if (rank === 3) return "bg-orange-500/10 border-orange-500/20 text-orange-600 dark:text-orange-300";
+  return "bg-slate-500/10 border-slate-500/20 text-slate-500 dark:text-slate-400";
 }
 
 function InductionCandidateCard({ 
@@ -1000,7 +1000,7 @@ function DiscourseCard({
       <div className="flex items-start gap-3 mb-3">
         {currentImgSrc ? (
           <div
-            className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-slate-800 cursor-pointer"
+            className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-muted dark:bg-slate-800 cursor-pointer"
             onClick={(e) => { e.stopPropagation(); setExpandedImage(currentImgSrc); }}
           >
             <img 
@@ -1065,7 +1065,7 @@ function DiscourseCard({
           </button>
           <button
             onClick={() => handleVote('neutral')}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-white/5 border border-white/40 text-white text-sm font-medium transition-all duration-300 hover:border-white/80 hover:bg-white/15"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-muted/40 border border-border text-foreground dark:bg-white/5 dark:border-white/40 dark:text-white text-sm font-medium transition-all duration-300 hover:border-foreground/40 hover:bg-muted/60 dark:hover:border-white/80 dark:hover:bg-white/15"
             data-testid={`button-neutral-${topic.id}`}
           >
             <Minus className="h-4 w-4 shrink-0" />
@@ -1129,7 +1129,7 @@ function DiscourseCard({
                   ? 'bg-[#00C853]/10 border-[#00C853]/40 text-[#00C853]' 
                   : voted === 'oppose'
                   ? 'bg-[#FF0000]/10 border-[#FF0000]/40 text-[#FF0000]'
-                  : 'bg-slate-500/10 border-slate-500/40 text-slate-400'
+                  : 'bg-slate-500/10 border-slate-500/40 text-slate-500 dark:text-slate-400'
               }`}
               data-testid={`badge-voted-${topic.id}`}
             >
@@ -1290,7 +1290,7 @@ function OpinionPollCard({
 
         <div className="flex items-start gap-3 mb-2">
           {poll.imageUrl ? (
-            <div className="h-14 w-14 rounded-lg overflow-hidden shrink-0 bg-slate-800">
+            <div className="h-14 w-14 rounded-lg overflow-hidden shrink-0 bg-muted dark:bg-slate-800">
               <img src={poll.imageUrl} alt={poll.title} className="w-full h-full object-cover" />
             </div>
           ) : (
@@ -1391,7 +1391,7 @@ function OpinionPollCard({
                   <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-700 ease-out ${
-                        isLeading ? 'bg-cyan-500' : isSelected ? 'bg-cyan-400/60' : 'bg-slate-600/50'
+                        isLeading ? 'bg-cyan-500' : isSelected ? 'bg-cyan-400/60' : 'bg-muted-foreground/30 dark:bg-slate-600/50'
                       }`}
                       style={{ width: `${percent}%` }}
                     />
@@ -2099,8 +2099,8 @@ function FilterChip({
       onClick={handleClick}
       className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${
         isActive
-          ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
-          : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+          ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
+          : "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600"
       }`}
       data-testid={getTestId()}
       aria-label={isIconOnly ? getDisplayLabel() : undefined}
@@ -2798,13 +2798,13 @@ export default function VotePage() {
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-4">
               <Link href="/#leaderboard">
-                <Button variant="ghost" size="sm" data-testid="link-nav-leaderboard">Leaderboard</Button>
+                <Button variant="ghost" size="sm" className="md:text-sm" data-testid="link-nav-leaderboard">Leaderboard</Button>
               </Link>
               <Link href="/vote">
-                <Button variant="ghost" size="sm" className="text-cyan-400" data-testid="link-nav-vote">Vote</Button>
+                <Button variant="ghost" size="sm" className="text-cyan-400 md:text-sm" data-testid="link-nav-vote">Vote</Button>
               </Link>
               <Link href="/predict">
-                <Button variant="ghost" size="sm" data-testid="link-nav-predict">Predict</Button>
+                <Button variant="ghost" size="sm" className="md:text-sm" data-testid="link-nav-predict">Predict</Button>
               </Link>
             </div>
             
@@ -2865,7 +2865,7 @@ export default function VotePage() {
                       <HelpCircle className="h-5 w-5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                  <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">
                     How it works
                   </TooltipContent>
                 </Tooltip>
@@ -2970,7 +2970,7 @@ export default function VotePage() {
                       <HelpCircle className="h-5 w-5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                  <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">
                     How it works
                   </TooltipContent>
                 </Tooltip>
@@ -3067,7 +3067,7 @@ export default function VotePage() {
                       <HelpCircle className="h-5 w-5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                  <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">
                     How it works
                   </TooltipContent>
                 </Tooltip>
@@ -3167,7 +3167,7 @@ export default function VotePage() {
                     <HelpCircle className="h-5 w-5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">
                   How it works
                 </TooltipContent>
               </Tooltip>
@@ -3271,7 +3271,7 @@ export default function VotePage() {
                       <HelpCircle className="h-5 w-5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                  <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">
                     How it works
                   </TooltipContent>
                 </Tooltip>
@@ -3383,7 +3383,7 @@ export default function VotePage() {
                       <HelpCircle className="h-5 w-5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-slate-900/95 border-slate-700 text-slate-200 text-xs">
+                  <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">
                     How it works
                   </TooltipContent>
                 </Tooltip>
@@ -3498,7 +3498,7 @@ export default function VotePage() {
                   <label className="text-sm font-medium mb-2 block text-amber-400">Topic Image (Optional)</label>
                   {pollSubjectImagePreview ? (
                     <div className="flex items-center gap-3">
-                      <div className="h-16 w-16 rounded-md overflow-hidden border border-amber-500/30 bg-slate-800">
+                      <div className="h-16 w-16 rounded-md overflow-hidden border border-amber-500/30 bg-muted dark:bg-slate-800">
                         <img 
                           src={pollSubjectImagePreview} 
                           alt="Topic preview"
@@ -3553,8 +3553,8 @@ export default function VotePage() {
                     onClick={() => setPollDuration(preset.value)}
                     className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
                       pollDuration === preset.value
-                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
-                        : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
+                        : "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600"
                     }`}
                     data-testid={`poll-duration-${preset.value}`}
                   >
@@ -3969,8 +3969,8 @@ export default function VotePage() {
                     onClick={() => setOpinionSuggestDuration(preset.value)}
                     className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
                       opinionSuggestDuration === preset.value
-                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
-                        : "bg-slate-800/30 border-slate-700/40 text-slate-400 hover:border-slate-600"
+                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
+                        : "bg-muted/50 border-border/60 text-muted-foreground hover:border-foreground/30 dark:bg-slate-800/30 dark:border-slate-700/40 dark:text-slate-400 dark:hover:border-slate-600"
                     }`}
                     data-testid={`opinion-duration-${preset.value}`}
                   >
