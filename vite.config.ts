@@ -31,6 +31,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // New production builds replace the old SW immediately so users see fresh UI sooner.
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         runtimeCaching: [
           {
