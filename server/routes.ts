@@ -9630,14 +9630,11 @@ Target length: about 90-150 words.`;
   app.post("/api/opinion-polls/:slug/vote", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { slug } = req.params;
-      const { optionId } = req.body;
+      const { optionId, remove } = req.body;
+      const wantsRemove = remove === true || remove === "true";
       const userId = req.userId!;
       if (!checkVoteRateLimit(userId)) {
         return res.status(429).json({ error: "Too many votes. Please slow down." });
-      }
-
-      if (!optionId) {
-        return res.status(400).json({ error: "optionId is required" });
       }
 
       const [poll] = await db
@@ -9648,6 +9645,26 @@ Target length: about 90-150 words.`;
 
       if (!poll) {
         return res.status(404).json({ error: "Poll not found" });
+      }
+
+      if (wantsRemove) {
+        const [existingRemove] = await db
+          .select({ id: opinionPollVotes.id })
+          .from(opinionPollVotes)
+          .where(and(eq(opinionPollVotes.pollId, poll.id), eq(opinionPollVotes.userId, userId)))
+          .limit(1);
+        if (existingRemove) {
+          await db.delete(opinionPollVotes).where(eq(opinionPollVotes.id, existingRemove.id));
+          await db
+            .update(profiles)
+            .set({ totalVotes: sql`GREATEST(${profiles.totalVotes} - 1, 0)` })
+            .where(eq(profiles.id, userId));
+        }
+        return res.json({ success: true, removed: true });
+      }
+
+      if (!optionId) {
+        return res.status(400).json({ error: "optionId is required" });
       }
 
       const [option] = await db
